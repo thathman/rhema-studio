@@ -53,7 +53,13 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - name: ESLint (Rhema Studio code, blocking)
-        run: bunx eslint src/studio src/stores src/hooks/use-detection-events.ts src/types src/App.tsx
+        run: |
+          paths=""
+          for p in src/studio src/stores src/hooks/use-detection-events.ts src/types src/App.tsx; do
+            [ -e "$p" ] && paths="$paths $p"
+          done
+          echo "Linting:$paths"
+          bunx eslint $paths
       - name: ESLint (whole repo, informational)
         continue-on-error: true
         run: bunx eslint .
@@ -90,10 +96,12 @@ jobs:
           [ -f data/rhema.db ] || : > data/rhema.db
       - name: Content crate tests
         working-directory: src-tauri
-        run: cargo test -p rhema-content
+        run: |
+          if [ -d crates/content ]; then cargo test -p rhema-content; else echo "no content crate on this branch"; fi
       - name: Content crate clippy (strict)
         working-directory: src-tauri
-        run: cargo clippy -p rhema-content --all-targets -- -D warnings
+        run: |
+          if [ -d crates/content ]; then cargo clippy -p rhema-content --all-targets -- -D warnings; else echo "no content crate on this branch"; fi
       - name: App crate check
         working-directory: src-tauri
         run: cargo check -p rhema
