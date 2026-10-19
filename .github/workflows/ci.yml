@@ -31,12 +31,12 @@ jobs:
           bun-version: latest
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Typecheck (tsc -b; the root tsconfig has no files, so plain `tsc --noEmit` checks nothing)
+        run: bunx tsc -b --noEmit
       - name: Unit tests
         run: bunx vitest run
-      - name: Production build
-        run: bunx vite build
+      - name: Production build (tsc -b && vite build)
+        run: bun run build
 
   lint:
     # Pre-existing ESLint debt lives mostly in web/, src-tauri data scripts and
