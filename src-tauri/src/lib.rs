@@ -141,6 +141,7 @@ pub fn run() {
             commands::content::content_get_program,
             commands::content::content_replace_items,
             commands::content::content_delete_program,
+            commands::content::content_status,
         ])
         .setup(|app| {
             use tauri::Manager;

@@ -1,4 +1,5 @@
 import { CheckIcon, TriangleAlertIcon, InfoIcon, PlayIcon, PencilRulerIcon, MonitorIcon, SettingsIcon } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { openSettings } from "@/lib/settings-dialog"
@@ -152,7 +153,7 @@ export function HomeWorkspace() {
                       <span className="text-xs text-muted-foreground">open</span>
                     ) : (
                       <Button size="sm" variant="outline" disabled={dirty} title={dirty ? "Save or close the current service first" : undefined}
-                        onClick={() => void useServiceStore.getState().openProgram(p.id)}>
+                        onClick={() => void useServiceStore.getState().openProgram(p.id).then((r) => { if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined }) })}>
                         Open
                       </Button>
                     )}
