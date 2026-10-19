@@ -3,7 +3,8 @@
   "bundle": {
     "resources": {
       "../data/rhema.db": "rhema.db",
-      "../sdk/ndi/linux/libndi.so": "sdk/ndi/linux/libndi.so"
+      "../sdk/ndi/linux/libndi.so": "sdk/ndi/linux/libndi.so",
+      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md"
     }
   }
 }
