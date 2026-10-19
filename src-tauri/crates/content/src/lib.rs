@@ -685,7 +685,7 @@ mod tests {
         let p = db.create_program("Sunday", Some("2026-10-25")).unwrap();
         assert_eq!((p.revision, p.item_count), (1, 0));
         assert_eq!(db.list_programs().unwrap()[0].title, "Sunday");
-        assert!(db.get_program(&p.id).unwrap().unwrap().items.is_empty());
+        assert_eq!(db.get_program(&p.id).unwrap().unwrap().items.len(), 0);
         assert!(db.get_program("nope").unwrap().is_none());
     }
 
