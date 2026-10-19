@@ -24,6 +24,8 @@ Rhema listens to a live sermon audio feed, transcribes speech in real time, dete
 
 There is no Intel Mac build — on an Intel Mac,
 [build from source](#getting-started).
+For `cargo check`/`clippy` on an Intel Mac, install `onnxruntime` with Homebrew and set
+`ORT_LIB_LOCATION=$(brew --prefix onnxruntime) ORT_PREFER_DYNAMIC_LINK=1`.
 
 Every build is **unsigned** — there is no Apple Developer or Windows code
 signing certificate behind this project — so each OS warns on first run.

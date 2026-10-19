@@ -2,6 +2,8 @@ import type { Verse } from "./bible"
 
 export interface QueueItem {
   id: string
+  /** Rundown item kind. Absent means "verse" (the only kind today). */
+  kind?: "verse"
   verse: Verse
   reference: string
   confidence: number

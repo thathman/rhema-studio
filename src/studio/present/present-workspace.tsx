@@ -15,6 +15,7 @@ import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { PanelHeader } from "@/components/ui/panel-header"
 import { useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
+import { useServiceStore } from "@/stores/service-store"
 import { presentActions } from "@/studio/present-actions"
 import { keyToPresentAction, shouldIgnoreKeyboard } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
@@ -31,11 +32,12 @@ export function PresentWorkspace() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
+  const service = useServiceStore((s) => s.current)
   const onAir = outputs.filter((o) => outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive).length
 
   return (
     <div className="flex h-full flex-col">
-      <WorkspaceHeader title="Present">
+      <WorkspaceHeader title="Present" subtitle={service ? `${service.title}${service.service_date ? ` · ${service.service_date}` : ""}` : undefined}>
         <StatusChip
           tone={isLive && liveRef ? "live" : "off"}
           label={isLive && liveRef ? `LIVE · ${liveRef}` : "Nothing live"}

@@ -9,6 +9,7 @@ import { PreviewPanel } from "@/components/panels/preview-panel"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
+import { ServiceBar } from "@/studio/prepare/service-bar"
 
 /**
  * Service builder, foundation version: order Bible passages into the rundown.
@@ -21,6 +22,7 @@ export function PrepareWorkspace() {
   return (
     <div className="flex h-full flex-col">
       <WorkspaceHeader title="Prepare" subtitle="Build the service. Nothing here goes live.">
+        <ServiceBar />
         <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" disabled={count === 0}>
@@ -67,7 +69,7 @@ export function PrepareWorkspace() {
               Songs, hymn numbers and custom slides arrive with the content library (Milestone 2).
             </p>
           </section>
-          <div className="h-48 overflow-hidden [&>div]:h-full">
+          <div className="h-72 w-[26rem] overflow-hidden [&>div]:h-full">
             <PreviewPanel />
           </div>
         </div>

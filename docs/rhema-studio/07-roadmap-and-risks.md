@@ -7,7 +7,7 @@
 | 0 | Discovery and design | docs 01–07 | — |
 | 1 | **Foundation** (this PR) | Shell with Home/Prepare/Present/More, Standard + Production views, big controls, Clear/Restore, keyboard, readiness, detection listeners lifted to app level, tests | 0 |
 | 1.5 | Reconcile fork branches | Merge Yoruba Bible, dual-language themes, numbered-book fix into `main` (one PR, from the Codex squash or the three `pr/*` branches) | owner decision |
-| 2 | Content and service workflow | `rhema-content` crate + `studio.db`, programs/items, rundown with item kinds, songs + sections + arrangements, hymn numbers, custom slides, Quick find across kinds, Prepare becomes real | 1 |
+| 2 | Content and service workflow | **Done in PR 2:** `rhema-content` crate + `studio.db`, programs/items, rundown `kind`, Prepare saves/opens services, Home lists them. **Remaining:** songs + sections + arrangements, hymn numbers, custom slides, Quick find across kinds | 1 |
 | 3 | Media and lower thirds | media assets, image/video items, lower-third output payload, readiness for missing files/fonts, Logo/Black quick screens | 2 |
 | 4 | Outputs and stage | output profiles, per-output routing, stage view, multiview strip in Production | 3 |
 | 5 | Production timing and cues | monotonic timers, service clock, cues/macros over `remoteActions`, rehearsal mode | 4 |
@@ -16,9 +16,8 @@
 | 8 | Signage | signage output kind, schedules, browser player | 4, 7 |
 | 9 | Archive and AI assistance | service logs, actual-vs-planned, transcripts tied to releases, sermon series | 5, 7 |
 
-Milestone 2 is the recommended next step. Its first PR should be the `rhema-content`
-crate with migrations and the `program`/`program_item` tables, plus the rundown `kind`
-field, because everything after depends on it.
+Milestone 2's first PR (content crate, programs, rundown `kind`) is done. Next: songs
+with sections and arrangements as the second content type, then custom slides.
 
 ## 2. Decisions taken in the foundation (reversible)
 
@@ -35,7 +34,7 @@ field, because everything after depends on it.
 ## 3. Open decisions (need owner input, not blocking)
 
 1. **Branch reconciliation order** for the four unmerged fork branches (see 01 §5.8).
-2. **ONNX optional at compile time** to restore Intel macOS builds.
+2. **ONNX optional at compile time** to restore Intel macOS builds without the Homebrew workaround (see 01 §2).
 3. **Product identifier rename** (`com.openbezal.rhema` → something under the fork's
    ownership) and the settings-migration that must accompany it.
 4. **Lint debt**: fix the 16 `src/` errors in one PR, or relax the two new `react-hooks`

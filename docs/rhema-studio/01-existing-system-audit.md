@@ -33,7 +33,7 @@ in a new shell, not to rewrite it.
 | TypeScript | `bun run typecheck` | pass |
 | Frontend tests | `bunx vitest run` | 17 files, 240 tests, all pass |
 | ESLint | `bun run lint` | **55 errors** (16 in `src/`, 34 in `src-tauri/` TS data scripts, 6 in `web/`, 1 in `data/`). Mostly `react-hooks` v7 rules (setState in effect, ref access in render) and `react-refresh` in `web/`. None are build-blocking. |
-| Rust | `cargo check --workspace` | **cannot run on this machine**: `ort-sys` has no prebuilt binary for `x86_64-apple-darwin`. This matches the README ("no Intel Mac build"). CI builds on Windows, Linux and Apple Silicon. |
+| Rust | `cargo check -p rhema` | Passes on Intel macOS **only** with a Homebrew ONNX Runtime: `brew install onnxruntime` then `ORT_LIB_LOCATION=$(brew --prefix onnxruntime) ORT_PREFER_DYNAMIC_LINK=1 cargo check -p rhema`. Without it `ort-sys` fails (no prebuilt x86_64 macOS binary). `cargo clippy` with the same env is clean for the app and content crates. |
 | Production bundle | `bun run build` | pass (see foundation PR) |
 
 ## 3. Stack and structure (verified)
@@ -103,7 +103,7 @@ Legend: **1** implemented and working · **2** implemented but incomplete · **3
 | Light/dark UI theme | 1 | `theme-provider.tsx` (localStorage) |
 | Diagnostics export | 1 | `commands/diagnostics.rs` |
 | Songs, hymns, arrangements | 4 | nothing in code |
-| Service rundown / programs | 4 | the queue is a flat verse list, not a service |
+| Service rundown / programs | 2 (since Milestone 2 PR) | services (programs) with ordered verse items can be created, saved, reopened; the queue store is the in-memory rundown with a `kind` field |
 | Custom slides, announcements | 4 | — |
 | Media library, video/audio playback, backgrounds | 4 | themes support a background image only |
 | Lower thirds | 2 | a builtin "Lower Thirds" theme with transparent background exists; no dedicated lower-third pipeline |
@@ -111,7 +111,7 @@ Legend: **1** implemented and working · **2** implemented but incomplete · **3
 | Timers, cues, macros | 4 | — |
 | Users, roles, approvals, collaboration | 4 | — |
 | Digital signage, archive | 4 | — |
-| Content persistence (SQLite for user content) | 5 | only JSON blobs via plugin-store; no migrations, no transactions |
+| Content persistence (SQLite for user content) | 2 (since Milestone 2 PR) | `rhema-content` crate: `studio.db`, embedded migrations, programs + items + audit trail. Songs/slides/media tables not yet added |
 | Canva | 4 | — |
 | Cloud sync | 4 | — (and must stay optional) |
 

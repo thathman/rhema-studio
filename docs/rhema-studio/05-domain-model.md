@@ -1,7 +1,8 @@
 # 05 — Domain Model and Persistence Proposal
 
-Status: proposal. Not implemented in the foundation PR. The foundation PR keeps the
-existing JSON-blob persistence untouched.
+Status: partially implemented. The Milestone 2 PR adds `src-tauri/crates/content` with
+`studio.db`, migration `0001_programs` (programs, program_items, audit_events) and
+the service store on the frontend. Everything else below remains a proposal.
 
 ## 1. What exists today
 

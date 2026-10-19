@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
 import { useTheme } from "@/components/theme-provider"
 import { bibleActions } from "@/hooks/use-bible"
-import { useBroadcastStore } from "@/stores"
+import { rememberedServiceId, useServiceStore } from "@/stores/service-store"
+import { useBroadcastStore, useQueueStore } from "@/stores"
 import { HomeWorkspace } from "@/studio/home/home-workspace"
 import { PrepareWorkspace } from "@/studio/prepare/prepare-workspace"
 import { PresentWorkspace } from "@/studio/present/present-workspace"
@@ -46,6 +47,14 @@ export function AppShell() {
   useEffect(() => {
     bibleActions.loadTranslations().catch(console.error)
     bibleActions.loadBooks().catch(console.error)
+    // Saved services, and the one that was open last time (empty rundown only:
+    // a rundown already on screen, e.g. from detections, is never replaced).
+    void useServiceStore.getState().loadPrograms().then(() => {
+      const id = rememberedServiceId()
+      if (id && useQueueStore.getState().items.length === 0) {
+        void useServiceStore.getState().openProgram(id)
+      }
+    })
   }, [])
 
   // Cmd/Ctrl+1..4 switch workspaces from anywhere.

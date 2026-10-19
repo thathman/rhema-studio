@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { openSettings } from "@/lib/settings-dialog"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
+import { useServiceStore } from "@/stores/service-store"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
 import { computeReadiness, type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 
@@ -27,6 +28,9 @@ export function HomeWorkspace() {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const listening = useTranscriptStore((s) => s.isTranscribing)
+  const programs = useServiceStore((s) => s.programs)
+  const current = useServiceStore((s) => s.current)
+  const dirty = useServiceStore((s) => s.dirty)
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
@@ -100,7 +104,11 @@ export function HomeWorkspace() {
           </section>
 
           <section aria-labelledby="service" className="rounded-lg border border-border bg-card p-4">
-            <h2 id="service" className="mb-1 text-sm font-semibold">This service</h2>
+            <h2 id="service" className="mb-1 text-sm font-semibold">
+              {current ? current.title : "This service"}
+              {current?.service_date && <span className="ml-2 text-xs font-normal text-muted-foreground">{current.service_date}</span>}
+              {dirty && <span className="ml-2 text-xs font-normal text-confidence-mid">unsaved changes</span>}
+            </h2>
             {items.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 Nothing in the service yet. Open Prepare to add passages.
@@ -123,6 +131,34 @@ export function HomeWorkspace() {
                   )}
                 </ol>
               </>
+            )}
+          </section>
+
+          <section aria-labelledby="services" className="rounded-lg border border-border bg-card p-4">
+            <h2 id="services" className="mb-2 text-sm font-semibold">Saved services</h2>
+            {programs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">None yet. Create one in Prepare to keep a rundown for Sunday.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {programs.slice(0, 5).map((p) => (
+                  <li key={p.id} className="flex items-center gap-2 py-1.5">
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {p.title}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {p.service_date ?? "undated"} · {p.item_count} item{p.item_count === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                    {current?.id === p.id ? (
+                      <span className="text-xs text-muted-foreground">open</span>
+                    ) : (
+                      <Button size="sm" variant="outline" disabled={dirty} title={dirty ? "Save or close the current service first" : undefined}
+                        onClick={() => void useServiceStore.getState().openProgram(p.id)}>
+                        Open
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
         </div>

@@ -3803,6 +3803,7 @@ dependencies = [
  "rhema-audio",
  "rhema-bible",
  "rhema-broadcast",
+ "rhema-content",
  "rhema-detection",
  "rhema-stt",
  "serde",
@@ -3865,6 +3866,18 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "rhema-content"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "uuid",
 ]
 
 [[package]]
