@@ -92,7 +92,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Placeholder bundled resources (tauri-build only checks they exist; CI never packages)
         run: |
-          mkdir -p data models/whisper
+          mkdir -p data
           [ -f data/rhema.db ] || : > data/rhema.db
       - name: Content crate tests
         working-directory: src-tauri
