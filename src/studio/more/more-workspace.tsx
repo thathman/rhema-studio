@@ -115,8 +115,14 @@ export function MoreWorkspace() {
             </p>
             <p>
               Built on <span className="text-foreground">Rhema</span> by OpenBezal (MIT licence, © 2025 OpenBezal).
-              Rhema Studio keeps the upstream licence and attribution. Bible translations carry their own licences; see the
-              Bible section in Settings and the README.
+              Rhema Studio keeps the upstream licence and attribution.
+            </p>
+            <p className="mt-2">
+              Yoruba scripture: <span className="text-foreground">Open Yoruba Contemporary Bible</span>, © 2009, 2017 by
+              Biblica, Inc., used under CC BY-SA 4.0. The original work by Biblica, Inc. is available for free at
+              www.biblica.com and open.bible. The text has been converted to this app's database format; see
+              licenses/YORUBA-OYCB-LICENSE.md in the application resources for the changes made. Other translations carry
+              their own licences; see the Bible section in Settings and the README.
             </p>
           </section>
         </div>
