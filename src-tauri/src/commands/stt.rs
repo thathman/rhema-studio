@@ -33,6 +33,16 @@ fn truncate_safe(s: &str, max_bytes: usize) -> &str {
     }
     &s[..end]
 }
+
+fn normalize_speech_language(language: Option<String>) -> Result<String, String> {
+    let language = language.unwrap_or_else(|| "en".to_string()).to_lowercase();
+    match language.as_str() {
+        "en" | "yo" => Ok(language),
+        _ => Err(format!(
+            "Unsupported speech language '{language}'. Choose English (en) or Yoruba (yo)."
+        )),
+    }
+}
 use rhema_audio::{AudioConfig, AudioFrame};
 use rhema_stt::{DeepgramClient, SttConfig, SttProvider, TranscriptEvent};
 
@@ -53,6 +63,7 @@ pub async fn start_transcription(
     device_id: Option<String>,
     gain: Option<f32>,
     provider: Option<String>,
+    language: Option<String>,
 ) -> Result<(), String> {
     // ── 1. Guard: already running? ──────────────────────────────────────
     let (stt_active, audio_active, audio_test_active) = {
@@ -76,9 +87,43 @@ pub async fn start_transcription(
     }
 
     let provider_name = provider.as_deref().unwrap_or("deepgram");
+    let speech_language = normalize_speech_language(language)?;
+
+    if provider_name == "deepgram" && speech_language == "yo" {
+        return Err(
+            "Deepgram Nova-3 does not currently list Yoruba support. Select Local (Whisper) for Yoruba speech.".into(),
+        );
+    }
 
     // ── 2. Build the STT provider ───────────────────────────────────────
     let stt_provider: Box<dyn SttProvider> = match provider_name {
+        #[cfg(feature = "openai")]
+        "openai" => {
+            let resolved_api_key = if api_key.is_empty() {
+                std::env::var("OPENAI_API_KEY").unwrap_or_default()
+            } else {
+                api_key
+            };
+
+            if resolved_api_key.is_empty() {
+                return Err(
+                    "No OpenAI API key provided. Set it in Settings or via OPENAI_API_KEY env var."
+                        .into(),
+                );
+            }
+
+            log::info!(
+                "Starting OpenAI Whisper transcription: language={speech_language}, device_id={device_id:?}"
+            );
+            Box::new(rhema_stt::OpenAiWhisperProvider::new(
+                resolved_api_key,
+                Some(speech_language.clone()),
+            ))
+        }
+        #[cfg(not(feature = "openai"))]
+        "openai" => {
+            return Err("OpenAI Whisper support was not compiled into this build.".into());
+        }
         #[cfg(feature = "whisper")]
         "whisper" => {
             // Resolve bundled Whisper model path.
@@ -122,7 +167,7 @@ pub async fn start_transcription(
 
             Box::new(rhema_stt::WhisperProvider::new(
                 model_path,
-                None,
+                Some(speech_language.clone()),
                 n_threads,
             ))
         }
@@ -159,7 +204,7 @@ pub async fn start_transcription(
                 model: "nova-3".to_string(),
                 sample_rate: 16_000,
                 encoding: "linear16".to_string(),
-                language: None,
+                language: Some(speech_language.clone()),
             };
 
             Box::new(DeepgramClient::new(stt_config))
@@ -991,4 +1036,3 @@ pub fn stop_transcription(
     log::info!("Transcription stop requested");
     Ok(())
 }
-

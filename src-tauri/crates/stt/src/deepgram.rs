@@ -11,7 +11,7 @@ use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
 use crate::error::SttError;
-use crate::keyterms::bible_keyterms;
+use crate::keyterms::bible_keyterms_for_language;
 use crate::provider::SttProvider;
 use crate::types::{SttConfig, TranscriptEvent, Word};
 
@@ -73,7 +73,7 @@ impl DeepgramClient {
                 "Lord".to_string(),
                 "Holy Spirit".to_string(),
             ];
-            let bible_terms = bible_keyterms();
+            let bible_terms = bible_keyterms_for_language(self.config.language.as_deref());
 
             // Deduplicate: core terms first, then bible_keyterms(), capped at 100.
             let mut seen = std::collections::HashSet::new();

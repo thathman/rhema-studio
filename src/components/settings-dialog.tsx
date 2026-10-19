@@ -125,7 +125,7 @@ function AudioTestRow() {
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
         Test Input
       </label>
       <div className="flex items-center gap-3">
@@ -149,12 +149,7 @@ function AudioTestRow() {
 }
 
 function AudioSection() {
-  const {
-    audioDeviceId,
-    setAudioDeviceId,
-    gain,
-    setGain,
-  } = useSettingsStore()
+  const { audioDeviceId, setAudioDeviceId, gain, setGain } = useSettingsStore()
 
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -183,12 +178,14 @@ function AudioSection() {
     <div className="flex flex-col gap-6">
       {/* Device selector */}
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Input Device
         </label>
         <Select
           value={audioDeviceId ?? "__default__"}
-          onValueChange={(v) => setAudioDeviceId(v === "__default__" ? null : v)}
+          onValueChange={(v) =>
+            setAudioDeviceId(v === "__default__" ? null : v)
+          }
           disabled={loading}
         >
           <SelectTrigger className="h-8 text-xs">
@@ -218,10 +215,10 @@ function AudioSection() {
       {/* Input gain */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Input Gain
           </label>
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-xs text-muted-foreground tabular-nums">
             {gainPercent}%
           </span>
         </div>
@@ -249,12 +246,18 @@ function SpeechSection() {
   const {
     sttProvider,
     setSttProvider,
+    speechLanguage,
+    setSpeechLanguage,
     deepgramApiKey,
     setDeepgramApiKey,
+    openaiApiKey,
+    setOpenaiApiKey,
   } = useSettingsStore()
 
   const [keyValue, setKeyValue] = useState(deepgramApiKey ?? "")
   const [saved, setSaved] = useState(false)
+  const [openaiKeyValue, setOpenaiKeyValue] = useState(openaiApiKey ?? "")
+  const [openaiSaved, setOpenaiSaved] = useState(false)
 
   const handleSaveKey = () => {
     setDeepgramApiKey(keyValue || null)
@@ -262,23 +265,33 @@ function SpeechSection() {
     setTimeout(() => setSaved(false), 2000)
   }
 
+  const handleSaveOpenAiKey = () => {
+    setOpenaiApiKey(openaiKeyValue || null)
+    setOpenaiSaved(true)
+    setTimeout(() => setOpenaiSaved(false), 2000)
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Provider selector */}
       <div className="flex flex-col gap-3">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Provider
         </label>
 
         <RadioGroup
           value={sttProvider}
-          onValueChange={(v) => setSttProvider(v as "deepgram" | "whisper")}
+          onValueChange={(v) =>
+            setSttProvider(v as "deepgram" | "whisper" | "openai")
+          }
           className="gap-3"
         >
           {/* Deepgram (cloud) */}
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
-              sttProvider !== "deepgram" ? "hover:border-muted-foreground/25" : ""
+              sttProvider !== "deepgram"
+                ? "hover:border-muted-foreground/25"
+                : ""
             }`}
           >
             <RadioGroupItem value="deepgram" className="mt-0.5" />
@@ -297,7 +310,9 @@ function SpeechSection() {
           {/* Whisper (local) */}
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
-              sttProvider !== "whisper" ? "hover:border-muted-foreground/25" : ""
+              sttProvider !== "whisper"
+                ? "hover:border-muted-foreground/25"
+                : ""
             }`}
           >
             <RadioGroupItem value="whisper" className="mt-0.5" />
@@ -306,19 +321,71 @@ function SpeechSection() {
                 Local (Whisper)
               </span>
               <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-                Runs Whisper large-v3-turbo locally on your device. Fully
+                Runs a multilingual Whisper model locally on your device. Fully
                 offline, no API key needed. Audio never leaves your machine.
+              </p>
+            </div>
+          </label>
+
+          {/* OpenAI Whisper (cloud) */}
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
+              sttProvider !== "openai"
+                ? "hover:border-muted-foreground/25"
+                : ""
+            }`}
+          >
+            <RadioGroupItem value="openai" className="mt-0.5" />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-foreground">
+                Cloud (OpenAI Whisper)
+              </span>
+              <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
+                Sends each spoken utterance to OpenAI&apos;s Whisper API. Supports
+                Yoruba, but returns text after a short upload rather than live
+                interim words.
               </p>
             </div>
           </label>
         </RadioGroup>
       </div>
 
+      {/* Language selector */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          Speech language
+        </label>
+        <Select
+          value={speechLanguage}
+          onValueChange={(value) => {
+            const nextLanguage = value === "yo" ? "yo" : "en"
+            setSpeechLanguage(nextLanguage)
+            if (nextLanguage === "yo" && sttProvider === "deepgram") {
+              setSttProvider("whisper")
+            }
+          }}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="yo">Yorùbá</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-[0.625rem] text-muted-foreground">
+          Sets the recognition language and improves Bible-name recognition for
+          live Yoruba speech. Yoruba currently uses Local (Whisper) or OpenAI
+          Whisper; Deepgram does not list Yoruba among its supported Nova-3
+          languages.
+        </p>
+      </div>
+
       {/* Deepgram settings — show when deepgram is selected */}
       {sttProvider === "deepgram" && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Deepgram API Key
             </label>
             {deepgramApiKey && (
@@ -352,6 +419,45 @@ function SpeechSection() {
           </p>
         </div>
       )}
+
+      {/* OpenAI settings — show when OpenAI Whisper is selected */}
+      {sttProvider === "openai" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+              OpenAI API Key
+            </label>
+            {openaiApiKey && (
+              <Badge variant="outline" className="text-[0.5rem]">
+                Key configured
+              </Badge>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              type="password"
+              placeholder="Enter your OpenAI API key..."
+              value={openaiKeyValue}
+              onChange={(e) => setOpenaiKeyValue(e.target.value)}
+              className="flex-1 text-xs"
+            />
+            <Button size="sm" onClick={handleSaveOpenAiKey}>
+              {openaiSaved ? (
+                <>
+                  <CheckIcon className="size-3" />
+                  Saved
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </div>
+          <p className="text-[0.625rem] text-muted-foreground">
+            Required for OpenAI Whisper transcription. The key is stored in the
+            app&apos;s local settings.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -361,12 +467,8 @@ function SpeechSection() {
 /* -------------------------------------------------------------------------- */
 
 function DisplayModeSection() {
-  const {
-    autoMode,
-    setAutoMode,
-    confidenceThreshold,
-    setConfidenceThreshold,
-  } = useSettingsStore()
+  const { autoMode, setAutoMode, confidenceThreshold, setConfidenceThreshold } =
+    useSettingsStore()
 
   const thresholdPercent = Math.round(confidenceThreshold * 100)
 
@@ -374,7 +476,7 @@ function DisplayModeSection() {
     <div className="flex flex-col gap-6">
       {/* Mode selector */}
       <div className="flex flex-col gap-3">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Broadcast Mode
         </label>
 
@@ -394,8 +496,8 @@ function DisplayModeSection() {
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
                 Automatically displays the highest-confidence detected verse on
-                broadcast output. A 2.5-second cooldown prevents rapid flickering.
-                Best for hands-off operation.
+                broadcast output. A 2.5-second cooldown prevents rapid
+                flickering. Best for hands-off operation.
               </p>
             </div>
           </label>
@@ -408,11 +510,14 @@ function DisplayModeSection() {
           >
             <RadioGroupItem value="manual" className="mt-0.5" />
             <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-foreground">Manual</span>
+              <span className="text-xs font-medium text-foreground">
+                Manual
+              </span>
               <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
                 Nothing goes to broadcast until you explicitly send it. Detected
-                verses still appear in the AI Detections panel and queue, but you
-                decide which ones to display and when. Best for important services.
+                verses still appear in the AI Detections panel and queue, but
+                you decide which ones to display and when. Best for important
+                services.
               </p>
             </div>
           </label>
@@ -423,10 +528,10 @@ function DisplayModeSection() {
       {autoMode && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Confidence Threshold
             </label>
-            <span className="text-xs tabular-nums text-muted-foreground">
+            <span className="text-xs text-muted-foreground tabular-nums">
               {thresholdPercent}%
             </span>
           </div>
@@ -459,7 +564,7 @@ function ApiKeysSection() {
       {/* Deepgram key status (configured in Speech Recognition section) */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Deepgram API Key
           </label>
           {deepgramApiKey ? (
@@ -467,7 +572,10 @@ function ApiKeysSection() {
               Key configured
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[0.5rem] text-muted-foreground">
+            <Badge
+              variant="outline"
+              className="text-[0.5rem] text-muted-foreground"
+            >
               Not set
             </Badge>
           )}
@@ -512,8 +620,8 @@ interface TranslationInfo {
 function BibleSection() {
   const [translations, setTranslations] = useState<TranslationInfo[]>([])
   const [activeId, setActiveId] = useState<number>(1)
-  const secondaryId = useBibleStore((state) => state.secondaryTranslationId)
   const [loading, setLoading] = useState(true)
+  const secondaryId = useBibleStore((state) => state.secondaryTranslationId)
 
   useEffect(() => {
     async function load() {
@@ -539,25 +647,25 @@ function BibleSection() {
       await invoke("set_active_translation", { translationId: id })
       setActiveId(id)
       // Update frontend stores so all panels use the new translation
-      const { useBibleStore } = await import("@/stores")
       useBibleStore.getState().setActiveTranslation(id)
     } catch (e) {
       console.error("Failed to set translation:", e)
     }
   }
 
-  const englishTranslations = translations.filter((t) => t.language === "en")
-  const otherTranslations = translations.filter((t) => t.language !== "en")
   const handleSecondaryChange = (value: string) => {
     useBibleStore
       .getState()
       .setSecondaryTranslation(value === "__none__" ? null : parseInt(value))
   }
 
+  const englishTranslations = translations.filter((t) => t.language === "en")
+  const otherTranslations = translations.filter((t) => t.language !== "en")
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Primary Translation
         </label>
         <Select
@@ -566,12 +674,14 @@ function BibleSection() {
           disabled={loading}
         >
           <SelectTrigger className="h-8 text-xs">
-            <SelectValue placeholder={loading ? "Loading..." : "Select translation"} />
+            <SelectValue
+              placeholder={loading ? "Loading..." : "Select translation"}
+            />
           </SelectTrigger>
           <SelectContent>
             {englishTranslations.length > 0 && (
               <>
-                <div className="px-2 py-1 text-[0.5625rem] font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="px-2 py-1 text-[0.5625rem] font-medium tracking-wider text-muted-foreground uppercase">
                   English
                 </div>
                 {englishTranslations.map((t) => (
@@ -583,7 +693,7 @@ function BibleSection() {
             )}
             {otherTranslations.length > 0 && (
               <>
-                <div className="mt-1 px-2 py-1 text-[0.5625rem] font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="mt-1 px-2 py-1 text-[0.5625rem] font-medium tracking-wider text-muted-foreground uppercase">
                   Other Languages
                 </div>
                 {otherTranslations.map((t) => (
@@ -597,12 +707,13 @@ function BibleSection() {
         </Select>
         <p className="text-[0.625rem] text-muted-foreground">
           Detected verses will display in this translation.
-          {translations.length > 0 && ` ${translations.length} translations available.`}
+          {translations.length > 0 &&
+            ` ${translations.length} translations available.`}
         </p>
       </div>
 
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           Secondary Translation
         </label>
         <Select
@@ -652,8 +763,14 @@ interface CommandLogEntry {
 function RemoteControlSection() {
   const [oscPort, setOscPort] = useState("8000")
   const [httpPort, setHttpPort] = useState("8080")
-  const [oscStatus, setOscStatus] = useState<RemoteStatus>({ running: false, port: null })
-  const [httpStatus, setHttpStatus] = useState<RemoteStatus>({ running: false, port: null })
+  const [oscStatus, setOscStatus] = useState<RemoteStatus>({
+    running: false,
+    port: null,
+  })
+  const [httpStatus, setHttpStatus] = useState<RemoteStatus>({
+    running: false,
+    port: null,
+  })
   const [oscError, setOscError] = useState<string | null>(null)
   const [httpError, setHttpError] = useState<string | null>(null)
   const [commandLog, setCommandLog] = useState<CommandLogEntry[]>([])
@@ -666,12 +783,16 @@ function RemoteControlSection() {
         const osc = await invoke<RemoteStatus>("get_osc_status")
         setOscStatus(osc)
         if (osc.running) setOscError(null)
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       try {
         const http = await invoke<RemoteStatus>("get_http_status")
         setHttpStatus(http)
         if (http.running) setHttpError(null)
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }, 2000)
     return () => clearInterval(interval)
   }, [])
@@ -742,11 +863,11 @@ function RemoteControlSection() {
     <div className="flex flex-col gap-6">
       {/* OSC */}
       <div className="flex flex-col gap-3">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           OSC (Open Sound Control)
         </label>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 flex-1">
+          <div className="flex flex-1 items-center gap-2">
             <label className="text-xs text-muted-foreground">Port</label>
             <Input
               type="number"
@@ -766,27 +887,25 @@ function RemoteControlSection() {
             {oscStatus.running ? "Stop" : "Start"}
           </Button>
         </div>
-        {oscError && (
-          <p className="text-[0.625rem] text-red-500">{oscError}</p>
-        )}
+        {oscError && <p className="text-[0.625rem] text-red-500">{oscError}</p>}
         {oscStatus.running && oscStatus.port && (
           <p className="text-[0.625rem] text-muted-foreground">
             Listening on UDP port {oscStatus.port}
           </p>
         )}
         <p className="text-[0.625rem] text-muted-foreground">
-          Receives commands from hardware controllers (Stream Deck, TouchOSC, Companion)
-          via OSC over UDP.
+          Receives commands from hardware controllers (Stream Deck, TouchOSC,
+          Companion) via OSC over UDP.
         </p>
       </div>
 
       {/* HTTP API */}
       <div className="flex flex-col gap-3">
-        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
           HTTP API
         </label>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 flex-1">
+          <div className="flex flex-1 items-center gap-2">
             <label className="text-xs text-muted-foreground">Port</label>
             <Input
               type="number"
@@ -815,15 +934,17 @@ function RemoteControlSection() {
           </p>
         )}
         <p className="text-[0.625rem] text-muted-foreground">
-          REST API for status queries and control commands. Use with custom dashboards,
-          automation scripts, or HTTP-capable controllers.
+          REST API for status queries and control commands. Use with custom
+          dashboards, automation scripts, or HTTP-capable controllers.
         </p>
       </div>
 
       {/* Firewall guidance */}
       <div className="rounded-lg border border-border bg-muted/30 p-3">
-        <p className="text-[0.625rem] font-medium text-muted-foreground mb-1">Firewall Note</p>
-        <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
+        <p className="mb-1 text-[0.625rem] font-medium text-muted-foreground">
+          Firewall Note
+        </p>
+        <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
           Your OS may block incoming connections. On macOS, allow Rhema through
           System Settings → Network → Firewall. On Windows, allow through
           Windows Security → Firewall → Allow an app.
@@ -833,14 +954,14 @@ function RemoteControlSection() {
       {/* Command Log */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <label className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Command Log
           </label>
           {commandLog.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 text-[0.5rem] px-1.5"
+              className="h-5 px-1.5 text-[0.5rem]"
               onClick={() => setCommandLog([])}
             >
               Clear
@@ -849,20 +970,25 @@ function RemoteControlSection() {
         </div>
         <div className="h-32 overflow-y-auto rounded-lg border border-border bg-background p-2">
           {commandLog.length === 0 ? (
-            <p className="text-[0.625rem] text-muted-foreground text-center mt-8">
+            <p className="mt-8 text-center text-[0.625rem] text-muted-foreground">
               No commands received yet
             </p>
           ) : (
             <div className="flex flex-col gap-0.5">
               {commandLog.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-2 text-[0.625rem]">
-                  <span className="text-muted-foreground tabular-nums shrink-0">
+                <div
+                  key={entry.id}
+                  className="flex items-center gap-2 text-[0.625rem]"
+                >
+                  <span className="shrink-0 text-muted-foreground tabular-nums">
                     {entry.timestamp}
                   </span>
-                  <Badge variant="outline" className="text-[0.5rem] h-3.5 px-1">
+                  <Badge variant="outline" className="h-3.5 px-1 text-[0.5rem]">
                     {entry.source}
                   </Badge>
-                  <span className="text-foreground font-mono">{entry.command}</span>
+                  <span className="font-mono text-foreground">
+                    {entry.command}
+                  </span>
                 </div>
               ))}
             </div>
@@ -939,7 +1065,7 @@ function StatusDot({ running }: { running: boolean }) {
     <div className="flex items-center gap-1.5">
       <div
         className={`size-2 rounded-full ${
-          running ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/30"
+          running ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"
         }`}
       />
       <span className="text-[0.625rem] text-muted-foreground">
@@ -995,7 +1121,7 @@ export function SettingsDialog() {
         </DialogDescription>
         <SidebarProvider className="items-start">
           <Sidebar collapsible="none" className="hidden md:flex">
-            <div className="h-14 border-b border-border border-r px-4 flex items-center" >
+            <div className="flex h-14 items-center border-r border-b border-border px-4">
               Settings
             </div>
             <SidebarContent className="border-r border-border">
