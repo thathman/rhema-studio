@@ -1,8 +1,26 @@
 # 05 — Domain Model and Persistence Proposal
 
-Status: partially implemented. The Milestone 2 PR adds `src-tauri/crates/content` with
-`studio.db`, migration `0001_programs` (programs, program_items, audit_events) and
-the service store on the frontend. Everything else below remains a proposal.
+Status: partially implemented. `src-tauri/crates/content` provides `studio.db` with
+migrations `0001_programs` and `0002_item_identity`, programs + items + audit trail,
+optimistic concurrency (expected revision → Conflict), stable item ids across saves,
+backup-before-migrate, integrity check on open, and real-file tests. The frontend
+service store adds save generations and store-level unsaved-change protection.
+Everything else below remains a proposal.
+
+### Bible identity on items (implemented)
+Items store `book_number` (canonical Protestant 1–66 numbering shared by every
+translation in `rhema.db`, including OYCB), `chapter`, `verse`, and translation
+**abbreviations** (`translation`, `secondary_translation`), never translation row ids,
+which change when the Bible database is rebuilt. `NULL` translation means "follow the
+operator's active translation". Versification differences between translations are not
+modelled yet; when a translation with a different versification is added, a
+`versification` column keyed per translation is the planned extension.
+
+### Audit, actor, backups (implemented / planned)
+`audit_events.actor` exists and is `NULL` until a user model exists; no placeholder
+values are written. Before applying a migration to an existing file the crate writes
+`studio.db.before-<version>.bak` via SQLite's online backup API; `backup_to(path)` is
+available for a scheduled backup command (planned: Settings → Backups).
 
 ## 1. What exists today
 

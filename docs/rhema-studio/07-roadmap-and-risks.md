@@ -48,7 +48,8 @@ with sections and arrangements as the second content type, then custom slides.
 |---|---|---|---|
 | New shell breaks a hidden coupling (e.g. tutorial targets, detection listeners) | medium | high | Preservation checklist in 01 §7; listeners lifted with the same handler code; Production view unchanged |
 | Fork branches conflict with foundation | medium | low | Foundation avoids `use-broadcast.ts`, `live-output-panel.tsx`, `settings-store.ts`, `verse-renderer.ts`; test-merged against the Codex branch before opening the PR |
-| JSON-blob persistence leaks into new content features | high if unmanaged | high | Milestone 2 starts with the content DB, not with UI |
+| JSON-blob persistence leaks into new content features | low (content DB exists) | high | Themes/outputs/settings still in JSON; migrate when they gain revisions |
+| Concurrent or stale saves overwrite newer data | low | high | Expected-revision checks in the crate; save generations and dirty baseline in the store; tests for both |
 | Live output depends on optional services (AI, cloud STT) | low (already isolated) | high | Rendering path has no network call; keep it that way (rule 11) |
 | Upstream pulls become hard as the fork diverges | medium | medium | Keep upstream files untouched where possible; new code under `src/studio/` |
 | Intel macOS contributors cannot build Rust | certain today | low | Decision 2 |
