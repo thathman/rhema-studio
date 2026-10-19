@@ -1,12 +1,10 @@
-import { useState } from "react"
 import { LevelMeter } from "@/components/ui/level-meter"
 import { LiveIndicator } from "@/components/ui/live-indicator"
 import { Badge } from "@/components/ui/badge"
-import { MicIcon, PaletteIcon, CastIcon, SunIcon, MoonIcon } from "lucide-react"
+import { MicIcon, PaletteIcon, CastIcon, SunIcon, MoonIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { SettingsDialog } from "@/components/settings-dialog"
-import { ThemeDesigner } from "@/components/broadcast/theme-designer"
-import { BroadcastOutputsDialog } from "@/components/broadcast/broadcast-outputs-dialog"
+import { openSettings } from "@/lib/settings-dialog"
+import { useShellStore } from "@/studio/shell-store"
 import { useAudioStore, useTranscriptStore, useBroadcastStore } from "@/stores"
 import { useTheme } from "@/components/theme-provider"
 
@@ -14,7 +12,6 @@ export function TransportBar() {
   const { theme, setTheme } = useTheme()
   const audioLevel = useAudioStore((s) => s.level)
   const isTranscribing = useTranscriptStore((s) => s.isTranscribing)
-  const [broadcastOpen, setBroadcastOpen] = useState(false)
 
   return (
     <div
@@ -24,7 +21,7 @@ export function TransportBar() {
       {/* Left: Logo + Plan Badge */}
       <div className="flex items-center gap-2.5">
         <span className="text-sm font-semibold tracking-tight text-foreground">
-          Rhema
+          Rhema Studio
         </span>
         <Badge variant="outline" className="text-[0.5625rem] uppercase">
           Free
@@ -55,11 +52,10 @@ export function TransportBar() {
           size="icon-sm"
           title="Broadcast Settings"
           data-tour="broadcast"
-          onClick={() => setBroadcastOpen(true)}
+          onClick={() => useShellStore.getState().openOutputs()}
         >
           <CastIcon className="size-3.5" />
         </Button>
-        <BroadcastOutputsDialog open={broadcastOpen} onOpenChange={setBroadcastOpen} />
         <Button
           variant="ghost"
           size="icon-sm"
@@ -69,8 +65,15 @@ export function TransportBar() {
         >
           <PaletteIcon className="size-3.5" />
         </Button>
-        <ThemeDesigner />
-        <SettingsDialog />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Settings"
+          data-tour="settings"
+          onClick={() => openSettings()}
+        >
+          <SettingsIcon className="size-3.5" />
+        </Button>
       </div>
     </div>
   )

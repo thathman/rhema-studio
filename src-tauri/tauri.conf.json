@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Rhema",
+        "title": "Rhema Studio",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,

@@ -11,7 +11,7 @@ export function Dashboard() {
   return (
     <div
       style={{
-        position: "fixed",
+        position: "absolute",
         inset: "0px",
         display: "grid",
         // The `auto` row hosts the warning banner and collapses to 0 when
