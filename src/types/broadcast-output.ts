@@ -16,6 +16,8 @@ export interface StagePayload {
   next: string | null
   note: string | null
   timer: { label: string; tone: "ok" | "warn" | "over" } | null
+  /** A private message from the operator ("wrap up", "mic 2 is off"). */
+  message: string | null
 }
 
 export interface BroadcastOutputNdiSettings {

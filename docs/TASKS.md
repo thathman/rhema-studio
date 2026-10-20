@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.20 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.21 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -71,8 +71,8 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| OP-001 Output profile model, routing and migration | P1 | IN PR (roles) | MD-004 | stage-display PR: `role` on each output (`congregation` default, `stage`); saved outputs without a role load unchanged; chosen in the output editor; stage forces a display window (no NDI) |
-| OP-002 Stage confidence screen and private messages | P1 | IN PR | OP-001 | stage-display PR: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
+| OP-001 Output profile model, routing and migration | P1 | MERGED (roles) | MD-004 | PR #23: `role` on each output (`congregation` default, `stage`); saved outputs without a role load unchanged; chosen in the output editor; stage forces a display window (no NDI) |
+| OP-002 Stage confidence screen and private messages | P1 | MERGED (screen) / IN PR (messages) | OP-001 | PR #23: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
 | OP-003 Independent language/style per output | P1 | BACKLOG | OP-001,SO-006 | EN/YO variants projected independently with matched passage |
 | OP-004 Multiview and device health | P1 | BACKLOG | OP-001 | Show actual/preview outputs, disconnected/error status |
 | OP-005 NDI/OBS and external output stability | P0 | BACKLOG | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
@@ -85,7 +85,7 @@
 | PT-001 Monotonic timer engine | P1 | MERGED | SV-002 | PR #21: pure engine on an injected monotonic clock (`performance.now`), start/pause/resume/reset, countdown or count-up, over-run; Present header chip with presets; 3 tests |
 | PT-002 Service timing policies and over/under | P1 | MERGED (planned side) | PT-001 | PR #22: planned minutes per item (payload, crate-validated 0–600), service total in Prepare, timer chip shows "n min late/early" against the plan up to the live item; 2 tests. Per-item actuals and policies later |
 | PT-003 Cue/macro typed action registry | P1 | BACKLOG | OP-001 | Idempotent, permission-aware, safe retry and operator preview |
-| PT-004 Stage timer messages, visual cues | P1 | BACKLOG | PT-002,OP-002 | Stage-only alerts and controls |
+| PT-004 Stage timer messages, visual cues | P1 | IN PR | PT-002,OP-002 | stage-messages PR: operator → stage message (typed or quick phrases), shown big and framed on stage outputs only, cleared from the same control; the timer and its colours already reach the stage; 1 test |
 | PT-005 Rehearsal/dry-run isolation | P0 | BACKLOG | PT-003 | Cannot inadvertently affect congregation, OBS or real devices |
 | PT-006 Song-playback/MIDI synchronization | P2 | BACKLOG | PT-003,MD-002 | Explicit integration opt-in, loss of sync degrades safely |
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.21):** PR #23 merged; stage-messages PR opened (PT-004 IN PR).
 - **2026-10-20 (rev 0.20):** PR #22 merged; stage-display PR opened (OP-001 roles, OP-002 IN PR).
 - **2026-10-20 (rev 0.19):** PR #21 merged; service-timing PR opened (PT-002 IN PR).
 - **2026-10-20 (rev 0.18):** PRs #19 and #20 merged; service-timer PR opened (PT-001 IN PR).

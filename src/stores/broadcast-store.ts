@@ -60,6 +60,8 @@ interface BroadcastState {
   liveItemId: string | null
   /** Set while a quick screen is up; what Back returns to. */
   heldLive: HeldLive | null
+  /** Private note shown on stage outputs only. Not persisted. */
+  stageMessage: string
   /** Why the last present did not reach the output; cleared by the next successful present. */
   presentWarning: string | null
   // When on, detections auto-present to the live output. When off, the live
@@ -86,6 +88,7 @@ interface BroadcastState {
   /** `goLive` puts the output on air in the same update as the verse, so no stale frame shows first. */
   setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean }) => void
   setPresentWarning: (warning: string | null) => void
+  setStageMessage: (message: string) => void
   /** Remember the current live content (if any) before a quick screen replaces it. */
   holdLive: () => void
   /** Put the held content back on air (or off air, as it was) and forget it. */
@@ -220,6 +223,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveSlide: null,
   liveItemId: null,
   heldLive: null,
+  stageMessage: "",
   presentWarning: null,
   autoLive: true,
   isDesignerOpen: false,
@@ -307,7 +311,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         theme,
         verse: null,
         role: "stage",
-        stage: buildStagePayload({ isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow() }),
+        stage: buildStagePayload({ isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage }),
       }).catch(() => {})
       return
     }
@@ -409,6 +413,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     get().syncBroadcastOutput()
   },
   setPresentWarning: (presentWarning) => set({ presentWarning }),
+  setStageMessage: (stageMessage) => {
+    set({ stageMessage })
+    for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
+  },
   holdLive: () => {
     const s = get()
     if (s.heldLive || !s.liveVerse) return

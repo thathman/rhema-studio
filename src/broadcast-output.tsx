@@ -9,6 +9,7 @@ import "./broadcast-fonts.css"
 import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { NdiConfigEventPayload, NdiFrameRequest, StagePayload } from "@/types"
+import { StageView } from "@/components/stage-view"
 
 /** Convert Uint8Array/Uint8ClampedArray to base64 using Function.apply (avoids spread stack overflow) */
 function uint8ToBase64(bytes: Uint8Array | Uint8ClampedArray): string {
@@ -33,35 +34,6 @@ interface BroadcastPayload {
   verse: VerseRenderData | null
   role?: "congregation" | "stage"
   stage?: StagePayload
-}
-
-/**
- * Stage display: plain DOM, high contrast, no theme. What the team needs at
- * a glance — the live words, what is next, the operator's note, the timer.
- */
-function StageView({ stage }: { stage: StagePayload }) {
-  const timerColor = stage.timer?.tone === "over" ? "#ff5a5a" : stage.timer?.tone === "warn" ? "#ffc547" : "#9be37a"
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "#000", color: "#fff", fontFamily: "system-ui, sans-serif", display: "grid", gridTemplateRows: "auto 1fr auto", padding: "3vh 4vw", gap: "2vh" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: "3.2vh", color: "#9aa0a6" }}>
-        <span>{stage.current?.title ?? "Nothing live"}</span>
-        {stage.timer && <span style={{ color: timerColor, fontVariantNumeric: "tabular-nums", fontSize: "5vh", fontWeight: 700 }}>{stage.timer.label}{stage.timer.tone === "over" ? " OVER" : ""}</span>}
-      </div>
-      <div style={{ overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap: "1vh" }}>
-        {stage.current ? (
-          stage.current.lines.map((line, i) => (
-            <div key={i} style={{ fontSize: `${Math.max(4, Math.min(9, 60 / Math.max(stage.current!.lines.length, 1)))}vh`, lineHeight: 1.25, fontWeight: 600 }}>{line}</div>
-          ))
-        ) : (
-          <div style={{ fontSize: "6vh", color: "#555" }}>—</div>
-        )}
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "4vw", fontSize: "3.6vh" }}>
-        <span style={{ color: "#ffd166", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{stage.note ? `Note: ${stage.note}` : ""}</span>
-        <span style={{ color: "#9aa0a6", whiteSpace: "nowrap" }}>{stage.next ? `NEXT: ${stage.next}` : "End of service"}</span>
-      </div>
-    </div>
-  )
 }
 
 function BroadcastCanvas() {
@@ -207,7 +179,7 @@ function BroadcastCanvas() {
     logDebug("Listener registration started", { label: currentWindow.label })
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
       if (event.payload.role === "stage") {
-        setStage(event.payload.stage ?? { current: null, next: null, note: null, timer: null })
+        setStage(event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null })
         return
       }
       setStage(null)
