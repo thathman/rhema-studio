@@ -14,3 +14,5 @@ log.workspace = true
 thiserror.workspace = true
 rusqlite = { version = "0.34", features = ["bundled", "backup"] }
 uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+base64 = "0.22"

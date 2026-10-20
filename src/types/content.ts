@@ -127,6 +127,21 @@ export interface RestoreReport {
   migrations: string[]
 }
 
+/** One service with its songs and pictures, as a checksummed file (`rhema-service-v1`). */
+export interface ServicePackage {
+  version: 1
+  payload: string
+  sha256: string
+}
+
+export interface PackageReport {
+  program: ProgramWithItems
+  songs_added: number
+  songs_skipped: number
+  media_added: number
+  media_reused: number
+}
+
 // ── Songs and hymnbooks (migration 0003) ─────────────────────────────────
 
 export const SECTION_KINDS = ["verse", "chorus", "bridge", "prechorus", "tag", "ending", "intro", "other"] as const

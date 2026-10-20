@@ -79,6 +79,8 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "get_chapter": return Array.from({ length: 10 }, (_, i) => verse(Number(args.translationId ?? 1), Number(args.bookNumber), Number(args.chapter), i + 1))
     case "search_verses": return [verse(1, 43, 3, 16)]
     case "content_status": return { available: true, path: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"], last_backup: null }
+    case "content_export_service_package": throw { message: "Not available in the browser shim" }
+    case "content_import_service_package": throw { message: "Not available in the browser shim" }
     case "content_backup": return null
     case "media_list": return []
     case "media_import": return (args.paths as string[]).map((path) => ({ status: "failed", path, message: "the browser shim has no media folder" }))

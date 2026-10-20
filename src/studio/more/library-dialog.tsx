@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSongStore } from "@/stores/song-store"
 import { useShellStore } from "@/studio/shell-store"
-import { backupDatabaseToFile, contentStatus, exportSongsToFile, importSongsFromFiles, restoreDatabaseFromFile, type ImportOutcome } from "@/lib/song-files"
+import { backupDatabaseToFile, contentStatus, exportServicePackageToFile, exportSongsToFile, importServicePackageFromFile, importSongsFromFiles, restoreDatabaseFromFile, type ImportOutcome } from "@/lib/song-files"
 import { useJournalStore } from "@/stores/journal-store"
 import { formatJournal } from "@/lib/journal"
 import { monotonicNow } from "@/stores/timer-store"
@@ -149,6 +149,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
               </div>
             )}
           </div>
+          <PackageBlock onClose={onClose} />
           <JournalBlock />
           <HymnbookList />
           <div className="rounded-lg border border-border p-3">
@@ -182,6 +183,58 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** One service as a file: made at home, opened at church. */
+function PackageBlock({ onClose }: { onClose: () => void }) {
+  const current = useServiceStore((s) => s.current)
+  const dirty = useServiceStore((s) => s.dirty)
+  const setWorkspace = useShellStore((s) => s.setWorkspace)
+  const [busy, setBusy] = useState(false)
+  const doSave = async () => {
+    if (!current) return
+    setBusy(true)
+    try {
+      const path = await exportServicePackageToFile(current.id, current.title)
+      if (path) toast.success(`Service saved to ${path}`)
+    } catch (e) {
+      toast.error(describeError(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const doOpen = async () => {
+    setBusy(true)
+    try {
+      const r = await importServicePackageFromFile()
+      if (!r) return
+      await useServiceStore.getState().loadPrograms()
+      const opened = await useServiceStore.getState().openProgram(r.program.program.id)
+      toast.success(`“${r.program.program.title}” added`, {
+        description: `${r.songs_added} song${r.songs_added === 1 ? "" : "s"} added, ${r.songs_skipped} already here; ${r.media_added} picture${r.media_added === 1 ? "" : "s"} added, ${r.media_reused} already here.`,
+      })
+      if (opened === "ok") {
+        onClose()
+        setWorkspace("prepare")
+      } else if (opened === "unsaved") {
+        toast.info("Save or close the open service, then open the new one from Prepare.")
+      }
+    } catch (e) {
+      toast.error("Nothing was added", { description: describeError(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <p className="mb-1 font-medium">One service as a file</p>
+      <p className="mb-2 text-xs text-muted-foreground">The open service with the songs and pictures it uses, in one file you can carry to another computer. Opening one adds a new service; songs and pictures already there are reused.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy || !current || dirty} title={!current ? "Open a service first" : dirty ? "Save the service first" : undefined} onClick={() => void doSave()}><DownloadIcon /> Save this service as a file…</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void doOpen()}><UploadIcon /> Open a service file…</Button>
+      </div>
+    </div>
   )
 }
 

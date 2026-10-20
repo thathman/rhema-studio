@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { readFile, writeTextFile } from "@tauri-apps/plugin-fs"
-import type { ContentStatus, Hymnbook, ImportMode, ImportReport, RestoreReport, SongExport, SongWithSections } from "@/types"
+import type { ContentStatus, Hymnbook, ImportMode, ImportReport, PackageReport, RestoreReport, ServicePackage, SongExport, SongWithSections } from "@/types"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 
 export interface ImportOutcome {
@@ -92,6 +92,35 @@ export async function importSongsFromFiles(mode: ImportMode, hymnbooks: Hymnbook
     }
   }
   return outcome
+}
+
+// ── one service as a package ─────────────────────────────────────────────
+
+/** Save a saved service with its songs and pictures as one file. Null when cancelled. */
+export async function exportServicePackageToFile(programId: string, title: string): Promise<string | null> {
+  const pkg = await invoke<ServicePackage>("content_export_service_package", { programId })
+  const path = await save({
+    defaultPath: `${title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "service"}.rhema-service.json`,
+    filters: [{ name: "Rhema service package", extensions: ["json"] }],
+  })
+  if (!path) return null
+  await writeTextFile(path, JSON.stringify(pkg))
+  return path
+}
+
+function isServicePackage(x: unknown): x is ServicePackage {
+  const p = x as ServicePackage
+  return typeof x === "object" && x !== null && p.version === 1 && typeof p.payload === "string" && typeof p.sha256 === "string"
+}
+
+/** Open a package as a new service. The backend checks the checksum before writing anything. Null when cancelled. */
+export async function importServicePackageFromFile(): Promise<PackageReport | null> {
+  const selected = await open({ multiple: false, filters: [{ name: "Rhema service package", extensions: ["json"] }] })
+  if (!selected) return null
+  const path = Array.isArray(selected) ? selected[0] : selected
+  const parsed: unknown = JSON.parse(new TextDecoder().decode(await readFile(path)))
+  if (!isServicePackage(parsed)) throw new Error("This is not a Rhema service package.")
+  return invoke<PackageReport>("content_import_service_package", { package: parsed })
 }
 
 // ── whole database ──────────────────────────────────────────────────────
