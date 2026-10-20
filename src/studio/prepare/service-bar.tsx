@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
+import { useBibleStore } from "@/stores/bible-store"
 
 /**
  * Pick, create, save, close and delete the service the rundown belongs to.
@@ -28,7 +29,17 @@ export function ServiceBar() {
   const error = useServiceStore((s) => s.error)
   const conflict = useServiceStore((s) => s.conflict)
   const unsupported = useServiceStore((s) => s.unsupportedItems)
+  const missing = useServiceStore((s) => s.missingTranslations)
   const count = useQueueStore((s) => s.items.length)
+  const items = useQueueStore((s) => s.items)
+  const activeId = useBibleStore((s) => s.activeTranslationId)
+  const translations = useBibleStore((s) => s.translations)
+  // Saved services keep their own translation; presentation follows the active
+  // one. Say so instead of letting a KJV service silently show in OYCB.
+  const activeAbbrev = translations.find((t) => t.id === activeId)?.abbreviation ?? null
+  const pinnedElsewhere = current
+    ? [...new Set(items.map((i) => i.translation).filter((t): t is string => typeof t === "string" && t !== activeAbbrev && !missing.includes(t)))]
+    : []
 
   const [newOpen, setNewOpen] = useState(false)
   const [title, setTitle] = useState("")
@@ -199,6 +210,16 @@ export function ServiceBar() {
       {unsupported.length > 0 && (
         <span className="flex items-center gap-1 text-xs text-confidence-mid" role="status" title={unsupported.map((u) => `${u.kind}: ${u.reference}`).join("\n")}>
           <TriangleAlertIcon className="size-3.5" /> {unsupported.length} item{unsupported.length === 1 ? "" : "s"} this version cannot edit
+        </span>
+      )}
+      {missing.length > 0 && (
+        <span className="flex items-center gap-1 text-xs text-confidence-mid" role="status" title={`This service names ${missing.join(", ")}, which is not installed. Text is shown from ${activeAbbrev ?? "the active translation"} instead. Saving keeps ${missing.join(", ")} on the items.`}>
+          <TriangleAlertIcon className="size-3.5" /> {missing.join(", ")} not installed
+        </span>
+      )}
+      {pinnedElsewhere.length > 0 && (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status" title={`Items in this service were saved with ${pinnedElsewhere.join(", ")}. Live output uses the active translation (${activeAbbrev ?? "unknown"}). Saving keeps ${pinnedElsewhere.join(", ")}.`}>
+          <TriangleAlertIcon className="size-3.5" /> Saved as {pinnedElsewhere.join(", ")}; presenting {activeAbbrev ?? "active"}
         </span>
       )}
       {error && !current && (

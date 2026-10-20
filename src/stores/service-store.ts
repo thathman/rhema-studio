@@ -8,6 +8,7 @@ import type {
   ProgramItem,
   ProgramWithItems,
   QueueItem,
+  Translation,
   Verse,
 } from "@/types"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
@@ -39,6 +40,8 @@ interface ServiceState {
   conflict: { expected: number; actual: number } | null
   /** Items of the open service this build cannot edit. Saving is blocked while any exist. */
   unsupportedItems: ProgramItem[]
+  /** Translation codes the open service names that are not installed here. */
+  missingTranslations: string[]
 
   loadPrograms: () => Promise<boolean>
   /** Create an empty service and open it. Refuses while another service has unsaved changes. */
@@ -54,8 +57,24 @@ interface ServiceState {
   closeProgram: (opts?: Discard) => CloseResult
 }
 
-/** Pure: rundown items → what the database stores. Ids keep item identity. */
-export function toItemInputs(items: QueueItem[], translationOf: (id: number) => string | null = () => null): ItemInput[] {
+/** Translation abbreviations the operator is presenting with right now. */
+export interface ActiveTranslations {
+  primary: string | null
+  secondary: string | null
+}
+
+/**
+ * Pure: rundown items → what the database stores. Ids keep item identity.
+ * Items loaded from a service keep their stored translation, secondary and
+ * notes verbatim; only items that were never saved take the translation they
+ * were added with, so changing the active translation later never rewrites a
+ * saved service.
+ */
+export function toItemInputs(
+  items: QueueItem[],
+  translationOf: (id: number) => string | null = () => null,
+  active: ActiveTranslations = { primary: null, secondary: null }
+): ItemInput[] {
   return items.map((i) => ({
     id: i.id,
     kind: "verse",
@@ -63,9 +82,9 @@ export function toItemInputs(items: QueueItem[], translationOf: (id: number) => 
     book_number: i.verse.book_number,
     chapter: i.verse.chapter,
     verse: i.verse.verse,
-    translation: translationOf(i.verse.translation_id),
-    secondary_translation: null,
-    notes: null,
+    translation: i.translation === undefined ? translationOf(i.verse.translation_id) : i.translation,
+    secondary_translation: i.secondary_translation === undefined ? active.secondary : i.secondary_translation,
+    notes: i.notes ?? null,
   }))
 }
 
@@ -78,28 +97,39 @@ function isVerseItem(it: ProgramItem): boolean {
   )
 }
 
+const findTranslation = (translations: Translation[], abbrev: string | null): Translation | undefined =>
+  abbrev === null ? undefined : translations.find((t) => t.abbreviation.toLowerCase() === abbrev.toLowerCase())
+
 /**
  * Pure: stored items → rundown items. Only well-formed items of a supported
  * kind become rundown entries; everything else is returned separately and is
- * never silently turned into a verse.
+ * never silently turned into a verse. Translation, secondary and notes are
+ * carried onto the rundown item verbatim. A pinned translation that is not
+ * installed falls back to the active one for text lookup only and is listed
+ * in `missingTranslations`; the item still remembers it for the next save.
  */
 export function toQueueItems(
   data: ProgramWithItems,
-  translationId: number
-): { items: QueueItem[]; unsupported: ProgramItem[] } {
+  translationId: number,
+  translations: Translation[] = []
+): { items: QueueItem[]; unsupported: ProgramItem[]; missingTranslations: string[] } {
   const items: QueueItem[] = []
   const unsupported: ProgramItem[] = []
+  const missing = new Set<string>()
   for (const it of data.items) {
     if (!(SUPPORTED_ITEM_KINDS as readonly string[]).includes(it.kind) || !isVerseItem(it)) {
       unsupported.push(it)
       continue
     }
+    const pinned = findTranslation(translations, it.translation)
+    if (it.translation !== null && !pinned) missing.add(it.translation)
+    if (it.secondary_translation !== null && !findTranslation(translations, it.secondary_translation)) missing.add(it.secondary_translation)
     items.push({
       id: it.id,
       kind: "verse",
       verse: {
         id: 0,
-        translation_id: translationId,
+        translation_id: pinned?.id ?? translationId,
         book_number: it.book_number!,
         book_name: it.reference.replace(/\s+\d+:\d+$/, ""),
         book_abbreviation: "",
@@ -111,15 +141,18 @@ export function toQueueItems(
       confidence: 1,
       source: "manual",
       added_at: Date.now(),
+      translation: it.translation,
+      secondary_translation: it.secondary_translation,
+      notes: it.notes,
     })
   }
-  return { items, unsupported }
+  return { items, unsupported, missingTranslations: [...missing] }
 }
 
 /** What a save persists; verse text and timestamps are not part of it. */
 export function rundownSignature(items: QueueItem[]): string {
   return items
-    .map((i) => `${i.id}|${i.kind ?? "verse"}|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}`)
+    .map((i) => `${i.id}|${i.kind ?? "verse"}|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`)
     .join("\n")
 }
 
@@ -153,6 +186,14 @@ let saveGeneration = 0
 const translationAbbrev = (id: number): string | null =>
   useBibleStore.getState().translations.find((t) => t.id === id)?.abbreviation ?? null
 
+const activeTranslations = (): ActiveTranslations => {
+  const b = useBibleStore.getState()
+  return {
+    primary: translationAbbrev(b.activeTranslationId),
+    secondary: b.secondaryTranslationId === null ? null : translationAbbrev(b.secondaryTranslationId),
+  }
+}
+
 export const useServiceStore = create<ServiceState>((set, get) => ({
   programs: [],
   current: null,
@@ -162,6 +203,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   error: null,
   conflict: null,
   unsupportedItems: [],
+  missingTranslations: [],
 
   loadPrograms: async () => {
     set({ loading: true })
@@ -194,7 +236,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     const program = await get().createProgram(title, serviceDate, { discard: true })
     if (!program) return "failed"
     baseline = "" // the rundown is not yet what the database has
-    set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [] })
+    set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [], missingTranslations: [] })
     remember(program.id)
     if (!get().dirty) return "created"
     const saved = await get().saveCurrent()
@@ -214,11 +256,11 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         }
         return "missing"
       }
-      const translationId = useBibleStore.getState().activeTranslationId
-      const { items, unsupported } = toQueueItems(data, translationId)
+      const bible = useBibleStore.getState()
+      const { items, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
       baseline = rundownSignature(items)
       useQueueStore.setState({ items, activeIndex: null })
-      set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported })
+      set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported, missingTranslations })
       remember(data.program.id)
       // Fill in verse text so preview works before anything is presented.
       // Text is not part of the signature, so this never marks dirty.
@@ -226,7 +268,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         items.map(async (item) => {
           try {
             const v = await invoke<Verse | null>("get_verse", {
-              translationId,
+              translationId: item.verse.translation_id,
               bookNumber: item.verse.book_number,
               chapter: item.verse.chapter,
               verse: item.verse.verse,
@@ -264,7 +306,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       const data = await invoke<ProgramWithItems>("content_replace_items", {
         programId: current.id,
         expectedRevision: current.revision,
-        items: toItemInputs(snapshotItems, translationAbbrev),
+        items: toItemInputs(snapshotItems, translationAbbrev, activeTranslations()),
       })
       if (generation !== saveGeneration) return "saved" // a newer save owns the state now
       // What was saved is the new baseline; edits made meanwhile stay dirty.
@@ -301,7 +343,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       await invoke("content_delete_program", { id, expectedRevision: target.revision })
       set((st) => ({
         programs: st.programs.filter((p) => p.id !== id),
-        ...(st.current?.id === id ? { current: null, dirty: false, conflict: null, unsupportedItems: [] } : {}),
+        ...(st.current?.id === id ? { current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [] } : {}),
         error: null,
       }))
       if (get().current === null) remember(null)
@@ -314,7 +356,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   closeProgram: (opts) => {
     if (get().dirty && !opts?.discard) return "unsaved"
-    set({ current: null, dirty: false, conflict: null, unsupportedItems: [] })
+    set({ current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [] })
     remember(null)
     return "closed"
   },

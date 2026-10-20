@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }))
 
 import { useServiceStore, toItemInputs, toQueueItems, rundownSignature } from "./service-store"
+import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
 
@@ -62,6 +63,23 @@ const savedResponse = (revision: number, items: ProgramItem[] = stored.items): P
   items,
 })
 
+const KJV: Translation = { id: 1, abbreviation: "KJV", title: "", language: "en", is_copyrighted: false, is_downloaded: true }
+const OYCB: Translation = { id: 7, abbreviation: "OYCB", title: "", language: "yo", is_copyrighted: false, is_downloaded: true }
+
+/** A Yoruba service with an English secondary and a note, as saved by the database. */
+const bilingual: ProgramWithItems = {
+  program,
+  items: [
+    item("y1", "Johanu 3:16", 43, 3, 16, { translation: "OYCB", secondary_translation: "KJV", notes: "Read slowly" }),
+    item("y2", "Orin Dafidi 23:1", 19, 23, 1, { translation: "OYCB", secondary_translation: "KJV" }),
+  ],
+}
+
+const sentItems = () => {
+  const call = mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items").at(-1)!
+  return (call[1] as { items: Array<Record<string, unknown>> }).items
+}
+
 async function openStored() {
   mockInvoke.mockImplementation(async (cmd: string) => (cmd === "content_get_program" ? stored : null))
   expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
@@ -70,8 +88,8 @@ async function openStored() {
 beforeEach(() => {
   mockInvoke.mockReset()
   useQueueStore.setState({ items: [], activeIndex: null })
-  useBibleStore.setState({ activeTranslationId: 1, translations: [{ id: 1, abbreviation: "KJV", title: "", language: "en", is_copyrighted: false, is_downloaded: true }] })
-  useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [] })
+  useBibleStore.setState({ activeTranslationId: 1, secondaryTranslationId: null, translations: [KJV] })
+  useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], missingTranslations: [] })
 })
 
 describe("conversions", () => {
@@ -82,7 +100,7 @@ describe("conversions", () => {
   })
 
   it("stored items become rundown items with the stored id", () => {
-    const { items, unsupported } = toQueueItems(stored, 1)
+    const { items, unsupported } = toQueueItems(stored, 1, [KJV])
     expect(items.map((i) => i.id)).toEqual(["i1", "i2"])
     expect(items[0].verse).toMatchObject({ book_number: 19, chapter: 23, verse: 1, book_name: "Psalms", text: "" })
     expect(unsupported).toEqual([])
@@ -97,9 +115,42 @@ describe("conversions", () => {
         item("broken", "Nowhere 1:1", 0, 0, 0, { book_number: null }),
       ],
     }
-    const { items, unsupported } = toQueueItems(data, 1)
+    const { items, unsupported } = toQueueItems(data, 1, [KJV])
     expect(items.map((i) => i.id)).toEqual(["ok"])
     expect(unsupported.map((i) => i.id)).toEqual(["song", "broken"])
+  })
+
+  it("stored translation, secondary and notes ride on the rundown item and come back out unchanged", () => {
+    const { items, missingTranslations } = toQueueItems(bilingual, 1, [KJV, OYCB])
+    expect(missingTranslations).toEqual([])
+    expect(items[0]).toMatchObject({ translation: "OYCB", secondary_translation: "KJV", notes: "Read slowly" })
+    expect(items[0].verse.translation_id).toBe(OYCB.id) // text lookups use the pinned translation
+    // The operator is presenting KJV with no secondary: the service's own choice still wins.
+    const out = toItemInputs(items, (id) => (id === 1 ? "KJV" : id === 7 ? "OYCB" : null), { primary: "KJV", secondary: null })
+    expect(out.map((o) => [o.translation, o.secondary_translation, o.notes])).toEqual([
+      ["OYCB", "KJV", "Read slowly"],
+      ["OYCB", "KJV", null],
+    ])
+  })
+
+  it("a stored null translation stays null (follow active) rather than being pinned on re-save", () => {
+    const { items } = toQueueItems(stored, 1, [KJV])
+    const out = toItemInputs(items, () => "KJV", { primary: "KJV", secondary: null })
+    expect(out.map((o) => o.translation)).toEqual([null, null])
+  })
+
+  it("never-saved items take the translation they were added with and the current secondary", () => {
+    const out = toItemInputs([queueItem("John 3:16", 43, 3, 16)], (id) => (id === 1 ? "KJV" : null), { primary: "KJV", secondary: "OYCB" })
+    expect(out[0]).toMatchObject({ translation: "KJV", secondary_translation: "OYCB", notes: null })
+  })
+
+  it("a pinned translation that is not installed is reported, text falls back, and the pin survives", () => {
+    const { items, missingTranslations } = toQueueItems(bilingual, 1, [KJV])
+    expect(missingTranslations).toEqual(["OYCB"])
+    expect(items[0].verse.translation_id).toBe(1)
+    expect(items[0].translation).toBe("OYCB")
+    const out = toItemInputs(items, () => "KJV", { primary: "KJV", secondary: null })
+    expect(out[0]).toMatchObject({ translation: "OYCB", secondary_translation: "KJV" })
   })
 
   it("signature ignores verse text but not order or identity", () => {
@@ -108,6 +159,64 @@ describe("conversions", () => {
     expect(rundownSignature(a)).toBe(rundownSignature(b))
     expect(rundownSignature([a[1], a[0]])).not.toBe(rundownSignature(a))
     expect(rundownSignature([{ ...a[0], id: "other" }, a[1]])).not.toBe(rundownSignature(a))
+  })
+})
+
+describe("bilingual service round trip", () => {
+  it("open → save under a different active translation → reopen keeps OYCB, KJV secondary and notes", async () => {
+    useBibleStore.setState({ activeTranslationId: 1, secondaryTranslationId: null, translations: [KJV, OYCB] })
+    let db: ProgramWithItems = bilingual
+    mockInvoke.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
+      if (cmd === "content_get_program") return db
+      if (cmd === "content_replace_items") {
+        const sent = args.items as Array<Omit<ProgramItem, "program_id" | "position">>
+        db = { program: { ...db.program, revision: db.program.revision + 1, item_count: sent.length }, items: sent.map((it, position) => ({ ...it, program_id: "p1", position })) }
+        return db
+      }
+      return null
+    })
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(useServiceStore.getState().missingTranslations).toEqual([])
+    expect(mockInvoke.mock.calls.filter((c) => c[0] === "get_verse").every((c) => (c[1] as { translationId: number }).translationId === OYCB.id)).toBe(true)
+
+    // Operator switches the live translation to KJV and adds an English verse, then saves.
+    useBibleStore.getState().setActiveTranslation(1)
+    useQueueStore.getState().addItem(queueItem("Romans 8:28", 45, 8, 28))
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+    const sent = sentItems()
+    expect(sent.slice(1).map((i) => [i.id, i.translation, i.secondary_translation, i.notes])).toEqual([
+      ["y1", "OYCB", "KJV", "Read slowly"],
+      ["y2", "OYCB", "KJV", null],
+    ])
+    expect(sent[0]).toMatchObject({ reference: "Romans 8:28", translation: "KJV", secondary_translation: null })
+
+    // Reopen after a "restart": the store is cleared, the database is the source.
+    useServiceStore.setState({ current: null, dirty: false })
+    useQueueStore.setState({ items: [] })
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    const q = useQueueStore.getState().items
+    expect(q.map((i) => [i.id, i.translation, i.secondary_translation, i.notes])).toEqual([
+      [sent[0].id, "KJV", null, null],
+      ["y1", "OYCB", "KJV", "Read slowly"],
+      ["y2", "OYCB", "KJV", null],
+    ])
+    expect(useServiceStore.getState().dirty).toBe(false)
+  })
+
+  it("a service naming an uninstalled translation opens with a warning and re-saves without losing it", async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => (cmd === "content_get_program" ? bilingual : cmd === "content_replace_items" ? savedResponse(2, bilingual.items) : null))
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(useServiceStore.getState().missingTranslations).toEqual(["OYCB"])
+    expect(useQueueStore.getState().items[0].verse.translation_id).toBe(1)
+    useQueueStore.getState().addItem(queueItem("Romans 8:28", 45, 8, 28))
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+    expect(sentItems().find((i) => i.id === "y1")).toMatchObject({ translation: "OYCB", secondary_translation: "KJV", notes: "Read slowly" })
+  })
+
+  it("changing an item's notes or translation marks the service dirty", async () => {
+    await openStored()
+    useQueueStore.setState((s) => ({ items: s.items.map((i, n) => (n === 0 ? { ...i, notes: "Pause here" } : i)) }))
+    expect(useServiceStore.getState().dirty).toBe(true)
   })
 })
 

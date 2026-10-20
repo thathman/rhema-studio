@@ -12,7 +12,17 @@ Items store `book_number` (canonical Protestant 1–66 numbering shared by every
 translation in `rhema.db`, including OYCB), `chapter`, `verse`, and translation
 **abbreviations** (`translation`, `secondary_translation`), never translation row ids,
 which change when the Bible database is rebuilt. `NULL` translation means "follow the
-operator's active translation". Versification differences between translations are not
+operator's active translation".
+
+Fidelity rule (implemented in `service-store.ts`): a rundown item loaded from a service
+carries its stored `translation`, `secondary_translation` and `notes` verbatim and writes
+them back unchanged on save, whatever the operator is presenting with. Only items that
+were never saved take the translation they were added with and the current secondary.
+A pinned translation that is not installed is reported (`missingTranslations`), text is
+looked up in the active translation instead, and the pin survives the next save.
+Changing any of these fields marks the service dirty.
+
+Versification differences between translations are not
 modelled yet; when a translation with a different versification is added, a
 `versification` column keyed per translation is the planned extension.
 
