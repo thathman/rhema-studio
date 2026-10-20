@@ -30,7 +30,6 @@ export function ServiceHistory() {
 
   useEffect(() => {
     if (!open) return
-    setPicked(null)
     void useServiceStore.getState().listRevisions().then(setRevisions)
   }, [open])
 
@@ -59,7 +58,7 @@ export function ServiceHistory() {
 
   if (!current) return null
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setPicked(null) }}>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" title="Earlier saved versions of this service">
           <HistoryIcon /> History
