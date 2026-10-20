@@ -13,6 +13,16 @@ import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes
 import { normalizeTheme } from "@/lib/theme-migrations"
 import type { ItemTranslations } from "@/lib/translation-policy"
 
+/** What was live before a quick screen took over, so Back can return to it. */
+export interface HeldLive {
+  liveVerse: VerseRenderData
+  liveSourceVerse: Verse | null
+  liveItem: ItemTranslations | null
+  liveSlide: LiveSlide | null
+  liveItemId: string | null
+  wasLive: boolean
+}
+
 /** The song slide on the output: which rundown item, song and step. */
 export interface LiveSlide {
   itemId: string
@@ -45,6 +55,8 @@ interface BroadcastState {
   liveSlide: LiveSlide | null
   /** The rundown item the live content came from, if any. */
   liveItemId: string | null
+  /** Set while a quick screen is up; what Back returns to. */
+  heldLive: HeldLive | null
   /** Why the last present did not reach the output; cleared by the next successful present. */
   presentWarning: string | null
   // When on, detections auto-present to the live output. When off, the live
@@ -69,8 +81,12 @@ interface BroadcastState {
   setActiveTheme: (id: string) => void
   setLive: (live: boolean) => void
   /** `goLive` puts the output on air in the same update as the verse, so no stale frame shows first. */
-  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null }) => void
+  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean }) => void
   setPresentWarning: (warning: string | null) => void
+  /** Remember the current live content (if any) before a quick screen replaces it. */
+  holdLive: () => void
+  /** Put the held content back on air (or off air, as it was) and forget it. */
+  releaseHeld: () => boolean
   setAutoLive: (auto: boolean) => void
   syncBroadcastOutput: () => void
   syncBroadcastOutputFor: (outputId: string) => void
@@ -200,6 +216,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveItem: null,
   liveSlide: null,
   liveItemId: null,
+  heldLive: null,
   presentWarning: null,
   autoLive: true,
   isDesignerOpen: false,
@@ -372,12 +389,33 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       liveItem: opts.item ?? null,
       liveSlide: opts.slide ?? null,
       liveItemId: opts.itemId ?? opts.slide?.itemId ?? null,
+      heldLive: opts.keepHeld ? get().heldLive : null,
       presentWarning: null,
       ...(opts.goLive ? { isLive: true } : {}),
     })
     get().syncBroadcastOutput()
   },
   setPresentWarning: (presentWarning) => set({ presentWarning }),
+  holdLive: () => {
+    const s = get()
+    if (s.heldLive || !s.liveVerse) return
+    set({ heldLive: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: s.isLive } })
+  },
+  releaseHeld: () => {
+    const held = get().heldLive
+    if (!held) return false
+    set({
+      liveVerse: held.liveVerse,
+      liveSourceVerse: held.liveSourceVerse,
+      liveItem: held.liveItem,
+      liveSlide: held.liveSlide,
+      liveItemId: held.liveItemId,
+      heldLive: null,
+      isLive: held.wasLive,
+    })
+    get().syncBroadcastOutput()
+    return true
+  },
   setAutoLive: (autoLive) => set({ autoLive }),
 
   // Designer

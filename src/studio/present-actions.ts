@@ -4,6 +4,7 @@ import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { presentQuickScreen, type QuickScreen } from "@/hooks/use-broadcast"
 import { useSongStore } from "@/stores/song-store"
 
 /**
@@ -62,6 +63,13 @@ export const presentActions = {
   /** Continue a reading: the verse after/before the live one, same translations. */
   verseNext: () => remoteActions.verseNext(),
   versePrev: () => remoteActions.versePrev(),
+  /** Welcome / Please stand / Let us pray / Offering, on air at once. */
+  quickScreen: (screen: QuickScreen) => presentQuickScreen(screen),
+  /** Return to what was live before the quick screen. */
+  back: () => {
+    useBroadcastStore.getState().releaseHeld()
+  },
+  canGoBack: () => useBroadcastStore.getState().heldLive !== null,
   clear: () => remoteActions.toggleOnAir(false),
   restore: () => {
     if (presentActions.canRestore()) remoteActions.toggleOnAir(true)

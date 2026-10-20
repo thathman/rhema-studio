@@ -6,6 +6,7 @@ import {
   ChevronsRightIcon,
   MonitorIcon,
   RotateCcwIcon,
+  UndoIcon,
   SquareIcon,
   LayoutGridIcon,
   LayoutPanelLeftIcon,
@@ -45,7 +46,8 @@ export function PresentWorkspace() {
   const setView = useShellStore((s) => s.setPresentView)
   const openOutputs = useShellStore((s) => s.openOutputs)
   const isLive = useBroadcastStore((s) => s.isLive)
-  const liveRef = useBroadcastStore((s) => s.liveVerse?.reference ?? null)
+  // Verses carry a reference; quick screens and custom slides may only have lines.
+  const liveRef = useBroadcastStore((s) => (s.liveVerse ? s.liveVerse.reference || s.liveVerse.lines?.[0] || "Slide" : null))
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
@@ -117,6 +119,7 @@ function StandardView() {
   const count = useQueueStore((s) => s.items.length)
   const canRestore = !isLive && hasLiveItem
   const nextHint = useNextHint()
+  const held = useBroadcastStore((s) => s.heldLive !== null)
 
   // Keyboard verbs, only in Standard view and never while typing.
   useEffect(() => {
@@ -164,8 +167,17 @@ function StandardView() {
         </span>
       </div>
 
-      <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card p-3">
+      <section className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] gap-3 overflow-hidden rounded-lg border border-border bg-card p-3">
         <QuickFind mode="present" />
+        <div className="flex flex-col gap-2 border-l border-border pl-3" role="group" aria-label="Quick screens">
+          <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Quick screens</p>
+          <div className="grid grid-cols-2 gap-2">
+            {(["welcome", "stand", "pray", "offering"] as const).map((s) => (
+              <BigButton key={s} icon={<MonitorIcon />} label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering" }[s]} tone="live" className="min-w-0" onClick={() => presentActions.quickScreen(s)} />
+            ))}
+          </div>
+          <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="min-w-0" />
+        </div>
       </section>
     </div>
   )

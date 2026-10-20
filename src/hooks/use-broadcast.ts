@@ -239,6 +239,28 @@ export function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolea
   return "presented"
 }
 
+/** Built-in screens a volunteer needs in a hurry. Text only; themed like everything else. */
+export const QUICK_SCREENS = {
+  welcome: { title: "Welcome", lines: ["We're glad you're here."] },
+  stand: { title: "", lines: ["Please stand"] },
+  pray: { title: "", lines: ["Let us pray"] },
+  offering: { title: "Offering", lines: ["Give as the Lord leads"] },
+} as const
+export type QuickScreen = keyof typeof QUICK_SCREENS
+
+/**
+ * Put a quick screen on air now. Whatever was live is held so Back can
+ * return to it; Next/Previous/Show live drop the hold because the operator
+ * has moved on.
+ */
+export function presentQuickScreen(screen: QuickScreen): void {
+  presentSeq += 1
+  const { title, lines } = QUICK_SCREENS[screen]
+  const store = useBroadcastStore.getState()
+  store.holdLive()
+  store.setLiveVerse({ kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines] }, null, { goLive: true, keepHeld: true })
+}
+
 export const broadcastActions = {
   setLiveVerse: (verse: VerseRenderData | null) =>
     useBroadcastStore.getState().setLiveVerse(verse),
