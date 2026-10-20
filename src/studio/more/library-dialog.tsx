@@ -10,6 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSongStore } from "@/stores/song-store"
 import { useShellStore } from "@/studio/shell-store"
 import { backupDatabaseToFile, contentStatus, exportSongsToFile, importSongsFromFiles, restoreDatabaseFromFile, type ImportOutcome } from "@/lib/song-files"
+import { useJournalStore } from "@/stores/journal-store"
+import { formatJournal } from "@/lib/journal"
+import { monotonicNow } from "@/stores/timer-store"
+import { save } from "@tauri-apps/plugin-dialog"
+import { writeTextFile } from "@tauri-apps/plugin-fs"
+import { plannedMs } from "@/lib/service-timing"
 import type { ContentStatus, ImportMode } from "@/types"
 
 const MODE_LABEL: Record<ImportMode, string> = {
@@ -142,6 +148,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
               </div>
             )}
           </div>
+          <JournalBlock />
           <div className="rounded-lg border border-border p-3">
             <p className="mb-1 flex items-center gap-2 font-medium"><DatabaseIcon className="size-4" /> Everything: services and songs</p>
             <p className="mb-2 text-xs text-muted-foreground">
@@ -173,6 +180,39 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Today's service log: what went live and for how long, against the plan. */
+function JournalBlock() {
+  const entries = useJournalStore((s) => s.entries)
+  const current = useServiceStore((s) => s.current)
+  const items = useQueueStore((s) => s.items)
+  const [busy, setBusy] = useState(false)
+  const text = () => formatJournal(current?.title ?? "Service", entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)])))
+  const saveLog = async () => {
+    setBusy(true)
+    try {
+      const path = await save({ defaultPath: `rhema-service-log-${new Date().toISOString().slice(0, 10)}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] })
+      if (path) {
+        await writeTextFile(path, text())
+        toast.success(`Log saved to ${path}`)
+      }
+    } catch (e) {
+      toast.error(describeError(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <p className="mb-1 font-medium">Service log</p>
+      <p className="mb-2 text-xs text-muted-foreground">{entries.length ? `${entries.length} event${entries.length === 1 ? "" : "s"} since the app started: what went live and for how long, against the planned minutes.` : "Nothing has gone live yet in this run of the app."}</p>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void saveLog()}><DownloadIcon /> Save the log…</Button>
+        <Button size="sm" variant="ghost" disabled={entries.length === 0} onClick={() => useJournalStore.getState().clear()}>Start a new log</Button>
+      </div>
+    </div>
   )
 }
 

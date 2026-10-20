@@ -120,7 +120,7 @@
 | SG-001 Signage player and screen identity | P2 | BACKLOG | OP-001,MD-006 | Independent cache and device health |
 | SG-002 Scheduled announcements/playlists | P2 | BACKLOG | SG-001 | Date/time and timezone tested, no effect on sanctuary |
 | SG-003 QR digital bulletins and optional action links | P2 | BACKLOG | SV-002 | Link safety, privacy, consent, offline fallback |
-| AR-001 Runtime journal/service event log | P1 | BACKLOG | CL-002,PT-001 | Actual vs planned with operator events |
+| AR-001 Runtime journal/service event log | P1 | IN PR (first slice) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
 | AR-002 OBS recording markers and sermon metadata | P2 | BACKLOG | AR-001,OP-005 | No fake recorded status; failures visible |
 | AR-003 Searchable archive and series reuse | P2 | BACKLOG | AR-001 | Find sermon/song/Scripture, respect rights |
 | AR-004 Opt-in transcription and archive indexing | P2 | BACKLOG | AR-003 | Provider-consent, corrections and privacy |
