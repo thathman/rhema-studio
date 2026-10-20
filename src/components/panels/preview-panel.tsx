@@ -3,15 +3,21 @@ import { PanelHeader } from "@/components/ui/panel-header"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
-import { toCustomSlideRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
-import { isSlideItem, isSongItem } from "@/types"
+import { toCustomSlideRenderData, toImageRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
+import { isImageItem, isSlideItem, isSongItem } from "@/types"
+import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 
 export function PreviewPanel() {
   const selectedVerse = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
-  const previewSongId = selectedSlide && !isSlideItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
+  const previewSongId = selectedSlide && isSongItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
+  const previewMediaId = selectedSlide && isImageItem(selectedSlide.item) ? selectedSlide.item.image.media_id : null
+  const previewUrl = useMediaStore((s) => (previewMediaId ? s.urls[previewMediaId] : undefined))
+  useEffect(() => {
+    if (previewMediaId && !previewUrl) void useMediaStore.getState().dataUrl(previewMediaId)
+  }, [previewMediaId, previewUrl])
   const previewSong = useSongStore((s) => (previewSongId ? s.songs[previewSongId] : undefined))
   useEffect(() => {
     if (previewSongId && !previewSong) void useSongStore.getState().load(previewSongId).catch(() => {})
@@ -48,7 +54,9 @@ export function PreviewPanel() {
     "KJV"
 
   let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
-  if (selectedSlide && isSlideItem(selectedSlide.item)) {
+  if (selectedSlide && isImageItem(selectedSlide.item)) {
+    verseData = previewUrl ? toImageRenderData(selectedSlide.item, previewUrl) : null
+  } else if (selectedSlide && isSlideItem(selectedSlide.item)) {
     verseData = toCustomSlideRenderData(selectedSlide.item)
   } else if (selectedSlide && isSongItem(selectedSlide.item)) {
     // A song slide in preview: exactly what Show live will present.

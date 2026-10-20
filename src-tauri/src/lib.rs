@@ -97,6 +97,7 @@ pub fn run() {
         .manage(Mutex::new(commands::remote::OscRuntime::new()))
         .manage(Mutex::new(commands::remote::HttpRuntime::new()))
         .manage(commands::content::ContentState(Mutex::new(None)))
+        .manage(commands::media::MediaState(std::sync::OnceLock::new()))
         .invoke_handler(tauri::generate_handler![
             commands::bible::list_translations,
             commands::bible::list_books,
@@ -154,6 +155,10 @@ pub fn run() {
             commands::content::content_import_songs,
             commands::content::content_backup,
             commands::content::content_restore,
+            commands::media::media_import,
+            commands::media::media_list,
+            commands::media::media_set_dimensions,
+            commands::media::media_delete,
         ])
         .setup(|app| {
             use tauri::Manager;
@@ -165,6 +170,8 @@ pub fn run() {
             // depend on the content database.
             match app.path().app_data_dir() {
                 Ok(dir) => {
+                    // Imported media lives beside the database.
+                    let _ = app.state::<commands::media::MediaState>().0.set(dir.join("media"));
                     let path = dir.join("studio.db");
                     let opened = std::fs::create_dir_all(&dir)
                         .map_err(|e| e.to_string())

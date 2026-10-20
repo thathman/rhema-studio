@@ -1,10 +1,10 @@
-import { cancelPendingPresents, presentCustomSlide, presentSlide, presentVerse } from "@/hooks/use-broadcast"
+import { cancelPendingPresents, presentCustomSlide, presentImage, presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { fetchChapter, stepVerse } from "@/hooks/use-bible"
 import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { isSlideItem, isSongItem, isVerseItem } from "@/types"
+import { isImageItem, isSlideItem, isSongItem, isVerseItem } from "@/types"
 
 /**
  * Find the queue index of the item currently on the live output.
@@ -32,6 +32,10 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   useQueueStore.getState().setActive(index)
   if (isSlideItem(item)) {
     presentCustomSlide(item, { goLive: true })
+    return
+  }
+  if (isImageItem(item)) {
+    await presentImage(item, { goLive: true }).catch((e) => console.warn("[remote-actions] presentQueueItem (image) failed:", e))
     return
   }
   if (isSongItem(item)) {
@@ -155,6 +159,7 @@ export const remoteActions = {
       const idx = queue.items.findIndex((i) => i.id === item.id)
       if (idx !== -1) queue.setActive(idx)
       if (isSlideItem(item)) presentCustomSlide(item, { goLive: true })
+      else if (isImageItem(item)) void presentImage(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (image) failed:", e))
       else void presentSlide(item, index, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
       return
     }

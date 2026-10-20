@@ -4,8 +4,8 @@ export interface VerseSegment {
 }
 
 export interface VerseRenderData {
-  /** Absent means a Bible verse. `lyric` is a song slide, `slide` a custom slide (both use `lines`). */
-  kind?: "verse" | "lyric" | "slide"
+  /** Absent means a Bible verse. `lyric` is a song slide, `slide` a custom slide (both use `lines`), `image` a picture. */
+  kind?: "verse" | "lyric" | "slide" | "image"
   reference: string
   segments: VerseSegment[]
   /** Separate unlabeled translation lines rendered with a blank line between them. */
@@ -20,6 +20,8 @@ export interface VerseRenderData {
   secondaryLines?: string[]
   /** Small copyright line at the bottom of the text area. */
   footer?: string
+  /** A picture over the whole frame (above the theme background). */
+  image?: ThemeImageFill
 }
 
 export interface RenderOptions {

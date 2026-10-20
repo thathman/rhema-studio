@@ -12,6 +12,7 @@ import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceBar } from "@/studio/prepare/service-bar"
 import { SongLibrary } from "@/studio/prepare/song-library"
 import { SlideComposer } from "@/studio/prepare/slide-composer"
+import { MediaLibrary } from "@/studio/prepare/media-library"
 
 /**
  * Service builder: order Bible passages, songs and custom slides into the
@@ -61,6 +62,7 @@ export function PrepareWorkspace() {
                   <TabsTrigger value="bible">Bible</TabsTrigger>
                   <TabsTrigger value="songs">Songs</TabsTrigger>
                   <TabsTrigger value="slides">Slides</TabsTrigger>
+                  <TabsTrigger value="media">Pictures</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden p-3">
@@ -71,6 +73,9 @@ export function PrepareWorkspace() {
               </TabsContent>
               <TabsContent value="slides" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
                 <SlideComposer />
+              </TabsContent>
+              <TabsContent value="media" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+                <MediaLibrary />
               </TabsContent>
             </Tabs>
           </section>

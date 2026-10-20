@@ -19,7 +19,9 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+mod media;
 mod songs;
+pub use media::*;
 pub use songs::*;
 use std::sync::Mutex;
 
@@ -54,13 +56,14 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0001_programs", include_str!("../migrations/0001_programs.sql")),
     ("0002_item_identity", include_str!("../migrations/0002_item_identity.sql")),
     ("0003_songs", include_str!("../migrations/0003_songs.sql")),
+    ("0004_media", include_str!("../migrations/0004_media.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
 /// migration and a renderer; until then they are rejected on write and
 /// surfaced untouched on read. A `song` item carries a JSON `payload`
 /// (`SongItemPayload`); its `reference` is the title, for display only.
-pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide"];
+pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image"];
 
 pub const MAX_TITLE: usize = 200;
 pub const MAX_REFERENCE: usize = 200;
@@ -732,6 +735,9 @@ fn validate_items(items: &[ItemInput]) -> Result<()> {
         if kind == "slide" {
             validate_slide_payload(i, it.payload.as_deref())?;
         }
+        if kind == "image" {
+            media::validate_image_payload(i, it.payload.as_deref())?;
+        }
         for t in [&it.translation, &it.secondary_translation].into_iter().flatten() {
             let t = t.trim();
             if t.is_empty() || t.len() > 32 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
@@ -792,7 +798,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media"]);
     }
 
     #[test]
@@ -981,7 +987,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

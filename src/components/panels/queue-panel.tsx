@@ -8,9 +8,9 @@ import {
   GripVerticalIcon,
 } from "lucide-react"
 import { useQueueStore } from "@/stores"
-import { presentCustomSlide, presentSlide, presentVerse } from "@/hooks/use-broadcast"
+import { presentCustomSlide, presentImage, presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { bibleActions } from "@/hooks/use-bible"
-import { isSlideItem, isSongItem, type QueueItem } from "@/types"
+import { isImageItem, isSlideItem, isSongItem, type QueueItem } from "@/types"
 
 function QueueItemRow({
   item,
@@ -27,6 +27,10 @@ function QueueItemRow({
     useQueueStore.getState().setActive(index)
     if (isSlideItem(item)) {
       presentCustomSlide(item)
+      return
+    }
+    if (isImageItem(item)) {
+      void presentImage(item)
       return
     }
     if (isSongItem(item)) {

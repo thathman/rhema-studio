@@ -1513,6 +1513,16 @@ function renderVerseImpl(
   // Draw background
   drawBackground(ctx, scaledTheme, metrics.backgroundRect, options?.imageCache)
 
+  // A picture item covers the frame; with no text at all, nothing else is drawn.
+  if (verse?.image) {
+    drawImageFill(ctx, verse.image, { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }, 0, options?.imageCache)
+    const hasText = Boolean(verse.reference) || Boolean(verse.lines?.length) || verse.segments.some((s) => s.text.trim())
+    if (!hasText) {
+      ctx.restore()
+      return metrics
+    }
+  }
+
   // The container behind the reference + verse block, then each element's own
   // plate on top of it.
   const baseOpacity = options?.opacity ?? 1

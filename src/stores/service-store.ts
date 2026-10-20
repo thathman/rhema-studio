@@ -8,12 +8,13 @@ import type {
   ProgramItem,
   ProgramWithItems,
   QueueItem,
+  ImageItemPayload,
   SlideItemPayload,
   SongItemPayload,
   Translation,
   Verse,
 } from "@/types"
-import { isSlideItem, isVerseItem } from "@/types"
+import { isImageItem, isSlideItem, isVerseItem } from "@/types"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
@@ -84,7 +85,20 @@ export function toItemInputs(
   active: ActiveTranslations = { primary: null, secondary: null }
 ): ItemInput[] {
   return items.map((i): ItemInput =>
-    isSlideItem(i)
+    isImageItem(i)
+      ? {
+          id: i.id,
+          kind: "image",
+          reference: i.image.name,
+          book_number: null,
+          chapter: null,
+          verse: null,
+          translation: null,
+          secondary_translation: null,
+          notes: i.notes ?? null,
+          payload: JSON.stringify({ media_id: i.image.media_id, fit: i.image.fit } satisfies ImageItemPayload),
+        }
+      : isSlideItem(i)
       ? {
           id: i.id,
           kind: "slide",
@@ -126,6 +140,19 @@ export function toItemInputs(
           } satisfies SongItemPayload),
         }
   )
+}
+
+/** The picture payload of a stored item, or null when it is not well-formed. */
+export function parseImagePayload(raw: string | null | undefined): { media_id: string; fit: "cover" | "contain" | "stretch" } | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as Partial<ImageItemPayload>
+    if (typeof p.media_id !== "string" || !p.media_id) return null
+    const fit = p.fit === "contain" || p.fit === "stretch" ? p.fit : "cover"
+    return { media_id: p.media_id, fit }
+  } catch {
+    return null
+  }
 }
 
 /** The custom-slide payload of a stored item, or null when it is not well-formed. */
@@ -186,6 +213,15 @@ export function toQueueItems(
   const unsupported: ProgramItem[] = []
   const missing = new Set<string>()
   for (const it of data.items) {
+    if (it.kind === "image") {
+      const image = parseImagePayload(it.payload)
+      if (!image) {
+        unsupported.push(it)
+        continue
+      }
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes })
+      continue
+    }
     if (it.kind === "slide") {
       const slide = parseSlidePayload(it.payload)
       if (!slide) {
@@ -251,6 +287,8 @@ export function rundownSignature(items: QueueItem[]): string {
     .map((i) =>
       isVerseItem(i)
         ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
+        : isImageItem(i)
+          ? `${i.id}|image|${i.image.name}|${i.image.media_id}|${i.image.fit}|${i.notes ?? ""}`
         : isSlideItem(i)
           ? `${i.id}|slide|${i.slide.title}|${i.slide.body}|${i.notes ?? ""}`
           : `${i.id}|song|${i.song.title}|${i.song.song_id}|${i.song.arrangement_id ?? ""}|${i.song.languages.join(",")}|${i.notes ?? ""}`
