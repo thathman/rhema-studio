@@ -50,6 +50,19 @@ impl fmt::Display for RemoteCommand {
     }
 }
 
+/// Constant-time equality for shared keys: the time taken does not depend
+/// on where the first differing byte is, so a sender on the LAN cannot
+/// guess the key byte by byte from response timing.
+#[must_use]
+pub fn same_key(presented: &str, expected: &str) -> bool {
+    let (a, b) = (presented.as_bytes(), expected.as_bytes());
+    let mut diff = u8::from(a.len() != b.len());
+    for i in 0..a.len().max(b.len()) {
+        diff |= a.get(i).copied().unwrap_or(0) ^ b.get(i).copied().unwrap_or(0);
+    }
+    diff == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -320,5 +333,14 @@ mod tests {
         }
 
         assert_eq!(cmds.len(), 15);
+    }
+
+    #[test]
+    fn same_key_compares_whole_strings() {
+        assert!(same_key("s3cret", "s3cret"));
+        assert!(!same_key("s3cret", "s3cres"));
+        assert!(!same_key("s3cret", "s3cret1"));
+        assert!(!same_key("", "x"));
+        assert!(same_key("", ""));
     }
 }
