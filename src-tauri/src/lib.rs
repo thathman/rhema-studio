@@ -175,6 +175,12 @@ pub fn run() {
 
             // Try to load ONNX embedding model and pre-computed verse index
             // Prefer INT8 quantized model (~571MB) over FP32 (~2.4GB)
+            //
+            // Gated behind the `onnx` feature: linking ONNX Runtime pulls in a
+            // prebuilt static lib that requires AVX2/BMI2 and whose startup code
+            // crashes pre-Haswell CPUs even when no model is loaded.
+            #[cfg(feature = "onnx")]
+            {
             let base_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
             let model_path = {
                 let int8 = base_dir.join("models/qwen3-embedding-0.6b-int8/model_quantized.onnx");
@@ -249,6 +255,12 @@ pub fn run() {
                      search fully functional. Opt in with 'bun run setup:all --with-embedding'."
                 );
             }
+            }
+
+            #[cfg(not(feature = "onnx"))]
+            log::info!(
+                "Built without the 'onnx' feature — semantic embedding search is disabled in this build."
+            );
 
             Ok(())
         })

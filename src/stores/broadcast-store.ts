@@ -40,6 +40,11 @@ interface BroadcastState {
   renamingThemeId: string | null
   draftTheme: BroadcastTheme | null
   selectedElement: SelectedElement
+  /**
+   * Designer-only flag: draw the secondary translation line in the canvas even
+   * before the draft theme has its own secondary style. Never persisted.
+   */
+  previewSecondaryLine: boolean
 
   // Theme management
   loadThemes: () => void
@@ -74,6 +79,7 @@ interface BroadcastState {
   saveDraft: () => void
   discardDraft: () => void
   setSelectedElement: (el: SelectedElement) => void
+  setPreviewSecondaryLine: (on: boolean) => void
   setRenamingTheme: (id: string | null) => void
 }
 
@@ -105,6 +111,19 @@ function setNestedValue(obj: Record<string, unknown>, path: string, value: unkno
   ;(current as Record<string, unknown> | unknown[])[lastIndex as keyof typeof current] = value as never
 
   return result
+}
+
+function seedSecondaryVerseStyle(
+  theme: BroadcastTheme,
+  path: string
+): BroadcastTheme {
+  if (!path.startsWith("secondaryVerseText.") || theme.secondaryVerseText) {
+    return theme
+  }
+  return {
+    ...theme,
+    secondaryVerseText: { ...theme.verseText },
+  }
 }
 
 function emitDraftToBroadcast(state: BroadcastState): void {
@@ -171,6 +190,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   renamingThemeId: null,
   draftTheme: null,
   selectedElement: null,
+  previewSecondaryLine: false,
 
   loadThemes: () => {
     set({ themes: [...BUILTIN_THEMES] })
@@ -338,7 +358,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   // Designer
   setDesignerOpen: (isDesignerOpen) => {
     if (!isDesignerOpen) {
-      set({ isDesignerOpen, editingThemeId: null, draftTheme: null, selectedElement: null })
+      set({
+        isDesignerOpen,
+        editingThemeId: null,
+        draftTheme: null,
+        selectedElement: null,
+        previewSecondaryLine: false,
+      })
     } else {
       set({ isDesignerOpen })
     }
@@ -350,13 +376,17 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       editingThemeId: themeId,
       draftTheme: { ...theme, updatedAt: Date.now() },
       selectedElement: null,
+      previewSecondaryLine: Boolean(theme.secondaryVerseText),
     })
   },
+  setPreviewSecondaryLine: (previewSecondaryLine) =>
+    set({ previewSecondaryLine }),
   stopEditing: () => {
     set({
       editingThemeId: null,
       draftTheme: null,
       selectedElement: null,
+      previewSecondaryLine: false,
     })
   },
   updateDraft: (updates) => {
@@ -368,7 +398,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   updateDraftNested: (path, value) => {
     set((s) => ({
       draftTheme: s.draftTheme
-        ? (setNestedValue(s.draftTheme as unknown as Record<string, unknown>, path, value) as unknown as BroadcastTheme)
+        ? (setNestedValue(
+            seedSecondaryVerseStyle(s.draftTheme, path) as unknown as Record<string, unknown>,
+            path,
+            value
+          ) as unknown as BroadcastTheme)
         : null,
     }))
     emitDraftToBroadcast(get())

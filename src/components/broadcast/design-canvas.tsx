@@ -6,7 +6,11 @@ import {
   renderVerse,
   type VerseLayoutMetrics,
 } from "@/lib/verse-renderer"
-import { seedFreeBoxesFromMetrics, SAMPLE_VERSE } from "@/lib/theme-migrations"
+import {
+  seedFreeBoxesFromMetrics,
+  SAMPLE_VERSE,
+  SAMPLE_VERSE_DUAL,
+} from "@/lib/theme-migrations"
 import { preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,6 +43,7 @@ export function DesignCanvas() {
   const draftTheme = useBroadcastStore((s) => s.draftTheme)
   const editingThemeId = useBroadcastStore((s) => s.editingThemeId)
   const selectedElement = useBroadcastStore((s) => s.selectedElement)
+  const previewSecondaryLine = useBroadcastStore((s) => s.previewSecondaryLine)
   const [zoomLevel, setZoomLevel] = useState(0)
 
   const resyncLatestTheme = useCallback(() => {
@@ -299,7 +304,7 @@ export function DesignCanvas() {
         draggingRef.current
       )
     })
-  }, [draftTheme])
+  }, [draftTheme, previewSecondaryLine])
 
   useEffect(() => {
     const refRegion = objectsRef.current.referenceRegion
@@ -533,9 +538,15 @@ function renderThemeBitmap(
   const ctx = offscreen.getContext("2d")
   if (!ctx) return { bitmap: offscreen, metrics: null }
 
-  const metrics = renderVerse(ctx, theme, SAMPLE_VERSE, {
-    imageCache: themeImageCache(),
-  })
+  const useDualPreview =
+    Boolean(theme.secondaryVerseText) ||
+    useBroadcastStore.getState().previewSecondaryLine
+  const metrics = renderVerse(
+    ctx,
+    theme,
+    useDualPreview ? SAMPLE_VERSE_DUAL : SAMPLE_VERSE,
+    { imageCache: themeImageCache() }
+  )
   if (theme.background.type === "transparent") {
     drawTransparencyCheckerboard(ctx)
   }

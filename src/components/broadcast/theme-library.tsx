@@ -38,6 +38,11 @@ const THUMBNAIL_VERSE: VerseRenderData = {
   segments: [{ text: "Sample Verse" }],
 }
 
+const THUMBNAIL_VERSE_DUAL: VerseRenderData = {
+  ...THUMBNAIL_VERSE,
+  translationLines: ["Sample Verse", "Àpẹẹrẹ Ẹsẹ̀"],
+}
+
 function ThemeCard({
   theme,
   isActive,
@@ -67,7 +72,13 @@ function ThemeCard({
     >
       {/* Thumbnail */}
       <div className="relative aspect-video w-full overflow-hidden rounded-lg">
-        <CanvasVerse theme={theme} verse={THUMBNAIL_VERSE} className="w-full" />
+        <CanvasVerse
+          theme={theme}
+          verse={
+            theme.secondaryVerseText ? THUMBNAIL_VERSE_DUAL : THUMBNAIL_VERSE
+          }
+          className="w-full"
+        />
 
         {/* Active badge */}
         {isActive && (

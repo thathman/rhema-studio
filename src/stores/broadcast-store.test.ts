@@ -158,6 +158,53 @@ describe("broadcast store sync", () => {
     )
   })
 
+  it("inherits primary verse styling when a secondary language style is edited", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const theme = useBroadcastStore.getState().themes[0]
+    useBroadcastStore.getState().startEditing(theme.id)
+
+    const primary = useBroadcastStore.getState().draftTheme!.verseText
+    useBroadcastStore
+      .getState()
+      .updateDraftNested("secondaryVerseText.color", "#00ff00")
+
+    const secondary = useBroadcastStore.getState().draftTheme!.secondaryVerseText
+    expect(secondary).toEqual({ ...primary, color: "#00ff00" })
+  })
+
+  it("previews the secondary line while editing and clears it on close", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const theme = useBroadcastStore.getState().themes[0]
+
+    useBroadcastStore.getState().startEditing(theme.id)
+    expect(useBroadcastStore.getState().previewSecondaryLine).toBe(
+      Boolean(theme.secondaryVerseText)
+    )
+
+    useBroadcastStore.getState().setPreviewSecondaryLine(true)
+    expect(useBroadcastStore.getState().previewSecondaryLine).toBe(true)
+
+    useBroadcastStore.getState().stopEditing()
+    expect(useBroadcastStore.getState().previewSecondaryLine).toBe(false)
+  })
+
+  it("stores an explicit gap between the translation blocks", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const theme = useBroadcastStore.getState().themes[0]
+    useBroadcastStore.getState().startEditing(theme.id)
+
+    expect(
+      useBroadcastStore.getState().draftTheme!.translationGap
+    ).toBeUndefined()
+    useBroadcastStore.getState().updateDraftNested("translationGap", 96)
+    expect(useBroadcastStore.getState().draftTheme!.translationGap).toBe(96)
+
+    useBroadcastStore.getState().updateDraftNested("translationGap", undefined)
+    expect(
+      useBroadcastStore.getState().draftTheme!.translationGap
+    ).toBeUndefined()
+  })
+
   it("saving a customised builtin repoints the outputs that used it", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const builtin = useBroadcastStore.getState().themes[0]

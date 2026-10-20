@@ -60,7 +60,7 @@ rhema-audio = { path = "crates/audio" }
 rhema-bible = { path = "crates/bible" }
 rhema-stt = { path = "crates/stt" }
 rhema-broadcast = { path = "crates/broadcast" }
-rhema-detection = { path = "crates/detection", features = ["onnx", "vector-search"] }
+rhema-detection = { path = "crates/detection" }
 rhema-api = { path = "crates/api" }
 crossbeam-channel = "0.5"
 dotenvy = "0.15"
@@ -71,8 +71,12 @@ tauri-plugin-fs = "2"
 fontdb = "0.24.0"
 
 [features]
-default = ["whisper"]
+default = ["whisper", "onnx"]
 whisper = ["rhema-stt/whisper"]
+# ONNX Runtime powers semantic (embedding) verse search. It is on by default so
+# release builds are unchanged, but it can be turned off for CPUs whose prebuilt
+# ONNX Runtime static lib requires AVX2/BMI2 (e.g. pre-Haswell Ivy Bridge).
+onnx = ["rhema-detection/onnx", "rhema-detection/vector-search"]
 
 [lints]
 workspace = true

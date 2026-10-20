@@ -20,6 +20,19 @@ export const SAMPLE_VERSE: VerseRenderData = {
   ],
 }
 
+/**
+ * Two-language variant of {@link SAMPLE_VERSE} for the designer and theme
+ * thumbnails, so the secondary translation's styling and the gap between the
+ * two blocks are visible while editing instead of only appearing on air.
+ */
+export const SAMPLE_VERSE_DUAL: VerseRenderData = {
+  ...SAMPLE_VERSE,
+  translationLines: [
+    "In the beginning God created the heaven and the earth.",
+    "Ní ìbẹ̀rẹ̀ ohun gbogbo Ọlọ́run dá àwọn ọ̀run àti ayé.",
+  ],
+}
+
 const DEFAULT_VERSE_NUMBERS: BroadcastTheme["verseNumbers"] = {
   visible: true,
   fontSize: 18,
@@ -81,6 +94,13 @@ export function normalizeTheme(theme: BroadcastTheme): BroadcastTheme {
       ...theme.verseText,
       surface: normalizeSurface(theme.verseText?.surface),
     },
+    secondaryVerseText: theme.secondaryVerseText
+      ? {
+          ...theme.verseText,
+          ...theme.secondaryVerseText,
+          surface: normalizeSurface(theme.secondaryVerseText.surface),
+        }
+      : undefined,
     reference: {
       ...theme.reference,
       surface: normalizeSurface(theme.reference?.surface),
@@ -111,7 +131,9 @@ const rectToBox = (
  */
 export function seedFreeBoxesForTheme(
   theme: BroadcastTheme,
-  verse: VerseRenderData = SAMPLE_VERSE
+  verse: VerseRenderData = theme.secondaryVerseText
+    ? SAMPLE_VERSE_DUAL
+    : SAMPLE_VERSE
 ): { referenceBox: ElementBox; verseBox: ElementBox } | null {
   const ctx = document.createElement("canvas").getContext("2d")
   if (!ctx) return null
