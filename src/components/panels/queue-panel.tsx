@@ -26,7 +26,7 @@ function QueueItemRow({
   const handlePresent = () => {
     useQueueStore.getState().setActive(index)
     if (isSlideItem(item)) {
-      presentCustomSlide(item)
+      void presentCustomSlide(item)
       return
     }
     if (isImageItem(item)) {
@@ -43,7 +43,7 @@ function QueueItemRow({
       item.verse.chapter,
       item.verse.verse
     )
-    void presentVerse(item.verse)
+    void presentVerse(item.verse, { background: item.background })
   }
 
   const handleRemove = (e: React.MouseEvent) => {

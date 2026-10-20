@@ -84,6 +84,7 @@ export function toItemInputs(
   translationOf: (id: number) => string | null = () => null,
   active: ActiveTranslations = { primary: null, secondary: null }
 ): ItemInput[] {
+  const bg = (i: QueueItem) => (i.background ? { background_media_id: i.background.media_id } : {})
   return items.map((i): ItemInput =>
     isImageItem(i)
       ? {
@@ -96,7 +97,7 @@ export function toItemInputs(
           translation: null,
           secondary_translation: null,
           notes: i.notes ?? null,
-          payload: JSON.stringify({ media_id: i.image.media_id, fit: i.image.fit } satisfies ImageItemPayload),
+          payload: JSON.stringify({ media_id: i.image.media_id, fit: i.image.fit, ...bg(i) } satisfies ImageItemPayload & { background_media_id?: string }),
         }
       : isSlideItem(i)
       ? {
@@ -109,7 +110,7 @@ export function toItemInputs(
           translation: null,
           secondary_translation: null,
           notes: i.notes ?? null,
-          payload: JSON.stringify({ title: i.slide.title, body: i.slide.body } satisfies SlideItemPayload),
+          payload: JSON.stringify({ title: i.slide.title, body: i.slide.body, ...bg(i) } satisfies SlideItemPayload & { background_media_id?: string }),
         }
       : isVerseItem(i)
       ? {
@@ -122,6 +123,7 @@ export function toItemInputs(
           translation: i.translation === undefined ? translationOf(i.verse.translation_id) : i.translation,
           secondary_translation: i.secondary_translation === undefined ? active.secondary : i.secondary_translation,
           notes: i.notes ?? null,
+          ...(i.background ? { payload: JSON.stringify(bg(i)) } : {}),
         }
       : {
           id: i.id,
@@ -137,9 +139,21 @@ export function toItemInputs(
             song_id: i.song.song_id,
             arrangement_id: i.song.arrangement_id,
             languages: i.song.languages,
-          } satisfies SongItemPayload),
+            ...bg(i),
+          } satisfies SongItemPayload & { background_media_id?: string }),
         }
   )
+}
+
+/** `background_media_id` from any item's payload; the name is filled in from the library later. */
+export function parseBackground(raw: string | null | undefined): { media_id: string; name: string } | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as { background_media_id?: unknown }
+    return typeof p.background_media_id === "string" && p.background_media_id ? { media_id: p.background_media_id, name: "" } : null
+  } catch {
+    return null
+  }
 }
 
 /** The picture payload of a stored item, or null when it is not well-formed. */
@@ -219,7 +233,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload) })
       continue
     }
     if (it.kind === "slide") {
@@ -228,7 +242,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload) })
       continue
     }
     if (it.kind === "song") {
@@ -246,6 +260,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
+        background: parseBackground(it.payload),
       })
       continue
     }
@@ -276,6 +291,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
+      background: parseBackground(it.payload),
     })
   }
   return { items, unsupported, missingTranslations: [...missing] }
@@ -284,7 +300,7 @@ export function toQueueItems(
 /** What a save persists; verse text and timestamps are not part of it. */
 export function rundownSignature(items: QueueItem[]): string {
   return items
-    .map((i) =>
+    .map((i) => `${i.background?.media_id ?? ""}|` + (
       isVerseItem(i)
         ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
         : isImageItem(i)
@@ -292,7 +308,7 @@ export function rundownSignature(items: QueueItem[]): string {
         : isSlideItem(i)
           ? `${i.id}|slide|${i.slide.title}|${i.slide.body}|${i.notes ?? ""}`
           : `${i.id}|song|${i.song.title}|${i.song.song_id}|${i.song.arrangement_id ?? ""}|${i.song.languages.join(",")}|${i.notes ?? ""}`
-    )
+    ))
     .join("\n")
 }
 

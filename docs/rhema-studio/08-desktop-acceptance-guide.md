@@ -209,6 +209,7 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10g.3 | Delete the media file from the folder by hand. Open Home, then try to present the item. | Library shows "missing"; presenting reports the missing file and leaves the output alone. |
 | 10g.4 | Try to remove a picture that a saved service uses. | Refused, naming the service. |
 | 10g.5 | NDI/OBS output with a picture live. | Receivers show the picture (not a flat frame) within a second. |
+| 10g.6 | Prepare: select a verse item, choose a background picture. Present it; then a song with the same background. | Words over the picture in the theme's text box; both the main window and NDI show the picture under the text; preview matches live. |
 
 ## 11. What automation has and has not verified
 

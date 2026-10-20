@@ -31,7 +31,7 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   if (!item) return
   useQueueStore.getState().setActive(index)
   if (isSlideItem(item)) {
-    presentCustomSlide(item, { goLive: true })
+    await presentCustomSlide(item, { goLive: true }).catch((e) => console.warn("[remote-actions] presentQueueItem (slide) failed:", e))
     return
   }
   if (isImageItem(item)) {
@@ -50,7 +50,7 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
     chapter: item.verse.chapter,
     verse: item.verse.verse,
   })
-  await presentVerse(item.verse, { item, goLive: true, itemId: item.id }).catch((e) =>
+  await presentVerse(item.verse, { item, goLive: true, itemId: item.id, background: item.background }).catch((e) =>
     console.warn("[remote-actions] presentQueueItem failed:", e),
   )
 }
@@ -158,7 +158,7 @@ export const remoteActions = {
       const { item, index } = bible.selectedSlide
       const idx = queue.items.findIndex((i) => i.id === item.id)
       if (idx !== -1) queue.setActive(idx)
-      if (isSlideItem(item)) presentCustomSlide(item, { goLive: true })
+      if (isSlideItem(item)) void presentCustomSlide(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
       else if (isImageItem(item)) void presentImage(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (image) failed:", e))
       else void presentSlide(item, index, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
       return
@@ -172,6 +172,7 @@ export const remoteActions = {
     void presentVerse(selectedVerse, {
       goLive: true,
       itemId: rundownItem?.id ?? null,
+      background: rundownItem?.background ?? null,
       item: {
         translation: previewed,
         secondary_translation: rundownItem && isVerseItem(rundownItem) ? (rundownItem.secondary_translation ?? null) : null,
