@@ -3,7 +3,7 @@ import { bibleActions } from "@/hooks/use-bible"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
-import { isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 import { useSongStore } from "@/stores/song-store"
 
 /**
@@ -28,6 +28,10 @@ export const presentActions = {
    * the active translation and the preview would stop matching live.
    */
   previewItem: (item: QueueItem) => {
+    if (isSlideItem(item)) {
+      useBibleStore.getState().selectSlide({ item, index: 0 })
+      return
+    }
     if (isSongItem(item)) {
       presentActions.previewSlide(item, 0)
       return

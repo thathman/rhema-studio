@@ -11,7 +11,7 @@ export interface Program {
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
-export const SUPPORTED_ITEM_KINDS = ["verse", "song"] as const
+export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide"] as const
 export type ProgramItemKind = (typeof SUPPORTED_ITEM_KINDS)[number]
 
 export interface ProgramItem {
@@ -210,6 +210,12 @@ export interface ImportReport {
   replaced: number
   skipped: number
   hymnbooks_added: number
+}
+
+/** `payload` of a `kind = "slide"` program item. */
+export interface SlideItemPayload {
+  title: string
+  body: string
 }
 
 /** `payload` of a `kind = "song"` program item. */

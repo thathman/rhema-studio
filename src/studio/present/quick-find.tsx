@@ -9,7 +9,7 @@ import { bibleActions } from "@/hooks/use-bible"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { presentActions } from "@/studio/present-actions"
-import type { SongSummary, Verse } from "@/types"
+import { isSongItem, type SongSummary, type Verse } from "@/types"
 
 type Hit = { kind: "verse"; verse: Verse } | { kind: "song"; song: SongSummary }
 
@@ -133,7 +133,7 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
           const isSel =
             hit.kind === "verse"
               ? !selectedSlide && !!selected && selected.book_number === hit.verse.book_number && selected.chapter === hit.verse.chapter && selected.verse === hit.verse.verse
-              : selectedSlide?.item.song.song_id === hit.song.id
+              : !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === hit.song.id
           return (
             <li key={key} className="flex items-stretch gap-1">
               <button

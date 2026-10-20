@@ -60,7 +60,7 @@ pub const MIGRATIONS: &[Migration] = &[
 /// migration and a renderer; until then they are rejected on write and
 /// surfaced untouched on read. A `song` item carries a JSON `payload`
 /// (`SongItemPayload`); its `reference` is the title, for display only.
-pub const SUPPORTED_KINDS: &[&str] = &["verse", "song"];
+pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide"];
 
 pub const MAX_TITLE: usize = 200;
 pub const MAX_REFERENCE: usize = 200;
@@ -674,6 +674,32 @@ pub fn validate_date(date: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// A custom slide: `{"title": ..., "body": ...}`, both plain text.
+#[derive(Debug, Deserialize)]
+struct SlidePayload {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    body: String,
+}
+
+fn validate_slide_payload(i: usize, payload: Option<&str>) -> Result<()> {
+    let Some(raw) = payload else {
+        return Err(ContentError::Invalid(format!("item {i}: slide items need a payload")));
+    };
+    let p: SlidePayload = serde_json::from_str(raw).map_err(|e| ContentError::Invalid(format!("item {i}: bad slide payload: {e}")))?;
+    if p.title.chars().count() > MAX_TITLE {
+        return Err(ContentError::Invalid(format!("item {i}: slide title longer than {MAX_TITLE} characters")));
+    }
+    if p.body.chars().count() > MAX_NOTES {
+        return Err(ContentError::Invalid(format!("item {i}: slide text longer than {MAX_NOTES} characters")));
+    }
+    if p.title.trim().is_empty() && p.body.trim().is_empty() {
+        return Err(ContentError::Invalid(format!("item {i}: a slide needs a title or some text")));
+    }
+    Ok(())
+}
+
 fn validate_items(items: &[ItemInput]) -> Result<()> {
     if items.len() > MAX_ITEMS {
         return Err(ContentError::Invalid(format!("more than {MAX_ITEMS} items")));
@@ -702,6 +728,9 @@ fn validate_items(items: &[ItemInput]) -> Result<()> {
         }
         if kind == "song" {
             songs::validate_song_payload(i, it.payload.as_deref())?;
+        }
+        if kind == "slide" {
+            validate_slide_payload(i, it.payload.as_deref())?;
         }
         for t in [&it.translation, &it.secondary_translation].into_iter().flatten() {
             let t = t.trim();
@@ -860,6 +889,9 @@ mod tests {
         let invalid = [
             ItemInput { reference: " ".into(), ..verse("", 1, 1, 1) },
             ItemInput { kind: "song".into(), ..verse("Song", 1, 1, 1) },
+            ItemInput { kind: "slide".into(), reference: "Welcome".into(), ..ItemInput::default() },
+            ItemInput { kind: "slide".into(), reference: "Welcome".into(), payload: Some("{\"title\":\"\",\"body\":\"  \"}".into()), ..ItemInput::default() },
+            ItemInput { kind: "slide".into(), reference: "Welcome".into(), payload: Some("nope".into()), ..ItemInput::default() },
             ItemInput { book_number: None, ..verse("John 3:16", 43, 3, 16) },
             ItemInput { verse: Some(0), ..verse("John 3:0", 43, 3, 16) },
             ItemInput { translation: Some("K J V".into()), ..verse("John 3:16", 43, 3, 16) },
@@ -873,6 +905,19 @@ mod tests {
         assert!(matches!(db.replace_items(&p.id, 1, &dup), Err(ContentError::Invalid(_))));
         assert_eq!(db.get_program(&p.id).unwrap().unwrap().program.revision, 1);
         assert!(matches!(db.replace_items("missing", 1, &[]), Err(ContentError::NotFound(_))));
+    }
+
+    #[test]
+    fn slide_items_round_trip() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("p", None).unwrap();
+        let payload = "{\"title\":\"Welcome\",\"body\":\"Tea after the service\\nin the hall\"}";
+        let saved = db
+            .replace_items(&p.id, 1, &[ItemInput { kind: "slide".into(), reference: "Welcome".into(), payload: Some(payload.into()), ..ItemInput::default() }])
+            .unwrap();
+        assert_eq!(saved.items[0].kind, "slide");
+        assert_eq!(saved.items[0].payload.as_deref(), Some(payload));
+        assert!(saved.items[0].book_number.is_none());
     }
 
     #[test]

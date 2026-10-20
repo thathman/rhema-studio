@@ -1,20 +1,20 @@
-import { cancelPendingPresents, presentSlide, presentVerse } from "@/hooks/use-broadcast"
+import { cancelPendingPresents, presentCustomSlide, presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { stepVerse } from "@/hooks/use-bible"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { isSongItem, isVerseItem } from "@/types"
+import { isSlideItem, isSongItem, isVerseItem } from "@/types"
 
 /**
  * Find the queue index of the item currently on the live output.
  * Returns null when the live content came from somewhere other than the queue.
  */
 function findLiveQueueIndex(): number | null {
-  const { liveVerse, liveSlide } = useBroadcastStore.getState()
+  const { liveVerse, liveItemId } = useBroadcastStore.getState()
   if (!liveVerse) return null
   const items = useQueueStore.getState().items
-  const index = liveSlide
-    ? items.findIndex((item) => item.id === liveSlide.itemId)
+  const index = liveItemId
+    ? items.findIndex((item) => item.id === liveItemId)
     : items.findIndex((item) => isVerseItem(item) && item.reference === liveVerse.reference)
   return index >= 0 ? index : null
 }
@@ -29,6 +29,10 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   const item = useQueueStore.getState().items[index]
   if (!item) return
   useQueueStore.getState().setActive(index)
+  if (isSlideItem(item)) {
+    presentCustomSlide(item, { goLive: true })
+    return
+  }
   if (isSongItem(item)) {
     await presentSlide(item, slide, { goLive: true }).catch((e) =>
       console.warn("[remote-actions] presentQueueItem (song) failed:", e),
@@ -41,7 +45,7 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
     chapter: item.verse.chapter,
     verse: item.verse.verse,
   })
-  await presentVerse(item.verse, { item, goLive: true }).catch((e) =>
+  await presentVerse(item.verse, { item, goLive: true, itemId: item.id }).catch((e) =>
     console.warn("[remote-actions] presentQueueItem failed:", e),
   )
 }
@@ -99,7 +103,8 @@ export const remoteActions = {
       const { item, index } = bible.selectedSlide
       const idx = queue.items.findIndex((i) => i.id === item.id)
       if (idx !== -1) queue.setActive(idx)
-      void presentSlide(item, index, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
+      if (isSlideItem(item)) presentCustomSlide(item, { goLive: true })
+      else void presentSlide(item, index, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
       return
     }
     const selectedVerse = bible.selectedVerse
@@ -110,6 +115,7 @@ export const remoteActions = {
     const previewed = bible.translations.find((t) => t.id === selectedVerse.translation_id)?.abbreviation ?? null
     void presentVerse(selectedVerse, {
       goLive: true,
+      itemId: rundownItem?.id ?? null,
       item: {
         translation: previewed,
         secondary_translation: rundownItem && isVerseItem(rundownItem) ? (rundownItem.secondary_translation ?? null) : null,

@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.7 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.8 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -22,7 +22,7 @@
 | ST-005 Verify translation/secondary/notes round-trip in latest PR #2 | P0 | MERGED | ST-003 | Fixed in PR #2 (`9c7c1c2`): items keep saved translation/secondary/notes; 7 store tests incl. bilingual reopen/save/reopen. Manual step 4.6–4.7 in the acceptance guide still open |
 | ST-006 End-to-end operator acceptance on real desktop and projectors | P0 | BACKLOG | ST-001,ST-002,ST-003 | Checklist written (`08-desktop-acceptance-guide.md`); Windows installer built (run 39382133331) and contents inspected, not launched. No manual pass performed yet |
 | ST-007 Verify PR dependency merge sequence and CI after retargets | P0 | MERGED | ST-005 | Executed 2026-10-20: #5 `5d23c94` → #3 `a3204ea` → #1 `011b3ae` → #2 `e66483b`, merge commits, no duplicates (`git diff` content-branch..main = docs only). CI on `main` recorded in DEVELOPMENT-STATUS.md. Branches kept; PR #4 retargeted to `main` |
-| ST-008 Ship explicit database backup/restore UX and verified recovery exercise | P0 | IN PR | ST-003 | content-backup-restore PR: More → Library → Back up now / Restore from a backup; crate `verify_backup` + `restore_from` (snapshot first, bad files refused, reopen on failure, older backups migrate); 2 crate tests; guide §9.4–9.6. Recovery rehearsal on a real machine (QA-010) still open |
+| ST-008 Ship explicit database backup/restore UX and verified recovery exercise | P0 | MERGED | ST-003 | PR #10 `d884791`: More → Library → Back up now / Restore from a backup; crate `verify_backup` + `restore_from` (snapshot first, bad files refused, reopen on failure, older backups migrate); 2 crate tests; guide §9.4–9.6. Recovery rehearsal on a real machine (QA-010) still open |
 | ST-009 Migrate product identity and settings safely | P2 | BACKLOG | ST-003 | Existing configurations survive app-ID rename, migration/rollback tested |
 | ST-010 Correct typecheck coverage and control lint debt | P1 | MERGED / BACKLOG | ST-001 | `tsc -b` in CI (merged); lint debt documented (13 upstream files), not reduced |
 | ST-011 Translation-resolution policy and atomic live activation | P0 | MERGED | ST-003,ST-005 | PR #2 (`af950eb`): item's saved translations win unless overridden; missing translation reported, never substituted; Next/Prev/Show live/OSC/HTTP go on air only with the verse; Clear cancels in-flight presents. 26 tests. Manual steps 5.0a–5.0h open |
@@ -47,8 +47,8 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| SV-001 Custom slide schema/editor and text rendering | P1 | BACKLOG | ST-003 | Create/reuse, save/reopen, theme safe area, explicit Preview/Live |
-| SV-002 Unified add/reorder/edit flow across Bible/song/slide | P1 | BACKLOG | SO-009,SV-001 | One search bar and consistent add action; stable item identity |
+| SV-001 Custom slide schema/editor and text rendering | P1 | IN PR | ST-003 | custom-slides PR: `kind='slide'` items with `{title, body}` payload (crate-validated), Prepare → Slides composer with live preview and quick starts, in-place editing in the rundown, `presentCustomSlide` (atomic, supersedes loading presents), Next/Prev and Show live; 4 tests + crate test. Reuse across services (slide library) not yet |
+| SV-002 Unified add/reorder/edit flow across Bible/song/slide | P1 | IN PR (partial) | SO-009,SV-001 | Same Add button and rundown controls for verses, songs and slides; live highlighting by item id (custom-slides PR). Drag reorder in the rundown and one search box across all kinds still open |
 | SV-003 Service templates and multi-service variants | P1 | BACKLOG | SV-002 | Duplicate/adjust 7/9/11 AM without unintended shared mutations |
 | SV-004 Quick Find for Bible, hymn, song, media | P1 | BACKLOG | SO-007,SV-002 | Keyboard-safe, typo-tolerant, predictable candidate ranking |
 | SV-005 Next/Previous Verse and responsive readings | P1 | BACKLOG | ST-001,SV-002 | Versification-safe navigation; leader/congregation format |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.8):** PR #10 merged `d884791` (ST-008 MERGED, acceptance 9.4–9.6 open). custom-slides PR opened (SV-001 IN PR, SV-002 partial).
 - **2026-10-20 (rev 0.7):** PR #9 merged `039602b`; content-backup-restore PR opened (ST-008 IN PR).
 - **2026-10-20 (rev 0.6):** PR #8 merged `38f76eb`; songs-import-export PR opened (SO-008 UI IN PR).
 - **2026-10-20 (rev 0.5):** PR #7 merged `351d8e2`; songs-editor PR opened (SO-002 editor, SO-003, SO-004, SO-005 UI IN PR). Browser-shim check of the editor and Present flow recorded in guide §10a.

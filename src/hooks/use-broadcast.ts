@@ -3,7 +3,7 @@ import { mark } from "@/lib/latency-marks"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type { VerseRenderData } from "@/types"
-import type { SongQueueItem, Verse } from "@/types"
+import type { SlideQueueItem, SongQueueItem, Verse } from "@/types"
 import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 import { useSongStore } from "@/stores/song-store"
@@ -68,6 +68,8 @@ export interface PresentOptions {
   item?: ItemTranslations | null
   /** Put the output on air in the same update as the verse. Nothing changes if the present fails. */
   goLive?: boolean
+  /** The rundown item id the verse came from, for highlighting and stepping. */
+  itemId?: string | null
 }
 
 export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_translation"
@@ -166,7 +168,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
             renderEntries[0]?.translation ?? "KJV"
           ),
       verseToPresent,
-      { goLive: opts.goLive, item: opts.item ?? null }
+      { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null }
     )
   mark(`presentVerse end ${ref}`)
   return "presented"
@@ -213,6 +215,27 @@ export async function presentSlide(
   if (slide.missing.length > 0) {
     warn(`${slide.sectionLabel} has no ${slide.missing.join(" / ").toUpperCase()} text; showing what there is.`)
   }
+  return "presented"
+}
+
+export function toCustomSlideRenderData(item: SlideQueueItem): VerseRenderData {
+  const lines = item.slide.body.replace(/\r\n?/g, "\n").split("\n").map((l) => l.trim()).filter(Boolean)
+  return { kind: "slide", reference: item.slide.title.trim(), segments: [{ text: lines.join(" ") }], lines }
+}
+
+/**
+ * Present a custom slide. Nothing to fetch, so it lands in one update; it
+ * still takes a ticket so a verse or song that was loading cannot overtake it.
+ */
+export function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolean } = {}): PresentOutcome {
+  presentSeq += 1
+  const data = toCustomSlideRenderData(item)
+  if (!data.reference && data.lines?.length === 0) {
+    useBroadcastStore.getState().setPresentWarning("Empty slide not shown: give it a title or some text.")
+    return "empty"
+  }
+  useBibleStore.getState().selectSlide({ item, index: 0 })
+  useBroadcastStore.getState().setLiveVerse(data, null, { goLive: opts.goLive, itemId: item.id })
   return "presented"
 }
 

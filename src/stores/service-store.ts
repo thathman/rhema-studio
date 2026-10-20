@@ -8,11 +8,12 @@ import type {
   ProgramItem,
   ProgramWithItems,
   QueueItem,
+  SlideItemPayload,
   SongItemPayload,
   Translation,
   Verse,
 } from "@/types"
-import { isVerseItem } from "@/types"
+import { isSlideItem, isVerseItem } from "@/types"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
@@ -78,7 +79,20 @@ export function toItemInputs(
   active: ActiveTranslations = { primary: null, secondary: null }
 ): ItemInput[] {
   return items.map((i): ItemInput =>
-    isVerseItem(i)
+    isSlideItem(i)
+      ? {
+          id: i.id,
+          kind: "slide",
+          reference: i.slide.title.trim() || i.slide.body.split("\n")[0]?.trim() || "Slide",
+          book_number: null,
+          chapter: null,
+          verse: null,
+          translation: null,
+          secondary_translation: null,
+          notes: i.notes ?? null,
+          payload: JSON.stringify({ title: i.slide.title, body: i.slide.body } satisfies SlideItemPayload),
+        }
+      : isVerseItem(i)
       ? {
           id: i.id,
           kind: "verse",
@@ -107,6 +121,19 @@ export function toItemInputs(
           } satisfies SongItemPayload),
         }
   )
+}
+
+/** The custom-slide payload of a stored item, or null when it is not well-formed. */
+export function parseSlidePayload(raw: string | null | undefined): SlideItemPayload | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as Partial<SlideItemPayload>
+    const title = typeof p.title === "string" ? p.title : ""
+    const body = typeof p.body === "string" ? p.body : ""
+    return title.trim() || body.trim() ? { title, body } : null
+  } catch {
+    return null
+  }
 }
 
 /** The song payload of a stored item, or null when it is not well-formed. */
@@ -154,6 +181,15 @@ export function toQueueItems(
   const unsupported: ProgramItem[] = []
   const missing = new Set<string>()
   for (const it of data.items) {
+    if (it.kind === "slide") {
+      const slide = parseSlidePayload(it.payload)
+      if (!slide) {
+        unsupported.push(it)
+        continue
+      }
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes })
+      continue
+    }
     if (it.kind === "song") {
       const payload = parseSongPayload(it.payload)
       if (!payload) {
@@ -210,7 +246,9 @@ export function rundownSignature(items: QueueItem[]): string {
     .map((i) =>
       isVerseItem(i)
         ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
-        : `${i.id}|song|${i.song.title}|${i.song.song_id}|${i.song.arrangement_id ?? ""}|${i.song.languages.join(",")}|${i.notes ?? ""}`
+        : isSlideItem(i)
+          ? `${i.id}|slide|${i.slide.title}|${i.slide.body}|${i.notes ?? ""}`
+          : `${i.id}|song|${i.song.title}|${i.song.song_id}|${i.song.arrangement_id ?? ""}|${i.song.languages.join(",")}|${i.notes ?? ""}`
     )
     .join("\n")
 }

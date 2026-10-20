@@ -11,10 +11,11 @@ import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceBar } from "@/studio/prepare/service-bar"
 import { SongLibrary } from "@/studio/prepare/song-library"
+import { SlideComposer } from "@/studio/prepare/slide-composer"
 
 /**
- * Service builder: order Bible passages and songs into the rundown, and keep
- * the song library. Nothing here can present — Prepare only edits.
+ * Service builder: order Bible passages, songs and custom slides into the
+ * rundown, and keep the song library. Nothing here can present — Prepare only edits.
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
@@ -59,7 +60,7 @@ export function PrepareWorkspace() {
                 <TabsList>
                   <TabsTrigger value="bible">Bible</TabsTrigger>
                   <TabsTrigger value="songs">Songs</TabsTrigger>
-                  <TabsTrigger value="slides" disabled title="Planned for Milestone 2C">Slides</TabsTrigger>
+                  <TabsTrigger value="slides">Slides</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden p-3">
@@ -67,6 +68,9 @@ export function PrepareWorkspace() {
               </TabsContent>
               <TabsContent value="songs" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
                 <SongLibrary />
+              </TabsContent>
+              <TabsContent value="slides" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+                <SlideComposer />
               </TabsContent>
             </Tabs>
           </section>
