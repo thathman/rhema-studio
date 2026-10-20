@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.37 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.38 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-21 (rev 0.38):** PRs #78–#85 merged (roles, signage loop/schedule/health, lint debt, settings migration tests, today's service, QR slides); rows reconciled.
 - **2026-10-20 (rev 0.37):** PRs #57–#77 merged; rows reconciled (OP-006 pairing, QA-006 remote part, SO-011 attachments, CL-001/002/003 first slices, AR-001/003, QA-002/003).
 - **2026-10-20 (rev 0.36):** PRs #47–#53 merged; rows reconciled (SO-003/004/005/006/008/009/010/011, PT-003, AR-001, QA-004/005/008).
 - **2026-10-20 (rev 0.35):** brand-variants PR opened (CV-004 variants + font warning).
