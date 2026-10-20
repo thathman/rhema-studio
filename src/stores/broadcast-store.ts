@@ -178,14 +178,32 @@ function seedSecondaryVerseStyle(
 // One ticker for all signage outputs; each emits only when its picture changes.
 const signageStarted = new Map<string, number>()
 const signageLast = new Map<string, number>()
+/** Per output: a ticket for the latest sync (older in-flight syncs give up) and what was last emitted. */
+const signageSeq = new Map<string, number>()
+const signageEmitted = new Map<string, string>()
 let signageTicker: ReturnType<typeof setInterval> | null = null
+
+function forgetSignage(id: string): void {
+  signageStarted.delete(id)
+  signageLast.delete(id)
+  signageSeq.delete(id)
+  signageEmitted.delete(id)
+}
 
 async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Promise<void> {
   const ids = output.signage?.mediaIds ?? []
   const seconds = output.signage?.seconds ?? 10
+  const ticket = (signageSeq.get(output.id) ?? 0) + 1
+  signageSeq.set(output.id, ticket)
   if (!signageStarted.has(output.id)) signageStarted.set(output.id, monotonicNow())
   const index = signageIndex(ids.length, signageStarted.get(output.id) ?? 0, monotonicNow(), seconds)
   signageLast.set(output.id, index)
+  // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
+  const stamp = `${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
+  if (signageEmitted.get(output.id) === stamp) {
+    ensureSignageTicker()
+    return
+  }
   let verse: VerseRenderData | null = null
   if (index >= 0) {
     try {
@@ -195,7 +213,10 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
       // A missing picture shows the theme background instead of breaking the loop.
     }
   }
-  if (signageLast.get(output.id) !== index) return // a newer tick won
+  // A newer sync, or a role change while the picture was loading: this result is stale.
+  if (signageSeq.get(output.id) !== ticket) return
+  if (useBroadcastStore.getState().outputs.find((o) => o.id === output.id)?.role !== "signage") return
+  signageEmitted.set(output.id, stamp)
   void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse }).catch(() => {})
   ensureSignageTicker()
 }
@@ -210,6 +231,8 @@ function ensureSignageTicker(): void {
       signageTicker = null
       signageStarted.clear()
       signageLast.clear()
+      signageSeq.clear()
+      signageEmitted.clear()
       return
     }
     for (const o of signage) {
@@ -416,10 +439,12 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         ? { activeThemeId: patch.themeId }
         : {}),
     }))
-    if (patch.themeId || "language" in patch || "role" in patch) get().syncBroadcastOutputFor(id)
+    if ("role" in patch && patch.role !== "signage") forgetSignage(id)
+    if (patch.themeId || "language" in patch || "role" in patch || "signage" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
+    forgetSignage(id)
     set((s) => {
       const outputStatus = Object.fromEntries(
         Object.entries(s.outputStatus).filter(([statusId]) => statusId !== id)
