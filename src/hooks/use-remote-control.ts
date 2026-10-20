@@ -24,8 +24,13 @@ export function useRemoteControl() {
     const unlisteners: UnlistenFn[] = []
 
     async function setup() {
+      // A listener that resolves after cleanup would leak for the process lifetime.
+      const keep = (unlisten: UnlistenFn) => {
+        if (cancelled) unlisten()
+        else keep(unlisten)
+      }
       const register = async (event: string, handler: () => void) => {
-        unlisteners.push(
+        keep(
           await listen(event, () => {
             if (cancelled) return
             noteRemote(event)
@@ -54,7 +59,7 @@ export function useRemoteControl() {
           runMacro(id)
         }
       })
-      unlisteners.push(uMacro)
+      keep(uMacro)
 
       // remote:theme — switch active theme by name
       const u3 = await listen<string>(REMOTE_EVENTS.theme, (event) => {
@@ -72,7 +77,7 @@ export function useRemoteControl() {
           useBroadcastStore.getState().setActiveTheme(theme.id)
         }
       })
-      unlisteners.push(u3)
+      keep(u3)
 
       // remote:opacity — set broadcast output opacity
       const u4 = await listen<string>(REMOTE_EVENTS.opacity, (event) => {
@@ -86,7 +91,7 @@ export function useRemoteControl() {
         // that can be wired when the broadcast store adds opacity support.
         void value
       })
-      unlisteners.push(u4)
+      keep(u4)
 
       // remote:on_air — toggle live broadcast state
       const u5 = await listen<string>(REMOTE_EVENTS.on_air, (event) => {
@@ -97,7 +102,7 @@ export function useRemoteControl() {
         if (active === undefined) return
         remoteActions.toggleOnAir(active)
       })
-      unlisteners.push(u5)
+      keep(u5)
 
       // remote:confidence — set detection confidence threshold
       const u8 = await listen<string>(REMOTE_EVENTS.confidence, (event) => {
@@ -108,7 +113,7 @@ export function useRemoteControl() {
         if (value === undefined) return
         useSettingsStore.getState().setConfidenceThreshold(value)
       })
-      unlisteners.push(u8)
+      keep(u8)
     }
 
     setup()

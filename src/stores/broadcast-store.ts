@@ -176,10 +176,10 @@ function emitDraftToBroadcast(state: BroadcastState): void {
   if (!state.draftTheme) return
   const verse = state.isLive ? state.liveVerse : null
   for (const output of state.outputs) {
-    if (output.themeId !== state.editingThemeId) continue
+    if (output.themeId !== state.editingThemeId || output.role === "stage") continue
     void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", {
       theme: state.draftTheme,
-      verse,
+      verse: forOutputLanguage(verse, output.language),
     }).catch(() => {})
   }
 }
@@ -362,7 +362,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         ? { activeThemeId: patch.themeId }
         : {}),
     }))
-    if (patch.themeId) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "language" in patch || "role" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
