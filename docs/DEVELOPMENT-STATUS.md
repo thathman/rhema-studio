@@ -2,7 +2,7 @@
 
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-20
+**Updated:** 2026-10-21
 
 ## Integrated `main`
 
@@ -20,19 +20,17 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Active milestone
 
-**2C — Service Builder** complete in code (SV-001–SV-007; SV-004 typo tolerance open). **Milestone 5** PT-001/PT-002 merged. **Milestone 4** started with output roles and the stage display. **2C detail:** SV-001 custom slides merged (PR #11); SV-002 drag reorder and SV-003 copy service merged (PR #12); SV-005 and SV-006 merged. 2C remaining: SV-007 revisions/compare, SV-004 typo tolerance, duration estimates. Milestone 3: MD-005 text quick screens merged (#15); MD-001 media index and MD-002 pictures in PR (media-assets). 2B code complete pending desktop acceptance.
-
-**2B — Songs and Hymnbooks** (`docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`). Done: crate + migration 0003 (PR #6), stores, Quick find, renderer, `presentSlide`, rundown and Present integration (PR #7). Merged: Prepare → Songs library, paste-first editor, arrangement strip, hymnbook numbers, per-item language/order controls, licence readiness line (PR #8). Merged: More → Library export/import (PR #9). Remaining for 2B: manual acceptance §10a on the desktop. Milestone 2B code is complete pending acceptance.
+All PRD milestones through 8 have first slices merged: 2B songs, 2C service builder, 3 media (pictures, backgrounds, pages; video/lower thirds desktop-gated), 4 outputs (roles, stage, language, health, signage), 5 production (timers, cues, rehearsal), 6 design (brand kit; Canva blocked on #34), 7 collaboration (approval, package, operator name, pairing; sync blocked on #72), 8 signage (loop, schedule, playlists, QR), 9 archive (logs). Open work is listed under "Next eligible tasks".
 
 ## Latest test results
 
 - Frontend: 407 vitest tests in 54 files pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
 - Rust: `rhema-content` 44 tests pass; `rhema-api` 115; app `cargo check` and clippy in CI.
-- CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
+- CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
 
 ## Unverified (release-acceptance blockers, not development blockers)
 
-- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10a, incl. 5.0a–5.0h). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
+- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10z). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
 - Windows installer (run 39382133331, content branch at `1684859`) built and inspected, not installed or launched.
 - Yoruba speech recognition and the OpenAI provider (PR #4).
 
@@ -51,7 +49,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 - **Licensing (owner decision):** the installer's `rhema.db` bundles copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) inherited from upstream. `docs/LICENSES.md` records this; no public release should go out before the owner decides which texts ship.
 
 - No hands-on desktop or projector verification yet of the integrated build.
-- Upstream lint debt in `src/components/**` and `data/` is unfixed.
+- Upstream lint debt: 7 React hook patterns in untouched components (ST-010).
 - Whisper model is not bundled in the Windows installer (by design); speech is optional.
 
 ## Next eligible tasks

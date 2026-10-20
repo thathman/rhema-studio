@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.39 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.40 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -32,12 +32,12 @@
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
 | SO-001 Specify versioned song/section/arrangement/hymnbook schema | P1 | MERGED | ST-003,ST-005 | Spec `docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`; schema shipped as migration 0003 in PR #6 (`802640a`) |
-| SO-002 Song CRUD and history | P1 | MERGED (crate) / IN PR (editor) | SO-001 | PR #6 crate; songs-editor PR: Prepare → Songs library, New/Edit/Delete with conflict and in-use messages, unsaved-change guard |
+| SO-002 Song CRUD and history | P1 | MERGED (#6 crate, #8 editor) | SO-001 | PR #6 crate; songs-editor PR: Prepare → Songs library, New/Edit/Delete with conflict and in-use messages, unsaved-change guard |
 | SO-003 Section editor (verse/chorus/bridge/tag) | P1 | MERGED (#8) | SO-002 | songs-editor PR: paste-first parser → section cards, kind dropdown, relabel, move/remove, EN/YO side by side, validation list |
 | SO-004 Named service-specific arrangements | P1 | MERGED (#8) | SO-003 | songs-editor PR: arrangement strip (drag, ← → Delete, buttons), named orders, default flag, per-item order and language choice in the rundown |
 | SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (#6, #7, #8, #52) | SO-002 | PR #6 crate; PR #7 Quick find; PR #8 creation and number rows; hymnbook-management PR: rename and remove in More → Library (numbers dropped, songs kept) |
 | SO-006 Multilingual lyrics | P1 | MERGED (#7, #8) | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |
-| SO-007 Search library | P1 | MERGED (crate) / IN PR (UI) | SO-002,SO-005 | PR #6: FTS5 over title/authors/lyrics + numbers; songs-core PR: one Quick find box for verses, hymn numbers and songs |
+| SO-007 Search library | P1 | MERGED (#6 crate, #7/#25 UI) | SO-002,SO-005 | PR #6: FTS5 over title/authors/lyrics + numbers; songs-core PR: one Quick find box for verses, hymn numbers and songs |
 | SO-008 Import/export | P1 | MERGED (#6, #9, #54) | SO-001,SO-003 | PR #6 crate; PR #9 Library dialog (JSON export, JSON/OpenLyrics import); PR #54 editor → OpenLyrics… saves one song as .xml (round-trips through the importer) |
 | SO-009 Add songs to unified service rundown | P1 | MERGED (#7) | SO-004,ST-003 | songs-core PR: song rundown items (`kind='song'` + payload) save/reopen, Add from Quick find, slide sub-list, reorder/remove |
 | SO-010 Song/lyric renderer and Live safety | P0 | MERGED (#7) | SO-009,ST-002 | songs-core PR: `presentSlide` (atomic go-live, Clear cancels, no stale frame), lyric lines + secondary language + copyright footer in the renderer, Next/Prev step slides then items, Show live from a previewed slide; 12 tests |
@@ -72,8 +72,8 @@
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
 | OP-001 Output profile model, routing and migration | P1 | MERGED (roles) | MD-004 | PR #23: `role` on each output (`congregation` default, `stage`); saved outputs without a role load unchanged; chosen in the output editor; stage forces a display window (no NDI) |
-| OP-002 Stage confidence screen and private messages | P1 | MERGED (screen) / IN PR (messages) | OP-001 | PR #23: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
-| OP-003 Independent language/style per output | P1 | IN PR | OP-001,SO-006 | output-language PR: each congregation output chooses Both / First only / Second only (verses and lyrics; second falls back to the prepared frame, never blank); style per output already via themes; 2 tests |
+| OP-002 Stage confidence screen and private messages | P1 | MERGED (#23 screen, #24 messages) | OP-001 | PR #23: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
+| OP-003 Independent language/style per output | P1 | MERGED (#55) | OP-001,SO-006 | output-language PR: each congregation output chooses Both / First only / Second only (verses and lyrics; second falls back to the prepared frame, never blank); style per output already via themes; 2 tests |
 | OP-004 Multiview and device health | P1 | MERGED (health) | OP-001 | PR #26: Home readiness lists every output (on/off, congregation/stage/stream) and warns when only the stage screen is on; 1 test. Multiview thumbnails and disconnected-monitor detection later |
 | OP-005 NDI/OBS and external output stability | P0 | BACKLOG | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
 | OP-006 Paired mobile/LAN control with roles | P1 | MERGED (#66, #69 shared key; #77 pairing + revocation; #78 roles + require-a-key switch) | OP-001 | remote-secret PR (#63): optional key in Settings → Remote; HTTP `/command` needs `X-Rhema-Key` or `Authorization: Bearer` (401 otherwise, health stays open), OSC needs the key as first string argument; blank keeps today's behaviour; 2 crate tests. Pairing, roles and revocation later |
@@ -105,10 +105,10 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| CL-001 Accounts, roles and local identity/actor audit | P1 | IN PR (first slice) | ST-003 | operator-name PR: More → Your name (local setting) is the audit actor on every content write (approve, save, import…; `audit_events.actor`, column from 0002) and heads the service log. Roles/permissions and multi-user identity later |
-| CL-002 Immutable approved release snapshot | P0 | IN PR (first slice) | SV-002,MD-006 | approved-snapshot PR: migration 0007 `programs.approved_revision/approved_at`; Prepare → Approve pins the saved revision (its History snapshot is never pruned), History marks it, Home readiness shows approved / changed since approval / not approved; the service file (CL-003) is the content+media manifest. approve-preflight PR: Approve refuses while a song is missing from the library or a picture/background is missing from the media folder (FR-08 'all assets local before Ready'). Later: approval required before go-live, approver identity (CL-001) |
-| CL-003 Local portable service package | P1 | IN PR | CL-002 | service-package PR: `<title>.rhema-service.json` = service items + the songs and pictures they use (base64) + SHA-256 over the payload; import refuses a bad checksum/hash/version before writing, reuses songs by id and pictures by hash, remaps arrangement ids; More → Library block; 2 crate tests |
-| CL-004 Sync transport evaluation and threat model | P1 | IN PR (evaluation) | CL-001,CL-002 | `docs/rhema-studio/15-sync-transport-evaluation.md`: four options (files, shared folder, self-hosted relay, hosted relay) with cost, conflicts, threat model; recommends the shared-folder slice next, no vendor; owner decision requested |
+| CL-001 Accounts, roles and local identity/actor audit | P1 | MERGED (first slice #61) / BACKLOG (roles) | ST-003 | operator-name PR: More → Your name (local setting) is the audit actor on every content write (approve, save, import…; `audit_events.actor`, column from 0002) and heads the service log. Roles/permissions and multi-user identity later |
+| CL-002 Immutable approved release snapshot | P0 | MERGED (#59 approval, #73 preflight) / BACKLOG (approval required before go-live) | SV-002,MD-006 | approved-snapshot PR: migration 0007 `programs.approved_revision/approved_at`; Prepare → Approve pins the saved revision (its History snapshot is never pruned), History marks it, Home readiness shows approved / changed since approval / not approved; the service file (CL-003) is the content+media manifest. approve-preflight PR: Approve refuses while a song is missing from the library or a picture/background is missing from the media folder (FR-08 'all assets local before Ready'). Later: approval required before go-live, approver identity (CL-001) |
+| CL-003 Local portable service package | P1 | MERGED (#56, #75 hardening) | CL-002 | service-package PR: `<title>.rhema-service.json` = service items + the songs and pictures they use (base64) + SHA-256 over the payload; import refuses a bad checksum/hash/version before writing, reuses songs by id and pictures by hash, remaps arrangement ids; More → Library block; 2 crate tests |
+| CL-004 Sync transport evaluation and threat model | P1 | MERGED (evaluation #71; decision #72 open) | CL-001,CL-002 | `docs/rhema-studio/15-sync-transport-evaluation.md`: four options (files, shared folder, self-hosted relay, hosted relay) with cost, conflicts, threat model; recommends the shared-folder slice next, no vendor; owner decision requested |
 | CL-005 Sync drafts, approvals, presence and conflict resolution | P1 | BACKLOG | CL-004 | Edited remotely, reviewed locally, no silent overwrite |
 | CL-006 Release delivery and activation at church | P0 | MERGED (first slice #83) / BACKLOG (remote delivery, after #72) | CL-003,CL-005 | todays-service PR: Home offers "Open" for today's approved service (then today's, then the next approved one) when nothing is open; saved list marks approved ones. Assets preflight = approval (#73) + service file (#56). Remote delivery waits on #72 |
 | CL-007 Team assignments, comments, visual diff/notifications | P2 | BACKLOG | CL-005 | Ownership, activity audit, unread actionable changes |
@@ -119,7 +119,7 @@
 |---|---|---|---|---|
 | SG-001 Signage player and screen identity | P2 | MERGED (#79 loop, #84 screen health, #86 preload) | OP-001,MD-006 | signage-loop PR: output role Signage loops chosen library pictures (seconds each) on its own ticker; untouched by go-live, Clear, rehearsal and theme-designer edits; a missing picture shows the theme background; card shows the loop size; readiness lists the role. Schedules (SG-002) and screen health later |
 | SG-002 Scheduled announcements/playlists | P2 | MERGED (#80 time window, #86 playlists) | SG-001 | signage-schedule PR: days + from/to (local time, crosses midnight) on the loop; outside the window the theme background shows; an unreadable time keeps the loop on; 1 test with fixed local dates. Multiple playlists later |
-| SG-003 QR digital bulletins and optional action links | P2 | BACKLOG | SV-002 | qr-bulletin PR: Prepare → Slides → "QR link": a full http(s) address only (no credentials, ≤300 chars), drawn offline as one composed picture (white panel: code left, title/lines/address right; no text layer or scrim over the code) so what is scanned is what is read; nothing tracked; saved in the slide payload. Known limit: the preview panel shows the words only. Giving/prayer integrations later |
+| SG-003 QR digital bulletins and optional action links | P2 | MERGED (first slice #85) / BACKLOG (action links) | SV-002 | qr-bulletin PR: Prepare → Slides → "QR link": a full http(s) address only (no credentials, ≤300 chars), drawn offline as one composed picture (white panel: code left, title/lines/address right; no text layer or scrim over the code) so what is scanned is what is read; nothing tracked; saved in the slide payload. Known limit: the preview panel shows the words only. Giving/prayer integrations later |
 | AR-001 Runtime journal/service event log | P1 | MERGED (#53, #60 remote commands) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
 | AR-002 OBS recording markers and sermon metadata | P2 | BACKLOG | AR-001,OP-005 | No fake recorded status; failures visible |
 | AR-003 Searchable archive and series reuse | P2 | MERGED (#65 logs) / BACKLOG (series reuse beyond Copy service) | AR-001 | log-archive PR: migration 0008 `service_logs`; Library → Keep this log stores the text; Earlier logs lists newest first, searches title/body, saves any log as a file, deletes; logs outlive their service; 1 crate test. Series reuse later |
@@ -132,7 +132,7 @@
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
 | QA-001 Windows x64 signed/unsigned packaging and hands-on smoke | P0 | BACKLOG | ST-007 | Artifact installs/launches, data stays, projectors + NDI verified |
-| QA-002 Offline and injected-failure test suite | P0 | IN PR (first slice) | OP-005,SV-002 | injected-failures PR: `live-safety-failures.test.ts` — song load error, unreadable picture, failure after Clear (stays cleared; Restore still works), Bible lookup failure plus a dead output window: what is on air stays on air, with a warning. OBS/NDI drop and real network loss remain desktop tests (OP-005) |
+| QA-002 Offline and injected-failure test suite | P0 | MERGED (first slice #57) / BACKLOG (network loss, OBS drop on a desktop) | OP-005,SV-002 | injected-failures PR: `live-safety-failures.test.ts` — song load error, unreadable picture, failure after Clear (stays cleared; Restore still works), Bible lookup failure plus a dead output window: what is on air stays on air, with a warning. OBS/NDI drop and real network loss remain desktop tests (OP-005) |
 | QA-003 Accessibility and novice-volunteer usability | P0 | MERGED (guard #68) / BACKLOG (human tests) | ST-002 | Keyboard, contrast, novice timed exercises with recorded findings |
 | QA-004 Rights and dependency license inventory | P0 | MERGED (#28) | ST-001 | `docs/LICENSES.md`: upstream MIT, OYCB CC BY-SA 4.0 (compliant), direct Rust and JS dependency licences (all permissive), fonts OFL, NDI runtime terms, song/media provenance model. **Open owner decision:** copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) are bundled in `rhema.db`/installer; openbible.info and NDI notices added to About (about-notices PR); installer licence screen still MIT-only |
 | QA-005 Settings and database migration/rollback matrix | P0 | MERGED (database #40, settings #82) | ST-003 | migration-matrix PR (#39): one crate test opens a file at every schema version 0001–0004, upgrades it (backup named after the first pending migration, data intact, songs and revisions usable), verifies the automatic backup and restores it into a current database. Corrupt-file refusal already tested. Settings/app-identity migration (ST-009) still open |
@@ -140,7 +140,7 @@
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
 | QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | MERGED (#48, #51) | QA-003 | `docs/QUICK-START.md`: one-page volunteer guide (prepare, present table, what cannot go wrong, if something breaks). Stage/production guide and diagnostics how-to later |
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
-| QA-010 Backup/restore incident rehearsal | P0 | IN PR (runbook) | ST-008 | `docs/rhema-studio/14-backup-restore-rehearsal.md`: five-step drill (approve + service file + backup → standby open/restore → restore approved → USB pulled), all rows unverified until performed |
+| QA-010 Backup/restore incident rehearsal | P0 | MERGED (runbook #59) / BACKLOG (the drill itself, #62) | ST-008 | `docs/rhema-studio/14-backup-restore-rehearsal.md`: five-step drill (approve + service file + backup → standby open/restore → restore approved → USB pulled), all rows unverified until performed |
 
 ## Roll-up / near-term sequence
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-21 (rev 0.40):** eleven rows still at IN PR after their merges reconciled (SO-002, SO-007, OP-002, OP-003, CL-001–004, SG-003, QA-002, QA-010).
 - **2026-10-21 (rev 0.39):** PRs #86 (signage playlists + preload) and #87 (long text as pages) merged; five stale rows reconciled (CV-004, AR-001, AR-003, PT-002, PT-004).
 - **2026-10-21 (rev 0.38):** PRs #78–#85 merged (roles, signage loop/schedule/health, lint debt, settings migration tests, today's service, QR slides); rows reconciled.
 - **2026-10-20 (rev 0.37):** PRs #57–#77 merged; rows reconciled (OP-006 pairing, QA-006 remote part, SO-011 attachments, CL-001/002/003 first slices, AR-001/003, QA-002/003).
