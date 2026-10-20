@@ -15,6 +15,8 @@ export interface OutputHealth {
   role: "congregation" | "stage" | "signage"
   kind: "display" | "ndi"
   on: boolean
+  /** Why the output is not really delivering (NDI frames failing), when known. */
+  error?: string | null
 }
 
 export interface ReadinessInput {
@@ -43,7 +45,7 @@ export interface ReadinessInput {
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
 export function outputDetail(outputs: OutputHealth[] | undefined): string | undefined {
   if (!outputs?.length) return undefined
-  const parts = outputs.map((o) => `${o.name} · ${o.on ? "on" : "off"} · ${o.role === "stage" ? "stage" : o.kind === "ndi" ? "stream" : "congregation"}`)
+  const parts = outputs.map((o) => `${o.name} · ${o.on ? "on" : "off"} · ${o.role === "stage" ? "stage" : o.kind === "ndi" ? "stream" : "congregation"}${o.error ? ` · not sending: ${o.error}` : ""}`)
   const congregationOn = outputs.some((o) => o.role === "congregation" && o.on)
   const anyOn = outputs.some((o) => o.on)
   return parts.join(", ") + (anyOn && !congregationOn ? ". Only the stage is on; the congregation sees nothing." : "")
@@ -64,10 +66,10 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
     i.outputsOnAir > 0
       ? {
           id: "outputs",
-          status: i.outputs?.some((o) => o.role === "congregation" && o.on) === false ? "warn" : "ok",
+          status: i.outputs?.some((o) => o.role === "congregation" && o.on) === false || i.outputs?.some((o) => o.on && o.error) ? "warn" : "ok",
           label: `${i.outputsOnAir} of ${i.outputsConfigured} output${i.outputsConfigured === 1 ? "" : "s"} on a screen`,
           detail: outputDetail(i.outputs),
-          ...(i.outputs?.some((o) => o.role === "congregation" && o.on) === false ? { fix: "outputs" as const, fixLabel: "Open outputs" } : {}),
+          ...(i.outputs?.some((o) => o.role === "congregation" && o.on) === false || i.outputs?.some((o) => o.on && o.error) ? { fix: "outputs" as const, fixLabel: "Open outputs" } : {}),
         }
       : { id: "outputs", status: "warn", label: "No output is on a screen yet", detail: i.outputs?.length ? outputDetail(i.outputs) : "The congregation cannot see anything until an output is on air.", fix: "outputs", fixLabel: "Open outputs" },
     i.rundownCount > 0

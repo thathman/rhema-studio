@@ -75,6 +75,7 @@ export function HomeWorkspace() {
       role: o.role ?? "congregation",
       kind: o.type,
       on: Boolean(outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive),
+      error: outputStatus[o.id]?.ndiError ?? null,
     })),
     rundownCount: items.length,
     listening,

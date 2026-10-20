@@ -1,6 +1,13 @@
 import { useEffect } from "react"
 import { listen } from "@tauri-apps/api/event"
+import { invoke } from "@tauri-apps/api/core"
+import { toast } from "sonner"
 import { useBroadcastStore } from "@/stores"
+import { disableOutput, enableOutput } from "@/lib/broadcast-output-control"
+
+/** One automatic restart per output per minute; after that the operator decides. */
+const lastRestart = new Map<string, number>()
+const RESTART_COOLDOWN_MS = 60_000
 
 interface OutputReadyPayload {
   outputId?: string
@@ -37,9 +44,48 @@ export function useBroadcastOutputs(): void {
       }
     })
 
+    // NDI stream died (frame pushes keep failing): show it, try one restart.
+    const unlistenTrouble = listen<{ outputId?: string; message?: string }>("broadcast:ndi-trouble", (event) => {
+      const store = useBroadcastStore.getState()
+      const id = event.payload?.outputId
+      const output = id ? store.outputs.find((o) => o.id === id) : undefined
+      // Only an NDI output is ever restarted; a projector window is never touched.
+      if (!output || output.type !== "ndi") return
+      const message = event.payload?.message?.trim() || "frames are not being sent"
+      void (async () => {
+      // Stale failures from a sender the operator just turned off are not trouble.
+      const status = await invoke<{ active: boolean } | null>("get_ndi_status", { outputId: output.id }).catch(() => null)
+      if (!status?.active) {
+        store.setNdiError(output.id, null)
+        return
+      }
+      store.setNdiError(output.id, message)
+      const last = lastRestart.get(output.id) ?? 0
+      if (Date.now() - last < RESTART_COOLDOWN_MS) {
+        toast.error(`${output.name}: NDI is not sending`, { description: `${message}. Turn the output off and on in Outputs.` })
+        return
+      }
+      lastRestart.set(output.id, Date.now())
+      toast.warning(`${output.name}: NDI stopped sending, restarting it`, { description: message })
+      await disableOutput(output)
+      const ok = await enableOutput(output)
+      if (!ok) toast.error(`${output.name}: NDI could not be restarted`, { description: "Check the NDI runtime and the network, then turn the output on again." })
+      })()
+    })
+    const unlistenRecovered = listen<{ outputId?: string }>("broadcast:ndi-recovered", (event) => {
+      const store = useBroadcastStore.getState()
+      const id = event.payload?.outputId
+      const output = id ? store.outputs.find((o) => o.id === id) : undefined
+      if (!output || !store.outputStatus[output.id]?.ndiError) return
+      store.setNdiError(output.id, null)
+      toast.success(`${output.name}: NDI is sending again`)
+    })
+
     return () => {
       for (const id of timeouts) clearTimeout(id)
       void unlistenPromise.then((unlisten) => unlisten())
+      void unlistenTrouble.then((unlisten) => unlisten())
+      void unlistenRecovered.then((unlisten) => unlisten())
     }
   }, [])
 }

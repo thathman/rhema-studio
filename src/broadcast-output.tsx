@@ -1,3 +1,5 @@
+import { emitTo } from "@tauri-apps/api/event"
+import { initialNdiHealth, pushOutcome } from "@/lib/ndi-health"
 import { createRoot } from "react-dom/client"
 import { useRef, useEffect, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
@@ -28,6 +30,17 @@ function uint8ToBase64(bytes: Uint8Array | Uint8ClampedArray): string {
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
 const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "main"
+
+// Tell the main window when the NDI stream dies on the network (a few pushes
+// failing in a row) and when it comes back, so the operator sees it and the
+// app can restart the sender. The pump itself keeps trying.
+let ndiHealth = initialNdiHealth()
+function reportNdi(ok: boolean, message: string): void {
+  const r = pushOutcome(ndiHealth, ok)
+  ndiHealth = r.state
+  if (r.event === "trouble") void emitTo("main", "broadcast:ndi-trouble", { outputId: OUTPUT_ID, message }).catch(() => {})
+  if (r.event === "recovered") void emitTo("main", "broadcast:ndi-recovered", { outputId: OUTPUT_ID }).catch(() => {})
+}
 
 interface BroadcastPayload {
   theme: BroadcastTheme
@@ -141,8 +154,10 @@ function BroadcastCanvas() {
 
       await invoke("push_ndi_frame", { request })
       lastPushRef.current = Date.now()
+      reportNdi(true, "")
     } catch (error) {
       console.warn("[broadcast-output] push_ndi_frame failed", error)
+      reportNdi(false, String(error))
     } finally {
       pushingRef.current = false
     }
@@ -198,6 +213,8 @@ function BroadcastCanvas() {
     })
 
     const unlistenNdiConfig = currentWindow.listen<NdiConfigEventPayload>("broadcast:ndi-config", (event) => {
+      // A deliberate on/off is a fresh start for trouble counting.
+      ndiHealth = initialNdiHealth()
       ndiConfigRef.current = event.payload
       logDebug("Received broadcast:ndi-config", event.payload)
       // Push burst when NDI becomes active

@@ -118,6 +118,7 @@ interface BroadcastState {
   renameOutput: (id: string, name: string) => void
   setOutputTheme: (id: string, themeId: string) => void
   setOutputStatus: (id: string, status: BroadcastOutputStatus) => void
+  setNdiError: (id: string, ndiError: string | null) => void
 
   // Designer actions
   setDesignerOpen: (open: boolean) => void
@@ -499,10 +500,20 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setOutputStatus: (id, status) =>
     set((s) => {
       const prev = s.outputStatus[id]
-      if (prev && prev.previewOpen === status.previewOpen && prev.ndiActive === status.ndiActive) {
+      // A status without an opinion on the error keeps it while the sender is on (the
+      // Outputs dialog refreshes status every second); off always clears it.
+      const ndiError = status.ndiError !== undefined ? status.ndiError : status.ndiActive ? (prev?.ndiError ?? null) : null
+      const next = { ...status, ndiError }
+      if (prev && prev.previewOpen === next.previewOpen && prev.ndiActive === next.ndiActive && (prev.ndiError ?? null) === (next.ndiError ?? null)) {
         return s
       }
-      return { outputStatus: { ...s.outputStatus, [id]: status } }
+      return { outputStatus: { ...s.outputStatus, [id]: next } }
+    }),
+  setNdiError: (id, ndiError) =>
+    set((s) => {
+      const prev = s.outputStatus[id] ?? { previewOpen: false, ndiActive: false }
+      if ((prev.ndiError ?? null) === ndiError) return s
+      return { outputStatus: { ...s.outputStatus, [id]: { ...prev, ndiError } } }
     }),
   setLive: (isLive) => {
     set({ isLive })
