@@ -500,10 +500,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setOutputStatus: (id, status) =>
     set((s) => {
       const prev = s.outputStatus[id]
-      if (prev && prev.previewOpen === status.previewOpen && prev.ndiActive === status.ndiActive && (prev.ndiError ?? null) === (status.ndiError ?? null)) {
+      // A status without an opinion on the error keeps it while the sender is on (the
+      // Outputs dialog refreshes status every second); off always clears it.
+      const ndiError = status.ndiError !== undefined ? status.ndiError : status.ndiActive ? (prev?.ndiError ?? null) : null
+      const next = { ...status, ndiError }
+      if (prev && prev.previewOpen === next.previewOpen && prev.ndiActive === next.ndiActive && (prev.ndiError ?? null) === (next.ndiError ?? null)) {
         return s
       }
-      return { outputStatus: { ...s.outputStatus, [id]: status } }
+      return { outputStatus: { ...s.outputStatus, [id]: next } }
     }),
   setNdiError: (id, ndiError) =>
     set((s) => {

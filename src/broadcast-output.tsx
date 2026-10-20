@@ -213,6 +213,8 @@ function BroadcastCanvas() {
     })
 
     const unlistenNdiConfig = currentWindow.listen<NdiConfigEventPayload>("broadcast:ndi-config", (event) => {
+      // A deliberate on/off is a fresh start for trouble counting.
+      ndiHealth = initialNdiHealth()
       ndiConfigRef.current = event.payload
       logDebug("Received broadcast:ndi-config", event.payload)
       // Push burst when NDI becomes active

@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import { listen } from "@tauri-apps/api/event"
+import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { useBroadcastStore } from "@/stores"
 import { disableOutput, enableOutput } from "@/lib/broadcast-output-control"
@@ -48,8 +49,16 @@ export function useBroadcastOutputs(): void {
       const store = useBroadcastStore.getState()
       const id = event.payload?.outputId
       const output = id ? store.outputs.find((o) => o.id === id) : undefined
-      if (!output) return
+      // Only an NDI output is ever restarted; a projector window is never touched.
+      if (!output || output.type !== "ndi") return
       const message = event.payload?.message?.trim() || "frames are not being sent"
+      void (async () => {
+      // Stale failures from a sender the operator just turned off are not trouble.
+      const status = await invoke<{ active: boolean } | null>("get_ndi_status", { outputId: output.id }).catch(() => null)
+      if (!status?.active) {
+        store.setNdiError(output.id, null)
+        return
+      }
       store.setNdiError(output.id, message)
       const last = lastRestart.get(output.id) ?? 0
       if (Date.now() - last < RESTART_COOLDOWN_MS) {
@@ -58,10 +67,9 @@ export function useBroadcastOutputs(): void {
       }
       lastRestart.set(output.id, Date.now())
       toast.warning(`${output.name}: NDI stopped sending, restarting it`, { description: message })
-      void (async () => {
-        await disableOutput(output)
-        const ok = await enableOutput(output)
-        if (!ok) toast.error(`${output.name}: NDI could not be restarted`, { description: "Check the NDI runtime and the network, then turn the output on again." })
+      await disableOutput(output)
+      const ok = await enableOutput(output)
+      if (!ok) toast.error(`${output.name}: NDI could not be restarted`, { description: "Check the NDI runtime and the network, then turn the output on again." })
       })()
     })
     const unlistenRecovered = listen<{ outputId?: string }>("broadcast:ndi-recovered", (event) => {
