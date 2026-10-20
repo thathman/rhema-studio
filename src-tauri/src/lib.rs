@@ -153,6 +153,8 @@ pub fn run() {
             commands::content::content_delete_hymnbook,
             commands::content::content_export_songs,
             commands::content::content_import_songs,
+            commands::media::content_export_service_package,
+            commands::media::content_import_service_package,
             commands::content::content_list_revisions,
             commands::content::content_get_revision,
             commands::content::content_restore_revision,

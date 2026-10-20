@@ -271,3 +271,11 @@ Not verified by automation (needs the checklist above): every interactive step i
 sections 1–10l, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.
+
+### 10n. One service as a file (CL-003)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10n.1 | Save a service with a verse, a song with a background picture and a picture item. More → Library → "Save this service as a file…". Copy the file to a second computer (or restore an empty database) and "Open a service file…". | The service opens in Prepare with all three items; the song and picture are in the library; the picture shows on the preview. | Unverified |
+| 10n.2 | Edit one character in the file's `payload` and open it. | "Nothing was added … the file is damaged (checksum does not match)". No new service. | Unverified |
+| 10n.3 | Open the same file twice. | Two services with the same title; one copy of the song and picture. | Unverified |

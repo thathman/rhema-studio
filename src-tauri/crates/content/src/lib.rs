@@ -20,9 +20,11 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 mod media;
+mod package;
 mod revisions;
 mod songs;
 pub use media::*;
+pub use package::*;
 pub use revisions::*;
 pub use songs::*;
 use std::sync::Mutex;

@@ -107,7 +107,7 @@
 |---|---|---|---|---|
 | CL-001 Accounts, roles and local identity/actor audit | P1 | BACKLOG | ST-003 | Added/updated by with real actor, permissions test |
 | CL-002 Immutable approved release snapshot | P0 | BACKLOG | SV-002,MD-006 | Complete content+media manifest, explicit go-live release |
-| CL-003 Local portable service package | P1 | BACKLOG | CL-002 | Export/import checksum verified without internet |
+| CL-003 Local portable service package | P1 | IN PR | CL-002 | service-package PR: `<title>.rhema-service.json` = service items + the songs and pictures they use (base64) + SHA-256 over the payload; import refuses a bad checksum/hash/version before writing, reuses songs by id and pictures by hash, remaps arrangement ids; More → Library block; 2 crate tests |
 | CL-004 Sync transport evaluation and threat model | P1 | BACKLOG | CL-001,CL-002 | Self-hosted vs optional hosted assessed and priced; no lock-in |
 | CL-005 Sync drafts, approvals, presence and conflict resolution | P1 | BACKLOG | CL-004 | Edited remotely, reviewed locally, no silent overwrite |
 | CL-006 Release delivery and activation at church | P0 | BACKLOG | CL-003,CL-005 | All assets preflight; active runtime pinned offline |

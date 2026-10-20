@@ -7,7 +7,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::State;
 
-use rhema_content::{MediaAsset, MediaInput};
+use rhema_content::{MediaAsset, MediaInput, PackageReport, ServicePackage};
 
 use super::content::{ContentCommandError, ContentState};
 
@@ -184,4 +184,20 @@ mod tests {
             assert!(safe_file_name(bad).is_none(), "{bad}");
         }
     }
+}
+
+/// One service with the songs and pictures it uses, as a checksummed file.
+#[tauri::command]
+pub fn content_export_service_package(state: State<'_, ContentState>, media: State<'_, MediaState>, program_id: String) -> CmdResult<ServicePackage> {
+    let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
+    let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
+    Ok(db.export_service_package(&program_id, media_dir(&media)?)?)
+}
+
+/// Creates a new service from a package; songs and pictures already here are reused.
+#[tauri::command]
+pub fn content_import_service_package(state: State<'_, ContentState>, media: State<'_, MediaState>, package: ServicePackage) -> CmdResult<PackageReport> {
+    let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
+    let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
+    Ok(db.import_service_package(&package, media_dir(&media)?)?)
 }
