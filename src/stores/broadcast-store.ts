@@ -18,7 +18,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useSongStore } from "@/stores/song-store"
 import { forOutputLanguage } from "@/lib/output-language"
-import { signageFrame, signageIndex } from "@/lib/signage"
+import { signageActive, signageFrame, signageIndex } from "@/lib/signage"
 import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -196,7 +196,8 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   const ticket = (signageSeq.get(output.id) ?? 0) + 1
   signageSeq.set(output.id, ticket)
   if (!signageStarted.has(output.id)) signageStarted.set(output.id, monotonicNow())
-  const index = signageIndex(ids.length, signageStarted.get(output.id) ?? 0, monotonicNow(), seconds)
+  const active = signageActive(output.signage?.schedule, new Date())
+  const index = active ? signageIndex(ids.length, signageStarted.get(output.id) ?? 0, monotonicNow(), seconds) : -1
   signageLast.set(output.id, index)
   // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
   const stamp = `${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
@@ -237,7 +238,8 @@ function ensureSignageTicker(): void {
     }
     for (const o of signage) {
       const ids = o.signage?.mediaIds ?? []
-      const next = signageIndex(ids.length, signageStarted.get(o.id) ?? monotonicNow(), monotonicNow(), o.signage?.seconds ?? 10)
+      const active = signageActive(o.signage?.schedule, new Date())
+      const next = active ? signageIndex(ids.length, signageStarted.get(o.id) ?? monotonicNow(), monotonicNow(), o.signage?.seconds ?? 10) : -1
       if (next !== signageLast.get(o.id)) s.syncBroadcastOutputFor(o.id)
     }
   }, 1000)

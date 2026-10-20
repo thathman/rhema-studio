@@ -345,3 +345,4 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10w.1 | Add an output with role Signage, tick three pictures, 5 seconds each, put it on a second monitor. Go live with a verse, Clear, toggle Rehearsal, edit the theme. | The foyer screen cycles the three pictures every 5 s and never shows the verse, a blank, or the draft theme. The output card reads "Signage loop · 3 pictures". | Unverified |
 | 10w.2 | Delete one of the three pictures' files from the media folder. | That slot shows the theme background for its 5 s; the loop continues. | Unverified |
+| 10w.3 | Tick "Only at set times", Sun 08:00–13:00; set the laptop clock to Sunday 12:59 then 13:00. | Pictures until 12:59; the theme background from 13:00 within a second; back to pictures when the clock returns. | Unverified |

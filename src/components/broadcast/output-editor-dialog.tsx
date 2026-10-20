@@ -436,6 +436,8 @@ export function OutputEditorDialog({
   )
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
 /** Pick the pictures a signage output loops through, in library order, and how long each stays. */
 function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: (v: SignageSettings) => void }) {
   const assets = useMediaStore((s) => s.assets)
@@ -468,6 +470,37 @@ function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: 
         </ul>
       )}
       <p className="text-[0.625rem] text-muted-foreground">{value.mediaIds.length} picture{value.mediaIds.length === 1 ? "" : "s"} in the loop. Going live, Clear and rehearsal never change this screen.</p>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={!!value.schedule} onChange={(e) => onChange({ ...value, schedule: e.target.checked ? { days: [0], from: "08:00", to: "13:00" } : undefined })} />
+        <span>Only at set times (otherwise the theme background shows)</span>
+      </label>
+      {value.schedule && (
+        <div className="flex flex-col gap-2 rounded-md border border-border p-2">
+          <div className="flex flex-wrap gap-1" role="group" aria-label="Days">
+            {DAY_NAMES.map((name, d) => (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={value.schedule?.days.includes(d)}
+                onClick={() => {
+                  const days = value.schedule?.days ?? []
+                  onChange({ ...value, schedule: { ...value.schedule!, days: days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort() } })
+                }}
+                className={`h-7 rounded px-2 text-xs ${value.schedule?.days.includes(d) ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"}`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">From</span>
+            <Input type="time" value={value.schedule.from} onChange={(e) => onChange({ ...value, schedule: { ...value.schedule!, from: e.target.value } })} className="h-7 w-28 text-xs" />
+            <span className="text-muted-foreground">to</span>
+            <Input type="time" value={value.schedule.to} onChange={(e) => onChange({ ...value, schedule: { ...value.schedule!, to: e.target.value } })} className="h-7 w-28 text-xs" />
+          </div>
+          <p className="text-[0.625rem] text-muted-foreground">No day ticked means every day. An end earlier than the start runs past midnight. A time that cannot be read keeps the loop on.</p>
+        </div>
+      )}
     </div>
   )
 }
