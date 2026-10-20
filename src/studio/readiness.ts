@@ -36,6 +36,8 @@ export interface ReadinessInput {
   missingFonts?: Array<{ theme: string; font: string }>
   /** Whether the open service was approved as it is (Prepare → Approve). Absent when no service is open. */
   approval?: "approved" | "changed" | "none"
+  /** Signage outputs whose loop has no pictures, or pictures whose files are gone. */
+  signage?: Array<{ name: string; total: number; missing: number }>
 }
 
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
@@ -84,6 +86,13 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
         : i.approval === "none"
           ? [{ id: "approval", status: "info" as const, label: "Service not approved yet", detail: "Optional. Approve in Prepare so the version for today is kept whatever changes later.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
           : []),
+    ...(i.signage ?? []).flatMap((s) =>
+      s.total === 0
+        ? [{ id: `signage-empty-${s.name}`, status: "warn" as const, label: `${s.name}: the signage loop has no pictures`, detail: "That screen shows only the theme background. Pick pictures in its output settings.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+        : s.missing > 0
+          ? [{ id: `signage-missing-${s.name}`, status: "warn" as const, label: `${s.name}: ${s.missing} of ${s.total} signage picture${s.total === 1 ? "" : "s"} ${s.missing === 1 ? "is" : "are"} missing`, detail: "Those slots show the theme background. Re-import the pictures or remove them from the loop.", fix: "outputs" as const, fixLabel: "Open outputs" }]
+          : [],
+    ),
     ...(i.missingFonts?.length
       ? [{ id: "fonts", status: "warn" as const, label: `${i.missingFonts.length} theme font${i.missingFonts.length === 1 ? " is" : "s are"} not installed`, detail: i.missingFonts.map((m) => `${m.theme}: ${m.font}`).join(", ") + ". The screen will use a fallback font.", fix: "outputs" as const, fixLabel: "Open outputs" }]
       : []),
