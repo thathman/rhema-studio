@@ -1481,7 +1481,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&path).unwrap();
-        assert_eq!(db.applied_migrations().unwrap().last().map(String::as_str), Some("0003_songs"));
+        assert!(db.applied_migrations().unwrap().iter().any(|m| m == "0003_songs"));
         let backup = db.last_backup().unwrap().to_path_buf();
         assert!(backup.to_string_lossy().contains("before-0003_songs"));
         let got = db.get_program(&pid).unwrap().unwrap();

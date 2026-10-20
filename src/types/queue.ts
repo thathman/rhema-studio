@@ -55,7 +55,20 @@ export interface SlideQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem
+/** A picture from the media library, shown full screen. */
+export interface ImageQueueRef {
+  media_id: string
+  name: string
+  fit: "cover" | "contain" | "stretch"
+}
+
+export interface ImageQueueItem extends QueueItemBase {
+  kind: "image"
+  image: ImageQueueRef
+  verse?: undefined
+}
+
+export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem
 
 export function isVerseItem(item: QueueItem): item is VerseQueueItem {
   return item.kind === undefined || item.kind === "verse"
@@ -67,4 +80,8 @@ export function isSongItem(item: QueueItem): item is SongQueueItem {
 
 export function isSlideItem(item: QueueItem): item is SlideQueueItem {
   return item.kind === "slide"
+}
+
+export function isImageItem(item: QueueItem): item is ImageQueueItem {
+  return item.kind === "image"
 }

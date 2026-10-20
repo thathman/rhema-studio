@@ -200,6 +200,16 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10f.3 | Please stand, then Next. | The next item goes live; Back is disabled (the operator moved on). |
 | 10f.4 | Transparent OBS theme. | The quick screen text keys like a verse; the header chip reads "LIVE · Please stand". |
 
+## 10g. Pictures (media library)
+
+| # | Do | Expect |
+|---|---|---|
+| 10g.1 | Prepare → Pictures → Import pictures… pick two JPG/PNG files, one of them twice. | Thumbnails appear; the duplicate is reported "already here" and stored once; files are in `<app data>/media/` named by hash. |
+| 10g.2 | Add a picture to the service, choose "Show it all". Save, restart, reopen. Present it with Next. | Full-frame picture on the output (letterboxed for "Show it all"); on air in one step; LIVE marks the item. |
+| 10g.3 | Delete the media file from the folder by hand. Open Home, then try to present the item. | Library shows "missing"; presenting reports the missing file and leaves the output alone. |
+| 10g.4 | Try to remove a picture that a saved service uses. | Refused, naming the service. |
+| 10g.5 | NDI/OBS output with a picture live. | Receivers show the picture (not a flat frame) within a second. |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -214,6 +224,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10f, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10g, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.

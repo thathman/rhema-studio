@@ -11,7 +11,7 @@ export interface Program {
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
-export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide"] as const
+export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide", "image"] as const
 export type ProgramItemKind = (typeof SUPPORTED_ITEM_KINDS)[number]
 
 export interface ProgramItem {
@@ -71,6 +71,41 @@ export interface ContentStatus {
   migrations: string[]
   /** Automatic copy made before the last migration, if any. */
   last_backup: string | null
+}
+
+// ── Media (migration 0004) ───────────────────────────────────────────────
+
+export interface MediaAsset {
+  id: string
+  kind: "image" | "video" | "audio"
+  name: string
+  file: string
+  hash: string
+  size: number
+  mime: string
+  width: number | null
+  height: number | null
+  duration_ms: number | null
+  source: string
+  source_ref: string
+  original_path: string
+  created_at: string
+}
+
+/** An asset plus where its file is and whether it is still there. */
+export interface MediaAssetStatus extends MediaAsset {
+  path: string
+  present: boolean
+}
+
+export type MediaImportResult =
+  | { status: "imported"; asset: MediaAssetStatus; duplicate: boolean }
+  | { status: "failed"; path: string; message: string }
+
+/** `payload` of a `kind = "image"` program item. */
+export interface ImageItemPayload {
+  media_id: string
+  fit?: "cover" | "contain" | "stretch" | null
 }
 
 export interface RestoreReport {

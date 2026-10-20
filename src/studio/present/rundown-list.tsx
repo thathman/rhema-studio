@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
-import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, ImageIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { useSongStore } from "@/stores/song-store"
 import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
-import { isSlideItem, isSongItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
+import { isImageItem, isSlideItem, isSongItem, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 /**
@@ -54,13 +54,14 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
       {items.map((item, index) => {
         const song = isSongItem(item)
         const custom = isSlideItem(item)
-        const isSelected = song || custom
+        const picture = isImageItem(item)
+        const isSelected = song || custom || picture
           ? selectedSlide?.item.id === item.id
           : !!selected && !selectedSlide &&
             selected.book_number === item.verse.book_number &&
             selected.chapter === item.verse.chapter &&
             selected.verse === item.verse.verse
-        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && liveRef.startsWith(item.reference))
+        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === activeIndex + 1
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
         return (
@@ -85,6 +86,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
+                {picture && <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Picture" />}
                 <span className="truncate text-sm font-medium">{item.reference}</span>
                 {song && <SongBadges item={item} />}
                 {onAir && (
@@ -121,6 +123,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             {expanded && mode === "prepare" && <SongItemControls item={item} />}
             {expanded && <SlideList item={item} index={index} mode={mode} />}
             {custom && isSelected && mode === "prepare" && <CustomSlideEditor item={item} />}
+            {picture && isSelected && mode === "prepare" && <ImageItemControls item={item} />}
             {isSelected && mode === "prepare" && <NoteEditor item={item} />}
           </Row>
         )
@@ -177,6 +180,23 @@ function SongBadges({ item }: { item: SongQueueItem }) {
       ))}
       {arrangement && !arrangement.is_default && <span className="truncate">{arrangement.name}</span>}
     </span>
+  )
+}
+
+/** Prepare-only: how the picture fills the screen. */
+function ImageItemControls({ item }: { item: ImageQueueItem }) {
+  return (
+    <div className="ml-7 flex items-center gap-2 py-1 pl-2 text-xs">
+      <span className="text-muted-foreground">Fit</span>
+      <Select value={item.image.fit} onValueChange={(v) => useQueueStore.getState().updateItem(item.id, (i) => (isImageItem(i) ? { ...i, image: { ...i.image, fit: v as ImageQueueItem["image"]["fit"] } } : i))}>
+        <SelectTrigger className="h-6 w-32 text-xs" aria-label="Picture fit"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="cover">Fill the screen</SelectItem>
+          <SelectItem value="contain">Show it all</SelectItem>
+          <SelectItem value="stretch">Stretch</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
   )
 }
 

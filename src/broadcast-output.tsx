@@ -3,7 +3,7 @@ import { useRef, useEffect, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
+import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
@@ -178,6 +178,7 @@ function BroadcastCanvas() {
         theme: normalizeTheme(event.payload.theme),
       }
       preloadThemeAssets(event.payload.theme)
+      if (event.payload.verse?.image?.url) void loadThemeImage(event.payload.verse.image.url).then(() => { draw(); pushNdiBurstRef.current?.() })
       logDebug("Received broadcast:verse-update", {
         hasVerse: Boolean(event.payload.verse),
         themeId: event.payload.theme.id,

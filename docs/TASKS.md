@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.12 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.13 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -59,11 +59,11 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| MD-001 Media asset schema, import, hash, provenance | P1 | BACKLOG | ST-003 | Index local assets; dedup/missing-file handling, rights |
-| MD-002 Playback (image/video/audio), aspect and timing | P1 | BACKLOG | MD-001,SV-002 | Supported codecs matrix; graceful unsupported/missing media |
+| MD-001 Media asset schema, import, hash, provenance | P1 | IN PR | ST-003 | media-assets PR: migration 0004 `media_assets`, import copies into `<app data>/media/<sha256>.<ext>` (same bytes → same asset), original path kept, missing-file flag, delete refused while a service uses it; 3 crate tests |
+| MD-002 Playback (image/video/audio), aspect and timing | P1 | IN PR (pictures) | MD-001,SV-002 | media-assets PR: picture rundown items with fill/show-all/stretch, atomic go-live after decode, missing file reported; Prepare → Pictures tab; 5 tests. Video and audio not yet |
 | MD-003 Backgrounds, safe text and lyric scrolling | P1 | BACKLOG | MD-002,SO-010 | Per-slide preview, readability, no display disruption |
 | MD-004 Independently addressable transparent lower-third layer | P1 | BACKLOG | MD-001 | Congregation vs OBS output independent; alpha verified |
-| MD-005 Quick Screens and persistent overlays | P1 | IN PR (text screens) | ST-002,MD-002 | quick-screens PR: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
+| MD-005 Quick Screens and persistent overlays | P1 | MERGED (text screens) | ST-002,MD-002 | PR #15 `8bc82eb`: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
 | MD-006 Local cache manifest, integrity/readiness | P0 | BACKLOG | MD-001,SV-002 | Missing file/font reported before live, release works offline |
 | MD-007 Adaptive Smart Media rendering | P2 | BACKLOG | MD-003 | Text fits styles/output without masking content or violating branding |
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.13):** PR #15 `8bc82eb` merged; media-assets PR opened (MD-001 IN PR, MD-002 pictures IN PR).
 - **2026-10-20 (rev 0.12):** PR #13 `7c8b980` and PR #14 `fa05eef` merged; quick-screens PR opened (MD-005 text screens IN PR).
 - **2026-10-20 (rev 0.11):** rundown-notes-readiness PR opened (SV-006 IN PR).
 - **2026-10-20 (rev 0.10):** PR #11 `570b41a` and PR #12 `ff09a63` merged (SV-001 MERGED, SV-002/SV-003 MERGED pending acceptance); live-verse-step PR opened (SV-005 IN PR).

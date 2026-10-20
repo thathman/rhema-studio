@@ -3,7 +3,9 @@ import { mark } from "@/lib/latency-marks"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type { VerseRenderData } from "@/types"
-import type { SlideQueueItem, SongQueueItem, Verse } from "@/types"
+import type { ImageQueueItem, SlideQueueItem, SongQueueItem, Verse } from "@/types"
+import { useMediaStore } from "@/stores/media-store"
+import { loadThemeImage } from "@/lib/theme-image-cache"
 import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 import { useSongStore } from "@/stores/song-store"
@@ -236,6 +238,35 @@ export function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolea
   }
   useBibleStore.getState().selectSlide({ item, index: 0 })
   useBroadcastStore.getState().setLiveVerse(data, null, { goLive: opts.goLive, itemId: item.id })
+  return "presented"
+}
+
+export function toImageRenderData(item: ImageQueueItem, url: string): VerseRenderData {
+  return { kind: "image", reference: "", segments: [], image: { url, fit: item.image.fit, blur: 0, brightness: 100, tint: null } }
+}
+
+/**
+ * Present a picture item: read it from the media folder (cached), decode
+ * it, then put it on air in one update. A missing file is reported and the
+ * output left alone; a newer present or Clear supersedes a slow read.
+ */
+export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
+  presentSeq += 1
+  const ticket = presentSeq
+  let url: string | null = null
+  try {
+    url = await useMediaStore.getState().dataUrl(item.image.media_id)
+    if (url && typeof Image !== "undefined") await loadThemeImage(url)
+  } catch (e) {
+    console.warn("[broadcast] picture load failed:", e)
+  }
+  if (ticket !== presentSeq) return "superseded"
+  if (!url) {
+    useBroadcastStore.getState().setPresentWarning(`${item.image.name} not shown: the picture file is missing from the media folder.`)
+    return "empty"
+  }
+  useBibleStore.getState().selectSlide({ item, index: 0 })
+  useBroadcastStore.getState().setLiveVerse(toImageRenderData(item, url), null, { goLive: opts.goLive, itemId: item.id })
   return "presented"
 }
 

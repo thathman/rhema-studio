@@ -5,8 +5,8 @@ export type {
   TranscriptEventPayload,
 } from "./transcript"
 export type { Translation, Book, Verse, CrossReference } from "./bible"
-export type { QueueItem, VerseQueueItem, SongQueueItem, SongQueueRef, SlideQueueItem, CustomSlide } from "./queue"
-export { isVerseItem, isSongItem, isSlideItem } from "./queue"
+export type { QueueItem, VerseQueueItem, SongQueueItem, SongQueueRef, SlideQueueItem, CustomSlide, ImageQueueItem, ImageQueueRef } from "./queue"
+export { isVerseItem, isSongItem, isSlideItem, isImageItem } from "./queue"
 export type { DetectionResult, DetectionStatus, ReadingAdvance, SemanticSearchResult } from "./detection"
 export type { BroadcastTheme, VerseRenderData, VerseSegment, RenderOptions } from "./broadcast"
 export type {
@@ -29,5 +29,5 @@ export type {
   Program, ProgramItem, ProgramItemKind, ItemInput, ProgramWithItems, ContentCommandError, ContentStatus,
   Song, SongSection, SongSummary, SongWithSections, Arrangement, Hymnbook, HymnNumber, SongInput, SectionInput,
   ArrangementInput, HymnbookInput, HymnNumberInput, SongExport, ImportMode, ImportReport, SongItemPayload, SlideItemPayload, SectionKind, Licence,
-  RestoreReport,
+  RestoreReport, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
 } from "./content"
