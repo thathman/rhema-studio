@@ -35,7 +35,7 @@
 | SO-002 Song CRUD and history | P1 | MERGED (crate) / IN PR (editor) | SO-001 | PR #6 crate; songs-editor PR: Prepare → Songs library, New/Edit/Delete with conflict and in-use messages, unsaved-change guard |
 | SO-003 Section editor (verse/chorus/bridge/tag) | P1 | IN PR | SO-002 | songs-editor PR: paste-first parser → section cards, kind dropdown, relabel, move/remove, EN/YO side by side, validation list |
 | SO-004 Named service-specific arrangements | P1 | IN PR | SO-003 | songs-editor PR: arrangement strip (drag, ← → Delete, buttons), named orders, default flag, per-item order and language choice in the rundown |
-| SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (crate) / IN PR (UI) | SO-002 | PR #6 crate; PR #7 Quick find; songs-editor PR: hymnbook creation and number rows in the editor |
+| SO-005 Hymnbook catalogs and number lookup | P1 | MERGED | SO-002 | PR #6 crate; PR #7 Quick find; PR #8 creation and number rows; hymnbook-management PR: rename and remove in More → Library (numbers dropped, songs kept) |
 | SO-006 Multilingual lyrics | P1 | IN PR | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |
 | SO-007 Search library | P1 | MERGED (crate) / IN PR (UI) | SO-002,SO-005 | PR #6: FTS5 over title/authors/lyrics + numbers; songs-core PR: one Quick find box for verses, hymn numbers and songs |
 | SO-008 Import/export | P1 | MERGED (crate) / IN PR (UI) | SO-001,SO-003 | PR #6 crate; songs-import-export PR: More → Library dialog, export to `rhema-songs-<date>.json`, import JSON (skip/replace/duplicate) and OpenLyrics .xml (DOMParser, per-language verses, verseOrder, songbooks, report of ignored parts) |

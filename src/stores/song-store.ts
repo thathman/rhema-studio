@@ -24,6 +24,8 @@ interface SongState {
   update: (id: string, expectedRevision: number, input: SongInput) => Promise<SongWithSections>
   remove: (id: string, expectedRevision: number) => Promise<void>
   upsertHymnbook: (input: HymnbookInput) => Promise<Hymnbook>
+  /** Removes the book and its numbers; the songs stay. */
+  deleteHymnbook: (id: string) => Promise<void>
 }
 
 let searchSeq = 0
@@ -100,6 +102,12 @@ export const useSongStore = create<SongState>((set, get) => ({
       delete songs[id]
       return { songs, results: s.results.filter((r) => r.id !== id) }
     })
+  },
+
+  deleteHymnbook: async (id) => {
+    await invoke("content_delete_hymnbook", { id })
+    invalidateSongList()
+    await get().loadHymnbooks()
   },
 
   upsertHymnbook: async (input) => {

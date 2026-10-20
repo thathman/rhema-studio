@@ -132,7 +132,11 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
       hymnbooks.set(id, book)
       return book
     }
-    case "content_delete_hymnbook": hymnbooks.delete(String(args.id)); return null
+    case "content_delete_hymnbook": {
+      hymnbooks.delete(String(args.id))
+      for (const s of songs.values()) s.numbers = s.numbers.filter((n) => n.hymnbook_id !== String(args.id))
+      return null
+    }
     case "content_export_songs": return { version: 1, hymnbooks: [...hymnbooks.values()], songs: [...songs.values()] }
     case "content_import_songs": {
       const e = args.export as { songs: Song[]; hymnbooks: Array<{ id: string; code: string; name: string; language: string; publisher: string; licence_note: string }> }
