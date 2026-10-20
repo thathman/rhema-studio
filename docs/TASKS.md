@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.38 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.39 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -61,7 +61,7 @@
 |---|---|---|---|---|
 | MD-001 Media asset schema, import, hash, provenance | P1 | MERGED | ST-003 | PR #16 `2757285`: migration 0004 `media_assets`, import copies into `<app data>/media/<sha256>.<ext>` (same bytes → same asset), original path kept, missing-file flag, delete refused while a service uses it; 3 crate tests |
 | MD-002 Playback (image/video/audio), aspect and timing | P1 | MERGED (pictures) | MD-001,SV-002 | PR #16: picture rundown items with fill/show-all/stretch, atomic go-live after decode, missing file reported; Prepare → Pictures tab; 5 tests. Video and audio not yet |
-| MD-003 Backgrounds, safe text and lyric scrolling | P1 | MERGED (#18 backgrounds, #20 scrim) / IN PR (long text as pages) | MD-002,SO-010 | PR #18: any verse, song or slide item can carry a library picture behind its text (`background_media_id` in the payload, crate-validated); picture loads before go-live; a missing file shows the words without it; Prepare picker in the rundown; 2 tests. Lyric scrolling and safe-area tuning not yet |
+| MD-003 Backgrounds, safe text and lyric scrolling | P1 | MERGED (#18 backgrounds, #20 scrim, #87 long text as pages) | MD-002,SO-010 | PR #18: any verse, song or slide item can carry a library picture behind its text (`background_media_id` in the payload, crate-validated); picture loads before go-live; a missing file shows the words without it; Prepare picker in the rundown; 2 tests. Lyric scrolling and safe-area tuning not yet |
 | MD-004 Independently addressable transparent lower-third layer | P1 | BACKLOG | MD-001 | Congregation vs OBS output independent; alpha verified |
 | MD-005 Quick Screens and persistent overlays | P1 | MERGED (text screens) | ST-002,MD-002 | PR #15 `8bc82eb`, bilingual (English + Yorùbá when a Yorùbá Bible is active or secondary) in bilingual-quick-screens PR: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
 | MD-006 Local cache manifest, integrity/readiness | P0 | MERGED (pictures) | MD-001,SV-002 | PR #17 `5263a94`: Home warns before the service when a picture item's file is gone; rundown marks the item; presenting a missing picture never blanks the output (PR media-assets). Fonts and a release manifest later |
@@ -117,8 +117,8 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| SG-001 Signage player and screen identity | P2 | MERGED (#79 loop, #84 screen health) / IN PR (next-picture preload) | OP-001,MD-006 | signage-loop PR: output role Signage loops chosen library pictures (seconds each) on its own ticker; untouched by go-live, Clear, rehearsal and theme-designer edits; a missing picture shows the theme background; card shows the loop size; readiness lists the role. Schedules (SG-002) and screen health later |
-| SG-002 Scheduled announcements/playlists | P2 | MERGED (#80 time window) / IN PR (playlists) | SG-001 | signage-schedule PR: days + from/to (local time, crosses midnight) on the loop; outside the window the theme background shows; an unreadable time keeps the loop on; 1 test with fixed local dates. Multiple playlists later |
+| SG-001 Signage player and screen identity | P2 | MERGED (#79 loop, #84 screen health, #86 preload) | OP-001,MD-006 | signage-loop PR: output role Signage loops chosen library pictures (seconds each) on its own ticker; untouched by go-live, Clear, rehearsal and theme-designer edits; a missing picture shows the theme background; card shows the loop size; readiness lists the role. Schedules (SG-002) and screen health later |
+| SG-002 Scheduled announcements/playlists | P2 | MERGED (#80 time window, #86 playlists) | SG-001 | signage-schedule PR: days + from/to (local time, crosses midnight) on the loop; outside the window the theme background shows; an unreadable time keeps the loop on; 1 test with fixed local dates. Multiple playlists later |
 | SG-003 QR digital bulletins and optional action links | P2 | BACKLOG | SV-002 | qr-bulletin PR: Prepare → Slides → "QR link": a full http(s) address only (no credentials, ≤300 chars), drawn offline as one composed picture (white panel: code left, title/lines/address right; no text layer or scrim over the code) so what is scanned is what is read; nothing tracked; saved in the slide payload. Known limit: the preview panel shows the words only. Giving/prayer integrations later |
 | AR-001 Runtime journal/service event log | P1 | MERGED (#53, #60 remote commands) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
 | AR-002 OBS recording markers and sermon metadata | P2 | BACKLOG | AR-001,OP-005 | No fake recorded status; failures visible |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-21 (rev 0.39):** PRs #86 (signage playlists + preload) and #87 (long text as pages) merged; five stale rows reconciled (CV-004, AR-001, AR-003, PT-002, PT-004).
 - **2026-10-21 (rev 0.38):** PRs #78–#85 merged (roles, signage loop/schedule/health, lint debt, settings migration tests, today's service, QR slides); rows reconciled.
 - **2026-10-20 (rev 0.37):** PRs #57–#77 merged; rows reconciled (OP-006 pairing, QA-006 remote part, SO-011 attachments, CL-001/002/003 first slices, AR-001/003, QA-002/003).
 - **2026-10-20 (rev 0.36):** PRs #47–#53 merged; rows reconciled (SO-003/004/005/006/008/009/010/011, PT-003, AR-001, QA-004/005/008).
