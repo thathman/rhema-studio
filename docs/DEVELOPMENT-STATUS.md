@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: `351d8e2` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`).
+- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`).
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -16,13 +16,13 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Active milestone
 
-**2B — Songs and Hymnbooks** (`docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`). Done: crate + migration 0003 (PR #6), stores, Quick find, renderer, `presentSlide`, rundown and Present integration (PR #7). In PR: Prepare → Songs library, paste-first editor, arrangement strip, hymnbook numbers, per-item language/order controls, licence readiness line. Remaining: import/export UI (JSON + OpenLyrics via DOMParser), manual acceptance §10a.
+**2B — Songs and Hymnbooks** (`docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`). Done: crate + migration 0003 (PR #6), stores, Quick find, renderer, `presentSlide`, rundown and Present integration (PR #7). Merged: Prepare → Songs library, paste-first editor, arrangement strip, hymnbook numbers, per-item language/order controls, licence readiness line (PR #8). In PR: More → Library export/import (JSON + OpenLyrics). Remaining for 2B: manual acceptance §10a on the desktop.
 
 ## Latest test results
 
-- Frontend: 329 vitest tests in 28 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 332 vitest tests in 29 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
 - Rust: `rhema-content` 25 tests pass; app `cargo check` and clippy in CI.
-- CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head).
+- CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head).
 
 ## Unverified (release-acceptance blockers, not development blockers)
 
@@ -46,6 +46,6 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. SO-008 import/export UI (More → Library: `rhema-songs-v1.json` export, JSON and OpenLyrics import with a report).
-2. ST-008 explicit database backup/restore UX.
-3. Milestone 2C: SV-001 custom slides, SV-002 unified add/reorder flow.
+1. ST-008 explicit database backup/restore UX (More → Library or Settings → Diagnostics).
+2. Milestone 2C: SV-001 custom slides (schema + editor + renderer), SV-002 unified add/reorder flow, SV-003 service templates.
+3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.

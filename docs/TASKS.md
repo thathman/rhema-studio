@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.5 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.6 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -38,7 +38,7 @@
 | SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (crate) / IN PR (UI) | SO-002 | PR #6 crate; PR #7 Quick find; songs-editor PR: hymnbook creation and number rows in the editor |
 | SO-006 Multilingual lyrics | P1 | IN PR | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |
 | SO-007 Search library | P1 | MERGED (crate) / IN PR (UI) | SO-002,SO-005 | PR #6: FTS5 over title/authors/lyrics + numbers; songs-core PR: one Quick find box for verses, hymn numbers and songs |
-| SO-008 Import/export | P1 | MERGED (crate JSON) / BACKLOG (UI, OpenLyrics) | SO-001,SO-003 | PR #6: `rhema-songs-v1` JSON export/import, skip/replace/duplicate, atomic. Paste parser in songs-core PR |
+| SO-008 Import/export | P1 | MERGED (crate) / IN PR (UI) | SO-001,SO-003 | PR #6 crate; songs-import-export PR: More → Library dialog, export to `rhema-songs-<date>.json`, import JSON (skip/replace/duplicate) and OpenLyrics .xml (DOMParser, per-language verses, verseOrder, songbooks, report of ignored parts) |
 | SO-009 Add songs to unified service rundown | P1 | IN PR | SO-004,ST-003 | songs-core PR: song rundown items (`kind='song'` + payload) save/reopen, Add from Quick find, slide sub-list, reorder/remove |
 | SO-010 Song/lyric renderer and Live safety | P0 | IN PR | SO-009,ST-002 | songs-core PR: `presentSlide` (atomic go-live, Clear cancels, no stale frame), lyric lines + secondary language + copyright footer in the renderer, Next/Prev step slides then items, Show live from a previewed slide; 12 tests |
 | SO-011 Rehearsal notes, key, tempo, attachments | P2 | BACKLOG | SO-004 | Notes never leak to congregation; imported media rights tracked |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.6):** PR #8 merged `38f76eb`; songs-import-export PR opened (SO-008 UI IN PR).
 - **2026-10-20 (rev 0.5):** PR #7 merged `351d8e2`; songs-editor PR opened (SO-002 editor, SO-003, SO-004, SO-005 UI IN PR). Browser-shim check of the editor and Present flow recorded in guide §10a.
 - **2026-10-20 (rev 0.4):** PR #6 (songs database) merged `802640a`; songs-core PR opened (SO-006/007/009/010 IN PR, SO-002/005/008 crate parts MERGED).
 - **2026-10-20 (rev 0.3):** Integration executed: PRs #5, #3, #1, #2 merged into `main` (`e66483b`). ST-001/002/003/005/007/011, QA-009 → MERGED (not ACCEPTED: manual desktop gate ST-006 open). Milestone 2B started (SO-002…). Status snapshots live in `docs/DEVELOPMENT-STATUS.md`.

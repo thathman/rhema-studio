@@ -18,6 +18,7 @@ import { openSettings } from "@/lib/settings-dialog"
 import { useBroadcastStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
+import { LibraryDialog } from "@/studio/more/library-dialog"
 
 interface Row {
   icon: React.ReactNode
@@ -32,6 +33,7 @@ export function MoreWorkspace() {
   const setPresentView = useShellStore((s) => s.setPresentView)
   const openOutputs = useShellStore((s) => s.openOutputs)
   const [version, setVersion] = useState<string | null>(null)
+  const [libraryOpen, setLibraryOpen] = useState(false)
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
@@ -56,7 +58,7 @@ export function MoreWorkspace() {
       title: "Content",
       rows: [
         { icon: <BookOpenIcon />, label: "Bible", detail: "Translations and the secondary language", onClick: () => openSettings("bible") },
-        { icon: <LibraryIcon />, label: "Library", detail: "Songs, hymnbooks, slides and media", planned: "Milestone 2–3" },
+        { icon: <LibraryIcon />, label: "Library", detail: "Songs and hymnbooks: export, import (Rhema or OpenLyrics files)", onClick: () => setLibraryOpen(true) },
       ],
     },
     {
@@ -127,6 +129,7 @@ export function MoreWorkspace() {
           </section>
         </div>
       </div>
+      <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </div>
   )
 }
