@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: `e023403` (2026-10-20 23:03 WAT) — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display, #24 stage messages, #25 typo-tolerant search, #26 output health, #27 rehearsal mode, #28 licence inventory, #29 About notices, #30 Canva findings, #40 migration matrix, #41 bilingual quick screens, #42 Brand Kit spec, #43 theme logo, #44 brand kit, #45 announcement composer, #46 cues, #47 brand looks, #48 quick start, #49 remote macros, #50 song key/tempo, #51 production guide, #52 hymnbook rename/remove, #53 service log, #54 OpenLyrics export, #55 one language per output, #56 one service as a file (CL-003), #57 injected-failure tests, #58 remote bind option + threat notes, #59 approve a service (CL-002) + rehearsal runbook, #60 remote commands in the service log, #61 operator name on audit rows (CL-001), #64 Library dialog scroll fix, #65 earlier logs kept in the database (AR-003).
+- Head: see `git log fork/main` (2026-10-20 23:10 WAT) — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display, #24 stage messages, #25 typo-tolerant search, #26 output health, #27 rehearsal mode, #28 licence inventory, #29 About notices, #30 Canva findings, #40 migration matrix, #41 bilingual quick screens, #42 Brand Kit spec, #43 theme logo, #44 brand kit, #45 announcement composer, #46 cues, #47 brand looks, #48 quick start, #49 remote macros, #50 song key/tempo, #51 production guide, #52 hymnbook rename/remove, #53 service log, #54 OpenLyrics export, #55 one language per output, #56 one service as a file (CL-003), #57 injected-failure tests, #58 remote bind option + threat notes, #59 approve a service (CL-002) + rehearsal runbook, #60 remote commands in the service log, #61 operator name on audit rows (CL-001), #64 Library dialog scroll fix, #65 earlier logs kept in the database (AR-003), #66 optional shared key for HTTP/OSC control (OP-006 first slice), #67 More page rows.
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -27,7 +27,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 ## Latest test results
 
 - Frontend: 390 vitest tests in 47 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
-- Rust: `rhema-content` 42 tests pass; `rhema-api` 108; app `cargo check` and clippy in CI.
+- Rust: `rhema-content` 42 tests pass; `rhema-api` 110; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
 ## Unverified (release-acceptance blockers, not development blockers)
@@ -56,6 +56,6 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Next eligible tasks
 
-1. OP-006 first slice (#63): shared secret for HTTP and OSC control. Then SO-011 attachments.
+1. QA-003 icon-button accessibility guard — in PR (#68). SO-011 attachments wait on adding an opener plugin (Rust dep); OP-006 pairing/revocation (#63) after the shared key.
 2. Desktop-gated: MD-002 video (#36), MD-004 lower thirds (#37), OP-005 OBS/NDI stability, QA-010 drill (#62); ST-009 app identity migration at release time.
-3. Release gate unchanged: desktop acceptance (#31, rows 1–10r), Windows smoke (#32); owner decisions #33 (bundled translations), #34 (Canva relay); PR #4 speech.
+3. Release gate unchanged: desktop acceptance (#31, rows 1–10s), Windows smoke (#32); owner decisions #33 (bundled translations), #34 (Canva relay); PR #4 speech.
