@@ -62,6 +62,12 @@ interface BroadcastState {
   heldLive: HeldLive | null
   /** Private note shown on stage outputs only. Not persisted. */
   stageMessage: string
+  /**
+   * Rehearsal: everything works in the app (Preview, Live panel, rundown)
+   * but no output window, NDI sender or stage screen receives anything.
+   * Turning it off sends the current state to every output. Not persisted.
+   */
+  rehearsal: boolean
   /** Why the last present did not reach the output; cleared by the next successful present. */
   presentWarning: string | null
   // When on, detections auto-present to the live output. When off, the live
@@ -89,6 +95,7 @@ interface BroadcastState {
   setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean }) => void
   setPresentWarning: (warning: string | null) => void
   setStageMessage: (message: string) => void
+  setRehearsal: (on: boolean) => void
   /** Remember the current live content (if any) before a quick screen replaces it. */
   holdLive: () => void
   /** Put the held content back on air (or off air, as it was) and forget it. */
@@ -224,6 +231,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveItemId: null,
   heldLive: null,
   stageMessage: "",
+  rehearsal: false,
   presentWarning: null,
   autoLive: true,
   isDesignerOpen: false,
@@ -300,6 +308,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     })),
   syncBroadcastOutputFor: (outputId: string) => {
     const s = get()
+    // Rehearsal freezes every real output at whatever it last showed.
+    if (s.rehearsal) return
     const output = s.outputs.find((o) => o.id === outputId)
     if (!output) return
     const theme = s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
@@ -413,6 +423,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     get().syncBroadcastOutput()
   },
   setPresentWarning: (presentWarning) => set({ presentWarning }),
+  setRehearsal: (rehearsal) => {
+    set({ rehearsal })
+    if (!rehearsal) get().syncBroadcastOutput()
+  },
   setStageMessage: (stageMessage) => {
     set({ stageMessage })
     for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
