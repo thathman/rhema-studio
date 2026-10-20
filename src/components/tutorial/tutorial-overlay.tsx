@@ -10,6 +10,7 @@ import {
 import { TUTORIAL_STEPS } from "./tutorial-steps"
 import { TutorialTooltip } from "./tutorial-tooltip"
 import { useTheme } from "@/components/theme-provider"
+import { useShellStore } from "@/studio/shell-store"
 
 export function TutorialOverlay() {
   const [isHydrated, setIsHydrated] = useState(false)
@@ -51,6 +52,14 @@ export function TutorialOverlay() {
       return () => clearTimeout(timer)
     }
   }, [isHydrated, onboardingComplete])
+
+  // The tour targets the classic dashboard, so bring it on screen first.
+  useEffect(() => {
+    if (!isRunning) return
+    const shell = useShellStore.getState()
+    shell.setPresentView("production")
+    shell.setWorkspace("present")
+  }, [isRunning])
 
   const handleEvent = useCallback((data: EventData) => {
     if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) {

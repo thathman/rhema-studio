@@ -53,6 +53,7 @@
     --color-live-pulse: var(--live-pulse);
     --color-surface-elevated: var(--surface-elevated);
     --color-surface-sunken: var(--surface-sunken);
+    --color-studio-rail: var(--studio-rail);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -104,6 +105,8 @@
     --live-pulse: oklch(0.65 0.25 25);
     --surface-elevated: oklch(0.96 0 0);
     --surface-sunken: oklch(0.92 0 0);
+    --studio-rail: oklch(0.975 0 0);
+    --control-height: 3.25rem;
 }
 
 .dark {
@@ -147,6 +150,7 @@
     --live-pulse: oklch(0.65 0.25 25);
     --surface-elevated: oklch(0.22 0 0);
     --surface-sunken: oklch(0.12 0 0);
+    --studio-rail: oklch(0.17 0.005 285.823);
 }
 
 @layer base {

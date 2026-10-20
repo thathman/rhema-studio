@@ -4,6 +4,12 @@
 
 <h1 align="center">Rhema</h1>
 
+> **Rhema Studio** — this fork is evolving Rhema into a church production platform
+> (service preparation, volunteer-friendly presenting, production tools). The new
+> application shell lives under `src/studio/`; the original Rhema dashboard remains
+> available as the **Production** view. Design and architecture documents are in
+> [`docs/rhema-studio/`](docs/rhema-studio/). Upstream: [openbezal/rhema](https://github.com/openbezal/rhema) (MIT).
+
 <p align="center">Real-time AI-powered Bible verse detection for live sermons and broadcasts. A Tauri v2 desktop app with a React frontend and Rust backend.</p>
 
 Rhema listens to a live sermon audio feed, transcribes speech in real time, detects Bible verse references (both explicit citations and quoted passages), and renders them as broadcast-ready overlays via NDI for live production.

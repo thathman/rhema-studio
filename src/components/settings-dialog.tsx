@@ -19,7 +19,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   Sidebar,
@@ -35,7 +34,6 @@ import {
   MicIcon,
   TvIcon,
   KeyIcon,
-  SettingsIcon,
   CheckIcon,
   BookOpenIcon,
   RadioIcon,
@@ -983,11 +981,6 @@ export function SettingsDialog() {
         }
       }}
     >
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon-sm" data-tour="settings">
-          <SettingsIcon className="size-3.5" />
-        </Button>
-      </DialogTrigger>
       <DialogContent className="overflow-hidden p-0 md:max-h-[600px] md:max-w-[800px] lg:max-w-[900px]">
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
