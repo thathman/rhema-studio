@@ -10,6 +10,8 @@ interface QueueItemBase {
   notes?: string | null
   /** A library picture drawn behind this item's text (MD-003). */
   background?: { media_id: string; name: string } | null
+  /** How long this item is planned to take, for service timing (PT-002). */
+  planned_minutes?: number | null
 }
 
 export interface VerseQueueItem extends QueueItemBase {

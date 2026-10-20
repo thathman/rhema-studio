@@ -89,7 +89,10 @@ export function toItemInputs(
   translationOf: (id: number) => string | null = () => null,
   active: ActiveTranslations = { primary: null, secondary: null }
 ): ItemInput[] {
-  const bg = (i: QueueItem) => (i.background ? { background_media_id: i.background.media_id } : {})
+  const bg = (i: QueueItem) => ({
+    ...(i.background ? { background_media_id: i.background.media_id } : {}),
+    ...(typeof i.planned_minutes === "number" && i.planned_minutes > 0 ? { planned_minutes: i.planned_minutes } : {}),
+  })
   return items.map((i): ItemInput =>
     isImageItem(i)
       ? {
@@ -128,7 +131,7 @@ export function toItemInputs(
           translation: i.translation === undefined ? translationOf(i.verse.translation_id) : i.translation,
           secondary_translation: i.secondary_translation === undefined ? active.secondary : i.secondary_translation,
           notes: i.notes ?? null,
-          ...(i.background ? { payload: JSON.stringify(bg(i)) } : {}),
+          ...(Object.keys(bg(i)).length ? { payload: JSON.stringify(bg(i)) } : {}),
         }
       : {
           id: i.id,
@@ -148,6 +151,17 @@ export function toItemInputs(
           } satisfies SongItemPayload & { background_media_id?: string }),
         }
   )
+}
+
+/** `planned_minutes` from any item's payload. */
+export function parsePlannedMinutes(raw: string | null | undefined): number | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as { planned_minutes?: unknown }
+    return typeof p.planned_minutes === "number" && p.planned_minutes > 0 ? p.planned_minutes : null
+  } catch {
+    return null
+  }
 }
 
 /** `background_media_id` from any item's payload; the name is filled in from the library later. */
@@ -238,7 +252,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload) })
       continue
     }
     if (it.kind === "slide") {
@@ -247,7 +261,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload) })
       continue
     }
     if (it.kind === "song") {
@@ -265,7 +279,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload),
       })
       continue
     }
@@ -296,7 +310,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload),
     })
   }
   return { items, unsupported, missingTranslations: [...missing] }
@@ -305,7 +319,7 @@ export function toQueueItems(
 /** What a save persists; verse text and timestamps are not part of it. */
 export function rundownSignature(items: QueueItem[]): string {
   return items
-    .map((i) => `${i.background?.media_id ?? ""}|` + (
+    .map((i) => `${i.background?.media_id ?? ""}|${i.planned_minutes ?? ""}|` + (
       isVerseItem(i)
         ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
         : isImageItem(i)

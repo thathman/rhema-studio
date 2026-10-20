@@ -10,6 +10,7 @@ import { WorkspaceHeader } from "@/studio/ui/status-chip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceBar } from "@/studio/prepare/service-bar"
+import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { SongLibrary } from "@/studio/prepare/song-library"
 import { SlideComposer } from "@/studio/prepare/slide-composer"
 import { MediaLibrary } from "@/studio/prepare/media-library"
@@ -20,6 +21,7 @@ import { MediaLibrary } from "@/studio/prepare/media-library"
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
+  const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(s.items)))
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   return (
@@ -47,7 +49,7 @@ export function PrepareWorkspace() {
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(18rem,2fr)_minmax(0,3fr)] gap-3 p-3">
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
           <PanelHeader title="Service">
-            <span className="text-xs text-muted-foreground">{count} item{count === 1 ? "" : "s"}</span>
+            <span className="text-xs text-muted-foreground">{count} item{count === 1 ? "" : "s"}{planned ? ` · ${planned} planned` : ""}</span>
           </PanelHeader>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <RundownList mode="prepare" />
