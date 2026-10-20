@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useBibleStore, useQueueStore } from "@/stores"
 import type { SlideQueueItem } from "@/types"
+import { announcementBody } from "@/lib/announcement"
 
 const EXAMPLES = [
   { title: "Welcome", body: "We're glad you're here.\nPlease silence your phone." },
@@ -21,34 +22,61 @@ const EXAMPLES = [
 export function SlideComposer() {
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
+  const [mode, setMode] = useState<"free" | "announcement">("free")
+  const [when, setWhen] = useState("")
+  const [where, setWhere] = useState("")
   const empty = !title.trim() && !body.trim()
+  /** An announcement is a plain slide whose first line is "when · where", so it needs nothing new to store or render. */
+  const composedBody = mode === "announcement" ? announcementBody(when, where, body) : body
 
   const draft = (): SlideQueueItem => ({
     id: "draft-slide",
     kind: "slide",
-    slide: { title, body },
+    slide: { title, body: composedBody },
     reference: title.trim() || body.split("\n")[0]?.trim() || "Slide",
     confidence: 1,
     source: "manual",
-    added_at: Date.now(),
+    added_at: 0,
   })
-  const preview = (t = title, b = body) => {
-    if (!t.trim() && !b.trim()) return
-    useBibleStore.getState().selectSlide({ item: { ...draft(), slide: { title: t, body: b } }, index: 0 })
+  const preview = (t = title, b = body, w = when, p = where, m = mode) => {
+    const full = m === "announcement" ? announcementBody(w, p, b) : b
+    if (!t.trim() && !full.trim()) return
+    useBibleStore.getState().selectSlide({ item: { ...draft(), slide: { title: t, body: full } }, index: 0 })
   }
   const add = () => {
     if (empty) return
     const queue = useQueueStore.getState()
     const before = queue.items.length
-    queue.addItem({ ...draft(), id: crypto.randomUUID() })
+    queue.addItem({ ...draft(), id: crypto.randomUUID(), added_at: Date.now() })
     const after = useQueueStore.getState().items.length
     if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
     setTitle("")
     setBody("")
+    setWhen("")
+    setWhere("")
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div role="group" aria-label="Slide kind" className="flex w-fit rounded-md border border-border p-0.5">
+        {(["free", "announcement"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={mode === m}
+            onClick={() => { setMode(m); preview(title, body, when, where, m) }}
+            className={`h-7 rounded px-2.5 text-xs font-medium ${mode === m ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            {m === "free" ? "Any text" : "Announcement"}
+          </button>
+        ))}
+      </div>
+      {mode === "announcement" && (
+        <div className="grid grid-cols-2 gap-2">
+          <Input aria-label="When" placeholder="When (Friday 6 pm)" value={when} onChange={(e) => { setWhen(e.target.value); preview(title, body, e.target.value, where) }} className="h-9" />
+          <Input aria-label="Where" placeholder="Where (main hall)" value={where} onChange={(e) => { setWhere(e.target.value); preview(title, body, when, e.target.value) }} className="h-9" />
+        </div>
+      )}
       <Input
         aria-label="Slide title"
         placeholder="Title (optional)"
@@ -58,7 +86,7 @@ export function SlideComposer() {
       />
       <Textarea
         aria-label="Slide text"
-        placeholder={"What goes on screen. One line per line.\nPress Add when it looks right in the preview."}
+        placeholder={mode === "announcement" ? "Details, one line per line (what to bring, who to ask…)" : "What goes on screen. One line per line.\nPress Add when it looks right in the preview."}
         value={body}
         onChange={(e) => { setBody(e.target.value); preview(title, e.target.value) }}
         rows={6}
