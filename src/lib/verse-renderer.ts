@@ -694,6 +694,23 @@ function drawVerseText(
   const actualFontSize = scaledFontSize ?? vt.fontSize
   const lineHeightPx = actualFontSize * vt.lineHeight
 
+  if (verse.lines) {
+    const primaryStyle = theme.verseText
+    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
+    const baseFontSize = scaledFontSize ?? primaryStyle.fontSize
+    const primaryScale = primaryStyle.fontSize > 0 ? baseFontSize / primaryStyle.fontSize : 1
+    let currentY = startY
+    const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
+    if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
+    for (const [b, [lines, lineStyle]] of blocks.entries()) {
+      if (b > 0) currentY += baseFontSize * primaryStyle.lineHeight
+      for (const text of lines) {
+        currentY += drawVerseText(ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectX, textRectWidth, currentY, lineStyle.fontSize * primaryScale, lineStyle)
+      }
+    }
+    return currentY - startY
+  }
+
   if (verse.translationLines && verse.translationLines.length > 1) {
     const primaryStyle = theme.verseText
     const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
@@ -1004,6 +1021,28 @@ export function measureVerseHeight(
   )
   const effectiveFontSize = fontSizeOverride ?? vt.fontSize
   const lineHeightPx = effectiveFontSize * vt.lineHeight
+
+  if (verse.lines) {
+    // Lyrics: every entry is its own line; the second language follows after
+    // one blank line in the secondary style. Same scaling as dual verses.
+    const primaryStyle = theme.verseText
+    const secondaryStyle = theme.secondaryVerseText ?? primaryStyle
+    const baseFontSize = fontSizeOverride ?? primaryStyle.fontSize
+    const primaryScale = primaryStyle.fontSize > 0 ? baseFontSize / primaryStyle.fontSize : 1
+    let height = 0
+    let maxLineWidth = 1
+    const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
+    if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
+    for (const [b, [lines, lineStyle]] of blocks.entries()) {
+      if (b > 0) height += baseFontSize * primaryStyle.lineHeight
+      for (const text of lines) {
+        const m = measureVerseHeight(_ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectWidth, lineStyle.fontSize * primaryScale, lineStyle)
+        height += m.height
+        maxLineWidth = Math.max(maxLineWidth, m.maxLineWidth)
+      }
+    }
+    return { height, maxLineWidth }
+  }
 
   if (verse.translationLines && verse.translationLines.length > 1) {
     const primaryStyle = theme.verseText
@@ -1534,7 +1573,24 @@ function renderVerseImpl(
       referenceRect.y
     )
   }
+  if (verse.footer) drawFooter(ctx, scaledTheme, verse.footer, metrics.textRect)
 
   ctx.restore()
   return metrics
+}
+
+/** Copyright line: reference style at 40% size, bottom of the text area. */
+function drawFooter(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, text: string, rect: VerseLayoutRect): void {
+  const ref = theme.reference
+  const size = Math.max(10, ref.fontSize * 0.4)
+  ctx.save()
+  ctx.font = `${ref.fontWeight} ${size}px "${ref.fontFamily}", sans-serif`
+  ctx.fillStyle = ref.color
+  ctx.globalAlpha *= 0.8
+  ctx.textBaseline = "bottom"
+  ctx.textAlign = "center"
+  let line = text
+  while (line.length > 8 && ctx.measureText(line).width > rect.width) line = `${line.slice(0, -4).trimEnd()}…`
+  ctx.fillText(line, rect.x + rect.width / 2, rect.y + rect.height)
+  ctx.restore()
 }

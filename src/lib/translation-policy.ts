@@ -1,7 +1,7 @@
-import type { QueueItem, Translation } from "@/types"
+import type { Translation, VerseQueueItem } from "@/types"
 
-/** What a rundown item remembers about its translations. */
-export type ItemTranslations = Pick<QueueItem, "translation" | "secondary_translation">
+/** What a rundown verse item remembers about its translations. */
+export type ItemTranslations = Pick<VerseQueueItem, "translation" | "secondary_translation">
 
 export interface TranslationChoice {
   primary: number

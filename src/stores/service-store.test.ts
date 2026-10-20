@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ProgramItem, ProgramWithItems, QueueItem } from "@/types"
+import type { ProgramItem, ProgramWithItems, VerseQueueItem } from "@/types"
 
 const mockInvoke = vi.fn()
 vi.mock("@tauri-apps/api/core", () => ({
@@ -42,7 +42,7 @@ const stored: ProgramWithItems = {
   items: [item("i1", "Psalms 23:1", 19, 23, 1), item("i2", "John 3:16", 43, 3, 16)],
 }
 
-const queueItem = (ref: string, b: number, c: number, v: number): QueueItem => ({
+const queueItem = (ref: string, b: number, c: number, v: number): VerseQueueItem => ({
   id: crypto.randomUUID(),
   verse: { id: 0, translation_id: 1, book_number: b, book_name: ref.split(" ")[0], book_abbreviation: "", chapter: c, verse: v, text: "t" },
   reference: ref,
@@ -122,7 +122,8 @@ describe("conversions", () => {
   })
 
   it("stored translation, secondary and notes ride on the rundown item and come back out unchanged", () => {
-    const { items, missingTranslations } = toQueueItems(bilingual, 1, [KJV, OYCB])
+    const { items: loaded, missingTranslations } = toQueueItems(bilingual, 1, [KJV, OYCB])
+    const items = loaded as VerseQueueItem[]
     expect(missingTranslations).toEqual([])
     expect(items[0]).toMatchObject({ translation: "OYCB", secondary_translation: "KJV", notes: "Read slowly" })
     expect(items[0].verse.translation_id).toBe(OYCB.id) // text lookups use the pinned translation
@@ -146,7 +147,8 @@ describe("conversions", () => {
   })
 
   it("a pinned translation that is not installed is reported, text falls back, and the pin survives", () => {
-    const { items, missingTranslations } = toQueueItems(bilingual, 1, [KJV])
+    const { items: loaded, missingTranslations } = toQueueItems(bilingual, 1, [KJV])
+    const items = loaded as VerseQueueItem[]
     expect(missingTranslations).toEqual(["OYCB"])
     expect(items[0].verse.translation_id).toBe(1)
     expect(items[0].translation).toBe("OYCB")
@@ -195,7 +197,7 @@ describe("bilingual service round trip", () => {
     useServiceStore.setState({ current: null, dirty: false })
     useQueueStore.setState({ items: [] })
     expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
-    const q = useQueueStore.getState().items
+    const q = useQueueStore.getState().items as VerseQueueItem[]
     expect(q.map((i) => [i.id, i.translation, i.secondary_translation, i.notes])).toEqual([
       [sent[0].id, "KJV", null, null],
       ["y1", "OYCB", "KJV", "Read slowly"],
@@ -208,7 +210,7 @@ describe("bilingual service round trip", () => {
     mockInvoke.mockImplementation(async (cmd: string) => (cmd === "content_get_program" ? bilingual : cmd === "content_replace_items" ? savedResponse(2, bilingual.items) : null))
     expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
     expect(useServiceStore.getState().missingTranslations).toEqual(["OYCB"])
-    expect(useQueueStore.getState().items[0].verse.translation_id).toBe(1)
+    expect((useQueueStore.getState().items[0] as VerseQueueItem).verse.translation_id).toBe(1)
     useQueueStore.getState().addItem(queueItem("Romans 8:28", 45, 8, 28))
     expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
     expect(sentItems().find((i) => i.id === "y1")).toMatchObject({ translation: "OYCB", secondary_translation: "KJV", notes: "Read slowly" })
@@ -229,7 +231,7 @@ describe("open and dirty tracking", () => {
       return null
     })
     expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
-    const q = useQueueStore.getState().items
+    const q = useQueueStore.getState().items as VerseQueueItem[]
     expect(q.map((i) => i.id)).toEqual(["i1", "i2"])
     expect(q[1].verse.text).toBe("text 16")
     expect(useServiceStore.getState()).toMatchObject({ dirty: false, conflict: null })

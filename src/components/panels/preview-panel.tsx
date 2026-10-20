@@ -4,9 +4,16 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
 import { toVerseRenderData } from "@/hooks/use-broadcast"
+import { useSongStore } from "@/stores/song-store"
+import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 
 export function PreviewPanel() {
   const selectedVerse = useBibleStore((s) => s.selectedVerse)
+  const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  const previewSong = useSongStore((s) => (selectedSlide ? s.songs[selectedSlide.item.song.song_id] : undefined))
+  useEffect(() => {
+    if (selectedSlide && !previewSong) void useSongStore.getState().load(selectedSlide.item.song.song_id).catch(() => {})
+  }, [selectedSlide, previewSong])
   const translations = useBibleStore((s) => s.translations)
   const activeTranslationId = useBibleStore((s) => s.activeTranslationId)
 
@@ -38,7 +45,13 @@ export function PreviewPanel() {
     translations.find((t) => t.id === activeTranslationId)?.abbreviation ??
     "KJV"
 
-  const verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
+  let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
+  if (selectedSlide) {
+    // A song slide in preview: exactly what Show live will present.
+    const slides = previewSong ? buildSlides(previewSong, selectedSlide.item.song.arrangement_id, selectedSlide.item.song.languages) : []
+    const slide = slides[Math.min(selectedSlide.index, slides.length - 1)]
+    verseData = previewSong && slide ? toLyricRenderData(previewSong, slide) : null
+  }
 
   return (
     <div

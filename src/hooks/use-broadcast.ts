@@ -3,8 +3,10 @@ import { mark } from "@/lib/latency-marks"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type { VerseRenderData } from "@/types"
-import type { Verse } from "@/types"
+import type { SongQueueItem, Verse } from "@/types"
 import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
+import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
+import { useSongStore } from "@/stores/song-store"
 
 export function toVerseRenderData(
   verse: Verse,
@@ -167,6 +169,50 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
       { goLive: opts.goLive, item: opts.item ?? null }
     )
   mark(`presentVerse end ${ref}`)
+  return "presented"
+}
+
+/**
+ * Present one slide of a song item. The sibling of `presentVerse` and the
+ * only writer of lyric slides: same ticket, same atomic go-live, same
+ * "never blank the output on failure" rule. `index` may be "last" so
+ * Previous can land on a song's final slide.
+ */
+export async function presentSlide(
+  item: SongQueueItem,
+  index: number | "last",
+  opts: { goLive?: boolean } = {}
+): Promise<PresentOutcome> {
+  presentSeq += 1
+  const ticket = presentSeq
+  const warn = (message: string) => useBroadcastStore.getState().setPresentWarning(message)
+  let song = null
+  try {
+    song = await useSongStore.getState().load(item.song.song_id)
+  } catch (e) {
+    console.warn("[broadcast] song load failed:", e)
+  }
+  if (ticket !== presentSeq) return "superseded"
+  if (!song) {
+    warn(`${item.song.title} not shown: the song is no longer in the library.`)
+    return "empty"
+  }
+  const slides = buildSlides(song, item.song.arrangement_id, item.song.languages)
+  const langs = item.song.languages.length ? item.song.languages : [song.song.primary_language]
+  if (slides.length === 0) {
+    warn(`${item.song.title} not shown: it has no lyrics in ${langs.join(" / ").toUpperCase()}.`)
+    return "empty"
+  }
+  const i = index === "last" ? slides.length - 1 : Math.min(Math.max(index, 0), slides.length - 1)
+  const slide = slides[i]
+  useBibleStore.getState().selectSlide({ item, index: i })
+  useBroadcastStore.getState().setLiveVerse(toLyricRenderData(song, slide), null, {
+    goLive: opts.goLive,
+    slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length },
+  })
+  if (slide.missing.length > 0) {
+    warn(`${slide.sectionLabel} has no ${slide.missing.join(" / ").toUpperCase()} text; showing what there is.`)
+  }
   return "presented"
 }
 

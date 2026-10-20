@@ -10,12 +10,8 @@ export interface Program {
   item_count: number
 }
 
-/**
- * Kinds this build can show in the rundown. The database also accepts
- * `song` (migration 0003); it joins this list when the rundown can render
- * lyrics. Anything else is preserved, not edited.
- */
-export const SUPPORTED_ITEM_KINDS = ["verse"] as const
+/** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
+export const SUPPORTED_ITEM_KINDS = ["verse", "song"] as const
 export type ProgramItemKind = (typeof SUPPORTED_ITEM_KINDS)[number]
 
 export interface ProgramItem {

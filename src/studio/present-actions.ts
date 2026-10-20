@@ -3,7 +3,8 @@ import { bibleActions } from "@/hooks/use-bible"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
-import type { QueueItem } from "@/types"
+import { isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { useSongStore } from "@/stores/song-store"
 
 /**
  * The Standard view's verb set. Thin wrappers over `remoteActions` so the big
@@ -27,6 +28,10 @@ export const presentActions = {
    * the active translation and the preview would stop matching live.
    */
   previewItem: (item: QueueItem) => {
+    if (isSongItem(item)) {
+      presentActions.previewSlide(item, 0)
+      return
+    }
     const choice = resolveTranslations(item, useBibleStore.getState())
     const { book_number, chapter, verse } = item.verse
     if (isMissing(choice) || choice.source !== "item") {
@@ -44,6 +49,11 @@ export const presentActions = {
         }
       })
       .catch(() => {})
+  },
+  /** Put one slide of a song item in Preview; the song loads if it is not cached yet. */
+  previewSlide: (item: SongQueueItem, index: number) => {
+    useBibleStore.getState().selectSlide({ item, index })
+    void useSongStore.getState().load(item.song.song_id).catch(() => {})
   },
   clear: () => remoteActions.toggleOnAir(false),
   restore: () => {

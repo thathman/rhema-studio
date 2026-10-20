@@ -1,4 +1,5 @@
 import { useTauriEvent } from "@/hooks/use-tauri-event"
+import { isVerseItem } from "@/types"
 import {
   useAudioStore,
   useBibleStore,
@@ -82,12 +83,12 @@ export function useDetectionEvents(): void {
         const queue = useQueueStore.getState()
         const dupIdx = d.is_chapter_only
           ? queue.items.findIndex(
-              (i) => i.verse.book_number === d.book_number && i.verse.chapter === d.chapter
+              (i) => isVerseItem(i) && i.verse.book_number === d.book_number && i.verse.chapter === d.chapter
             )
           : queue.findDuplicate(d.book_number, d.chapter, d.verse)
         if (dupIdx !== -1) {
           const existing = queue.items[dupIdx]
-          if (!existing.verse.text && d.verse_text) {
+          if (isVerseItem(existing) && !existing.verse.text && d.verse_text) {
             queue.backfillText(existing.id, d.verse_text)
           }
           queue.flashItem(existing.id)

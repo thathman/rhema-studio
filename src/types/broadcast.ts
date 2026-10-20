@@ -4,10 +4,22 @@ export interface VerseSegment {
 }
 
 export interface VerseRenderData {
+  /** Absent means a Bible verse. `lyric` is a song slide (see `lines`). */
+  kind?: "verse" | "lyric"
   reference: string
   segments: VerseSegment[]
   /** Separate unlabeled translation lines rendered with a blank line between them. */
   translationLines?: string[]
+  /**
+   * Lyric slides: each entry is one line of the song, drawn on its own line
+   * in the verse style (no wrapping across entries). `segments` is ignored
+   * when set.
+   */
+  lines?: string[]
+  /** Same section in the second language, after a gap, in the secondary style. */
+  secondaryLines?: string[]
+  /** Small copyright line at the bottom of the text area. */
+  footer?: string
 }
 
 export interface RenderOptions {

@@ -22,6 +22,21 @@ import { BigButton } from "@/studio/ui/big-button"
 import { StatusChip, WorkspaceHeader } from "@/studio/ui/status-chip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
+import { useSongStore } from "@/stores/song-store"
+import { buildSlides } from "@/lib/lyrics"
+import { isSongItem } from "@/types"
+
+/** "Next: Chorus" while a song is live, else the keyboard hint. */
+function useNextHint(): string {
+  const liveSlide = useBroadcastStore((s) => s.liveSlide)
+  const items = useQueueStore((s) => s.items)
+  const song = useSongStore((s) => (liveSlide ? s.songs[liveSlide.songId] : undefined))
+  if (!liveSlide || !song) return "→ / PgDn"
+  const item = items.find((i) => i.id === liveSlide.itemId)
+  if (!item || !isSongItem(item)) return "→ / PgDn"
+  const next = buildSlides(song, item.song.arrangement_id, item.song.languages)[liveSlide.index + 1]
+  return next ? `Next: ${next.sectionLabel}` : "→ / PgDn"
+}
 
 export function PresentWorkspace() {
   const view = useShellStore((s) => s.presentView)
@@ -99,6 +114,7 @@ function StandardView() {
   const hasLiveItem = useBroadcastStore((s) => s.liveVerse !== null)
   const count = useQueueStore((s) => s.items.length)
   const canRestore = !isLive && hasLiveItem
+  const nextHint = useNextHint()
 
   // Keyboard verbs, only in Standard view and never while typing.
   useEffect(() => {
@@ -134,7 +150,7 @@ function StandardView() {
 
       <div className="flex flex-wrap items-center gap-3" role="toolbar" aria-label="Presentation controls">
         <BigButton icon={<ChevronLeftIcon />} label="Previous" hint="← / PgUp" onClick={presentActions.prev} disabled={count === 0} />
-        <BigButton icon={<ChevronRightIcon />} label="Next" hint="→ / PgDn" onClick={presentActions.next} disabled={count === 0} className="min-w-36" />
+        <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-36" />
         <BigButton icon={<MonitorIcon />} label="Show live" hint="present the preview" tone="live" onClick={presentActions.showLive} className="ml-4 min-w-40" />
         <span className="ml-auto flex gap-3">
           <BigButton icon={<SquareIcon />} label="Clear" hint="Esc" tone="danger" onClick={presentActions.clear} disabled={!isLive} />

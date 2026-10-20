@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
+import { isVerseItem } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 
 /**
@@ -39,7 +40,7 @@ export function ServiceBar() {
   // operator overrides in Present). Say so when that differs from the active one.
   const activeAbbrev = translations.find((t) => t.id === activeId)?.abbreviation ?? null
   const pinnedElsewhere = current
-    ? [...new Set(items.map((i) => i.translation).filter((t): t is string => typeof t === "string" && t !== activeAbbrev && !missing.includes(t)))]
+    ? [...new Set(items.filter(isVerseItem).map((i) => i.translation).filter((t): t is string => typeof t === "string" && t !== activeAbbrev && !missing.includes(t)))]
     : []
 
   const [newOpen, setNewOpen] = useState(false)
