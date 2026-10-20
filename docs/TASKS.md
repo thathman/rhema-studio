@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.24 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.25 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -86,7 +86,7 @@
 | PT-002 Service timing policies and over/under | P1 | MERGED (planned side) | PT-001 | PR #22: planned minutes per item (payload, crate-validated 0–600), service total in Prepare, timer chip shows "n min late/early" against the plan up to the live item; 2 tests. Per-item actuals and policies later |
 | PT-003 Cue/macro typed action registry | P1 | BACKLOG | OP-001 | Idempotent, permission-aware, safe retry and operator preview |
 | PT-004 Stage timer messages, visual cues | P1 | MERGED (messages) | PT-002,OP-002 | PR #24: operator → stage message (typed or quick phrases), shown big and framed on stage outputs only, cleared from the same control; the timer and its colours already reach the stage; 1 test |
-| PT-005 Rehearsal/dry-run isolation | P0 | IN PR | PT-003 | rehearsal-mode PR: header toggle freezes every output (projector windows, NDI, stage) at what they show; Preview, Live panel, rundown, quick screens all work; turning it off sends the current content everywhere; 1 test with two outputs |
+| PT-005 Rehearsal/dry-run isolation | P0 | MERGED | PT-003 | PR #27 `15be1b3`: header toggle freezes every output (projector windows, NDI, stage) at what they show; Preview, Live panel, rundown, quick screens all work; turning it off sends the current content everywhere; 1 test with two outputs |
 | PT-006 Song-playback/MIDI synchronization | P2 | BACKLOG | PT-003,MD-002 | Explicit integration opt-in, loss of sync degrades safely |
 
 ## Milestone 6 — Canva and Church Brand Kit
@@ -134,7 +134,7 @@
 | QA-001 Windows x64 signed/unsigned packaging and hands-on smoke | P0 | BACKLOG | ST-007 | Artifact installs/launches, data stays, projectors + NDI verified |
 | QA-002 Offline and injected-failure test suite | P0 | BACKLOG | OP-005,SV-002 | No live outage under network/API failure |
 | QA-003 Accessibility and novice-volunteer usability | P0 | BACKLOG | ST-002 | Keyboard, contrast, novice timed exercises with recorded findings |
-| QA-004 Rights and dependency license inventory | P0 | BACKLOG | ST-001 | Upstream MIT notices, Yoruba terms, media/lyrics provenance |
+| QA-004 Rights and dependency license inventory | P0 | IN PR | ST-001 | `docs/LICENSES.md`: upstream MIT, OYCB CC BY-SA 4.0 (compliant), direct Rust and JS dependency licences (all permissive), fonts OFL, NDI runtime terms, song/media provenance model. **Open owner decision:** copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) are bundled in `rhema.db`/installer; openbible.info and NDI notices still to add to About |
 | QA-005 Settings and database migration/rollback matrix | P0 | BACKLOG | ST-003 | Upgrades, corrupt files, backup restore, app identity |
 | QA-006 Security threat review of LAN, external cues and cloud sync | P1 | BACKLOG | OP-006,CL-004 | Pairing/auth, permissions, secrets, revocation, secure defaults |
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.25):** PR #27 merged; licence-inventory PR opened (QA-004 IN PR; owner decision on bundled copyrighted translations flagged).
 - **2026-10-20 (rev 0.24):** PRs #24, #25, #26 merged; rehearsal-mode PR opened (PT-005 IN PR).
 - **2026-10-20 (rev 0.23):** output-health PR opened (OP-004 health IN PR).
 - **2026-10-20 (rev 0.22):** fuzzy-song-search PR opened (SV-004 IN PR).
