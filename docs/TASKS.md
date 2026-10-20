@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.22 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.23 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -74,7 +74,7 @@
 | OP-001 Output profile model, routing and migration | P1 | MERGED (roles) | MD-004 | PR #23: `role` on each output (`congregation` default, `stage`); saved outputs without a role load unchanged; chosen in the output editor; stage forces a display window (no NDI) |
 | OP-002 Stage confidence screen and private messages | P1 | MERGED (screen) / IN PR (messages) | OP-001 | PR #23: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
 | OP-003 Independent language/style per output | P1 | BACKLOG | OP-001,SO-006 | EN/YO variants projected independently with matched passage |
-| OP-004 Multiview and device health | P1 | BACKLOG | OP-001 | Show actual/preview outputs, disconnected/error status |
+| OP-004 Multiview and device health | P1 | IN PR (health) | OP-001 | output-health PR: Home readiness lists every output (on/off, congregation/stage/stream) and warns when only the stage screen is on; 1 test. Multiview thumbnails and disconnected-monitor detection later |
 | OP-005 NDI/OBS and external output stability | P0 | BACKLOG | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
 | OP-006 Paired mobile/LAN control with roles | P1 | BACKLOG | OP-001 | Secure pairing, revocation, authorization, no cloud dependency |
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.23):** output-health PR opened (OP-004 health IN PR).
 - **2026-10-20 (rev 0.22):** fuzzy-song-search PR opened (SV-004 IN PR).
 - **2026-10-20 (rev 0.21):** PR #23 merged; stage-messages PR opened (PT-004 IN PR).
 - **2026-10-20 (rev 0.20):** PR #22 merged; stage-display PR opened (OP-001 roles, OP-002 IN PR).

@@ -63,6 +63,12 @@ export function HomeWorkspace() {
     activeThemeName: themes.find((t) => t.id === activeThemeId)?.name ?? null,
     outputsConfigured: outputs.length,
     outputsOnAir: onAir,
+    outputs: outputs.map((o) => ({
+      name: o.name,
+      role: o.role ?? "congregation",
+      kind: o.type,
+      on: Boolean(outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive),
+    })),
     rundownCount: items.length,
     listening,
     unknownLicenceSongs,

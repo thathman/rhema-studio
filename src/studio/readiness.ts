@@ -10,11 +10,20 @@ export interface ReadinessCheck {
   fixLabel?: string
 }
 
+export interface OutputHealth {
+  name: string
+  role: "congregation" | "stage"
+  kind: "display" | "ndi"
+  on: boolean
+}
+
 export interface ReadinessInput {
   translationsLoaded: number
   activeThemeName: string | null
   outputsConfigured: number
   outputsOnAir: number
+  /** Per-output state, for the detail line. */
+  outputs?: OutputHealth[]
   rundownCount: number
   listening: boolean
   /** Songs in the rundown whose licence is still "unknown". */
@@ -23,6 +32,15 @@ export interface ReadinessInput {
   missingSongs?: number
   /** Picture items whose file is gone from the media folder (or whose asset was removed). */
   missingMedia?: number
+}
+
+/** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
+export function outputDetail(outputs: OutputHealth[] | undefined): string | undefined {
+  if (!outputs?.length) return undefined
+  const parts = outputs.map((o) => `${o.name} · ${o.on ? "on" : "off"} · ${o.role === "stage" ? "stage" : o.kind === "ndi" ? "stream" : "congregation"}`)
+  const congregationOn = outputs.some((o) => o.role === "congregation" && o.on)
+  const anyOn = outputs.some((o) => o.on)
+  return parts.join(", ") + (anyOn && !congregationOn ? ". Only the stage is on; the congregation sees nothing." : "")
 }
 
 /**
@@ -38,8 +56,14 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       ? { id: "theme", status: "ok", label: `Theme: ${i.activeThemeName}` }
       : { id: "theme", status: "warn", label: "No theme selected", fix: "outputs", fixLabel: "Open outputs" },
     i.outputsOnAir > 0
-      ? { id: "outputs", status: "ok", label: `${i.outputsOnAir} of ${i.outputsConfigured} output${i.outputsConfigured === 1 ? "" : "s"} on a screen` }
-      : { id: "outputs", status: "warn", label: "No output is on a screen yet", detail: "The congregation cannot see anything until an output is on air.", fix: "outputs", fixLabel: "Open outputs" },
+      ? {
+          id: "outputs",
+          status: i.outputs?.some((o) => o.role === "congregation" && o.on) === false ? "warn" : "ok",
+          label: `${i.outputsOnAir} of ${i.outputsConfigured} output${i.outputsConfigured === 1 ? "" : "s"} on a screen`,
+          detail: outputDetail(i.outputs),
+          ...(i.outputs?.some((o) => o.role === "congregation" && o.on) === false ? { fix: "outputs" as const, fixLabel: "Open outputs" } : {}),
+        }
+      : { id: "outputs", status: "warn", label: "No output is on a screen yet", detail: i.outputs?.length ? outputDetail(i.outputs) : "The congregation cannot see anything until an output is on air.", fix: "outputs", fixLabel: "Open outputs" },
     i.rundownCount > 0
       ? { id: "rundown", status: "ok", label: `${i.rundownCount} item${i.rundownCount === 1 ? "" : "s"} in the service` }
       : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
