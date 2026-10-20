@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyBrandKit, contrastRatio, defaultBrandKit, readable, MANAGED_THEME_IDS } from "./brand-kit"
+import { applyBrandKit, contrastRatio, defaultBrandKit, missingThemeFonts, readable, MANAGED_THEME_IDS } from "./brand-kit"
 import { BUILTIN_THEMES } from "./builtin-themes"
 
 describe("brand kit", () => {
@@ -41,5 +41,24 @@ describe("brand kit", () => {
     // A low-contrast accent falls back to the body colour.
     const dim = applyBrandKit({ ...kit, colors: { ...kit.colors, accent: "#0b0b1b" } }, BUILTIN_THEMES)
     expect(dim.find((t) => t.id === MANAGED_THEME_IDS.scripture)!.reference.color).toBe("#ffffff")
+  })
+
+  it("makes an Announcements theme per variant and drops it when the variant goes", () => {
+    const kit = { ...defaultBrandKit(), churchName: "Grace", variants: [{ id: "youth", name: "Youth", colors: { primary: "#550088", accent: "#00ffcc" } }] }
+    const themes = applyBrandKit(kit, BUILTIN_THEMES)
+    const youth = themes.find((t) => t.id === "brand-variant-youth")!
+    expect(youth.name).toBe("Grace · Youth · Announcements")
+    expect(youth.background.gradient?.stops[0].color).toBe("#550088")
+    expect(youth.reference.color).toBe("#00ffcc")
+    expect(youth.brandManaged).toBe(true)
+    const gone = applyBrandKit({ ...kit, variants: [] }, themes)
+    expect(gone.find((t) => t.id === "brand-variant-youth")).toBeUndefined()
+    expect(gone.filter((t) => t.brandManaged)).toHaveLength(3)
+  })
+
+  it("names fonts a theme needs that are not available", () => {
+    const themes = [{ name: "Custom", verseText: { fontFamily: "Poppins" }, reference: { fontFamily: "Geist Variable" }, logo: null }] as never
+    expect(missingThemeFonts(themes, (f) => f === "Geist Variable")).toEqual([{ theme: "Custom", font: "Poppins" }])
+    expect(missingThemeFonts(themes, () => true)).toEqual([])
   })
 })

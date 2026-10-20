@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
 import { pickThemeBackgroundImage } from "@/lib/theme-designer-files"
-import { BRAND_FONTS, MANAGED_THEME_IDS, contrastRatio, type BrandKit } from "@/lib/brand-kit"
+import { BRAND_FONTS, MANAGED_THEME_IDS, contrastRatio, type BrandKit, type BrandVariant } from "@/lib/brand-kit"
+import { PlusIcon, XIcon } from "lucide-react"
 
 const CORNERS = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]] as const
 
@@ -76,6 +77,24 @@ export function BrandDialog({ open, onClose }: { open: boolean; onClose: () => v
               </Select>
             </label>
           ))}
+          <div className="col-span-2 flex flex-col gap-2 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Ministry looks (each gets its own Announcements theme)</span>
+              <Button variant="outline" size="xs" onClick={() => set({ variants: [...(kit.variants ?? []), { id: crypto.randomUUID().slice(0, 8), name: "Youth", colors: { primary: kit.colors.primary, accent: kit.colors.accent } }] })}><PlusIcon /> Add look</Button>
+            </div>
+            {(kit.variants ?? []).map((v) => (
+              <div key={v.id} className="flex items-center gap-2">
+                <Input aria-label="Look name" value={v.name} onChange={(e) => set({ variants: (kit.variants ?? []).map((x) => (x.id === v.id ? { ...x, name: e.target.value } : x)) })} className="h-8 w-32 text-xs" />
+                {(["primary", "accent"] as const).map((key) => (
+                  <label key={key} className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <input type="color" aria-label={`${v.name} ${key}`} value={v.colors[key] ?? kit.colors[key]} onChange={(e) => set({ variants: (kit.variants ?? []).map((x) => (x.id === v.id ? { ...x, colors: { ...x.colors, [key]: e.target.value } } satisfies BrandVariant : x)) })} className="h-7 w-8 cursor-pointer rounded border border-border bg-transparent" />
+                    {key}
+                  </label>
+                ))}
+                <Button variant="ghost" size="icon-xs" aria-label={`Remove ${v.name}`} onClick={() => set({ variants: (kit.variants ?? []).filter((x) => x.id !== v.id) })}><XIcon /></Button>
+              </div>
+            ))}
+          </div>
           <div className="col-span-2 flex items-center justify-between gap-3 border-t border-border pt-3">
             <span className="text-xs text-muted-foreground">
               {managed.length ? `${managed.length} brand theme${managed.length === 1 ? "" : "s"} in use. Themes you edit by hand stay as you left them.` : "No brand themes yet."}

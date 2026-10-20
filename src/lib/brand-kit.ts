@@ -11,6 +11,14 @@ export interface BrandKit {
   colors: { primary: string; accent: string; text: string; background: string }
   fonts: { heading: string; body: string }
   logo: { corner: ThemeLogo["corner"]; size: number }
+  /** Ministry looks (Youth, Children's, Evening): the same kit with other colours, each getting its own Announcements theme. */
+  variants?: BrandVariant[]
+}
+
+export interface BrandVariant {
+  id: string
+  name: string
+  colors: Partial<BrandKit["colors"]>
 }
 
 export const defaultBrandKit = (): BrandKit => ({
@@ -92,9 +100,48 @@ export function applyBrandKit(kit: BrandKit, themes: BroadcastTheme[]): Broadcas
       verseNumbers: { ...CLASSIC_DARK.verseNumbers, visible: false },
     }),
   ]
-  const managedIds = new Set<string>(Object.values(MANAGED_THEME_IDS))
+  for (const v of kit.variants ?? []) {
+    const vk: BrandKit = { ...kit, colors: { ...kit.colors, ...v.colors } }
+    const vbg = vk.colors.background
+    const vbody = readable(vk.colors.text, vbg, luminance(vbg) > 0.5 ? "#111111" : "#ffffff")
+    const vaccent = readable(vk.colors.accent, vbg, vbody)
+    generated.push({
+      ...base(`brand-variant-${v.id}`, `${kit.churchName || "Church"} · ${v.name} · Announcements`, {
+        reference: { ...CLASSIC_DARK.reference, fontFamily: kit.fonts.heading, color: vaccent, fontSize: CLASSIC_DARK.reference.fontSize * 1.6, uppercase: false },
+        verseNumbers: { ...CLASSIC_DARK.verseNumbers, visible: false },
+      }),
+      background: { ...CLASSIC_DARK.background, type: "gradient", color: vbg, gradient: { type: "linear", angle: 180, stops: [{ color: vk.colors.primary, position: 0 }, { color: vbg, position: 100 }] }, image: null },
+      verseText: { ...CLASSIC_DARK.verseText, fontFamily: kit.fonts.body, color: vbody },
+      secondaryVerseText: { ...(CLASSIC_DARK.secondaryVerseText ?? CLASSIC_DARK.verseText), fontFamily: kit.fonts.body, color: vaccent },
+    })
+  }
+  const managedIds = new Set<string>([...Object.values(MANAGED_THEME_IDS), ...generated.map((g) => g.id)])
+  // Variant themes whose variant was removed go away (unless detached by a hand edit).
+  const stale = themes.filter((t) => t.id.startsWith("brand-variant-") && t.brandManaged !== false && !generated.some((g) => g.id === t.id)).map((t) => t.id)
   // A managed theme the church turned into a hand-edited one is left alone.
-  const keep = themes.filter((t) => !managedIds.has(t.id) || t.brandManaged === false)
+  const keep = themes.filter((t) => (!managedIds.has(t.id) || t.brandManaged === false) && !stale.includes(t.id))
   const replaced = generated.filter((g) => !themes.some((t) => t.id === g.id && t.brandManaged === false))
   return [...keep, ...replaced]
+}
+
+/** Font families the themes ask for that the system cannot provide (checked with the Font Loading API when present). */
+export function missingThemeFonts(themes: Pick<BroadcastTheme, "name" | "verseText" | "reference" | "logo">[], isAvailable: (family: string) => boolean): Array<{ theme: string; font: string }> {
+  const out: Array<{ theme: string; font: string }> = []
+  for (const t of themes) {
+    for (const font of new Set([t.verseText.fontFamily, t.reference.fontFamily])) {
+      if (font && !isAvailable(font)) out.push({ theme: t.name, font })
+    }
+  }
+  return out
+}
+
+/** Bundled fonts are always there; anything else is asked of the browser. */
+export function fontAvailable(family: string): boolean {
+  if ((BRAND_FONTS as readonly string[]).includes(family)) return true
+  if (typeof document === "undefined" || !("fonts" in document)) return true
+  try {
+    return document.fonts.check(`16px "${family}"`)
+  } catch {
+    return true
+  }
 }

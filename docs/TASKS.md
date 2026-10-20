@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.33 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.35 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -96,7 +96,7 @@
 | CV-001 Validate current Canva Connect API scopes, plan eligibility, rate limits | P1 | MERGED (design) | MD-001 | `docs/rhema-studio/11-canva-connect-findings.md`: OAuth PKCE with a backend-only token exchange (needs a relay → owner cost decision), export formats/limits/plan gates, autofill Pro/Teams/Enterprise only, private integrations need Enterprise so Rhema must be a reviewed public integration. Blocks CV-002 until the relay decision |
 | CV-002 Secure Canva account connection and disconnection | P1 | BACKLOG | CV-001 | OAuth token safety, consent, refresh/revoke, offline behavior |
 | CV-003 Select/edit-in-Canva/export and local import | P1 | BACKLOG | CV-002,MD-006 | Track source design/export version, review, local cache |
-| CV-004 Church Brand Kit and ministry variants | P1 | MERGED (kit + logo) / BACKLOG (variants) | MD-003 | Spec `docs/rhema-studio/12-brand-kit.md` (#35). PR #43 logo element; PR #44: kit in settings, contrast-checked generation of Scripture/Lyrics/Announcements themes, detach on hand edit, More → Church brand; 3 tests. Variants and font warning later |
+| CV-004 Church Brand Kit and ministry variants | P1 | MERGED (kit + logo) / IN PR (variants, font warning) | MD-003 | brand-variants PR: ministry looks each generating an Announcements theme (removed with the look), Home warns when an output's theme needs a font the computer lacks; 3 tests. | Spec `docs/rhema-studio/12-brand-kit.md` (#35). PR #43 logo element; PR #44: kit in settings, contrast-checked generation of Scripture/Lyrics/Announcements themes, detach on hand edit, More → Church brand; 3 tests. Variants and font warning later |
 | CV-005 Native reusable announcement templates | P1 | MERGED (minimal) | CV-004,SV-001 | PR #45: Announcement mode in the slide composer (when · where line + details) stored as a plain slide; the Announcements brand theme styles it. Reusable saved templates later |
 | CV-006 Canva Autofill eligibility and templating | P2 | BACKLOG | CV-003,CV-005 | Only eligible APIs/plans, meaningful errors, no mandatory dependency |
 | CV-007 Approval and update-check workflow | P2 | BACKLOG | CV-003,CL-002 | New export cannot replace currently live art |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.35):** brand-variants PR opened (CV-004 variants + font warning).
 - **2026-10-20 (rev 0.33):** PRs #44 and #45 merged (CV-004 kit, CV-005 minimal).
 - **2026-10-20 (rev 0.32):** PR #43 merged; brand-kit PR #44 opened (CV-004 step 2).
 - **2026-10-20 (rev 0.31):** PRs #41 and #42 merged; theme-logo PR #43 opened (CV-004 step 1).

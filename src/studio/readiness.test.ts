@@ -40,6 +40,12 @@ describe("computeReadiness", () => {
     expect(ok.checks.find((x) => x.id === "outputs")).toMatchObject({ status: "ok", detail: "Main Display · on · congregation, Stage · on · stage" })
   })
 
+  it("fonts the outputs' themes need but the computer lacks are a warning", () => {
+    const r = computeReadiness({ ...good, missingFonts: [{ theme: "Grace · Scripture", font: "Poppins" }] })
+    expect(r.ready).toBe(false)
+    expect(r.checks.find((x) => x.id === "fonts")?.detail).toContain("Grace · Scripture: Poppins")
+  })
+
   it("pictures missing their file block readiness", () => {
     const r = computeReadiness({ ...good, missingMedia: 2 })
     expect(r.ready).toBe(false)
