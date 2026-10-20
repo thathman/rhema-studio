@@ -12,6 +12,7 @@ import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import type { ItemTranslations } from "@/lib/translation-policy"
+import { applyBrandKit, type BrandKit } from "@/lib/brand-kit"
 import { buildStagePayload } from "@/lib/stage"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
@@ -84,6 +85,7 @@ interface BroadcastState {
   // Theme management
   loadThemes: () => void
   saveTheme: (theme: BroadcastTheme) => void
+  applyBrandKit: (kit: BrandKit) => void
   deleteTheme: (id: string) => void
   duplicateTheme: (id: string) => void
   createNewTheme: (layoutKind?: NewThemeLayoutKind) => void
@@ -249,6 +251,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         ? s.themes.map((t) => (t.id === theme.id ? theme : t))
         : [...s.themes, theme],
     })),
+  /** Generate or refresh the Brand Kit's themes; hand-edited ones are left alone. */
+  applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes) })),
   deleteTheme: (id) =>
     set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin) })),
   duplicateTheme: (id) => {
@@ -496,8 +500,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     emitDraftToBroadcast(get())
   },
   saveDraft: () => {
-    const { draftTheme } = get()
-    if (!draftTheme) return
+    const { draftTheme: edited } = get()
+    if (!edited) return
+    // A hand edit detaches a Brand Kit theme, so Apply never overwrites it again.
+    const draftTheme = edited.brandManaged ? { ...edited, brandManaged: false } : edited
     // If editing a builtin, save as a new custom theme
     if (draftTheme.builtin) {
       const customTheme = {
