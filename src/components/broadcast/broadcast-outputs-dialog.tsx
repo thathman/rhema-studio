@@ -167,6 +167,8 @@ export function BroadcastOutputsDialog({
         themeId: next.themeId,
         monitorIndex: next.monitorIndex,
         ndi: next.ndi,
+        role: next.role,
+        language: next.language,
       })
       if (wasOnAir && transportChanged) {
         const updated = useBroadcastStore.getState().outputs.find((o) => o.id === next.id)

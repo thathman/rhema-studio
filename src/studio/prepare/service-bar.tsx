@@ -4,7 +4,7 @@ import { BadgeCheckIcon, CalendarIcon, CopyIcon, PlusIcon, RefreshCwIcon, SaveIc
 import { approvalBlockers, approvalLabel, approvalState } from "@/lib/approval"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
-import { isImageItem } from "@/types"
+import { isImageItem, isSongItem } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -33,6 +33,8 @@ export function ServiceBar() {
   const approval = approvalState(useServiceStore((s) => s.current))
   const approve = async () => {
     const items = useQueueStore.getState().items
+    // Fresh answers, not cached ones: a song imported since, or a file removed since.
+    await Promise.all(items.filter(isSongItem).map((i) => useSongStore.getState().load(i.song.song_id, { refresh: true }).catch(() => null)))
     if (items.some(isImageItem) || items.some((i) => i.background)) await useMediaStore.getState().list().catch(() => {})
     const blockers = approvalBlockers(items, useSongStore.getState().missing, useMediaStore.getState().assets)
     if (blockers.length) {

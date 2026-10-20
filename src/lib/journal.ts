@@ -15,6 +15,8 @@ export interface JournalEntry {
 }
 
 export interface ActualDuration {
+  /** The log entry this duration belongs to. */
+  entry: JournalEntry
   itemId: string | null
   label: string
   /** Milliseconds the item (or screen) was on air before the next change. */
@@ -28,7 +30,7 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
     .map((e) => {
       const i = entries.indexOf(e)
       const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote")
-      return { itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
+      return { entry: e, itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }
 
@@ -47,7 +49,7 @@ export function formatJournal(title: string, entries: JournalEntry[], nowMono: n
   const lines = [`${title}`, `Service log — ${entries[0] ? new Date(entries[0].at).toLocaleDateString() : ""}`, ""]
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
-    const d = durations.find((x) => x.label === e.label && x.itemId === (e.itemId ?? null) && entries.indexOf(e) === entries.findIndex((y) => y === e))
+    const d = durations.find((x) => x.entry === e)
     const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
     lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}`)

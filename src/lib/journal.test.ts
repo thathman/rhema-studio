@@ -19,5 +19,9 @@ describe("service journal", () => {
     expect(text).toContain("John 3:16: 2:00 (planned 1:00, +1:00)")
     expect(text).toContain("Amazing Grace: 3:00")
     expect(formatJournal("x", [e(0, "remote", "macro service-start")], 1000)).toMatch(/remote\s+macro service-start/)
+    // The same reference shown twice prints each stay's own duration.
+    const twice = formatJournal("x", [e(0, "live", "John 3:16", "a"), e(60_000, "clear", "John 3:16", "a"), e(120_000, "live", "John 3:16", "a")], 420_000)
+    expect(twice).toContain("John 3:16  (1:00)")
+    expect(twice).toContain("John 3:16  (5:00)")
   })
 })
