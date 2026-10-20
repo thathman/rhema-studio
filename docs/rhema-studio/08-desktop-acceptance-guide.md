@@ -353,3 +353,9 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10x.1 | Two services dated today, one approved. Close the open service, go Home. | A highlighted row names the approved one ("Today's service, approved") with Open; the saved list shows "· approved" on it. Open it, then Present. | Unverified |
 | 10w.4 | With a signage output whose loop has a picture whose file was deleted, go Home. | Readiness warns "<output>: 1 of n signage pictures is missing" with Open outputs; an empty loop warns "has no pictures". | Unverified |
+
+### 10z. Long text as pages (MD-003)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10z.1 | Prepare → Slides: paste three paragraphs, one of them nine lines long. | "Add as 4 slides" appears; it adds four items labelled "(1/4)" … "(4/4)" in order; each shows at full size with no shrinking; Next steps through them. | Unverified |
