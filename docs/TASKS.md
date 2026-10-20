@@ -110,7 +110,7 @@
 | CL-003 Local portable service package | P1 | IN PR | CL-002 | service-package PR: `<title>.rhema-service.json` = service items + the songs and pictures they use (base64) + SHA-256 over the payload; import refuses a bad checksum/hash/version before writing, reuses songs by id and pictures by hash, remaps arrangement ids; More → Library block; 2 crate tests |
 | CL-004 Sync transport evaluation and threat model | P1 | IN PR (evaluation) | CL-001,CL-002 | `docs/rhema-studio/15-sync-transport-evaluation.md`: four options (files, shared folder, self-hosted relay, hosted relay) with cost, conflicts, threat model; recommends the shared-folder slice next, no vendor; owner decision requested |
 | CL-005 Sync drafts, approvals, presence and conflict resolution | P1 | BACKLOG | CL-004 | Edited remotely, reviewed locally, no silent overwrite |
-| CL-006 Release delivery and activation at church | P0 | BACKLOG | CL-003,CL-005 | All assets preflight; active runtime pinned offline |
+| CL-006 Release delivery and activation at church | P0 | IN PR (first slice) | CL-003,CL-005 | todays-service PR: Home offers "Open" for today's approved service (then today's, then the next approved one) when nothing is open; saved list marks approved ones. Assets preflight = approval (#73) + service file (#56). Remote delivery waits on #72 |
 | CL-007 Team assignments, comments, visual diff/notifications | P2 | BACKLOG | CL-005 | Ownership, activity audit, unread actionable changes |
 
 ## Milestones 8–9 — Signage, engagement, archive, AI
