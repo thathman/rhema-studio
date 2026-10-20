@@ -19,10 +19,12 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+mod logs;
 mod media;
 mod package;
 mod revisions;
 mod songs;
+pub use logs::*;
 pub use media::*;
 pub use package::*;
 pub use revisions::*;
@@ -64,6 +66,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0005_revisions", include_str!("../migrations/0005_revisions.sql")),
     ("0006_song_key_tempo", include_str!("../migrations/0006_song_key_tempo.sql")),
     ("0007_approval", include_str!("../migrations/0007_approval.sql")),
+    ("0008_service_logs", include_str!("../migrations/0008_service_logs.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -873,7 +876,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs"]);
     }
 
     #[test]
@@ -1079,7 +1082,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

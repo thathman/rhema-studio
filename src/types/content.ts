@@ -130,6 +130,18 @@ export interface RestoreReport {
   migrations: string[]
 }
 
+/** A saved service log (migration 0008): the text kept after a service. */
+export interface ServiceLogSummary {
+  id: string
+  program_id: string | null
+  title: string
+  saved_at: string
+  bytes: number
+}
+export interface ServiceLog extends ServiceLogSummary {
+  body: string
+}
+
 /** One service with its songs and pictures, as a checksummed file (`rhema-service-v1`). */
 export interface ServicePackage {
   version: 1
