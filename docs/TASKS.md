@@ -122,7 +122,7 @@
 | SG-003 QR digital bulletins and optional action links | P2 | BACKLOG | SV-002 | Link safety, privacy, consent, offline fallback |
 | AR-001 Runtime journal/service event log | P1 | MERGED (#53) / IN PR (remote commands) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
 | AR-002 OBS recording markers and sermon metadata | P2 | BACKLOG | AR-001,OP-005 | No fake recorded status; failures visible |
-| AR-003 Searchable archive and series reuse | P2 | BACKLOG | AR-001 | Find sermon/song/Scripture, respect rights |
+| AR-003 Searchable archive and series reuse | P2 | IN PR (logs) | AR-001 | log-archive PR: migration 0008 `service_logs`; Library → Keep this log stores the text; Earlier logs lists newest first, searches title/body, saves any log as a file, deletes; logs outlive their service; 1 crate test. Series reuse later |
 | AR-004 Opt-in transcription and archive indexing | P2 | BACKLOG | AR-003 | Provider-consent, corrections and privacy |
 | AI-001 Provider abstraction, privacy and human approval | P2 | BACKLOG | AR-004 | Offline mode unaffected; no AI output auto-live |
 | AI-002 Assisted Bible suggestion / sermon-follow | P3 | BACKLOG | AI-001,ST-001 | Retrieve text from licensed local corpus only; approval and provenance |

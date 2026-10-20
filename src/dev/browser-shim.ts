@@ -20,6 +20,7 @@ const uid = () => crypto.randomUUID()
 const songs = new Map<string, Song>()
 const hymnbooks = new Map<string, { id: string; code: string; name: string; language: string; publisher: string; licence_note: string }>()
 const programs = new Map<string, { program: Record<string, unknown>; items: unknown[] }>()
+const logs: Array<{ id: string; program_id: string | null; title: string; saved_at: string; bytes: number; body: string }> = []
 
 const KJV = { id: 1, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true }
 const OYCB = { id: 7, abbreviation: "OYCB", title: "Yoruba Bible", language: "yo", is_copyrighted: false, is_downloaded: true }
@@ -82,6 +83,10 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "content_export_service_package": throw { message: "Not available in the browser shim" }
     case "content_import_service_package": throw { message: "Not available in the browser shim" }
     case "content_set_actor": return null
+    case "content_save_service_log": { const id = crypto.randomUUID(); logs.unshift({ id, program_id: (args.programId as string | null) ?? null, title: String(args.title), saved_at: new Date().toISOString(), bytes: String(args.body).length, body: String(args.body) }); return logs[0] }
+    case "content_list_service_logs": { const q = String(args.query ?? "").toLowerCase(); return logs.filter((l) => !q || l.title.toLowerCase().includes(q) || l.body.toLowerCase().includes(q)) }
+    case "content_get_service_log": return logs.find((l) => l.id === args.id) ?? null
+    case "content_delete_service_log": { const i = logs.findIndex((l) => l.id === args.id); if (i >= 0) logs.splice(i, 1); return null }
     case "content_backup": return null
     case "media_list": return []
     case "media_import": return (args.paths as string[]).map((path) => ({ status: "failed", path, message: "the browser shim has no media folder" }))

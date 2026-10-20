@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { BookOpenIcon, CheckIcon, DatabaseIcon, DownloadIcon, MusicIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { ArchiveIcon, BookOpenIcon, CheckIcon, DatabaseIcon, DownloadIcon, MusicIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { invoke } from "@tauri-apps/api/core"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useServiceStore } from "@/stores/service-store"
@@ -18,7 +19,7 @@ import { monotonicNow } from "@/stores/timer-store"
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
 import { plannedMs } from "@/lib/service-timing"
-import type { ContentStatus, ImportMode } from "@/types"
+import type { ContentStatus, ImportMode, ServiceLog, ServiceLogSummary } from "@/types"
 
 const MODE_LABEL: Record<ImportMode, string> = {
   skip: "Keep my copy of songs I already have",
@@ -245,7 +246,21 @@ function JournalBlock() {
   const current = useServiceStore((s) => s.current)
   const items = useQueueStore((s) => s.items)
   const [busy, setBusy] = useState(false)
+  const [archived, setArchived] = useState(0)
   const operator = useSettingsStore((s) => s.operatorName.trim())
+  const keepLog = async () => {
+    setBusy(true)
+    try {
+      const title = `${current?.title ?? "Service"} — ${new Date().toLocaleDateString()}`
+      await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: text() })
+      setArchived((n) => n + 1)
+      toast.success("Log kept", { description: "Find it under Earlier logs, even after a restart." })
+    } catch (e) {
+      toast.error(describeError(e))
+    } finally {
+      setBusy(false)
+    }
+  }
   const text = () => formatJournal(`${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`, entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)])))
   const saveLog = async () => {
     setBusy(true)
@@ -265,10 +280,68 @@ function JournalBlock() {
     <div className="rounded-lg border border-border p-3">
       <p className="mb-1 font-medium">Service log</p>
       <p className="mb-2 text-xs text-muted-foreground">{entries.length ? `${entries.length} event${entries.length === 1 ? "" : "s"} since the app started: what went live and for how long, against the planned minutes.` : "Nothing has gone live yet in this run of the app."}</p>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void keepLog()}><ArchiveIcon /> Keep this log</Button>
         <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void saveLog()}><DownloadIcon /> Save the log…</Button>
         <Button size="sm" variant="ghost" disabled={entries.length === 0} onClick={() => useJournalStore.getState().clear()}>Start a new log</Button>
       </div>
+      <EarlierLogs refresh={archived} />
+    </div>
+  )
+}
+
+/** Logs kept in the database: newest first, searchable, each one saveable as a file. */
+function EarlierLogs({ refresh }: { refresh: number }) {
+  const [query, setQuery] = useState("")
+  const [logs, setLogs] = useState<ServiceLogSummary[]>([])
+  useEffect(() => {
+    let cancelled = false
+    invoke<ServiceLogSummary[]>("content_list_service_logs", { query: query.trim() || null, limit: 50 })
+      .then((l) => { if (!cancelled) setLogs(l) })
+      .catch(() => { if (!cancelled) setLogs([]) })
+    return () => { cancelled = true }
+  }, [query, refresh])
+  const [gone, setGone] = useState<string[]>([])
+  const saveAs = async (l: ServiceLogSummary) => {
+    try {
+      const full = await invoke<ServiceLog | null>("content_get_service_log", { id: l.id })
+      if (!full) return
+      const path = await save({ defaultPath: `${l.title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "service-log"}.txt`, filters: [{ name: "Text", extensions: ["txt"] }] })
+      if (path) {
+        await writeTextFile(path, full.body)
+        toast.success(`Log saved to ${path}`)
+      }
+    } catch (e) {
+      toast.error(describeError(e))
+    }
+  }
+  const remove = async (id: string) => {
+    try {
+      await invoke("content_delete_service_log", { id })
+      setGone((g) => [...g, id])
+    } catch (e) {
+      toast.error(describeError(e))
+    }
+  }
+  const shown = logs.filter((l) => !gone.includes(l.id))
+  if (shown.length === 0 && !query) return null
+  return (
+    <div className="mt-3 border-t border-border pt-2">
+      <div className="mb-1 flex items-center gap-2">
+        <p className="text-xs font-medium">Earlier logs</p>
+        <Input aria-label="Search earlier logs" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search a title or a reference" className="h-7 flex-1 text-xs" />
+      </div>
+      <ul className="max-h-40 overflow-y-auto">
+        {shown.length === 0 && <li className="px-1 py-1 text-xs text-muted-foreground">Nothing matches.</li>}
+        {shown.map((l) => (
+          <li key={l.id} className="flex items-center gap-2 px-1 py-1 text-xs">
+            <span className="min-w-0 flex-1 truncate">{l.title}</span>
+            <span className="shrink-0 text-muted-foreground">{new Date(l.saved_at).toLocaleDateString()}</span>
+            <Button size="icon-xs" variant="ghost" aria-label={`Save ${l.title} as a file`} onClick={() => void saveAs(l)}><DownloadIcon /></Button>
+            <Button size="icon-xs" variant="ghost" aria-label={`Delete ${l.title}`} onClick={() => void remove(l.id)}><Trash2Icon /></Button>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

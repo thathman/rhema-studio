@@ -8,7 +8,7 @@ use tauri::State;
 
 use rhema_content::{
     ContentDb, ContentError, Hymnbook, HymnbookInput, ImportMode, ImportReport, ItemInput, Program, ProgramWithItems,
-    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections,
+    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, ServiceLog, ServiceLogSummary,
 };
 
 /// The content database is opened in `setup`; `None` means it failed to open
@@ -68,6 +68,26 @@ pub fn content_create_program(
     service_date: Option<String>,
 ) -> CmdResult<Program> {
     with_db(&state, |db| db.create_program(&title, service_date.as_deref()))
+}
+
+#[tauri::command]
+pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Option<String>, title: String, body: String) -> CmdResult<ServiceLogSummary> {
+    with_db(&state, |db| db.save_service_log(program_id.as_deref(), &title, &body))
+}
+
+#[tauri::command]
+pub fn content_list_service_logs(state: State<'_, ContentState>, query: Option<String>, limit: Option<usize>) -> CmdResult<Vec<ServiceLogSummary>> {
+    with_db(&state, |db| db.list_service_logs(query.as_deref(), limit.unwrap_or(100)))
+}
+
+#[tauri::command]
+pub fn content_get_service_log(state: State<'_, ContentState>, id: String) -> CmdResult<Option<ServiceLog>> {
+    with_db(&state, |db| db.get_service_log(&id))
+}
+
+#[tauri::command]
+pub fn content_delete_service_log(state: State<'_, ContentState>, id: String) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_service_log(&id))
 }
 
 /// The operator's name for audit rows (Settings → your name). Empty clears it.

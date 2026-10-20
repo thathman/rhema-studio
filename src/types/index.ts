@@ -34,5 +34,7 @@ export type {
   ArrangementInput, HymnbookInput, HymnNumberInput, SongExport, ImportMode, ImportReport, SongItemPayload, SlideItemPayload, SectionKind, Licence,
   PackageReport,
   RestoreReport,
-  ServicePackage, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
+  ServicePackage,
+  ServiceLog,
+  ServiceLogSummary, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
 } from "./content"
