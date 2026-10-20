@@ -8,6 +8,8 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
 import { computeReadiness, type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
+import { useSongStore } from "@/stores/song-store"
+import { isSongItem } from "@/types"
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -36,6 +38,10 @@ export function HomeWorkspace() {
   const openOutputs = useShellStore((s) => s.openOutputs)
 
   const onAir = outputs.filter((o) => outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive).length
+  const songs = useSongStore((s) => s.songs)
+  const unknownLicenceSongs = new Set(
+    items.filter(isSongItem).map((i) => i.song.song_id).filter((id) => songs[id]?.song.licence === "unknown")
+  ).size
   const { ready, checks } = computeReadiness({
     translationsLoaded: translations.length,
     activeThemeName: themes.find((t) => t.id === activeThemeId)?.name ?? null,
@@ -43,6 +49,7 @@ export function HomeWorkspace() {
     outputsOnAir: onAir,
     rundownCount: items.length,
     listening,
+    unknownLicenceSongs,
   })
 
   const fix = (f: ReadinessFix) => {

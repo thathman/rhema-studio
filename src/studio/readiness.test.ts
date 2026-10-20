@@ -25,6 +25,15 @@ describe("computeReadiness", () => {
     expect(c?.fix).toBe("outputs")
   })
 
+  it("unknown song licences are an info line with a Prepare fix", () => {
+    const r = computeReadiness({ ...good, unknownLicenceSongs: 2 })
+    expect(r.ready).toBe(true)
+    const c = r.checks.find((x) => x.id === "licence")
+    expect(c).toMatchObject({ status: "info", fix: "prepare" })
+    expect(c?.label).toContain("2 songs")
+    expect(computeReadiness(good).checks.find((x) => x.id === "licence")).toBeUndefined()
+  })
+
   it("empty rundown and listening off are info, not blockers", () => {
     const r = computeReadiness({ ...good, rundownCount: 0, listening: false })
     expect(r.ready).toBe(true)

@@ -136,6 +136,23 @@ Enable both in Settings → Remote and note the ports there.
 | 10.3 | Look in the install folder. | `resources\rhema.db`, `resources\licenses\YORUBA-OYCB-LICENSE.md`, `resources\sdk\ndi\windows\Processing.NDI.Lib.x64.dll` present. |
 | 10.4 | Run sections 1, 3, 4, 7 and 8 on Windows. | As above. Note Yoruba font rendering specifically (Segoe UI covers Yoruba diacritics; check tone marks). |
 
+## 10a. Songs and hymnbooks (Milestone 2B)
+
+| # | Do | Expect |
+|---|---|---|
+| 10a.1 | Prepare → Songs → New song. Paste a printed hymn's words (blank line between verses, "Chorus" on its own line). Click Make sections. | Sections appear as Verse 1, Chorus, Verse 2… Relabel from the dropdown. Under two minutes for a volunteer who has never used the app. |
+| 10a.2 | Add Yorùbá words to Verse 1 only. Save. | Song shows EN and YO badges in the library. |
+| 10a.3 | Hymnbook numbers → New hymnbook (code SSS) → add number 245. Save. Quick find "245" and "SSS 245" in Present. | Both find the song. "1 John 1:1" still finds the verse. |
+| 10a.4 | Change the order: drag a chip; then focus a chip and use ← → and Delete. Save, reopen the editor. | Order persists; drag and keyboard both reorder; removing a chip never deletes words. |
+| 10a.5 | Add the song to a service between two verses. Save the service, restart the app, reopen. | Song item back with its languages and order. |
+| 10a.6 | Present (Standard): Next from the verse into the song, through every slide, into the next verse. Repeat with OSC `/rhema/next`. | Next steps slides, then items; "Next: Chorus" hint; Previous enters the song at its last slide. |
+| 10a.7 | Song with EN+YO on a dual-language theme. | Both languages on one slide, aligned per section; a section missing YO shows a warning chip and EN only. |
+| 10a.8 | Click a slide in the rundown (preview), then Show live. Clear, then Restore. | Live matches preview exactly; Clear keeps the slide for Restore; no stale frame. |
+| 10a.9 | Set the song's licence to CCLI with a number; present. OBS with a transparent theme. | Copyright line under the words; keys correctly in OBS. |
+| 10a.10 | Delete a song that is in a saved service. | Refused, naming the service. After removing the item and saving, delete succeeds. |
+
+Browser check performed on the dev server (not the desktop app, songs-editor PR): paste → sections, keyboard reorder, save, library search, add to service, bilingual preview, Next through slides, missing-language warning, footer, Clear/Restore all behaved as specified. Drag reorder could not be exercised by the automated browser (synthetic pointer); verify by hand in 10a.4.
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -150,6 +167,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10a, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.

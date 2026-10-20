@@ -15,6 +15,12 @@ import { hydrateBroadcastThemes } from "@/stores/broadcast-store"
 // otherwise, so the logs a user sends us would say nothing about them.
 forwardConsoleToLog()
 
+// Plain-browser dev runs (no Tauri window) get a stub IPC so layout and
+// workflows can be checked. Dead code in production builds.
+if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
+  await import("./dev/browser-shim")
+}
+
 // Webview reloads do NOT restart the Rust backend, so any STT pipeline
 // left running from the previous webview session still has
 // `stt_active = true`. That makes the next `start_transcription` call

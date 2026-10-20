@@ -9,6 +9,8 @@ interface QueueState {
 
   addItem: (item: QueueItem) => void
   removeItem: (id: string) => void
+  /** Change an item's own settings (song languages, arrangement, notes). */
+  updateItem: (id: string, patch: (item: QueueItem) => QueueItem) => void
   reorderItems: (fromIndex: number, toIndex: number) => void
   setActive: (index: number | null) => void
   clearQueue: () => void
@@ -60,6 +62,8 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     set((state) => ({
       items: state.items.filter((i) => i.id !== id),
     })),
+  updateItem: (id, patch) =>
+    set((state) => ({ items: state.items.map((i) => (i.id === id ? patch(i) : i)) })),
   reorderItems: (fromIndex, toIndex) =>
     set((state) => {
       const items = [...state.items]
