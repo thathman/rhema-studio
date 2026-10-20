@@ -15,7 +15,7 @@ import type {
   ThemeImageFill,
   VerseRenderData,
   RenderOptions,
-  VerseTextStyle,,
+  VerseTextStyle,
   ThemeLogo,
 } from "@/types/broadcast"
 
