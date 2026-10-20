@@ -10,10 +10,11 @@ import { WorkspaceHeader } from "@/studio/ui/status-chip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceBar } from "@/studio/prepare/service-bar"
+import { SongLibrary } from "@/studio/prepare/song-library"
 
 /**
- * Service builder, foundation version: order Bible passages into the rundown.
- * Nothing here can present — Prepare only edits.
+ * Service builder: order Bible passages and songs into the rundown, and keep
+ * the song library. Nothing here can present — Prepare only edits.
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
@@ -57,17 +58,17 @@ export function PrepareWorkspace() {
               <div className="border-b border-border px-3 pt-2">
                 <TabsList>
                   <TabsTrigger value="bible">Bible</TabsTrigger>
-                  <TabsTrigger value="songs" disabled title="Planned for Milestone 2">Songs</TabsTrigger>
-                  <TabsTrigger value="slides" disabled title="Planned for Milestone 2">Slides</TabsTrigger>
+                  <TabsTrigger value="songs">Songs</TabsTrigger>
+                  <TabsTrigger value="slides" disabled title="Planned for Milestone 2C">Slides</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden p-3">
                 <QuickFind mode="prepare" autoFocus />
               </TabsContent>
+              <TabsContent value="songs" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+                <SongLibrary />
+              </TabsContent>
             </Tabs>
-            <p className="border-t border-border px-3 py-2 text-[0.6875rem] text-muted-foreground">
-              Songs, hymn numbers and custom slides arrive with the content library (Milestone 2).
-            </p>
           </section>
           <div className="h-72 w-[26rem] overflow-hidden [&>div]:h-full">
             <PreviewPanel />

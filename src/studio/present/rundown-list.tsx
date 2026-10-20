@@ -8,6 +8,7 @@ import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
 import { isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 /**
  * The service rundown, built on the existing queue store.
@@ -104,6 +105,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 </span>
               )}
             </div>
+            {expanded && mode === "prepare" && <SongItemControls item={item} />}
             {expanded && <SlideList item={item} index={index} mode={mode} />}
           </li>
         )
@@ -123,6 +125,51 @@ function SongBadges({ item }: { item: SongQueueItem }) {
       ))}
       {arrangement && !arrangement.is_default && <span className="truncate">{arrangement.name}</span>}
     </span>
+  )
+}
+
+/** Prepare-only: which languages this service shows the song in, and which order. */
+function SongItemControls({ item }: { item: SongQueueItem }) {
+  const song = useSongStore((s) => s.songs[item.song.song_id])
+  const update = (patch: Partial<SongQueueItem["song"]>) =>
+    useQueueStore.getState().updateItem(item.id, (i) => (isSongItem(i) ? { ...i, song: { ...i.song, ...patch } } : i))
+  if (!song) return null
+  const available = [...new Set([song.song.primary_language, ...song.sections.flatMap((s) => Object.keys(s.texts))])]
+  const toggle = (lang: string) => {
+    const on = item.song.languages.includes(lang)
+    const next = on ? item.song.languages.filter((l) => l !== lang) : [...item.song.languages, lang]
+    if (next.length === 0) return
+    update({ languages: next })
+  }
+  return (
+    <div className="ml-7 flex flex-wrap items-center gap-2 py-1 pl-2 text-xs">
+      <span className="text-muted-foreground">Show in</span>
+      <span role="group" aria-label="Languages" className="flex gap-1">
+        {available.map((l) => (
+          <button
+            key={l}
+            type="button"
+            aria-pressed={item.song.languages.includes(l)}
+            onClick={() => toggle(l)}
+            className={cn(
+              "h-6 rounded-full border px-2 uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              item.song.languages.includes(l) ? "border-primary/50 bg-primary/10" : "border-border text-muted-foreground"
+            )}
+          >
+            {l}
+          </button>
+        ))}
+      </span>
+      {song.arrangements.length > 1 && (
+        <Select value={item.song.arrangement_id ?? "__default"} onValueChange={(v) => update({ arrangement_id: v === "__default" ? null : v })}>
+          <SelectTrigger className="h-6 w-36 text-xs" aria-label="Order"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__default">Default order</SelectItem>
+            {song.arrangements.filter((a) => !a.is_default).map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
   )
 }
 

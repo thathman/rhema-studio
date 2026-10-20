@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.4 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.5 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -32,10 +32,10 @@
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
 | SO-001 Specify versioned song/section/arrangement/hymnbook schema | P1 | MERGED | ST-003,ST-005 | Spec `docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`; schema shipped as migration 0003 in PR #6 (`802640a`) |
-| SO-002 Song CRUD and history | P1 | MERGED (crate) / BACKLOG (editor UI) | SO-001 | PR #6: create/update (stable ids, revision conflicts), delete refused while a service uses the song, audit rows; 25 crate tests. Editor UI pending |
-| SO-003 Section editor (verse/chorus/bridge/tag) | P1 | BACKLOG | SO-002 | Fast tagging, reorder, validation, drag/key accessibility, save/reopen |
-| SO-004 Named service-specific arrangements | P1 | BACKLOG | SO-003 | Repeat/jump without mutating source song; stable section IDs |
-| SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (crate) / IN PR (Quick find) | SO-002 | PR #6: hymnbooks, numbers per book, `SSS 245`/`245`/`#12a` lookup; Quick find resolves hymn numbers in the songs-core PR |
+| SO-002 Song CRUD and history | P1 | MERGED (crate) / IN PR (editor) | SO-001 | PR #6 crate; songs-editor PR: Prepare → Songs library, New/Edit/Delete with conflict and in-use messages, unsaved-change guard |
+| SO-003 Section editor (verse/chorus/bridge/tag) | P1 | IN PR | SO-002 | songs-editor PR: paste-first parser → section cards, kind dropdown, relabel, move/remove, EN/YO side by side, validation list |
+| SO-004 Named service-specific arrangements | P1 | IN PR | SO-003 | songs-editor PR: arrangement strip (drag, ← → Delete, buttons), named orders, default flag, per-item order and language choice in the rundown |
+| SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (crate) / IN PR (UI) | SO-002 | PR #6 crate; PR #7 Quick find; songs-editor PR: hymnbook creation and number rows in the editor |
 | SO-006 Multilingual lyrics | P1 | IN PR | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |
 | SO-007 Search library | P1 | MERGED (crate) / IN PR (UI) | SO-002,SO-005 | PR #6: FTS5 over title/authors/lyrics + numbers; songs-core PR: one Quick find box for verses, hymn numbers and songs |
 | SO-008 Import/export | P1 | MERGED (crate JSON) / BACKLOG (UI, OpenLyrics) | SO-001,SO-003 | PR #6: `rhema-songs-v1` JSON export/import, skip/replace/duplicate, atomic. Paste parser in songs-core PR |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.5):** PR #7 merged `351d8e2`; songs-editor PR opened (SO-002 editor, SO-003, SO-004, SO-005 UI IN PR). Browser-shim check of the editor and Present flow recorded in guide §10a.
 - **2026-10-20 (rev 0.4):** PR #6 (songs database) merged `802640a`; songs-core PR opened (SO-006/007/009/010 IN PR, SO-002/005/008 crate parts MERGED).
 - **2026-10-20 (rev 0.3):** Integration executed: PRs #5, #3, #1, #2 merged into `main` (`e66483b`). ST-001/002/003/005/007/011, QA-009 → MERGED (not ACCEPTED: manual desktop gate ST-006 open). Milestone 2B started (SO-002…). Status snapshots live in `docs/DEVELOPMENT-STATUS.md`.
 - **2026-10-20:** Initial canonical backlog created from owner-confirmed product direction and existing seven Studio design documents. No tasks newly implemented by this documentation-only change.

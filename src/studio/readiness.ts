@@ -17,6 +17,8 @@ export interface ReadinessInput {
   outputsOnAir: number
   rundownCount: number
   listening: boolean
+  /** Songs in the rundown whose licence is still "unknown". */
+  unknownLicenceSongs?: number
 }
 
 /**
@@ -40,6 +42,9 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
     i.listening
       ? { id: "listening", status: "ok", label: "Listening for verse references" }
       : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in the Production view to detect verses from the sermon." },
+    ...(i.unknownLicenceSongs
+      ? [{ id: "licence", status: "info" as const, label: `${i.unknownLicenceSongs} song${i.unknownLicenceSongs === 1 ? "" : "s"} in the service ${i.unknownLicenceSongs === 1 ? "has" : "have"} no licence recorded`, detail: "Not a blocker. Open the song in Prepare → Songs to record it.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
   ]
   return { ready: checks.every((c) => c.status !== "warn"), checks }
 }

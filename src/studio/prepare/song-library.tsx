@@ -1,0 +1,124 @@
+import { useCallback, useEffect, useRef, useState } from "react"
+import { MusicIcon, PencilIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { useBibleStore, useQueueStore } from "@/stores"
+import { useSongStore } from "@/stores/song-store"
+import { songQueueItem } from "@/lib/lyrics"
+import { presentActions } from "@/studio/present-actions"
+import { SongEditor } from "@/studio/prepare/song-editor"
+import type { SongSummary } from "@/types"
+
+const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI", custom: "Custom", unknown: "Licence?" }
+
+/**
+ * Prepare → Songs: find a song (title, words, hymn number), preview it, add it
+ * to the service, or open it in the editor. "New song" opens the paste-first
+ * editor.
+ */
+export function SongLibrary() {
+  const [query, setQuery] = useState("")
+  const results = useSongStore((s) => s.results)
+  const searching = useSongStore((s) => s.searching)
+  const error = useSongStore((s) => s.error)
+  const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  const [editing, setEditing] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const search = useCallback((q: string) => void useSongStore.getState().search(q), [])
+  useEffect(() => {
+    search("")
+    return () => { if (timer.current) clearTimeout(timer.current) }
+  }, [search])
+
+  const onChange = (value: string) => {
+    setQuery(value)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => search(value), 180)
+  }
+
+  const add = (song: SongSummary) => {
+    const queue = useQueueStore.getState()
+    const before = queue.items.length
+    queue.addItem(songQueueItem(song))
+    const after = useQueueStore.getState().items.length
+    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="Find a song"
+            placeholder="Title, a line of the words, or a hymn number like 245"
+            value={query}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") onChange("") }}
+            className="h-11 pl-9 text-sm"
+          />
+        </div>
+        <Button size="sm" className="h-11" onClick={() => setEditing({ open: true, id: null })}>
+          <PlusIcon /> New song
+        </Button>
+      </div>
+      <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
+        {error && <li className="px-2 py-1 text-xs text-destructive">{error}</li>}
+        {searching && results.length === 0 && <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>}
+        {!searching && results.length === 0 && !error && (
+          <li className="px-2 py-4 text-center text-xs text-muted-foreground">
+            {query.trim() ? "No songs match." : "No songs yet. Click New song and paste the words of your first hymn."}
+          </li>
+        )}
+        {results.map((song) => {
+          const isSel = selectedSlide?.item.song.song_id === song.id
+          return (
+            <li key={song.id} className="flex items-stretch gap-1">
+              <button
+                type="button"
+                onClick={() => presentActions.previewSlide(songQueueItem(song, `library-${song.id}`), 0)}
+                className={cn(
+                  "flex min-w-0 flex-1 flex-col rounded-md px-2.5 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                  isSel ? "bg-primary/10" : "hover:bg-muted/50"
+                )}
+                title="Click to preview"
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold">
+                  <MusicIcon className="size-3 text-muted-foreground" aria-hidden />
+                  <span className="truncate">{song.title}</span>
+                  {song.numbers.map((n) => (
+                    <span key={n} className="rounded border border-border px-1 text-[0.625rem] font-normal text-muted-foreground">{n}</span>
+                  ))}
+                  {song.languages.map((l) => (
+                    <span key={l} className="rounded border border-border px-1 text-[0.625rem] font-normal text-muted-foreground uppercase">{l}</span>
+                  ))}
+                  <span
+                    className={cn("rounded px-1 text-[0.625rem] font-normal", song.licence === "unknown" ? "bg-confidence-mid/20 text-foreground" : "border border-border text-muted-foreground")}
+                    title={song.licence === "unknown" ? "Licence not recorded yet" : undefined}
+                  >
+                    {LICENCE_BADGE[song.licence] ?? song.licence}
+                  </span>
+                </span>
+                <span className="line-clamp-1 text-sm text-muted-foreground">{song.first_line || song.authors || "—"}</span>
+              </button>
+              <Button variant="ghost" size="icon-sm" className="self-center" aria-label={`Edit ${song.title}`} onClick={() => setEditing({ open: true, id: song.id })}>
+                <PencilIcon />
+              </Button>
+              <Button variant="outline" size="sm" className="self-center" onClick={() => add(song)}>
+                <PlusIcon /> Add
+              </Button>
+            </li>
+          )
+        })}
+      </ul>
+      <SongEditor
+        songId={editing.id}
+        open={editing.open}
+        onClose={() => setEditing((e) => ({ ...e, open: false }))}
+        onSaved={() => search(query)}
+      />
+    </div>
+  )
+}
