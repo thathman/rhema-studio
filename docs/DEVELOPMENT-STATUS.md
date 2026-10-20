@@ -6,9 +6,13 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display, #24 stage messages, #25 typo-tolerant search, #26 output health, #27 rehearsal mode, #28 licence inventory, #29 About notices.
+- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display, #24 stage messages, #25 typo-tolerant search, #26 output health, #27 rehearsal mode, #28 licence inventory, #29 About notices, #30 Canva findings.
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
+
+## Issues
+
+Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 and #34 owner decisions (bundled translations; Canva relay), #35 Brand Kit/templates, #36 video, #37 lower thirds, #38 cues, #39 migration matrix.
 
 ## Open PRs
 
@@ -52,8 +56,8 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. CV-001 Canva findings — in PR (docs/canva-connect-findings).
-2. CV-005 native announcement templates with a Church Brand Kit (CV-004) — no Canva dependency; PT-003 cue/macro registry; MD-002 video; MD-004 lower thirds.
+1. QA-005 migration/restore matrix as crate tests (#39).
+2. CV-004/CV-005 Brand Kit and native announcement templates (#35); PT-003 cues (#38); MD-002 video (#36); MD-004 lower thirds (#37).
 3. Milestone 4 OP-001 output profiles.
 3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.
 3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.

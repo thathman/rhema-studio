@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.26 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.27 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -8,7 +8,7 @@
 - **States:** `BACKLOG` (not started); `DESIGN` (analysis/spec only); `IN PR` (code exists, not merged); `MERGED` (merged, not yet accepted); `ACCEPTED` (merged + tests/manual gate passed); `SHIPPED` (included in released build); `BLOCKED`. No automatic status inflation from passing CI.
 - Task owners initially **Unassigned**; implementing engineer becomes responsible after issue assignment. Product acceptance belongs to repository owner. No arbitrary due dates.
 - Every issue/PR should include: task IDs, affected FRs, change scope, migration/security/license notes, tests and screenshots, performance and offline impact, rollback plan, acceptance checklist.
-- Do not conflate **in PR** with **done**. GitHub Issues are not yet provisioned. This file is the master queue until issues are created; issue links should be added here as they are established.
+- Do not conflate **in PR** with **done**. GitHub Issues are enabled (2026-10-20): #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 owner decision on bundled translations, #34 owner decision on the Canva relay, #35 CV-004/005 Brand Kit and templates, #36 MD-002 video, #37 MD-004 lower thirds, #38 PT-003 cues, #39 QA-005 migration matrix. This file stays the master queue; link new issues here as they are opened.
 - Track separate **code quality** vs **volunteer UX acceptance**. An intuitive app is not established merely by unit tests.
 
 ## Current active work
@@ -93,7 +93,7 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| CV-001 Validate current Canva Connect API scopes, plan eligibility, rate limits | P1 | IN PR (design) | MD-001 | `docs/rhema-studio/11-canva-connect-findings.md`: OAuth PKCE with a backend-only token exchange (needs a relay → owner cost decision), export formats/limits/plan gates, autofill Pro/Teams/Enterprise only, private integrations need Enterprise so Rhema must be a reviewed public integration. Blocks CV-002 until the relay decision |
+| CV-001 Validate current Canva Connect API scopes, plan eligibility, rate limits | P1 | MERGED (design) | MD-001 | `docs/rhema-studio/11-canva-connect-findings.md`: OAuth PKCE with a backend-only token exchange (needs a relay → owner cost decision), export formats/limits/plan gates, autofill Pro/Teams/Enterprise only, private integrations need Enterprise so Rhema must be a reviewed public integration. Blocks CV-002 until the relay decision |
 | CV-002 Secure Canva account connection and disconnection | P1 | BACKLOG | CV-001 | OAuth token safety, consent, refresh/revoke, offline behavior |
 | CV-003 Select/edit-in-Canva/export and local import | P1 | BACKLOG | CV-002,MD-006 | Track source design/export version, review, local cache |
 | CV-004 Church Brand Kit and ministry variants | P1 | BACKLOG | MD-003 | Fonts/colors/logos reproducible across items |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.27):** PR #30 merged; Issues enabled and #31–#39 opened for near-term work and the two owner decisions.
 - **2026-10-20 (rev 0.26):** PR #29 merged; canva-connect-findings PR opened (CV-001 design; owner decisions on a token relay and public-integration application flagged).
 - **2026-10-20 (rev 0.25):** PR #27 merged; licence-inventory PR opened (QA-004 IN PR; owner decision on bundled copyrighted translations flagged).
 - **2026-10-20 (rev 0.24):** PRs #24, #25, #26 merged; rehearsal-mode PR opened (PT-005 IN PR).
