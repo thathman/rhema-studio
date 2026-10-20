@@ -132,6 +132,34 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSttProvider: (sttProvider) => set({ sttProvider }),
 }))
 
+/**
+ * A settings file written by an older or newer build may hold a shape this
+ * build does not expect (a string where a list is due, a number where a
+ * flag is due). Such values are skipped and the default stays, instead of
+ * reaching the UI and throwing. Keys not listed here are taken as they are.
+ */
+function acceptable(key: string, value: unknown): boolean {
+  switch (key) {
+    case "operatorName":
+    case "remoteSecret":
+      return typeof value === "string"
+    case "remoteAuthRequired":
+    case "autoMode":
+    case "onboardingComplete":
+      return typeof value === "boolean"
+    case "gain":
+    case "confidenceThreshold":
+    case "cooldownMs":
+      return typeof value === "number" && Number.isFinite(value)
+    case "remoteDevices":
+      return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
+    case "brandKit":
+      return typeof value === "object" && !Array.isArray(value)
+    default:
+      return true
+  }
+}
+
 const PERSISTED_KEYS = [
   "brandKit",
   "operatorName",
@@ -171,7 +199,7 @@ export function hydrateSettings(): Promise<void> {
       const patch: Partial<SettingsState> = {}
       for (const key of PERSISTED_KEYS) {
         const value = await store.get(key)
-        if (value !== undefined && value !== null) {
+        if (value !== undefined && value !== null && acceptable(key, value)) {
           ;(patch as Record<string, unknown>)[key] = value
         }
       }
