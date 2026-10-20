@@ -331,3 +331,10 @@ report), but launching it cannot.
 | 10u.1 | Settings → Remote: start HTTP, press "Pair a device". From a phone on the LAN: `curl -X POST http://<laptop>:8080/api/v1/pair -d '{"code":"<code>","name":"Tolu phone"}'`. | The reply carries a 64-character token; the laptop toasts "Tolu phone paired"; the code disappears; the device is listed. | Unverified |
 | 10u.2 | Send `next` with `X-Rhema-Key: <token>`; then Revoke the device; send again. Restart the app; check the list. | First request works; after revoke 401 at once (no restart); the device list survives restart; the token is never shown again. | Unverified |
 | 10u.3 | Press "Pair a device", send three wrong codes. | 403 with tries left, then the window closes (404 "pairing is not open"); the on-screen code remains until cancelled or two minutes pass. | Unverified |
+
+### 10v. Device roles (OP-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10v.1 | With a paired device (10u) send `{"command":"theme","value":"Dark"}` and `{"command":"next"}` with its token. Change it to "Present and change settings" in Settings, send theme again. | First theme request: 403 "may present but not change settings"; next works; after the change, theme works at once. Restart the app: the role is kept. | Unverified |
+| 10v.2 | Revoke the last paired device with no shared key set. Send `next` with no key. Untick "Require a key or a paired device", send again. | 401 while the switch is on with no keys; accepted after unticking; the switch state survives restart. | Unverified |

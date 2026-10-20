@@ -1,9 +1,13 @@
 import { invoke } from "@tauri-apps/api/core"
 
+export type RemoteRole = "present" | "configure"
+
 export interface RemoteDevice {
   hash: string
   name: string
   paired_at: string
+  /** Absent on entries saved before roles existed: treated as configure (full access). */
+  role?: RemoteRole
 }
 
 let remoteKeysPush: Promise<void> = Promise.resolve()
@@ -18,7 +22,7 @@ export function pushRemoteKeys(): Promise<void> {
   remoteKeysPush = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name })) })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure" })), requireAuth: s.remoteAuthRequired })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -52,10 +56,14 @@ interface SettingsState {
   remoteSecret: string
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
+  /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
+  remoteAuthRequired: boolean
+  setRemoteAuthRequired: (on: boolean) => void
 
   setRemoteSecret: (secret: string) => void
-  addRemoteDevice: (d: { hash: string; name: string }) => void
+  addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
   revokeRemoteDevice: (hash: string) => void
+  setRemoteDeviceRole: (hash: string, role: RemoteRole) => void
   setOperatorName: (name: string) => void
   setBrandKit: (kit: BrandKit) => void
   setDeepgramApiKey: (key: string | null) => void
@@ -85,17 +93,26 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   operatorName: "",
   remoteSecret: "",
   remoteDevices: [],
+  remoteAuthRequired: false,
 
+  setRemoteAuthRequired: (remoteAuthRequired) => {
+    set({ remoteAuthRequired })
+    void pushRemoteKeys()
+  },
   setRemoteSecret: (remoteSecret) => {
-    set({ remoteSecret })
+    set((s) => ({ remoteSecret, remoteAuthRequired: s.remoteAuthRequired || remoteSecret.trim().length > 0 }))
     void pushRemoteKeys()
   },
   addRemoteDevice: (d) => {
-    set((s) => ({ remoteDevices: [...s.remoteDevices.filter((x) => x.hash !== d.hash), { ...d, paired_at: new Date().toISOString() }] }))
+    set((s) => ({ remoteDevices: [...s.remoteDevices.filter((x) => x.hash !== d.hash), { ...d, paired_at: new Date().toISOString() }], remoteAuthRequired: true }))
     void pushRemoteKeys()
   },
   revokeRemoteDevice: (hash) => {
     set((s) => ({ remoteDevices: s.remoteDevices.filter((x) => x.hash !== hash) }))
+    void pushRemoteKeys()
+  },
+  setRemoteDeviceRole: (hash, role) => {
+    set((s) => ({ remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }))
     void pushRemoteKeys()
   },
   setOperatorName: (operatorName) => {
@@ -120,6 +137,7 @@ const PERSISTED_KEYS = [
   "operatorName",
   "remoteSecret",
   "remoteDevices",
+  "remoteAuthRequired",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",

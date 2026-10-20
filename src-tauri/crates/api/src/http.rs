@@ -232,11 +232,11 @@ async fn pair_handler<S: CommandSink + 'static>(
 ) -> impl IntoResponse {
     match try_pair(&state.pairing, &state.keys, &req.code, &req.name) {
         PairOutcome::Paired { token, entry } => {
-            let payload = serde_json::json!({ "name": entry.name, "hash": entry.hash }).to_string();
+            let payload = serde_json::json!({ "name": entry.name, "hash": entry.hash, "role": entry.role }).to_string();
             if let Err(e) = state.sink.emit_event("remote:paired", &payload) {
                 // The app would never list it, so it could never be revoked: take it back and let the device retry.
                 log::warn!("pairing event not delivered, token withdrawn: {e}");
-                state.keys.write().unwrap_or_else(std::sync::PoisonError::into_inner).retain(|k| k.hash != entry.hash);
+                state.keys.write().unwrap_or_else(std::sync::PoisonError::into_inner).entries.retain(|k| k.hash != entry.hash);
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(PairResponse { success: false, token: None, name: None, error: Some("the app did not record the device; try again".into()) }));
             }
             let _ = state.sink.emit_event("remote:pair_closed", "{}");
@@ -269,12 +269,22 @@ async fn command_handler<S: CommandSink + 'static>(
     headers: HeaderMap,
     Json(request): Json<CommandRequest>,
 ) -> impl IntoResponse {
-    if let Err(reason) = check_key(&state.keys, presented_key(&headers)) {
-        log::warn!("HTTP command refused: {reason}");
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")) }),
-        );
+    match check_key(&state.keys, presented_key(&headers)) {
+        Err(reason) => {
+            log::warn!("HTTP command refused: {reason}");
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")) }),
+            );
+        }
+        Ok(Some(entry)) if !entry.role.allows(&request.command) => {
+            log::warn!("HTTP command refused for {}: {} may not change settings", entry.name, entry.name);
+            return (
+                StatusCode::FORBIDDEN,
+                Json(CommandResponse { success: false, error: Some("this device may present but not change settings".into()) }),
+            );
+        }
+        Ok(_) => {}
     }
     match CommandDispatcher::dispatch(&request.command, &*state.sink) {
         Ok(()) => (
@@ -491,6 +501,11 @@ mod tests {
         assert!(events.iter().any(|e| e == "remote:paired") && events.last().map(String::as_str) == Some("remote:pair_closed"), "{events:?}");
         let cmd = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"next"}"#), &format!("X-Rhema-Key: {token}\r\n")).await;
         assert!(cmd.contains("200 OK"), "{cmd}");
+        // A paired device presents; it does not change settings. The shared key (configure) does.
+        let theme = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"theme","value":"Dark"}"#), &format!("X-Rhema-Key: {token}\r\n")).await;
+        assert!(theme.contains("403"), "{theme}");
+        let shared = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"theme","value":"Dark"}"#), "X-Rhema-Key: s3cret\r\n").await;
+        assert!(shared.contains("200 OK"), "{shared}");
         let mut handle = result.handle;
         handle.stop();
     }
