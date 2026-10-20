@@ -27,4 +27,4 @@ QA-006 first slice. What the two control surfaces expose today, verified from th
 
 ## Not done
 
-- Authentication and pairing (OP-006), rate limiting, an audit line in the service log for remote commands (AR-001 could record `remote:` as the source).
+- Authentication and pairing (OP-006), rate limiting. (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)

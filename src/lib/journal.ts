@@ -8,7 +8,7 @@ export interface JournalEntry {
   at: number
   /** Monotonic ms, for durations (immune to clock changes). */
   mono: number
-  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal"
+  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote"
   /** Reference, title or message text. */
   label: string
   itemId?: string | null
@@ -27,7 +27,7 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
     .filter((e) => e.kind === "live" || e.kind === "quick" || e.kind === "restore")
     .map((e) => {
       const i = entries.indexOf(e)
-      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal")
+      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote")
       return { itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }
@@ -48,7 +48,7 @@ export function formatJournal(title: string, entries: JournalEntry[], nowMono: n
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
     const d = durations.find((x) => x.label === e.label && x.itemId === (e.itemId ?? null) && entries.indexOf(e) === entries.findIndex((y) => y === e))
-    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal" }[e.kind]
+    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
     lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}`)
   }
