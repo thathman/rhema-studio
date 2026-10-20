@@ -181,6 +181,8 @@ const signageLast = new Map<string, number>()
 /** Per output: a ticket for the latest sync (older in-flight syncs give up) and what was last emitted. */
 const signageSeq = new Map<string, number>()
 const signageEmitted = new Map<string, string>()
+/** Which playlist (by position; -1 = legacy loop) the latest sync chose, written synchronously so the ticker never re-fires while a picture loads. */
+const signageLastList = new Map<string, number>()
 let signageTicker: ReturnType<typeof setInterval> | null = null
 
 function forgetSignage(id: string): void {
@@ -188,10 +190,12 @@ function forgetSignage(id: string): void {
   signageLast.delete(id)
   signageSeq.delete(id)
   signageEmitted.delete(id)
+  signageLastList.delete(id)
 }
 
 async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Promise<void> {
   const playlist = activePlaylist(output.signage, new Date())
+  const listKey = playlist ? (output.signage?.playlists?.indexOf(playlist) ?? -1) : -2
   const ids = playlist?.mediaIds ?? []
   const seconds = playlist?.seconds ?? 10
   const ticket = (signageSeq.get(output.id) ?? 0) + 1
@@ -199,8 +203,9 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   if (!signageStarted.has(output.id)) signageStarted.set(output.id, monotonicNow())
   const index = playlist ? signageIndex(ids.length, signageStarted.get(output.id) ?? 0, monotonicNow(), seconds) : -1
   signageLast.set(output.id, index)
+  signageLastList.set(output.id, listKey)
   // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
-  const stamp = `${playlist?.name ?? ""}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
+  const stamp = `${listKey}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
   if (signageEmitted.get(output.id) === stamp) {
     ensureSignageTicker()
     return
@@ -240,11 +245,11 @@ function ensureSignageTicker(): void {
     }
     for (const o of signage) {
       const playlist = activePlaylist(o.signage, new Date())
+      const listKey = playlist ? (o.signage?.playlists?.indexOf(playlist) ?? -1) : -2
       const ids = playlist?.mediaIds ?? []
       const next = playlist ? signageIndex(ids.length, signageStarted.get(o.id) ?? monotonicNow(), monotonicNow(), playlist.seconds) : -1
-      const last = signageEmitted.get(o.id)
-      // A different playlist at the same index still needs a sync.
-      if (next !== signageLast.get(o.id) || (last !== undefined && !last.startsWith(`${playlist?.name ?? ""}:`))) s.syncBroadcastOutputFor(o.id)
+      // A different playlist at the same index still needs a sync; both keys are recorded before any await.
+      if (next !== signageLast.get(o.id) || listKey !== signageLastList.get(o.id)) s.syncBroadcastOutputFor(o.id)
     }
   }, 1000)
 }
