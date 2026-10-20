@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.21 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.22 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -50,7 +50,7 @@
 | SV-001 Custom slide schema/editor and text rendering | P1 | MERGED | ST-003 | PR #11 `570b41a`: `kind='slide'` items with `{title, body}` payload (crate-validated), Prepare → Slides composer with live preview and quick starts, in-place editing in the rundown, `presentCustomSlide` (atomic, supersedes loading presents), Next/Prev and Show live; 4 tests + crate test. Reuse across services (slide library) not yet |
 | SV-002 Unified add/reorder/edit flow across Bible/song/slide | P1 | MERGED | SO-009,SV-001 | PR #11 and PR #12 `ff09a63`: same Add and rundown controls, live highlighting by item id; service-builder PR: drag-handle reorder in Prepare (dnd-kit) beside the arrow buttons. One search box across all kinds: Quick find covers verses and songs (slides are service-local) |
 | SV-003 Service templates and multi-service variants | P1 | MERGED | SV-002 | PR #12 `ff09a63`: Copy service (fresh item ids, original untouched, refused while unsaved); 1 test. Named templates not yet (a copied service is the template) |
-| SV-004 Quick Find for Bible, hymn, song, media | P1 | BACKLOG | SO-007,SV-002 | Keyboard-safe, typo-tolerant, predictable candidate ranking |
+| SV-004 Quick Find for Bible, hymn, song, media | P1 | IN PR | SO-007,SV-002 | fuzzy-song-search PR: when the exact search finds no song, titles, first lines and authors are matched with one typo per short word (two per long), prefixes and Yoruba folding, ranked by edits; in Quick find and the song library; 2 tests. Media is service-local (not searched) |
 | SV-005 Next/Previous Verse and responsive readings | P1 | MERGED | ST-001,SV-002 | PR #13 `7c8b980`: Verse +/− continues the live reading in the item's translations, crosses chapters, stops at book ends with a warning; Shift+←/→, Standard buttons, OSC `/rhema/verse_next|verse_prev`, HTTP `verse_next|verse_prev`; 4 tests + Rust api tests. Responsive (leader/congregation) format not yet |
 | SV-006 Program notes, review readiness and duration estimates | P1 | MERGED | SV-002 | PR #14 `fa05eef`: operator note per item (Prepare edits, Present shows, never on screen, saved with the service); Home warns when a song in the service is missing from the library (looked up on Home); 1 test. Duration estimates not yet |
 | SV-007 Persistent revisions, visual compare and revert | P1 | MERGED | ST-003,SV-002 | PR #19: migration 0005 snapshots every save (last 50), History popover lists versions, shows what a restore brings back/removes/changes, restores as a new save (undoable), refused while unsaved or on a stale revision; 3 crate tests + 1 diff test. Live output untouched (restore only edits the rundown) |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.22):** fuzzy-song-search PR opened (SV-004 IN PR).
 - **2026-10-20 (rev 0.21):** PR #23 merged; stage-messages PR opened (PT-004 IN PR).
 - **2026-10-20 (rev 0.20):** PR #22 merged; stage-display PR opened (OP-001 roles, OP-002 IN PR).
 - **2026-10-20 (rev 0.19):** PR #21 merged; service-timing PR opened (PT-002 IN PR).

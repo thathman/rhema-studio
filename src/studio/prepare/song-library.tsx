@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { songQueueItem } from "@/lib/lyrics"
+import { fuzzySongs } from "@/lib/fuzzy"
 import { presentActions } from "@/studio/present-actions"
 import { SongEditor } from "@/studio/prepare/song-editor"
 import { isSongItem, type SongSummary } from "@/types"
@@ -26,7 +27,13 @@ export function SongLibrary() {
   const [editing, setEditing] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const search = useCallback((q: string) => void useSongStore.getState().search(q), [])
+  const search = useCallback((q: string) => {
+    void useSongStore.getState().search(q).then(async (exact) => {
+      if (exact.length > 0 || !q.trim()) return
+      const near = fuzzySongs(q, await useSongStore.getState().all().catch(() => []))
+      if (near.length > 0 && useSongStore.getState().query === q) useSongStore.setState({ results: near })
+    })
+  }, [])
   useEffect(() => {
     search("")
     return () => { if (timer.current) clearTimeout(timer.current) }
