@@ -179,6 +179,6 @@ mod tests {
         let p = db.create_program("x", None).unwrap();
         db.replace_items(&p.id, 1, &[verse("John 3:16", 43, 3, 16)]).unwrap();
         db.delete_program(&p.id, 2).unwrap();
-        assert!(db.list_revisions(&p.id).unwrap().is_empty());
+        assert_eq!(db.list_revisions(&p.id).unwrap().len(), 0);
     }
 }
