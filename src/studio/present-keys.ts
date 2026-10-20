@@ -2,7 +2,7 @@
  * Keyboard mapping for the Standard present view. Pure so it is testable
  * without a DOM; the hook in present-workspace wires it to `window`.
  */
-export type PresentKeyAction = "next" | "prev" | "clear" | "restore"
+export type PresentKeyAction = "next" | "prev" | "clear" | "restore" | "verseNext" | "versePrev"
 
 interface KeyLike {
   key: string
@@ -28,10 +28,10 @@ export function keyToPresentAction(e: KeyLike): PresentKeyAction | null {
   switch (e.key) {
     case "ArrowRight":
     case "PageDown":
-      return e.shiftKey ? null : "next"
+      return e.shiftKey ? "verseNext" : "next"
     case "ArrowLeft":
     case "PageUp":
-      return e.shiftKey ? null : "prev"
+      return e.shiftKey ? "versePrev" : "prev"
     case "Escape":
       return e.shiftKey ? "restore" : "clear"
     default:

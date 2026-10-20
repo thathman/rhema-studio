@@ -21,6 +21,9 @@ pub enum RemoteCommand {
     BibleNext,
     BiblePrev,
     AddToQueue,
+    /// Present the verse after the one on the live output (continues a reading).
+    VerseNext,
+    VersePrev,
 }
 
 impl fmt::Display for RemoteCommand {
@@ -38,6 +41,8 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::BibleNext => write!(f, "bible_next"),
             RemoteCommand::BiblePrev => write!(f, "bible_prev"),
             RemoteCommand::AddToQueue => write!(f, "add_to_queue"),
+            RemoteCommand::VerseNext => write!(f, "verse_next"),
+            RemoteCommand::VersePrev => write!(f, "verse_prev"),
         }
     }
 }
@@ -47,6 +52,15 @@ mod tests {
     use super::*;
 
     // --- Serde serialization tests ---
+
+    #[test]
+    fn serialize_and_parse_verse_next_prev() {
+        assert_eq!(serde_json::to_value(&RemoteCommand::VerseNext).unwrap(), serde_json::json!({"command": "verse_next"}));
+        assert_eq!(serde_json::to_value(&RemoteCommand::VersePrev).unwrap(), serde_json::json!({"command": "verse_prev"}));
+        let cmd: RemoteCommand = serde_json::from_str(r#"{"command":"verse_next"}"#).unwrap();
+        assert_eq!(cmd, RemoteCommand::VerseNext);
+        assert_eq!(RemoteCommand::VersePrev.to_string(), "verse_prev");
+    }
 
     #[test]
     fn serialize_next() {
@@ -254,7 +268,7 @@ mod tests {
     // --- Exhaustive match test ---
 
     #[test]
-    fn enum_has_exactly_12_variants() {
+    fn enum_has_exactly_14_variants() {
         // This test ensures all 12 variants are covered.
         // If a new variant is added, this match will fail to compile.
         let cmds: Vec<RemoteCommand> = vec![
@@ -270,6 +284,8 @@ mod tests {
             RemoteCommand::BibleNext,
             RemoteCommand::BiblePrev,
             RemoteCommand::AddToQueue,
+            RemoteCommand::VerseNext,
+            RemoteCommand::VersePrev,
         ];
 
         for cmd in &cmds {
@@ -283,12 +299,14 @@ mod tests {
                 RemoteCommand::Confidence(_) => {}
                 RemoteCommand::OnAir(_) => {}
                 RemoteCommand::SendToLive => {}
+                RemoteCommand::VerseNext => {}
+                RemoteCommand::VersePrev => {}
                 RemoteCommand::BibleNext => {}
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
             }
         }
 
-        assert_eq!(cmds.len(), 12);
+        assert_eq!(cmds.len(), 14);
     }
 }

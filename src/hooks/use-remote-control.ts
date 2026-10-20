@@ -34,6 +34,8 @@ export function useRemoteControl() {
       await register(REMOTE_EVENTS.add_to_queue, remoteActions.addToQueue)
       await register(REMOTE_EVENTS.bible_next, remoteActions.bibleNext)
       await register(REMOTE_EVENTS.bible_prev, remoteActions.biblePrev)
+      await register(REMOTE_EVENTS.verse_next, remoteActions.verseNext)
+      await register(REMOTE_EVENTS.verse_prev, remoteActions.versePrev)
       await register(REMOTE_EVENTS.show, () => remoteActions.toggleOnAir(true))
       await register(REMOTE_EVENTS.hide, () => remoteActions.toggleOnAir(false))
 

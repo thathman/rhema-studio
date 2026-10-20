@@ -112,7 +112,7 @@ Enable both in Settings → Remote and note the ports there.
 |---|---|---|
 | 8.1 | `curl http://127.0.0.1:<port>/api/v1/health` | 200 OK. |
 | 8.2 | `curl http://127.0.0.1:<port>/api/v1/status` | JSON with live state. |
-| 8.3 | `curl -X POST http://127.0.0.1:<port>/api/v1/command -H 'content-type: application/json' -d '{"command":"next"}'` | Rundown advances and output updates. Same for `prev`, `show`, `hide`, `send_to_live`, `bible_next`, `bible_prev`, `add_to_queue`. |
+| 8.3 | `curl -X POST http://127.0.0.1:<port>/api/v1/command -H 'content-type: application/json' -d '{"command":"next"}'` | Rundown advances and output updates. Same for `prev`, `show`, `hide`, `send_to_live`, `bible_next`, `bible_prev`, `add_to_queue`, `verse_next`, `verse_prev`. |
 | 8.4 | OSC: send `/rhema/next`, `/rhema/prev`, `/rhema/show`, `/rhema/hide`, `/rhema/on_air` (bool), `/rhema/theme` (string). | Each acts exactly as the matching button. |
 | 8.5 | Send `/rhema/next` from a remote while the operator is typing in Quick find. | Remote action still works (keyboard guard applies to keys, not remote). |
 | 8.6 | Send a malformed command. | 4xx with a message; app unaffected. |
@@ -175,6 +175,15 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10c.2 | With a saved service open, click Copy, accept "(copy)". Change the copy, save. Reopen the original. | Original unchanged; both listed; the copy's items have their own identity (edits never cross). |
 | 10c.3 | Try Copy with unsaved changes. | Disabled with "save or discard changes first". |
 
+## 10d. Continue the reading (Verse + / Verse −)
+
+| # | Do | Expect |
+|---|---|---|
+| 10d.1 | Present John 3:16 from a service item saved for OYCB while KJV is active. Press Shift+→ three times, then Shift+←. | 3:17, 3:18, 3:19 then 3:18, all in OYCB, each on air in one step. |
+| 10d.2 | Present the last verse of a chapter; Verse +. Present 1:1 of a book; Verse −. Present the last verse of a book; Verse +. | Next chapter's first verse; a warning "starts at 1:1" with the output unchanged; a warning "ends at …" with the output unchanged. |
+| 10d.3 | OSC `/rhema/verse_next` and HTTP `{"command":"verse_next"}`. | Same as the button. |
+| 10d.4 | Clear, then Verse +. | Goes back on air with the next verse (Restore still brings the previous one). |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -189,6 +198,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10c, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10d, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.

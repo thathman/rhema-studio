@@ -45,6 +45,8 @@ impl CommandDispatcher {
             RemoteCommand::BibleNext => sink.emit_event("remote:bible_next", "{}"),
             RemoteCommand::BiblePrev => sink.emit_event("remote:bible_prev", "{}"),
             RemoteCommand::AddToQueue => sink.emit_event("remote:add_to_queue", "{}"),
+            RemoteCommand::VerseNext => sink.emit_event("remote:verse_next", "{}"),
+            RemoteCommand::VersePrev => sink.emit_event("remote:verse_prev", "{}"),
             RemoteCommand::Show => sink.invoke_backend("show_broadcast", "{}"),
             RemoteCommand::Hide => sink.invoke_backend("hide_broadcast", "{}"),
             RemoteCommand::Confidence(val) => {
@@ -189,6 +191,15 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_verse_next_prev_emit_events() {
+        let sink = MockSink::new();
+        CommandDispatcher::dispatch(&RemoteCommand::VerseNext, &sink).unwrap();
+        assert_eq!(sink.last_event().0, "remote:verse_next");
+        CommandDispatcher::dispatch(&RemoteCommand::VersePrev, &sink).unwrap();
+        assert_eq!(sink.last_event().0, "remote:verse_prev");
+    }
+
+    #[test]
     fn dispatch_bible_next_emits_event() {
         let sink = MockSink::new();
         CommandDispatcher::dispatch(&RemoteCommand::BibleNext, &sink).unwrap();
@@ -260,6 +271,8 @@ mod tests {
             RemoteCommand::BibleNext,
             RemoteCommand::BiblePrev,
             RemoteCommand::AddToQueue,
+            RemoteCommand::VerseNext,
+            RemoteCommand::VersePrev,
         ];
 
         for cmd in &frontend_cmds {

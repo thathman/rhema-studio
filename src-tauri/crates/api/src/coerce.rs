@@ -89,10 +89,10 @@ pub fn coerce_string(arg: &OscType) -> Result<String, CommandError> {
 
 /// Parse an OSC address + arguments into a `RemoteCommand`.
 ///
-/// Handles all 12 Rhema OSC addresses:
+/// Handles all 14 Rhema OSC addresses:
 /// - `/rhema/next`, `/rhema/prev`, `/rhema/show`, `/rhema/hide` (no arguments)
 /// - `/rhema/send_to_live`, `/rhema/bible_next`, `/rhema/bible_prev`,
-///   `/rhema/add_to_queue` (no arguments)
+///   `/rhema/add_to_queue`, `/rhema/verse_next`, `/rhema/verse_prev` (no arguments)
 /// - `/rhema/theme` (string argument)
 /// - `/rhema/opacity`, `/rhema/confidence` (float argument, normalized to [0.0, 1.0])
 /// - `/rhema/on_air` (bool argument)
@@ -106,6 +106,8 @@ pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, Comma
         "/rhema/bible_next" => Ok(RemoteCommand::BibleNext),
         "/rhema/bible_prev" => Ok(RemoteCommand::BiblePrev),
         "/rhema/add_to_queue" => Ok(RemoteCommand::AddToQueue),
+        "/rhema/verse_next" => Ok(RemoteCommand::VerseNext),
+        "/rhema/verse_prev" => Ok(RemoteCommand::VersePrev),
         "/rhema/theme" => {
             let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
                 address: address.into(),
@@ -308,6 +310,12 @@ mod tests {
             parse_osc("/rhema/bible_prev", &[]).unwrap(),
             RemoteCommand::BiblePrev
         );
+    }
+
+    #[test]
+    fn parse_osc_verse_next_prev() {
+        assert_eq!(parse_osc("/rhema/verse_next", &[]).unwrap(), RemoteCommand::VerseNext);
+        assert_eq!(parse_osc("/rhema/verse_prev", &[OscType::Int(1)]).unwrap(), RemoteCommand::VersePrev);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { cancelPendingPresents, presentCustomSlide, presentSlide, presentVerse } from "@/hooks/use-broadcast"
-import { stepVerse } from "@/hooks/use-bible"
+import { fetchChapter, stepVerse } from "@/hooks/use-bible"
+import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -81,6 +82,56 @@ function stepQueue(offset: number): void {
   void presentQueueItem(target, song ? (atEdge ? (live?.index ?? 0) : offset < 0 ? "last" : 0) : 0)
 }
 
+// Chapter-crossing ticket: a slow lookup must not land after a newer step.
+let verseStepSeq = 0
+
+/**
+ * Continue a reading: present the verse after (or before) the one on the
+ * live output, in the same translations, on air in one step. Crosses
+ * chapter boundaries; stops at the ends of a book. With nothing live it
+ * steps the Bible panel instead (the preview), like the panel's arrows.
+ */
+export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
+  const { liveSourceVerse: source, liveItem } = useBroadcastStore.getState()
+  if (!source) {
+    await stepVerse(offset === 1 ? "next" : "prev", { present: true })
+    return
+  }
+  verseStepSeq += 1
+  const ticket = verseStepSeq
+  const bible = useBibleStore.getState()
+  const choice = resolveTranslations(liveItem, bible)
+  const translationId = isMissing(choice) ? bible.activeTranslationId : choice.primary
+  try {
+    let target: { chapter: number; verse: number } | null = null
+    if (offset === 1) {
+      const same = await fetchChapter(source.book_number, source.chapter, translationId)
+      if (same.some((v) => v.verse === source.verse + 1)) target = { chapter: source.chapter, verse: source.verse + 1 }
+      else {
+        const next = await fetchChapter(source.book_number, source.chapter + 1, translationId)
+        if (next.length > 0) target = { chapter: source.chapter + 1, verse: next[0].verse }
+      }
+    } else if (source.verse > 1) {
+      target = { chapter: source.chapter, verse: source.verse - 1 }
+    } else if (source.chapter > 1) {
+      const prev = await fetchChapter(source.book_number, source.chapter - 1, translationId)
+      if (prev.length > 0) target = { chapter: source.chapter - 1, verse: prev[prev.length - 1].verse }
+    }
+    if (ticket !== verseStepSeq) return
+    if (!target) {
+      useBroadcastStore.getState().setPresentWarning(
+        offset === 1 ? `${source.book_name} ends at ${source.chapter}:${source.verse}.` : `${source.book_name} starts at 1:1.`
+      )
+      return
+    }
+    const verse = { ...source, ...target, id: 0, text: "" }
+    useBibleStore.getState().setPendingNavigation({ bookNumber: verse.book_number, chapter: verse.chapter, verse: verse.verse })
+    await presentVerse(verse, { item: liveItem, goLive: true })
+  } catch (e) {
+    console.warn("[remote-actions] stepLiveVerse failed:", e)
+  }
+}
+
 /**
  * Operator actions reachable from every control surface — OSC, the HTTP API,
  * and (from Phase 2) the keyboard. Each surface dispatches into this registry
@@ -143,6 +194,10 @@ export const remoteActions = {
   /** Step the Bible Text panel one verse. Leaves the queue alone. */
   bibleNext: () => stepVerse("next"),
   biblePrev: () => stepVerse("prev"),
+
+  /** Continue the reading on the live output by one verse. */
+  verseNext: () => void stepLiveVerse(1),
+  versePrev: () => void stepLiveVerse(-1),
 
   /** Off air also cancels any present still loading, so it cannot reappear later. */
   toggleOnAir: (active: boolean) => {

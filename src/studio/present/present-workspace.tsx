@@ -2,6 +2,8 @@ import { useEffect } from "react"
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronsLeftIcon,
+  ChevronsRightIcon,
   MonitorIcon,
   RotateCcwIcon,
   SquareIcon,
@@ -152,6 +154,10 @@ function StandardView() {
         <BigButton icon={<ChevronLeftIcon />} label="Previous" hint="← / PgUp" onClick={presentActions.prev} disabled={count === 0} />
         <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-36" />
         <BigButton icon={<MonitorIcon />} label="Show live" hint="present the preview" tone="live" onClick={presentActions.showLive} className="ml-4 min-w-40" />
+        <span className="ml-4 flex gap-2" role="group" aria-label="Continue the reading">
+          <BigButton icon={<ChevronsLeftIcon />} label="Verse −" hint="Shift+←" onClick={presentActions.versePrev} disabled={!hasLiveItem} title="Present the verse before the live one" />
+          <BigButton icon={<ChevronsRightIcon />} label="Verse +" hint="Shift+→" onClick={presentActions.verseNext} disabled={!hasLiveItem} title="Present the next verse of the live passage" />
+        </span>
         <span className="ml-auto flex gap-3">
           <BigButton icon={<SquareIcon />} label="Clear" hint="Esc" tone="danger" onClick={presentActions.clear} disabled={!isLive} />
           <BigButton icon={<RotateCcwIcon />} label="Restore" hint="Shift+Esc" onClick={presentActions.restore} disabled={!canRestore} />

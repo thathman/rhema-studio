@@ -59,6 +59,9 @@ export const presentActions = {
     useBibleStore.getState().selectSlide({ item, index })
     void useSongStore.getState().load(item.song.song_id).catch(() => {})
   },
+  /** Continue a reading: the verse after/before the live one, same translations. */
+  verseNext: () => remoteActions.verseNext(),
+  versePrev: () => remoteActions.versePrev(),
   clear: () => remoteActions.toggleOnAir(false),
   restore: () => {
     if (presentActions.canRestore()) remoteActions.toggleOnAir(true)

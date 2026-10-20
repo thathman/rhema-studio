@@ -21,6 +21,8 @@ describe("keyToPresentAction", () => {
   it("escape clears, shift+escape restores", () => {
     expect(keyToPresentAction(key("Escape"))).toBe("clear")
     expect(keyToPresentAction(key("Escape", { shiftKey: true }))).toBe("restore")
+    expect(keyToPresentAction(key("ArrowRight", { shiftKey: true }))).toBe("verseNext")
+    expect(keyToPresentAction(key("PageUp", { shiftKey: true }))).toBe("versePrev")
   })
 
   it("ignores modifier combos and unknown keys", () => {
