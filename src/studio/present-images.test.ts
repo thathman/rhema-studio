@@ -96,3 +96,27 @@ describe("picture items", () => {
     expect(rundownSignature([picture()])).not.toBe(rundownSignature([{ ...picture(), image: { ...picture().image, fit: "contain" as const } }]))
   })
 })
+
+describe("background pictures behind text", () => {
+  it("a verse item with a background goes live with the picture under the words, and round-trips", async () => {
+    const item = { id: "v-bg", verse: verse(43, 3, 16), reference: "Book43 3:16", confidence: 1, source: "manual" as const, added_at: 0, background: { media_id: "m-1", name: "Welcome" } }
+    await presentVerse(item.verse, { goLive: true, itemId: item.id, background: item.background })
+    const live = useBroadcastStore.getState().liveVerse
+    expect(live?.reference).toContain("Book43 3:16")
+    expect(live?.image?.url.startsWith("data:image/png")).toBe(true)
+    // Missing picture: the words still show, without a background.
+    await presentVerse(item.verse, { goLive: true, background: { media_id: "m-gone" } })
+    expect(useBroadcastStore.getState().liveVerse?.image).toBeUndefined()
+    expect(useBroadcastStore.getState().liveVerse?.reference).toContain("Book43 3:16")
+
+    const out = toItemInputs([item])
+    expect(out[0].payload).toBe(JSON.stringify({ background_media_id: "m-1" }))
+    const data: ProgramWithItems = {
+      program: { id: "p1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 },
+      items: [{ id: "v-bg", program_id: "p1", position: 0, kind: "verse", reference: "Book43 3:16", book_number: 43, chapter: 3, verse: 16, translation: null, secondary_translation: null, notes: null, payload: out[0].payload ?? null }],
+    }
+    const { items } = toQueueItems(data, 1, [])
+    expect(items[0].background).toEqual({ media_id: "m-1", name: "" })
+    expect(rundownSignature(items)).not.toBe(rundownSignature([{ ...items[0], background: null }]))
+  })
+})

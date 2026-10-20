@@ -49,10 +49,10 @@ beforeEach(() => {
 })
 
 describe("custom slides", () => {
-  it("render as a title plus hard lines, and refuse an empty slide", () => {
+  it("render as a title plus hard lines, and refuse an empty slide", async () => {
     const data = toCustomSlideRenderData(slide("Welcome", "We're glad you're here.\r\n\r\nPlease silence your phone.  "))
     expect(data).toMatchObject({ kind: "slide", reference: "Welcome", lines: ["We're glad you're here.", "Please silence your phone."] })
-    expect(presentCustomSlide(slide("", "   "), { goLive: true })).toBe("empty")
+    expect(await presentCustomSlide(slide("", "   "), { goLive: true })).toBe("empty")
     expect(useBroadcastStore.getState().isLive).toBe(false)
     expect(useBroadcastStore.getState().presentWarning).toContain("Empty slide")
   })
@@ -61,7 +61,7 @@ describe("custom slides", () => {
     const d = deferred<Verse>()
     mockInvoke.mockImplementation((cmd: string) => (cmd === "get_verse" ? d.promise : Promise.resolve(null)))
     const pending = presentVerse(verse(43, 3, 16), { goLive: true })
-    expect(presentCustomSlide(slide("Please stand", ""), { goLive: true })).toBe("presented")
+    expect(await presentCustomSlide(slide("Please stand", ""), { goLive: true })).toBe("presented")
     const s = useBroadcastStore.getState()
     expect(s.isLive).toBe(true)
     expect(s.liveVerse?.reference).toBe("Please stand")

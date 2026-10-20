@@ -8,6 +8,8 @@ interface QueueItemBase {
   source: "manual" | "ai-direct" | "ai-semantic" | "ai-cloud"
   added_at: number
   notes?: string | null
+  /** A library picture drawn behind this item's text (MD-003). */
+  background?: { media_id: string; name: string } | null
 }
 
 export interface VerseQueueItem extends QueueItemBase {

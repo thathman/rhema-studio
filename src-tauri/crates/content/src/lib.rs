@@ -703,6 +703,22 @@ fn validate_slide_payload(i: usize, payload: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// Any item may carry `{"background_media_id": ...}` in its payload.
+#[derive(Debug, Deserialize)]
+struct BackgroundPayload {
+    #[serde(default)]
+    background_media_id: Option<String>,
+}
+
+fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
+    let Some(raw) = payload else { return Ok(()) };
+    let p: BackgroundPayload = serde_json::from_str(raw).map_err(|e| ContentError::Invalid(format!("item {i}: bad payload: {e}")))?;
+    if p.background_media_id.as_deref().is_some_and(|id| !is_valid_id(id)) {
+        return Err(ContentError::Invalid(format!("item {i}: invalid background media id")));
+    }
+    Ok(())
+}
+
 fn validate_items(items: &[ItemInput]) -> Result<()> {
     if items.len() > MAX_ITEMS {
         return Err(ContentError::Invalid(format!("more than {MAX_ITEMS} items")));
@@ -729,6 +745,7 @@ fn validate_items(items: &[ItemInput]) -> Result<()> {
                 return Err(ContentError::Invalid(format!("item {i}: verse items need book, chapter and verse")));
             }
         }
+        validate_background(i, it.payload.as_deref())?;
         if kind == "song" {
             songs::validate_song_payload(i, it.payload.as_deref())?;
         }
@@ -911,6 +928,19 @@ mod tests {
         assert!(matches!(db.replace_items(&p.id, 1, &dup), Err(ContentError::Invalid(_))));
         assert_eq!(db.get_program(&p.id).unwrap().unwrap().program.revision, 1);
         assert!(matches!(db.replace_items("missing", 1, &[]), Err(ContentError::NotFound(_))));
+    }
+
+    #[test]
+    fn any_item_may_carry_a_background_picture() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("p", None).unwrap();
+        let ok = ItemInput { payload: Some("{\"background_media_id\":\"pic-1\"}".into()), ..verse("John 3:16", 43, 3, 16) };
+        let saved = db.replace_items(&p.id, 1, &[ok]).unwrap();
+        assert!(saved.items[0].payload.as_deref().unwrap().contains("pic-1"));
+        let bad = ItemInput { payload: Some("{\"background_media_id\":\"../x\"}".into()), ..verse("John 3:16", 43, 3, 16) };
+        assert!(matches!(db.replace_items(&p.id, 2, &[bad]), Err(ContentError::Invalid(_))));
+        let not_json = ItemInput { payload: Some("nope".into()), ..verse("John 3:16", 43, 3, 16) };
+        assert!(matches!(db.replace_items(&p.id, 2, &[not_json]), Err(ContentError::Invalid(_))));
     }
 
     #[test]

@@ -126,6 +126,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             {expanded && <SlideList item={item} index={index} mode={mode} />}
             {custom && isSelected && mode === "prepare" && <CustomSlideEditor item={item} />}
             {picture && isSelected && mode === "prepare" && <ImageItemControls item={item} />}
+            {isSelected && mode === "prepare" && !picture && <BackgroundPicker item={item} />}
             {isSelected && mode === "prepare" && <NoteEditor item={item} />}
           </Row>
         )
@@ -204,6 +205,37 @@ function ImageItemControls({ item }: { item: ImageQueueItem }) {
           <SelectItem value="cover">Fill the screen</SelectItem>
           <SelectItem value="contain">Show it all</SelectItem>
           <SelectItem value="stretch">Stretch</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+/** Prepare-only: a library picture behind this item's text. */
+function BackgroundPicker({ item }: { item: QueueItem }) {
+  const assets = useMediaStore((s) => s.assets)
+  const loaded = useMediaStore((s) => s.assets.length > 0 || s.loading)
+  useEffect(() => {
+    if (!loaded) void useMediaStore.getState().list()
+  }, [loaded])
+  const pictures = assets.filter((a) => a.kind === "image" && a.present)
+  if (pictures.length === 0 && !item.background) return null
+  return (
+    <div className="ml-7 flex items-center gap-2 py-1 pl-2 text-xs">
+      <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <Select
+        value={item.background?.media_id ?? "__none"}
+        onValueChange={(v) =>
+          useQueueStore.getState().updateItem(item.id, (i) => ({
+            ...i,
+            background: v === "__none" ? null : { media_id: v, name: pictures.find((p) => p.id === v)?.name ?? "" },
+          }))
+        }
+      >
+        <SelectTrigger className="h-6 w-56 text-xs" aria-label="Background picture"><SelectValue placeholder="No background" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none">No background picture</SelectItem>
+          {pictures.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
         </SelectContent>
       </Select>
     </div>

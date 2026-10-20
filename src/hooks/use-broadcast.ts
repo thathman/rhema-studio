@@ -72,6 +72,21 @@ export interface PresentOptions {
   goLive?: boolean
   /** The rundown item id the verse came from, for highlighting and stepping. */
   itemId?: string | null
+  /** A library picture to draw behind the text. */
+  background?: { media_id: string } | null
+}
+
+/** Data-URL fill for a background picture, or null (missing file → no background, text still shows). */
+export async function backgroundFill(background: { media_id: string } | null | undefined): Promise<VerseRenderData["image"] | undefined> {
+  if (!background) return undefined
+  try {
+    const url = await useMediaStore.getState().dataUrl(background.media_id)
+    if (!url) return undefined
+    if (typeof Image !== "undefined") await loadThemeImage(url)
+    return { url, fit: "cover", blur: 0, brightness: 100, tint: null }
+  } catch {
+    return undefined
+  }
 }
 
 export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_translation"
@@ -106,7 +121,9 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   }
   const translationIds = [choice.primary, ...(choice.secondary !== null ? [choice.secondary] : [])]
 
-  const fetchedVerses = await Promise.all(
+  const [image, fetchedVerses] = await Promise.all([
+    backgroundFill(opts.background),
+    Promise.all(
     translationIds.map(async (translationId) => {
       try {
         return await invoke<Verse | null>("get_verse", {
@@ -123,7 +140,8 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
         return null
       }
     })
-  )
+    ),
+  ])
   const verseToPresent = fetchedVerses[0] ?? verse
   mark(
     `presentVerse get_verse done ${verse.book_name} ${verse.chapter}:${verse.verse}`
@@ -160,15 +178,13 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
 
   // Keep the preview in sync with what was just presented.
   bibleState.selectVerse(verseToPresent)
+  const data = renderEntries.length > 1
+    ? toDualVerseRenderData(renderEntries)
+    : toVerseRenderData(renderEntries[0]?.verse ?? verseToPresent, renderEntries[0]?.translation ?? "KJV")
   useBroadcastStore
     .getState()
     .setLiveVerse(
-      renderEntries.length > 1
-        ? toDualVerseRenderData(renderEntries)
-        : toVerseRenderData(
-            renderEntries[0]?.verse ?? verseToPresent,
-            renderEntries[0]?.translation ?? "KJV"
-          ),
+      image ? { ...data, image } : data,
       verseToPresent,
       { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null }
     )
@@ -209,8 +225,10 @@ export async function presentSlide(
   }
   const i = index === "last" ? slides.length - 1 : Math.min(Math.max(index, 0), slides.length - 1)
   const slide = slides[i]
+  const image = await backgroundFill(item.background)
+  if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: i })
-  useBroadcastStore.getState().setLiveVerse(toLyricRenderData(song, slide), null, {
+  useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...(image ? { image } : {}) }, null, {
     goLive: opts.goLive,
     slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length },
   })
@@ -229,15 +247,19 @@ export function toCustomSlideRenderData(item: SlideQueueItem): VerseRenderData {
  * Present a custom slide. Nothing to fetch, so it lands in one update; it
  * still takes a ticket so a verse or song that was loading cannot overtake it.
  */
-export function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolean } = {}): PresentOutcome {
+export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
   presentSeq += 1
+  const ticket = presentSeq
   const data = toCustomSlideRenderData(item)
   if (!data.reference && data.lines?.length === 0) {
     useBroadcastStore.getState().setPresentWarning("Empty slide not shown: give it a title or some text.")
     return "empty"
   }
+  // No background: present synchronously so nothing can slip in between.
+  const image = item.background ? await backgroundFill(item.background) : undefined
+  if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: 0 })
-  useBroadcastStore.getState().setLiveVerse(data, null, { goLive: opts.goLive, itemId: item.id })
+  useBroadcastStore.getState().setLiveVerse(image ? { ...data, image } : data, null, { goLive: opts.goLive, itemId: item.id })
   return "presented"
 }
 
