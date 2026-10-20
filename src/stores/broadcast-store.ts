@@ -17,6 +17,7 @@ import { buildStagePayload } from "@/lib/stage"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useSongStore } from "@/stores/song-store"
+import { forOutputLanguage } from "@/lib/output-language"
 
 /** What was live before a quick screen took over, so Back can return to it. */
 export interface HeldLive {
@@ -335,7 +336,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
-      verse: s.isLive ? s.liveVerse : null,
+      verse: s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null,
     }).catch(() => {})
   },
   syncBroadcastOutput: () => {

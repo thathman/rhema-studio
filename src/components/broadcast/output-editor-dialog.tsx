@@ -209,6 +209,19 @@ export function OutputEditorDialog({
                 <SelectItem value="stage">Stage — the live words, what is next, your note and the timer</SelectItem>
               </SelectContent>
             </Select>
+            {form.role !== "stage" && (
+              <>
+                <span id="language-label" className="mt-2 text-xs text-muted-foreground">Languages on this output</span>
+                <Select value={form.language ?? "both"} onValueChange={(v) => patch({ language: v as BroadcastOutput["language"] })}>
+                  <SelectTrigger aria-labelledby="language-label" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="both">Both languages, as prepared</SelectItem>
+                    <SelectItem value="first">First language only</SelectItem>
+                    <SelectItem value="second">Second language only (first when there is no second)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">

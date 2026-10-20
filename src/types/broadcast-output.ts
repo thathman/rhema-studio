@@ -10,6 +10,13 @@ export type BroadcastOutputType = "display" | "ndi"
  */
 export type BroadcastOutputRole = "congregation" | "stage"
 
+/**
+ * Which language(s) of a bilingual frame a congregation output shows. Absent
+ * means `both`. "second" falls back to the frame as prepared when there is
+ * no second language.
+ */
+export type BroadcastOutputLanguage = "both" | "first" | "second"
+
 /** What a stage output is sent on every change. Plain text only. */
 export interface StagePayload {
   current: { title: string; lines: string[] } | null
@@ -40,6 +47,7 @@ export interface BroadcastOutput {
   name: string
   type: BroadcastOutputType
   role?: BroadcastOutputRole
+  language?: BroadcastOutputLanguage
   themeId: string
   /** Kept even while type === "ndi" so switching types is lossless. */
   monitorIndex: number
