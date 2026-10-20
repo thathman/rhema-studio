@@ -22,7 +22,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Latest test results
 
-- Frontend: 353 vitest tests in 33 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 356 vitest tests in 35 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
 - Rust: `rhema-content` 35 tests pass; `rhema-api` 105; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
@@ -49,8 +49,8 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. SV-007 service history — in PR (service-revisions).
-2. MD-002 video items (needs a continuous draw loop in the output window), MD-007 adaptive text contrast on backgrounds, MD-004 lower-third layer.
+1. SV-007 service history (#19) and MD-007 background contrast (background-contrast) — in PR.
+2. PT-001 monotonic timer engine and a simple service countdown; MD-002 video items (continuous draw loop in the output window); MD-004 lower-third layer.
 3. Milestone 4 OP-001 output profiles.
 3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.
 3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.

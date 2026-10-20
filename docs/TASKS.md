@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.16 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.17 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -65,7 +65,7 @@
 | MD-004 Independently addressable transparent lower-third layer | P1 | BACKLOG | MD-001 | Congregation vs OBS output independent; alpha verified |
 | MD-005 Quick Screens and persistent overlays | P1 | MERGED (text screens) | ST-002,MD-002 | PR #15 `8bc82eb`: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
 | MD-006 Local cache manifest, integrity/readiness | P0 | MERGED (pictures) | MD-001,SV-002 | PR #17 `5263a94`: Home warns before the service when a picture item's file is gone; rundown marks the item; presenting a missing picture never blanks the output (PR media-assets). Fonts and a release manifest later |
-| MD-007 Adaptive Smart Media rendering | P2 | BACKLOG | MD-003 | Text fits styles/output without masking content or violating branding |
+| MD-007 Adaptive Smart Media rendering | P2 | IN PR (contrast) | MD-003 | background-contrast PR: words over a photo get an automatic dark scrim scaled by the theme's text-plate opacity, none for dark-text themes; 2 tests. Layout adaptation to text length later |
 
 ## Milestone 4 — Multi-output, stage and monitoring
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.17):** background-contrast PR opened (MD-007 contrast IN PR).
 - **2026-10-20 (rev 0.16):** PRs #16 `2757285`, #17 `5263a94`, #18 merged; service-revisions PR opened (SV-007 IN PR).
 - **2026-10-20 (rev 0.15):** item-backgrounds PR opened (MD-003 backgrounds IN PR).
 - **2026-10-20 (rev 0.14):** media-readiness PR opened (MD-006 pictures IN PR).
