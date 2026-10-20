@@ -77,6 +77,7 @@ pub async fn start_osc(
     app: AppHandle,
     state: State<'_, Mutex<OscRuntime>>,
     port: Option<u16>,
+    lan: Option<bool>,
 ) -> Result<u16, String> {
     let mut runtime = state.lock().map_err(|e| e.to_string())?;
 
@@ -86,7 +87,7 @@ pub async fn start_osc(
 
     let config = OscConfig {
         port: port.unwrap_or(8000),
-        host: "0.0.0.0".into(),
+        host: bind_host(lan).into(),
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -170,6 +171,7 @@ pub async fn start_http(
     app: AppHandle,
     state: State<'_, Mutex<HttpRuntime>>,
     port: Option<u16>,
+    lan: Option<bool>,
 ) -> Result<u16, String> {
     let (status, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
@@ -182,7 +184,7 @@ pub async fn start_http(
 
     let config = HttpConfig {
         port: port.unwrap_or(8080),
-        host: "0.0.0.0".into(),
+        host: bind_host(lan).into(),
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -270,4 +272,11 @@ pub async fn update_remote_status(
 pub struct HttpStatus {
     pub running: bool,
     pub port: Option<u16>,
+}
+
+/// Neither control surface authenticates, so where it listens is the only
+/// gate: the whole network (default, what existing setups expect) or this
+/// computer only. See docs/rhema-studio/13-remote-control-threat-notes.md.
+fn bind_host(lan: Option<bool>) -> &'static str {
+    if lan.unwrap_or(true) { "0.0.0.0" } else { "127.0.0.1" }
 }

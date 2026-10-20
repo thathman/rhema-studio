@@ -650,6 +650,9 @@ interface CommandLogEntry {
 function RemoteControlSection() {
   const [oscPort, setOscPort] = useState("8000")
   const [httpPort, setHttpPort] = useState("8080")
+  // Applies to both listeners at their next start. Nothing here authenticates,
+  // so this is the only gate between the network and the live output.
+  const [remoteLan, setRemoteLan] = useState(true)
   const [oscStatus, setOscStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [httpStatus, setHttpStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [oscError, setOscError] = useState<string | null>(null)
@@ -711,7 +714,7 @@ function RemoteControlSection() {
         setOscError(null)
       } else {
         const port = parseInt(oscPort) || 8000
-        const boundPort = await invoke<number>("start_osc", { port })
+        const boundPort = await invoke<number>("start_osc", { port, lan: remoteLan })
         setOscPort(String(boundPort))
         setOscError(null)
       }
@@ -727,7 +730,7 @@ function RemoteControlSection() {
         setHttpError(null)
       } else {
         const port = parseInt(httpPort) || 8080
-        const boundPort = await invoke<number>("start_http", { port })
+        const boundPort = await invoke<number>("start_http", { port, lan: remoteLan })
         setHttpPort(String(boundPort))
         setHttpError(null)
       }
@@ -738,6 +741,15 @@ function RemoteControlSection() {
 
   return (
     <div className="flex flex-col gap-6">
+      <label className="flex items-start gap-2 text-xs">
+        <input type="checkbox" className="mt-0.5" checked={remoteLan} onChange={(e) => setRemoteLan(e.target.checked)} disabled={oscStatus.running || httpStatus.running} />
+        <span>
+          Accept commands from other devices on this network
+          <span className="block text-[0.625rem] text-muted-foreground">
+            Anyone on the network can then change what is on screen; nothing asks for a password. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
+          </span>
+        </span>
+      </label>
       {/* OSC */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
