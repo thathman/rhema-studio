@@ -54,6 +54,6 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Next eligible tasks
 
-1. OP-005 receiver count — in PR (NDIlib_send_get_no_connections, optional symbol). After it, OP-005's remaining acceptance is a real OBS 720p30 smoke and a runtime drop on a desktop (rows 10aa.1–4).
+1. OP-005 receiver count merged (#89). OP-005's remaining acceptance is a real OBS 720p30 smoke and a runtime drop on a desktop (rows 10aa.1–4).
 2. Blocked on owner decisions: #72 sync approach (CL-005/006 remote delivery), #33 bundled translations, #34 Canva relay (CV-002…); PR #4 speech (ST-004; AR-004 and AI-001 follow it).
 3. Desktop or hardware only: MD-002 video/audio (#36), MD-004 lower thirds (#37), AR-002 OBS markers, PT-006 MIDI, QA-010 drill (#62), QA-007 benchmarks, acceptance rows 1–10aa (#31), Windows smoke (#32); ST-009 app identity migration at release time.
