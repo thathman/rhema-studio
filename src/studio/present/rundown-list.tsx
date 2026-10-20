@@ -1,5 +1,7 @@
 import { useEffect } from "react"
-import { ArrowDownIcon, ArrowUpIcon, MusicIcon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, MusicIcon, PresentationIcon, XIcon } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
@@ -7,7 +9,7 @@ import { useSongStore } from "@/stores/song-store"
 import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
-import { isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { isSlideItem, isSongItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 /**
@@ -27,6 +29,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const liveRef = useBroadcastStore((s) => s.liveVerse?.reference ?? null)
   const liveSlide = useBroadcastStore((s) => s.liveSlide)
+  const liveItemId = useBroadcastStore((s) => s.liveItemId)
 
   const preview = (item: QueueItem) => presentActions.previewItem(item)
   const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
@@ -45,13 +48,14 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
     <ol className="flex flex-col gap-0.5 p-1.5" aria-label="Service rundown">
       {items.map((item, index) => {
         const song = isSongItem(item)
-        const isSelected = song
+        const custom = isSlideItem(item)
+        const isSelected = song || custom
           ? selectedSlide?.item.id === item.id
           : !!selected && !selectedSlide &&
             selected.book_number === item.verse.book_number &&
             selected.chapter === item.verse.chapter &&
             selected.verse === item.verse.verse
-        const onAir = isLive && (song ? liveSlide?.itemId === item.id : liveSlide === null && liveRef !== null && liveRef.startsWith(item.reference))
+        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && liveRef.startsWith(item.reference))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === activeIndex + 1
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
         return (
@@ -75,6 +79,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
+                {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 <span className="truncate text-sm font-medium">{item.reference}</span>
                 {song && <SongBadges item={item} />}
                 {onAir && (
@@ -107,6 +112,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             </div>
             {expanded && mode === "prepare" && <SongItemControls item={item} />}
             {expanded && <SlideList item={item} index={index} mode={mode} />}
+            {custom && isSelected && mode === "prepare" && <CustomSlideEditor item={item} />}
           </li>
         )
       })}
@@ -125,6 +131,25 @@ function SongBadges({ item }: { item: SongQueueItem }) {
       ))}
       {arrangement && !arrangement.is_default && <span className="truncate">{arrangement.name}</span>}
     </span>
+  )
+}
+
+/** Prepare-only: edit a custom slide in place. The preview follows every keystroke. */
+function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
+  const update = (patch: Partial<SlideQueueItem["slide"]>) =>
+    useQueueStore.getState().updateItem(item.id, (i) => (isSlideItem(i) ? { ...i, slide: { ...i.slide, ...patch }, reference: (patch.title ?? i.slide.title).trim() || i.reference } : i))
+  return (
+    <div className="ml-7 flex flex-col gap-1.5 py-1 pl-2">
+      <Input aria-label="Slide title" value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
+      <Textarea
+        aria-label="Slide text"
+        value={item.slide.body}
+        placeholder="One line per line on screen"
+        rows={Math.min(8, Math.max(3, item.slide.body.split("\n").length))}
+        className="text-sm"
+        onChange={(e) => update({ body: e.target.value })}
+      />
+    </div>
   )
 }
 

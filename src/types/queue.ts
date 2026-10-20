@@ -42,12 +42,29 @@ export interface SongQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-export type QueueItem = VerseQueueItem | SongQueueItem
+/** An announcement or any free-text screen: one slide, no library behind it. */
+export interface CustomSlide {
+  title: string
+  /** Plain text; each line is drawn on its own line. */
+  body: string
+}
+
+export interface SlideQueueItem extends QueueItemBase {
+  kind: "slide"
+  slide: CustomSlide
+  verse?: undefined
+}
+
+export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem
 
 export function isVerseItem(item: QueueItem): item is VerseQueueItem {
-  return item.kind !== "song"
+  return item.kind === undefined || item.kind === "verse"
 }
 
 export function isSongItem(item: QueueItem): item is SongQueueItem {
   return item.kind === "song"
+}
+
+export function isSlideItem(item: QueueItem): item is SlideQueueItem {
+  return item.kind === "slide"
 }

@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { load } from "@tauri-apps/plugin-store"
 import { invoke } from "@tauri-apps/api/core"
-import type { Translation, Book, Verse, CrossReference, SongQueueItem } from "@/types"
+import type { Translation, Book, Verse, CrossReference, SongQueueItem, SlideQueueItem } from "@/types"
 import type { SemanticSearchResult } from "@/types/detection"
 
 interface PendingNavigation {
@@ -16,9 +16,9 @@ interface PendingNavigation {
   present?: boolean
 }
 
-/** What Preview shows when a song is selected: the item and the slide step. */
+/** What Preview shows when a song or custom slide is selected: the item and the step. */
 export interface SelectedSlide {
-  item: SongQueueItem
+  item: SongQueueItem | SlideQueueItem
   index: number
 }
 

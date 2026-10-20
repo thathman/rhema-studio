@@ -8,7 +8,7 @@ import { useSongStore } from "@/stores/song-store"
 import { songQueueItem } from "@/lib/lyrics"
 import { presentActions } from "@/studio/present-actions"
 import { SongEditor } from "@/studio/prepare/song-editor"
-import type { SongSummary } from "@/types"
+import { isSongItem, type SongSummary } from "@/types"
 
 const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI", custom: "Custom", unknown: "Licence?" }
 
@@ -73,7 +73,7 @@ export function SongLibrary() {
           </li>
         )}
         {results.map((song) => {
-          const isSel = selectedSlide?.item.song.song_id === song.id
+          const isSel = !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === song.id
           return (
             <li key={song.id} className="flex items-stretch gap-1">
               <button

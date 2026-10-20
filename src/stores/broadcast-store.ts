@@ -43,6 +43,8 @@ interface BroadcastState {
   liveItem: ItemTranslations | null
   /** Which song slide is live (or last was, for Restore); null when a verse is. */
   liveSlide: LiveSlide | null
+  /** The rundown item the live content came from, if any. */
+  liveItemId: string | null
   /** Why the last present did not reach the output; cleared by the next successful present. */
   presentWarning: string | null
   // When on, detections auto-present to the live output. When off, the live
@@ -67,7 +69,7 @@ interface BroadcastState {
   setActiveTheme: (id: string) => void
   setLive: (live: boolean) => void
   /** `goLive` puts the output on air in the same update as the verse, so no stale frame shows first. */
-  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null }) => void
+  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null }) => void
   setPresentWarning: (warning: string | null) => void
   setAutoLive: (auto: boolean) => void
   syncBroadcastOutput: () => void
@@ -197,6 +199,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveSourceVerse: null,
   liveItem: null,
   liveSlide: null,
+  liveItemId: null,
   presentWarning: null,
   autoLive: true,
   isDesignerOpen: false,
@@ -368,6 +371,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       liveSourceVerse: source,
       liveItem: opts.item ?? null,
       liveSlide: opts.slide ?? null,
+      liveItemId: opts.itemId ?? opts.slide?.itemId ?? null,
       presentWarning: null,
       ...(opts.goLive ? { isLive: true } : {}),
     })

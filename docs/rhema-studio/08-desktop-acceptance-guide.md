@@ -157,6 +157,16 @@ Enable both in Settings → Remote and note the ports there.
 
 Browser check performed on the dev server (not the desktop app, songs-editor PR): paste → sections, keyboard reorder, save, library search, add to service, bilingual preview, Next through slides, missing-language warning, footer, Clear/Restore all behaved as specified. Drag reorder could not be exercised by the automated browser (synthetic pointer); verify by hand in 10a.4.
 
+## 10b. Custom slides (Milestone 2C)
+
+| # | Do | Expect |
+|---|---|---|
+| 10b.1 | Prepare → Slides. Type a title and three lines. | Preview updates as you type; Add to service puts it at the end of the rundown. |
+| 10b.2 | Click the slide in the rundown; edit the text in place. Save the service, restart, reopen. | Edits persist; the slide reopens with title and lines. |
+| 10b.3 | Present: Next from a verse onto the slide and on to a song; Previous back. Two slides with the same title. | Each slide is its own step; LIVE marks the right one; "Next" marker follows. |
+| 10b.4 | Preview a slide, Show live; Clear; Restore. | Live matches preview; Restore brings the slide back. |
+| 10b.5 | Dual-language theme and a transparent OBS theme. | Title in the reference style, lines in the verse style; keys correctly. |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -171,6 +181,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10a, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10b, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.

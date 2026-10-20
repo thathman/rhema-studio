@@ -3,17 +3,19 @@ import { PanelHeader } from "@/components/ui/panel-header"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
-import { toVerseRenderData } from "@/hooks/use-broadcast"
+import { toCustomSlideRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
+import { isSlideItem, isSongItem } from "@/types"
 import { useSongStore } from "@/stores/song-store"
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 
 export function PreviewPanel() {
   const selectedVerse = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
-  const previewSong = useSongStore((s) => (selectedSlide ? s.songs[selectedSlide.item.song.song_id] : undefined))
+  const previewSongId = selectedSlide && !isSlideItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
+  const previewSong = useSongStore((s) => (previewSongId ? s.songs[previewSongId] : undefined))
   useEffect(() => {
-    if (selectedSlide && !previewSong) void useSongStore.getState().load(selectedSlide.item.song.song_id).catch(() => {})
-  }, [selectedSlide, previewSong])
+    if (previewSongId && !previewSong) void useSongStore.getState().load(previewSongId).catch(() => {})
+  }, [previewSongId, previewSong])
   const translations = useBibleStore((s) => s.translations)
   const activeTranslationId = useBibleStore((s) => s.activeTranslationId)
 
@@ -46,7 +48,9 @@ export function PreviewPanel() {
     "KJV"
 
   let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
-  if (selectedSlide) {
+  if (selectedSlide && isSlideItem(selectedSlide.item)) {
+    verseData = toCustomSlideRenderData(selectedSlide.item)
+  } else if (selectedSlide && isSongItem(selectedSlide.item)) {
     // A song slide in preview: exactly what Show live will present.
     const slides = previewSong ? buildSlides(previewSong, selectedSlide.item.song.arrangement_id, selectedSlide.item.song.languages) : []
     const slide = slides[Math.min(selectedSlide.index, slides.length - 1)]
