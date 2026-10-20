@@ -285,3 +285,11 @@ report), but launching it cannot.
 | 10n.1 | Save a service with a verse, a song with a background picture and a picture item. More → Library → "Save this service as a file…". Copy the file to a second computer (or restore an empty database) and "Open a service file…". | The service opens in Prepare with all three items; the song and picture are in the library; the picture shows on the preview. | Unverified |
 | 10n.2 | Edit one character in the file's `payload` and open it. | "Nothing was added … the file is damaged (checksum does not match)". No new service. | Unverified |
 | 10n.3 | Open the same file twice. | Two services with the same title; one copy of the song and picture. | Unverified |
+
+### 10p. Approve a service (CL-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10p.1 | Save a service, press Approve. Home. | Approve shows "Approved" (disabled); Home readiness: "Service approved as saved". | Unverified |
+| 10p.2 | Change an item, save. Home, then History. | Prepare: "Approve again"; Home: "Service changed since it was approved" (warn); History lists the approved version with "· approved". | Unverified |
+| 10p.3 | Save 55 more times (or script it), then open History. | The approved version is still listed; the oldest unapproved ones are gone. | Unverified |

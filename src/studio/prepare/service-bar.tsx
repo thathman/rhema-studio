@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { CalendarIcon, CopyIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import { BadgeCheckIcon, CalendarIcon, CopyIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import { approvalLabel, approvalState } from "@/lib/approval"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -26,6 +27,14 @@ export function ServiceBar() {
   const programs = useServiceStore((s) => s.programs)
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
+  const approval = approvalState(useServiceStore((s) => s.current))
+  const approve = async () => {
+    const r = await useServiceStore.getState().approve()
+    if (r === "ok") toast.success("Approved", { description: "This saved version is kept in History whatever is saved later." })
+    else if (r === "unsaved") toast.warning("Save first")
+    else if (r === "conflict") toast.error("This service changed elsewhere", { description: "Reload it, then approve again." })
+    else toast.error("Could not approve", { description: useServiceStore.getState().error ?? undefined })
+  }
   const saving = useServiceStore((s) => s.saving)
   const loading = useServiceStore((s) => s.loading)
   const error = useServiceStore((s) => s.error)
@@ -208,6 +217,16 @@ export function ServiceBar() {
             title={unsupported.length > 0 ? "Contains items this version cannot edit" : dirty ? "Save changes" : "No unsaved changes"}
           >
             <SaveIcon /> {saving ? "Saving…" : dirty ? "Save" : "Saved"}
+          </Button>
+
+          <Button
+            size="sm"
+            variant={approval === "approved" ? "outline" : "secondary"}
+            disabled={dirty || saving || approval === "approved"}
+            title={dirty ? "Save first; approval covers what is saved" : approvalLabel(current)}
+            onClick={() => void approve()}
+          >
+            <BadgeCheckIcon /> {approval === "approved" ? "Approved" : approval === "changed" ? "Approve again" : "Approve"}
           </Button>
 
           {conflict && (

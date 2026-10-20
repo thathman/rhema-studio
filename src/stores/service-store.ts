@@ -69,6 +69,8 @@ interface ServiceState {
   listRevisions: () => Promise<RevisionSummary[]>
   /** Make a snapshot the current items (a normal save, so it is itself undoable). Refuses while unsaved. */
   restoreRevision: (revisionId: string) => Promise<OpenResult | "conflict">
+  /** Approve the saved service as it is now ("this is Sunday's"). */
+  approve: () => Promise<"ok" | "unsaved" | "conflict" | "error">
 }
 
 /** Translation abbreviations the operator is presenting with right now. */
@@ -426,6 +428,24 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     } catch (e) {
       set({ error: describe(e) })
       return []
+    }
+  },
+
+  approve: async () => {
+    const current = get().current
+    if (!current) return "error"
+    if (get().dirty) return "unsaved"
+    try {
+      const program = await invoke<Program>("content_approve_program", { id: current.id, expectedRevision: current.revision })
+      set((s) => ({ current: program, programs: s.programs.map((p) => (p.id === program.id ? program : p)), error: null }))
+      return "ok"
+    } catch (e) {
+      if (isContentCommandError(e) && e.kind === "conflict") {
+        set({ conflict: { expected: e.expected ?? current.revision, actual: e.actual ?? -1 }, error: e.message })
+        return "conflict"
+      }
+      set({ error: describe(e) })
+      return "error"
     }
   },
 

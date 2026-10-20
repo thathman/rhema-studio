@@ -57,9 +57,13 @@ pub(crate) fn snapshot(tx: &Transaction<'_>, program_id: &str) -> Result<()> {
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![new_id(), program_id, program.revision, program.title, program.service_date, json, i64::try_from(items.len()).unwrap_or(i64::MAX)],
     )?;
+    // The approved snapshot (0007) is never pruned; older files have no such column.
+    let keep_approved = if crate::has_approval_column(tx) { "AND revision != COALESCE((SELECT approved_revision FROM programs WHERE id = ?1), -1)" } else { "" };
     tx.execute(
-        "DELETE FROM program_revisions WHERE program_id = ?1 AND revision <= (
-            SELECT revision FROM program_revisions WHERE program_id = ?1 ORDER BY revision DESC LIMIT 1 OFFSET ?2)",
+        &format!(
+            "DELETE FROM program_revisions WHERE program_id = ?1 AND revision <= (
+            SELECT revision FROM program_revisions WHERE program_id = ?1 ORDER BY revision DESC LIMIT 1 OFFSET ?2) {keep_approved}"
+        ),
         params![program_id, KEEP_REVISIONS],
     )?;
     Ok(())
@@ -111,6 +115,31 @@ impl ContentDb {
     /// Put a snapshot's items back as the service's current items. This is a
     /// normal save: it needs the current revision, bumps it, and is itself
     /// snapshotted, so the state before the restore stays in the history.
+    /// Mark the current revision as the one approved for the service. Its
+    /// snapshot is kept however many saves follow; a later save does not
+    /// clear the approval, it just makes the service "changed since approval".
+    pub fn approve_program(&self, program_id: &str, expected_revision: i64) -> Result<crate::Program> {
+        let mut conn = self.lock()?;
+        let tx = conn.transaction()?;
+        crate::check_revision(&tx, program_id, expected_revision)?;
+        let has_snapshot: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM program_revisions WHERE program_id = ?1 AND revision = ?2",
+            params![program_id, expected_revision],
+            |r| r.get(0),
+        )?;
+        if has_snapshot == 0 {
+            snapshot(&tx, program_id)?;
+        }
+        tx.execute(
+            "UPDATE programs SET approved_revision = ?2, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+            params![program_id, expected_revision],
+        )?;
+        audit(&tx, "program", program_id, "approve", &serde_json::json!({ "revision": expected_revision }))?;
+        let program = load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.into()))?;
+        tx.commit()?;
+        Ok(program)
+    }
+
     pub fn restore_revision(&self, program_id: &str, expected_revision: i64, revision_id: &str) -> Result<ProgramWithItems> {
         let revision = {
             let conn = self.lock()?;
@@ -180,5 +209,29 @@ mod tests {
         db.replace_items(&p.id, 1, &[verse("John 3:16", 43, 3, 16)]).unwrap();
         db.delete_program(&p.id, 2).unwrap();
         assert_eq!(db.list_revisions(&p.id).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn approval_pins_a_revision_that_survives_saves_and_pruning() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let item = |r: &str| ItemInput { kind: "verse".into(), reference: r.into(), book_number: Some(43), chapter: Some(3), verse: Some(16), ..Default::default() };
+        let p = db.replace_items(&p.id, p.revision, &[item("John 3:16")]).unwrap().program;
+        let approved = db.approve_program(&p.id, p.revision).unwrap();
+        assert_eq!((approved.approved_revision, approved.revision), (Some(p.revision), p.revision));
+        assert!(approved.approved_at.is_some());
+        assert!(matches!(db.approve_program(&p.id, p.revision + 7), Err(ContentError::Conflict { .. })));
+        // Many later saves: the approval stays, the approved snapshot is never pruned.
+        let mut cur = approved;
+        for i in 0..(KEEP_REVISIONS + 10) {
+            cur = db.replace_items(&cur.id, cur.revision, &[item(&format!("Psalm {i}:1"))]).unwrap().program;
+        }
+        assert_eq!(cur.approved_revision, Some(p.revision));
+        let revs = db.list_revisions(&p.id).unwrap();
+        let kept = revs.iter().find(|r| r.revision == p.revision).expect("approved snapshot kept");
+        assert!(revs.len() <= usize::try_from(KEEP_REVISIONS).unwrap() + 1);
+        let back = db.restore_revision(&p.id, cur.revision, &kept.id).unwrap();
+        assert_eq!(back.items[0].reference, "John 3:16");
+        assert_eq!(back.program.approved_revision, Some(p.revision)); // still points at the approved content's revision
     }
 }

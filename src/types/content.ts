@@ -8,6 +8,9 @@ export interface Program {
   created_at: string
   updated_at: string
   item_count: number
+  /** The revision approved for the service, if any (`approve_program`). */
+  approved_revision?: number | null
+  approved_at?: string | null
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
