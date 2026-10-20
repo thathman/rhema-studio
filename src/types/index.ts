@@ -13,6 +13,7 @@ export type {
   BroadcastOutput,
   BroadcastOutputLanguage,
   BroadcastOutputRole,
+  SignageSettings,
   StagePayload,
   BroadcastOutputNdiSettings,
   BroadcastOutputStatus,

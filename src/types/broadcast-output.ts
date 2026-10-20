@@ -8,7 +8,15 @@ export type BroadcastOutputType = "display" | "ndi"
  * live, what is next, the operator's note and the timer instead of the
  * themed frame.
  */
-export type BroadcastOutputRole = "congregation" | "stage"
+export type BroadcastOutputRole = "congregation" | "stage" | "signage"
+
+/** A `signage` output: pictures on a loop, independent of what is live in the sanctuary. */
+export interface SignageSettings {
+  /** Media ids of pictures, in order. */
+  mediaIds: string[]
+  /** Seconds each picture stays. */
+  seconds: number
+}
 
 /**
  * Which language(s) of a bilingual frame a congregation output shows. Absent
@@ -48,6 +56,7 @@ export interface BroadcastOutput {
   type: BroadcastOutputType
   role?: BroadcastOutputRole
   language?: BroadcastOutputLanguage
+  signage?: SignageSettings
   themeId: string
   /** Kept even while type === "ndi" so switching types is lossless. */
   monitorIndex: number

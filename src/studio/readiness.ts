@@ -12,7 +12,7 @@ export interface ReadinessCheck {
 
 export interface OutputHealth {
   name: string
-  role: "congregation" | "stage"
+  role: "congregation" | "stage" | "signage"
   kind: "display" | "ndi"
   on: boolean
 }

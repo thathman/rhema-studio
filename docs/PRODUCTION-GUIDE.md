@@ -7,6 +7,7 @@ For the person running outputs, OBS and the stage screen. The volunteer guide (`
 - Each output is a window on a monitor or an NDI sender, with its own theme and a role:
   - **Congregation**: the themed frame (verses, lyrics, slides, pictures, quick screens).
   - **Stage**: plain high-contrast text — the live words in every language, NEXT, the operator's note, key and tempo for a song, the timer, and any message you send.
+  - **Signage**: library pictures on a loop (so many seconds each) for a foyer screen. Nothing in the service changes it: going live, Clear, rehearsal and theme edits leave it alone.
 - Removing one output never touches another. Home lists every output as on/off and warns when only the stage is on.
 - A theme's **logo** draws in a corner; it is hidden on transparent (OBS) themes unless you tick "Show on transparent".
 
