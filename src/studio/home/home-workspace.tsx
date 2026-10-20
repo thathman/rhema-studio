@@ -1,5 +1,6 @@
 import { approvalState } from "@/lib/approval"
 import { localDate, todaysService } from "@/lib/todays-service"
+import { allSignageIds } from "@/lib/signage"
 import { useEffect } from "react"
 import { CheckIcon, TriangleAlertIcon, InfoIcon, PlayIcon, PencilRulerIcon, MonitorIcon, SettingsIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -86,7 +87,7 @@ export function HomeWorkspace() {
     signage: outputs
       .filter((o) => o.role === "signage")
       .map((o) => {
-        const ids = o.signage?.mediaIds ?? []
+        const ids = allSignageIds(o.signage)
         return { name: o.name, total: ids.length, missing: mediaLoaded ? ids.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length : 0 }
       }),
   })

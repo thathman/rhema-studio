@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { signageActive, signageFrame, signageIndex } from "./signage"
+import { activePlaylist, allSignageIds, signageActive, signageFrame, signageIndex } from "./signage"
 
 describe("signage loop", () => {
   it("rotates round-robin by seconds from the start, and is -1 with nothing to show", () => {
@@ -34,5 +34,20 @@ describe("signage loop", () => {
     expect(signageActive(vigil, mon(23))).toBe(false)
     expect(signageActive({ days: [0], from: "8am", to: "noon" }, mon(3))).toBe(true) // unreadable: always on
     expect(signageActive({ days: [0], from: "09:00", to: "09:00" }, mon(3))).toBe(true)
+  })
+
+  it("picks the scheduled playlist whose window is open, else the unscheduled one, else none", () => {
+    const sun10 = new Date(2026, 9, 25, 10)
+    const mon10 = new Date(2026, 9, 26, 10)
+    const sunday = { name: "Sunday", mediaIds: ["a", "b"], seconds: 8, schedule: { days: [0], from: "08:00", to: "13:00" } }
+    const always = { name: "Weekdays", mediaIds: ["c"], seconds: 20 }
+    const settings = { mediaIds: ["a", "b"], seconds: 8, playlists: [sunday, always] }
+    expect(activePlaylist(settings, sun10)?.name).toBe("Sunday")
+    expect(activePlaylist(settings, mon10)?.name).toBe("Weekdays")
+    expect(activePlaylist({ mediaIds: [], seconds: 10, playlists: [sunday] }, mon10)).toBeNull()
+    expect(activePlaylist({ mediaIds: ["x"], seconds: 5 }, mon10)?.mediaIds).toEqual(["x"])
+    expect(activePlaylist({ mediaIds: ["x"], seconds: 5, schedule: sunday.schedule }, mon10)).toBeNull()
+    expect(allSignageIds(settings)).toEqual(["a", "b", "c"])
+    expect(allSignageIds(undefined)).toEqual([])
   })
 })

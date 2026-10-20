@@ -33,6 +33,7 @@ import type {
   NdiFrameRate,
   NdiResolution,
   SignageSettings,
+  SignagePlaylist,
 } from "@/types"
 
 interface OutputEditorDialogProps {
@@ -212,7 +213,7 @@ export function OutputEditorDialog({
                 <SelectItem value="signage">Signage — foyer pictures on a loop, untouched by the service</SelectItem>
               </SelectContent>
             </Select>
-            {form.role === "signage" && <SignagePicker value={form.signage ?? { mediaIds: [], seconds: 10 }} onChange={(signage) => patch({ signage })} />}
+            {form.role === "signage" && <SignagePlaylists value={form.signage ?? { mediaIds: [], seconds: 10 }} onChange={(signage) => patch({ signage })} />}
             {form.role !== "stage" && form.role !== "signage" && (
               <>
                 <span id="language-label" className="mt-2 text-xs text-muted-foreground">Languages on this output</span>
@@ -439,12 +440,38 @@ export function OutputEditorDialog({
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 /** Pick the pictures a signage output loops through, in library order, and how long each stays. */
+/** One or more loops, each with its own times; the first scheduled one whose window is open runs, an unscheduled one is the fallback. */
+function SignagePlaylists({ value, onChange }: { value: SignageSettings; onChange: (v: SignageSettings) => void }) {
+  const lists: SignagePlaylist[] = value.playlists?.length ? value.playlists : [{ name: "Loop", mediaIds: value.mediaIds, seconds: value.seconds, schedule: value.schedule }]
+  const commit = (next: SignagePlaylist[]) => {
+    const first = next[0] ?? { name: "Loop", mediaIds: [], seconds: 10 }
+    // Mirror the first playlist into the single-loop fields for older readers.
+    onChange({ ...value, mediaIds: first.mediaIds, seconds: first.seconds, schedule: first.schedule, playlists: next })
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-3">
+      {lists.map((p, i) => (
+        <div key={i} className="rounded-md border border-border p-2">
+          <div className="flex items-center gap-2">
+            <Input aria-label="Playlist name" value={p.name} onChange={(e) => commit(lists.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} className="h-7 flex-1 text-xs" maxLength={40} />
+            {lists.length > 1 && <Button size="sm" variant="ghost" className="text-xs" aria-label={`Remove playlist ${p.name}`} onClick={() => commit(lists.filter((_, j) => j !== i))}>Remove</Button>}
+          </div>
+          <SignagePicker value={{ mediaIds: p.mediaIds, seconds: p.seconds, schedule: p.schedule }} onChange={(v) => commit(lists.map((x, j) => (j === i ? { ...x, mediaIds: v.mediaIds, seconds: v.seconds, schedule: v.schedule } : x)))} />
+        </div>
+      ))}
+      <Button size="sm" variant="outline" className="w-fit text-xs" onClick={() => commit([...lists, { name: `Playlist ${lists.length + 1}`, mediaIds: [], seconds: 10 }])}>Add a playlist</Button>
+      <p className="text-[0.625rem] text-muted-foreground">The first playlist whose times match runs; one without set times is what shows the rest of the time.</p>
+    </div>
+  )
+}
+
 function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: (v: SignageSettings) => void }) {
   const assets = useMediaStore((s) => s.assets)
-  const loaded = useMediaStore((s) => s.assets.length > 0 || s.loading)
+  const loaded = useMediaStore((s) => s.loaded)
+  const loading = useMediaStore((s) => s.loading)
   useEffect(() => {
-    if (!loaded) void useMediaStore.getState().list()
-  }, [loaded])
+    if (!loaded && !loading) void useMediaStore.getState().list()
+  }, [loaded, loading])
   const pictures = assets.filter((a) => a.kind === "image" && a.present)
   const toggle = (id: string) =>
     onChange({ ...value, mediaIds: value.mediaIds.includes(id) ? value.mediaIds.filter((x) => x !== id) : [...value.mediaIds, id] })

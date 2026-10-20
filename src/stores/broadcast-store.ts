@@ -18,7 +18,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useSongStore } from "@/stores/song-store"
 import { forOutputLanguage } from "@/lib/output-language"
-import { signageActive, signageFrame, signageIndex } from "@/lib/signage"
+import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -191,16 +191,16 @@ function forgetSignage(id: string): void {
 }
 
 async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Promise<void> {
-  const ids = output.signage?.mediaIds ?? []
-  const seconds = output.signage?.seconds ?? 10
+  const playlist = activePlaylist(output.signage, new Date())
+  const ids = playlist?.mediaIds ?? []
+  const seconds = playlist?.seconds ?? 10
   const ticket = (signageSeq.get(output.id) ?? 0) + 1
   signageSeq.set(output.id, ticket)
   if (!signageStarted.has(output.id)) signageStarted.set(output.id, monotonicNow())
-  const active = signageActive(output.signage?.schedule, new Date())
-  const index = active ? signageIndex(ids.length, signageStarted.get(output.id) ?? 0, monotonicNow(), seconds) : -1
+  const index = playlist ? signageIndex(ids.length, signageStarted.get(output.id) ?? 0, monotonicNow(), seconds) : -1
   signageLast.set(output.id, index)
   // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
-  const stamp = `${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
+  const stamp = `${playlist?.name ?? ""}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
   if (signageEmitted.get(output.id) === stamp) {
     ensureSignageTicker()
     return
@@ -219,6 +219,8 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   if (useBroadcastStore.getState().outputs.find((o) => o.id === output.id)?.role !== "signage") return
   signageEmitted.set(output.id, stamp)
   void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse }).catch(() => {})
+  // Warm the next picture so the swap is instant (the data URL is cached by the media store).
+  if (ids.length > 1) void useMediaStore.getState().dataUrl(ids[(index + 1) % ids.length]).catch(() => {})
   ensureSignageTicker()
 }
 
@@ -237,10 +239,12 @@ function ensureSignageTicker(): void {
       return
     }
     for (const o of signage) {
-      const ids = o.signage?.mediaIds ?? []
-      const active = signageActive(o.signage?.schedule, new Date())
-      const next = active ? signageIndex(ids.length, signageStarted.get(o.id) ?? monotonicNow(), monotonicNow(), o.signage?.seconds ?? 10) : -1
-      if (next !== signageLast.get(o.id)) s.syncBroadcastOutputFor(o.id)
+      const playlist = activePlaylist(o.signage, new Date())
+      const ids = playlist?.mediaIds ?? []
+      const next = playlist ? signageIndex(ids.length, signageStarted.get(o.id) ?? monotonicNow(), monotonicNow(), playlist.seconds) : -1
+      const last = signageEmitted.get(o.id)
+      // A different playlist at the same index still needs a sync.
+      if (next !== signageLast.get(o.id) || (last !== undefined && !last.startsWith(`${playlist?.name ?? ""}:`))) s.syncBroadcastOutputFor(o.id)
     }
   }, 1000)
 }

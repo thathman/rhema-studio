@@ -1,4 +1,4 @@
-import type { SignageSchedule, VerseRenderData } from "@/types"
+import type { SignagePlaylist, SignageSchedule, SignageSettings, VerseRenderData } from "@/types"
 
 /** Which picture a signage loop shows now: `seconds` per picture, round-robin, from when the loop started. */
 export function signageIndex(count: number, startedAtMs: number, nowMs: number, seconds: number): number {
@@ -39,4 +39,24 @@ export function signageActive(schedule: SignageSchedule | undefined, now: Date):
   if (t >= from) return dayOk(day)
   if (t < to) return dayOk((day + 6) % 7)
   return false
+}
+
+/**
+ * The playlist a signage output should run at `now`: the first scheduled
+ * one whose window is open, else the first without a schedule, else none.
+ * Settings without `playlists` are the single legacy loop.
+ */
+export function activePlaylist(settings: SignageSettings | undefined, now: Date): SignagePlaylist | null {
+  if (!settings) return null
+  const lists = settings.playlists?.length ? settings.playlists : [{ name: "Loop", mediaIds: settings.mediaIds, seconds: settings.seconds, schedule: settings.schedule }]
+  const scheduled = lists.find((p) => p.schedule && signageActive(p.schedule, now))
+  if (scheduled) return scheduled
+  return lists.find((p) => !p.schedule) ?? null
+}
+
+/** Every picture any playlist refers to (for readiness and preloading). */
+export function allSignageIds(settings: SignageSettings | undefined): string[] {
+  if (!settings) return []
+  const lists = settings.playlists?.length ? settings.playlists : [settings]
+  return [...new Set(lists.flatMap((p) => p.mediaIds))]
 }
