@@ -96,6 +96,7 @@ pub fn run() {
         .manage(Mutex::new(rhema_detection::ReadingMode::new()))
         .manage(Mutex::new(commands::remote::OscRuntime::new()))
         .manage(Mutex::new(commands::remote::HttpRuntime::new()))
+        .manage(commands::content::ContentState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             commands::bible::list_translations,
             commands::bible::list_books,
@@ -134,11 +135,39 @@ pub fn run() {
             commands::remote::stop_http,
             commands::remote::get_http_status,
             commands::remote::update_remote_status,
+            commands::content::content_list_programs,
+            commands::content::content_create_program,
+            commands::content::content_update_program,
+            commands::content::content_get_program,
+            commands::content::content_replace_items,
+            commands::content::content_delete_program,
+            commands::content::content_status,
         ])
         .setup(|app| {
             use tauri::Manager;
 
             memstats::spawn();
+
+            // User content (services, rundowns) lives in the app data dir.
+            // Failure here must not stop the app: live presentation does not
+            // depend on the content database.
+            match app.path().app_data_dir() {
+                Ok(dir) => {
+                    let path = dir.join("studio.db");
+                    let opened = std::fs::create_dir_all(&dir)
+                        .map_err(|e| e.to_string())
+                        .and_then(|()| rhema_content::ContentDb::open(&path).map_err(|e| e.to_string()));
+                    match opened {
+                        Ok(db) => {
+                            log::info!("Content database opened at {}", path.display());
+                            let state = app.state::<commands::content::ContentState>();
+                            *state.0.lock().unwrap() = Some(db);
+                        }
+                        Err(e) => log::error!("Content database unavailable at {}: {e}", path.display()),
+                    }
+                }
+                Err(e) => log::error!("No app data dir for content database: {e}"),
+            }
 
             // Point the NDI runtime at the bundled resource dir (production).
             // The source-checkout path stays as a fallback inside the crate.

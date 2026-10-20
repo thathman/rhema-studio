@@ -13,8 +13,9 @@ import { Dashboard } from "@/components/layout/dashboard"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { PanelHeader } from "@/components/ui/panel-header"
-import { useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
+import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
+import { useServiceStore } from "@/stores/service-store"
 import { presentActions } from "@/studio/present-actions"
 import { keyToPresentAction, shouldIgnoreKeyboard } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
@@ -31,11 +32,16 @@ export function PresentWorkspace() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
+  const service = useServiceStore((s) => s.current)
+  const warning = useBroadcastStore((s) => s.presentWarning)
+  const override = useBibleStore((s) => s.overrideServiceTranslations)
+  const setOverride = useBibleStore((s) => s.setOverrideServiceTranslations)
+  const activeAbbrev = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? "active")
   const onAir = outputs.filter((o) => outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive).length
 
   return (
     <div className="flex h-full flex-col">
-      <WorkspaceHeader title="Present">
+      <WorkspaceHeader title="Present" subtitle={service ? `${service.title}${service.service_date ? ` · ${service.service_date}` : ""}` : undefined}>
         <StatusChip
           tone={isLive && liveRef ? "live" : "off"}
           label={isLive && liveRef ? `LIVE · ${liveRef}` : "Nothing live"}
@@ -48,6 +54,21 @@ export function PresentWorkspace() {
           title="Open outputs"
         />
         <StatusChip tone={listening ? "ok" : "off"} label={listening ? "Listening" : "Listening off"} />
+        {service && (
+          <StatusChip
+            tone={override ? "warn" : "info"}
+            label={override ? `Override: ${activeAbbrev}` : "Saved translations"}
+            onClick={() => setOverride(!override)}
+            title={
+              override
+                ? `Service items are shown in ${activeAbbrev} instead of the translation they were saved with. Click to use the saved translations.`
+                : `Service items are shown in the translation they were saved with. Click to override and use ${activeAbbrev} for everything.`
+            }
+          />
+        )}
+        {warning && (
+          <StatusChip tone="warn" label={warning} className="max-w-96" title={warning} onClick={() => useBroadcastStore.getState().setPresentWarning(null)} />
+        )}
         <div role="group" aria-label="Present view" className="ml-2 flex rounded-md border border-border p-0.5">
           {(["standard", "production"] as const).map((v) => (
             <button

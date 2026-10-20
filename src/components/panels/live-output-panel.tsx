@@ -11,6 +11,7 @@ import {
   toVerseRenderData,
 } from "@/hooks/use-broadcast"
 import { bibleActions } from "@/hooks/use-bible"
+import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 
 export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
@@ -31,15 +32,13 @@ export function LiveOutputPanel() {
   // text follows the new translation. Updates the live output only — the
   // preview keeps whatever the operator is browsing.
   useEffect(() => {
-    const source = useBroadcastStore.getState().liveSourceVerse
+    const { liveSourceVerse: source, liveItem } = useBroadcastStore.getState()
     if (!source) return
-    const ids = [
-      activeTranslationId,
-      ...(secondaryTranslationId !== null &&
-      secondaryTranslationId !== activeTranslationId
-        ? [secondaryTranslationId]
-        : []),
-    ]
+    // Same rule as presentVerse: a verse presented from a service item keeps
+    // that item's saved translations; anything else follows the operator.
+    const choice = resolveTranslations(liveItem, useBibleStore.getState())
+    if (isMissing(choice)) return
+    const ids = [choice.primary, ...(choice.secondary !== null ? [choice.secondary] : [])]
     void Promise.all(
       ids.map((id) =>
         bibleActions.fetchVerse(

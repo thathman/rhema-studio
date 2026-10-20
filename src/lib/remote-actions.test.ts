@@ -66,8 +66,46 @@ beforeEach(() => {
       },
     ],
   })
-  useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSourceVerse: null })
+  useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSourceVerse: null, liveItem: null, presentWarning: null })
   useQueueStore.setState({ items: [], activeIndex: null })
+})
+
+describe("remote next/prev/send_to_live go on air atomically (same semantics as the desktop buttons)", () => {
+  it("next: off air until the verse arrives, then on air with it", async () => {
+    useQueueStore.setState({ items: [queueItemFor(genesisOneOne)] })
+    let resolve: (v: Verse | null) => void = () => {}
+    mockInvoke.mockImplementation((cmd: unknown) =>
+      cmd === "get_verse" ? new Promise<Verse | null>((r) => (resolve = r)) : Promise.resolve(null),
+    )
+    remoteActions.queueNext()
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    resolve(genesisOneOne)
+    await vi.waitFor(() => expect(useBroadcastStore.getState().isLive).toBe(true))
+    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Genesis 1:1 (KJV)")
+  })
+
+  it("hide cancels a present that is still loading", async () => {
+    useQueueStore.setState({ items: [queueItemFor(genesisOneOne)] })
+    let resolve: (v: Verse | null) => void = () => {}
+    mockInvoke.mockImplementation((cmd: unknown) =>
+      cmd === "get_verse" ? new Promise<Verse | null>((r) => (resolve = r)) : Promise.resolve(null),
+    )
+    remoteActions.queueNext()
+    remoteActions.toggleOnAir(false)
+    resolve(genesisOneOne)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+  })
+
+  it("send_to_live goes on air with the previewed verse", async () => {
+    mockInvoke.mockImplementation(async (cmd: unknown) => (cmd === "get_verse" ? johnThreeSixteen : null))
+    useBibleStore.setState({ selectedVerse: johnThreeSixteen })
+    remoteActions.sendToLive()
+    await vi.waitFor(() => expect(useBroadcastStore.getState().isLive).toBe(true))
+    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("John 3:16 (KJV)")
+  })
 })
 
 describe("remoteActions.sendToLive", () => {

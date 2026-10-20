@@ -24,3 +24,4 @@ export type {
   NdiSessionInfo,
   NdiStartRequest,
 } from "./ndi"
+export type { Program, ProgramItem, ProgramItemKind, ItemInput, ProgramWithItems, ContentCommandError, ContentStatus } from "./content"

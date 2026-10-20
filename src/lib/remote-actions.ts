@@ -1,4 +1,4 @@
-import { presentVerse } from "@/hooks/use-broadcast"
+import { cancelPendingPresents, presentVerse } from "@/hooks/use-broadcast"
 import { stepVerse } from "@/hooks/use-bible"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -18,16 +18,21 @@ function findLiveQueueIndex(): number | null {
   return index >= 0 ? index : null
 }
 
-async function presentQueueItem(index: number): Promise<void> {
+/**
+ * Present a rundown item in its saved translations and put the output on air
+ * in the same update. Next/Previous/double-click/OSC/HTTP all come here.
+ */
+export async function presentQueueItem(index: number): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
+  useQueueStore.getState().setActive(index)
   // Navigate the Bible panel to the presented verse, as detections do
   useBibleStore.getState().setPendingNavigation({
     bookNumber: item.verse.book_number,
     chapter: item.verse.chapter,
     verse: item.verse.verse,
   })
-  await presentVerse(item.verse).catch((e) =>
+  await presentVerse(item.verse, { item, goLive: true }).catch((e) =>
     console.warn("[remote-actions] presentQueueItem failed:", e),
   )
 }
@@ -42,7 +47,6 @@ function stepQueue(offset: number): void {
       ? 0
       : Math.min(Math.max(current + offset, 0), items.length - 1)
 
-  useQueueStore.getState().setActive(target)
   void presentQueueItem(target)
 }
 
@@ -56,13 +60,24 @@ function stepQueue(offset: number): void {
  * callbacks, outside React's render cycle.
  */
 export const remoteActions = {
-  /** Present the verse showing in Program preview on the live output. */
+  /**
+   * Present what Program preview shows, on air, in the translation the preview
+   * is in. When the preview is a rundown item, that item becomes active and its
+   * saved secondary translation applies.
+   */
   sendToLive: () => {
-    const { selectedVerse } = useBibleStore.getState()
+    const bible = useBibleStore.getState()
+    const selectedVerse = bible.selectedVerse
     if (!selectedVerse) return
-    void presentVerse(selectedVerse).catch((e) =>
-      console.warn("[remote-actions] sendToLive failed:", e),
-    )
+    const queue = useQueueStore.getState()
+    const idx = queue.findDuplicate(selectedVerse.book_number, selectedVerse.chapter, selectedVerse.verse)
+    const rundownItem = idx === -1 ? null : queue.items[idx]
+    if (idx !== -1) queue.setActive(idx)
+    const previewed = bible.translations.find((t) => t.id === selectedVerse.translation_id)?.abbreviation ?? null
+    void presentVerse(selectedVerse, {
+      goLive: true,
+      item: { translation: previewed, secondary_translation: rundownItem?.secondary_translation ?? null },
+    }).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
   },
 
   /** Queue the verse showing in Program preview. Duplicates are dropped by the store. */
@@ -86,5 +101,9 @@ export const remoteActions = {
   bibleNext: () => stepVerse("next"),
   biblePrev: () => stepVerse("prev"),
 
-  toggleOnAir: (active: boolean) => useBroadcastStore.getState().setLive(active),
+  /** Off air also cancels any present still loading, so it cannot reappear later. */
+  toggleOnAir: (active: boolean) => {
+    if (!active) cancelPendingPresents()
+    useBroadcastStore.getState().setLive(active)
+  },
 }

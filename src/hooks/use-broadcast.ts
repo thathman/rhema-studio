@@ -4,6 +4,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type { VerseRenderData } from "@/types"
 import type { Verse } from "@/types"
+import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
 
 export function toVerseRenderData(
   verse: Verse,
@@ -53,31 +54,51 @@ export function getTranslationLabel(
 let presentSeq = 0
 
 /**
+ * Invalidate every present still in flight. Clear/hide call this so a verse
+ * that was being fetched when the operator cleared cannot pop up afterwards.
+ */
+export function cancelPendingPresents(): void {
+  presentSeq += 1
+}
+
+export interface PresentOptions {
+  /** The rundown item the verse came from. Its saved translations apply (see translation-policy). */
+  item?: ItemTranslations | null
+  /** Put the output on air in the same update as the verse. Nothing changes if the present fails. */
+  goLive?: boolean
+}
+
+export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_translation"
+
+/**
  * Refetch the full verse from the backend and present it to preview + live
  * output. Queue/detection items may carry partial verse objects (empty text,
  * synthetic id 0, stale translation_id), so always look the verse up by
- * book/chapter/verse against the active translation. Falls back to the passed
- * verse if the lookup fails — never blanks the output on error.
+ * book/chapter/verse. Which translation(s) is decided by `resolveTranslations`:
+ * the item's saved choice when there is one, else the operator's active
+ * translations. Falls back to the passed verse if the lookup fails — never
+ * blanks the output on error.
  *
  * This is the ONLY path that changes the live output verse. Manual selection
  * (verse click, arrow navigation, search) presents directly; detections update
  * only the preview unless the Auto toggle is on.
  */
-export async function presentVerse(verse: Verse): Promise<void> {
+export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Promise<PresentOutcome> {
   presentSeq += 1
   const ticket = presentSeq
-  mark(`presentVerse start ${verse.book_name} ${verse.chapter}:${verse.verse}`)
+  const ref = `${verse.book_name} ${verse.chapter}:${verse.verse}`
+  mark(`presentVerse start ${ref}`)
 
   const bibleState = useBibleStore.getState()
-  const primaryTranslationId = bibleState.activeTranslationId
-  const secondaryTranslationId = bibleState.secondaryTranslationId
-  const translationIds = [
-    primaryTranslationId,
-    ...(secondaryTranslationId !== null &&
-    secondaryTranslationId !== primaryTranslationId
-      ? [secondaryTranslationId]
-      : []),
-  ]
+  const choice = resolveTranslations(opts.item, bibleState)
+  if (isMissing(choice)) {
+    const active = getTranslationLabel(bibleState.activeTranslationId, "the active translation")
+    useBroadcastStore.getState().setPresentWarning(
+      `${ref} not shown: it was saved for ${choice.missing.join(", ")}, which is not installed. Install it, or turn on "Use my translation" to show it in ${active}.`
+    )
+    return "missing_translation"
+  }
+  const translationIds = [choice.primary, ...(choice.secondary !== null ? [choice.secondary] : [])]
 
   const fetchedVerses = await Promise.all(
     translationIds.map(async (translationId) => {
@@ -102,17 +123,17 @@ export async function presentVerse(verse: Verse): Promise<void> {
     `presentVerse get_verse done ${verse.book_name} ${verse.chapter}:${verse.verse}`
   )
 
-  // A newer present started while we were refetching — let it win.
-  if (ticket !== presentSeq) return
+  // A newer present (or a Clear) started while we were refetching — let it win.
+  if (ticket !== presentSeq) return "superseded"
 
   // Never present a verse with no text (e.g. a citation that doesn't exist
-  // in the active translation) — keep whatever is currently live instead.
+  // in the chosen translation) — keep whatever is currently live instead.
   if (!verseToPresent.text?.trim()) {
-    console.warn(
-      "[broadcast] refusing to present verse with empty text:",
-      `${verseToPresent.book_name} ${verseToPresent.chapter}:${verseToPresent.verse}`
+    console.warn("[broadcast] refusing to present verse with empty text:", ref)
+    useBroadcastStore.getState().setPresentWarning(
+      `${ref} not shown: no text in ${getTranslationLabel(choice.primary, "the chosen translation")}.`
     )
-    return
+    return "empty"
   }
 
   const renderEntries = fetchedVerses
@@ -142,11 +163,11 @@ export async function presentVerse(verse: Verse): Promise<void> {
             renderEntries[0]?.verse ?? verseToPresent,
             renderEntries[0]?.translation ?? "KJV"
           ),
-      verseToPresent
+      verseToPresent,
+      { goLive: opts.goLive, item: opts.item ?? null }
     )
-  mark(
-    `presentVerse end ${verseToPresent.book_name} ${verseToPresent.chapter}:${verseToPresent.verse}`
-  )
+  mark(`presentVerse end ${ref}`)
+  return "presented"
 }
 
 export const broadcastActions = {

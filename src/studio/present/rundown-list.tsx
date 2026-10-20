@@ -2,8 +2,7 @@ import { ArrowDownIcon, ArrowUpIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
-import { bibleActions } from "@/hooks/use-bible"
-import { presentVerse } from "@/hooks/use-broadcast"
+import { presentActions } from "@/studio/present-actions"
 import type { QueueItem } from "@/types"
 
 /**
@@ -19,16 +18,8 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const liveRef = useBroadcastStore((s) => s.liveVerse?.reference ?? null)
 
-  const preview = (item: QueueItem) => {
-    bibleActions.selectVerse(item.verse)
-    bibleActions.navigateToVerse(item.verse.book_number, item.verse.chapter, item.verse.verse)
-  }
-
-  const present = (item: QueueItem, index: number) => {
-    useQueueStore.getState().setActive(index)
-    useBroadcastStore.getState().setLive(true)
-    void presentVerse(item.verse)
-  }
+  const preview = (item: QueueItem) => presentActions.previewItem(item)
+  const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
 
   if (items.length === 0) {
     return (

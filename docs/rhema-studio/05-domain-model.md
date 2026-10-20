@@ -1,7 +1,36 @@
 # 05 — Domain Model and Persistence Proposal
 
-Status: proposal. Not implemented in the foundation PR. The foundation PR keeps the
-existing JSON-blob persistence untouched.
+Status: partially implemented. `src-tauri/crates/content` provides `studio.db` with
+migrations `0001_programs` and `0002_item_identity`, programs + items + audit trail,
+optimistic concurrency (expected revision → Conflict), stable item ids across saves,
+backup-before-migrate, integrity check on open, and real-file tests. The frontend
+service store adds save generations and store-level unsaved-change protection.
+Everything else below remains a proposal.
+
+### Bible identity on items (implemented)
+Items store `book_number` (canonical Protestant 1–66 numbering shared by every
+translation in `rhema.db`, including OYCB), `chapter`, `verse`, and translation
+**abbreviations** (`translation`, `secondary_translation`), never translation row ids,
+which change when the Bible database is rebuilt. `NULL` translation means "follow the
+operator's active translation".
+
+Fidelity rule (implemented in `service-store.ts`): a rundown item loaded from a service
+carries its stored `translation`, `secondary_translation` and `notes` verbatim and writes
+them back unchanged on save, whatever the operator is presenting with. Only items that
+were never saved take the translation they were added with and the current secondary.
+A pinned translation that is not installed is reported (`missingTranslations`), text is
+looked up in the active translation instead, and the pin survives the next save.
+Changing any of these fields marks the service dirty.
+
+Versification differences between translations are not
+modelled yet; when a translation with a different versification is added, a
+`versification` column keyed per translation is the planned extension.
+
+### Audit, actor, backups (implemented / planned)
+`audit_events.actor` exists and is `NULL` until a user model exists; no placeholder
+values are written. Before applying a migration to an existing file the crate writes
+`studio.db.before-<version>.bak` via SQLite's online backup API; `backup_to(path)` is
+available for a scheduled backup command (planned: Settings → Backups).
 
 ## 1. What exists today
 
