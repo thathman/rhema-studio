@@ -1406,8 +1406,8 @@ mod tests {
         let mut broken = export.clone();
         broken.songs[1].song.licence = "stolen".into();
         assert!(matches!(empty.import_songs(&broken, ImportMode::Skip), Err(ContentError::Invalid(_))));
-        assert!(empty.list_songs(None, 10).unwrap().is_empty());
-        assert!(empty.list_hymnbooks().unwrap().is_empty());
+        assert_eq!(empty.list_songs(None, 10).unwrap().len(), 0);
+        assert_eq!(empty.list_hymnbooks().unwrap().len(), 0);
         broken.version = 2;
         assert!(matches!(empty.import_songs(&broken, ImportMode::Skip), Err(ContentError::Invalid(_))));
     }
