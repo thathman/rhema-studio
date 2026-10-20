@@ -92,6 +92,8 @@ export interface BroadcastOutput {
 export interface BroadcastOutputStatus {
   previewOpen: boolean
   ndiActive: boolean
+  /** Set while the NDI sender keeps failing to push frames; cleared on the next success. */
+  ndiError?: string | null
 }
 
 /** The default output: always present, editable, never deletable. */

@@ -15,7 +15,7 @@ For the person running outputs, OBS and the stage screen. The volunteer guide (`
 
 - Use a transparent theme (for example the Lower Thirds builtin) on an NDI output for keying. Pictures and quick screens key like verses; background pictures fill the frame, so use them only on the congregation output.
 - NDI frames come from the output window's canvas; a stage output does not send NDI.
-- Health: Home → outputs line, Present header "n/m outputs on".
+- Health: Home → outputs line, Present header "n/m outputs on". If NDI frames stop reaching the network, a warning names the output, readiness shows "not sending", and the app restarts the sender once a minute at most; after that turn the output off and on yourself.
 
 ## Remote control (Settings → Remote)
 

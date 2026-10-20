@@ -75,7 +75,7 @@
 | OP-002 Stage confidence screen and private messages | P1 | MERGED (#23 screen, #24 messages) | OP-001 | PR #23: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
 | OP-003 Independent language/style per output | P1 | MERGED (#55) | OP-001,SO-006 | output-language PR: each congregation output chooses Both / First only / Second only (verses and lyrics; second falls back to the prepared frame, never blank); style per output already via themes; 2 tests |
 | OP-004 Multiview and device health | P1 | MERGED (health) | OP-001 | PR #26: Home readiness lists every output (on/off, congregation/stage/stream) and warns when only the stage screen is on; 1 test. Multiview thumbnails and disconnected-monitor detection later |
-| OP-005 NDI/OBS and external output stability | P0 | BACKLOG | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
+| OP-005 NDI/OBS and external output stability | P0 | IN PR (first slice: NDI trouble detection + one restart) / BACKLOG (real OBS 720p30 smoke, NDI runtime drop on a desktop) | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
 | OP-006 Paired mobile/LAN control with roles | P1 | MERGED (#66, #69 shared key; #77 pairing + revocation; #78 roles + require-a-key switch) | OP-001 | remote-secret PR (#63): optional key in Settings → Remote; HTTP `/command` needs `X-Rhema-Key` or `Authorization: Bearer` (401 otherwise, health stays open), OSC needs the key as first string argument; blank keeps today's behaviour; 2 crate tests. Pairing, roles and revocation later |
 
 ## Milestone 5 — Timers, cues, rehearsal

@@ -87,4 +87,17 @@ describe("computeReadiness", () => {
       ["warn", "Cafe: 1 of 4 signage pictures is missing"],
     ])
   })
+
+  it("warns when an output is on but its NDI frames are failing", () => {
+    const base = { translationsLoaded: 1, activeThemeName: "Dark", outputsConfigured: 2, outputsOnAir: 2, rundownCount: 1, listening: false }
+    const outputs = [
+      { name: "Main", role: "congregation" as const, kind: "display" as const, on: true },
+      { name: "Stream", role: "congregation" as const, kind: "ndi" as const, on: true, error: "no active session" },
+    ]
+    const { checks } = computeReadiness({ ...base, outputs })
+    const c = checks.find((x) => x.id === "outputs")!
+    expect(c.status).toBe("warn")
+    expect(c.detail).toContain("Stream · on · stream · not sending: no active session")
+    expect(c.fix).toBe("outputs")
+  })
 })

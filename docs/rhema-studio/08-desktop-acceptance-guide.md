@@ -360,3 +360,11 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10z.1 | Prepare → Slides: paste three paragraphs, one of them nine lines long. | "Add as 4 slides" appears; it adds four items labelled "(1/4)" … "(4/4)" in order; each shows at full size with no shrinking; Next steps through them. | Unverified |
+
+### 10aa. NDI stream trouble (OP-005)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10aa.1 | NDI output on and received in OBS. Break the sender (e.g. rename/remove the NDI runtime library while running, or stop the NDI session from a debugger) so frame pushes fail. | Within a few frames: a warning toast "<output>: NDI stopped sending, restarting it", Home readiness shows "<output> · on · stream · not sending: …", and the app restarts the sender once; if the restart fails, an error toast says to turn the output on again. The app never freezes or blanks the projector. | Unverified |
+| 10aa.2 | Make the sender work again (restore the runtime, turn the output on). | "NDI is sending again"; the readiness line clears. A second failure within a minute does not auto-restart again. | Unverified |
+| 10aa.3 | Close OBS while NDI is on. | Nothing changes on the laptop (the sender keeps sending); reopening OBS picks the source up. | Unverified |
