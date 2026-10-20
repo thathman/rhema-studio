@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.25 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.26 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -93,7 +93,7 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| CV-001 Validate current Canva Connect API scopes, plan eligibility, rate limits | P1 | BACKLOG | MD-001 | Document actual permissible API flow; no assumed live editor |
+| CV-001 Validate current Canva Connect API scopes, plan eligibility, rate limits | P1 | IN PR (design) | MD-001 | `docs/rhema-studio/11-canva-connect-findings.md`: OAuth PKCE with a backend-only token exchange (needs a relay → owner cost decision), export formats/limits/plan gates, autofill Pro/Teams/Enterprise only, private integrations need Enterprise so Rhema must be a reviewed public integration. Blocks CV-002 until the relay decision |
 | CV-002 Secure Canva account connection and disconnection | P1 | BACKLOG | CV-001 | OAuth token safety, consent, refresh/revoke, offline behavior |
 | CV-003 Select/edit-in-Canva/export and local import | P1 | BACKLOG | CV-002,MD-006 | Track source design/export version, review, local cache |
 | CV-004 Church Brand Kit and ministry variants | P1 | BACKLOG | MD-003 | Fonts/colors/logos reproducible across items |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.26):** PR #29 merged; canva-connect-findings PR opened (CV-001 design; owner decisions on a token relay and public-integration application flagged).
 - **2026-10-20 (rev 0.25):** PR #27 merged; licence-inventory PR opened (QA-004 IN PR; owner decision on bundled copyrighted translations flagged).
 - **2026-10-20 (rev 0.24):** PRs #24, #25, #26 merged; rehearsal-mode PR opened (PT-005 IN PR).
 - **2026-10-20 (rev 0.23):** output-health PR opened (OP-004 health IN PR).
