@@ -13,7 +13,8 @@ interface MediaState {
 
   list: () => Promise<MediaAssetStatus[]>
   /** Native picker → copy into the media folder → index. Returns the per-file report. */
-  importFiles: () => Promise<MediaImportResult[] | null>
+  /** Pick files and import them; `filters` defaults to pictures. */
+  importFiles: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<MediaImportResult[] | null>
   remove: (id: string) => Promise<void>
   /** The picture as a data URL (read from the media folder, cached). Null when missing. */
   dataUrl: (id: string) => Promise<string | null>
@@ -55,8 +56,8 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     }
   },
 
-  importFiles: async () => {
-    const selected = await open({ multiple: true, filters: [{ name: "Pictures", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }] })
+  importFiles: async (filters = [{ name: "Pictures", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }]) => {
+    const selected = await open({ multiple: true, filters })
     if (!selected) return null
     const paths = Array.isArray(selected) ? selected : [selected]
     const results = await invoke<MediaImportResult[]>("media_import", { paths })

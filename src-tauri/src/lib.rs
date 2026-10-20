@@ -88,6 +88,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(Mutex::new(state::AppState::new()))
         .manage(Mutex::new(rhema_detection::DetectionPipeline::new()))
         .manage(Mutex::new(rhema_broadcast::ndi::NdiRuntime::default()))
@@ -145,6 +146,9 @@ pub fn run() {
             commands::content::content_list_service_logs,
             commands::content::content_get_service_log,
             commands::content::content_delete_service_log,
+            commands::content::content_list_song_attachments,
+            commands::content::content_add_song_attachment,
+            commands::content::content_remove_song_attachment,
             commands::content::content_get_program,
             commands::content::content_replace_items,
             commands::content::content_delete_program,

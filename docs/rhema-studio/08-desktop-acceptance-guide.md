@@ -316,3 +316,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10s.1 | Settings → Remote: key "abc", start HTTP and OSC. `curl -X POST :8080/api/v1/command -d '{"command":"next"}'` without and with `-H "X-Rhema-Key: abc"`; send `/rhema/next` from TouchOSC without and with the string argument "abc". | Without the key: HTTP 401, OSC ignored, nothing changes on screen; with it: Next happens. Restart the app: the key is still in Settings. | Unverified |
+
+### 10t. Chord charts and sheets on a song (SO-011)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10t.1 | Open a saved song in the editor → "Add a file…" → a PDF. Click its name. Remove it. Delete the song's PDF from More → Pictures (if listed) or re-import the same PDF. | The PDF opens in the system viewer; the list updates; re-importing the same file does not duplicate it (same hash). Nothing about it ever reaches an output. | Unverified |

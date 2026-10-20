@@ -41,7 +41,7 @@
 | SO-008 Import/export | P1 | MERGED (#6, #9, #54) | SO-001,SO-003 | PR #6 crate; PR #9 Library dialog (JSON export, JSON/OpenLyrics import); PR #54 editor → OpenLyrics… saves one song as .xml (round-trips through the importer) |
 | SO-009 Add songs to unified service rundown | P1 | MERGED (#7) | SO-004,ST-003 | songs-core PR: song rundown items (`kind='song'` + payload) save/reopen, Add from Quick find, slide sub-list, reorder/remove |
 | SO-010 Song/lyric renderer and Live safety | P0 | MERGED (#7) | SO-009,ST-002 | songs-core PR: `presentSlide` (atomic go-live, Clear cancels, no stale frame), lyric lines + secondary language + copyright footer in the renderer, Next/Prev step slides then items, Show live from a previewed slide; 12 tests |
-| SO-011 Rehearsal notes, key, tempo, attachments | P2 | MERGED (key, tempo #50) / BACKLOG (attachments: needs an opener plugin on the Rust side to open a chord chart; not added yet) | SO-004 | song-key-tempo PR: migration 0006 adds key and tempo to songs (validated), editor fields, stage display shows "Key G · 72 bpm" for the live song; song notes already exist and never reach the output. Attachments later |
+| SO-011 Rehearsal notes, key, tempo, attachments | P2 | MERGED (#50 key/tempo, #70 attachments) | SO-004 | song-key-tempo PR: migration 0006 adds key and tempo to songs (validated), editor fields, stage display shows "Key G · 72 bpm" for the live song; song notes already exist and never reach the output. Attachments later |
 
 ## Milestone 2C — Mixed content and service planning
 

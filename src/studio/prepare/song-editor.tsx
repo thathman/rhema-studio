@@ -9,8 +9,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useSongStore } from "@/stores/song-store"
+import { useMediaStore } from "@/stores/media-store"
+import { invoke } from "@tauri-apps/api/core"
+import { openPath } from "@tauri-apps/plugin-opener"
 import { isContentCommandError, LICENCES, SECTION_KINDS } from "@/types/content"
-import type { Licence, SectionKind, SongWithSections } from "@/types"
+import type { Licence, MediaAsset, SectionKind, SongWithSections } from "@/types"
 import {
   addArrangement, addSection, applyPaste, emptyForm, formFromSong, formLanguages, inputFromForm, moveSection,
   removeArrangement, removeSection, updateArrangement, validateForm, type SongForm,
@@ -215,6 +218,7 @@ function EditorDialog({
               </Select>
             </Field>
             <HymnNumbers form={form} set={set} />
+            {songId && <Attachments songId={songId} />}
             <Field label="Copyright" hint="As printed in the hymnal">
               <Input value={form.copyright} onChange={(e) => set({ copyright: e.target.value })} />
             </Field>
@@ -462,6 +466,66 @@ function HymnNumbers({ form, set }: { form: SongForm; set: (patch: Partial<SongF
           </PopoverContent>
         </Popover>
       </div>
+    </div>
+  )
+}
+
+/** Chord charts and sheet music for a saved song: files in the media folder, opened with the computer's own viewer. */
+function Attachments({ songId }: { songId: string }) {
+  const [files, setFiles] = useState<MediaAsset[]>([])
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    invoke<MediaAsset[]>("content_list_song_attachments", { songId }).then((f) => { if (!cancelled) setFiles(f) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [songId])
+  const add = async () => {
+    setBusy(true)
+    try {
+      const results = await useMediaStore.getState().importFiles([{ name: "Chord charts and sheets", extensions: ["pdf", "png", "jpg", "jpeg"] }])
+      if (!results) return
+      let latest = files
+      for (const r of results) {
+        if (r.status === "imported") latest = await invoke<MediaAsset[]>("content_add_song_attachment", { songId, mediaId: r.asset.id })
+        else toast.error(`${r.path.split(/[\\/]/).pop()}: ${r.message}`)
+      }
+      setFiles(latest)
+    } catch (e) {
+      toast.error(describe(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const openFile = async (m: MediaAsset) => {
+    try {
+      const assets = useMediaStore.getState().assets.length ? useMediaStore.getState().assets : await useMediaStore.getState().list()
+      const path = assets.find((a) => a.id === m.id)?.path
+      if (!path) throw new Error("The file is missing from the media folder.")
+      await openPath(path)
+    } catch (e) {
+      toast.error(describe(e))
+    }
+  }
+  const remove = async (m: MediaAsset) => {
+    try {
+      setFiles(await invoke<MediaAsset[]>("content_remove_song_attachment", { songId, mediaId: m.id }))
+    } catch (e) {
+      toast.error(describe(e))
+    }
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">Chord charts and sheets</span>
+      {files.length === 0 && <p className="text-xs text-muted-foreground">None yet. PDF or picture; opens in the computer's own viewer, never on screen.</p>}
+      <ul className="flex flex-col gap-1">
+        {files.map((m) => (
+          <li key={m.id} className="flex items-center gap-2 text-xs">
+            <button type="button" className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => void openFile(m)} title="Open">{m.name}</button>
+            <Button size="icon-xs" variant="ghost" aria-label={`Remove ${m.name}`} onClick={() => void remove(m)}><XIcon /></Button>
+          </li>
+        ))}
+      </ul>
+      <Button variant="outline" size="sm" className="w-fit" disabled={busy} onClick={() => void add()}><PlusIcon /> Add a file…</Button>
     </div>
   )
 }

@@ -51,3 +51,5 @@ No GPL/AGPL/LGPL code is in the direct dependency set. Transitive dependencies w
 2. Add the openbible.info and NDI® notices to the installer's licence screen (About has them).
 3. Add an automated licence check (`cargo deny check licenses`, `bunx license-checker --production`) to the release workflow, with an allow-list matching this document.
 4. Keep this file current: any new dependency or bundled asset gets a row here in the same PR.
+
+- `tauri-plugin-opener` 2 (Rust) / `@tauri-apps/plugin-opener` (JS): MIT OR Apache-2.0. Opens a song attachment in the computer's own viewer; scoped to the media folder.
