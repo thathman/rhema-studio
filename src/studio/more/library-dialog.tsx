@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { DatabaseIcon, DownloadIcon, MusicIcon, RotateCcwIcon, UploadIcon } from "lucide-react"
+import { BookOpenIcon, CheckIcon, DatabaseIcon, DownloadIcon, MusicIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
@@ -142,6 +143,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
               </div>
             )}
           </div>
+          <HymnbookList />
           <div className="rounded-lg border border-border p-3">
             <p className="mb-1 flex items-center gap-2 font-medium"><DatabaseIcon className="size-4" /> Everything: services and songs</p>
             <p className="mb-2 text-xs text-muted-foreground">
@@ -173,6 +175,67 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Rename or remove hymnbooks. Removing a book drops its numbers; the songs stay. */
+function HymnbookList() {
+  const hymnbooks = useSongStore((s) => s.hymnbooks)
+  const [editing, setEditing] = useState<{ id: string; code: string; name: string } | null>(null)
+  const [confirm, setConfirm] = useState<string | null>(null)
+  const save = async () => {
+    if (!editing) return
+    try {
+      await useSongStore.getState().upsertHymnbook({ id: editing.id, code: editing.code.trim(), name: editing.name.trim() })
+      setEditing(null)
+    } catch (e) {
+      toast.error(describeError(e))
+    }
+  }
+  const remove = async (id: string) => {
+    setConfirm(null)
+    try {
+      await useSongStore.getState().deleteHymnbook(id)
+      toast.success("Hymnbook removed", { description: "Its numbers are gone; the songs are still here." })
+    } catch (e) {
+      toast.error(describeError(e))
+    }
+  }
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <p className="mb-2 flex items-center gap-2 font-medium"><BookOpenIcon className="size-4" /> Hymnbooks</p>
+      {hymnbooks.length === 0 && <p className="text-xs text-muted-foreground">None yet. Add one from a song's hymnbook numbers in the editor.</p>}
+      <ul className="flex flex-col gap-1">
+        {hymnbooks.map((b) => (
+          <li key={b.id} className="flex items-center gap-2 text-xs">
+            {editing?.id === b.id ? (
+              <>
+                <Input aria-label="Hymnbook code" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value.toUpperCase() })} className="h-7 w-20 font-mono text-xs" maxLength={6} />
+                <Input aria-label="Hymnbook name" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className="h-7 flex-1 text-xs" />
+                <Button size="icon-xs" aria-label="Save hymnbook" disabled={!/^[A-Za-z]{1,6}$/.test(editing.code) || !editing.name.trim()} onClick={() => void save()}><CheckIcon /></Button>
+                <Button size="icon-xs" variant="ghost" aria-label="Cancel" onClick={() => setEditing(null)}>✕</Button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left hover:underline" onClick={() => setEditing({ id: b.id, code: b.code, name: b.name })} title="Click to rename">
+                  <span className="w-14 shrink-0 font-mono">{b.code}</span>
+                  <span className="truncate">{b.name}</span>
+                </button>
+                {confirm === b.id ? (
+                  <>
+                    <span className="text-muted-foreground">Remove and drop its numbers?</span>
+                    <Button size="xs" variant="destructive" onClick={() => void remove(b.id)}>Remove</Button>
+                    <Button size="xs" variant="ghost" onClick={() => setConfirm(null)}>Keep</Button>
+                  </>
+                ) : (
+                  <Button size="icon-xs" variant="ghost" aria-label={`Remove ${b.code}`} onClick={() => setConfirm(b.id)}><Trash2Icon /></Button>
+                )}
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
