@@ -252,6 +252,8 @@ pub struct NdiStatusResponse {
     pub width: u32,
     pub height: u32,
     pub fps: u32,
+    /// Receivers connected right now; `None` when the runtime cannot say.
+    pub receivers: Option<i32>,
 }
 
 #[tauri::command]
@@ -266,6 +268,7 @@ pub fn get_ndi_status(
             width: info.width,
             height: info.height,
             fps: info.fps,
+            receivers: runtime.receivers(&output_id),
         })),
         None => Ok(None),
     }

@@ -100,4 +100,13 @@ describe("computeReadiness", () => {
     expect(c.detail).toContain("Stream · on · stream · not sending: no active session")
     expect(c.fix).toBe("outputs")
   })
+
+  it("says who is receiving an NDI stream", () => {
+    const base = { translationsLoaded: 1, activeThemeName: "Dark", outputsConfigured: 2, outputsOnAir: 2, rundownCount: 1, listening: false }
+    const main = { name: "Main", role: "congregation" as const, kind: "display" as const, on: true }
+    const stream = { name: "Stream", role: "congregation" as const, kind: "ndi" as const, on: true }
+    expect(computeReadiness({ ...base, outputs: [main, { ...stream, receivers: 0 }] }).checks.find((x) => x.id === "outputs")?.detail).toContain("Stream · on · stream · nobody receiving yet (open the source in OBS)")
+    expect(computeReadiness({ ...base, outputs: [main, { ...stream, receivers: 1 }] }).checks.find((x) => x.id === "outputs")?.detail).toContain("Stream · on · stream · 1 receiving")
+    expect(computeReadiness({ ...base, outputs: [main, { ...stream, receivers: null }] }).checks.find((x) => x.id === "outputs")?.detail).toMatch(/Stream · on · stream$/)
+  })
 })
