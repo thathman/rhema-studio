@@ -353,6 +353,7 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10x.1 | Two services dated today, one approved. Close the open service, go Home. | A highlighted row names the approved one ("Today's service, approved") with Open; the saved list shows "· approved" on it. Open it, then Present. | Unverified |
 | 10w.4 | With a signage output whose loop has a picture whose file was deleted, go Home. | Readiness warns "<output>: 1 of n signage pictures is missing" with Open outputs; an empty loop warns "has no pictures". | Unverified |
+| 10w.5 | Two playlists on a signage output: "Sunday" (Sun 08:00–13:00, pictures A, B) and "Rest of the week" (no times, picture C). Set the clock to Sunday 10:00, then Monday 10:00. | A/B alternate on Sunday morning; C shows at other times; the switch happens within a second of the clock change. | Unverified |
 
 ### 10z. Long text as pages (MD-003)
 

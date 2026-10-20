@@ -1,3 +1,4 @@
+import { allSignageIds } from "@/lib/signage"
 import { useState } from "react"
 import {
   CopyIcon,
@@ -185,7 +186,7 @@ export function OutputCard({
       </div>
 
       <div className="flex items-center justify-between px-0.5 pb-0.5">
-        <span className="truncate text-[0.6875rem] text-muted-foreground">{stage ? "Stage display" : signage ? `Signage loop · ${output.signage?.mediaIds.length ?? 0} picture${(output.signage?.mediaIds.length ?? 0) === 1 ? "" : "s"}` : (theme?.name ?? "No theme")}</span>
+        <span className="truncate text-[0.6875rem] text-muted-foreground">{stage ? "Stage display" : signage ? `Signage loop · ${allSignageIds(output.signage).length} picture${allSignageIds(output.signage).length === 1 ? "" : "s"}${(output.signage?.playlists?.length ?? 0) > 1 ? ` · ${output.signage?.playlists?.length} playlists` : ""}` : (theme?.name ?? "No theme")}</span>
         <Switch
           checked={onAir}
           disabled={busy}

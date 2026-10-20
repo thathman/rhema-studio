@@ -18,6 +18,20 @@ export interface SignageSettings {
   seconds: number
   /** When the loop runs; absent means always. Outside the window the screen shows the theme background. */
   schedule?: SignageSchedule
+  /**
+   * Several loops with their own times (SG-002). When present, the first
+   * playlist whose schedule matches runs; one without a schedule is the
+   * fallback. `mediaIds`/`seconds`/`schedule` above mirror the first playlist
+   * for older readers.
+   */
+  playlists?: SignagePlaylist[]
+}
+
+export interface SignagePlaylist {
+  name: string
+  mediaIds: string[]
+  seconds: number
+  schedule?: SignageSchedule
 }
 
 export interface SignageSchedule {
