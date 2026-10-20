@@ -247,6 +247,13 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10k.1 | With the projector showing a verse and NDI into OBS, turn Rehearsal on. Present three other items, a quick screen, Clear, Restore. | Projector, OBS and the stage screen never change; the app's Live panel and rundown behave normally; the header reads REHEARSAL. |
 | 10k.2 | Turn Rehearsal off. | Every output shows the current content at once. |
 
+## 10l. Cues
+
+| # | Do | Expect |
+|---|---|---|
+| 10l.1 | Present → Cues → Start the service → Run (with rehearsal on and the timer paused). | Rehearsal off, Welcome on air, timer counting from zero; the steps were listed before Run. |
+| 10l.2 | Cues → End the service → Run, twice. | Screen cleared, timer paused, stage message gone; the second run changes nothing. |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -261,6 +268,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10k, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10l, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.

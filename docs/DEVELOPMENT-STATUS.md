@@ -26,7 +26,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Latest test results
 
-- Frontend: 374 vitest tests in 43 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 377 vitest tests in 44 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
 - Rust: `rhema-content` 36 tests pass; `rhema-api` 105; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
@@ -56,7 +56,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Next eligible tasks
 
-1. PT-003 cue/macro registry (#38); CV-004 variants and the font-availability warning (#35).
+1. PT-003 cues — in PR (cues-macros, #38). Next: CV-004 variants and the font-availability warning (#35).
 2. MD-002 video (#36); MD-004 lower thirds (#37) — both need a real desktop.
 3. Desktop acceptance (#31) and Windows smoke (#32) remain the release gate; owner decisions #33, #34 open.
 3. Milestone 4 OP-001 output profiles.
