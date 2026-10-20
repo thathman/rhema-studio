@@ -3,17 +3,10 @@
  * (aria-label or title), or a screen reader announces "button" and a
  * volunteer hovering gets nothing. Static scan of the studio sources.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 
-function tsxFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name)
-    if (statSync(p).isDirectory()) return tsxFiles(p)
-    return p.endsWith(".tsx") && !p.endsWith(".test.tsx") ? [p] : []
-  })
-}
+// Vite reads the sources at test time; no Node fs types needed in the app tsconfig.
+const sources = import.meta.glob(["./**/*.tsx", "../components/stage-view.tsx"], { query: "?raw", import: "default", eager: true }) as Record<string, string>
 
 /** Every `<Button … size="icon…" …>` opening tag, tolerant of `=>` inside handlers. */
 function iconButtonTags(source: string): string[] {
@@ -37,8 +30,7 @@ function iconButtonTags(source: string): string[] {
 }
 
 describe("icon-only buttons have an accessible name", () => {
-  const roots = [join(__dirname), join(__dirname, "..", "components", "stage-view.tsx")]
-  const files = roots.flatMap((r) => (r.endsWith(".tsx") ? [r] : tsxFiles(r)))
+  const files = Object.entries(sources).filter(([p]) => !p.endsWith(".test.tsx"))
 
   it("scans the studio sources", () => {
     expect(files.length).toBeGreaterThan(10)
@@ -47,10 +39,10 @@ describe("icon-only buttons have an accessible name", () => {
   it("flags none without aria-label or title", () => {
     const missing: string[] = []
     let scanned = 0
-    for (const f of files) {
-      for (const tag of iconButtonTags(readFileSync(f, "utf8"))) {
+    for (const [f, source] of files) {
+      for (const tag of iconButtonTags(source)) {
         scanned++
-        if (!/aria-label=|title=|aria-labelledby=/.test(tag)) missing.push(`${f.replace(/.*\/src\//, "src/")}: ${tag.replace(/\s+/g, " ").slice(0, 100)}`)
+        if (!/aria-label=|title=|aria-labelledby=/.test(tag)) missing.push(`${f}: ${tag.replace(/\s+/g, " ").slice(0, 100)}`)
       }
     }
     expect(scanned).toBeGreaterThan(10)
