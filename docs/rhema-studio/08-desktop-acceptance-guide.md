@@ -127,6 +127,10 @@ Enable both in Settings → Remote and note the ports there.
 | 9.4 | Delete `studio.db` while the app is running, then save. | Error toast; the rundown stays on screen; relaunch creates a fresh database. |
 | 9.5 | Restore from `.bak`: quit, copy the `.bak` over `studio.db`, launch. | Services from the backup appear. |
 
+| 9.4 | More → Library → Back up now… Save to the Desktop. Add a service, save it. More → Library → Restore from a backup… → pick the Desktop file. | Confirmation first; after restore the added service is gone, the rundown is cleared, the song list reloads; toast names the snapshot `studio.db.before-restore-<stamp>.bak`. |
+| 9.5 | Restore from a text file renamed `.db`, and from a non-Rhema SQLite file. | "Nothing was changed" with a reason; services and songs still there. |
+| 9.6 | Open a service, change something, do not save. Try Restore. | Button disabled with "save or close the open service first". |
+
 ## 10. Windows installer (when the artifact exists)
 
 | Id | Step | Expected |

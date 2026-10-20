@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { readFile, writeTextFile } from "@tauri-apps/plugin-fs"
-import type { Hymnbook, ImportMode, ImportReport, SongExport, SongWithSections } from "@/types"
+import type { ContentStatus, Hymnbook, ImportMode, ImportReport, RestoreReport, SongExport, SongWithSections } from "@/types"
 import { parseOpenLyrics } from "@/lib/openlyrics"
 
 export interface ImportOutcome {
@@ -81,4 +81,30 @@ export async function importSongsFromFiles(mode: ImportMode, hymnbooks: Hymnbook
     }
   }
   return outcome
+}
+
+// ── whole database ──────────────────────────────────────────────────────
+
+export const contentStatus = () => invoke<ContentStatus>("content_status")
+
+/** Copy the whole content database (services and songs) to a file the user picks. */
+export async function backupDatabaseToFile(): Promise<string | null> {
+  const path = await save({
+    defaultPath: `rhema-studio-backup-${new Date().toISOString().slice(0, 10)}.db`,
+    filters: [{ name: "Rhema Studio database", extensions: ["db"] }],
+  })
+  if (!path) return null
+  await invoke("content_backup", { path })
+  return path
+}
+
+/**
+ * Replace the content database with a backup the user picks. The backend
+ * verifies the file and keeps the current database as a snapshot first.
+ */
+export async function restoreDatabaseFromFile(): Promise<RestoreReport | null> {
+  const selected = await open({ multiple: false, filters: [{ name: "Rhema Studio database", extensions: ["db", "bak"] }] })
+  if (!selected) return null
+  const path = Array.isArray(selected) ? selected[0] : selected
+  return invoke<RestoreReport>("content_restore", { path })
 }

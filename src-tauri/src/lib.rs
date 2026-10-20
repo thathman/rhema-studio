@@ -152,6 +152,8 @@ pub fn run() {
             commands::content::content_delete_hymnbook,
             commands::content::content_export_songs,
             commands::content::content_import_songs,
+            commands::content::content_backup,
+            commands::content::content_restore,
         ])
         .setup(|app| {
             use tauri::Manager;
