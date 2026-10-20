@@ -16,6 +16,17 @@ export interface SignageSettings {
   mediaIds: string[]
   /** Seconds each picture stays. */
   seconds: number
+  /** When the loop runs; absent means always. Outside the window the screen shows the theme background. */
+  schedule?: SignageSchedule
+}
+
+export interface SignageSchedule {
+  /** Days of the week, 0 = Sunday … 6 = Saturday. Empty means every day. */
+  days: number[]
+  /** "HH:MM" local time, inclusive start. */
+  from: string
+  /** "HH:MM" local time, exclusive end; earlier than `from` means the window crosses midnight. */
+  to: string
 }
 
 /**
