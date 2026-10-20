@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 00:02 WAT)
+- Head: see `git log fork/main` (2026-10-21 00:12 WAT)
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -26,7 +26,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Latest test results
 
-- Frontend: 395 vitest tests in 50 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 398 vitest tests in 51 files pass (PR #83); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
 - Rust: `rhema-content` 44 tests pass; `rhema-api` 115; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
@@ -56,6 +56,6 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Next eligible tasks
 
-1. SG-002 scheduled signage: a time window (days, from, to) on the signage loop; outside it the screen shows the theme background. Pure helper + editor fields.
-2. Blocked on owner decisions: #72 sync approach, #33 bundled translations, #34 Canva relay.
-3. Desktop-gated: MD-002 video (#36), MD-004 lower thirds (#37), OP-005 OBS/NDI stability, QA-010 drill (#62), acceptance rows 1–10w (#31), Windows smoke (#32); ST-009 app identity migration at release time; PR #4 speech.
+1. CL-006 first slice (Home offers today's approved service) — in PR (#83).
+2. Non-desktop backlog after that: SG-003 QR bulletins (needs a QR encoder dependency; decide), SG-001 screen health/cache, AR-002 OBS markers (needs OBS). Blocked on owner decisions: #72 sync approach, #33 bundled translations, #34 Canva relay; PR #4 speech (ST-004).
+3. Desktop-gated: MD-002 video (#36), MD-004 lower thirds (#37), OP-005 OBS/NDI stability, QA-010 drill (#62), acceptance rows 1–10x (#31), Windows smoke (#32); ST-009 app identity migration at release time.
