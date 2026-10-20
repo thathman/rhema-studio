@@ -1,4 +1,4 @@
-import type { SectionInput, SectionKind, SongInput } from "@/types"
+import type { SectionInput, SectionKind, SongInput, SongWithSections } from "@/types"
 
 /** What an OpenLyrics file contained that Rhema could not keep. */
 export interface OpenLyricsReport {
@@ -100,4 +100,41 @@ export function parseOpenLyrics(xml: string, hymnbookIds: Record<string, string>
     },
     report: { title, ignored },
   }
+}
+
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+const NAMES: Record<SectionKind, string> = { verse: "v", chorus: "c", bridge: "b", prechorus: "p", tag: "t", ending: "e", intro: "i", other: "o" }
+
+/**
+ * A song as OpenLyrics 0.8 XML, one <verse> per section and language,
+ * blank-line slide hints as separate <lines>, the default arrangement as
+ * <verseOrder>, hymnbook numbers as <songbook>. Round-trips through
+ * `parseOpenLyrics`.
+ */
+export function toOpenLyrics(song: SongWithSections): string {
+  const counters: Partial<Record<SectionKind, number>> = {}
+  const names = song.sections.map((s) => {
+    counters[s.kind] = (counters[s.kind] ?? 0) + 1
+    return `${NAMES[s.kind]}${counters[s.kind]}`
+  })
+  const order = (song.arrangements.find((a) => a.is_default) ?? song.arrangements[0])?.sequence
+    .map((id) => names[song.sections.findIndex((s) => s.id === id)])
+    .filter(Boolean)
+    .join(" ")
+  const verses = song.sections.flatMap((s, i) =>
+    Object.entries(s.texts).map(([lang, body]) => {
+      const blocks = body.replace(/\r\n?/g, "\n").split(/\n\s*\n/).map((b) => `      <lines>${b.split("\n").map(esc).join("<br/>")}</lines>`)
+      return `    <verse name="${names[i]}" lang="${esc(lang)}">\n${blocks.join("\n")}\n    </verse>`
+    })
+  )
+  const props = [
+    `    <titles><title>${esc(song.song.title)}</title></titles>`,
+    song.song.authors ? `    <authors>${song.song.authors.split(";").map((a) => a.trim()).filter(Boolean).map((a) => `<author>${esc(a)}</author>`).join("")}</authors>` : "",
+    song.song.copyright ? `    <copyright>${esc(song.song.copyright)}</copyright>` : "",
+    song.song.ccli_number ? `    <ccliNo>${esc(song.song.ccli_number)}</ccliNo>` : "",
+    song.numbers.length ? `    <songbooks>${song.numbers.map((n) => `<songbook name="${esc(n.hymnbook_code)}" entry="${esc(n.number)}"/>`).join("")}</songbooks>` : "",
+    order ? `    <verseOrder>${esc(order)}</verseOrder>` : "",
+    song.song.notes ? `    <comments><comment>${esc(song.song.notes)}</comment></comments>` : "",
+  ].filter(Boolean)
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<song xmlns="http://openlyrics.info/namespace/2009/song" version="0.8" createdIn="Rhema Studio">\n  <properties>\n${props.join("\n")}\n  </properties>\n  <lyrics>\n${verses.join("\n")}\n  </lyrics>\n</song>\n`
 }

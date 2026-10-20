@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { readFile, writeTextFile } from "@tauri-apps/plugin-fs"
 import type { ContentStatus, Hymnbook, ImportMode, ImportReport, RestoreReport, SongExport, SongWithSections } from "@/types"
-import { parseOpenLyrics } from "@/lib/openlyrics"
+import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 
 export interface ImportOutcome {
   /** Files that were read. */
@@ -24,6 +24,17 @@ export async function exportSongsToFile(ids?: string[]): Promise<string | null> 
   })
   if (!path) return null
   await writeTextFile(path, JSON.stringify(data, null, 2))
+  return path
+}
+
+/** Save one song as an OpenLyrics .xml (for OpenLP and others). Null when cancelled. */
+export async function exportOpenLyricsToFile(song: SongWithSections): Promise<string | null> {
+  const path = await save({
+    defaultPath: `${song.song.title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "song"}.xml`,
+    filters: [{ name: "OpenLyrics", extensions: ["xml"] }],
+  })
+  if (!path) return null
+  await writeTextFile(path, toOpenLyrics(song))
   return path
 }
 

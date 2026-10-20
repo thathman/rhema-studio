@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, DownloadIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { exportOpenLyricsToFile } from "@/lib/song-files"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -140,6 +141,16 @@ function EditorDialog({
   }
 
   const set = (patch: Partial<SongForm>) => setForm((f) => ({ ...f, ...patch }))
+  const exportOne = async () => {
+    const song = songId ? useSongStore.getState().songs[songId] : undefined
+    if (!song) return
+    try {
+      const path = await exportOpenLyricsToFile(song)
+      if (path) toast.success(`Saved to ${path}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) requestClose() }}>
@@ -151,6 +162,11 @@ function EditorDialog({
               <DialogDescription>Words, sections and the order they are sung in. Nothing here goes live.</DialogDescription>
             </div>
             <div className="flex items-center gap-2">
+              {songId && (
+                <Button variant="ghost" size="sm" disabled={dirty || loading} title={dirty ? "Save first; the file is made from the saved song" : "Save this song as an OpenLyrics .xml for OpenLP"} onClick={() => void exportOne()}>
+                  <DownloadIcon /> OpenLyrics…
+                </Button>
+              )}
               {songId && (
                 <Popover>
                   <PopoverTrigger asChild>
