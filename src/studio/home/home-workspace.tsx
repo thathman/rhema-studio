@@ -10,7 +10,8 @@ import { useServiceStore } from "@/stores/service-store"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
 import { computeReadiness, type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { useSongStore } from "@/stores/song-store"
-import { isSongItem } from "@/types"
+import { isImageItem, isSongItem } from "@/types"
+import { useMediaStore } from "@/stores/media-store"
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -44,6 +45,14 @@ export function HomeWorkspace() {
   const songIds = [...new Set(items.filter(isSongItem).map((i) => i.song.song_id))]
   const unknownLicenceSongs = songIds.filter((id) => songs[id]?.song.licence === "unknown").length
   const missingSongs = songIds.filter((id) => missing.includes(id)).length
+  const mediaAssets = useMediaStore((s) => s.assets)
+  const mediaLoaded = useMediaStore((s) => s.assets.length > 0 || s.loading)
+  const mediaIds = [...new Set(items.filter(isImageItem).map((i) => i.image.media_id))]
+  const missingMedia = mediaIds.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length
+  useEffect(() => {
+    if (mediaIds.length > 0 && !mediaLoaded) void useMediaStore.getState().list()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per set of ids
+  }, [mediaIds.join(","), mediaLoaded])
   // Home is the readiness check: make sure every song in the service has been looked up.
   useEffect(() => {
     for (const id of songIds) if (!songs[id] && !missing.includes(id)) void useSongStore.getState().load(id).catch(() => {})
@@ -58,6 +67,7 @@ export function HomeWorkspace() {
     listening,
     unknownLicenceSongs,
     missingSongs,
+    missingMedia: mediaLoaded || mediaIds.length === 0 ? missingMedia : 0,
   })
 
   const fix = (f: ReadinessFix) => {

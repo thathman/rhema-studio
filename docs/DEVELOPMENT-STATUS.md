@@ -22,7 +22,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Latest test results
 
-- Frontend: 351 vitest tests in 33 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 352 vitest tests in 33 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
 - Rust: `rhema-content` 31 tests pass; `rhema-api` 105; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
@@ -49,7 +49,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. MD-001/MD-002 pictures — in PR (media-assets).
-2. MD-003 picture as a background behind text (song/verse over a picture), MD-006 readiness for missing media before service, MD-002 video.
+1. MD-001/MD-002 pictures (media-assets, #16) and MD-006 picture readiness (media-readiness) — in PR.
+2. MD-003 picture as a background behind text (song/verse over a picture); MD-002 video.
 3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.
 3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.
