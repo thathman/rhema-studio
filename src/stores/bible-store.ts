@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { load } from "@tauri-apps/plugin-store"
 import { invoke } from "@tauri-apps/api/core"
-import type { Translation, Book, Verse, CrossReference } from "@/types"
+import type { Translation, Book, Verse, CrossReference, SongQueueItem } from "@/types"
 import type { SemanticSearchResult } from "@/types/detection"
 
 interface PendingNavigation {
@@ -16,6 +16,12 @@ interface PendingNavigation {
   present?: boolean
 }
 
+/** What Preview shows when a song is selected: the item and the slide step. */
+export interface SelectedSlide {
+  item: SongQueueItem
+  index: number
+}
+
 interface BibleState {
   translations: Translation[]
   activeTranslationId: number
@@ -24,6 +30,8 @@ interface BibleState {
   searchResults: Verse[]
   semanticResults: SemanticSearchResult[]
   selectedVerse: Verse | null
+  /** A song slide in Preview. Set by previewing a song; cleared by selecting a verse. */
+  selectedSlide: SelectedSlide | null
   currentChapter: Verse[]
   crossReferences: CrossReference[]
   pendingNavigation: PendingNavigation | null
@@ -51,6 +59,7 @@ interface BibleState {
   setSearchResults: (results: Verse[]) => void
   setSemanticResults: (results: SemanticSearchResult[]) => void
   selectVerse: (verse: Verse | null) => void
+  selectSlide: (slide: SelectedSlide | null) => void
   setCurrentChapter: (verses: Verse[]) => void
   setCrossReferences: (refs: CrossReference[]) => void
   setPendingNavigation: (nav: PendingNavigation | null) => void
@@ -66,6 +75,7 @@ export const useBibleStore = create<BibleState>((set) => ({
   searchResults: [],
   semanticResults: [],
   selectedVerse: null,
+  selectedSlide: null,
   currentChapter: [],
   crossReferences: [],
   pendingNavigation: null,
@@ -92,7 +102,8 @@ export const useBibleStore = create<BibleState>((set) => ({
   setBooks: (books) => set({ books }),
   setSearchResults: (searchResults) => set({ searchResults }),
   setSemanticResults: (semanticResults) => set({ semanticResults }),
-  selectVerse: (selectedVerse) => set({ selectedVerse }),
+  selectVerse: (selectedVerse) => set({ selectedVerse, selectedSlide: null }),
+  selectSlide: (selectedSlide) => set({ selectedSlide }),
   setCurrentChapter: (currentChapter) => set({ currentChapter }),
   setCrossReferences: (crossReferences) => set({ crossReferences }),
   setPendingNavigation: (pendingNavigation) => set({ pendingNavigation }),

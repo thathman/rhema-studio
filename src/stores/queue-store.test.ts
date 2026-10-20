@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { useQueueStore } from "./queue-store"
-import type { QueueItem } from "@/types"
+import type { VerseQueueItem } from "@/types"
 import type { Verse } from "@/types"
 
 function makeVerse(overrides: Partial<Verse> = {}): Verse {
@@ -17,7 +17,7 @@ function makeVerse(overrides: Partial<Verse> = {}): Verse {
   }
 }
 
-function makeItem(overrides: Partial<QueueItem> = {}, verse: Partial<Verse> = {}): QueueItem {
+function makeItem(overrides: Partial<VerseQueueItem> = {}, verse: Partial<Verse> = {}): VerseQueueItem {
   return {
     id: "item-1",
     verse: makeVerse(verse),
@@ -38,7 +38,7 @@ describe("addItem", () => {
     useQueueStore.getState().addItem(makeItem({ id: "a" }))
     useQueueStore.getState().addItem(makeItem({ id: "b" }, { verse: 17 }))
 
-    const items = useQueueStore.getState().items
+    const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items.map((i) => i.id)).toEqual(["b", "a"])
   })
 
@@ -46,7 +46,7 @@ describe("addItem", () => {
     useQueueStore.getState().addItem(makeItem({ id: "a" }))
     useQueueStore.getState().addItem(makeItem({ id: "b" }))
 
-    const items = useQueueStore.getState().items
+    const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items).toHaveLength(1)
     expect(items[0].id).toBe("a")
   })
@@ -57,7 +57,7 @@ describe("addItem", () => {
       .getState()
       .addItem(makeItem({ id: "b", added_at: 99 }, { text: "For God so loved the world" }))
 
-    const items = useQueueStore.getState().items
+    const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items).toHaveLength(1)
     expect(items[0].id).toBe("a")
     expect(items[0].added_at).toBe(0)
@@ -68,7 +68,7 @@ describe("addItem", () => {
     useQueueStore.getState().addItem(makeItem({ id: "a" }, { text: "original text" }))
     useQueueStore.getState().addItem(makeItem({ id: "b" }, { text: "different text" }))
 
-    expect(useQueueStore.getState().items[0].verse.text).toBe("original text")
+    expect((useQueueStore.getState().items[0] as VerseQueueItem).verse.text).toBe("original text")
   })
 })
 
@@ -77,7 +77,7 @@ describe("backfillText", () => {
     useQueueStore.getState().addItem(makeItem({ id: "a" }, { text: "" }))
     useQueueStore.getState().backfillText("a", "For God so loved the world")
 
-    expect(useQueueStore.getState().items[0].verse.text).toBe(
+    expect((useQueueStore.getState().items[0] as VerseQueueItem).verse.text).toBe(
       "For God so loved the world",
     )
   })
@@ -86,7 +86,7 @@ describe("backfillText", () => {
     useQueueStore.getState().addItem(makeItem({ id: "a" }, { text: "original text" }))
     useQueueStore.getState().backfillText("a", "different text")
 
-    expect(useQueueStore.getState().items[0].verse.text).toBe("original text")
+    expect((useQueueStore.getState().items[0] as VerseQueueItem).verse.text).toBe("original text")
   })
 
   it("ignores unknown ids and empty text", () => {
@@ -94,6 +94,6 @@ describe("backfillText", () => {
     useQueueStore.getState().backfillText("missing", "text")
     useQueueStore.getState().backfillText("a", "")
 
-    expect(useQueueStore.getState().items[0].verse.text).toBe("")
+    expect((useQueueStore.getState().items[0] as VerseQueueItem).verse.text).toBe("")
   })
 })

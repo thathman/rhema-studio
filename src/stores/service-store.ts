@@ -8,9 +8,11 @@ import type {
   ProgramItem,
   ProgramWithItems,
   QueueItem,
+  SongItemPayload,
   Translation,
   Verse,
 } from "@/types"
+import { isVerseItem } from "@/types"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
@@ -75,20 +77,55 @@ export function toItemInputs(
   translationOf: (id: number) => string | null = () => null,
   active: ActiveTranslations = { primary: null, secondary: null }
 ): ItemInput[] {
-  return items.map((i) => ({
-    id: i.id,
-    kind: "verse",
-    reference: i.reference,
-    book_number: i.verse.book_number,
-    chapter: i.verse.chapter,
-    verse: i.verse.verse,
-    translation: i.translation === undefined ? translationOf(i.verse.translation_id) : i.translation,
-    secondary_translation: i.secondary_translation === undefined ? active.secondary : i.secondary_translation,
-    notes: i.notes ?? null,
-  }))
+  return items.map((i): ItemInput =>
+    isVerseItem(i)
+      ? {
+          id: i.id,
+          kind: "verse",
+          reference: i.reference,
+          book_number: i.verse.book_number,
+          chapter: i.verse.chapter,
+          verse: i.verse.verse,
+          translation: i.translation === undefined ? translationOf(i.verse.translation_id) : i.translation,
+          secondary_translation: i.secondary_translation === undefined ? active.secondary : i.secondary_translation,
+          notes: i.notes ?? null,
+        }
+      : {
+          id: i.id,
+          kind: "song",
+          reference: i.song.title,
+          book_number: null,
+          chapter: null,
+          verse: null,
+          translation: null,
+          secondary_translation: null,
+          notes: i.notes ?? null,
+          payload: JSON.stringify({
+            song_id: i.song.song_id,
+            arrangement_id: i.song.arrangement_id,
+            languages: i.song.languages,
+          } satisfies SongItemPayload),
+        }
+  )
 }
 
-function isVerseItem(it: ProgramItem): boolean {
+/** The song payload of a stored item, or null when it is not well-formed. */
+export function parseSongPayload(raw: string | null | undefined): SongItemPayload | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as Partial<SongItemPayload>
+    if (typeof p.song_id !== "string" || !p.song_id) return null
+    return {
+      song_id: p.song_id,
+      arrangement_id: typeof p.arrangement_id === "string" ? p.arrangement_id : null,
+      languages: Array.isArray(p.languages) ? p.languages.filter((l): l is string => typeof l === "string") : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+function isStoredVerse(it: ProgramItem): boolean {
   return (
     it.kind === "verse" &&
     typeof it.book_number === "number" && it.book_number > 0 &&
@@ -117,7 +154,25 @@ export function toQueueItems(
   const unsupported: ProgramItem[] = []
   const missing = new Set<string>()
   for (const it of data.items) {
-    if (!(SUPPORTED_ITEM_KINDS as readonly string[]).includes(it.kind) || !isVerseItem(it)) {
+    if (it.kind === "song") {
+      const payload = parseSongPayload(it.payload)
+      if (!payload) {
+        unsupported.push(it)
+        continue
+      }
+      items.push({
+        id: it.id,
+        kind: "song",
+        song: { song_id: payload.song_id, title: it.reference, arrangement_id: payload.arrangement_id ?? null, languages: payload.languages ?? [] },
+        reference: it.reference,
+        confidence: 1,
+        source: "manual",
+        added_at: Date.now(),
+        notes: it.notes,
+      })
+      continue
+    }
+    if (!(SUPPORTED_ITEM_KINDS as readonly string[]).includes(it.kind) || !isStoredVerse(it)) {
       unsupported.push(it)
       continue
     }
@@ -152,7 +207,11 @@ export function toQueueItems(
 /** What a save persists; verse text and timestamps are not part of it. */
 export function rundownSignature(items: QueueItem[]): string {
   return items
-    .map((i) => `${i.id}|${i.kind ?? "verse"}|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`)
+    .map((i) =>
+      isVerseItem(i)
+        ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
+        : `${i.id}|song|${i.song.title}|${i.song.song_id}|${i.song.arrangement_id ?? ""}|${i.song.languages.join(",")}|${i.notes ?? ""}`
+    )
     .join("\n")
 }
 
@@ -265,7 +324,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       // Fill in verse text so preview works before anything is presented.
       // Text is not part of the signature, so this never marks dirty.
       await Promise.all(
-        items.map(async (item) => {
+        items.filter(isVerseItem).map(async (item) => {
           try {
             const v = await invoke<Verse | null>("get_verse", {
               translationId: item.verse.translation_id,

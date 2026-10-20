@@ -8,9 +8,9 @@ import {
   GripVerticalIcon,
 } from "lucide-react"
 import { useQueueStore } from "@/stores"
-import { presentVerse } from "@/hooks/use-broadcast"
+import { presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { bibleActions } from "@/hooks/use-bible"
-import type { QueueItem } from "@/types"
+import { isSongItem, type QueueItem } from "@/types"
 
 function QueueItemRow({
   item,
@@ -25,6 +25,10 @@ function QueueItemRow({
 }) {
   const handlePresent = () => {
     useQueueStore.getState().setActive(index)
+    if (isSongItem(item)) {
+      void presentSlide(item, 0)
+      return
+    }
     // Navigate the Bible panel to the presented verse, as detections do
     bibleActions.navigateToVerse(
       item.verse.book_number,

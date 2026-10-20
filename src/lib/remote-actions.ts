@@ -1,31 +1,40 @@
-import { cancelPendingPresents, presentVerse } from "@/hooks/use-broadcast"
+import { cancelPendingPresents, presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { stepVerse } from "@/hooks/use-bible"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { isSongItem, isVerseItem } from "@/types"
 
 /**
- * Find the queue index of the verse currently on the live output.
- * Returns null when the live verse came from somewhere other than the queue.
+ * Find the queue index of the item currently on the live output.
+ * Returns null when the live content came from somewhere other than the queue.
  */
 function findLiveQueueIndex(): number | null {
-  const { liveVerse } = useBroadcastStore.getState()
+  const { liveVerse, liveSlide } = useBroadcastStore.getState()
   if (!liveVerse) return null
-
-  const index = useQueueStore
-    .getState()
-    .items.findIndex((item) => item.reference === liveVerse.reference)
+  const items = useQueueStore.getState().items
+  const index = liveSlide
+    ? items.findIndex((item) => item.id === liveSlide.itemId)
+    : items.findIndex((item) => isVerseItem(item) && item.reference === liveVerse.reference)
   return index >= 0 ? index : null
 }
 
 /**
- * Present a rundown item in its saved translations and put the output on air
- * in the same update. Next/Previous/double-click/OSC/HTTP all come here.
+ * Present a rundown item and put the output on air in the same update.
+ * Verses go live in their saved translations; songs at `slide` (default the
+ * first, "last" for stepping backwards into a song).
+ * Next/Previous/double-click/OSC/HTTP all come here.
  */
-export async function presentQueueItem(index: number): Promise<void> {
+export async function presentQueueItem(index: number, slide: number | "last" = 0): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
   useQueueStore.getState().setActive(index)
+  if (isSongItem(item)) {
+    await presentSlide(item, slide, { goLive: true }).catch((e) =>
+      console.warn("[remote-actions] presentQueueItem (song) failed:", e),
+    )
+    return
+  }
   // Navigate the Bible panel to the presented verse, as detections do
   useBibleStore.getState().setPendingNavigation({
     bookNumber: item.verse.book_number,
@@ -37,17 +46,35 @@ export async function presentQueueItem(index: number): Promise<void> {
   )
 }
 
+/**
+ * Next/Previous step through a song's slides first, then on to the next
+ * item; stepping back into a song lands on its last slide.
+ */
 function stepQueue(offset: number): void {
   const { items, activeIndex } = useQueueStore.getState()
   if (items.length === 0) return
 
   const current = activeIndex ?? findLiveQueueIndex()
+  const live = useBroadcastStore.getState().liveSlide
+  if (current !== null) {
+    const item = items[current]
+    if (item && isSongItem(item) && live && live.itemId === item.id) {
+      const next = live.index + offset
+      if (next >= 0 && next < live.total) {
+        void presentQueueItem(current, next)
+        return
+      }
+    }
+  }
   const target =
     current === null
       ? 0
       : Math.min(Math.max(current + offset, 0), items.length - 1)
-
-  void presentQueueItem(target)
+  const atEdge = target === current
+  const song = items[target] && isSongItem(items[target])
+  // At the edge a song stays on its slide (re-presents it, e.g. after Clear);
+  // a verse re-presents too. Entering a song from below starts at its last slide.
+  void presentQueueItem(target, song ? (atEdge ? (live?.index ?? 0) : offset < 0 ? "last" : 0) : 0)
 }
 
 /**
@@ -67,16 +94,26 @@ export const remoteActions = {
    */
   sendToLive: () => {
     const bible = useBibleStore.getState()
+    const queue = useQueueStore.getState()
+    if (bible.selectedSlide) {
+      const { item, index } = bible.selectedSlide
+      const idx = queue.items.findIndex((i) => i.id === item.id)
+      if (idx !== -1) queue.setActive(idx)
+      void presentSlide(item, index, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
+      return
+    }
     const selectedVerse = bible.selectedVerse
     if (!selectedVerse) return
-    const queue = useQueueStore.getState()
     const idx = queue.findDuplicate(selectedVerse.book_number, selectedVerse.chapter, selectedVerse.verse)
     const rundownItem = idx === -1 ? null : queue.items[idx]
     if (idx !== -1) queue.setActive(idx)
     const previewed = bible.translations.find((t) => t.id === selectedVerse.translation_id)?.abbreviation ?? null
     void presentVerse(selectedVerse, {
       goLive: true,
-      item: { translation: previewed, secondary_translation: rundownItem?.secondary_translation ?? null },
+      item: {
+        translation: previewed,
+        secondary_translation: rundownItem && isVerseItem(rundownItem) ? (rundownItem.secondary_translation ?? null) : null,
+      },
     }).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
   },
 

@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { QueueItem } from "@/types"
+import { isVerseItem, type QueueItem } from "@/types"
 
 interface QueueState {
   items: QueueItem[]
@@ -31,8 +31,11 @@ export const useQueueStore = create<QueueState>((set, get) => ({
 
   addItem: (item) =>
     set((state) => {
+      // Songs may repeat in a service (opening and closing hymn); verses dedupe.
+      if (!isVerseItem(item)) return { items: [item, ...state.items] }
       const idx = state.items.findIndex(
         (i) =>
+          isVerseItem(i) &&
           i.verse.book_number === item.verse.book_number &&
           i.verse.chapter === item.verse.chapter &&
           i.verse.verse === item.verse.verse,
@@ -41,7 +44,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
         // Duplicate: don't re-add, but backfill text if the existing item
         // was queued without it (detections can arrive with empty text).
         const existing = state.items[idx]
-        if (!existing.verse.text && item.verse.text) {
+        if (isVerseItem(existing) && !existing.verse.text && item.verse.text) {
           const items = [...state.items]
           items[idx] = {
             ...existing,
@@ -74,6 +77,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   findDuplicate: (bookNumber, chapter, verse) =>
     get().items.findIndex(
       (i) =>
+        isVerseItem(i) &&
         i.verse.book_number === bookNumber &&
         i.verse.chapter === chapter &&
         i.verse.verse === verse,
@@ -81,12 +85,10 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   backfillText: (id, text) =>
     set((state) => {
       const idx = state.items.findIndex((i) => i.id === id)
-      if (idx === -1 || state.items[idx].verse.text || !text) return state
+      const target = state.items[idx]
+      if (!target || !isVerseItem(target) || target.verse.text || !text) return state
       const items = [...state.items]
-      items[idx] = {
-        ...items[idx],
-        verse: { ...items[idx].verse, text },
-      }
+      items[idx] = { ...target, verse: { ...target.verse, text } }
       return { items }
     }),
   updateEarlyRef: (bookNumber, chapter, verse, reference, verseText) => {
@@ -95,6 +97,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       // First try exact match: same book + same chapter
       let idx = state.items.findIndex(
         (i) =>
+          isVerseItem(i) &&
           i.is_chapter_only &&
           i.verse.book_number === bookNumber &&
           i.verse.chapter === chapter,
@@ -103,14 +106,16 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       if (idx === -1) {
         idx = state.items.findIndex(
           (i) =>
+            isVerseItem(i) &&
             i.is_chapter_only &&
             i.verse.book_number === bookNumber,
         )
       }
-      if (idx === -1) return state
+      const current = state.items[idx]
+      if (!current || !isVerseItem(current)) return state
       found = true
       const items = [...state.items]
-      const item = { ...items[idx] }
+      const item = { ...current }
       item.verse = { ...item.verse, verse, text: verseText }
       item.reference = reference
       item.is_chapter_only = false

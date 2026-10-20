@@ -5,7 +5,8 @@ export type {
   TranscriptEventPayload,
 } from "./transcript"
 export type { Translation, Book, Verse, CrossReference } from "./bible"
-export type { QueueItem } from "./queue"
+export type { QueueItem, VerseQueueItem, SongQueueItem, SongQueueRef } from "./queue"
+export { isVerseItem, isSongItem } from "./queue"
 export type { DetectionResult, DetectionStatus, ReadingAdvance, SemanticSearchResult } from "./detection"
 export type { BroadcastTheme, VerseRenderData, VerseSegment, RenderOptions } from "./broadcast"
 export type {
@@ -24,4 +25,8 @@ export type {
   NdiSessionInfo,
   NdiStartRequest,
 } from "./ndi"
-export type { Program, ProgramItem, ProgramItemKind, ItemInput, ProgramWithItems, ContentCommandError, ContentStatus } from "./content"
+export type {
+  Program, ProgramItem, ProgramItemKind, ItemInput, ProgramWithItems, ContentCommandError, ContentStatus,
+  Song, SongSection, SongSummary, SongWithSections, Arrangement, Hymnbook, HymnNumber, SongInput, SectionInput,
+  ArrangementInput, HymnbookInput, HymnNumberInput, SongExport, ImportMode, ImportReport, SongItemPayload, SectionKind, Licence,
+} from "./content"

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { isVerseItem } from "@/types"
 import { invoke } from "@tauri-apps/api/core"
 // Using native overflow-y-auto instead of Radix ScrollArea for reliable scrolling in flex layouts
 import { Button } from "@/components/ui/button"
@@ -136,7 +137,7 @@ export function SearchPanel() {
   const queueItems = useQueueStore((s) => s.items)
   const queuedVerseKeys = useMemo(() => {
     return new Set(
-      queueItems.map((item) => `${item.verse.book_number}:${item.verse.chapter}:${item.verse.verse}`)
+      queueItems.filter(isVerseItem).map((item) => `${item.verse.book_number}:${item.verse.chapter}:${item.verse.verse}`)
     )
   }, [queueItems])
 
