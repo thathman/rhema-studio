@@ -298,6 +298,7 @@ report), but launching it cannot.
 | 10p.1 | Save a service, press Approve. Home. | Approve shows "Approved" (disabled); Home readiness: "Service approved as saved". | Unverified |
 | 10p.2 | Change an item, save. Home, then History. | Prepare: "Approve again"; Home: "Service changed since it was approved" (warn); History lists the approved version with "· approved". | Unverified |
 | 10p.3 | Save 55 more times (or script it), then open History. | The approved version is still listed; the oldest unapproved ones are gone. | Unverified |
+| 10p.4 | Add a picture item, delete its file from the media folder on disk, press Approve. | "Not approved … missing from the media folder: <name>"; the service stays unapproved until the file is back or the item removed. | Unverified |
 
 ### 10q. Operator name on audit rows (CL-001)
 
