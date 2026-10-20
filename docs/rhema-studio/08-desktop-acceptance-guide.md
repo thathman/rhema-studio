@@ -271,3 +271,10 @@ Not verified by automation (needs the checklist above): every interactive step i
 sections 1–10l, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.
+
+### 10m. One language per output (OP-003)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10m.1 | Two congregation outputs; set one to "First language only" and the other to "Second language only" (More → Outputs → edit). Go live with a verse that has a second translation, then a bilingual song. | The first output shows only English, the second only Yoruba, same passage and slide; the operator preview still shows both. | Unverified |
+| 10m.2 | Go live with a verse that has no second translation on the "Second language only" output. | The verse is shown in its first language; the output never goes blank. | Unverified |
