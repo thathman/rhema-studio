@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{ContentDb, ContentError, ImportMode, ItemInput, MediaInput, ProgramWithItems, Result, SongExport};
+use std::collections::HashSet;
 
 pub const PACKAGE_VERSION: u32 = 1;
 
@@ -54,6 +55,14 @@ pub struct PackageReport {
     pub songs_skipped: usize,
     pub media_added: usize,
     pub media_reused: usize,
+}
+
+fn media_input(m: &PackagedMedia, bytes: &[u8]) -> Result<MediaInput> {
+    Ok(MediaInput {
+        kind: m.kind.clone(), name: m.name.clone(), file: m.file.clone(), hash: m.hash.clone(),
+        size: i64::try_from(bytes.len()).map_err(|_| ContentError::Invalid("picture too large".into()))?, mime: m.mime.clone(),
+        width: m.width, height: m.height, duration_ms: m.duration_ms, source: "package".into(), source_ref: String::new(), original_path: String::new(),
+    })
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -132,16 +141,37 @@ impl ContentDb {
             return Err(ContentError::Invalid("the file is damaged (checksum does not match)".into()));
         }
         let payload: PackagePayload = serde_json::from_str(&pkg.payload).map_err(|e| ContentError::Invalid(format!("unreadable package: {e}")))?;
-        // Verify every picture before touching anything.
+        // Every check that can fail runs here, before anything is written:
+        // a tampered file that passes its own checksum must still change nothing.
+        crate::validate_items(&payload.items)?;
+        let packaged_songs: HashSet<&str> = payload.songs.songs.iter().map(|s| s.song.id.as_str()).collect();
+        let packaged_media: HashSet<&str> = payload.media.iter().map(|m| m.id.as_str()).collect();
+        for (i, item) in payload.items.iter().enumerate() {
+            if let Some(id) = payload_ids(item.payload.as_deref(), "song_id") {
+                if !packaged_songs.contains(id.as_str()) {
+                    return Err(ContentError::Invalid(format!("item {}: its song is not in the file", i + 1)));
+                }
+            }
+            for key in ["media_id", "background_media_id"] {
+                if let Some(id) = payload_ids(item.payload.as_deref(), key) {
+                    if !packaged_media.contains(id.as_str()) {
+                        return Err(ContentError::Invalid(format!("item {}: its picture is not in the file", i + 1)));
+                    }
+                }
+            }
+        }
         let mut decoded = Vec::with_capacity(payload.media.len());
         for m in &payload.media {
             let bytes = B64.decode(&m.data).map_err(|_| ContentError::Invalid(format!("picture \"{}\" is damaged", m.name)))?;
             if sha256_hex(&bytes) != m.hash {
                 return Err(ContentError::Invalid(format!("picture \"{}\" is damaged (hash does not match)", m.name)));
             }
-            if !m.file.starts_with(&m.hash) || m.file.contains('/') || m.file.contains('\\') || m.file.contains("..") {
+            let ext = m.file.strip_prefix(m.hash.as_str()).and_then(|rest| rest.strip_prefix('.'));
+            let ext_ok = ext.is_some_and(|e| (1..=8).contains(&e.len()) && e.bytes().all(|b| b.is_ascii_alphanumeric()));
+            if m.hash.len() != 64 || !m.hash.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) || !ext_ok {
                 return Err(ContentError::Invalid(format!("picture \"{}\" has an unexpected file name", m.name)));
             }
+            crate::validate_media(&media_input(m, &bytes)?)?;
             decoded.push(bytes);
         }
         let songs = self.import_songs(&payload.songs, ImportMode::Skip)?;
@@ -162,20 +192,22 @@ impl ContentDb {
         let mut media_map = HashMap::new();
         let (mut media_added, mut media_reused) = (0, 0);
         for (m, bytes) in payload.media.iter().zip(decoded) {
+            std::fs::create_dir_all(media_dir).map_err(|e| ContentError::Invalid(e.to_string()))?;
             let id = if let Some(existing) = self.find_media_by_hash(&m.hash)? {
                 media_reused += 1;
+                // Same picture, but the file may have gone from this computer: the package has the bytes.
+                let dest = media_dir.join(&existing.file);
+                if !dest.exists() {
+                    std::fs::write(&dest, &bytes).map_err(|e| ContentError::Invalid(format!("could not save picture \"{}\": {e}", m.name)))?;
+                }
                 existing.id
             } else {
-                std::fs::create_dir_all(media_dir).map_err(|e| ContentError::Invalid(e.to_string()))?;
                 let dest = media_dir.join(&m.file);
                 if !dest.exists() {
                     std::fs::write(&dest, &bytes).map_err(|e| ContentError::Invalid(format!("could not save picture \"{}\": {e}", m.name)))?;
                 }
                 media_added += 1;
-                self.register_media(&MediaInput {
-                    kind: m.kind.clone(), name: m.name.clone(), file: m.file.clone(), hash: m.hash.clone(), size: i64::try_from(bytes.len()).map_err(|_| ContentError::Invalid("picture too large".into()))?, mime: m.mime.clone(),
-                    width: m.width, height: m.height, duration_ms: m.duration_ms, source: "package".into(), source_ref: String::new(), original_path: String::new(),
-                })?.id
+                self.register_media(&media_input(m, &bytes)?)?.id
             };
             media_map.insert(m.id.clone(), id);
         }
@@ -193,7 +225,14 @@ impl ContentDb {
             })
             .collect();
         let program = self.create_program(&payload.title, payload.service_date.as_deref())?;
-        let program = self.replace_items(&program.id, program.revision, &items)?;
+        let program = match self.replace_items(&program.id, program.revision, &items) {
+            Ok(p) => p,
+            Err(e) => {
+                // Never leave an empty service behind.
+                let _ = self.delete_program(&program.id, program.revision);
+                return Err(e);
+            }
+        };
         Ok(PackageReport { program, songs_added: songs.added, songs_skipped: songs.skipped, media_added, media_reused })
     }
 }
@@ -286,5 +325,66 @@ mod tests {
         assert!(matches!(db.import_service_package(&bad_pic, &media), Err(ContentError::Invalid(m)) if m.contains("damaged")));
         assert_eq!(db.list_programs().unwrap().len(), 1);
         assert_eq!(db.list_media().unwrap().len(), 0);
+    }
+
+    /// A file whose checksum is valid but whose content breaks the rules must change nothing at all.
+    #[test]
+    fn a_consistent_but_wrong_package_changes_nothing() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let media = temp_dir("wrong");
+        let s = db.create_song(&song()).unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        db.replace_items(&p.id, p.revision, &[ItemInput { kind: "song".into(), reference: "Amazing Grace".into(), payload: Some(serde_json::json!({ "song_id": s.song.id, "arrangement_id": s.arrangements[0].id, "languages": ["en"] }).to_string()), ..Default::default() }]).unwrap();
+        let good = db.export_service_package(&p.id, &media).unwrap();
+        let seal = |payload: &PackagePayload| {
+            let s = serde_json::to_string(payload).unwrap();
+            ServicePackage { version: 1, sha256: sha256_hex(s.as_bytes()), payload: s }
+        };
+        let base: PackagePayload = serde_json::from_str(&good.payload).unwrap();
+        let bytes = b"png bytes";
+        let hash = sha256_hex(bytes);
+        let pic = |file: String, kind: &str, mime: &str| PackagedMedia { id: "pm".into(), kind: kind.into(), name: "x.png".into(), file, hash: hash.clone(), mime: mime.into(), width: None, height: None, duration_ms: None, data: B64.encode(bytes) };
+
+        let church = ContentDb::open_in_memory().unwrap();
+        let church_media = temp_dir("wrong-church");
+        let snapshot = |db: &ContentDb| (db.list_programs().unwrap().len(), db.list_songs(None, 50).unwrap().len(), db.list_media().unwrap().len(), std::fs::read_dir(&church_media).unwrap().count());
+        let before = snapshot(&church);
+
+        // Bad media kind, mime, and file names.
+        for (file, kind, mime) in [
+            (format!("{hash}.png"), "picture", "image/png"),
+            (format!("{hash}.png"), "image", "png"),
+            (hash.clone(), "image", "image/png"),
+            (format!("{hash}\u{0}.png"), "image", "image/png"),
+            (format!("{hash}.png:stream"), "image", "image/png"),
+            (format!("{hash}.{}", "x".repeat(9)), "image", "image/png"),
+        ] {
+            let mut pl = base.clone();
+            pl.media.push(pic(file, kind, mime));
+            assert!(matches!(church.import_service_package(&seal(&pl), &church_media), Err(ContentError::Invalid(_))));
+            assert_eq!(snapshot(&church), before);
+        }
+        // An item whose song or picture is not in the file; an item of an unknown kind.
+        let mut pl = base.clone();
+        pl.items[0].payload = Some(serde_json::json!({ "song_id": "not-in-file", "arrangement_id": "a", "languages": ["en"] }).to_string());
+        assert!(matches!(church.import_service_package(&seal(&pl), &church_media), Err(ContentError::Invalid(m)) if m.contains("song is not in the file")));
+        let mut pl = base.clone();
+        pl.items.push(ItemInput { kind: "image".into(), reference: "x".into(), payload: Some(serde_json::json!({ "media_id": "ghost", "fit": "cover" }).to_string()), ..Default::default() });
+        assert!(matches!(church.import_service_package(&seal(&pl), &church_media), Err(ContentError::Invalid(m)) if m.contains("picture is not in the file")));
+        let mut pl = base.clone();
+        pl.items.push(ItemInput { kind: "video".into(), reference: "x".into(), ..Default::default() });
+        assert!(matches!(church.import_service_package(&seal(&pl), &church_media), Err(ContentError::Invalid(_))));
+        assert_eq!(snapshot(&church), before);
+
+        // And the good one still works, and restores a reused picture whose file went missing.
+        let mut pl = base.clone();
+        pl.media.push(pic(format!("{hash}.png"), "image", "image/png"));
+        pl.items.push(ItemInput { kind: "image".into(), reference: "x".into(), payload: Some(serde_json::json!({ "media_id": "pm", "fit": "cover" }).to_string()), ..Default::default() });
+        let r = church.import_service_package(&seal(&pl), &church_media).unwrap();
+        assert_eq!((r.media_added, r.media_reused), (1, 0));
+        std::fs::remove_file(church_media.join(format!("{hash}.png"))).unwrap();
+        let r2 = church.import_service_package(&seal(&pl), &church_media).unwrap();
+        assert_eq!((r2.media_added, r2.media_reused), (0, 1));
+        assert!(church_media.join(format!("{hash}.png")).exists());
     }
 }

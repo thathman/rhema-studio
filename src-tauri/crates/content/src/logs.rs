@@ -61,7 +61,7 @@ impl ContentDb {
         let limit = i64::try_from(limit.min(500)).unwrap_or(500);
         let q = query.map(str::trim).filter(|q| !q.is_empty());
         if let Some(q) = q {
-            let like = format!("%{}%", q.replace('%', "\\%").replace('_', "\\_"));
+            let like = format!("%{}%", q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
             let mut st = conn.prepare(&format!("SELECT {COLS} FROM service_logs WHERE title LIKE ?1 ESCAPE '\\' OR body LIKE ?1 ESCAPE '\\' ORDER BY saved_at DESC LIMIT ?2"))?;
             let v = st.query_map(params![like, limit], row_to_summary)?.collect::<std::result::Result<_, _>>()?;
             return Ok(v);
@@ -104,6 +104,9 @@ mod tests {
         assert_eq!(db.list_service_logs(None, 10).unwrap().iter().map(|l| l.id.as_str()).collect::<Vec<_>>(), vec![b.id.as_str(), a.id.as_str()]);
         assert_eq!(db.list_service_logs(Some("amazing"), 10).unwrap().len(), 1);
         assert_eq!(db.list_service_logs(Some("100%"), 10).unwrap().len(), 0);
+        db.save_service_log(None, "Paths", "C:\\Users\\tolu").unwrap();
+        assert_eq!(db.list_service_logs(Some("C:\\Users"), 10).unwrap().len(), 1);
+        assert_eq!(db.list_service_logs(Some("C:Users"), 10).unwrap().len(), 0);
         assert_eq!(db.get_service_log(&a.id).unwrap().unwrap().body.lines().count(), 2);
         assert!(matches!(db.save_service_log(None, " ", "x"), Err(ContentError::Invalid(_))));
         // The log outlives its service.

@@ -184,13 +184,15 @@ fn load_media(conn: &Connection, id: &str) -> Result<Option<MediaAsset>> {
 fn services_using_media(conn: &Connection, media_id: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT DISTINCT p.title FROM program_items i JOIN programs p ON p.id = i.program_id
-         WHERE i.kind = 'image' AND json_extract(i.payload, '$.media_id') = ?1 ORDER BY p.title",
+         WHERE (i.kind = 'image' AND json_extract(i.payload, '$.media_id') = ?1)
+            OR json_extract(i.payload, '$.background_media_id') = ?1
+         ORDER BY p.title",
     )?;
     let rows = stmt.query_map(params![media_id], |r| r.get(0))?;
     Ok(rows.collect::<std::result::Result<_, _>>()?)
 }
 
-fn validate_media(m: &MediaInput) -> Result<()> {
+pub(crate) fn validate_media(m: &MediaInput) -> Result<()> {
     let bad = |s: String| Err(ContentError::Invalid(s));
     if !MEDIA_KINDS.contains(&m.kind.trim()) {
         return bad(format!("unknown media kind {:?}", m.kind));
@@ -280,7 +282,10 @@ mod tests {
             ContentError::InUse { titles } => assert_eq!(titles, vec!["Sunday"]),
             other => panic!("{other:?}"),
         }
-        db.replace_items(&p.id, 2, &[]).unwrap();
+        // A background picture on any item counts as use too.
+        db.replace_items(&p.id, 2, &[ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), payload: Some(format!("{{\"background_media_id\":\"{}\"}}", a.id)), ..Default::default() }]).unwrap();
+        assert!(matches!(db.delete_media(&a.id), Err(ContentError::InUse { .. })));
+        db.replace_items(&p.id, 3, &[]).unwrap();
         assert_eq!(db.delete_media(&a.id).unwrap(), a.file);
         assert!(db.get_media(&a.id).unwrap().is_none());
         // Image items need a well-formed payload with a known fit.
