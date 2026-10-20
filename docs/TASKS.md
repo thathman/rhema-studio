@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.35 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.36 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -33,15 +33,15 @@
 |---|---|---|---|---|
 | SO-001 Specify versioned song/section/arrangement/hymnbook schema | P1 | MERGED | ST-003,ST-005 | Spec `docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`; schema shipped as migration 0003 in PR #6 (`802640a`) |
 | SO-002 Song CRUD and history | P1 | MERGED (crate) / IN PR (editor) | SO-001 | PR #6 crate; songs-editor PR: Prepare → Songs library, New/Edit/Delete with conflict and in-use messages, unsaved-change guard |
-| SO-003 Section editor (verse/chorus/bridge/tag) | P1 | IN PR | SO-002 | songs-editor PR: paste-first parser → section cards, kind dropdown, relabel, move/remove, EN/YO side by side, validation list |
-| SO-004 Named service-specific arrangements | P1 | IN PR | SO-003 | songs-editor PR: arrangement strip (drag, ← → Delete, buttons), named orders, default flag, per-item order and language choice in the rundown |
-| SO-005 Hymnbook catalogs and number lookup | P1 | MERGED | SO-002 | PR #6 crate; PR #7 Quick find; PR #8 creation and number rows; hymnbook-management PR: rename and remove in More → Library (numbers dropped, songs kept) |
-| SO-006 Multilingual lyrics | P1 | IN PR | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |
+| SO-003 Section editor (verse/chorus/bridge/tag) | P1 | MERGED (#8) | SO-002 | songs-editor PR: paste-first parser → section cards, kind dropdown, relabel, move/remove, EN/YO side by side, validation list |
+| SO-004 Named service-specific arrangements | P1 | MERGED (#8) | SO-003 | songs-editor PR: arrangement strip (drag, ← → Delete, buttons), named orders, default flag, per-item order and language choice in the rundown |
+| SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (#6, #7, #8, #52) | SO-002 | PR #6 crate; PR #7 Quick find; PR #8 creation and number rows; hymnbook-management PR: rename and remove in More → Library (numbers dropped, songs kept) |
+| SO-006 Multilingual lyrics | P1 | MERGED (#7, #8) | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |
 | SO-007 Search library | P1 | MERGED (crate) / IN PR (UI) | SO-002,SO-005 | PR #6: FTS5 over title/authors/lyrics + numbers; songs-core PR: one Quick find box for verses, hymn numbers and songs |
-| SO-008 Import/export | P1 | MERGED (crate) / IN PR (UI) | SO-001,SO-003 | PR #6 crate; songs-import-export PR: More → Library dialog, export to `rhema-songs-<date>.json`, import JSON (skip/replace/duplicate) and OpenLyrics .xml (DOMParser, per-language verses, verseOrder, songbooks, report of ignored parts) |
-| SO-009 Add songs to unified service rundown | P1 | IN PR | SO-004,ST-003 | songs-core PR: song rundown items (`kind='song'` + payload) save/reopen, Add from Quick find, slide sub-list, reorder/remove |
-| SO-010 Song/lyric renderer and Live safety | P0 | IN PR | SO-009,ST-002 | songs-core PR: `presentSlide` (atomic go-live, Clear cancels, no stale frame), lyric lines + secondary language + copyright footer in the renderer, Next/Prev step slides then items, Show live from a previewed slide; 12 tests |
-| SO-011 Rehearsal notes, key, tempo, attachments | P2 | IN PR (key, tempo) | SO-004 | song-key-tempo PR: migration 0006 adds key and tempo to songs (validated), editor fields, stage display shows "Key G · 72 bpm" for the live song; song notes already exist and never reach the output. Attachments later |
+| SO-008 Import/export | P1 | MERGED (#6, #9, #54) | SO-001,SO-003 | PR #6 crate; songs-import-export PR: More → Library dialog, export to `rhema-songs-<date>.json`, import JSON (skip/replace/duplicate) and OpenLyrics .xml (DOMParser, per-language verses, verseOrder, songbooks, report of ignored parts) |
+| SO-009 Add songs to unified service rundown | P1 | MERGED (#7) | SO-004,ST-003 | songs-core PR: song rundown items (`kind='song'` + payload) save/reopen, Add from Quick find, slide sub-list, reorder/remove |
+| SO-010 Song/lyric renderer and Live safety | P0 | MERGED (#7) | SO-009,ST-002 | songs-core PR: `presentSlide` (atomic go-live, Clear cancels, no stale frame), lyric lines + secondary language + copyright footer in the renderer, Next/Prev step slides then items, Show live from a previewed slide; 12 tests |
+| SO-011 Rehearsal notes, key, tempo, attachments | P2 | MERGED (key, tempo #50) / BACKLOG (attachments) | SO-004 | song-key-tempo PR: migration 0006 adds key and tempo to songs (validated), editor fields, stage display shows "Key G · 72 bpm" for the live song; song notes already exist and never reach the output. Attachments later |
 
 ## Milestone 2C — Mixed content and service planning
 
@@ -84,7 +84,7 @@
 |---|---|---|---|---|
 | PT-001 Monotonic timer engine | P1 | MERGED | SV-002 | PR #21: pure engine on an injected monotonic clock (`performance.now`), start/pause/resume/reset, countdown or count-up, over-run; Present header chip with presets; 3 tests |
 | PT-002 Service timing policies and over/under | P1 | MERGED (planned side) | PT-001 | PR #22: planned minutes per item (payload, crate-validated 0–600), service total in Prepare, timer chip shows "n min late/early" against the plan up to the live item; 2 tests. Per-item actuals and policies later |
-| PT-003 Cue/macro typed action registry | P1 | MERGED (#46) / IN PR (remote) | OP-001 | PR #46; remote-macro PR adds OSC `/rhema/macro <id>` and HTTP `macro`; PR #46: `CUE_ACTIONS` registry over the operator verbs (idempotent), built-in macros Start the service / Offering / Prayer / End the service, Cues menu in Present showing each step before Run; 3 tests. Church-defined macros and remote `macro` command later |
+| PT-003 Cue/macro typed action registry | P1 | MERGED (#46, #49) | OP-001 | PR #46; remote-macro PR adds OSC `/rhema/macro <id>` and HTTP `macro`; PR #46: `CUE_ACTIONS` registry over the operator verbs (idempotent), built-in macros Start the service / Offering / Prayer / End the service, Cues menu in Present showing each step before Run; 3 tests. Church-defined macros and remote `macro` command later |
 | PT-004 Stage timer messages, visual cues | P1 | MERGED (messages) | PT-002,OP-002 | PR #24: operator → stage message (typed or quick phrases), shown big and framed on stage outputs only, cleared from the same control; the timer and its colours already reach the stage; 1 test |
 | PT-005 Rehearsal/dry-run isolation | P0 | MERGED | PT-003 | PR #27 `15be1b3`: header toggle freezes every output (projector windows, NDI, stage) at what they show; Preview, Live panel, rundown, quick screens all work; turning it off sends the current content everywhere; 1 test with two outputs |
 | PT-006 Song-playback/MIDI synchronization | P2 | BACKLOG | PT-003,MD-002 | Explicit integration opt-in, loss of sync degrades safely |
@@ -120,7 +120,7 @@
 | SG-001 Signage player and screen identity | P2 | BACKLOG | OP-001,MD-006 | Independent cache and device health |
 | SG-002 Scheduled announcements/playlists | P2 | BACKLOG | SG-001 | Date/time and timezone tested, no effect on sanctuary |
 | SG-003 QR digital bulletins and optional action links | P2 | BACKLOG | SV-002 | Link safety, privacy, consent, offline fallback |
-| AR-001 Runtime journal/service event log | P1 | IN PR (first slice) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
+| AR-001 Runtime journal/service event log | P1 | MERGED (first slice #53) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
 | AR-002 OBS recording markers and sermon metadata | P2 | BACKLOG | AR-001,OP-005 | No fake recorded status; failures visible |
 | AR-003 Searchable archive and series reuse | P2 | BACKLOG | AR-001 | Find sermon/song/Scripture, respect rights |
 | AR-004 Opt-in transcription and archive indexing | P2 | BACKLOG | AR-003 | Provider-consent, corrections and privacy |
@@ -134,11 +134,11 @@
 | QA-001 Windows x64 signed/unsigned packaging and hands-on smoke | P0 | BACKLOG | ST-007 | Artifact installs/launches, data stays, projectors + NDI verified |
 | QA-002 Offline and injected-failure test suite | P0 | BACKLOG | OP-005,SV-002 | No live outage under network/API failure |
 | QA-003 Accessibility and novice-volunteer usability | P0 | BACKLOG | ST-002 | Keyboard, contrast, novice timed exercises with recorded findings |
-| QA-004 Rights and dependency license inventory | P0 | IN PR | ST-001 | `docs/LICENSES.md`: upstream MIT, OYCB CC BY-SA 4.0 (compliant), direct Rust and JS dependency licences (all permissive), fonts OFL, NDI runtime terms, song/media provenance model. **Open owner decision:** copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) are bundled in `rhema.db`/installer; openbible.info and NDI notices added to About (about-notices PR); installer licence screen still MIT-only |
-| QA-005 Settings and database migration/rollback matrix | P0 | IN PR (database) | ST-003 | migration-matrix PR (#39): one crate test opens a file at every schema version 0001–0004, upgrades it (backup named after the first pending migration, data intact, songs and revisions usable), verifies the automatic backup and restores it into a current database. Corrupt-file refusal already tested. Settings/app-identity migration (ST-009) still open |
+| QA-004 Rights and dependency license inventory | P0 | MERGED (#28) | ST-001 | `docs/LICENSES.md`: upstream MIT, OYCB CC BY-SA 4.0 (compliant), direct Rust and JS dependency licences (all permissive), fonts OFL, NDI runtime terms, song/media provenance model. **Open owner decision:** copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) are bundled in `rhema.db`/installer; openbible.info and NDI notices added to About (about-notices PR); installer licence screen still MIT-only |
+| QA-005 Settings and database migration/rollback matrix | P0 | MERGED (database #40) / BACKLOG (settings) | ST-003 | migration-matrix PR (#39): one crate test opens a file at every schema version 0001–0004, upgrades it (backup named after the first pending migration, data intact, songs and revisions usable), verifies the automatic backup and restores it into a current database. Corrupt-file refusal already tested. Settings/app-identity migration (ST-009) still open |
 | QA-006 Security threat review of LAN, external cues and cloud sync | P1 | BACKLOG | OP-006,CL-004 | Pairing/auth, permissions, secrets, revocation, secure defaults |
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
-| QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | IN PR (quick start) | QA-003 | `docs/QUICK-START.md`: one-page volunteer guide (prepare, present table, what cannot go wrong, if something breaks). Stage/production guide and diagnostics how-to later |
+| QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | MERGED (#48, #51) | QA-003 | `docs/QUICK-START.md`: one-page volunteer guide (prepare, present table, what cannot go wrong, if something breaks). Stage/production guide and diagnostics how-to later |
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
 | QA-010 Backup/restore incident rehearsal | P0 | BACKLOG | ST-008 | Recover approved last-good content on standby machine |
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.36):** PRs #47–#53 merged; rows reconciled (SO-003/004/005/006/008/009/010/011, PT-003, AR-001, QA-004/005/008).
 - **2026-10-20 (rev 0.35):** brand-variants PR opened (CV-004 variants + font warning).
 - **2026-10-20 (rev 0.34):** cues-macros PR opened (PT-003 IN PR).
 - **2026-10-20 (rev 0.33):** PRs #44 and #45 merged (CV-004 kit, CV-005 minimal).
