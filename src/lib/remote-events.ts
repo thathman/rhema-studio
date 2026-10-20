@@ -26,6 +26,7 @@ export const REMOTE_EVENTS = {
   add_to_queue: "remote:add_to_queue",
   verse_next: "remote:verse_next",
   verse_prev: "remote:verse_prev",
+  macro: "remote:macro",
 } as const
 
 export type RemoteEventName = (typeof REMOTE_EVENTS)[keyof typeof REMOTE_EVENTS]

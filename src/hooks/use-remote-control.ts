@@ -5,6 +5,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
+import { runMacro } from "@/lib/cues"
 import { remoteActions } from "@/lib/remote-actions"
 
 /**
@@ -38,6 +39,14 @@ export function useRemoteControl() {
       await register(REMOTE_EVENTS.verse_prev, remoteActions.versePrev)
       await register(REMOTE_EVENTS.show, () => remoteActions.toggleOnAir(true))
       await register(REMOTE_EVENTS.hide, () => remoteActions.toggleOnAir(false))
+
+      // remote:macro — run a named macro (Start the service, Offering, …)
+      const uMacro = await listen<string>(REMOTE_EVENTS.macro, (event) => {
+        if (cancelled) return
+        const id = parsePayload(event.payload)?.id
+        if (typeof id === "string") runMacro(id)
+      })
+      unlisteners.push(uMacro)
 
       // remote:theme — switch active theme by name
       const u3 = await listen<string>(REMOTE_EVENTS.theme, (event) => {

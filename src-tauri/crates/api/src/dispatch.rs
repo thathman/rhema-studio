@@ -47,6 +47,10 @@ impl CommandDispatcher {
             RemoteCommand::AddToQueue => sink.emit_event("remote:add_to_queue", "{}"),
             RemoteCommand::VerseNext => sink.emit_event("remote:verse_next", "{}"),
             RemoteCommand::VersePrev => sink.emit_event("remote:verse_prev", "{}"),
+            RemoteCommand::Macro(id) => {
+                let payload = serde_json::json!({ "id": id }).to_string();
+                sink.emit_event("remote:macro", &payload)
+            }
             RemoteCommand::Show => sink.invoke_backend("show_broadcast", "{}"),
             RemoteCommand::Hide => sink.invoke_backend("hide_broadcast", "{}"),
             RemoteCommand::Confidence(val) => {
@@ -191,6 +195,15 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_macro_emits_event_with_id() {
+        let sink = MockSink::new();
+        CommandDispatcher::dispatch(&RemoteCommand::Macro("offering".into()), &sink).unwrap();
+        let (name, payload) = sink.last_event();
+        assert_eq!(name, "remote:macro");
+        assert!(payload.contains("offering"));
+    }
+
+    #[test]
     fn dispatch_verse_next_prev_emit_events() {
         let sink = MockSink::new();
         CommandDispatcher::dispatch(&RemoteCommand::VerseNext, &sink).unwrap();
@@ -273,6 +286,7 @@ mod tests {
             RemoteCommand::AddToQueue,
             RemoteCommand::VerseNext,
             RemoteCommand::VersePrev,
+            RemoteCommand::Macro("service-start".into()),
         ];
 
         for cmd in &frontend_cmds {
