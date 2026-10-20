@@ -26,6 +26,7 @@ import { StatusChip, WorkspaceHeader } from "@/studio/ui/status-chip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
+import { StageMessage } from "@/studio/present/stage-message"
 import { useSongStore } from "@/stores/song-store"
 import { buildSlides } from "@/lib/lyrics"
 import { isSongItem } from "@/types"
@@ -75,6 +76,7 @@ export function PresentWorkspace() {
         />
         <StatusChip tone={listening ? "ok" : "off"} label={listening ? "Listening" : "Listening off"} />
         <ServiceTimer />
+        <StageMessage />
         {service && (
           <StatusChip
             tone={override ? "warn" : "info"}

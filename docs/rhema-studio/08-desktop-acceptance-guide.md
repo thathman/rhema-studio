@@ -237,6 +237,7 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10j.2 | Present a bilingual song slide; set an operator note on it; start the timer. | Stage shows both language lines, "Note: …", the timer (amber under 2 min, red OVER), and NEXT. The congregation output is unchanged. |
 | 10j.3 | Clear. Restore. Change the rundown order in Prepare. | Stage follows each change within a second. |
 | 10j.4 | Restart the app with the stage output saved; also open an output saved before this version. | The stage output comes back as stage; the older output is a congregation output. |
+| 10j.5 | Present header → Message stage → "Wrap up". Then Clear it. | A framed amber banner on the stage screen only; gone when cleared; the congregation output never shows it. |
 
 ## 11. What automation has and has not verified
 
