@@ -8,12 +8,15 @@ Nothing is merged until the owner says so. This document is the exact procedure.
 |---|---|---|---|---|
 | #3 Language integration | `feature/language-integration` | `main` (7cbb027) | 862fc97 | 8 |
 | #1 Studio foundation | `feature/rhema-studio-foundation` | `feature/language-integration` | 0bc1c54 | 2 |
-| #2 Content persistence | `feature/rhema-studio-content` | `feature/rhema-studio-foundation` | 9c7c1c2 | 6 |
+| #2 Content persistence | `feature/rhema-studio-content` | `feature/rhema-studio-foundation` | af950eb (live-safety fix) + the docs commit on top of it; the PR page shows the current head | 9 |
 | #4 Speech (Codex delta) | `feature/speech-language-openai` | `feature/language-integration` | 2705de0 | 1 |
 
 Each PR's diff against its base contains only its own commits (verified with
 `git log base..head` and `git diff --stat base head`; the counts above are from that).
-No commit appears in two branches.
+No commit appears in two branches. PR #2 gained three commits after the first gate:
+`9c7c1c2` (saved-content fidelity), `1684859` (gate documents) and `af950eb`
+(translation policy and atomic live activation), plus the documentation commit that
+records them.
 
 ## Strategy: merge commits, not squash or rebase
 

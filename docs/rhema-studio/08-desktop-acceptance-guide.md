@@ -59,7 +59,7 @@ Record results as a table: step id, pass/fail, build SHA, OS, date, tester, note
 | 4.3 | Remove that verse again. | Save button returns to "Saved" (dirty cleared because the rundown matches what is saved). |
 | 4.4 | Add a verse, press Save. | "Service saved". |
 | 4.5 | Quit the app fully. Relaunch. | Home lists "Sunday". The last service is reopened into an empty rundown with the same items in the same order. Text is filled in for preview. |
-| 4.6 | With primary = OYCB, create service "Yoruba evening" with two verses, save. Switch primary to KJV. Reopen "Yoruba evening". | Service bar shows "Saved as OYCB; presenting KJV". Preview text in the rundown is Yoruba. Press Save after adding an English verse: reopen shows the two original items still marked OYCB and the new one KJV. |
+| 4.6 | With primary = OYCB, create service "Yoruba evening" with two verses, save. Switch primary to KJV. Reopen "Yoruba evening". | Service bar shows "Saved as OYCB · shows in OYCB". Preview text in the rundown is Yoruba. Press Save after adding an English verse: reopen shows the two original items still marked OYCB and the new one KJV. |
 | 4.7 | Set secondary = OYCB, add a verse to a service and save. Reopen. | Item keeps secondary OYCB (visible in the item tooltip or by re-saving and checking the database with `sqlite3 studio.db "select reference, translation, secondary_translation from program_items"`). |
 | 4.8 | Make a change, then try to open another service / New service / Delete. | Each refuses with "Save or discard your changes first"; nothing is lost. Close (X) asks to discard. |
 | 4.9 | Open the same service in two running instances (copy the app, or run `bun tauri dev` twice with the same data dir). Save in A, then save in B. | B gets "Not saved: this service changed elsewhere" with a Reload button. A's data is intact. |
@@ -69,6 +69,14 @@ Record results as a table: step id, pass/fail, build SHA, OS, date, tester, note
 
 | Id | Step | Expected |
 |---|---|---|
+| 5.0a | **Translation consistency.** Open "Yoruba evening" (saved as OYCB) with primary = KJV. Click an item (preview). Press Show live. | Preview is labelled OYCB and shows Yoruba. Live shows Yoruba, not English. The Present header chip reads "Saved translations". |
+| 5.0b | Press Next through the service. Then Quick find `Romans 8:28` (spontaneous), Enter, Show live. | Service items go live in OYCB. The spontaneous verse goes live in KJV, matching its preview label. |
+| 5.0c | Click the "Saved translations" chip to turn on the override. Press Next. | Chip reads "Override: KJV"; the service item now goes live in KJV; the service bar says "override: shows in KJV". Click again to turn it off. |
+| 5.0d | Open a service whose items were saved with a translation not installed on this machine (copy a `studio.db` from a machine with NIV, or edit `program_items.translation` to `NIV` with sqlite3). Press Next. | Nothing goes live. The Present header shows "John 3:16 not shown: it was saved for NIV, which is not installed…". With the override on, it goes live in the active translation. |
+| 5.0e | **Atomic go-live.** Show a verse live. Press Clear. Press Next. Watch the output closely (record it with OBS at 60 fps if possible). | The output stays blank until the new verse is ready, then shows the new verse. The old verse never flashes first. |
+| 5.0f | Press Clear. Quit the app, make `rhema.db` unreadable or rename it, relaunch, open the service, press Next. | Output stays cleared; the header warning says the verse was not shown. Restore still brings back the last verse that was live before Clear. |
+| 5.0g | Send 10 OSC `/rhema/next` messages in under a second. | Output ends on the 10th item's verse; no earlier verse appears after it. Same with 10 HTTP `next` commands. |
+| 5.0h | Press Next, then Esc within 100 ms (or send `/rhema/next` then `/rhema/hide`). | Output stays cleared; the verse that was loading does not appear afterwards. |
 | 5.1 | Output on air. Quick find a verse, press Enter (preview). | Output unchanged. |
 | 5.2 | Press Show live. | Output shows the preview verse. |
 | 5.3 | Press Esc (Clear). | Output blank/background only. Restore enabled. |
