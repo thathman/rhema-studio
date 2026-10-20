@@ -1155,6 +1155,55 @@ mod tests {
         assert_eq!(db.list_programs().unwrap()[0].title, "Old");
     }
 
+    /// QA-005: every schema version this app ever shipped must open, upgrade
+    /// with a backup, keep its data, and be restorable into a current database.
+    #[test]
+    fn every_older_schema_upgrades_and_restores() {
+        for k in 1..MIGRATIONS.len() {
+            let tmp = TempDir::new();
+            let (version, _) = MIGRATIONS[k - 1];
+            let id = {
+                let db = ContentDb::open_with_migrations(&tmp.db(), &MIGRATIONS[..k]).unwrap();
+                assert_eq!(db.applied_migrations().unwrap().len(), k, "{version}");
+                let p = db.create_program(&format!("Service at {version}"), Some("2026-10-25")).unwrap();
+                // Items the way that schema version wrote them.
+                db.lock()
+                    .unwrap()
+                    .execute(
+                        "INSERT INTO program_items (id, program_id, position, kind, reference, book_number, chapter, verse)
+                         VALUES ('old-item', ?1, 0, 'verse', 'John 3:16', 43, 3, 16)",
+                        params![p.id],
+                    )
+                    .unwrap();
+                p.id
+            };
+            // Upgrade: backup named after the first pending migration, data intact, newest features usable.
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            assert_eq!(db.applied_migrations().unwrap().len(), MIGRATIONS.len(), "{version}");
+            let backup = db.last_backup().expect("backup before upgrade").to_path_buf();
+            assert!(backup.to_string_lossy().contains(&format!("before-{}", MIGRATIONS[k].0)), "{version}: {}", backup.display());
+            let got = db.get_program(&id).unwrap().unwrap();
+            assert_eq!(got.items[0].reference, "John 3:16", "{version}");
+            assert_eq!(got.items[0].payload, None, "{version}");
+            let song = db.create_song(&SongInput { title: "After upgrade".into(), sections: vec![SectionInput { kind: "verse".into(), texts: [("en".to_string(), "words".to_string())].into_iter().collect(), ..SectionInput::default() }], ..SongInput::default() }).unwrap();
+            assert_eq!(db.list_songs(Some("after"), 5).unwrap()[0].id, song.song.id, "{version}");
+            assert!(!db.list_revisions(&id).unwrap().is_empty() || k < 5, "{version}: saves after the upgrade are snapshotted");
+            drop(db);
+            // The automatic backup is itself a valid older database that restores into a current one.
+            assert_eq!(verify_backup(&backup).unwrap().len(), k, "{version}");
+            let current = tmp.0.join("current.db");
+            {
+                let c = ContentDb::open(&current).unwrap();
+                c.create_program("Will be replaced", None).unwrap();
+            }
+            let (restored, snapshot) = restore_from(&current, &backup).unwrap();
+            assert!(snapshot.is_some(), "{version}");
+            assert_eq!(restored.applied_migrations().unwrap().len(), MIGRATIONS.len(), "{version}");
+            assert_eq!(restored.list_programs().unwrap()[0].title, format!("Service at {version}"));
+            assert_eq!(restored.get_program(&id).unwrap().unwrap().items[0].reference, "John 3:16", "{version}");
+        }
+    }
+
     #[test]
     fn manual_backup_is_a_complete_copy() {
         let tmp = TempDir::new();
