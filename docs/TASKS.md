@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.1 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.2 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -17,20 +17,21 @@
 |---|---|---|---|---|
 | ST-001 Integrate numbered-book search, OYCB source and dual-language display | P0 | IN PR | — | [PR #3](https://github.com/thathman/rhema-studio/pull/3); real Yoruba projector/font check, licensing |
 | ST-002 Establish Home/Prepare/Present/More shell and two Present views | P0 | IN PR | ST-001 (stack) | [PR #1](https://github.com/thathman/rhema-studio/pull/1); operator rehearsal and UI check |
-| ST-003 Add versioned SQLite studio.db, migration/recovery/audit, persistent service editing | P0 | IN PR | ST-002 (stack) | [PR #2](https://github.com/thathman/rhema-studio/pull/2); backup/restore & translation fidelity |
+| ST-003 Add versioned SQLite studio.db, migration/recovery/audit, persistent service editing | P0 | IN PR | ST-002 (stack) | [PR #2](https://github.com/thathman/rhema-studio/pull/2); CI green; manual checklist `docs/rhema-studio/08-desktop-acceptance-guide.md` not yet performed |
 | ST-004 Yoruba speech and OpenAI speech provider delta | P2 | IN PR | ST-001 | [PR #4](https://github.com/thathman/rhema-studio/pull/4); decide bundling, live provider tests |
-| ST-005 Verify translation/secondary/notes round-trip in latest PR #2 | P0 | DESIGN | ST-003 | Automated saved-data tests and manual bilingual reopen/save/reopen |
-| ST-006 End-to-end operator acceptance on real desktop and projectors | P0 | BACKLOG | ST-001,ST-002,ST-003 | All J01/J03/J07 scenarios; Windows x64 priority |
-| ST-007 Verify PR dependency merge sequence and CI after retargets | P0 | BACKLOG | ST-005,ST-006 | #3 → #1 → #2; #4 optional; no duplicates/unstated merges |
+| ST-005 Verify translation/secondary/notes round-trip in latest PR #2 | P0 | IN PR | ST-003 | Fixed in PR #2 (`9c7c1c2`): items keep saved translation/secondary/notes; 7 store tests incl. bilingual reopen/save/reopen. Manual step 4.6–4.7 in the acceptance guide still open |
+| ST-006 End-to-end operator acceptance on real desktop and projectors | P0 | BACKLOG | ST-001,ST-002,ST-003 | Checklist written (`08-desktop-acceptance-guide.md`); Windows installer built (run 39382133331) and contents inspected, not launched. No manual pass performed yet |
+| ST-007 Verify PR dependency merge sequence and CI after retargets | P0 | DESIGN | ST-005,ST-006 | Procedure written (`09-integration-merge-plan.md`: merge commits, #3 → #1 → #2, retarget then delete); per-layer diffs verified disjoint. Not executed |
 | ST-008 Ship explicit database backup/restore UX and verified recovery exercise | P0 | BACKLOG | ST-003 | User can back up, restore offline, see failures; tests and operator guide |
 | ST-009 Migrate product identity and settings safely | P2 | BACKLOG | ST-003 | Existing configurations survive app-ID rename, migration/rollback tested |
-| ST-010 Correct typecheck coverage and control lint debt | P1 | IN PR / BACKLOG | ST-001 | Actual `tsc -b` in #2, report lint debt and resolve incrementally |
+| ST-010 Correct typecheck coverage and control lint debt | P1 | IN PR / BACKLOG | ST-001 | `tsc -b` in #2 (`37a5f20`) and in CI; lint debt documented, not reduced |
+| ST-011 Translation-resolution policy and atomic live activation | P0 | IN PR | ST-003,ST-005 | PR #2 (`af950eb`): item's saved translations win unless overridden; missing translation reported, never substituted; Next/Prev/Show live/OSC/HTTP go on air only with the verse; Clear cancels in-flight presents. 26 tests. Manual steps 5.0a–5.0h open |
 
 ## Milestone 2B — Songs and Hymnbooks
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| SO-001 Specify versioned song/section/arrangement/hymnbook schema | P1 | BACKLOG | ST-003,ST-005 | Migrations, stable IDs, rights metadata, backwards compatibility and tests |
+| SO-001 Specify versioned song/section/arrangement/hymnbook schema | P1 | DESIGN | ST-003,ST-005 | Specification in PR #2: `docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md` (schema 0003, crate API, search, editor, renderer, import/export, 18 acceptance tests). No code |
 | SO-002 Song CRUD and history | P1 | BACKLOG | SO-001 | Create/edit/duplicate/delete safely; conflict/undo strategy and persistence |
 | SO-003 Section editor (verse/chorus/bridge/tag) | P1 | BACKLOG | SO-002 | Fast tagging, reorder, validation, drag/key accessibility, save/reopen |
 | SO-004 Named service-specific arrangements | P1 | BACKLOG | SO-003 | Repeat/jump without mutating source song; stable section IDs |
