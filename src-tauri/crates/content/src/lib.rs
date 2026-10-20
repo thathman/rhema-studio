@@ -18,6 +18,9 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+
+mod songs;
+pub use songs::*;
 use std::sync::Mutex;
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
@@ -39,6 +42,8 @@ pub enum ContentError {
     Corrupt(String),
     #[error("lock poisoned")]
     Poisoned,
+    #[error("in use by: {}", titles.join(", "))]
+    InUse { titles: Vec<String> },
 }
 
 pub type Result<T> = std::result::Result<T, ContentError>;
@@ -48,12 +53,14 @@ pub type Migration = (&'static str, &'static str);
 pub const MIGRATIONS: &[Migration] = &[
     ("0001_programs", include_str!("../migrations/0001_programs.sql")),
     ("0002_item_identity", include_str!("../migrations/0002_item_identity.sql")),
+    ("0003_songs", include_str!("../migrations/0003_songs.sql")),
 ];
 
-/// The only item kind this version can read and write. Future kinds arrive
-/// with a migration and a renderer; until then they are rejected on write
-/// and surfaced untouched on read.
-pub const SUPPORTED_KINDS: &[&str] = &["verse"];
+/// Item kinds this version can read and write. Future kinds arrive with a
+/// migration and a renderer; until then they are rejected on write and
+/// surfaced untouched on read. A `song` item carries a JSON `payload`
+/// (`SongItemPayload`); its `reference` is the title, for display only.
+pub const SUPPORTED_KINDS: &[&str] = &["verse", "song"];
 
 pub const MAX_TITLE: usize = 200;
 pub const MAX_REFERENCE: usize = 200;
@@ -84,6 +91,8 @@ pub struct ProgramItem {
     pub translation: Option<String>,
     pub secondary_translation: Option<String>,
     pub notes: Option<String>,
+    /// Kind-specific JSON (song items). `None` for verses.
+    pub payload: Option<String>,
 }
 
 /// An item as the frontend sends it. `id` is kept when it names an existing
@@ -108,6 +117,8 @@ pub struct ItemInput {
     pub secondary_translation: Option<String>,
     #[serde(default)]
     pub notes: Option<String>,
+    #[serde(default)]
+    pub payload: Option<String>,
 }
 
 fn default_kind() -> String {
@@ -126,6 +137,7 @@ impl Default for ItemInput {
             translation: None,
             secondary_translation: None,
             notes: None,
+            payload: None,
         }
     }
 }
@@ -348,6 +360,7 @@ impl ContentDb {
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
         check_revision(&tx, program_id, expected_revision)?;
+        songs::check_song_items_exist(&tx, items)?;
 
         let existing: HashSet<String> = {
             let mut stmt = tx.prepare("SELECT id FROM program_items WHERE program_id = ?1")?;
@@ -376,14 +389,15 @@ impl ContentDb {
         {
             let mut update = tx.prepare(
                 "UPDATE program_items SET position = ?3, kind = ?4, reference = ?5, book_number = ?6,
-                        chapter = ?7, verse = ?8, translation = ?9, secondary_translation = ?10, notes = ?11
+                        chapter = ?7, verse = ?8, translation = ?9, secondary_translation = ?10, notes = ?11,
+                        payload = ?12
                  WHERE id = ?1 AND program_id = ?2",
             )?;
             let mut insert = tx.prepare(
                 "INSERT INTO program_items
                  (id, program_id, position, kind, reference, book_number, chapter, verse,
-                  translation, secondary_translation, notes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                  translation, secondary_translation, notes, payload)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )?;
             for (position, (item, id)) in items.iter().zip(&incoming_ids).enumerate() {
                 let position = i64::try_from(position).map_err(|e| ContentError::Invalid(e.to_string()))?;
@@ -399,6 +413,7 @@ impl ContentDb {
                     item.translation.as_deref().map(str::trim),
                     item.secondary_translation.as_deref().map(str::trim),
                     item.notes.as_deref(),
+                    item.payload.as_deref(),
                 ];
                 if existing.contains(id) {
                     update.execute(args)?;
@@ -500,7 +515,7 @@ fn load_program(conn: &Connection, id: &str) -> Result<Option<Program>> {
 fn load_items(conn: &Connection, program_id: &str) -> Result<Vec<ProgramItem>> {
     let mut stmt = conn.prepare(
         "SELECT id, program_id, position, kind, reference, book_number, chapter, verse,
-                translation, secondary_translation, notes
+                translation, secondary_translation, notes, payload
          FROM program_items WHERE program_id = ?1 ORDER BY position",
     )?;
     let rows = stmt.query_map(params![program_id], |r| {
@@ -516,6 +531,7 @@ fn load_items(conn: &Connection, program_id: &str) -> Result<Vec<ProgramItem>> {
             translation: r.get(8)?,
             secondary_translation: r.get(9)?,
             notes: r.get(10)?,
+            payload: r.get(11)?,
         })
     })?;
     Ok(rows.collect::<std::result::Result<_, _>>()?)
@@ -616,6 +632,9 @@ fn validate_items(items: &[ItemInput]) -> Result<()> {
                 return Err(ContentError::Invalid(format!("item {i}: verse items need book, chapter and verse")));
             }
         }
+        if kind == "song" {
+            songs::validate_song_payload(i, it.payload.as_deref())?;
+        }
         for t in [&it.translation, &it.secondary_translation].into_iter().flatten() {
             let t = t.trim();
             if t.is_empty() || t.len() > 32 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
@@ -676,7 +695,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs"]);
     }
 
     #[test]
@@ -849,7 +868,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));
