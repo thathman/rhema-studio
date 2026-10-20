@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer.
+- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes.
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -16,13 +16,13 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Active milestone
 
-**2C — Service Builder** complete in code (SV-001–SV-007; SV-004 typo tolerance open). **Milestone 5** started with PT-001. **2C detail:** SV-001 custom slides merged (PR #11); SV-002 drag reorder and SV-003 copy service merged (PR #12); SV-005 and SV-006 merged. 2C remaining: SV-007 revisions/compare, SV-004 typo tolerance, duration estimates. Milestone 3: MD-005 text quick screens merged (#15); MD-001 media index and MD-002 pictures in PR (media-assets). 2B code complete pending desktop acceptance.
+**2C — Service Builder** complete in code (SV-001–SV-007; SV-004 typo tolerance open). **Milestone 5** PT-001/PT-002 merged. **Milestone 4** started with output roles and the stage display. **2C detail:** SV-001 custom slides merged (PR #11); SV-002 drag reorder and SV-003 copy service merged (PR #12); SV-005 and SV-006 merged. 2C remaining: SV-007 revisions/compare, SV-004 typo tolerance, duration estimates. Milestone 3: MD-005 text quick screens merged (#15); MD-001 media index and MD-002 pictures in PR (media-assets). 2B code complete pending desktop acceptance.
 
 **2B — Songs and Hymnbooks** (`docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`). Done: crate + migration 0003 (PR #6), stores, Quick find, renderer, `presentSlide`, rundown and Present integration (PR #7). Merged: Prepare → Songs library, paste-first editor, arrangement strip, hymnbook numbers, per-item language/order controls, licence readiness line (PR #8). Merged: More → Library export/import (PR #9). Remaining for 2B: manual acceptance §10a on the desktop. Milestone 2B code is complete pending acceptance.
 
 ## Latest test results
 
-- Frontend: 361 vitest tests in 37 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 363 vitest tests in 38 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
 - Rust: `rhema-content` 35 tests pass; `rhema-api` 105; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
@@ -49,8 +49,8 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. PT-002 planned minutes and on-time chip — in PR (service-timing).
-2. PT-003 cue/macro registry (typed actions behind the existing remote actions); OP-001 output profiles; MD-002 video; MD-004 lower thirds.
+1. OP-001 output roles + OP-002 stage display — in PR (stage-display).
+2. PT-004 stage messages (operator → stage, private); OP-004 output health in Home; PT-003 cue/macro registry; MD-002 video; MD-004 lower thirds.
 3. Milestone 4 OP-001 output profiles.
 3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.
 3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.

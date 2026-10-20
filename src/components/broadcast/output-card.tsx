@@ -65,6 +65,7 @@ export function OutputCard({
   const [draftName, setDraftName] = useState(output.name)
 
   const theme = themes.find((t) => t.id === output.themeId) ?? themes[0]
+  const stage = output.role === "stage"
   const onAir = output.type === "display" ? (status?.previewOpen ?? false) : (status?.ndiActive ?? false)
   const isDefault = output.id === MAIN_OUTPUT_ID
 
@@ -183,7 +184,7 @@ export function OutputCard({
       </div>
 
       <div className="flex items-center justify-between px-0.5 pb-0.5">
-        <span className="truncate text-[0.6875rem] text-muted-foreground">{theme?.name ?? "No theme"}</span>
+        <span className="truncate text-[0.6875rem] text-muted-foreground">{stage ? "Stage display" : (theme?.name ?? "No theme")}</span>
         <Switch
           checked={onAir}
           disabled={busy}

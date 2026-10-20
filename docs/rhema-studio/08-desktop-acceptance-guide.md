@@ -229,6 +229,15 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10i.3 | Leave Planned blank, Start. | Counts up. Nothing about the timer appears on any output. |
 | 10i.4 | Prepare: give three items 5, 10 and 5 planned minutes. Start the timer, present item 2 after 20 minutes. | Prepare header reads "20 min planned"; timer chip reads "5 min late" (red); presenting earlier reads "n min early" (green). |
 
+## 10j. Stage display
+
+| # | Do | Expect |
+|---|---|---|
+| 10j.1 | More → Outputs → add an output, "Who sees it" = Stage, pick the stage monitor, turn it on. | A black, high-contrast screen: nothing live, "NEXT: <first item>". |
+| 10j.2 | Present a bilingual song slide; set an operator note on it; start the timer. | Stage shows both language lines, "Note: …", the timer (amber under 2 min, red OVER), and NEXT. The congregation output is unchanged. |
+| 10j.3 | Clear. Restore. Change the rundown order in Prepare. | Stage follows each change within a second. |
+| 10j.4 | Restart the app with the stage output saved; also open an output saved before this version. | The stage output comes back as stage; the older output is a congregation output. |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -243,6 +252,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10i, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10j, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.

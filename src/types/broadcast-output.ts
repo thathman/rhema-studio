@@ -2,6 +2,22 @@ import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
 export type BroadcastOutputType = "display" | "ndi"
 
+/**
+ * What an output is for. Absent means `congregation` (every output saved
+ * before roles existed). A `stage` output shows the worship team what is
+ * live, what is next, the operator's note and the timer instead of the
+ * themed frame.
+ */
+export type BroadcastOutputRole = "congregation" | "stage"
+
+/** What a stage output is sent on every change. Plain text only. */
+export interface StagePayload {
+  current: { title: string; lines: string[] } | null
+  next: string | null
+  note: string | null
+  timer: { label: string; tone: "ok" | "warn" | "over" } | null
+}
+
 export interface BroadcastOutputNdiSettings {
   sourceName: string
   resolution: NdiResolution
@@ -19,6 +35,7 @@ export interface BroadcastOutput {
   id: string
   name: string
   type: BroadcastOutputType
+  role?: BroadcastOutputRole
   themeId: string
   /** Kept even while type === "ndi" so switching types is lossless. */
   monitorIndex: number
