@@ -782,7 +782,7 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn validate_items(items: &[ItemInput]) -> Result<()> {
+pub(crate) fn validate_items(items: &[ItemInput]) -> Result<()> {
     if items.len() > MAX_ITEMS {
         return Err(ContentError::Invalid(format!("more than {MAX_ITEMS} items")));
     }
