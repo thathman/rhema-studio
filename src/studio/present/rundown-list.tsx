@@ -1,5 +1,7 @@
 import { useEffect } from "react"
-import { ArrowDownIcon, ArrowUpIcon, MusicIcon, PresentationIcon, XIcon } from "lucide-react"
+import { DragDropProvider } from "@dnd-kit/react"
+import { isSortable, useSortable } from "@dnd-kit/react/sortable"
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MusicIcon, PresentationIcon, XIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -20,6 +22,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
  *
  * A song row expands into its slides while it is selected or live; a slide
  * previews on click and presents on double-click, like a verse.
+ *
+ * In `prepare` mode rows can be dragged by their handle to reorder; the
+ * arrow buttons do the same from the keyboard.
  */
 export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const items = useQueueStore((s) => s.items)
@@ -44,7 +49,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
     )
   }
 
-  return (
+  const list = (
     <ol className="flex flex-col gap-0.5 p-1.5" aria-label="Service rundown">
       {items.map((item, index) => {
         const song = isSongItem(item)
@@ -59,7 +64,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === activeIndex + 1
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
         return (
-          <li key={item.id} className="flex flex-col">
+          <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"}>
             <div
               className={cn(
                 "group flex h-11 items-center gap-2 rounded-md border px-2 transition-colors",
@@ -113,10 +118,47 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             {expanded && mode === "prepare" && <SongItemControls item={item} />}
             {expanded && <SlideList item={item} index={index} mode={mode} />}
             {custom && isSelected && mode === "prepare" && <CustomSlideEditor item={item} />}
-          </li>
+          </Row>
         )
       })}
     </ol>
+  )
+  if (mode !== "prepare") return list
+  return (
+    <DragDropProvider
+      onDragEnd={(event) => {
+        if (event.canceled) return
+        const { source } = event.operation
+        if (isSortable(source) && source.initialIndex !== source.index) useQueueStore.getState().reorderItems(source.initialIndex, source.index)
+      }}
+    >
+      {list}
+    </DragDropProvider>
+  )
+}
+
+/** A rundown row; sortable (with a grip handle) only in prepare mode. */
+function Row({ id, index, sortable, children }: { id: string; index: number; sortable: boolean; children: React.ReactNode }) {
+  const { ref, handleRef, isDragging } = useSortable({ id, index, disabled: !sortable })
+  return (
+    <li ref={ref} className={cn("flex flex-col", isDragging && "opacity-60")}>
+      {sortable ? (
+        <div className="flex items-stretch">
+          <button
+            ref={handleRef}
+            type="button"
+            aria-label="Drag to reorder"
+            title="Drag to reorder (or use the arrow buttons)"
+            className="flex w-5 shrink-0 cursor-grab items-center justify-center text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
+          >
+            <GripVerticalIcon className="size-3.5" />
+          </button>
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
+      ) : (
+        children
+      )}
+    </li>
   )
 }
 

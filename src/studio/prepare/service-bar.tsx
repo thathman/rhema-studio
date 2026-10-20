@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { CalendarIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import { CalendarIcon, CopyIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -48,6 +48,9 @@ export function ServiceBar() {
   const [date, setDate] = useState("")
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
+  const [dupOpen, setDupOpen] = useState(false)
+  const [dupTitle, setDupTitle] = useState("")
+  const [dupDate, setDupDate] = useState("")
 
   const fail = (what: string) =>
     toast.error(what, { description: useServiceStore.getState().error ?? undefined })
@@ -76,6 +79,15 @@ export function ServiceBar() {
     } else {
       fail("Could not create service")
     }
+  }
+
+  const duplicate = async () => {
+    const r = await useServiceStore.getState().duplicateCurrent(dupTitle, dupDate || null)
+    setDupOpen(false)
+    if (r === "created") toast.success(`Copied to "${dupTitle}"`, { description: "You are now editing the copy. The original is unchanged." })
+    else if (r === "created_unsaved") toast.error(`"${dupTitle}" was created but its items could not be saved`, { description: useServiceStore.getState().error ?? undefined })
+    else if (r === "unsaved") toast.warning("Save or discard your changes first")
+    else fail("Could not copy service")
   }
 
   const save = async () => {
@@ -117,6 +129,41 @@ export function ServiceBar() {
           ))}
         </SelectContent>
       </Select>
+
+      {current && (
+        <Popover
+          open={dupOpen}
+          onOpenChange={(o) => {
+            setDupOpen(o)
+            if (o) {
+              setDupTitle(`${current.title} (copy)`)
+              setDupDate(current.service_date ?? "")
+            }
+          }}
+        >
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" disabled={dirty} title={dirty ? "Save or discard changes first" : "Make a copy of this service, e.g. for the 9 am and 11 am"}>
+              <CopyIcon /> Copy
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72">
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void duplicate()
+              }}
+            >
+              <p className="text-xs text-muted-foreground">Every item is copied. Changes to the copy never touch the original.</p>
+              <label className="text-xs text-muted-foreground" htmlFor="dup-title">Title</label>
+              <Input id="dup-title" autoFocus value={dupTitle} onChange={(e) => setDupTitle(e.target.value)} required maxLength={200} />
+              <label className="text-xs text-muted-foreground" htmlFor="dup-date">Date (optional)</label>
+              <Input id="dup-date" type="date" value={dupDate} onChange={(e) => setDupDate(e.target.value)} />
+              <Button type="submit" size="sm" disabled={!dupTitle.trim()}>Make the copy</Button>
+            </form>
+          </PopoverContent>
+        </Popover>
+      )}
 
       <Popover open={newOpen} onOpenChange={setNewOpen}>
         <PopoverTrigger asChild>

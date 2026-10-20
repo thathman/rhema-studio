@@ -59,3 +59,42 @@ describe("song items in a saved service", () => {
     expect(rundownSignature([{ ...songItem, added_at: 99 }])).toBe(base)
   })
 })
+
+describe("duplicate a service", () => {
+  it("copies the items with fresh ids into a new service and leaves the original alone", async () => {
+    const { useServiceStore } = await import("./service-store")
+    const { useQueueStore } = await import("./queue-store")
+    const { invoke } = await import("@tauri-apps/api/core")
+    const mock = invoke as unknown as ReturnType<typeof vi.fn>
+    const created: Array<Record<string, unknown>> = []
+    mock.mockImplementation(async (cmd: string, args: Record<string, unknown>) => {
+      if (cmd === "content_create_program") {
+        const p = { id: `p-${created.length + 2}`, title: args.title, service_date: args.serviceDate ?? null, revision: 1, created_at: "", updated_at: "", item_count: 0 }
+        created.push(p)
+        return p
+      }
+      if (cmd === "content_replace_items") {
+        const items = (args.items as Array<Record<string, unknown>>).map((it, position) => ({ ...it, program_id: args.programId, position, payload: it.payload ?? null }))
+        return { program: { id: args.programId, title: "copy", service_date: null, revision: 2, created_at: "", updated_at: "", item_count: items.length }, items }
+      }
+      if (cmd === "content_list_programs") return created
+      return null
+    })
+    useQueueStore.setState({ items: [verseItem, songItem], activeIndex: 1 })
+    useServiceStore.setState({ current: { ...program, id: "p-1", title: "9 am" }, dirty: false, programs: [], error: null })
+    expect(await useServiceStore.getState().duplicateCurrent("11 am", "2026-10-25")).toBe("created")
+    const state = useServiceStore.getState()
+    expect(state.current?.id).toBe("p-2")
+    expect(state.dirty).toBe(false)
+    const ids = useQueueStore.getState().items.map((i) => i.id)
+    expect(ids).not.toContain("v1")
+    expect(ids).not.toContain("s1")
+    const sent = mock.mock.calls.find((c) => c[0] === "content_replace_items")?.[1] as { programId: string; items: Array<{ id: string; kind: string }> }
+    expect(sent.programId).toBe("p-2")
+    expect(sent.items.map((i) => i.kind)).toEqual(["verse", "song"])
+    expect(sent.items.every((i) => i.id !== "v1" && i.id !== "s1")).toBe(true)
+    // Unsaved changes block the copy.
+    useServiceStore.setState({ dirty: true })
+    expect(await useServiceStore.getState().duplicateCurrent("x", null)).toBe("unsaved")
+  })
+})

@@ -51,6 +51,11 @@ interface ServiceState {
   createProgram: (title: string, serviceDate: string | null, opts?: Discard) => Promise<Program | null>
   /** Create a service from the rundown on screen and save it. */
   createFromRundown: (title: string, serviceDate: string | null, opts?: Discard) => Promise<CreateResult>
+  /**
+   * Copy the open service (its saved items, with fresh item ids) into a new
+   * one and open that. The original is untouched. Refuses while unsaved.
+   */
+  duplicateCurrent: (title: string, serviceDate: string | null) => Promise<CreateResult>
   /** Load a service into the rundown. Refuses while there are unsaved changes unless `discard`. */
   openProgram: (id: string, opts?: Discard) => Promise<OpenResult>
   /** Save the rundown as the current service's items. */
@@ -338,6 +343,15 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (!get().dirty) return "created"
     const saved = await get().saveCurrent()
     return saved === "saved" ? "created" : "created_unsaved"
+  },
+
+  duplicateCurrent: async (title, serviceDate) => {
+    if (!get().current) return "failed"
+    if (get().dirty) return "unsaved"
+    // Fresh ids: the copy must never share item identity with the original.
+    const copies = useQueueStore.getState().items.map((i) => ({ ...i, id: crypto.randomUUID() }))
+    useQueueStore.setState({ items: copies, activeIndex: null })
+    return get().createFromRundown(title, serviceDate, { discard: true })
   },
 
   openProgram: async (id, opts) => {
