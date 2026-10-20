@@ -50,13 +50,15 @@ export function HomeWorkspace() {
   const unknownLicenceSongs = songIds.filter((id) => songs[id]?.song.licence === "unknown").length
   const missingSongs = songIds.filter((id) => missing.includes(id)).length
   const mediaAssets = useMediaStore((s) => s.assets)
-  const mediaLoaded = useMediaStore((s) => s.assets.length > 0 || s.loading)
+  const mediaLoaded = useMediaStore((s) => s.loaded)
+  const mediaLoading = useMediaStore((s) => s.loading)
   const mediaIds = [...new Set(items.filter(isImageItem).map((i) => i.image.media_id))]
+  const hasSignage = outputs.some((o) => o.role === "signage")
   const missingMedia = mediaIds.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length
   useEffect(() => {
-    if ((mediaIds.length > 0 || outputs.some((o) => o.role === "signage")) && !mediaLoaded) void useMediaStore.getState().list()
+    if ((mediaIds.length > 0 || hasSignage) && !mediaLoaded && !mediaLoading) void useMediaStore.getState().list()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per set of ids
-  }, [mediaIds.join(","), mediaLoaded])
+  }, [mediaIds.join(","), hasSignage, mediaLoaded, mediaLoading])
   // Home is the readiness check: make sure every song in the service has been looked up.
   useEffect(() => {
     for (const id of songIds) if (!songs[id] && !missing.includes(id)) void useSongStore.getState().load(id).catch(() => {})

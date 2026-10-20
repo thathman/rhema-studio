@@ -7,6 +7,8 @@ import type { MediaAssetStatus, MediaImportResult } from "@/types"
 interface MediaState {
   assets: MediaAssetStatus[]
   loading: boolean
+  /** True once a list has completed (even with no pictures or with an error), so "missing" is never judged against an unloaded list. */
+  loaded: boolean
   error: string | null
   /** Data URLs by asset id, decoded once and shared with the output window as part of the render data. */
   urls: Record<string, string>
@@ -41,6 +43,7 @@ function measure(url: string): Promise<{ width: number; height: number } | null>
 export const useMediaStore = create<MediaState>((set, get) => ({
   assets: [],
   loading: false,
+  loaded: false,
   error: null,
   urls: {},
 
@@ -48,10 +51,10 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const assets = await invoke<MediaAssetStatus[]>("media_list")
-      set({ assets, loading: false })
+      set({ assets, loading: false, loaded: true })
       return assets
     } catch (e) {
-      set({ loading: false, error: e instanceof Error ? e.message : String(e) })
+      set({ loading: false, loaded: true, error: e instanceof Error ? e.message : String(e) })
       return []
     }
   },

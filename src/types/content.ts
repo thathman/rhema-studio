@@ -301,6 +301,7 @@ export interface ImportReport {
 export interface SlideItemPayload {
   title: string
   body: string
+  link?: string
 }
 
 /** `payload` of a `kind = "song"` program item. */

@@ -16,6 +16,7 @@ import type {
   Verse,
 } from "@/types"
 import { isImageItem, isSlideItem, isVerseItem } from "@/types"
+import { safeLink } from "@/lib/qr-bulletin"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
@@ -120,7 +121,7 @@ export function toItemInputs(
           translation: null,
           secondary_translation: null,
           notes: i.notes ?? null,
-          payload: JSON.stringify({ title: i.slide.title, body: i.slide.body, ...bg(i) } satisfies SlideItemPayload & { background_media_id?: string }),
+          payload: JSON.stringify({ title: i.slide.title, body: i.slide.body, ...(i.slide.link ? { link: i.slide.link } : {}), ...bg(i) } satisfies SlideItemPayload & { background_media_id?: string }),
         }
       : isVerseItem(i)
       ? {
@@ -197,7 +198,8 @@ export function parseSlidePayload(raw: string | null | undefined): SlideItemPayl
     const p = JSON.parse(raw) as Partial<SlideItemPayload>
     const title = typeof p.title === "string" ? p.title : ""
     const body = typeof p.body === "string" ? p.body : ""
-    return title.trim() || body.trim() ? { title, body } : null
+    const link = typeof p.link === "string" ? safeLink(p.link) : null
+    return title.trim() || body.trim() || link ? { title, body, ...(link ? { link } : {}) } : null
   } catch {
     return null
   }
