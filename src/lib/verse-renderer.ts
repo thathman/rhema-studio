@@ -1515,11 +1515,20 @@ function renderVerseImpl(
 
   // A picture item covers the frame; with no text at all, nothing else is drawn.
   if (verse?.image) {
-    drawImageFill(ctx, verse.image, { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }, 0, options?.imageCache)
+    const frame = { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }
+    drawImageFill(ctx, verse.image, frame, 0, options?.imageCache)
     const hasText = Boolean(verse.reference) || Boolean(verse.lines?.length) || verse.segments.some((s) => s.text.trim())
     if (!hasText) {
       ctx.restore()
       return metrics
+    }
+    // Words over a photo: darken it unless the theme already puts a solid plate under the text.
+    const scrim = backgroundScrimAlpha(scaledTheme)
+    if (scrim > 0) {
+      ctx.save()
+      ctx.fillStyle = `rgba(0,0,0,${scrim})`
+      ctx.fillRect(frame.x, frame.y, frame.width, frame.height)
+      ctx.restore()
     }
   }
 
@@ -1587,6 +1596,32 @@ function renderVerseImpl(
 
   ctx.restore()
   return metrics
+}
+
+/**
+ * How much to darken a background picture so light text stays readable:
+ * nothing when the theme's text box is an opaque plate, a little when it is
+ * translucent, a lot when the words sit straight on the picture. Dark text
+ * themes get no scrim (it would only hurt).
+ */
+export function backgroundScrimAlpha(theme: BroadcastTheme): number {
+  if (!isLightColor(theme.verseText.color)) return 0
+  const box = theme.textBox
+  if (box?.enabled && !box.image) {
+    if (box.opacity >= 0.6) return 0
+    return Math.max(0, 0.45 - box.opacity * 0.5)
+  }
+  return 0.45
+}
+
+function isLightColor(color: string): boolean {
+  const m = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!m) return true
+  const hex = m[1].length === 3 ? m[1].split("").map((c) => c + c).join("") : m[1]
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5
 }
 
 /** Copyright line: reference style at 40% size, bottom of the text area. */
