@@ -19,6 +19,7 @@ import { useBroadcastStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
 import { LibraryDialog } from "@/studio/more/library-dialog"
+import { BrandDialog } from "@/studio/more/brand-dialog"
 
 interface Row {
   icon: React.ReactNode
@@ -34,6 +35,7 @@ export function MoreWorkspace() {
   const openOutputs = useShellStore((s) => s.openOutputs)
   const [version, setVersion] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [brandOpen, setBrandOpen] = useState(false)
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
@@ -45,6 +47,7 @@ export function MoreWorkspace() {
       rows: [
         { icon: <MonitorIcon />, label: "Outputs", detail: "Screens and NDI senders, which theme each one shows", onClick: openOutputs },
         { icon: <PaletteIcon />, label: "Themes", detail: "Design how scripture looks on screen", onClick: () => useBroadcastStore.getState().setDesignerOpen(true) },
+        { icon: <PaletteIcon />, label: "Church brand", detail: "Logo, colours and fonts once; three matching themes", onClick: () => setBrandOpen(true) },
         {
           icon: <LayoutGridIcon />,
           label: "Classic layout",
@@ -138,6 +141,7 @@ export function MoreWorkspace() {
         </div>
       </div>
       <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+      {brandOpen && <BrandDialog open onClose={() => setBrandOpen(false)} />}
     </div>
   )
 }

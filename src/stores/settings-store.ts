@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
+import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
 
 type SttProvider = "deepgram" | "whisper"
 
@@ -14,7 +15,9 @@ interface SettingsState {
   cooldownMs: number
   onboardingComplete: boolean
   sttProvider: SttProvider
+  brandKit: BrandKit
 
+  setBrandKit: (kit: BrandKit) => void
   setDeepgramApiKey: (key: string | null) => void
   setOpenaiApiKey: (key: string | null) => void
   setClaudeApiKey: (key: string | null) => void
@@ -38,7 +41,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   cooldownMs: 2500,
   onboardingComplete: false,
   sttProvider: "deepgram",
+  brandKit: defaultBrandKit(),
 
+  setBrandKit: (brandKit) => set({ brandKit }),
   setDeepgramApiKey: (deepgramApiKey) => set({ deepgramApiKey }),
   setOpenaiApiKey: (openaiApiKey) => set({ openaiApiKey }),
   setClaudeApiKey: (claudeApiKey) => set({ claudeApiKey }),
@@ -52,6 +57,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 }))
 
 const PERSISTED_KEYS = [
+  "brandKit",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",

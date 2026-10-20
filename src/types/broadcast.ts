@@ -170,6 +170,8 @@ export interface BroadcastTheme {
   }
   /** A church logo in one corner (Brand Kit step 1). Absent = none. */
   logo?: ThemeLogo | null
+  /** Generated and kept in step by the Church Brand Kit; set false after a hand edit to detach. */
+  brandManaged?: boolean
   transition: {
     type: "fade" | "slide" | "scale" | "none"
     duration: number
