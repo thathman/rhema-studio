@@ -323,3 +323,11 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10t.1 | Open a saved song in the editor → "Add a file…" → a PDF. Click its name. Remove it. Delete the song's PDF from More → Pictures (if listed) or re-import the same PDF. | The PDF opens in the system viewer; the list updates; re-importing the same file does not duplicate it (same hash). Nothing about it ever reaches an output. | Unverified |
+
+### 10u. Pair and revoke a device (OP-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10u.1 | Settings → Remote: start HTTP, press "Pair a device". From a phone on the LAN: `curl -X POST http://<laptop>:8080/api/v1/pair -d '{"code":"<code>","name":"Tolu phone"}'`. | The reply carries a 64-character token; the laptop toasts "Tolu phone paired"; the code disappears; the device is listed. | Unverified |
+| 10u.2 | Send `next` with `X-Rhema-Key: <token>`; then Revoke the device; send again. Restart the app; check the list. | First request works; after revoke 401 at once (no restart); the device list survives restart; the token is never shown again. | Unverified |
+| 10u.3 | Press "Pair a device", send three wrong codes. | 403 with tries left, then the window closes (404 "pairing is not open"); the on-screen code remains until cancelled or two minutes pass. | Unverified |

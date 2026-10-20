@@ -97,6 +97,7 @@ pub fn run() {
         .manage(Mutex::new(rhema_detection::ReadingMode::new()))
         .manage(Mutex::new(commands::remote::OscRuntime::new()))
         .manage(Mutex::new(commands::remote::HttpRuntime::new()))
+        .manage(commands::remote::RemoteKeys::new())
         .manage(commands::content::ContentState(Mutex::new(None)))
         .manage(commands::media::MediaState(std::sync::OnceLock::new()))
         .invoke_handler(tauri::generate_handler![
@@ -136,6 +137,9 @@ pub fn run() {
             commands::remote::start_http,
             commands::remote::stop_http,
             commands::remote::get_http_status,
+            commands::remote::remote_set_keys,
+            commands::remote::remote_pair_start,
+            commands::remote::remote_pair_cancel,
             commands::remote::update_remote_status,
             commands::content::content_list_programs,
             commands::content::content_create_program,

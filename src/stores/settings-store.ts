@@ -1,4 +1,33 @@
 import { invoke } from "@tauri-apps/api/core"
+
+export interface RemoteDevice {
+  hash: string
+  name: string
+  paired_at: string
+}
+
+let remoteKeysPush: Promise<void> = Promise.resolve()
+
+/**
+ * The backend checks keys; the settings store owns the list. Called after
+ * hydration and on every change. Pushes are serialised so the last state
+ * wins, and a failure under Tauri is surfaced because a revoke that did not
+ * reach the backend is still a working key.
+ */
+export function pushRemoteKeys(): Promise<void> {
+  remoteKeysPush = remoteKeysPush.then(async () => {
+    const s = useSettingsStore.getState()
+    try {
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name })) })
+    } catch (e) {
+      if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+        const { toast } = await import("sonner")
+        toast.error("Remote keys not updated", { description: `${e instanceof Error ? e.message : String(e)}. Revoked devices may still work; restart the listeners.` })
+      }
+    }
+  })
+  return remoteKeysPush
+}
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
@@ -21,8 +50,12 @@ interface SettingsState {
   operatorName: string
   /** Shared key for OSC/HTTP control; blank means nothing authenticates. */
   remoteSecret: string
+  /** Paired controllers: SHA-256 of each token, never the token. */
+  remoteDevices: RemoteDevice[]
 
   setRemoteSecret: (secret: string) => void
+  addRemoteDevice: (d: { hash: string; name: string }) => void
+  revokeRemoteDevice: (hash: string) => void
   setOperatorName: (name: string) => void
   setBrandKit: (kit: BrandKit) => void
   setDeepgramApiKey: (key: string | null) => void
@@ -51,8 +84,20 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   brandKit: defaultBrandKit(),
   operatorName: "",
   remoteSecret: "",
+  remoteDevices: [],
 
-  setRemoteSecret: (remoteSecret) => set({ remoteSecret }),
+  setRemoteSecret: (remoteSecret) => {
+    set({ remoteSecret })
+    void pushRemoteKeys()
+  },
+  addRemoteDevice: (d) => {
+    set((s) => ({ remoteDevices: [...s.remoteDevices.filter((x) => x.hash !== d.hash), { ...d, paired_at: new Date().toISOString() }] }))
+    void pushRemoteKeys()
+  },
+  revokeRemoteDevice: (hash) => {
+    set((s) => ({ remoteDevices: s.remoteDevices.filter((x) => x.hash !== hash) }))
+    void pushRemoteKeys()
+  },
   setOperatorName: (operatorName) => {
     set({ operatorName })
     void invoke("content_set_actor", { name: operatorName.trim() || null }).catch(() => {})
@@ -74,6 +119,7 @@ const PERSISTED_KEYS = [
   "brandKit",
   "operatorName",
   "remoteSecret",
+  "remoteDevices",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",
@@ -116,6 +162,7 @@ export function hydrateSettings(): Promise<void> {
       }
       const name = useSettingsStore.getState().operatorName.trim()
       if (name) void invoke("content_set_actor", { name }).catch(() => {})
+      void pushRemoteKeys()
 
       // Attach only after successful hydration so as not to overwrite disk with defaults.
       // Debounce writes, so a dragged slider (e.g. gain) coalesces into a single disk write.
