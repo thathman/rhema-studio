@@ -78,6 +78,7 @@ pub async fn start_osc(
     state: State<'_, Mutex<OscRuntime>>,
     port: Option<u16>,
     lan: Option<bool>,
+    secret: Option<String>,
 ) -> Result<u16, String> {
     let mut runtime = state.lock().map_err(|e| e.to_string())?;
 
@@ -88,6 +89,7 @@ pub async fn start_osc(
     let config = OscConfig {
         port: port.unwrap_or(8000),
         host: bind_host(lan).into(),
+        secret: clean_secret(secret),
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -172,6 +174,7 @@ pub async fn start_http(
     state: State<'_, Mutex<HttpRuntime>>,
     port: Option<u16>,
     lan: Option<bool>,
+    secret: Option<String>,
 ) -> Result<u16, String> {
     let (status, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
@@ -185,6 +188,7 @@ pub async fn start_http(
     let config = HttpConfig {
         port: port.unwrap_or(8080),
         host: bind_host(lan).into(),
+        secret: clean_secret(secret),
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -277,6 +281,11 @@ pub struct HttpStatus {
 /// Neither control surface authenticates, so where it listens is the only
 /// gate: the whole network (default, what existing setups expect) or this
 /// computer only. See docs/rhema-studio/13-remote-control-threat-notes.md.
+/// Blank means "no key": nothing authenticates, as before.
+fn clean_secret(secret: Option<String>) -> Option<String> {
+    secret.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
 fn bind_host(lan: Option<bool>) -> &'static str {
     if lan.unwrap_or(true) { "0.0.0.0" } else { "127.0.0.1" }
 }

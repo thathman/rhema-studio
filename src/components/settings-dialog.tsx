@@ -653,6 +653,8 @@ function RemoteControlSection() {
   // Applies to both listeners at their next start. Nothing here authenticates,
   // so this is the only gate between the network and the live output.
   const [remoteLan, setRemoteLan] = useState(true)
+  const remoteSecret = useSettingsStore((s) => s.remoteSecret)
+  const setRemoteSecret = useSettingsStore((s) => s.setRemoteSecret)
   const [oscStatus, setOscStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [httpStatus, setHttpStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [oscError, setOscError] = useState<string | null>(null)
@@ -714,7 +716,7 @@ function RemoteControlSection() {
         setOscError(null)
       } else {
         const port = parseInt(oscPort) || 8000
-        const boundPort = await invoke<number>("start_osc", { port, lan: remoteLan })
+        const boundPort = await invoke<number>("start_osc", { port, lan: remoteLan, secret: remoteSecret.trim() || null })
         setOscPort(String(boundPort))
         setOscError(null)
       }
@@ -730,7 +732,7 @@ function RemoteControlSection() {
         setHttpError(null)
       } else {
         const port = parseInt(httpPort) || 8080
-        const boundPort = await invoke<number>("start_http", { port, lan: remoteLan })
+        const boundPort = await invoke<number>("start_http", { port, lan: remoteLan, secret: remoteSecret.trim() || null })
         setHttpPort(String(boundPort))
         setHttpError(null)
       }
@@ -748,6 +750,21 @@ function RemoteControlSection() {
           <span className="block text-[0.625rem] text-muted-foreground">
             Anyone on the network can then change what is on screen; nothing asks for a password. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
           </span>
+        </span>
+      </label>
+      <label className="flex flex-col gap-1 text-xs">
+        <span>Key the controller must send (optional)</span>
+        <Input
+          type="text"
+          value={remoteSecret}
+          onChange={(e) => setRemoteSecret(e.target.value)}
+          placeholder="e.g. rhema-sunday-2026"
+          className="h-7 max-w-xs text-xs"
+          disabled={oscStatus.running || httpStatus.running}
+          autoComplete="off"
+        />
+        <span className="text-[0.625rem] text-muted-foreground">
+          HTTP: header <code>X-Rhema-Key: &lt;key&gt;</code>. OSC: the key as the first argument, e.g. <code>/rhema/next "&lt;key&gt;"</code>. Leave blank to accept anything (as before). Takes effect when a listener is started.
         </span>
       </label>
       {/* OSC */}

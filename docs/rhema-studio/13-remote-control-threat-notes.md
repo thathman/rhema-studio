@@ -6,7 +6,7 @@ QA-006 first slice. What the two control surfaces expose today, verified from th
 
 - Both listeners are **off until the operator starts them** in Settings → Remote, every session (ports are not persisted). Rust: `commands/remote.rs`.
 - **OSC** listens on UDP (default 8000), **HTTP** on TCP (default 8080). Default bind is every interface (`0.0.0.0`); the Settings checkbox "Accept commands from other devices on this network" unticked binds `127.0.0.1` instead (this PR).
-- **No authentication.** No token, password or allow-list on either surface (`crates/api/src/http.rs`, `osc.rs`).
+- **Optional shared key** (Settings → Remote). When set, HTTP `/api/v1/command` requires `X-Rhema-Key: <key>` or `Authorization: Bearer <key>` (401 otherwise; `/health` and `/status` stay open) and every OSC message must start with the key as a string argument (refused and logged otherwise). Blank key = nothing authenticates, as shipped. The key travels in clear on the LAN (no TLS), so it stops accidents and casual misuse, not a determined attacker on the same network.
 - **Command surface** (`crates/api/src/command.rs`, 15 variants): next/prev, show/hide/on_air, send_to_live, bible_next/prev, verse_next/prev, add_to_queue, theme, opacity, confidence, macro. Every one goes through the same frontend actions as the buttons, so the live-safety rules hold (nothing goes on air before it has loaded; a bad reference is a warning). Payloads are typed and bounded (`coerce.rs`), unknown addresses and bad arguments are rejected with an error, and HTTP bodies are size-limited by the server.
 - Nothing on these surfaces reads or writes files, settings, the database or the network; the worst a sender can do is change what is on screen or turn the output off.
 
@@ -27,4 +27,4 @@ QA-006 first slice. What the two control surfaces expose today, verified from th
 
 ## Not done
 
-- Authentication and pairing (OP-006), rate limiting. (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)
+- Per-device pairing and revocation (OP-006), rate limiting, TLS. (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)

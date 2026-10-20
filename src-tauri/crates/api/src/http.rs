@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
+    http::HeaderMap,
     extract::State as AxumState,
     http::StatusCode,
     response::IntoResponse,
@@ -21,6 +22,8 @@ use crate::error::CommandError;
 pub struct HttpConfig {
     pub port: u16,
     pub host: String,
+    /// When set, `/command` requires `X-Rhema-Key: <secret>` (or `Authorization: Bearer <secret>`).
+    pub secret: Option<String>,
 }
 
 impl Default for HttpConfig {
@@ -28,6 +31,7 @@ impl Default for HttpConfig {
         Self {
             port: 8080,
             host: "0.0.0.0".into(),
+            secret: None,
         }
     }
 }
@@ -67,6 +71,7 @@ pub struct HttpStartResult {
 struct AppState<S: CommandSink> {
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
+    secret: Option<String>,
 }
 
 /// Snapshot of the current application state, served by `GET /api/v1/status`.
@@ -110,6 +115,7 @@ where
     let state = Arc::new(AppState {
         sink,
         status,
+        secret: config.secret.clone(),
     });
 
     let app = Router::new()
@@ -192,10 +198,32 @@ struct CommandResponse {
     error: Option<String>,
 }
 
+/// The key a request carries, from `X-Rhema-Key` or `Authorization: Bearer`.
+fn presented_key(headers: &HeaderMap) -> Option<&str> {
+    if let Some(v) = headers.get("x-rhema-key").and_then(|v| v.to_str().ok()) {
+        return Some(v.trim());
+    }
+    headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(str::trim)
+}
+
 async fn command_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
+    headers: HeaderMap,
     Json(request): Json<CommandRequest>,
 ) -> impl IntoResponse {
+    if let Some(secret) = state.secret.as_deref() {
+        if presented_key(&headers) != Some(secret) {
+            log::warn!("HTTP command refused: missing or wrong key");
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(CommandResponse { success: false, error: Some("missing or wrong X-Rhema-Key".into()) }),
+            );
+        }
+    }
     match CommandDispatcher::dispatch(&request.command, &*state.sink) {
         Ok(()) => (
             StatusCode::OK,
@@ -254,6 +282,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
+        secret: None,
         };
 
         let mut result = start_http_server(config, sink, status)
@@ -270,6 +299,10 @@ mod tests {
 
     /// Helper: send a raw HTTP request and return the response as a string.
     async fn raw_http_request(port: u16, method: &str, path: &str, body: Option<&str>) -> String {
+        raw_http_request_with(port, method, path, body, "").await
+    }
+
+    async fn raw_http_request_with(port: u16, method: &str, path: &str, body: Option<&str>, extra_headers: &str) -> String {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
@@ -279,7 +312,7 @@ mod tests {
         let body_str = body.unwrap_or("");
         let request = if body.is_some() {
             format!(
-                "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body_str}",
+                "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra_headers}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body_str}",
                 body_str.len()
             )
         } else {
@@ -300,6 +333,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
+        secret: None,
         };
 
         let result = start_http_server(config, sink, status)
@@ -334,6 +368,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
+        secret: None,
         };
 
         let result = start_http_server(config, sink, status)
@@ -357,12 +392,38 @@ mod tests {
     /// router happened to mount instead, so the two could drift apart and
     /// still pass.
     #[tokio::test]
+    async fn command_endpoint_requires_the_key_when_one_is_set() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), secret: Some("s3cret".into()) };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let body = r#"{"command":"next"}"#;
+        let no_key = raw_http_request(port, "POST", "/api/v1/command", Some(body)).await;
+        assert!(no_key.contains("401"), "Expected 401, got: {no_key}");
+        let wrong = raw_http_request_with(port, "POST", "/api/v1/command", Some(body), "X-Rhema-Key: nope\r\n").await;
+        assert!(wrong.contains("401"), "Expected 401, got: {wrong}");
+        assert_eq!(sink.command_count(), 0);
+        let header = raw_http_request_with(port, "POST", "/api/v1/command", Some(body), "X-Rhema-Key: s3cret\r\n").await;
+        assert!(header.contains("200 OK"), "Expected 200, got: {header}");
+        let bearer = raw_http_request_with(port, "POST", "/api/v1/command", Some(body), "Authorization: Bearer s3cret\r\n").await;
+        assert!(bearer.contains("200 OK"), "Expected 200, got: {bearer}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.command_count(), 2);
+        // Health stays open so a controller can find the app.
+        assert!(raw_http_request(port, "GET", "/api/v1/health", None).await.contains("200 OK"));
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
     async fn command_endpoint_dispatches_command() {
         let sink = Arc::new(MockSink::new());
         let status = new_shared_status();
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
+        secret: None,
         };
 
         let result = start_http_server(config, sink.clone(), status)
@@ -392,6 +453,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
+        secret: None,
         };
 
         let result = start_http_server(config, sink.clone(), status)
@@ -417,6 +479,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
+        secret: None,
         };
 
         let result = start_http_server(config, sink.clone(), status)
@@ -450,6 +513,7 @@ mod tests {
         let config = HttpConfig {
             port,
             host: "127.0.0.1".into(),
+            secret: None,
         };
 
         let result = start_http_server(config, sink, status).await;
