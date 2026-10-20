@@ -100,6 +100,8 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
       return p
     }
     case "content_delete_program": programs.delete(String(args.id)); return null
+    case "content_list_revisions": return []
+    case "content_get_revision": return null
     case "content_list_songs": {
       const q = String(args.query ?? "").toLowerCase().trim()
       return [...songs.values()].filter((s) => !q || JSON.stringify(summary(s)).toLowerCase().includes(q) || s.sections.some((x) => Object.values(x.texts).some((t) => t.toLowerCase().includes(q)))).map(summary)

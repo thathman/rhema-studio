@@ -8,6 +8,7 @@ import type {
   ProgramItem,
   ProgramWithItems,
   QueueItem,
+  RevisionSummary,
   ImageItemPayload,
   SlideItemPayload,
   SongItemPayload,
@@ -64,6 +65,10 @@ interface ServiceState {
   deleteProgram: (id: string, opts?: Discard) => Promise<DeleteResult>
   /** Detach the rundown from the saved service (keeps the rundown on screen). */
   closeProgram: (opts?: Discard) => CloseResult
+  /** Saved snapshots of the open service, newest first. */
+  listRevisions: () => Promise<RevisionSummary[]>
+  /** Make a snapshot the current items (a normal save, so it is itself undoable). Refuses while unsaved. */
+  restoreRevision: (revisionId: string) => Promise<OpenResult | "conflict">
 }
 
 /** Translation abbreviations the operator is presenting with right now. */
@@ -397,6 +402,34 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (!get().dirty) return "created"
     const saved = await get().saveCurrent()
     return saved === "saved" ? "created" : "created_unsaved"
+  },
+
+  listRevisions: async () => {
+    const current = get().current
+    if (!current) return []
+    try {
+      return await invoke<RevisionSummary[]>("content_list_revisions", { programId: current.id })
+    } catch (e) {
+      set({ error: describe(e) })
+      return []
+    }
+  },
+
+  restoreRevision: async (revisionId) => {
+    const current = get().current
+    if (!current) return "error"
+    if (get().dirty) return "unsaved"
+    try {
+      await invoke<ProgramWithItems>("content_restore_revision", { programId: current.id, expectedRevision: current.revision, revisionId })
+    } catch (e) {
+      if (isContentCommandError(e) && e.kind === "conflict") {
+        set({ conflict: { expected: e.expected ?? current.revision, actual: e.actual ?? -1 }, error: e.message })
+        return "conflict"
+      }
+      set({ error: describe(e) })
+      return "error"
+    }
+    return get().openProgram(current.id, { discard: true })
   },
 
   duplicateCurrent: async (title, serviceDate) => {

@@ -14,6 +14,7 @@ import {
 import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { isVerseItem } from "@/types"
+import { ServiceHistory } from "@/studio/prepare/service-history"
 import { useBibleStore } from "@/stores/bible-store"
 
 /**
@@ -130,6 +131,7 @@ export function ServiceBar() {
         </SelectContent>
       </Select>
 
+      <ServiceHistory />
       {current && (
         <Popover
           open={dupOpen}

@@ -211,6 +211,15 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10g.5 | NDI/OBS output with a picture live. | Receivers show the picture (not a flat frame) within a second. |
 | 10g.6 | Prepare: select a verse item, choose a background picture. Present it; then a song with the same background. | Words over the picture in the theme's text box; both the main window and NDI show the picture under the text; preview matches live. |
 
+## 10h. Service history
+
+| # | Do | Expect |
+|---|---|---|
+| 10h.1 | Save a service three times with different items. Prepare → History. | Three versions, newest first, the top one marked current. |
+| 10h.2 | Pick the oldest; read the summary; Restore. | "Brings back / Removes / moved" lines match; after restore the rundown is the old one and a new, fourth version exists. |
+| 10h.3 | With a verse live, restore an older version. | The output does not change; only the rundown does. |
+| 10h.4 | Edit without saving, open History. | Restore disabled with "save or discard first". |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -225,6 +234,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10g, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10h, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.
