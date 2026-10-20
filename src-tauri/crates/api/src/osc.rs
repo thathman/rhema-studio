@@ -8,7 +8,7 @@ use rosc::{OscPacket, OscMessage};
 use crate::coerce::parse_osc;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
-use crate::keys::{check_key, new_key_set, KeySet};
+use crate::keys::{check_key, new_key_set, KeyEntry, KeySet};
 
 /// Configuration for the OSC listener.
 #[derive(Debug, Clone)]
@@ -163,9 +163,9 @@ fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
         _ => None,
     };
     // One check: the set may change between two reads (a revoke on another thread).
-    let args: &[rosc::OscType] = match check_key(keys, presented) {
-        Ok(None) => &msg.args,
-        Ok(Some(_)) => &msg.args[1..],
+    let (args, entry): (&[rosc::OscType], Option<KeyEntry>) = match check_key(keys, presented) {
+        Ok(None) => (&msg.args, None),
+        Ok(Some(e)) => (&msg.args[1..], Some(e)),
         Err(reason) => {
             log::warn!("OSC message refused for {}: {reason}", msg.addr);
             return;
@@ -173,6 +173,12 @@ fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
     };
     match parse_osc(&msg.addr, args) {
         Ok(cmd) => {
+            if let Some(e) = entry {
+                if !e.role.allows(&cmd) {
+                    log::warn!("OSC command refused for {}: {} may present but not change settings", msg.addr, e.name);
+                    return;
+                }
+            }
             log::debug!("OSC command: {cmd}");
             if let Err(e) = CommandDispatcher::dispatch(&cmd, sink) {
                 log::warn!("OSC dispatch error for {}: {e}", msg.addr);
@@ -238,6 +244,7 @@ mod tests {
     fn osc_listener_requires_the_key_when_one_is_set() {
         let sink = Arc::new(MockSink::new());
         let config = OscConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("s3cret", "Shared key")]) };
+        let result_keys = config.keys.clone();
         let result = start_osc_listener(config, sink.clone()).expect("should bind");
         let port = result.bound_port;
         let send_socket = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -252,8 +259,22 @@ mod tests {
         send(vec![rosc::OscType::String("s3cret".into())]);
         std::thread::sleep(Duration::from_millis(200));
         assert_eq!(sink.command_count(), 1);
+        // A present-only entry cannot change the theme but can press Next.
+        keys_for_role_test(&result_keys, "tok");
+        let send_to = |addr: &str, args: Vec<rosc::OscType>| {
+            let packet = rosc::OscPacket::Message(rosc::OscMessage { addr: addr.into(), args });
+            send_socket.send_to(&rosc::encoder::encode(&packet).unwrap(), format!("127.0.0.1:{port}")).unwrap();
+        };
+        send_to("/rhema/theme", vec![rosc::OscType::String("tok".into()), rosc::OscType::String("Dark".into())]);
+        send_to("/rhema/next", vec![rosc::OscType::String("tok".into())]);
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(sink.command_count(), 2);
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    fn keys_for_role_test(keys: &KeySet, token: &str) {
+        keys.write().unwrap().push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present });
     }
 
     #[test]

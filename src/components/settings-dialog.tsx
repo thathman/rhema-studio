@@ -657,6 +657,7 @@ function RemoteControlSection() {
   const setRemoteSecret = useSettingsStore((s) => s.setRemoteSecret)
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
   const revokeRemoteDevice = useSettingsStore((s) => s.revokeRemoteDevice)
+  const setRemoteDeviceRole = useSettingsStore((s) => s.setRemoteDeviceRole)
   const [pairCode, setPairCode] = useState<string | null>(null)
   const [pairStartedAt, setPairStartedAt] = useState("")
   // The backend closes the window when a device pairs; hide the code once a device newer than the window appears.
@@ -819,12 +820,21 @@ function RemoteControlSection() {
           </div>
         )}
         {remoteDevices.length === 0 ? (
-          <p className="text-[0.625rem] text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, and can be revoked on its own.</p>
+          <p className="text-[0.625rem] text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, can be revoked on its own, and starts as "Present only" (next, previous, show, hide, macros; not theme, opacity, confidence or the on-air switch).</p>
         ) : (
           <ul className="divide-y divide-border rounded-md border border-border">
             {remoteDevices.map((d) => (
               <li key={d.hash} className="flex items-center gap-2 px-2 py-1.5">
                 <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                <select
+                  aria-label={`What ${d.name} may do`}
+                  value={d.role ?? "configure"}
+                  onChange={(e) => setRemoteDeviceRole(d.hash, e.target.value === "present" ? "present" : "configure")}
+                  className="h-6 rounded border border-border bg-background px-1 text-[0.625rem]"
+                >
+                  <option value="present">Present only</option>
+                  <option value="configure">Present and change settings</option>
+                </select>
                 <span className="shrink-0 text-[0.625rem] text-muted-foreground">paired {new Date(d.paired_at).toLocaleDateString()}</span>
                 <Button size="sm" variant="ghost" className="text-xs text-destructive" aria-label={`Revoke ${d.name}`} onClick={() => revokeRemoteDevice(d.hash)}>Revoke</Button>
               </li>

@@ -58,7 +58,7 @@ export function useRemoteControl() {
           const p = parsePayload(event.payload)
           if (typeof p?.hash === "string" && typeof p?.name === "string") {
             noteRemote(`${REMOTE_PAIRED_EVENT} ${p.name}`)
-            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name })
+            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: p.role === "configure" ? "configure" : "present" })
             toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
           }
         }),

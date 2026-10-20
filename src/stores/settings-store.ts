@@ -1,9 +1,13 @@
 import { invoke } from "@tauri-apps/api/core"
 
+export type RemoteRole = "present" | "configure"
+
 export interface RemoteDevice {
   hash: string
   name: string
   paired_at: string
+  /** Absent on entries saved before roles existed: treated as configure (full access). */
+  role?: RemoteRole
 }
 
 let remoteKeysPush: Promise<void> = Promise.resolve()
@@ -18,7 +22,7 @@ export function pushRemoteKeys(): Promise<void> {
   remoteKeysPush = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name })) })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure" })) })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -54,8 +58,9 @@ interface SettingsState {
   remoteDevices: RemoteDevice[]
 
   setRemoteSecret: (secret: string) => void
-  addRemoteDevice: (d: { hash: string; name: string }) => void
+  addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
   revokeRemoteDevice: (hash: string) => void
+  setRemoteDeviceRole: (hash: string, role: RemoteRole) => void
   setOperatorName: (name: string) => void
   setBrandKit: (kit: BrandKit) => void
   setDeepgramApiKey: (key: string | null) => void
@@ -96,6 +101,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
   revokeRemoteDevice: (hash) => {
     set((s) => ({ remoteDevices: s.remoteDevices.filter((x) => x.hash !== hash) }))
+    void pushRemoteKeys()
+  },
+  setRemoteDeviceRole: (hash, role) => {
+    set((s) => ({ remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }))
     void pushRemoteKeys()
   },
   setOperatorName: (operatorName) => {
