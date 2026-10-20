@@ -1,7 +1,10 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { BadgeCheckIcon, CalendarIcon, CopyIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
-import { approvalLabel, approvalState } from "@/lib/approval"
+import { approvalBlockers, approvalLabel, approvalState } from "@/lib/approval"
+import { useMediaStore } from "@/stores/media-store"
+import { useSongStore } from "@/stores/song-store"
+import { isImageItem } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -29,6 +32,13 @@ export function ServiceBar() {
   const dirty = useServiceStore((s) => s.dirty)
   const approval = approvalState(useServiceStore((s) => s.current))
   const approve = async () => {
+    const items = useQueueStore.getState().items
+    if (items.some(isImageItem) || items.some((i) => i.background)) await useMediaStore.getState().list().catch(() => {})
+    const blockers = approvalBlockers(items, useSongStore.getState().missing, useMediaStore.getState().assets)
+    if (blockers.length) {
+      toast.error("Not approved", { description: blockers.join(" ") + " Fix that first, or remove the item." })
+      return
+    }
     const r = await useServiceStore.getState().approve()
     if (r === "ok") toast.success("Approved", { description: "This saved version is kept in History whatever is saved later." })
     else if (r === "unsaved") toast.warning("Save first")

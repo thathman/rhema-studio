@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { approvalLabel, approvalState } from "./approval"
+import { approvalBlockers, approvalLabel, approvalState } from "./approval"
+import type { ImageQueueItem, SongQueueItem, VerseQueueItem } from "@/types"
 
 describe("approval state", () => {
   it("is none, approved or changed depending on the approved revision", () => {
@@ -9,5 +10,17 @@ describe("approval state", () => {
     expect(approvalState({ revision: 5, approved_revision: 3 })).toBe("changed")
     expect(approvalLabel({ revision: 5, approved_revision: 3, approved_at: null })).toBe("Changed since approval (v3 approved, now v5)")
     expect(approvalLabel({ revision: 3, approved_revision: 3, approved_at: null })).toBe("Approved")
+  })
+
+  it("refuses approval while a song or picture is missing, in plain words", () => {
+    const song = (id: string, title: string): SongQueueItem => ({ id, kind: "song", song: { song_id: id, title, arrangement_id: null, languages: ["en"] }, reference: title, confidence: 1, source: "manual", added_at: 0 })
+    const pic = (media_id: string, name: string): ImageQueueItem => ({ id: media_id, kind: "image", image: { media_id, name, fit: "cover" }, reference: name, confidence: 1, source: "manual", added_at: 0, notes: null })
+    const verse: VerseQueueItem = { id: "v", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, background: { media_id: "bg", name: "Sky" } }
+    const items = [song("s1", "Amazing Grace"), song("s2", "How Great"), pic("m1", "Welcome"), verse]
+    expect(approvalBlockers(items, [], [{ id: "m1", present: true }, { id: "bg", present: true }])).toEqual([])
+    expect(approvalBlockers(items, ["s2"], [{ id: "m1", present: false }])).toEqual([
+      "A song is not in the library: How Great.",
+      "2 pictures are missing from the media folder: Welcome, Sky.",
+    ])
   })
 })
