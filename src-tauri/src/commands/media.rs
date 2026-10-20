@@ -55,9 +55,31 @@ fn kind_and_mime(ext: &str) -> Option<(&'static str, &'static str)> {
     })
 }
 
+/// A media file name is `<sha256 hex>.<ext>` and nothing else. The crate
+/// validates on insert; this re-checks every name read back from the
+/// database (a restored or hand-edited file could carry anything) before it
+/// is joined onto the media folder.
+fn safe_file_name(name: &str) -> Option<&str> {
+    let (hash, ext) = name.split_once('.')?;
+    let ok = hash.len() == 64
+        && hash.bytes().all(|b| b.is_ascii_hexdigit())
+        && !ext.is_empty()
+        && ext.len() <= 8
+        && ext.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
+    ok.then_some(name)
+}
+
+/// The asset's path inside the media folder, or None when the stored name is
+/// not a bare hash name (treated as missing, never touched).
+fn media_path(dir: &Path, file: &str) -> Option<PathBuf> {
+    safe_file_name(file).map(|f| dir.join(f))
+}
+
 fn status(dir: &Path, asset: MediaAsset) -> MediaAssetStatus {
-    let path = dir.join(&asset.file);
-    MediaAssetStatus { present: path.is_file(), path: path.display().to_string(), asset }
+    match media_path(dir, &asset.file) {
+        Some(path) => MediaAssetStatus { present: path.is_file(), path: path.display().to_string(), asset },
+        None => MediaAssetStatus { present: false, path: String::new(), asset },
+    }
 }
 
 fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Result<(MediaAsset, bool), String> {
@@ -67,9 +89,10 @@ fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Resul
     let hash = format!("{:x}", Sha256::digest(&bytes));
     if let Some(existing) = db.find_media_by_hash(&hash).map_err(|e| e.to_string())? {
         // Same picture already here; make sure the file is too.
-        let dest = dir.join(&existing.file);
-        if !dest.is_file() {
-            std::fs::write(&dest, &bytes).map_err(|e| format!("could not restore the media file: {e}"))?;
+        if let Some(dest) = media_path(dir, &existing.file) {
+            if !dest.is_file() {
+                std::fs::write(&dest, &bytes).map_err(|e| format!("could not restore the media file: {e}"))?;
+            }
         }
         return Ok((existing, true));
     }
@@ -143,6 +166,22 @@ pub fn media_delete(state: State<'_, ContentState>, media: State<'_, MediaState>
     let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
     let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
     let file = db.delete_media(&id)?;
-    let _ = std::fs::remove_file(media_dir(&media)?.join(file));
+    if let Some(path) = media_path(media_dir(&media)?, &file) {
+        let _ = std::fs::remove_file(path);
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_file_name;
+
+    #[test]
+    fn only_hash_names_reach_the_file_system() {
+        let good = format!("{}.png", "a".repeat(64));
+        assert_eq!(safe_file_name(&good), Some(good.as_str()));
+        for bad in ["../x.png", "/etc/passwd", "abc.png", &format!("{}", "a".repeat(64)), &format!("{}.PNG", "a".repeat(64)), &format!("{}.p/ng", "a".repeat(64)), ""] {
+            assert!(safe_file_name(bad).is_none(), "{bad}");
+        }
+    }
 }
