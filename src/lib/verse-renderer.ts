@@ -15,7 +15,8 @@ import type {
   ThemeImageFill,
   VerseRenderData,
   RenderOptions,
-  VerseTextStyle,
+  VerseTextStyle,,
+  ThemeLogo,
 } from "@/types/broadcast"
 
 // Pretext lazily creates one internal measurement context, preferring
@@ -1532,6 +1533,8 @@ function renderVerseImpl(
     }
   }
 
+  drawLogo(ctx, scaledTheme, options?.imageCache, options?.opacity ?? 1)
+
   // The container behind the reference + verse block, then each element's own
   // plate on top of it.
   const baseOpacity = options?.opacity ?? 1
@@ -1622,6 +1625,33 @@ function isLightColor(color: string): boolean {
   const g = parseInt(hex.slice(2, 4), 16)
   const b = parseInt(hex.slice(4, 6), 16)
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5
+}
+
+/** Where the logo goes: `size`% of the frame height, 2% margin, aspect from the loaded image (square until it loads). */
+export function logoRect(
+  logo: Pick<ThemeLogo, "corner" | "size">,
+  resolution: { width: number; height: number },
+  aspect = 1
+): VerseLayoutRect {
+  const h = (Math.min(25, Math.max(4, logo.size)) / 100) * resolution.height
+  const w = h * Math.max(0.2, aspect)
+  const m = 0.02 * resolution.height
+  const x = logo.corner.endsWith("left") ? m : resolution.width - m - w
+  const y = logo.corner.startsWith("top") ? m : resolution.height - m - h
+  return { x, y, width: w, height: h }
+}
+
+function drawLogo(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, imageCache: Map<string, HTMLImageElement> | undefined, baseOpacity: number): void {
+  const logo = theme.logo
+  if (!logo?.url) return
+  if (theme.background.type === "transparent" && !logo.showOnTransparent) return
+  const img = imageCache?.get(logo.url)
+  if (!img) return
+  const rect = logoRect(logo, theme.resolution, img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1)
+  ctx.save()
+  ctx.globalAlpha = baseOpacity * Math.min(1, Math.max(0, logo.opacity))
+  ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height)
+  ctx.restore()
 }
 
 /** Copyright line: reference style at 40% size, bottom of the text area. */
