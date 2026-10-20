@@ -11,6 +11,8 @@ export type { DetectionResult, DetectionStatus, ReadingAdvance, SemanticSearchRe
 export type { BroadcastTheme, VerseRenderData, VerseSegment, RenderOptions } from "./broadcast"
 export type {
   BroadcastOutput,
+  BroadcastOutputRole,
+  StagePayload,
   BroadcastOutputNdiSettings,
   BroadcastOutputStatus,
   BroadcastOutputType,

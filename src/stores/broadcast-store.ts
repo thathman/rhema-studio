@@ -12,6 +12,9 @@ import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import type { ItemTranslations } from "@/lib/translation-policy"
+import { buildStagePayload } from "@/lib/stage"
+import { useQueueStore } from "@/stores/queue-store"
+import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
 export interface HeldLive {
@@ -298,6 +301,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const theme = s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
     if (!theme) return
 
+    if (output.role === "stage") {
+      const q = useQueueStore.getState()
+      void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
+        theme,
+        verse: null,
+        role: "stage",
+        stage: buildStagePayload({ isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow() }),
+      }).catch(() => {})
+      return
+    }
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
       verse: s.isLive ? s.liveVerse : null,
@@ -577,3 +590,13 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     console.warn("[broadcast] Failed to persist themes")
   }
 }
+
+// Stage outputs also follow the rundown (what is next) and the timer.
+function syncStageOutputs(): void {
+  const s = useBroadcastStore.getState()
+  for (const o of s.outputs) if (o.role === "stage") s.syncBroadcastOutputFor(o.id)
+}
+useQueueStore.subscribe((state, prev) => {
+  if (state.items !== prev.items || state.activeIndex !== prev.activeIndex) syncStageOutputs()
+})
+useTimerStore.subscribe(syncStageOutputs)

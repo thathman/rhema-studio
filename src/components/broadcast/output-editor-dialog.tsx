@@ -200,6 +200,17 @@ export function OutputEditorDialog({
             </div>
           </div>
 
+          <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+            <span id="role-label" className="text-xs text-muted-foreground">Who sees it</span>
+            <Select value={form.role ?? "congregation"} onValueChange={(v) => patch({ role: v as BroadcastOutput["role"], ...(v === "stage" ? { type: "display" as const } : {}) })}>
+              <SelectTrigger aria-labelledby="role-label" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="congregation">Congregation — the themed screen (projector, stream)</SelectItem>
+                <SelectItem value="stage">Stage — the live words, what is next, your note and the timer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex flex-col gap-3 border-t border-border pt-4">
             <span className="text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
               {form.type === "display" ? "Display settings" : "NDI settings"}
