@@ -19,6 +19,8 @@ export interface ReadinessInput {
   listening: boolean
   /** Songs in the rundown whose licence is still "unknown". */
   unknownLicenceSongs?: number
+  /** Song items in the rundown whose song is no longer in the library. */
+  missingSongs?: number
 }
 
 /**
@@ -42,6 +44,9 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
     i.listening
       ? { id: "listening", status: "ok", label: "Listening for verse references" }
       : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in the Production view to detect verses from the sermon." },
+    ...(i.missingSongs
+      ? [{ id: "missing-songs", status: "warn" as const, label: `${i.missingSongs} song${i.missingSongs === 1 ? "" : "s"} in the service ${i.missingSongs === 1 ? "is" : "are"} not in the library`, detail: "They cannot be shown. Remove them or import the songs again.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
     ...(i.unknownLicenceSongs
       ? [{ id: "licence", status: "info" as const, label: `${i.unknownLicenceSongs} song${i.unknownLicenceSongs === 1 ? "" : "s"} in the service ${i.unknownLicenceSongs === 1 ? "has" : "have"} no licence recorded`, detail: "Not a blocker. Open the song in Prepare → Songs to record it.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),

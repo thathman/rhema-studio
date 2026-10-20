@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.10 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.11 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -52,7 +52,7 @@
 | SV-003 Service templates and multi-service variants | P1 | MERGED | SV-002 | PR #12 `ff09a63`: Copy service (fresh item ids, original untouched, refused while unsaved); 1 test. Named templates not yet (a copied service is the template) |
 | SV-004 Quick Find for Bible, hymn, song, media | P1 | BACKLOG | SO-007,SV-002 | Keyboard-safe, typo-tolerant, predictable candidate ranking |
 | SV-005 Next/Previous Verse and responsive readings | P1 | IN PR | ST-001,SV-002 | live-verse-step PR: Verse +/− continues the live reading in the item's translations, crosses chapters, stops at book ends with a warning; Shift+←/→, Standard buttons, OSC `/rhema/verse_next|verse_prev`, HTTP `verse_next|verse_prev`; 4 tests + Rust api tests. Responsive (leader/congregation) format not yet |
-| SV-006 Program notes, review readiness and duration estimates | P1 | BACKLOG | SV-002 | Clear missing/unfinished tasks, no false readiness |
+| SV-006 Program notes, review readiness and duration estimates | P1 | IN PR | SV-002 | rundown-notes-readiness PR: operator note per item (Prepare edits, Present shows, never on screen, saved with the service); Home warns when a song in the service is missing from the library (looked up on Home); 1 test. Duration estimates not yet |
 | SV-007 Persistent revisions, visual compare and revert | P1 | BACKLOG | ST-003,SV-002 | Auditable service history; reversible without affecting live |
 
 ## Milestone 3 — Media and visuals
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.11):** rundown-notes-readiness PR opened (SV-006 IN PR).
 - **2026-10-20 (rev 0.10):** PR #11 `570b41a` and PR #12 `ff09a63` merged (SV-001 MERGED, SV-002/SV-003 MERGED pending acceptance); live-verse-step PR opened (SV-005 IN PR).
 - **2026-10-20 (rev 0.9):** service-builder PR opened (SV-002 drag reorder, SV-003 copy service).
 - **2026-10-20 (rev 0.8):** PR #10 merged `d884791` (ST-008 MERGED, acceptance 9.4–9.6 open). custom-slides PR opened (SV-001 IN PR, SV-002 partial).

@@ -5,6 +5,8 @@ import type { Hymnbook, HymnbookInput, SongInput, SongSummary, SongWithSections 
 interface SongState {
   /** Loaded songs by id. Presenting reads from here; saves refresh it. */
   songs: Record<string, SongWithSections>
+  /** Ids a load found missing (deleted or from another computer's library). */
+  missing: string[]
   hymnbooks: Hymnbook[]
   /** Last library search. */
   query: string
@@ -26,6 +28,7 @@ let searchSeq = 0
 
 export const useSongStore = create<SongState>((set, get) => ({
   songs: {},
+  missing: [],
   hymnbooks: [],
   query: "",
   results: [],
@@ -36,11 +39,11 @@ export const useSongStore = create<SongState>((set, get) => ({
     const cached = get().songs[id]
     if (cached && !opts.refresh) return cached
     const song = await invoke<SongWithSections | null>("content_get_song", { id })
-    if (song) set((s) => ({ songs: { ...s.songs, [id]: song } }))
+    if (song) set((s) => ({ songs: { ...s.songs, [id]: song }, missing: s.missing.filter((m) => m !== id) }))
     else set((s) => {
       const songs = { ...s.songs }
       delete songs[id]
-      return { songs }
+      return { songs, missing: s.missing.includes(id) ? s.missing : [...s.missing, id] }
     })
     return song
   },

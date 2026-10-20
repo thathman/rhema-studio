@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
-import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MusicIcon, PresentationIcon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -115,9 +115,13 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 </span>
               )}
             </div>
+            {mode === "present" && item.notes?.trim() && (
+              <p className="ml-9 flex items-start gap-1 pr-2 pb-1 text-xs text-muted-foreground"><StickyNoteIcon className="mt-0.5 size-3 shrink-0" aria-label="Note" /><span className="whitespace-pre-wrap">{item.notes.trim()}</span></p>
+            )}
             {expanded && mode === "prepare" && <SongItemControls item={item} />}
             {expanded && <SlideList item={item} index={index} mode={mode} />}
             {custom && isSelected && mode === "prepare" && <CustomSlideEditor item={item} />}
+            {isSelected && mode === "prepare" && <NoteEditor item={item} />}
           </Row>
         )
       })}
@@ -173,6 +177,23 @@ function SongBadges({ item }: { item: SongQueueItem }) {
       ))}
       {arrangement && !arrangement.is_default && <span className="truncate">{arrangement.name}</span>}
     </span>
+  )
+}
+
+/** Prepare-only: a note for the operator ("read slowly", "pause for prayer"). Never on screen. */
+function NoteEditor({ item }: { item: QueueItem }) {
+  return (
+    <div className="ml-7 flex items-center gap-2 py-1 pl-2">
+      <StickyNoteIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <Input
+        aria-label={`Note for ${item.reference}`}
+        placeholder="Note for the operator (never on screen)"
+        value={item.notes ?? ""}
+        maxLength={4000}
+        className="h-7 text-xs"
+        onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, notes: e.target.value || null }))}
+      />
+    </div>
   )
 }
 

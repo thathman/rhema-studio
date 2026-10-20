@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { CheckIcon, TriangleAlertIcon, InfoIcon, PlayIcon, PencilRulerIcon, MonitorIcon, SettingsIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -39,9 +40,15 @@ export function HomeWorkspace() {
 
   const onAir = outputs.filter((o) => outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive).length
   const songs = useSongStore((s) => s.songs)
-  const unknownLicenceSongs = new Set(
-    items.filter(isSongItem).map((i) => i.song.song_id).filter((id) => songs[id]?.song.licence === "unknown")
-  ).size
+  const missing = useSongStore((s) => s.missing)
+  const songIds = [...new Set(items.filter(isSongItem).map((i) => i.song.song_id))]
+  const unknownLicenceSongs = songIds.filter((id) => songs[id]?.song.licence === "unknown").length
+  const missingSongs = songIds.filter((id) => missing.includes(id)).length
+  // Home is the readiness check: make sure every song in the service has been looked up.
+  useEffect(() => {
+    for (const id of songIds) if (!songs[id] && !missing.includes(id)) void useSongStore.getState().load(id).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ids only
+  }, [songIds.join(",")])
   const { ready, checks } = computeReadiness({
     translationsLoaded: translations.length,
     activeThemeName: themes.find((t) => t.id === activeThemeId)?.name ?? null,
@@ -50,6 +57,7 @@ export function HomeWorkspace() {
     rundownCount: items.length,
     listening,
     unknownLicenceSongs,
+    missingSongs,
   })
 
   const fix = (f: ReadinessFix) => {

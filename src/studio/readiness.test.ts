@@ -25,6 +25,12 @@ describe("computeReadiness", () => {
     expect(c?.fix).toBe("outputs")
   })
 
+  it("songs missing from the library block readiness", () => {
+    const r = computeReadiness({ ...good, missingSongs: 1 })
+    expect(r.ready).toBe(false)
+    expect(r.checks.find((x) => x.id === "missing-songs")).toMatchObject({ status: "warn", fix: "prepare" })
+  })
+
   it("unknown song licences are an info line with a Prepare fix", () => {
     const r = computeReadiness({ ...good, unknownLicenceSongs: 2 })
     expect(r.ready).toBe(true)
