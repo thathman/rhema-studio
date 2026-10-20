@@ -41,7 +41,7 @@
 | SO-008 Import/export | P1 | MERGED (crate) / IN PR (UI) | SO-001,SO-003 | PR #6 crate; songs-import-export PR: More → Library dialog, export to `rhema-songs-<date>.json`, import JSON (skip/replace/duplicate) and OpenLyrics .xml (DOMParser, per-language verses, verseOrder, songbooks, report of ignored parts) |
 | SO-009 Add songs to unified service rundown | P1 | IN PR | SO-004,ST-003 | songs-core PR: song rundown items (`kind='song'` + payload) save/reopen, Add from Quick find, slide sub-list, reorder/remove |
 | SO-010 Song/lyric renderer and Live safety | P0 | IN PR | SO-009,ST-002 | songs-core PR: `presentSlide` (atomic go-live, Clear cancels, no stale frame), lyric lines + secondary language + copyright footer in the renderer, Next/Prev step slides then items, Show live from a previewed slide; 12 tests |
-| SO-011 Rehearsal notes, key, tempo, attachments | P2 | BACKLOG | SO-004 | Notes never leak to congregation; imported media rights tracked |
+| SO-011 Rehearsal notes, key, tempo, attachments | P2 | IN PR (key, tempo) | SO-004 | song-key-tempo PR: migration 0006 adds key and tempo to songs (validated), editor fields, stage display shows "Key G · 72 bpm" for the live song; song notes already exist and never reach the output. Attachments later |
 
 ## Milestone 2C — Mixed content and service planning
 

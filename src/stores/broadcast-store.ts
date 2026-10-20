@@ -16,6 +16,7 @@ import { applyBrandKit, type BrandKit } from "@/lib/brand-kit"
 import { buildStagePayload } from "@/lib/stage"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { useSongStore } from "@/stores/song-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
 export interface HeldLive {
@@ -325,7 +326,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         theme,
         verse: null,
         role: "stage",
-        stage: buildStagePayload({ isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage }),
+        stage: buildStagePayload({
+          isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
+          song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
+        }),
       }).catch(() => {})
       return
     }

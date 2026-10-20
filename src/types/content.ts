@@ -145,6 +145,10 @@ export interface Song {
   primary_language: string
   tags: string
   notes: string
+  /** Musical key for the band ("G", "F#m"); shown on the stage display only. */
+  key: string
+  /** Beats per minute, for the band. */
+  tempo: number | null
   revision: number
   created_at: string
   updated_at: string
@@ -231,6 +235,8 @@ export interface SongInput {
   primary_language?: string
   tags?: string
   notes?: string
+  key?: string
+  tempo?: number | null
   sections: SectionInput[]
   /** Empty = a generated "Default" arrangement. */
   arrangements?: ArrangementInput[]

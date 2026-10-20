@@ -9,6 +9,8 @@ export interface StageInput {
   timer: TimerState
   now: number
   message?: string | null
+  /** Key and tempo of the live song, if a song is live and loaded. */
+  song?: { key: string; tempo: number | null } | null
 }
 
 /** The words of whatever is live, as lines a singer can read. */
@@ -30,5 +32,6 @@ export function buildStagePayload(i: StageInput): StagePayload {
     note: active?.notes?.trim() || null,
     timer: running ? { label: i.timer.durationMs > 0 ? formatMs(remainingMs(i.timer, i.now)) : formatMs(elapsedMs(i.timer, i.now)), tone: timerTone(i.timer, i.now) } : null,
     message: i.message?.trim() || null,
+    band: i.song ? [i.song.key.trim() ? `Key ${i.song.key.trim()}` : "", i.song.tempo ? `${i.song.tempo} bpm` : ""].filter(Boolean).join(" · ") || null : null,
   }
 }

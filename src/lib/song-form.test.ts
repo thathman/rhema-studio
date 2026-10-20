@@ -8,7 +8,7 @@ import type { SongWithSections } from "@/types"
 const stored: SongWithSections = {
   song: {
     id: "s1", title: "Blessed Assurance", authors: "Fanny Crosby", copyright: "", ccli_number: "22324", licence: "public_domain",
-    licence_note: "", primary_language: "en", tags: "", notes: "", revision: 3, created_at: "", updated_at: "",
+    licence_note: "", primary_language: "en", tags: "", notes: "", key: "", tempo: null, revision: 3, created_at: "", updated_at: "",
   },
   sections: [
     { id: "v1", kind: "verse", label: "Verse 1", texts: { en: "Blessed assurance" } },
@@ -28,6 +28,8 @@ describe("song form", () => {
     expect(input.arrangements?.[0]).toMatchObject({ id: "a1", sequence: ["v1", "c", "c"], is_default: true })
     expect(input.numbers).toEqual([{ hymnbook_id: "b1", number: "345" }])
     expect(input.ccli_number).toBe("22324")
+    expect(inputFromForm({ ...form, key: " G ", tempo: "72" })).toMatchObject({ key: "G", tempo: 72 })
+    expect(validateForm({ ...form, tempo: "900" })).toContain("Tempo is beats per minute, 20 to 300.")
 
     const withNew = addSection(form, "bridge")
     const bridgeId = withNew.sections[2].id

@@ -60,6 +60,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0003_songs", include_str!("../migrations/0003_songs.sql")),
     ("0004_media", include_str!("../migrations/0004_media.sql")),
     ("0005_revisions", include_str!("../migrations/0005_revisions.sql")),
+    ("0006_song_key_tempo", include_str!("../migrations/0006_song_key_tempo.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -826,7 +827,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo"]);
     }
 
     #[test]
@@ -1032,7 +1033,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

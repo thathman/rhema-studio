@@ -18,6 +18,8 @@ export interface StagePayload {
   timer: { label: string; tone: "ok" | "warn" | "over" } | null
   /** A private message from the operator ("wrap up", "mic 2 is off"). */
   message: string | null
+  /** "Key G · 72 bpm" for the live song, when known. */
+  band: string | null
 }
 
 export interface BroadcastOutputNdiSettings {
