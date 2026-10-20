@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.29 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.31 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -96,8 +96,8 @@
 | CV-001 Validate current Canva Connect API scopes, plan eligibility, rate limits | P1 | MERGED (design) | MD-001 | `docs/rhema-studio/11-canva-connect-findings.md`: OAuth PKCE with a backend-only token exchange (needs a relay → owner cost decision), export formats/limits/plan gates, autofill Pro/Teams/Enterprise only, private integrations need Enterprise so Rhema must be a reviewed public integration. Blocks CV-002 until the relay decision |
 | CV-002 Secure Canva account connection and disconnection | P1 | BACKLOG | CV-001 | OAuth token safety, consent, refresh/revoke, offline behavior |
 | CV-003 Select/edit-in-Canva/export and local import | P1 | BACKLOG | CV-002,MD-006 | Track source design/export version, review, local cache |
-| CV-004 Church Brand Kit and ministry variants | P1 | BACKLOG | MD-003 | Fonts/colors/logos reproducible across items |
-| CV-005 Native reusable announcement templates | P1 | BACKLOG | CV-004,SV-001 | Data fields validated, review, local rendering |
+| CV-004 Church Brand Kit and ministry variants | P1 | DESIGN / IN PR (logo) | MD-003 | Spec `docs/rhema-studio/12-brand-kit.md` (#35, PR #42). Step 1 in theme-logo PR (#43): logo element per theme (corner, size, opacity, hidden on transparent themes), designer control, preload, 2 tests |
+| CV-005 Native reusable announcement templates | P1 | DESIGN | CV-004,SV-001 | Spec in `12-brand-kit.md` §4.3: structured announcement slide (`payload.template`), older builds read it as a plain slide |
 | CV-006 Canva Autofill eligibility and templating | P2 | BACKLOG | CV-003,CV-005 | Only eligible APIs/plans, meaningful errors, no mandatory dependency |
 | CV-007 Approval and update-check workflow | P2 | BACKLOG | CV-003,CL-002 | New export cannot replace currently live art |
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.31):** PRs #41 and #42 merged; theme-logo PR #43 opened (CV-004 step 1).
 - **2026-10-20 (rev 0.29):** PR #40 merged; bilingual-quick-screens PR opened.
 - **2026-10-20 (rev 0.28):** migration-matrix PR opened (QA-005 database part IN PR, #39).
 - **2026-10-20 (rev 0.27):** PR #30 merged; Issues enabled and #31–#39 opened for near-term work and the two owner decisions.
