@@ -25,6 +25,7 @@ import { BigButton } from "@/studio/ui/big-button"
 import { StatusChip, WorkspaceHeader } from "@/studio/ui/status-chip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
+import { ServiceTimer } from "@/studio/present/service-timer"
 import { useSongStore } from "@/stores/song-store"
 import { buildSlides } from "@/lib/lyrics"
 import { isSongItem } from "@/types"
@@ -73,6 +74,7 @@ export function PresentWorkspace() {
           title="Open outputs"
         />
         <StatusChip tone={listening ? "ok" : "off"} label={listening ? "Listening" : "Listening off"} />
+        <ServiceTimer />
         {service && (
           <StatusChip
             tone={override ? "warn" : "info"}

@@ -220,6 +220,14 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10h.3 | With a verse live, restore an older version. | The output does not change; only the rundown does. |
 | 10h.4 | Edit without saving, open History. | Restore disabled with "save or discard first". |
 
+## 10i. Service timer
+
+| # | Do | Expect |
+|---|---|---|
+| 10i.1 | Present header → Timer → 30 min → Start. Change the computer's clock by an hour (Settings → Date & Time). | The countdown keeps counting correctly; it never jumps. |
+| 10i.2 | Pause, wait, Resume; let it run past zero. | Paused time is not counted; at under two minutes the chip turns amber, past zero it reads "−m:ss over" in red. |
+| 10i.3 | Leave Planned blank, Start. | Counts up. Nothing about the timer appears on any output. |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -234,6 +242,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10h, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10i, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.
