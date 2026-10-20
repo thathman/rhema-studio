@@ -227,6 +227,7 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10i.1 | Present header → Timer → 30 min → Start. Change the computer's clock by an hour (Settings → Date & Time). | The countdown keeps counting correctly; it never jumps. |
 | 10i.2 | Pause, wait, Resume; let it run past zero. | Paused time is not counted; at under two minutes the chip turns amber, past zero it reads "−m:ss over" in red. |
 | 10i.3 | Leave Planned blank, Start. | Counts up. Nothing about the timer appears on any output. |
+| 10i.4 | Prepare: give three items 5, 10 and 5 planned minutes. Start the timer, present item 2 after 20 minutes. | Prepare header reads "20 min planned"; timer chip reads "5 min late" (red); presenting earlier reads "n min early" (green). |
 
 ## 11. What automation has and has not verified
 

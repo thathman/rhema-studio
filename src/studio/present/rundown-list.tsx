@@ -91,6 +91,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
                 <span className="truncate text-sm font-medium">{item.reference}</span>
                 {song && <SongBadges item={item} />}
+                {item.planned_minutes ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
                 {onAir && (
                   <span className="ml-auto shrink-0 text-[0.625rem] font-bold tracking-wider text-destructive uppercase">
                     Live
@@ -128,6 +129,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             {picture && isSelected && mode === "prepare" && <ImageItemControls item={item} />}
             {isSelected && mode === "prepare" && !picture && <BackgroundPicker item={item} />}
             {isSelected && mode === "prepare" && <NoteEditor item={item} />}
+            {isSelected && mode === "prepare" && <PlannedMinutes item={item} />}
           </Row>
         )
       })}
@@ -238,6 +240,30 @@ function BackgroundPicker({ item }: { item: QueueItem }) {
           {pictures.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
         </SelectContent>
       </Select>
+    </div>
+  )
+}
+
+/** Prepare-only: planned minutes, for the service total and the on-time chip in Present. */
+function PlannedMinutes({ item }: { item: QueueItem }) {
+  return (
+    <div className="ml-7 flex items-center gap-2 py-1 pl-2 text-xs">
+      <span className="text-muted-foreground">Planned</span>
+      <Input
+        type="number"
+        min={0}
+        max={600}
+        step={0.5}
+        aria-label={`Planned minutes for ${item.reference}`}
+        value={item.planned_minutes ?? ""}
+        placeholder="min"
+        className="h-7 w-20 text-xs"
+        onChange={(e) => {
+          const n = Number(e.target.value)
+          useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, planned_minutes: e.target.value === "" || !(n > 0) ? null : Math.min(600, n) }))
+        }}
+      />
+      <span className="text-muted-foreground">minutes</span>
     </div>
   )
 }

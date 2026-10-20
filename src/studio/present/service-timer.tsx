@@ -5,6 +5,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { elapsedMs, formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { useQueueStore } from "@/stores"
+import { formatMinutes, timingSummary } from "@/lib/service-timing"
 
 const PRESETS = [20, 30, 45, 60]
 
@@ -21,6 +23,10 @@ export function ServiceTimer() {
   const tone = timerTone(timer, now)
   const label = timer.durationMs > 0 ? formatMs(remainingMs(timer, now)) : formatMs(elapsedMs(timer, now))
   const idle = !running && elapsedMs(timer, now) === 0
+  const items = useQueueStore((s) => s.items)
+  const activeIndex = useQueueStore((s) => s.activeIndex)
+  const plan = timingSummary(items, idle ? null : activeIndex, elapsedMs(timer, now))
+  const behind = plan.behindMs === null ? null : Math.round(plan.behindMs / 60_000)
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -37,10 +43,15 @@ export function ServiceTimer() {
           <TimerIcon className="size-3.5" />
           {idle ? "Timer" : label}
           {tone === "over" && <span className="text-[0.625rem] font-bold uppercase">over</span>}
+          {behind !== null && behind !== 0 && (
+            <span className={cn("text-[0.625rem] font-semibold", behind > 0 ? "text-destructive" : "text-confidence-high")} title="Against the planned minutes of the items so far">
+              {behind > 0 ? `${behind} min late` : `${-behind} min early`}
+            </span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
-        <p className="mb-2 text-xs text-muted-foreground">Counts on a clock that cannot be changed by the computer's time. Only you see it.</p>
+        <p className="mb-2 text-xs text-muted-foreground">Counts on a clock that cannot be changed by the computer's time. Only you see it.{plan.totalMs ? ` The service plan is ${formatMinutes(plan.totalMs)}.` : ""}</p>
         <div className="mb-2 flex items-center gap-2">
           <label className="text-xs text-muted-foreground" htmlFor="timer-minutes">Planned</label>
           <Input

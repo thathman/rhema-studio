@@ -709,18 +709,23 @@ fn validate_slide_payload(i: usize, payload: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Any item may carry `{"background_media_id": ...}` in its payload.
+/// Any item may carry `{"background_media_id": ..., "planned_minutes": ...}` in its payload.
 #[derive(Debug, Deserialize)]
-struct BackgroundPayload {
+struct ExtrasPayload {
     #[serde(default)]
     background_media_id: Option<String>,
+    #[serde(default)]
+    planned_minutes: Option<f64>,
 }
 
 fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     let Some(raw) = payload else { return Ok(()) };
-    let p: BackgroundPayload = serde_json::from_str(raw).map_err(|e| ContentError::Invalid(format!("item {i}: bad payload: {e}")))?;
+    let p: ExtrasPayload = serde_json::from_str(raw).map_err(|e| ContentError::Invalid(format!("item {i}: bad payload: {e}")))?;
     if p.background_media_id.as_deref().is_some_and(|id| !is_valid_id(id)) {
         return Err(ContentError::Invalid(format!("item {i}: invalid background media id")));
+    }
+    if p.planned_minutes.is_some_and(|m| !(0.0..=600.0).contains(&m) || m.is_nan()) {
+        return Err(ContentError::Invalid(format!("item {i}: planned minutes must be between 0 and 600")));
     }
     Ok(())
 }
@@ -947,6 +952,10 @@ mod tests {
         assert!(matches!(db.replace_items(&p.id, 2, &[bad]), Err(ContentError::Invalid(_))));
         let not_json = ItemInput { payload: Some("nope".into()), ..verse("John 3:16", 43, 3, 16) };
         assert!(matches!(db.replace_items(&p.id, 2, &[not_json]), Err(ContentError::Invalid(_))));
+        let too_long = ItemInput { payload: Some("{\"planned_minutes\":900}".into()), ..verse("John 3:16", 43, 3, 16) };
+        assert!(matches!(db.replace_items(&p.id, 2, &[too_long]), Err(ContentError::Invalid(_))));
+        let timed = ItemInput { payload: Some("{\"planned_minutes\":4.5}".into()), ..verse("John 3:16", 43, 3, 16) };
+        assert!(db.replace_items(&p.id, 2, &[timed]).is_ok());
     }
 
     #[test]

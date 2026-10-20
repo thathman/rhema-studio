@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.18 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.19 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -82,8 +82,8 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| PT-001 Monotonic timer engine | P1 | IN PR | SV-002 | service-timer PR: pure engine on an injected monotonic clock (`performance.now`), start/pause/resume/reset, countdown or count-up, over-run; Present header chip with presets; 3 tests |
-| PT-002 Service timing policies and over/under | P1 | BACKLOG | PT-001 | Policy changes explained; calculated planned/actual |
+| PT-001 Monotonic timer engine | P1 | MERGED | SV-002 | PR #21: pure engine on an injected monotonic clock (`performance.now`), start/pause/resume/reset, countdown or count-up, over-run; Present header chip with presets; 3 tests |
+| PT-002 Service timing policies and over/under | P1 | IN PR | PT-001 | service-timing PR: planned minutes per item (payload, crate-validated 0–600), service total in Prepare, timer chip shows "n min late/early" against the plan up to the live item; 2 tests. Per-item actuals and policies later |
 | PT-003 Cue/macro typed action registry | P1 | BACKLOG | OP-001 | Idempotent, permission-aware, safe retry and operator preview |
 | PT-004 Stage timer messages, visual cues | P1 | BACKLOG | PT-002,OP-002 | Stage-only alerts and controls |
 | PT-005 Rehearsal/dry-run isolation | P0 | BACKLOG | PT-003 | Cannot inadvertently affect congregation, OBS or real devices |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.19):** PR #21 merged; service-timing PR opened (PT-002 IN PR).
 - **2026-10-20 (rev 0.18):** PRs #19 and #20 merged; service-timer PR opened (PT-001 IN PR).
 - **2026-10-20 (rev 0.17):** background-contrast PR opened (MD-007 contrast IN PR).
 - **2026-10-20 (rev 0.16):** PRs #16 `2757285`, #17 `5263a94`, #18 merged; service-revisions PR opened (SV-007 IN PR).
