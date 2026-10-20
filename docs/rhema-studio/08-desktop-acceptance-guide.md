@@ -112,7 +112,7 @@ Enable both in Settings → Remote and note the ports there.
 |---|---|---|
 | 8.1 | `curl http://127.0.0.1:<port>/api/v1/health` | 200 OK. |
 | 8.2 | `curl http://127.0.0.1:<port>/api/v1/status` | JSON with live state. |
-| 8.3 | `curl -X POST http://127.0.0.1:<port>/api/v1/command -H 'content-type: application/json' -d '{"command":"next"}'` | Rundown advances and output updates. Same for `prev`, `show`, `hide`, `send_to_live`, `bible_next`, `bible_prev`, `add_to_queue`, `verse_next`, `verse_prev`. |
+| 8.3 | `curl -X POST http://127.0.0.1:<port>/api/v1/command -H 'content-type: application/json' -d '{"command":"next"}'` | Rundown advances and output updates. Same for `prev`, `show`, `hide`, `send_to_live`, `bible_next`, `bible_prev`, `add_to_queue`, `verse_next`, `verse_prev`, and `{"command":"macro","value":"service-start"}` / OSC `/rhema/macro "offering"`. |
 | 8.4 | OSC: send `/rhema/next`, `/rhema/prev`, `/rhema/show`, `/rhema/hide`, `/rhema/on_air` (bool), `/rhema/theme` (string). | Each acts exactly as the matching button. |
 | 8.5 | Send `/rhema/next` from a remote while the operator is typing in Quick find. | Remote action still works (keyboard guard applies to keys, not remote). |
 | 8.6 | Send a malformed command. | 4xx with a message; app unaffected. |
