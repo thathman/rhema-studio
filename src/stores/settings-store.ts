@@ -6,14 +6,27 @@ export interface RemoteDevice {
   paired_at: string
 }
 
-/** The backend checks keys; the settings store owns the list. Called after hydration and on every change. */
-export async function pushRemoteKeys(): Promise<void> {
-  const s = useSettingsStore.getState()
-  try {
-    await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name })) })
-  } catch {
-    // Not running under Tauri (tests, browser shim).
-  }
+let remoteKeysPush: Promise<void> = Promise.resolve()
+
+/**
+ * The backend checks keys; the settings store owns the list. Called after
+ * hydration and on every change. Pushes are serialised so the last state
+ * wins, and a failure under Tauri is surfaced because a revoke that did not
+ * reach the backend is still a working key.
+ */
+export function pushRemoteKeys(): Promise<void> {
+  remoteKeysPush = remoteKeysPush.then(async () => {
+    const s = useSettingsStore.getState()
+    try {
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name })) })
+    } catch (e) {
+      if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+        const { toast } = await import("sonner")
+        toast.error("Remote keys not updated", { description: `${e instanceof Error ? e.message : String(e)}. Revoked devices may still work; restart the listeners.` })
+      }
+    }
+  })
+  return remoteKeysPush
 }
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"

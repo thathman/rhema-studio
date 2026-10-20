@@ -158,20 +158,17 @@ fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, keys: &KeySet) {
 /// secret set, the first argument must be that string; it is stripped
 /// before parsing.
 fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
-    let open = keys.read().map(|k| k.is_empty()).unwrap_or(true);
-    let args: &[rosc::OscType] = if open {
-        &msg.args
-    } else {
-        let presented = match msg.args.first() {
-            Some(rosc::OscType::String(k)) => Some(k.as_str()),
-            _ => None,
-        };
-        match check_key(keys, presented) {
-            Ok(_) => &msg.args[1..],
-            Err(reason) => {
-                log::warn!("OSC message refused for {}: {reason}", msg.addr);
-                return;
-            }
+    let presented = match msg.args.first() {
+        Some(rosc::OscType::String(k)) => Some(k.as_str()),
+        _ => None,
+    };
+    // One check: the set may change between two reads (a revoke on another thread).
+    let args: &[rosc::OscType] = match check_key(keys, presented) {
+        Ok(None) => &msg.args,
+        Ok(Some(_)) => &msg.args[1..],
+        Err(reason) => {
+            log::warn!("OSC message refused for {}: {reason}", msg.addr);
+            return;
         }
     };
     match parse_osc(&msg.addr, args) {

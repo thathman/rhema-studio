@@ -678,6 +678,16 @@ function RemoteControlSection() {
     if (pairTimer.current) clearTimeout(pairTimer.current)
     await invoke("remote_pair_cancel").catch(() => {})
   }
+  useEffect(() => {
+    // The backend closes the window on pairing, expiry or three wrong codes; closing Settings closes it too.
+    const closed = () => setPairCode(null)
+    window.addEventListener("rhema:pair-closed", closed)
+    return () => {
+      window.removeEventListener("rhema:pair-closed", closed)
+      if (pairTimer.current) clearTimeout(pairTimer.current)
+      void invoke("remote_pair_cancel").catch(() => {})
+    }
+  }, [])
 
   const [oscStatus, setOscStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [httpStatus, setHttpStatus] = useState<RemoteStatus>({ running: false, port: null })
@@ -772,7 +782,7 @@ function RemoteControlSection() {
         <span>
           Accept commands from other devices on this network
           <span className="block text-[0.625rem] text-muted-foreground">
-            Anyone on the network can then change what is on screen; nothing asks for a password. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
+            Anyone on the network can then send commands, unless a key is set or devices are paired below. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
           </span>
         </span>
       </label>
@@ -784,7 +794,6 @@ function RemoteControlSection() {
           onChange={(e) => setRemoteSecret(e.target.value)}
           placeholder="e.g. rhema-sunday-2026"
           className="h-7 max-w-xs text-xs"
-          disabled={oscStatus.running || httpStatus.running}
           autoComplete="off"
         />
         <span className="text-[0.625rem] text-muted-foreground">

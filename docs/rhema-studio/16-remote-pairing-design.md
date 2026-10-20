@@ -1,6 +1,6 @@
 # Remote control pairing and revocation (OP-006) — design
 
-Status: proposed, not built. Builds on the shared key (PR #66, #69) and the this-computer-only bind (PR #58). Goal: a volunteer pairs a phone or Stream Deck once, the operator can see and revoke devices, and nothing needs the internet.
+Status: built in PR #77 (pairing, tokens as hashes, revoke list, `remote:paired` / `remote:pair_closed` events). Not yet built: roles per device, `/status` reporting `paired`, QR pairing. Builds on the shared key (PR #66, #69) and the this-computer-only bind (PR #58). Goal: a volunteer pairs a phone or Stream Deck once, the operator can see and revoke devices, and nothing needs the internet.
 
 ## Today
 

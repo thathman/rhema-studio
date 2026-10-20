@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { REMOTE_EVENTS, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
+import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
 import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
@@ -28,7 +28,7 @@ export function useRemoteControl() {
       // A listener that resolves after cleanup would leak for the process lifetime.
       const keep = (unlisten: UnlistenFn) => {
         if (cancelled) unlisten()
-        else keep(unlisten)
+        else unlisteners.push(unlisten)
       }
       const register = async (event: string, handler: () => void) => {
         keep(
@@ -57,9 +57,18 @@ export function useRemoteControl() {
           if (cancelled) return
           const p = parsePayload(event.payload)
           if (typeof p?.hash === "string" && typeof p?.name === "string") {
+            noteRemote(`${REMOTE_PAIRED_EVENT} ${p.name}`)
             useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name })
             toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
           }
+        }),
+      )
+
+      // remote:pair_closed — the backend closed the pairing window (paired, expired or three wrong codes)
+      keep(
+        await listen<string>(REMOTE_PAIR_CLOSED_EVENT, () => {
+          if (cancelled) return
+          window.dispatchEvent(new CustomEvent("rhema:pair-closed"))
         }),
       )
 

@@ -234,12 +234,21 @@ async fn pair_handler<S: CommandSink + 'static>(
         PairOutcome::Paired { token, entry } => {
             let payload = serde_json::json!({ "name": entry.name, "hash": entry.hash }).to_string();
             if let Err(e) = state.sink.emit_event("remote:paired", &payload) {
-                log::warn!("pairing event not delivered: {e}");
+                // The app would never list it, so it could never be revoked: take it back and let the device retry.
+                log::warn!("pairing event not delivered, token withdrawn: {e}");
+                state.keys.write().unwrap_or_else(std::sync::PoisonError::into_inner).retain(|k| k.hash != entry.hash);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(PairResponse { success: false, token: None, name: None, error: Some("the app did not record the device; try again".into()) }));
             }
+            let _ = state.sink.emit_event("remote:pair_closed", "{}");
             (StatusCode::OK, Json(PairResponse { success: true, token: Some(token), name: Some(entry.name), error: None }))
         }
         PairOutcome::NotOpen => (StatusCode::NOT_FOUND, Json(PairResponse { success: false, token: None, name: None, error: Some("pairing is not open; press Pair a device in Settings".into()) })),
-        PairOutcome::WrongCode { attempts_left } => (StatusCode::FORBIDDEN, Json(PairResponse { success: false, token: None, name: None, error: Some(format!("wrong code, {attempts_left} tries left")) })),
+        PairOutcome::WrongCode { attempts_left } => {
+            if attempts_left == 0 {
+                let _ = state.sink.emit_event("remote:pair_closed", "{}");
+            }
+            (StatusCode::FORBIDDEN, Json(PairResponse { success: false, token: None, name: None, error: Some(format!("wrong code, {attempts_left} tries left")) }))
+        }
     }
 }
 
@@ -478,7 +487,8 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
         let token = v["token"].as_str().unwrap().to_string();
         assert_eq!(token.len(), 64);
-        assert_eq!(sink.commands.lock().unwrap().last().map(String::as_str), Some("remote:paired"));
+        let events = sink.commands.lock().unwrap().clone();
+        assert!(events.iter().any(|e| e == "remote:paired") && events.last().map(String::as_str) == Some("remote:pair_closed"), "{events:?}");
         let cmd = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"next"}"#), &format!("X-Rhema-Key: {token}\r\n")).await;
         assert!(cmd.contains("200 OK"), "{cmd}");
         let mut handle = result.handle;

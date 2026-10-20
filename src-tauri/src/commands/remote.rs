@@ -322,9 +322,9 @@ pub struct HttpStatus {
     pub port: Option<u16>,
 }
 
-/// Neither control surface authenticates, so where it listens is the only
-/// gate: the whole network (default, what existing setups expect) or this
-/// computer only. See docs/rhema-studio/13-remote-control-threat-notes.md.
+/// Where the listeners bind: the whole network (default, what existing setups
+/// expect) or this computer only. Keys and pairing are the other gate
+/// (`RemoteKeys`). See docs/rhema-studio/13-remote-control-threat-notes.md.
 fn bind_host(lan: Option<bool>) -> &'static str {
     if lan.unwrap_or(true) { "0.0.0.0" } else { "127.0.0.1" }
 }

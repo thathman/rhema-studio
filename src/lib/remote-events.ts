@@ -31,5 +31,7 @@ export const REMOTE_EVENTS = {
 
 /** Emitted by the backend when a device completes pairing: `{ name, hash }`. Not a command. */
 export const REMOTE_PAIRED_EVENT = "remote:paired"
+/** Emitted when the pairing window closes for any reason. */
+export const REMOTE_PAIR_CLOSED_EVENT = "remote:pair_closed"
 
 export type RemoteEventName = (typeof REMOTE_EVENTS)[keyof typeof REMOTE_EVENTS]
