@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { resolveQuickFind } from "@/lib/quick-find-resolver"
 import { songQueueItem } from "@/lib/lyrics"
+import { fuzzySongs } from "@/lib/fuzzy"
 import { bibleActions } from "@/hooks/use-bible"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
@@ -54,10 +55,12 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
       } else if (resolved.kind === "hymn") {
         found = (await songs.search(q, 8)).map((song) => ({ kind: "song", song }))
       } else if (q.length >= 3) {
-        const [verses, hits] = await Promise.all([
+        const [verses, exact] = await Promise.all([
           bibleActions.searchVerses(q, 8).catch(() => [] as Verse[]),
           songs.search(q, 6).catch(() => [] as SongSummary[]),
         ])
+        // Nothing exact: forgive a typo or two against every title and first line.
+        const hits = exact.length > 0 ? exact : fuzzySongs(q, await songs.all().catch(() => [] as SongSummary[]))
         found = [...hits.map((song): Hit => ({ kind: "song", song })), ...verses.map((verse): Hit => ({ kind: "verse", verse }))]
       }
       if (ticket === seq.current) setResults(found)
