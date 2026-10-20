@@ -655,6 +655,30 @@ function RemoteControlSection() {
   const [remoteLan, setRemoteLan] = useState(true)
   const remoteSecret = useSettingsStore((s) => s.remoteSecret)
   const setRemoteSecret = useSettingsStore((s) => s.setRemoteSecret)
+  const remoteDevices = useSettingsStore((s) => s.remoteDevices)
+  const revokeRemoteDevice = useSettingsStore((s) => s.revokeRemoteDevice)
+  const [pairCode, setPairCode] = useState<string | null>(null)
+  const [pairStartedAt, setPairStartedAt] = useState("")
+  // The backend closes the window when a device pairs; hide the code once a device newer than the window appears.
+  const showPairCode = pairCode !== null && !remoteDevices.some((d) => d.paired_at > pairStartedAt)
+  const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const startPairing = async () => {
+    try {
+      const code = await invoke<string>("remote_pair_start")
+      setPairStartedAt(new Date().toISOString())
+      setPairCode(code)
+      if (pairTimer.current) clearTimeout(pairTimer.current)
+      pairTimer.current = setTimeout(() => setPairCode(null), 120_000)
+    } catch (e) {
+      setHttpError(String(e))
+    }
+  }
+  const cancelPairing = async () => {
+    setPairCode(null)
+    if (pairTimer.current) clearTimeout(pairTimer.current)
+    await invoke("remote_pair_cancel").catch(() => {})
+  }
+
   const [oscStatus, setOscStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [httpStatus, setHttpStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [oscError, setOscError] = useState<string | null>(null)
@@ -716,7 +740,7 @@ function RemoteControlSection() {
         setOscError(null)
       } else {
         const port = parseInt(oscPort) || 8000
-        const boundPort = await invoke<number>("start_osc", { port, lan: remoteLan, secret: remoteSecret.trim() || null })
+        const boundPort = await invoke<number>("start_osc", { port, lan: remoteLan })
         setOscPort(String(boundPort))
         setOscError(null)
       }
@@ -732,7 +756,7 @@ function RemoteControlSection() {
         setHttpError(null)
       } else {
         const port = parseInt(httpPort) || 8080
-        const boundPort = await invoke<number>("start_http", { port, lan: remoteLan, secret: remoteSecret.trim() || null })
+        const boundPort = await invoke<number>("start_http", { port, lan: remoteLan })
         setHttpPort(String(boundPort))
         setHttpError(null)
       }
@@ -764,9 +788,41 @@ function RemoteControlSection() {
           autoComplete="off"
         />
         <span className="text-[0.625rem] text-muted-foreground">
-          HTTP: header <code>X-Rhema-Key: &lt;key&gt;</code>. OSC: the key as the first argument, e.g. <code>/rhema/next "&lt;key&gt;"</code>. Leave blank to accept anything (as before). Takes effect when a listener is started.
+          HTTP: header <code>X-Rhema-Key: &lt;key&gt;</code>. OSC: the key as the first argument, e.g. <code>/rhema/next "&lt;key&gt;"</code>. Leave blank (and pair nothing) to accept anything, as before. Changes apply at once.
         </span>
       </label>
+      <div className="flex flex-col gap-2 text-xs">
+        <div className="flex items-center justify-between">
+          <span>Paired devices</span>
+          {showPairCode ? (
+            <Button size="sm" variant="outline" className="text-xs" onClick={() => void cancelPairing()}>Cancel pairing</Button>
+          ) : (
+            <Button size="sm" variant="outline" className="text-xs" disabled={!httpStatus.running} title={httpStatus.running ? undefined : "Start the HTTP API first; devices pair over it"} onClick={() => void startPairing()}>Pair a device</Button>
+          )}
+        </div>
+        {showPairCode && (
+          <div className="rounded-md border border-border bg-muted/40 p-3">
+            <p className="text-[0.625rem] text-muted-foreground">On the device, within two minutes, send this code once:</p>
+            <p className="my-1 font-mono text-2xl tracking-[0.3em]">{pairCode}</p>
+            <p className="text-[0.625rem] text-muted-foreground">
+              <code>POST http://&lt;this laptop&gt;:{httpStatus.port ?? httpPort}/api/v1/pair</code> with <code>{`{"code":"${pairCode}","name":"Tolu's phone"}`}</code>. The reply holds the device's token; it is shown once. Three wrong codes close the window.
+            </p>
+          </div>
+        )}
+        {remoteDevices.length === 0 ? (
+          <p className="text-[0.625rem] text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, and can be revoked on its own.</p>
+        ) : (
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {remoteDevices.map((d) => (
+              <li key={d.hash} className="flex items-center gap-2 px-2 py-1.5">
+                <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                <span className="shrink-0 text-[0.625rem] text-muted-foreground">paired {new Date(d.paired_at).toLocaleDateString()}</span>
+                <Button size="sm" variant="ghost" className="text-xs text-destructive" aria-label={`Revoke ${d.name}`} onClick={() => revokeRemoteDevice(d.hash)}>Revoke</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {/* OSC */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

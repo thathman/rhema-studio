@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/core"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { REMOTE_EVENTS } from "@/lib/remote-events"
+import { REMOTE_EVENTS, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
+import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
 
@@ -49,6 +50,18 @@ export function useRemoteControl() {
       await register(REMOTE_EVENTS.verse_prev, remoteActions.versePrev)
       await register(REMOTE_EVENTS.show, () => remoteActions.toggleOnAir(true))
       await register(REMOTE_EVENTS.hide, () => remoteActions.toggleOnAir(false))
+
+      // remote:paired — a device completed pairing; remember its token hash
+      keep(
+        await listen<string>(REMOTE_PAIRED_EVENT, (event) => {
+          if (cancelled) return
+          const p = parsePayload(event.payload)
+          if (typeof p?.hash === "string" && typeof p?.name === "string") {
+            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name })
+            toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
+          }
+        }),
+      )
 
       // remote:macro — run a named macro (Start the service, Offering, …)
       const uMacro = await listen<string>(REMOTE_EVENTS.macro, (event) => {

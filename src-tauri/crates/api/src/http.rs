@@ -16,14 +16,18 @@ use tower_http::cors::CorsLayer;
 use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
+use crate::keys::{check_key, new_key_set, new_pairing_window, try_pair, KeySet, PairOutcome, PairingWindow};
 
 /// Configuration for the HTTP API server.
 #[derive(Debug, Clone)]
 pub struct HttpConfig {
     pub port: u16,
     pub host: String,
-    /// When set, `/command` requires `X-Rhema-Key: <secret>` (or `Authorization: Bearer <secret>`).
-    pub secret: Option<String>,
+    /// Paired devices and the shared key; empty means open. `/command` requires
+    /// `X-Rhema-Key: <token>` (or `Authorization: Bearer <token>`) otherwise.
+    pub keys: KeySet,
+    /// The pairing window `/pair` checks against.
+    pub pairing: PairingWindow,
 }
 
 impl Default for HttpConfig {
@@ -31,7 +35,8 @@ impl Default for HttpConfig {
         Self {
             port: 8080,
             host: "0.0.0.0".into(),
-            secret: None,
+            keys: new_key_set(),
+            pairing: new_pairing_window(),
         }
     }
 }
@@ -71,7 +76,8 @@ pub struct HttpStartResult {
 struct AppState<S: CommandSink> {
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
-    secret: Option<String>,
+    keys: KeySet,
+    pairing: PairingWindow,
 }
 
 /// Snapshot of the current application state, served by `GET /api/v1/status`.
@@ -115,13 +121,15 @@ where
     let state = Arc::new(AppState {
         sink,
         status,
-        secret: config.secret.clone(),
+        keys: config.keys.clone(),
+        pairing: config.pairing.clone(),
     });
 
     let app = Router::new()
         .route("/api/v1/health", get(health_handler))
         .route("/api/v1/status", get(status_handler::<S>))
         .route("/api/v1/command", post(command_handler::<S>))
+        .route("/api/v1/pair", post(pair_handler::<S>))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
         .layer(CorsLayer::permissive())
@@ -198,6 +206,43 @@ struct CommandResponse {
     error: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct PairRequest {
+    code: String,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Serialize)]
+struct PairResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+/// `POST /api/v1/pair {"code":"123456","name":"Tolu's phone"}` while the
+/// operator has the pairing window open. The token comes back exactly once.
+async fn pair_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    Json(req): Json<PairRequest>,
+) -> impl IntoResponse {
+    match try_pair(&state.pairing, &state.keys, &req.code, &req.name) {
+        PairOutcome::Paired { token, entry } => {
+            let payload = serde_json::json!({ "name": entry.name, "hash": entry.hash }).to_string();
+            if let Err(e) = state.sink.emit_event("remote:paired", &payload) {
+                log::warn!("pairing event not delivered: {e}");
+            }
+            (StatusCode::OK, Json(PairResponse { success: true, token: Some(token), name: Some(entry.name), error: None }))
+        }
+        PairOutcome::NotOpen => (StatusCode::NOT_FOUND, Json(PairResponse { success: false, token: None, name: None, error: Some("pairing is not open; press Pair a device in Settings".into()) })),
+        PairOutcome::WrongCode { attempts_left } => (StatusCode::FORBIDDEN, Json(PairResponse { success: false, token: None, name: None, error: Some(format!("wrong code, {attempts_left} tries left")) })),
+    }
+}
+
 /// The key a request carries, from `X-Rhema-Key` or `Authorization: Bearer`.
 fn presented_key(headers: &HeaderMap) -> Option<&str> {
     if let Some(v) = headers.get("x-rhema-key").and_then(|v| v.to_str().ok()) {
@@ -215,14 +260,12 @@ async fn command_handler<S: CommandSink + 'static>(
     headers: HeaderMap,
     Json(request): Json<CommandRequest>,
 ) -> impl IntoResponse {
-    if let Some(secret) = state.secret.as_deref() {
-        if !presented_key(&headers).is_some_and(|k| crate::command::same_key(k, secret)) {
-            log::warn!("HTTP command refused: missing or wrong key");
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(CommandResponse { success: false, error: Some("missing or wrong X-Rhema-Key".into()) }),
-            );
-        }
+    if let Err(reason) = check_key(&state.keys, presented_key(&headers)) {
+        log::warn!("HTTP command refused: {reason}");
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")) }),
+        );
     }
     match CommandDispatcher::dispatch(&request.command, &*state.sink) {
         Ok(()) => (
@@ -282,7 +325,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
-        secret: None,
+        ..Default::default()
         };
 
         let mut result = start_http_server(config, sink, status)
@@ -333,7 +376,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
-        secret: None,
+        ..Default::default()
         };
 
         let result = start_http_server(config, sink, status)
@@ -368,7 +411,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
-        secret: None,
+        ..Default::default()
         };
 
         let result = start_http_server(config, sink, status)
@@ -394,7 +437,7 @@ mod tests {
     #[tokio::test]
     async fn command_endpoint_requires_the_key_when_one_is_set() {
         let sink = Arc::new(MockSink::new());
-        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), secret: Some("s3cret".into()) };
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("s3cret", "Shared key")]), ..Default::default() };
         let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -417,13 +460,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pair_endpoint_hands_out_a_token_that_then_works() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("s3cret", "Shared key")]), ..Default::default() };
+        let pairing = config.pairing.clone();
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let closed = raw_http_request(port, "POST", "/api/v1/pair", Some(r#"{"code":"000000","name":"x"}"#)).await;
+        assert!(closed.contains("404"), "{closed}");
+        let code = crate::keys::open_pairing(&pairing);
+        let wrong = raw_http_request(port, "POST", "/api/v1/pair", Some(r#"{"code":"not-it","name":"x"}"#)).await;
+        assert!(wrong.contains("403") && wrong.contains("2 tries left"), "{wrong}");
+        let ok = raw_http_request(port, "POST", "/api/v1/pair", Some(&format!(r#"{{"code":"{code}","name":"Tolu's phone"}}"#))).await;
+        assert!(ok.contains("200 OK"), "{ok}");
+        let body = ok.split("\r\n\r\n").nth(1).unwrap_or("");
+        let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+        let token = v["token"].as_str().unwrap().to_string();
+        assert_eq!(token.len(), 64);
+        assert_eq!(sink.commands.lock().unwrap().last().map(String::as_str), Some("remote:paired"));
+        let cmd = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"next"}"#), &format!("X-Rhema-Key: {token}\r\n")).await;
+        assert!(cmd.contains("200 OK"), "{cmd}");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
     async fn command_endpoint_dispatches_command() {
         let sink = Arc::new(MockSink::new());
         let status = new_shared_status();
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
-        secret: None,
+        ..Default::default()
         };
 
         let result = start_http_server(config, sink.clone(), status)
@@ -453,7 +522,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
-        secret: None,
+        ..Default::default()
         };
 
         let result = start_http_server(config, sink.clone(), status)
@@ -479,7 +548,7 @@ mod tests {
         let config = HttpConfig {
             port: 0,
             host: "127.0.0.1".into(),
-        secret: None,
+        ..Default::default()
         };
 
         let result = start_http_server(config, sink.clone(), status)
@@ -513,7 +582,7 @@ mod tests {
         let config = HttpConfig {
             port,
             host: "127.0.0.1".into(),
-            secret: None,
+            ..Default::default()
         };
 
         let result = start_http_server(config, sink, status).await;

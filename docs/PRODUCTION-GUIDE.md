@@ -32,7 +32,7 @@ OSC addresses and HTTP commands do exactly what the buttons do, with the same sa
 
 Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cues shows each macro's steps.
 
-**Who can send these:** anyone on the network while a listener runs, unless you set a key in Settings → Remote (then HTTP needs the `X-Rhema-Key` header and OSC messages start with the key as a string argument). Start a listener just before the service and stop it after; if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
+**Who can send these:** anyone on the network while a listener runs, unless you set a key or pair devices in Settings → Remote. Pairing: start the HTTP API, press "Pair a device", and on the phone or controller send the six-digit code once to `/api/v1/pair`; it receives its own token (HTTP header `X-Rhema-Key`, or first OSC argument) and can be revoked on its own later. Start a listener just before the service and stop it after; if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
 
 ## Timing and the stage
 

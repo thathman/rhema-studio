@@ -3,9 +3,52 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
 use rhema_api::{
-    CommandError, CommandSink, HttpConfig, HttpHandle, OscConfig, OscHandle, SharedStatus,
-    new_shared_status, start_http_server, start_osc_listener,
+    close_pairing, hash_key, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet,
+    OscConfig, OscHandle, PairingWindow, SharedStatus, new_shared_status, start_http_server, start_osc_listener,
 };
+
+/// Who may send remote commands, shared by both listeners so a revoke takes
+/// effect at once. The frontend owns the list (settings) and pushes it here.
+pub struct RemoteKeys {
+    pub keys: KeySet,
+    pub pairing: PairingWindow,
+}
+
+impl RemoteKeys {
+    #[must_use]
+    pub fn new() -> Self {
+        Self { keys: new_key_set(), pairing: new_pairing_window() }
+    }
+}
+
+impl Default for RemoteKeys {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Replace the accepted keys: the shared key (if any) plus every paired device.
+#[tauri::command]
+pub fn remote_set_keys(remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>) -> Result<usize, String> {
+    let mut entries: Vec<KeyEntry> = devices.into_iter().filter(|d| d.hash.len() == 64).collect();
+    if let Some(s) = shared.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+        entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into() });
+    }
+    let n = entries.len();
+    *remote.keys.write().map_err(|e| e.to_string())? = entries;
+    Ok(n)
+}
+
+/// Open the two-minute pairing window; returns the code to show on screen.
+#[tauri::command]
+pub fn remote_pair_start(remote: State<'_, RemoteKeys>) -> String {
+    open_pairing(&remote.pairing)
+}
+
+#[tauri::command]
+pub fn remote_pair_cancel(remote: State<'_, RemoteKeys>) {
+    close_pairing(&remote.pairing);
+}
 
 /// Tauri-aware implementation of `CommandSink`.
 ///
@@ -76,9 +119,9 @@ impl Default for OscRuntime {
 pub async fn start_osc(
     app: AppHandle,
     state: State<'_, Mutex<OscRuntime>>,
+    remote: State<'_, RemoteKeys>,
     port: Option<u16>,
     lan: Option<bool>,
-    secret: Option<String>,
 ) -> Result<u16, String> {
     let mut runtime = state.lock().map_err(|e| e.to_string())?;
 
@@ -89,7 +132,7 @@ pub async fn start_osc(
     let config = OscConfig {
         port: port.unwrap_or(8000),
         host: bind_host(lan).into(),
-        secret: clean_secret(secret),
+        keys: remote.keys.clone(),
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -172,9 +215,9 @@ impl Default for HttpRuntime {
 pub async fn start_http(
     app: AppHandle,
     state: State<'_, Mutex<HttpRuntime>>,
+    remote: State<'_, RemoteKeys>,
     port: Option<u16>,
     lan: Option<bool>,
-    secret: Option<String>,
 ) -> Result<u16, String> {
     let (status, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
@@ -188,7 +231,8 @@ pub async fn start_http(
     let config = HttpConfig {
         port: port.unwrap_or(8080),
         host: bind_host(lan).into(),
-        secret: clean_secret(secret),
+        keys: remote.keys.clone(),
+        pairing: remote.pairing.clone(),
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -281,11 +325,6 @@ pub struct HttpStatus {
 /// Neither control surface authenticates, so where it listens is the only
 /// gate: the whole network (default, what existing setups expect) or this
 /// computer only. See docs/rhema-studio/13-remote-control-threat-notes.md.
-/// Blank means "no key": nothing authenticates, as before.
-fn clean_secret(secret: Option<String>) -> Option<String> {
-    secret.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-}
-
 fn bind_host(lan: Option<bool>) -> &'static str {
     if lan.unwrap_or(true) { "0.0.0.0" } else { "127.0.0.1" }
 }

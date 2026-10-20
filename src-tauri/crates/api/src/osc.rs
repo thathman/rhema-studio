@@ -8,14 +8,16 @@ use rosc::{OscPacket, OscMessage};
 use crate::coerce::parse_osc;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
+use crate::keys::{check_key, new_key_set, KeySet};
 
 /// Configuration for the OSC listener.
 #[derive(Debug, Clone)]
 pub struct OscConfig {
     pub port: u16,
     pub host: String,
-    /// When set, every message must carry the secret as its first string argument.
-    pub secret: Option<String>,
+    /// Paired devices and the shared key; empty means open. Otherwise every
+    /// message must carry a token as its first string argument.
+    pub keys: KeySet,
 }
 
 impl Default for OscConfig {
@@ -23,7 +25,7 @@ impl Default for OscConfig {
         Self {
             port: 8000,
             host: "0.0.0.0".into(),
-            secret: None,
+            keys: new_key_set(),
         }
     }
 }
@@ -92,7 +94,7 @@ where
 
     let active = Arc::new(AtomicBool::new(true));
     let thread_active = active.clone();
-    let secret = config.secret.clone();
+    let keys = config.keys.clone();
 
     let thread = std::thread::Builder::new()
         .name("osc-listener".into())
@@ -124,7 +126,7 @@ where
                     }
                 };
 
-                handle_packet(&packet, &*sink, secret.as_deref());
+                handle_packet(&packet, &*sink, &keys);
             }
 
             log::info!("OSC listener stopped");
@@ -141,12 +143,12 @@ where
 }
 
 /// Recursively handle an OSC packet (messages and bundles).
-fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, secret: Option<&str>) {
+fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, keys: &KeySet) {
     match packet {
-        OscPacket::Message(msg) => handle_message(msg, sink, secret),
+        OscPacket::Message(msg) => handle_message(msg, sink, keys),
         OscPacket::Bundle(bundle) => {
             for content in &bundle.content {
-                handle_packet(content, sink, secret);
+                handle_packet(content, sink, keys);
             }
         }
     }
@@ -155,17 +157,22 @@ fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, secret: Option<&str
 /// Parse a single OSC message and dispatch the resulting command. With a
 /// secret set, the first argument must be that string; it is stripped
 /// before parsing.
-fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, secret: Option<&str>) {
-    let args: &[rosc::OscType] = if let Some(secret) = secret {
-        match msg.args.first() {
-            Some(rosc::OscType::String(k)) if crate::command::same_key(k, secret) => &msg.args[1..],
-            _ => {
-                log::warn!("OSC message refused for {}: missing or wrong key", msg.addr);
+fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
+    let open = keys.read().map(|k| k.is_empty()).unwrap_or(true);
+    let args: &[rosc::OscType] = if open {
+        &msg.args
+    } else {
+        let presented = match msg.args.first() {
+            Some(rosc::OscType::String(k)) => Some(k.as_str()),
+            _ => None,
+        };
+        match check_key(keys, presented) {
+            Ok(_) => &msg.args[1..],
+            Err(reason) => {
+                log::warn!("OSC message refused for {}: {reason}", msg.addr);
                 return;
             }
         }
-    } else {
-        &msg.args
     };
     match parse_osc(&msg.addr, args) {
         Ok(cmd) => {
@@ -219,7 +226,7 @@ mod tests {
         let config = OscConfig {
             port: 0, // OS assigns a free port
             host: "127.0.0.1".into(),
-            secret: None,
+            ..Default::default()
         };
 
         let mut result = start_osc_listener(config, sink).expect("should bind");
@@ -233,7 +240,7 @@ mod tests {
     #[test]
     fn osc_listener_requires_the_key_when_one_is_set() {
         let sink = Arc::new(MockSink::new());
-        let config = OscConfig { port: 0, host: "127.0.0.1".into(), secret: Some("s3cret".into()) };
+        let config = OscConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&[("s3cret", "Shared key")]) };
         let result = start_osc_listener(config, sink.clone()).expect("should bind");
         let port = result.bound_port;
         let send_socket = UdpSocket::bind("127.0.0.1:0").unwrap();
@@ -258,7 +265,7 @@ mod tests {
         let config = OscConfig {
             port: 0,
             host: "127.0.0.1".into(),
-            secret: None,
+            ..Default::default()
         };
 
         let result = start_osc_listener(config, sink.clone()).expect("should bind");
@@ -296,7 +303,7 @@ mod tests {
         let config = OscConfig {
             port,
             host: "127.0.0.1".into(),
-            secret: None,
+            ..Default::default()
         };
 
         let result = start_osc_listener(config, sink);
@@ -310,7 +317,7 @@ mod tests {
             addr: "/rhema/next".into(),
             args: vec![],
         };
-        handle_message(&msg, &sink, None);
+        handle_message(&msg, &sink, &new_key_set());
         assert_eq!(sink.command_count(), 1);
     }
 
@@ -321,7 +328,7 @@ mod tests {
             addr: "/foo/bar".into(),
             args: vec![],
         };
-        handle_message(&msg, &sink, None);
+        handle_message(&msg, &sink, &new_key_set());
         assert_eq!(sink.command_count(), 0);
     }
 
@@ -341,7 +348,7 @@ mod tests {
                 }),
             ],
         });
-        handle_packet(&bundle, &sink, None);
+        handle_packet(&bundle, &sink, &new_key_set());
         assert_eq!(sink.command_count(), 2);
     }
 }

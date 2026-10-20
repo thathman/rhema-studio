@@ -29,4 +29,7 @@ export const REMOTE_EVENTS = {
   macro: "remote:macro",
 } as const
 
+/** Emitted by the backend when a device completes pairing: `{ name, hash }`. Not a command. */
+export const REMOTE_PAIRED_EVENT = "remote:paired"
+
 export type RemoteEventName = (typeof REMOTE_EVENTS)[keyof typeof REMOTE_EVENTS]
