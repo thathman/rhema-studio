@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.6 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.7 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -22,7 +22,7 @@
 | ST-005 Verify translation/secondary/notes round-trip in latest PR #2 | P0 | MERGED | ST-003 | Fixed in PR #2 (`9c7c1c2`): items keep saved translation/secondary/notes; 7 store tests incl. bilingual reopen/save/reopen. Manual step 4.6–4.7 in the acceptance guide still open |
 | ST-006 End-to-end operator acceptance on real desktop and projectors | P0 | BACKLOG | ST-001,ST-002,ST-003 | Checklist written (`08-desktop-acceptance-guide.md`); Windows installer built (run 39382133331) and contents inspected, not launched. No manual pass performed yet |
 | ST-007 Verify PR dependency merge sequence and CI after retargets | P0 | MERGED | ST-005 | Executed 2026-10-20: #5 `5d23c94` → #3 `a3204ea` → #1 `011b3ae` → #2 `e66483b`, merge commits, no duplicates (`git diff` content-branch..main = docs only). CI on `main` recorded in DEVELOPMENT-STATUS.md. Branches kept; PR #4 retargeted to `main` |
-| ST-008 Ship explicit database backup/restore UX and verified recovery exercise | P0 | BACKLOG | ST-003 | User can back up, restore offline, see failures; tests and operator guide |
+| ST-008 Ship explicit database backup/restore UX and verified recovery exercise | P0 | IN PR | ST-003 | content-backup-restore PR: More → Library → Back up now / Restore from a backup; crate `verify_backup` + `restore_from` (snapshot first, bad files refused, reopen on failure, older backups migrate); 2 crate tests; guide §9.4–9.6. Recovery rehearsal on a real machine (QA-010) still open |
 | ST-009 Migrate product identity and settings safely | P2 | BACKLOG | ST-003 | Existing configurations survive app-ID rename, migration/rollback tested |
 | ST-010 Correct typecheck coverage and control lint debt | P1 | MERGED / BACKLOG | ST-001 | `tsc -b` in CI (merged); lint debt documented (13 upstream files), not reduced |
 | ST-011 Translation-resolution policy and atomic live activation | P0 | MERGED | ST-003,ST-005 | PR #2 (`af950eb`): item's saved translations win unless overridden; missing translation reported, never substituted; Next/Prev/Show live/OSC/HTTP go on air only with the verse; Clear cancels in-flight presents. 26 tests. Manual steps 5.0a–5.0h open |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.7):** PR #9 merged `039602b`; content-backup-restore PR opened (ST-008 IN PR).
 - **2026-10-20 (rev 0.6):** PR #8 merged `38f76eb`; songs-import-export PR opened (SO-008 UI IN PR).
 - **2026-10-20 (rev 0.5):** PR #7 merged `351d8e2`; songs-editor PR opened (SO-002 editor, SO-003, SO-004, SO-005 UI IN PR). Browser-shim check of the editor and Present flow recorded in guide §10a.
 - **2026-10-20 (rev 0.4):** PR #6 (songs database) merged `802640a`; songs-core PR opened (SO-006/007/009/010 IN PR, SO-002/005/008 crate parts MERGED).

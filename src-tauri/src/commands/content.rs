@@ -1,5 +1,6 @@
 #![expect(clippy::needless_pass_by_value, reason = "Tauri command extractors require pass-by-value")]
 
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::Serialize;
@@ -157,12 +158,54 @@ pub fn content_import_songs(state: State<'_, ContentState>, export: SongExport, 
     with_db(&state, |db| db.import_songs(&export, mode))
 }
 
+/// Copy the live database to `path` (SQLite online backup; safe while open).
+#[tauri::command]
+pub fn content_backup(state: State<'_, ContentState>, path: String) -> CmdResult<()> {
+    with_db(&state, |db| db.backup_to(Path::new(&path)))
+}
+
+#[derive(Debug, Serialize)]
+pub struct RestoreReport {
+    /// Where the pre-restore database was kept.
+    pub snapshot: Option<String>,
+    pub migrations: Vec<String>,
+}
+
+/// Replace the live database with a verified backup. The current file is
+/// snapshotted first; on any failure the previous database is reopened.
+#[tauri::command]
+pub fn content_restore(state: State<'_, ContentState>, path: String) -> CmdResult<RestoreReport> {
+    let mut guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
+    let current: PathBuf = guard
+        .as_ref()
+        .and_then(|db| db.path().map(Path::to_path_buf))
+        .ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".to_string() })?;
+    // Close the only handle so the file can be replaced.
+    *guard = None;
+    match rhema_content::restore_from(&current, Path::new(&path)) {
+        Ok((db, snapshot)) => {
+            let migrations = db.applied_migrations().unwrap_or_default();
+            *guard = Some(db);
+            Ok(RestoreReport { snapshot: snapshot.map(|p| p.display().to_string()), migrations })
+        }
+        Err(e) => {
+            match ContentDb::open(&current) {
+                Ok(db) => *guard = Some(db),
+                Err(reopen) => log::error!("content database could not be reopened after a failed restore: {reopen}"),
+            }
+            Err(e.into())
+        }
+    }
+}
+
 /// Where the database lives and whether it is open: for Diagnostics.
 #[derive(Debug, Serialize)]
 pub struct ContentStatus {
     pub available: bool,
     pub path: Option<String>,
     pub migrations: Vec<String>,
+    /// Automatic copy made before the last migration, if any.
+    pub last_backup: Option<String>,
 }
 
 #[tauri::command]
@@ -173,7 +216,8 @@ pub fn content_status(state: State<'_, ContentState>) -> Result<ContentStatus, S
             available: true,
             path: db.path().map(|p| p.display().to_string()),
             migrations: db.applied_migrations().unwrap_or_default(),
+            last_backup: db.last_backup().map(|p| p.display().to_string()),
         },
-        None => ContentStatus { available: false, path: None, migrations: vec![] },
+        None => ContentStatus { available: false, path: None, migrations: vec![], last_backup: None },
     })
 }

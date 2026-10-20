@@ -78,7 +78,9 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "get_verse": return verse(Number(args.translationId ?? 1), Number(args.bookNumber), Number(args.chapter), Number(args.verse))
     case "get_chapter": return Array.from({ length: 10 }, (_, i) => verse(Number(args.translationId ?? 1), Number(args.bookNumber), Number(args.chapter), i + 1))
     case "search_verses": return [verse(1, 43, 3, 16)]
-    case "content_status": return { available: true, path: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"] }
+    case "content_status": return { available: true, path: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"], last_backup: null }
+    case "content_backup": return null
+    case "content_restore": return { snapshot: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"] }
     case "content_list_programs": return [...programs.values()].map((p) => p.program)
     case "content_create_program": {
       const id = uid()

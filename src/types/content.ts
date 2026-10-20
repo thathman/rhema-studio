@@ -69,6 +69,13 @@ export interface ContentStatus {
   available: boolean
   path: string | null
   migrations: string[]
+  /** Automatic copy made before the last migration, if any. */
+  last_backup: string | null
+}
+
+export interface RestoreReport {
+  snapshot: string | null
+  migrations: string[]
 }
 
 // ── Songs and hymnbooks (migration 0003) ─────────────────────────────────

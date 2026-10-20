@@ -480,6 +480,74 @@ impl ContentDb {
     }
 }
 
+// ── backup and restore ─────────────────────────────────────────────────
+
+/// Is `source` a Rhema Studio database this build can open? Read-only check:
+/// a passing `quick_check` and a `schema_migrations` table.
+pub fn verify_backup(source: &Path) -> Result<Vec<String>> {
+    use rusqlite::OpenFlags;
+    let conn = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+        .map_err(|e| ContentError::Invalid(format!("not a readable database: {e}")))?;
+    let verdict: String = conn
+        .query_row("PRAGMA quick_check", [], |r| r.get(0))
+        .map_err(|e| ContentError::Invalid(format!("not a database file: {e}")))?;
+    if verdict != "ok" {
+        return Err(ContentError::Corrupt(verdict));
+    }
+    let has_table: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_table == 0 {
+        return Err(ContentError::Invalid("not a Rhema Studio database (no schema_migrations table)".into()));
+    }
+    let mut stmt = conn.prepare("SELECT version FROM schema_migrations ORDER BY version")?;
+    let rows = stmt.query_map([], |r| r.get(0))?;
+    Ok(rows.collect::<std::result::Result<_, _>>()?)
+}
+
+/// Replace the database at `path` with the verified backup at `source`,
+/// keeping the current file as `<name>.before-restore-<stamp>.bak` first.
+/// Every handle on `path` must be dropped before calling. If the restored
+/// file cannot be opened, the snapshot is put back and the error returned.
+/// Returns the new handle and the snapshot path (None when nothing existed).
+pub fn restore_from(path: &Path, source: &Path) -> Result<(ContentDb, Option<PathBuf>)> {
+    verify_backup(source)?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let snapshot = if path.exists() {
+        let dest = backup_path(path, &format!("restore-{stamp}"));
+        std::fs::copy(path, &dest).map_err(|e| ContentError::Invalid(format!("could not snapshot the current database: {e}")))?;
+        Some(dest)
+    } else {
+        None
+    };
+    let remove_sidecars = || {
+        for suffix in ["-wal", "-shm"] {
+            let mut p = path.as_os_str().to_owned();
+            p.push(suffix);
+            let _ = std::fs::remove_file(PathBuf::from(p));
+        }
+    };
+    remove_sidecars();
+    std::fs::copy(source, path).map_err(|e| ContentError::Invalid(format!("could not copy the backup into place: {e}")))?;
+    match ContentDb::open(path) {
+        Ok(db) => {
+            log::info!("[content] restored {} from {}", path.display(), source.display());
+            Ok((db, snapshot))
+        }
+        Err(e) => {
+            if let Some(snap) = &snapshot {
+                remove_sidecars();
+                let _ = std::fs::copy(snap, path);
+            }
+            Err(e)
+        }
+    }
+}
+
 // ── helpers ─────────────────────────────────────────────────────────────
 
 fn new_id() -> String {
@@ -937,6 +1005,58 @@ mod tests {
         let _ = std::fs::remove_file(tmp.0.join("studio.db-wal"));
         let err = ContentDb::open(&tmp.db()).unwrap_err();
         assert!(matches!(err, ContentError::Corrupt(_) | ContentError::Database(_)), "{err:?}");
+    }
+
+    #[test]
+    fn restore_replaces_the_file_keeps_a_snapshot_and_refuses_bad_sources() {
+        let tmp = TempDir::new();
+        let backup = tmp.0.join("backup.db");
+        let old_id = {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            let p = db.create_program("Before", None).unwrap();
+            db.backup_to(&backup).unwrap();
+            db.replace_items(&p.id, 1, &[verse("John 3:16", 43, 3, 16)]).unwrap();
+            db.create_program("After the backup", None).unwrap();
+            p.id
+        };
+        assert_eq!(verify_backup(&backup).unwrap().len(), MIGRATIONS.len());
+        // Every handle dropped; restore.
+        let (db, snapshot) = restore_from(&tmp.db(), &backup).unwrap();
+        assert_eq!(db.list_programs().unwrap().len(), 1, "the later program is gone");
+        assert_eq!(db.get_program(&old_id).unwrap().unwrap().items.len(), 0, "items added after the backup are gone");
+        let snapshot = snapshot.expect("snapshot of the pre-restore file");
+        assert!(snapshot.to_string_lossy().contains("before-restore-"));
+        let snap = ContentDb::open(&snapshot).unwrap();
+        assert_eq!(snap.list_programs().unwrap().len(), 2, "the snapshot keeps what was there before the restore");
+        drop(db);
+        drop(snap);
+
+        // Garbage and a non-Studio database are refused and leave the file alone.
+        let garbage = tmp.0.join("garbage.db");
+        std::fs::write(&garbage, b"not a database at all").unwrap();
+        assert!(matches!(restore_from(&tmp.db(), &garbage), Err(ContentError::Invalid(_))));
+        let plain = tmp.0.join("plain.db");
+        Connection::open(&plain).unwrap().execute_batch("CREATE TABLE t(x)").unwrap();
+        assert!(matches!(restore_from(&tmp.db(), &plain), Err(ContentError::Invalid(_))));
+        let db = ContentDb::open(&tmp.db()).unwrap();
+        assert_eq!(db.list_programs().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn restoring_an_older_backup_migrates_it() {
+        let tmp = TempDir::new();
+        let old = tmp.0.join("old.db");
+        {
+            let db = ContentDb::open_with_migrations(&old, &MIGRATIONS[..1]).unwrap();
+            db.create_program("Old", None).unwrap();
+        }
+        {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            db.create_program("Current", None).unwrap();
+        }
+        let (db, _) = restore_from(&tmp.db(), &old).unwrap();
+        assert_eq!(db.applied_migrations().unwrap().len(), MIGRATIONS.len());
+        assert_eq!(db.list_programs().unwrap()[0].title, "Old");
     }
 
     #[test]
