@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.28 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.29 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -63,7 +63,7 @@
 | MD-002 Playback (image/video/audio), aspect and timing | P1 | MERGED (pictures) | MD-001,SV-002 | PR #16: picture rundown items with fill/show-all/stretch, atomic go-live after decode, missing file reported; Prepare → Pictures tab; 5 tests. Video and audio not yet |
 | MD-003 Backgrounds, safe text and lyric scrolling | P1 | MERGED (backgrounds) | MD-002,SO-010 | PR #18: any verse, song or slide item can carry a library picture behind its text (`background_media_id` in the payload, crate-validated); picture loads before go-live; a missing file shows the words without it; Prepare picker in the rundown; 2 tests. Lyric scrolling and safe-area tuning not yet |
 | MD-004 Independently addressable transparent lower-third layer | P1 | BACKLOG | MD-001 | Congregation vs OBS output independent; alpha verified |
-| MD-005 Quick Screens and persistent overlays | P1 | MERGED (text screens) | ST-002,MD-002 | PR #15 `8bc82eb`: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
+| MD-005 Quick Screens and persistent overlays | P1 | MERGED (text screens) | ST-002,MD-002 | PR #15 `8bc82eb`, bilingual (English + Yorùbá when a Yorùbá Bible is active or secondary) in bilingual-quick-screens PR: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
 | MD-006 Local cache manifest, integrity/readiness | P0 | MERGED (pictures) | MD-001,SV-002 | PR #17 `5263a94`: Home warns before the service when a picture item's file is gone; rundown marks the item; presenting a missing picture never blanks the output (PR media-assets). Fonts and a release manifest later |
 | MD-007 Adaptive Smart Media rendering | P2 | MERGED (contrast) | MD-003 | PR #20: words over a photo get an automatic dark scrim scaled by the theme's text-plate opacity, none for dark-text themes; 2 tests. Layout adaptation to text length later |
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.29):** PR #40 merged; bilingual-quick-screens PR opened.
 - **2026-10-20 (rev 0.28):** migration-matrix PR opened (QA-005 database part IN PR, #39).
 - **2026-10-20 (rev 0.27):** PR #30 merged; Issues enabled and #31–#39 opened for near-term work and the two owner decisions.
 - **2026-10-20 (rev 0.26):** PR #29 merged; canva-connect-findings PR opened (CV-001 design; owner decisions on a token relay and public-integration application flagged).

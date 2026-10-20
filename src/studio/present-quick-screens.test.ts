@@ -79,3 +79,23 @@ describe("quick screens", () => {
     expect(useBroadcastStore.getState().liveVerse?.lines).toEqual(["Let us pray"])
   })
 })
+
+describe("bilingual quick screens", () => {
+  it("adds the Yorùbá line when a Yorùbá Bible is active or secondary, and not otherwise", () => {
+    useBibleStore.setState({
+      activeTranslationId: 1, secondaryTranslationId: null,
+      translations: [
+        { id: 1, abbreviation: "KJV", title: "", language: "en", is_copyrighted: false, is_downloaded: true },
+        { id: 7, abbreviation: "OYCB", title: "", language: "yo", is_copyrighted: false, is_downloaded: true },
+      ],
+    })
+    presentActions.quickScreen("stand")
+    expect(useBroadcastStore.getState().liveVerse?.secondaryLines).toBeUndefined()
+    useBibleStore.setState({ secondaryTranslationId: 7 })
+    presentActions.quickScreen("stand")
+    expect(useBroadcastStore.getState().liveVerse?.secondaryLines).toEqual(["Ẹ jọ̀wọ́ ẹ dìde"])
+    useBibleStore.setState({ activeTranslationId: 7, secondaryTranslationId: null })
+    presentActions.quickScreen("welcome")
+    expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", lines: ["We're glad you're here."], secondaryLines: ["Ẹ kú àbọ̀. Inú wa dùn pé ẹ wá."] })
+  })
+})
