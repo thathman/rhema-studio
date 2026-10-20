@@ -158,7 +158,7 @@ fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, secret: Option<&str
 fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, secret: Option<&str>) {
     let args: &[rosc::OscType] = if let Some(secret) = secret {
         match msg.args.first() {
-            Some(rosc::OscType::String(k)) if k == secret => &msg.args[1..],
+            Some(rosc::OscType::String(k)) if crate::command::same_key(k, secret) => &msg.args[1..],
             _ => {
                 log::warn!("OSC message refused for {}: missing or wrong key", msg.addr);
                 return;

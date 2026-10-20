@@ -216,7 +216,7 @@ async fn command_handler<S: CommandSink + 'static>(
     Json(request): Json<CommandRequest>,
 ) -> impl IntoResponse {
     if let Some(secret) = state.secret.as_deref() {
-        if presented_key(&headers) != Some(secret) {
+        if !presented_key(&headers).is_some_and(|k| crate::command::same_key(k, secret)) {
             log::warn!("HTTP command refused: missing or wrong key");
             return (
                 StatusCode::UNAUTHORIZED,
