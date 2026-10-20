@@ -11,6 +11,7 @@ import type {
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
+import type { ItemTranslations } from "@/lib/translation-policy"
 
 type SelectedElement = "verse" | "reference" | null
 
@@ -30,6 +31,10 @@ interface BroadcastState {
   // re-presented (e.g. after a translation change). Preview selection never
   // writes this — only an explicit present does.
   liveSourceVerse: Verse | null
+  /** The rundown item's saved translations the live verse was presented under, if any. */
+  liveItem: ItemTranslations | null
+  /** Why the last present did not reach the output; cleared by the next successful present. */
+  presentWarning: string | null
   // When on, detections auto-present to the live output. When off, the live
   // output only changes via explicit presents (manual operator control).
   autoLive: boolean
@@ -51,7 +56,9 @@ interface BroadcastState {
   togglePinTheme: (id: string) => void
   setActiveTheme: (id: string) => void
   setLive: (live: boolean) => void
-  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null) => void
+  /** `goLive` puts the output on air in the same update as the verse, so no stale frame shows first. */
+  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null }) => void
+  setPresentWarning: (warning: string | null) => void
   setAutoLive: (auto: boolean) => void
   syncBroadcastOutput: () => void
   syncBroadcastOutputFor: (outputId: string) => void
@@ -178,6 +185,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   isLive: false,
   liveVerse: null,
   liveSourceVerse: null,
+  liveItem: null,
+  presentWarning: null,
   autoLive: true,
   isDesignerOpen: false,
   editingThemeId: null,
@@ -342,10 +351,17 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({ isLive })
     get().syncBroadcastOutput()
   },
-  setLiveVerse: (liveVerse, source = null) => {
-    set({ liveVerse, liveSourceVerse: source })
+  setLiveVerse: (liveVerse, source = null, opts = {}) => {
+    set({
+      liveVerse,
+      liveSourceVerse: source,
+      liveItem: opts.item ?? null,
+      presentWarning: null,
+      ...(opts.goLive ? { isLive: true } : {}),
+    })
     get().syncBroadcastOutput()
   },
+  setPresentWarning: (presentWarning) => set({ presentWarning }),
   setAutoLive: (autoLive) => set({ autoLive }),
 
   // Designer

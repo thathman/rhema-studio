@@ -38,6 +38,11 @@ interface BibleState {
    */
   revealRequest: number
   revealBlock: ScrollLogicalPosition
+  /**
+   * Show saved service items in the active translation instead of the one
+   * they were saved with. A deliberate per-session choice; never persisted.
+   */
+  overrideServiceTranslations: boolean
 
   setTranslations: (translations: Translation[]) => void
   setActiveTranslation: (id: number) => void
@@ -50,6 +55,7 @@ interface BibleState {
   setCrossReferences: (refs: CrossReference[]) => void
   setPendingNavigation: (nav: PendingNavigation | null) => void
   requestVerseReveal: (block: ScrollLogicalPosition) => void
+  setOverrideServiceTranslations: (on: boolean) => void
 }
 
 export const useBibleStore = create<BibleState>((set) => ({
@@ -65,6 +71,7 @@ export const useBibleStore = create<BibleState>((set) => ({
   pendingNavigation: null,
   revealRequest: 0,
   revealBlock: "nearest",
+  overrideServiceTranslations: false,
 
   setTranslations: (translations) => set({ translations }),
   setActiveTranslation: (activeTranslationId) =>
@@ -91,6 +98,7 @@ export const useBibleStore = create<BibleState>((set) => ({
   setPendingNavigation: (pendingNavigation) => set({ pendingNavigation }),
   requestVerseReveal: (revealBlock) =>
     set((s) => ({ revealRequest: s.revealRequest + 1, revealBlock })),
+  setOverrideServiceTranslations: (overrideServiceTranslations) => set({ overrideServiceTranslations }),
 }))
 
 /** Load persisted translation selections from disk into Zustand, then sync the primary to Rust. */

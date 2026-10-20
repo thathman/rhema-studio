@@ -34,8 +34,9 @@ export function ServiceBar() {
   const items = useQueueStore((s) => s.items)
   const activeId = useBibleStore((s) => s.activeTranslationId)
   const translations = useBibleStore((s) => s.translations)
-  // Saved services keep their own translation; presentation follows the active
-  // one. Say so instead of letting a KJV service silently show in OYCB.
+  const override = useBibleStore((s) => s.overrideServiceTranslations)
+  // Saved items go live in the translation they were saved with (unless the
+  // operator overrides in Present). Say so when that differs from the active one.
   const activeAbbrev = translations.find((t) => t.id === activeId)?.abbreviation ?? null
   const pinnedElsewhere = current
     ? [...new Set(items.map((i) => i.translation).filter((t): t is string => typeof t === "string" && t !== activeAbbrev && !missing.includes(t)))]
@@ -218,8 +219,8 @@ export function ServiceBar() {
         </span>
       )}
       {pinnedElsewhere.length > 0 && (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status" title={`Items in this service were saved with ${pinnedElsewhere.join(", ")}. Live output uses the active translation (${activeAbbrev ?? "unknown"}). Saving keeps ${pinnedElsewhere.join(", ")}.`}>
-          <TriangleAlertIcon className="size-3.5" /> Saved as {pinnedElsewhere.join(", ")}; presenting {activeAbbrev ?? "active"}
+        <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status" title={override ? `Items saved with ${pinnedElsewhere.join(", ")} are shown in ${activeAbbrev ?? "the active translation"} because the override is on in Present. Saving keeps ${pinnedElsewhere.join(", ")}.` : `Items saved with ${pinnedElsewhere.join(", ")} go live in ${pinnedElsewhere.join(", ")}, not in ${activeAbbrev ?? "the active translation"}. Turn on the override in Present to use ${activeAbbrev ?? "the active translation"} instead.`}>
+          <TriangleAlertIcon className="size-3.5" /> Saved as {pinnedElsewhere.join(", ")}{override ? ` · override: shows in ${activeAbbrev ?? "active"}` : ` · shows in ${pinnedElsewhere.join(", ")}`}
         </span>
       )}
       {error && !current && (

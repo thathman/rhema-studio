@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { PanelHeader } from "@/components/ui/panel-header"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
@@ -10,10 +10,16 @@ export function PreviewPanel() {
   const translations = useBibleStore((s) => s.translations)
   const activeTranslationId = useBibleStore((s) => s.activeTranslationId)
 
-  // When translation changes, re-fetch the selected verse in the new translation
+  // When the active translation changes, re-fetch the selected verse in the
+  // new one — but only if it was following the active translation. A verse
+  // previewed in a service item's saved translation stays in it, so the
+  // preview keeps matching what Show live will put on the output.
+  const prevActive = useRef(activeTranslationId)
   useEffect(() => {
+    const was = prevActive.current
+    prevActive.current = activeTranslationId
     const verse = useBibleStore.getState().selectedVerse
-    if (verse && verse.book_number > 0 && verse.chapter > 0 && verse.verse > 0) {
+    if (verse && verse.translation_id === was && verse.book_number > 0 && verse.chapter > 0 && verse.verse > 0) {
       bibleActions
         .fetchVerse(verse.book_number, verse.chapter, verse.verse)
         .then((v) => {
@@ -26,7 +32,11 @@ export function PreviewPanel() {
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
 
   const activeTheme = themes.find((t) => t.id === activeThemeId) ?? themes[0]
-  const translation = translations.find((t) => t.id === activeTranslationId)?.abbreviation ?? "KJV"
+  // Label the preview with the translation the verse is actually in.
+  const translation =
+    translations.find((t) => t.id === selectedVerse?.translation_id)?.abbreviation ??
+    translations.find((t) => t.id === activeTranslationId)?.abbreviation ??
+    "KJV"
 
   const verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
 
