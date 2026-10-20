@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.2 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.3 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -15,17 +15,17 @@
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
-| ST-001 Integrate numbered-book search, OYCB source and dual-language display | P0 | IN PR | — | [PR #3](https://github.com/thathman/rhema-studio/pull/3); real Yoruba projector/font check, licensing |
-| ST-002 Establish Home/Prepare/Present/More shell and two Present views | P0 | IN PR | ST-001 (stack) | [PR #1](https://github.com/thathman/rhema-studio/pull/1); operator rehearsal and UI check |
-| ST-003 Add versioned SQLite studio.db, migration/recovery/audit, persistent service editing | P0 | IN PR | ST-002 (stack) | [PR #2](https://github.com/thathman/rhema-studio/pull/2); CI green; manual checklist `docs/rhema-studio/08-desktop-acceptance-guide.md` not yet performed |
+| ST-001 Integrate numbered-book search, OYCB source and dual-language display | P0 | MERGED | — | [PR #3](https://github.com/thathman/rhema-studio/pull/3) merged `a3204ea`; real Yoruba projector/font check still open (ST-006) |
+| ST-002 Establish Home/Prepare/Present/More shell and two Present views | P0 | MERGED | ST-001 (stack) | [PR #1](https://github.com/thathman/rhema-studio/pull/1) merged `011b3ae`; operator rehearsal still open (ST-006) |
+| ST-003 Add versioned SQLite studio.db, migration/recovery/audit, persistent service editing | P0 | MERGED | ST-002 (stack) | [PR #2](https://github.com/thathman/rhema-studio/pull/2) merged `e66483b`; manual checklist `docs/rhema-studio/08-desktop-acceptance-guide.md` not yet performed |
 | ST-004 Yoruba speech and OpenAI speech provider delta | P2 | IN PR | ST-001 | [PR #4](https://github.com/thathman/rhema-studio/pull/4); decide bundling, live provider tests |
-| ST-005 Verify translation/secondary/notes round-trip in latest PR #2 | P0 | IN PR | ST-003 | Fixed in PR #2 (`9c7c1c2`): items keep saved translation/secondary/notes; 7 store tests incl. bilingual reopen/save/reopen. Manual step 4.6–4.7 in the acceptance guide still open |
+| ST-005 Verify translation/secondary/notes round-trip in latest PR #2 | P0 | MERGED | ST-003 | Fixed in PR #2 (`9c7c1c2`): items keep saved translation/secondary/notes; 7 store tests incl. bilingual reopen/save/reopen. Manual step 4.6–4.7 in the acceptance guide still open |
 | ST-006 End-to-end operator acceptance on real desktop and projectors | P0 | BACKLOG | ST-001,ST-002,ST-003 | Checklist written (`08-desktop-acceptance-guide.md`); Windows installer built (run 39382133331) and contents inspected, not launched. No manual pass performed yet |
-| ST-007 Verify PR dependency merge sequence and CI after retargets | P0 | DESIGN | ST-005,ST-006 | Procedure written (`09-integration-merge-plan.md`: merge commits, #3 → #1 → #2, retarget then delete); per-layer diffs verified disjoint. Not executed |
+| ST-007 Verify PR dependency merge sequence and CI after retargets | P0 | MERGED | ST-005 | Executed 2026-10-20: #5 `5d23c94` → #3 `a3204ea` → #1 `011b3ae` → #2 `e66483b`, merge commits, no duplicates (`git diff` content-branch..main = docs only). CI on `main` recorded in DEVELOPMENT-STATUS.md. Branches kept; PR #4 retargeted to `main` |
 | ST-008 Ship explicit database backup/restore UX and verified recovery exercise | P0 | BACKLOG | ST-003 | User can back up, restore offline, see failures; tests and operator guide |
 | ST-009 Migrate product identity and settings safely | P2 | BACKLOG | ST-003 | Existing configurations survive app-ID rename, migration/rollback tested |
-| ST-010 Correct typecheck coverage and control lint debt | P1 | IN PR / BACKLOG | ST-001 | `tsc -b` in #2 (`37a5f20`) and in CI; lint debt documented, not reduced |
-| ST-011 Translation-resolution policy and atomic live activation | P0 | IN PR | ST-003,ST-005 | PR #2 (`af950eb`): item's saved translations win unless overridden; missing translation reported, never substituted; Next/Prev/Show live/OSC/HTTP go on air only with the verse; Clear cancels in-flight presents. 26 tests. Manual steps 5.0a–5.0h open |
+| ST-010 Correct typecheck coverage and control lint debt | P1 | MERGED / BACKLOG | ST-001 | `tsc -b` in CI (merged); lint debt documented (13 upstream files), not reduced |
+| ST-011 Translation-resolution policy and atomic live activation | P0 | MERGED | ST-003,ST-005 | PR #2 (`af950eb`): item's saved translations win unless overridden; missing translation reported, never substituted; Next/Prev/Show live/OSC/HTTP go on air only with the verse; Clear cancels in-flight presents. 26 tests. Manual steps 5.0a–5.0h open |
 
 ## Milestone 2B — Songs and Hymnbooks
 
@@ -139,7 +139,7 @@
 | QA-006 Security threat review of LAN, external cues and cloud sync | P1 | BACKLOG | OP-006,CL-004 | Pairing/auth, permissions, secrets, revocation, secure defaults |
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
 | QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | BACKLOG | QA-003 | 1-page quick start, stage/production guides, diagnostics |
-| QA-009 CI status gates and no-skipped-test claims | P0 | IN PR | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
+| QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
 | QA-010 Backup/restore incident rehearsal | P0 | BACKLOG | ST-008 | Recover approved last-good content on standby machine |
 
 ## Roll-up / near-term sequence
@@ -154,4 +154,5 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.3):** Integration executed: PRs #5, #3, #1, #2 merged into `main` (`e66483b`). ST-001/002/003/005/007/011, QA-009 → MERGED (not ACCEPTED: manual desktop gate ST-006 open). Milestone 2B started (SO-002…). Status snapshots live in `docs/DEVELOPMENT-STATUS.md`.
 - **2026-10-20:** Initial canonical backlog created from owner-confirmed product direction and existing seven Studio design documents. No tasks newly implemented by this documentation-only change.
