@@ -42,7 +42,7 @@ Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cue
 
 ## Data safety
 
-- Every save of a service is a version (Prepare → History): compare and restore; a restore is itself a new version.
+- Every save of a service is a version (Prepare → History): compare and restore; a restore is itself a new version. **Approve** (Prepare, next to Save) pins the saved version as the one for the day: History marks it, it is never pruned, and Home warns when the service has changed since.
 - More → Library: **Save this service as a file** carries one service with its songs and pictures to another computer (checksummed; a damaged file is refused). Export/import songs (Rhema JSON, OpenLyrics), and **Back up now / Restore** for the whole database. A restore refuses files that are not a Rhema Studio database and keeps the previous database as a snapshot next to it.
 - Before any upgrade the app copies the database to `studio.db.before-<migration>.bak`.
 

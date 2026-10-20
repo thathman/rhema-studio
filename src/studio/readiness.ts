@@ -34,6 +34,8 @@ export interface ReadinessInput {
   missingMedia?: number
   /** Fonts the themes in use ask for that this computer does not have. */
   missingFonts?: Array<{ theme: string; font: string }>
+  /** Whether the open service was approved as it is (Prepare → Approve). Absent when no service is open. */
+  approval?: "approved" | "changed" | "none"
 }
 
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
@@ -75,6 +77,13 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
     ...(i.missingSongs
       ? [{ id: "missing-songs", status: "warn" as const, label: `${i.missingSongs} song${i.missingSongs === 1 ? "" : "s"} in the service ${i.missingSongs === 1 ? "is" : "are"} not in the library`, detail: "They cannot be shown. Remove them or import the songs again.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
+    ...(i.approval === "approved"
+      ? [{ id: "approval", status: "ok" as const, label: "Service approved as saved" }]
+      : i.approval === "changed"
+        ? [{ id: "approval", status: "warn" as const, label: "Service changed since it was approved", detail: "Approve it again, or restore the approved version from History.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+        : i.approval === "none"
+          ? [{ id: "approval", status: "info" as const, label: "Service not approved yet", detail: "Optional. Approve in Prepare so the version for today is kept whatever changes later.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+          : []),
     ...(i.missingFonts?.length
       ? [{ id: "fonts", status: "warn" as const, label: `${i.missingFonts.length} theme font${i.missingFonts.length === 1 ? " is" : "s are"} not installed`, detail: i.missingFonts.map((m) => `${m.theme}: ${m.font}`).join(", ") + ". The screen will use a fallback font.", fix: "outputs" as const, fixLabel: "Open outputs" }]
       : []),

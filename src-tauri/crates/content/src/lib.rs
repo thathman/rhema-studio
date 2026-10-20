@@ -63,6 +63,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0004_media", include_str!("../migrations/0004_media.sql")),
     ("0005_revisions", include_str!("../migrations/0005_revisions.sql")),
     ("0006_song_key_tempo", include_str!("../migrations/0006_song_key_tempo.sql")),
+    ("0007_approval", include_str!("../migrations/0007_approval.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -85,6 +86,11 @@ pub struct Program {
     pub created_at: String,
     pub updated_at: String,
     pub item_count: i64,
+    /// The revision approved for the service (see `approve_program`), if any.
+    #[serde(default)]
+    pub approved_revision: Option<i64>,
+    #[serde(default)]
+    pub approved_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -295,10 +301,10 @@ impl ContentDb {
     pub fn list_programs(&self) -> Result<Vec<Program>> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT p.id, p.title, p.service_date, p.revision, p.created_at, p.updated_at,
-                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id)
+            &format!("SELECT p.id, p.title, p.service_date, p.revision, p.created_at, p.updated_at,
+                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id){}
              FROM programs p
-             ORDER BY p.service_date IS NULL, p.service_date DESC, p.updated_at DESC",
+             ORDER BY p.service_date IS NULL, p.service_date DESC, p.updated_at DESC", approval_cols(&conn)),
         )?;
         let rows = stmt.query_map([], row_to_program)?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
@@ -583,9 +589,9 @@ fn backup_path(path: &Path, version: &str) -> PathBuf {
 fn load_program(conn: &Connection, id: &str) -> Result<Option<Program>> {
     Ok(conn
         .query_row(
-            "SELECT p.id, p.title, p.service_date, p.revision, p.created_at, p.updated_at,
-                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id)
-             FROM programs p WHERE p.id = ?1",
+            &format!("SELECT p.id, p.title, p.service_date, p.revision, p.created_at, p.updated_at,
+                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id){}
+             FROM programs p WHERE p.id = ?1", approval_cols(conn)),
             params![id],
             row_to_program,
         )
@@ -617,6 +623,18 @@ fn load_items(conn: &Connection, program_id: &str) -> Result<Vec<ProgramItem>> {
     Ok(rows.collect::<std::result::Result<_, _>>()?)
 }
 
+/// Tests open files at older schema versions; before 0007 the approval
+/// columns do not exist, so select NULLs in their place.
+pub(crate) fn has_approval_column(conn: &Connection) -> bool {
+    conn.prepare("SELECT 1 FROM pragma_table_info('programs') WHERE name = 'approved_revision'")
+        .and_then(|mut st| st.exists([]))
+        .unwrap_or(false)
+}
+
+fn approval_cols(conn: &Connection) -> &'static str {
+    if has_approval_column(conn) { ", p.approved_revision, p.approved_at" } else { ", NULL, NULL" }
+}
+
 fn row_to_program(r: &rusqlite::Row<'_>) -> rusqlite::Result<Program> {
     Ok(Program {
         id: r.get(0)?,
@@ -626,6 +644,8 @@ fn row_to_program(r: &rusqlite::Row<'_>) -> rusqlite::Result<Program> {
         created_at: r.get(4)?,
         updated_at: r.get(5)?,
         item_count: r.get(6)?,
+        approved_revision: r.get(7)?,
+        approved_at: r.get(8)?,
     })
 }
 
@@ -829,7 +849,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval"]);
     }
 
     #[test]
@@ -1035,7 +1055,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

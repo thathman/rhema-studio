@@ -70,6 +70,12 @@ pub fn content_create_program(
     with_db(&state, |db| db.create_program(&title, service_date.as_deref()))
 }
 
+/// Mark the saved service as the one for the day; its snapshot is then kept.
+#[tauri::command]
+pub fn content_approve_program(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<Program> {
+    with_db(&state, |db| db.approve_program(&id, expected_revision))
+}
+
 #[tauri::command]
 pub fn content_update_program(
     state: State<'_, ContentState>,

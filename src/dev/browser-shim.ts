@@ -103,6 +103,12 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     }
     case "content_delete_program": programs.delete(String(args.id)); return null
     case "content_list_revisions": return []
+    case "content_approve_program": {
+      const p = programs.get(String(args.id))
+      if (!p) throw { kind: "not_found", message: "no such service" }
+      p.program = { ...p.program, approved_revision: p.program.revision, approved_at: new Date().toISOString() }
+      return p.program
+    }
     case "content_get_revision": return null
     case "content_list_songs": {
       const q = String(args.query ?? "").toLowerCase().trim()

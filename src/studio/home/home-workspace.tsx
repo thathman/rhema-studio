@@ -1,3 +1,4 @@
+import { approvalState } from "@/lib/approval"
 import { useEffect } from "react"
 import { CheckIcon, TriangleAlertIcon, InfoIcon, PlayIcon, PencilRulerIcon, MonitorIcon, SettingsIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -77,6 +78,7 @@ export function HomeWorkspace() {
     missingMedia: mediaLoaded || mediaIds.length === 0 ? missingMedia : 0,
     // Only the themes outputs actually use.
     missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
+    approval: current ? (dirty ? "changed" : approvalState(current)) : undefined,
   })
 
   const fix = (f: ReadinessFix) => {

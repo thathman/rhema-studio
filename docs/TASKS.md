@@ -106,7 +106,7 @@
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
 | CL-001 Accounts, roles and local identity/actor audit | P1 | BACKLOG | ST-003 | Added/updated by with real actor, permissions test |
-| CL-002 Immutable approved release snapshot | P0 | BACKLOG | SV-002,MD-006 | Complete content+media manifest, explicit go-live release |
+| CL-002 Immutable approved release snapshot | P0 | IN PR (first slice) | SV-002,MD-006 | approved-snapshot PR: migration 0007 `programs.approved_revision/approved_at`; Prepare → Approve pins the saved revision (its History snapshot is never pruned), History marks it, Home readiness shows approved / changed since approval / not approved; the service file (CL-003) is the content+media manifest. Later: approval required before go-live, approver identity (CL-001) |
 | CL-003 Local portable service package | P1 | IN PR | CL-002 | service-package PR: `<title>.rhema-service.json` = service items + the songs and pictures they use (base64) + SHA-256 over the payload; import refuses a bad checksum/hash/version before writing, reuses songs by id and pictures by hash, remaps arrangement ids; More → Library block; 2 crate tests |
 | CL-004 Sync transport evaluation and threat model | P1 | BACKLOG | CL-001,CL-002 | Self-hosted vs optional hosted assessed and priced; no lock-in |
 | CL-005 Sync drafts, approvals, presence and conflict resolution | P1 | BACKLOG | CL-004 | Edited remotely, reviewed locally, no silent overwrite |
@@ -140,7 +140,7 @@
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
 | QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | MERGED (#48, #51) | QA-003 | `docs/QUICK-START.md`: one-page volunteer guide (prepare, present table, what cannot go wrong, if something breaks). Stage/production guide and diagnostics how-to later |
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
-| QA-010 Backup/restore incident rehearsal | P0 | BACKLOG | ST-008 | Recover approved last-good content on standby machine |
+| QA-010 Backup/restore incident rehearsal | P0 | IN PR (runbook) | ST-008 | `docs/rhema-studio/14-backup-restore-rehearsal.md`: five-step drill (approve + service file + backup → standby open/restore → restore approved → USB pulled), all rows unverified until performed |
 
 ## Roll-up / near-term sequence
 

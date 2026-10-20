@@ -291,3 +291,10 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10o.1 | Settings → Remote: untick "Accept commands from other devices on this network", start HTTP. From another device on the LAN, `curl http://<laptop-ip>:8080/...`; from the laptop, `curl http://127.0.0.1:8080/...`. | The LAN request is refused (connection refused); the local one works. Re-tick, restart: both work. | Unverified |
+### 10p. Approve a service (CL-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10p.1 | Save a service, press Approve. Home. | Approve shows "Approved" (disabled); Home readiness: "Service approved as saved". | Unverified |
+| 10p.2 | Change an item, save. Home, then History. | Prepare: "Approve again"; Home: "Service changed since it was approved" (warn); History lists the approved version with "· approved". | Unverified |
+| 10p.3 | Save 55 more times (or script it), then open History. | The approved version is still listed; the oldest unapproved ones are gone. | Unverified |
