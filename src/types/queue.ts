@@ -51,6 +51,8 @@ export interface CustomSlide {
   title: string
   /** Plain text; each line is drawn on its own line. */
   body: string
+  /** A safe http(s) link shown as a QR code with the text beside it (SG-003). */
+  link?: string
 }
 
 export interface SlideQueueItem extends QueueItemBase {

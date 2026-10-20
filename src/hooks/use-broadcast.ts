@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { mark } from "@/lib/latency-marks"
+import { qrDataUrl } from "@/lib/qr-bulletin"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type { VerseRenderData } from "@/types"
@@ -240,6 +241,8 @@ export async function presentSlide(
 
 export function toCustomSlideRenderData(item: SlideQueueItem): VerseRenderData {
   const lines = item.slide.body.replace(/\r\n?/g, "\n").split("\n").map((l) => l.trim()).filter(Boolean)
+  // The link is always printed under the code, so what is scanned is what is read.
+  if (item.slide.link) lines.push(item.slide.link)
   return { kind: "slide", reference: item.slide.title.trim(), segments: [{ text: lines.join(" ") }], lines }
 }
 
@@ -256,7 +259,15 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
     return "empty"
   }
   // No background: present synchronously so nothing can slip in between.
-  const image = item.background ? await backgroundFill(item.background) : undefined
+  let image = item.background ? await backgroundFill(item.background) : undefined
+  if (item.slide.link) {
+    try {
+      image = { url: await qrDataUrl(item.slide.link), fit: "contain", blur: 0, brightness: 100, tint: null }
+    } catch (e) {
+      console.warn("[broadcast] QR could not be drawn:", e)
+      useBroadcastStore.getState().setPresentWarning("The QR code could not be drawn; showing the text only.")
+    }
+  }
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: 0 })
   useBroadcastStore.getState().setLiveVerse(image ? { ...data, image } : data, null, { goLive: opts.goLive, itemId: item.id })
