@@ -7,6 +7,7 @@ import { useBibleStore, useQueueStore } from "@/stores"
 import type { SlideQueueItem } from "@/types"
 import { announcementBody } from "@/lib/announcement"
 import { safeLink } from "@/lib/qr-bulletin"
+import { slidePages } from "@/lib/slide-pages"
 
 const EXAMPLES = [
   { title: "Welcome", body: "We're glad you're here.\nPlease silence your phone." },
@@ -47,13 +48,33 @@ export function SlideComposer() {
     if (!t.trim() && !full.trim() && !safe) return
     useBibleStore.getState().selectSlide({ item: { ...draft(), slide: { title: t, body: full, ...(safe ? { link: safe } : {}) } }, index: 0 })
   }
-  const add = () => {
-    if (empty) return
+  const pages = mode === "qr" ? [] : slidePages(composedBody)
+  const appendToService = (item: SlideQueueItem) => {
     const queue = useQueueStore.getState()
     const before = queue.items.length
-    queue.addItem({ ...draft(), id: crypto.randomUUID(), added_at: Date.now() })
+    queue.addItem(item)
     const after = useQueueStore.getState().items.length
     if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+  }
+  const reset = () => {
+    setTitle("")
+    setBody("")
+    setWhen("")
+    setWhere("")
+    setLink("")
+  }
+  /** One slide per paragraph (and per six lines), in order, so nothing has to shrink or scroll on screen. */
+  const addPages = () => {
+    if (pages.length < 2) return
+    pages.forEach((page, i) => {
+      const d = draft()
+      appendToService({ ...d, id: crypto.randomUUID(), added_at: Date.now(), slide: { ...d.slide, body: page }, reference: `${d.reference} (${i + 1}/${pages.length})` })
+    })
+    reset()
+  }
+  const add = () => {
+    if (empty) return
+    appendToService({ ...draft(), id: crypto.randomUUID(), added_at: Date.now() })
     setTitle("")
     setBody("")
     setWhen("")
@@ -105,6 +126,11 @@ export function SlideComposer() {
       />
       <div className="flex items-center gap-2">
         <Button size="sm" disabled={empty} onClick={add}><PlusIcon /> Add to service</Button>
+        {pages.length > 1 && (
+          <Button size="sm" variant="outline" onClick={addPages} title="Split at blank lines, at most six lines a slide">
+            Add as {pages.length} slides
+          </Button>
+        )}
         <span className="text-xs text-muted-foreground">Edit it later by clicking it in the service.</span>
       </div>
       <p className="mt-2 text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Quick starts</p>
