@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.8 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.9 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -48,8 +48,8 @@
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
 | SV-001 Custom slide schema/editor and text rendering | P1 | IN PR | ST-003 | custom-slides PR: `kind='slide'` items with `{title, body}` payload (crate-validated), Prepare → Slides composer with live preview and quick starts, in-place editing in the rundown, `presentCustomSlide` (atomic, supersedes loading presents), Next/Prev and Show live; 4 tests + crate test. Reuse across services (slide library) not yet |
-| SV-002 Unified add/reorder/edit flow across Bible/song/slide | P1 | IN PR (partial) | SO-009,SV-001 | Same Add button and rundown controls for verses, songs and slides; live highlighting by item id (custom-slides PR). Drag reorder in the rundown and one search box across all kinds still open |
-| SV-003 Service templates and multi-service variants | P1 | BACKLOG | SV-002 | Duplicate/adjust 7/9/11 AM without unintended shared mutations |
+| SV-002 Unified add/reorder/edit flow across Bible/song/slide | P1 | IN PR | SO-009,SV-001 | custom-slides PR: same Add and rundown controls, live highlighting by item id; service-builder PR: drag-handle reorder in Prepare (dnd-kit) beside the arrow buttons. One search box across all kinds: Quick find covers verses and songs (slides are service-local) |
+| SV-003 Service templates and multi-service variants | P1 | IN PR | SV-002 | service-builder PR: Copy service (fresh item ids, original untouched, refused while unsaved); 1 test. Named templates not yet (a copied service is the template) |
 | SV-004 Quick Find for Bible, hymn, song, media | P1 | BACKLOG | SO-007,SV-002 | Keyboard-safe, typo-tolerant, predictable candidate ranking |
 | SV-005 Next/Previous Verse and responsive readings | P1 | BACKLOG | ST-001,SV-002 | Versification-safe navigation; leader/congregation format |
 | SV-006 Program notes, review readiness and duration estimates | P1 | BACKLOG | SV-002 | Clear missing/unfinished tasks, no false readiness |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.9):** service-builder PR opened (SV-002 drag reorder, SV-003 copy service).
 - **2026-10-20 (rev 0.8):** PR #10 merged `d884791` (ST-008 MERGED, acceptance 9.4–9.6 open). custom-slides PR opened (SV-001 IN PR, SV-002 partial).
 - **2026-10-20 (rev 0.7):** PR #9 merged `039602b`; content-backup-restore PR opened (ST-008 IN PR).
 - **2026-10-20 (rev 0.6):** PR #8 merged `38f76eb`; songs-import-export PR opened (SO-008 UI IN PR).

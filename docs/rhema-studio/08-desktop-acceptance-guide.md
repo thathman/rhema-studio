@@ -167,6 +167,14 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10b.4 | Preview a slide, Show live; Clear; Restore. | Live matches preview; Restore brings the slide back. |
 | 10b.5 | Dual-language theme and a transparent OBS theme. | Title in the reference style, lines in the verse style; keys correctly. |
 
+## 10c. Service builder (Milestone 2C)
+
+| # | Do | Expect |
+|---|---|---|
+| 10c.1 | Prepare: drag a rundown row by its grip to a new place; then use the arrow buttons. | Both reorder; the service shows unsaved; Save persists the order. |
+| 10c.2 | With a saved service open, click Copy, accept "(copy)". Change the copy, save. Reopen the original. | Original unchanged; both listed; the copy's items have their own identity (edits never cross). |
+| 10c.3 | Try Copy with unsaved changes. | Disabled with "save or discard changes first". |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -181,6 +189,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10b, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10c, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.
