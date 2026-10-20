@@ -80,7 +80,7 @@ export interface ContentStatus {
 
 export interface MediaAsset {
   id: string
-  kind: "image" | "video" | "audio"
+  kind: "image" | "video" | "audio" | "document"
   name: string
   file: string
   hash: string

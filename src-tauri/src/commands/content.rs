@@ -8,7 +8,7 @@ use tauri::State;
 
 use rhema_content::{
     ContentDb, ContentError, Hymnbook, HymnbookInput, ImportMode, ImportReport, ItemInput, Program, ProgramWithItems,
-    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, ServiceLog, ServiceLogSummary,
+    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, ServiceLog, ServiceLogSummary, MediaAsset,
 };
 
 /// The content database is opened in `setup`; `None` means it failed to open
@@ -88,6 +88,21 @@ pub fn content_get_service_log(state: State<'_, ContentState>, id: String) -> Cm
 #[tauri::command]
 pub fn content_delete_service_log(state: State<'_, ContentState>, id: String) -> CmdResult<()> {
     with_db(&state, |db| db.delete_service_log(&id))
+}
+
+#[tauri::command]
+pub fn content_list_song_attachments(state: State<'_, ContentState>, song_id: String) -> CmdResult<Vec<MediaAsset>> {
+    with_db(&state, |db| db.list_song_attachments(&song_id))
+}
+
+#[tauri::command]
+pub fn content_add_song_attachment(state: State<'_, ContentState>, song_id: String, media_id: String) -> CmdResult<Vec<MediaAsset>> {
+    with_db(&state, |db| db.add_song_attachment(&song_id, &media_id))
+}
+
+#[tauri::command]
+pub fn content_remove_song_attachment(state: State<'_, ContentState>, song_id: String, media_id: String) -> CmdResult<Vec<MediaAsset>> {
+    with_db(&state, |db| db.remove_song_attachment(&song_id, &media_id))
 }
 
 /// The operator's name for audit rows (Settings → your name). Empty clears it.

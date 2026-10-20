@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{audit, is_valid_id, new_id, ContentDb, ContentError, Result};
 
-pub const MEDIA_KINDS: &[&str] = &["image", "video", "audio"];
+pub const MEDIA_KINDS: &[&str] = &["image", "video", "audio", "document"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MediaAsset {

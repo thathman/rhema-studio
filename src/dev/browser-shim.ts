@@ -82,6 +82,9 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "content_status": return { available: true, path: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"], last_backup: null }
     case "content_export_service_package": throw { message: "Not available in the browser shim" }
     case "content_import_service_package": throw { message: "Not available in the browser shim" }
+    case "content_list_song_attachments": return []
+    case "content_add_song_attachment": return []
+    case "content_remove_song_attachment": return []
     case "content_set_actor": return null
     case "content_save_service_log": { const id = crypto.randomUUID(); logs.unshift({ id, program_id: (args.programId as string | null) ?? null, title: String(args.title), saved_at: new Date().toISOString(), bytes: String(args.body).length, body: String(args.body) }); return logs[0] }
     case "content_list_service_logs": { const q = String(args.query ?? "").toLowerCase(); return logs.filter((l) => !q || l.title.toLowerCase().includes(q) || l.body.toLowerCase().includes(q)) }

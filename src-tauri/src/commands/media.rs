@@ -51,6 +51,7 @@ fn kind_and_mime(ext: &str) -> Option<(&'static str, &'static str)> {
         "wav" => ("audio", "audio/wav"),
         "ogg" => ("audio", "audio/ogg"),
         "m4a" | "aac" => ("audio", "audio/mp4"),
+        "pdf" => ("document", "application/pdf"),
         _ => return None,
     })
 }
