@@ -117,7 +117,7 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| SG-001 Signage player and screen identity | P2 | IN PR (first slice) | OP-001,MD-006 | signage-loop PR: output role Signage loops chosen library pictures (seconds each) on its own ticker; untouched by go-live, Clear, rehearsal and theme-designer edits; a missing picture shows the theme background; card shows the loop size; readiness lists the role. Schedules (SG-002) and screen health later |
+| SG-001 Signage player and screen identity | P2 | MERGED (first slice #79) / BACKLOG (screen health, cache) | OP-001,MD-006 | signage-loop PR: output role Signage loops chosen library pictures (seconds each) on its own ticker; untouched by go-live, Clear, rehearsal and theme-designer edits; a missing picture shows the theme background; card shows the loop size; readiness lists the role. Schedules (SG-002) and screen health later |
 | SG-002 Scheduled announcements/playlists | P2 | BACKLOG | SG-001 | Date/time and timezone tested, no effect on sanctuary |
 | SG-003 QR digital bulletins and optional action links | P2 | BACKLOG | SV-002 | Link safety, privacy, consent, offline fallback |
 | AR-001 Runtime journal/service event log | P1 | MERGED (#53) / IN PR (remote commands) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
