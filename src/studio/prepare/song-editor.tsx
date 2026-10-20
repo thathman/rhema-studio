@@ -219,6 +219,14 @@ function EditorDialog({
                 <Input value={form.licence_note} onChange={(e) => set({ licence_note: e.target.value })} placeholder="Used by permission, CCLI licence 123456" />
               </Field>
             )}
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Key" hint="For the band">
+                <Input value={form.key} onChange={(e) => set({ key: e.target.value })} placeholder="G" maxLength={12} />
+              </Field>
+              <Field label="Tempo (bpm)">
+                <Input value={form.tempo} onChange={(e) => set({ tempo: e.target.value })} inputMode="numeric" placeholder="72" />
+              </Field>
+            </div>
             <Field label="Notes" hint="For the team, never on screen">
               <Textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} rows={2} />
             </Field>

@@ -30,6 +30,10 @@ pub struct Song {
     pub primary_language: String,
     pub tags: String,
     pub notes: String,
+    /// Musical key, e.g. "G", "Bb", "F#m". Free text, for the band.
+    pub key: String,
+    /// Beats per minute, for the band.
+    pub tempo: Option<i64>,
     pub revision: i64,
     pub created_at: String,
     pub updated_at: String,
@@ -139,6 +143,10 @@ pub struct SongInput {
     pub tags: String,
     #[serde(default)]
     pub notes: String,
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub tempo: Option<i64>,
     pub sections: Vec<SectionInput>,
     /// Empty = keep a generated "Default" arrangement (authoring order, chorus
     /// after each verse when there is exactly one chorus).
@@ -167,6 +175,8 @@ impl Default for SongInput {
             primary_language: default_language(),
             tags: String::new(),
             notes: String::new(),
+            key: String::new(),
+            tempo: None,
             sections: vec![],
             arrangements: vec![],
             numbers: vec![],
@@ -478,6 +488,8 @@ fn to_input(s: &SongWithSections, book_ids: &BTreeMap<String, String>) -> SongIn
         primary_language: s.song.primary_language.clone(),
         tags: s.song.tags.clone(),
         notes: s.song.notes.clone(),
+        key: s.song.key.clone(),
+        tempo: s.song.tempo,
         sections: s
             .sections
             .iter()
@@ -514,8 +526,8 @@ fn check_song_revision(tx: &Transaction<'_>, id: &str, expected: i64) -> Result<
 fn insert_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> {
     tx.execute(
         "INSERT INTO songs (id, title, title_sort, authors, copyright, ccli_number, licence, licence_note,
-                            primary_language, tags, notes)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                            primary_language, tags, notes, key, tempo)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             id,
             s.title.trim(),
@@ -528,6 +540,8 @@ fn insert_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> 
             s.primary_language.trim(),
             s.tags.trim(),
             s.notes.trim(),
+            s.key.trim(),
+            s.tempo,
         ],
     )?;
     Ok(())
@@ -537,6 +551,7 @@ fn update_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> 
     tx.execute(
         "UPDATE songs SET title = ?2, title_sort = ?3, authors = ?4, copyright = ?5, ccli_number = ?6,
                           licence = ?7, licence_note = ?8, primary_language = ?9, tags = ?10, notes = ?11,
+                          key = ?12, tempo = ?13,
                           revision = revision + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
          WHERE id = ?1",
         params![
@@ -551,6 +566,8 @@ fn update_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> 
             s.primary_language.trim(),
             s.tags.trim(),
             s.notes.trim(),
+            s.key.trim(),
+            s.tempo,
         ],
     )?;
     Ok(())
@@ -803,7 +820,7 @@ fn load_song_row(conn: &Connection, id: &str) -> Result<Option<Song>> {
     Ok(conn
         .query_row(
             "SELECT id, title, authors, copyright, ccli_number, licence, licence_note, primary_language, tags, notes,
-                    revision, created_at, updated_at FROM songs WHERE id = ?1",
+                    revision, created_at, updated_at, key, tempo FROM songs WHERE id = ?1",
             params![id],
             |r| {
                 Ok(Song {
@@ -820,6 +837,8 @@ fn load_song_row(conn: &Connection, id: &str) -> Result<Option<Song>> {
                     revision: r.get(10)?,
                     created_at: r.get(11)?,
                     updated_at: r.get(12)?,
+                    key: r.get(13)?,
+                    tempo: r.get(14)?,
                 })
             },
         )
@@ -1045,6 +1064,12 @@ fn validate_song(s: &SongInput) -> Result<()> {
     if s.notes.chars().count() > crate::MAX_NOTES {
         return bad(format!("notes longer than {} characters", crate::MAX_NOTES));
     }
+    if s.key.trim().chars().count() > 12 {
+        return bad("key must be short, like G or F#m".into());
+    }
+    if s.tempo.is_some_and(|t| !(20..=300).contains(&t)) {
+        return bad("tempo must be between 20 and 300 bpm".into());
+    }
     let mut ids = HashSet::new();
     for (i, sec) in s.sections.iter().enumerate() {
         if !SECTION_KINDS.contains(&sec.kind.trim()) {
@@ -1252,6 +1277,18 @@ mod tests {
         assert_eq!(s.sections[1].label, "Chorus");
         assert_eq!(s.sections[2].label, "Verse 2");
         assert_eq!(s.arrangements[0].sequence, vec![v1.clone(), c.clone(), v2.clone(), c.clone()]);
+    }
+
+    #[test]
+    fn key_and_tempo_round_trip_and_validate() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let s = db.create_song(&SongInput { key: " G ".into(), tempo: Some(72), ..amazing_grace() }).unwrap();
+        assert_eq!((s.song.key.as_str(), s.song.tempo), ("G", Some(72)));
+        let back = db.import_songs(&db.export_songs(None).unwrap(), ImportMode::Duplicate).unwrap();
+        assert_eq!(back.added, 1);
+        assert_eq!(db.list_songs(Some("amazing"), 5).unwrap().len(), 2);
+        assert!(matches!(db.create_song(&SongInput { tempo: Some(1000), ..amazing_grace() }), Err(ContentError::Invalid(_))));
+        assert!(matches!(db.create_song(&SongInput { key: "x".repeat(13), ..amazing_grace() }), Err(ContentError::Invalid(_))));
     }
 
     #[test]

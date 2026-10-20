@@ -33,6 +33,8 @@ export interface SongForm {
   primary_language: string
   tags: string
   notes: string
+  key: string
+  tempo: string
   sections: SectionForm[]
   arrangements: ArrangementForm[]
   numbers: HymnNumberInput[]
@@ -45,7 +47,7 @@ const isLocal = (id: string) => id.startsWith("new-")
 export function emptyForm(language = "en"): SongForm {
   return {
     title: "", authors: "", copyright: "", ccli_number: "", licence: "unknown", licence_note: "",
-    primary_language: language, tags: "", notes: "", sections: [], arrangements: [], numbers: [],
+    primary_language: language, tags: "", notes: "", key: "", tempo: "", sections: [], arrangements: [], numbers: [],
   }
 }
 
@@ -60,6 +62,8 @@ export function formFromSong(s: SongWithSections): SongForm {
     primary_language: s.song.primary_language,
     tags: s.song.tags,
     notes: s.song.notes,
+    key: s.song.key ?? "",
+    tempo: s.song.tempo === null || s.song.tempo === undefined ? "" : String(s.song.tempo),
     sections: s.sections.map((x) => ({ id: x.id, kind: x.kind, label: x.label, texts: { ...x.texts } })),
     arrangements: s.arrangements.map((a) => ({
       id: a.id,
@@ -100,6 +104,8 @@ export function inputFromForm(f: SongForm): SongInput {
     primary_language: f.primary_language,
     tags: f.tags.trim(),
     notes: f.notes.trim(),
+    key: f.key.trim(),
+    tempo: f.tempo.trim() ? Number(f.tempo) : null,
     sections,
     arrangements,
     numbers: f.numbers.filter((n) => n.hymnbook_id && n.number.trim()).map((n) => ({ hymnbook_id: n.hymnbook_id, number: n.number.trim() })),
@@ -210,6 +216,7 @@ export function validateForm(f: SongForm): string[] {
   if (f.sections.length === 0) problems.push("Add at least one section of words.")
   if (f.sections.some((s) => !Object.values(s.texts).some((t) => t.trim()))) problems.push("Every section needs some words, or remove the empty one.")
   if (f.ccli_number.trim() && !/^\d{1,12}$/.test(f.ccli_number.trim())) problems.push("The CCLI number is digits only.")
+  if (f.tempo.trim() && !(Number(f.tempo) >= 20 && Number(f.tempo) <= 300)) problems.push("Tempo is beats per minute, 20 to 300.")
   for (const n of f.numbers) {
     if (n.hymnbook_id && !/^\d{1,5}[a-z]?$/i.test(n.number.trim())) problems.push(`Hymn number "${n.number}" should be a number like 245 or 12a.`)
   }

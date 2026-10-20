@@ -29,7 +29,7 @@ const verseItem = (v: Verse): VerseQueueItem => ({
 const amazing: SongWithSections = {
   song: {
     id: "song-1", title: "Amazing Grace", authors: "John Newton", copyright: "", ccli_number: null, licence: "public_domain",
-    licence_note: "", primary_language: "en", tags: "", notes: "", revision: 1, created_at: "", updated_at: "",
+    licence_note: "", primary_language: "en", tags: "", notes: "", key: "", tempo: null, revision: 1, created_at: "", updated_at: "",
   },
   sections: [
     { id: "v1", kind: "verse", label: "Verse 1", texts: { en: "Amazing grace\nhow sweet", yo: "Oore-ọ̀fẹ́\nìyanu" } },

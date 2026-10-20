@@ -10,6 +10,7 @@ export function StageView({ stage }: { stage: StagePayload }) {
     <div style={{ position: "fixed", inset: 0, background: "#000", color: "#fff", fontFamily: "system-ui, sans-serif", display: "grid", gridTemplateRows: stage.message ? "auto auto 1fr auto" : "auto 1fr auto", padding: "3vh 4vw", gap: "2vh" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: "3.2vh", color: "#9aa0a6" }}>
         <span>{stage.current?.title ?? "Nothing live"}</span>
+        {stage.band && <span style={{ color: "#9be37a", fontWeight: 700 }}>{stage.band}</span>}
         {stage.timer && <span style={{ color: timerColor, fontVariantNumeric: "tabular-nums", fontSize: "5vh", fontWeight: 700 }}>{stage.timer.label}{stage.timer.tone === "over" ? " OVER" : ""}</span>}
       </div>
       {stage.message && (

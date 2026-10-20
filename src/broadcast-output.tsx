@@ -179,7 +179,7 @@ function BroadcastCanvas() {
     logDebug("Listener registration started", { label: currentWindow.label })
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
       if (event.payload.role === "stage") {
-        setStage(event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null })
+        setStage(event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null, band: null })
         return
       }
       setStage(null)
