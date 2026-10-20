@@ -55,6 +55,7 @@ export function PresentWorkspace() {
   const listening = useTranscriptStore((s) => s.isTranscribing)
   const service = useServiceStore((s) => s.current)
   const warning = useBroadcastStore((s) => s.presentWarning)
+  const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const override = useBibleStore((s) => s.overrideServiceTranslations)
   const setOverride = useBibleStore((s) => s.setOverrideServiceTranslations)
   const activeAbbrev = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? "active")
@@ -64,9 +65,15 @@ export function PresentWorkspace() {
     <div className="flex h-full flex-col">
       <WorkspaceHeader title="Present" subtitle={service ? `${service.title}${service.service_date ? ` · ${service.service_date}` : ""}` : undefined}>
         <StatusChip
-          tone={isLive && liveRef ? "live" : "off"}
-          label={isLive && liveRef ? `LIVE · ${liveRef}` : "Nothing live"}
+          tone={isLive && liveRef ? (rehearsal ? "warn" : "live") : "off"}
+          label={isLive && liveRef ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef}` : rehearsal ? "Rehearsal · nothing live" : "Nothing live"}
           className="max-w-80"
+        />
+        <StatusChip
+          tone={rehearsal ? "warn" : "off"}
+          label={rehearsal ? "Rehearsal on" : "Rehearsal off"}
+          onClick={() => useBroadcastStore.getState().setRehearsal(!rehearsal)}
+          title={rehearsal ? "Outputs, NDI and the stage screen are frozen. Click to go back to normal; they will show the current content." : "Practise without touching any screen: outputs, NDI and the stage screen keep what they show now."}
         />
         <StatusChip
           tone={onAir > 0 ? "ok" : "warn"}

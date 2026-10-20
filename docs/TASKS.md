@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.23 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.24 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -50,7 +50,7 @@
 | SV-001 Custom slide schema/editor and text rendering | P1 | MERGED | ST-003 | PR #11 `570b41a`: `kind='slide'` items with `{title, body}` payload (crate-validated), Prepare → Slides composer with live preview and quick starts, in-place editing in the rundown, `presentCustomSlide` (atomic, supersedes loading presents), Next/Prev and Show live; 4 tests + crate test. Reuse across services (slide library) not yet |
 | SV-002 Unified add/reorder/edit flow across Bible/song/slide | P1 | MERGED | SO-009,SV-001 | PR #11 and PR #12 `ff09a63`: same Add and rundown controls, live highlighting by item id; service-builder PR: drag-handle reorder in Prepare (dnd-kit) beside the arrow buttons. One search box across all kinds: Quick find covers verses and songs (slides are service-local) |
 | SV-003 Service templates and multi-service variants | P1 | MERGED | SV-002 | PR #12 `ff09a63`: Copy service (fresh item ids, original untouched, refused while unsaved); 1 test. Named templates not yet (a copied service is the template) |
-| SV-004 Quick Find for Bible, hymn, song, media | P1 | IN PR | SO-007,SV-002 | fuzzy-song-search PR: when the exact search finds no song, titles, first lines and authors are matched with one typo per short word (two per long), prefixes and Yoruba folding, ranked by edits; in Quick find and the song library; 2 tests. Media is service-local (not searched) |
+| SV-004 Quick Find for Bible, hymn, song, media | P1 | MERGED | SO-007,SV-002 | PR #25: when the exact search finds no song, titles, first lines and authors are matched with one typo per short word (two per long), prefixes and Yoruba folding, ranked by edits; in Quick find and the song library; 2 tests. Media is service-local (not searched) |
 | SV-005 Next/Previous Verse and responsive readings | P1 | MERGED | ST-001,SV-002 | PR #13 `7c8b980`: Verse +/− continues the live reading in the item's translations, crosses chapters, stops at book ends with a warning; Shift+←/→, Standard buttons, OSC `/rhema/verse_next|verse_prev`, HTTP `verse_next|verse_prev`; 4 tests + Rust api tests. Responsive (leader/congregation) format not yet |
 | SV-006 Program notes, review readiness and duration estimates | P1 | MERGED | SV-002 | PR #14 `fa05eef`: operator note per item (Prepare edits, Present shows, never on screen, saved with the service); Home warns when a song in the service is missing from the library (looked up on Home); 1 test. Duration estimates not yet |
 | SV-007 Persistent revisions, visual compare and revert | P1 | MERGED | ST-003,SV-002 | PR #19: migration 0005 snapshots every save (last 50), History popover lists versions, shows what a restore brings back/removes/changes, restores as a new save (undoable), refused while unsaved or on a stale revision; 3 crate tests + 1 diff test. Live output untouched (restore only edits the rundown) |
@@ -74,7 +74,7 @@
 | OP-001 Output profile model, routing and migration | P1 | MERGED (roles) | MD-004 | PR #23: `role` on each output (`congregation` default, `stage`); saved outputs without a role load unchanged; chosen in the output editor; stage forces a display window (no NDI) |
 | OP-002 Stage confidence screen and private messages | P1 | MERGED (screen) / IN PR (messages) | OP-001 | PR #23: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
 | OP-003 Independent language/style per output | P1 | BACKLOG | OP-001,SO-006 | EN/YO variants projected independently with matched passage |
-| OP-004 Multiview and device health | P1 | IN PR (health) | OP-001 | output-health PR: Home readiness lists every output (on/off, congregation/stage/stream) and warns when only the stage screen is on; 1 test. Multiview thumbnails and disconnected-monitor detection later |
+| OP-004 Multiview and device health | P1 | MERGED (health) | OP-001 | PR #26: Home readiness lists every output (on/off, congregation/stage/stream) and warns when only the stage screen is on; 1 test. Multiview thumbnails and disconnected-monitor detection later |
 | OP-005 NDI/OBS and external output stability | P0 | BACKLOG | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
 | OP-006 Paired mobile/LAN control with roles | P1 | BACKLOG | OP-001 | Secure pairing, revocation, authorization, no cloud dependency |
 
@@ -85,8 +85,8 @@
 | PT-001 Monotonic timer engine | P1 | MERGED | SV-002 | PR #21: pure engine on an injected monotonic clock (`performance.now`), start/pause/resume/reset, countdown or count-up, over-run; Present header chip with presets; 3 tests |
 | PT-002 Service timing policies and over/under | P1 | MERGED (planned side) | PT-001 | PR #22: planned minutes per item (payload, crate-validated 0–600), service total in Prepare, timer chip shows "n min late/early" against the plan up to the live item; 2 tests. Per-item actuals and policies later |
 | PT-003 Cue/macro typed action registry | P1 | BACKLOG | OP-001 | Idempotent, permission-aware, safe retry and operator preview |
-| PT-004 Stage timer messages, visual cues | P1 | IN PR | PT-002,OP-002 | stage-messages PR: operator → stage message (typed or quick phrases), shown big and framed on stage outputs only, cleared from the same control; the timer and its colours already reach the stage; 1 test |
-| PT-005 Rehearsal/dry-run isolation | P0 | BACKLOG | PT-003 | Cannot inadvertently affect congregation, OBS or real devices |
+| PT-004 Stage timer messages, visual cues | P1 | MERGED (messages) | PT-002,OP-002 | PR #24: operator → stage message (typed or quick phrases), shown big and framed on stage outputs only, cleared from the same control; the timer and its colours already reach the stage; 1 test |
+| PT-005 Rehearsal/dry-run isolation | P0 | IN PR | PT-003 | rehearsal-mode PR: header toggle freezes every output (projector windows, NDI, stage) at what they show; Preview, Live panel, rundown, quick screens all work; turning it off sends the current content everywhere; 1 test with two outputs |
 | PT-006 Song-playback/MIDI synchronization | P2 | BACKLOG | PT-003,MD-002 | Explicit integration opt-in, loss of sync degrades safely |
 
 ## Milestone 6 — Canva and Church Brand Kit
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.24):** PRs #24, #25, #26 merged; rehearsal-mode PR opened (PT-005 IN PR).
 - **2026-10-20 (rev 0.23):** output-health PR opened (OP-004 health IN PR).
 - **2026-10-20 (rev 0.22):** fuzzy-song-search PR opened (SV-004 IN PR).
 - **2026-10-20 (rev 0.21):** PR #23 merged; stage-messages PR opened (PT-004 IN PR).

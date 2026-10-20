@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display.
+- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display, #24 stage messages, #25 typo-tolerant search, #26 output health.
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -22,7 +22,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Latest test results
 
-- Frontend: 366 vitest tests in 39 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 367 vitest tests in 40 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
 - Rust: `rhema-content` 35 tests pass; `rhema-api` 105; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
@@ -49,8 +49,8 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. PT-004 stage messages (#24), SV-004 typo-tolerant search (#25), OP-004 output health (output-health) — in PR.
-2. PT-003 cue/macro registry; MD-002 video; MD-004 lower thirds; QA-003 accessibility pass over the Studio screens.
+1. PT-005 rehearsal mode — in PR (rehearsal-mode).
+2. PT-003 cue/macro registry; MD-002 video; MD-004 lower thirds; QA-003 accessibility pass over the Studio screens; QA-004 licence inventory.
 3. Milestone 4 OP-001 output profiles.
 3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.
 3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.
