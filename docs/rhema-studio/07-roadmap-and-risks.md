@@ -57,3 +57,9 @@ with sections and arrangements as the second content type, then custom slides.
 | Canva API assumptions wrong | medium | medium | Verification step before Milestone 6 code |
 | Timer drift / wall-clock change during service | medium | medium | Monotonic clocks (Milestone 5), tested |
 | Font missing for Yoruba on a Windows machine | medium | medium | Readiness check for fonts (Milestone 3) |
+
+## Integration gate documents
+
+- `08-desktop-acceptance-guide.md` — manual desktop checklist; what automation has and has not verified.
+- `09-integration-merge-plan.md` — exact merge order and procedure (merge commits, retarget, delete last).
+- `10-milestone-2b-songs-hymnbooks.md` — Songs and Hymnbooks specification and acceptance tests (design only).
