@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
+import { useMediaStore } from "@/stores/media-store"
 import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
@@ -87,6 +88,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 {picture && <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Picture" />}
+                {picture && <MissingMediaMark mediaId={item.image.media_id} />}
                 <span className="truncate text-sm font-medium">{item.reference}</span>
                 {song && <SongBadges item={item} />}
                 {onAir && (
@@ -181,6 +183,14 @@ function SongBadges({ item }: { item: SongQueueItem }) {
       {arrangement && !arrangement.is_default && <span className="truncate">{arrangement.name}</span>}
     </span>
   )
+}
+
+/** "missing" after the picture's file when the library says it is gone. */
+function MissingMediaMark({ mediaId }: { mediaId: string }) {
+  const asset = useMediaStore((s) => s.assets.find((a) => a.id === mediaId))
+  const loaded = useMediaStore((s) => s.assets.length > 0)
+  if (!loaded || asset?.present) return null
+  return <span className="shrink-0 rounded bg-destructive/15 px-1 text-[0.625rem] font-semibold text-destructive uppercase" title="The picture file is missing from the media folder">missing</span>
 }
 
 /** Prepare-only: how the picture fills the screen. */

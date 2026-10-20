@@ -25,6 +25,12 @@ describe("computeReadiness", () => {
     expect(c?.fix).toBe("outputs")
   })
 
+  it("pictures missing their file block readiness", () => {
+    const r = computeReadiness({ ...good, missingMedia: 2 })
+    expect(r.ready).toBe(false)
+    expect(r.checks.find((x) => x.id === "missing-media")?.label).toContain("2 pictures")
+  })
+
   it("songs missing from the library block readiness", () => {
     const r = computeReadiness({ ...good, missingSongs: 1 })
     expect(r.ready).toBe(false)
