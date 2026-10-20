@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display, #24 stage messages, #25 typo-tolerant search, #26 output health, #27 rehearsal mode.
+- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`), #15 quick screens (`8bc82eb`), #16 pictures (`2757285`), #17 picture readiness (`5263a94`), #18 backgrounds, #19 service history, #20 background contrast, #21 service timer, #22 planned minutes, #23 stage display, #24 stage messages, #25 typo-tolerant search, #26 output health, #27 rehearsal mode, #28 licence inventory, #29 About notices.
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -43,6 +43,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Known risks
 
+- **Canva (owner decision):** the Connect API's token exchange must run on a backend (client secret); a hosted or self-hosted relay is a cost/ops choice, and the integration must be a Canva-reviewed public one. See `docs/rhema-studio/11-canva-connect-findings.md`. CV-002 onwards waits for this.
 - **Licensing (owner decision):** the installer's `rhema.db` bundles copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) inherited from upstream. `docs/LICENSES.md` records this; no public release should go out before the owner decides which texts ship.
 
 - No hands-on desktop or projector verification yet of the integrated build.
@@ -51,8 +52,8 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. QA-004 licence inventory — in PR (docs/licence-inventory).
-2. About screen notices (openbible.info CC BY 4.0, NDI®); PT-003 cue/macro registry; MD-002 video; MD-004 lower thirds; QA-003 accessibility pass.
+1. CV-001 Canva findings — in PR (docs/canva-connect-findings).
+2. CV-005 native announcement templates with a Church Brand Kit (CV-004) — no Canva dependency; PT-003 cue/macro registry; MD-002 video; MD-004 lower thirds.
 3. Milestone 4 OP-001 output profiles.
 3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.
 3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.
