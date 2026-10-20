@@ -8,7 +8,7 @@ use tauri::State;
 
 use rhema_content::{
     ContentDb, ContentError, Hymnbook, HymnbookInput, ImportMode, ImportReport, ItemInput, Program, ProgramWithItems,
-    SongExport, SongInput, SongSummary, SongWithSections,
+    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections,
 };
 
 /// The content database is opened in `setup`; `None` means it failed to open
@@ -99,6 +99,28 @@ pub fn content_replace_items(
 #[tauri::command]
 pub fn content_delete_program(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
     with_db(&state, |db| db.delete_program(&id, expected_revision))
+}
+
+// ── service history ────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn content_list_revisions(state: State<'_, ContentState>, program_id: String) -> CmdResult<Vec<RevisionSummary>> {
+    with_db(&state, |db| db.list_revisions(&program_id))
+}
+
+#[tauri::command]
+pub fn content_get_revision(state: State<'_, ContentState>, id: String) -> CmdResult<Option<Revision>> {
+    with_db(&state, |db| db.get_revision(&id))
+}
+
+#[tauri::command]
+pub fn content_restore_revision(
+    state: State<'_, ContentState>,
+    program_id: String,
+    expected_revision: i64,
+    revision_id: String,
+) -> CmdResult<ProgramWithItems> {
+    with_db(&state, |db| db.restore_revision(&program_id, expected_revision, &revision_id))
 }
 
 // ── songs and hymnbooks ────────────────────────────────────────────────

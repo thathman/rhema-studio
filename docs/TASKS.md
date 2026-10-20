@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.15 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.16 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -53,18 +53,18 @@
 | SV-004 Quick Find for Bible, hymn, song, media | P1 | BACKLOG | SO-007,SV-002 | Keyboard-safe, typo-tolerant, predictable candidate ranking |
 | SV-005 Next/Previous Verse and responsive readings | P1 | MERGED | ST-001,SV-002 | PR #13 `7c8b980`: Verse +/− continues the live reading in the item's translations, crosses chapters, stops at book ends with a warning; Shift+←/→, Standard buttons, OSC `/rhema/verse_next|verse_prev`, HTTP `verse_next|verse_prev`; 4 tests + Rust api tests. Responsive (leader/congregation) format not yet |
 | SV-006 Program notes, review readiness and duration estimates | P1 | MERGED | SV-002 | PR #14 `fa05eef`: operator note per item (Prepare edits, Present shows, never on screen, saved with the service); Home warns when a song in the service is missing from the library (looked up on Home); 1 test. Duration estimates not yet |
-| SV-007 Persistent revisions, visual compare and revert | P1 | BACKLOG | ST-003,SV-002 | Auditable service history; reversible without affecting live |
+| SV-007 Persistent revisions, visual compare and revert | P1 | IN PR | ST-003,SV-002 | service-revisions PR: migration 0005 snapshots every save (last 50), History popover lists versions, shows what a restore brings back/removes/changes, restores as a new save (undoable), refused while unsaved or on a stale revision; 3 crate tests + 1 diff test. Live output untouched (restore only edits the rundown) |
 
 ## Milestone 3 — Media and visuals
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| MD-001 Media asset schema, import, hash, provenance | P1 | IN PR | ST-003 | media-assets PR: migration 0004 `media_assets`, import copies into `<app data>/media/<sha256>.<ext>` (same bytes → same asset), original path kept, missing-file flag, delete refused while a service uses it; 3 crate tests |
-| MD-002 Playback (image/video/audio), aspect and timing | P1 | IN PR (pictures) | MD-001,SV-002 | media-assets PR: picture rundown items with fill/show-all/stretch, atomic go-live after decode, missing file reported; Prepare → Pictures tab; 5 tests. Video and audio not yet |
-| MD-003 Backgrounds, safe text and lyric scrolling | P1 | IN PR (backgrounds) | MD-002,SO-010 | item-backgrounds PR: any verse, song or slide item can carry a library picture behind its text (`background_media_id` in the payload, crate-validated); picture loads before go-live; a missing file shows the words without it; Prepare picker in the rundown; 2 tests. Lyric scrolling and safe-area tuning not yet |
+| MD-001 Media asset schema, import, hash, provenance | P1 | MERGED | ST-003 | PR #16 `2757285`: migration 0004 `media_assets`, import copies into `<app data>/media/<sha256>.<ext>` (same bytes → same asset), original path kept, missing-file flag, delete refused while a service uses it; 3 crate tests |
+| MD-002 Playback (image/video/audio), aspect and timing | P1 | MERGED (pictures) | MD-001,SV-002 | PR #16: picture rundown items with fill/show-all/stretch, atomic go-live after decode, missing file reported; Prepare → Pictures tab; 5 tests. Video and audio not yet |
+| MD-003 Backgrounds, safe text and lyric scrolling | P1 | MERGED (backgrounds) | MD-002,SO-010 | PR #18: any verse, song or slide item can carry a library picture behind its text (`background_media_id` in the payload, crate-validated); picture loads before go-live; a missing file shows the words without it; Prepare picker in the rundown; 2 tests. Lyric scrolling and safe-area tuning not yet |
 | MD-004 Independently addressable transparent lower-third layer | P1 | BACKLOG | MD-001 | Congregation vs OBS output independent; alpha verified |
 | MD-005 Quick Screens and persistent overlays | P1 | MERGED (text screens) | ST-002,MD-002 | PR #15 `8bc82eb`: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
-| MD-006 Local cache manifest, integrity/readiness | P0 | IN PR (pictures) | MD-001,SV-002 | media-readiness PR: Home warns before the service when a picture item's file is gone; rundown marks the item; presenting a missing picture never blanks the output (PR media-assets). Fonts and a release manifest later |
+| MD-006 Local cache manifest, integrity/readiness | P0 | MERGED (pictures) | MD-001,SV-002 | PR #17 `5263a94`: Home warns before the service when a picture item's file is gone; rundown marks the item; presenting a missing picture never blanks the output (PR media-assets). Fonts and a release manifest later |
 | MD-007 Adaptive Smart Media rendering | P2 | BACKLOG | MD-003 | Text fits styles/output without masking content or violating branding |
 
 ## Milestone 4 — Multi-output, stage and monitoring
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.16):** PRs #16 `2757285`, #17 `5263a94`, #18 merged; service-revisions PR opened (SV-007 IN PR).
 - **2026-10-20 (rev 0.15):** item-backgrounds PR opened (MD-003 backgrounds IN PR).
 - **2026-10-20 (rev 0.14):** media-readiness PR opened (MD-006 pictures IN PR).
 - **2026-10-20 (rev 0.13):** PR #15 `8bc82eb` merged; media-assets PR opened (MD-001 IN PR, MD-002 pictures IN PR).

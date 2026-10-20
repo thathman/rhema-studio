@@ -29,5 +29,5 @@ export type {
   Program, ProgramItem, ProgramItemKind, ItemInput, ProgramWithItems, ContentCommandError, ContentStatus,
   Song, SongSection, SongSummary, SongWithSections, Arrangement, Hymnbook, HymnNumber, SongInput, SectionInput,
   ArrangementInput, HymnbookInput, HymnNumberInput, SongExport, ImportMode, ImportReport, SongItemPayload, SlideItemPayload, SectionKind, Licence,
-  RestoreReport, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
+  RestoreReport, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
 } from "./content"

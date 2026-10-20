@@ -20,8 +20,10 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 mod media;
+mod revisions;
 mod songs;
 pub use media::*;
+pub use revisions::*;
 pub use songs::*;
 use std::sync::Mutex;
 
@@ -57,6 +59,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0002_item_identity", include_str!("../migrations/0002_item_identity.sql")),
     ("0003_songs", include_str!("../migrations/0003_songs.sql")),
     ("0004_media", include_str!("../migrations/0004_media.sql")),
+    ("0005_revisions", include_str!("../migrations/0005_revisions.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -309,6 +312,7 @@ impl ContentDb {
             params![id, title, service_date],
         )?;
         audit(&tx, "program", &id, "create", &serde_json::json!({ "title": title, "service_date": service_date }))?;
+        revisions::snapshot(&tx, &id)?;
         let program = load_program(&tx, &id)?.ok_or_else(|| ContentError::NotFound(id.clone()))?;
         tx.commit()?;
         Ok(program)
@@ -335,6 +339,7 @@ impl ContentDb {
             params![id, title, service_date],
         )?;
         audit(&tx, "program", id, "update", &serde_json::json!({ "title": title, "service_date": service_date }))?;
+        revisions::snapshot(&tx, id)?;
         let program = load_program(&tx, id)?.ok_or_else(|| ContentError::NotFound(id.to_string()))?;
         tx.commit()?;
         Ok(program)
@@ -446,6 +451,7 @@ impl ContentDb {
             "replace_items",
             &serde_json::json!({ "count": items.len(), "kept": kept, "added": added, "removed": removed }),
         )?;
+        revisions::snapshot(&tx, program_id)?;
         let program = load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.to_string()))?;
         let items = load_items(&tx, program_id)?;
         tx.commit()?;
@@ -815,7 +821,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions"]);
     }
 
     #[test]
@@ -1017,7 +1023,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

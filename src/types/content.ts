@@ -108,6 +108,20 @@ export interface ImageItemPayload {
   fit?: "cover" | "contain" | "stretch" | null
 }
 
+export interface RevisionSummary {
+  id: string
+  program_id: string
+  revision: number
+  title: string
+  service_date: string | null
+  item_count: number
+  created_at: string
+}
+
+export interface Revision extends RevisionSummary {
+  items: ItemInput[]
+}
+
 export interface RestoreReport {
   snapshot: string | null
   migrations: string[]
