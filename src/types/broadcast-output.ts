@@ -94,6 +94,8 @@ export interface BroadcastOutputStatus {
   ndiActive: boolean
   /** Set while the NDI sender keeps failing to push frames; cleared on the next success. */
   ndiError?: string | null
+  /** Receivers (OBS, another PC) connected to the NDI sender right now; null when unknown. */
+  ndiReceivers?: number | null
 }
 
 /** The default output: always present, editable, never deletable. */

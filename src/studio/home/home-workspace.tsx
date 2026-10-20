@@ -76,6 +76,7 @@ export function HomeWorkspace() {
       kind: o.type,
       on: Boolean(outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive),
       error: outputStatus[o.id]?.ndiError ?? null,
+      receivers: outputStatus[o.id]?.ndiReceivers ?? null,
     })),
     rundownCount: items.length,
     listening,

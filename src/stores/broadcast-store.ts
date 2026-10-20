@@ -503,8 +503,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // A status without an opinion on the error keeps it while the sender is on (the
       // Outputs dialog refreshes status every second); off always clears it.
       const ndiError = status.ndiError !== undefined ? status.ndiError : status.ndiActive ? (prev?.ndiError ?? null) : null
-      const next = { ...status, ndiError }
-      if (prev && prev.previewOpen === next.previewOpen && prev.ndiActive === next.ndiActive && (prev.ndiError ?? null) === (next.ndiError ?? null)) {
+      const next = { ...status, ndiError, ndiReceivers: status.ndiReceivers !== undefined ? status.ndiReceivers : status.ndiActive ? (prev?.ndiReceivers ?? null) : null }
+      if (prev && prev.previewOpen === next.previewOpen && prev.ndiActive === next.ndiActive && (prev.ndiError ?? null) === (next.ndiError ?? null) && (prev.ndiReceivers ?? null) === (next.ndiReceivers ?? null)) {
         return s
       }
       return { outputStatus: { ...s.outputStatus, [id]: next } }

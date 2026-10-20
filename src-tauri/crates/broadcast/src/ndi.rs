@@ -12,6 +12,8 @@ type NdiDestroyFn = unsafe extern "C" fn();
 type NdiSendCreateFn = unsafe extern "C" fn(*const NdiSendCreate) -> NdiSendInstance;
 type NdiSendDestroyFn = unsafe extern "C" fn(NdiSendInstance);
 type NdiSendVideoV2Fn = unsafe extern "C" fn(NdiSendInstance, *const NdiVideoFrameV2);
+/// `NDIlib_send_get_no_connections(instance, timeout_ms)`: how many receivers are connected right now.
+type NdiSendGetNoConnectionsFn = unsafe extern "C" fn(NdiSendInstance, u32) -> i32;
 
 #[repr(C)]
 struct NdiSendCreate {
@@ -143,6 +145,8 @@ struct NdiLibrary {
     send_destroy: NdiSendDestroyFn,
     send_video: NdiSendVideoV2Fn,
     ndi_destroy: NdiDestroyFn,
+    /// Optional: older runtimes without it just report "unknown".
+    send_get_no_connections: Option<NdiSendGetNoConnectionsFn>,
 }
 
 impl NdiLibrary {
@@ -159,6 +163,12 @@ impl NdiLibrary {
         let send_destroy_fn = *load_symbol::<NdiSendDestroyFn>(&library, b"NDIlib_send_destroy\0", "NDIlib_send_destroy")?;
         let send_video_fn =
             *load_symbol::<NdiSendVideoV2Fn>(&library, b"NDIlib_send_send_video_v2\0", "NDIlib_send_send_video_v2")?;
+        let send_get_no_connections_fn = load_symbol::<NdiSendGetNoConnectionsFn>(&library, b"NDIlib_send_get_no_connections\0", "NDIlib_send_get_no_connections")
+            .ok()
+            .map(|s| *s);
+        if send_get_no_connections_fn.is_none() {
+            log::warn!("NDI: runtime has no NDIlib_send_get_no_connections; receiver count will be unknown");
+        }
 
         // SAFETY: initialize_fn is a valid function pointer loaded from the NDI library
         if !unsafe { initialize_fn() } {
@@ -171,6 +181,7 @@ impl NdiLibrary {
             send_destroy: send_destroy_fn,
             send_video: send_video_fn,
             ndi_destroy: ndi_destroy_fn,
+            send_get_no_connections: send_get_no_connections_fn,
         })
     }
 }
@@ -276,6 +287,15 @@ impl NdiRuntime {
 
     pub fn current_info(&self, session_id: &str) -> Option<NdiSessionInfo> {
         self.sessions.get(session_id).map(|s| s.info.clone())
+    }
+
+    /// Receivers connected to the session right now (OBS counts as one), or
+    /// `None` when there is no session or the runtime cannot say. Never blocks.
+    pub fn receivers(&self, session_id: &str) -> Option<i32> {
+        let s = self.sessions.get(session_id)?;
+        let f = s.library.send_get_no_connections?;
+        // SAFETY: `sender` is a live instance owned by this session and `f` was resolved from the same loaded library; timeout 0 returns at once.
+        Some(unsafe { f(s.sender, 0) })
     }
 
     pub fn send_frame_rgba(
@@ -501,6 +521,12 @@ fn load_symbol<'a, T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn receivers_is_unknown_without_a_session() {
+        let runtime = NdiRuntime::default();
+        assert_eq!(runtime.receivers("nope"), None);
+    }
 
     /// Unique per-test scratch dir, removed on drop.
     struct TempDir(PathBuf);

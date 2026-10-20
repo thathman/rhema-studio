@@ -86,18 +86,20 @@ async function isPreviewWindowVisible(outputId: string): Promise<boolean> {
 export async function reconcileOutputStatus(output: BroadcastOutput): Promise<void> {
   const previewOpen = await isPreviewWindowVisible(output.id)
   let ndiActive = false
+  let ndiReceivers: number | null = null
   try {
-    const status = await invoke<{ active: boolean } | null>("get_ndi_status", {
+    const status = await invoke<{ active: boolean; receivers?: number | null } | null>("get_ndi_status", {
       outputId: output.id,
     })
     ndiActive = status?.active ?? false
+    ndiReceivers = typeof status?.receivers === "number" ? status.receivers : null
   } catch {
     // Status stays false if the command fails.
   }
   const store = useBroadcastStore.getState()
   // The output may have been removed while these queries were in flight.
   if (!store.outputs.some((o) => o.id === output.id)) return
-  store.setOutputStatus(output.id, { previewOpen, ndiActive })
+  store.setOutputStatus(output.id, { previewOpen, ndiActive, ndiReceivers })
 }
 
 /**

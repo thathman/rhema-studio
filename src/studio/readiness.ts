@@ -17,6 +17,8 @@ export interface OutputHealth {
   on: boolean
   /** Why the output is not really delivering (NDI frames failing), when known. */
   error?: string | null
+  /** NDI receivers connected right now; null when unknown; only meaningful for an on-air NDI output. */
+  receivers?: number | null
 }
 
 export interface ReadinessInput {
@@ -45,7 +47,7 @@ export interface ReadinessInput {
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
 export function outputDetail(outputs: OutputHealth[] | undefined): string | undefined {
   if (!outputs?.length) return undefined
-  const parts = outputs.map((o) => `${o.name} · ${o.on ? "on" : "off"} · ${o.role === "stage" ? "stage" : o.kind === "ndi" ? "stream" : "congregation"}${o.error ? ` · not sending: ${o.error}` : ""}`)
+  const parts = outputs.map((o) => `${o.name} · ${o.on ? "on" : "off"} · ${o.role === "stage" ? "stage" : o.kind === "ndi" ? "stream" : "congregation"}${o.error ? ` · not sending: ${o.error}` : o.kind === "ndi" && o.on && o.receivers === 0 ? " · nobody receiving yet (open the source in OBS)" : o.kind === "ndi" && o.on && typeof o.receivers === "number" ? ` · ${o.receivers} receiving` : ""}`)
   const congregationOn = outputs.some((o) => o.role === "congregation" && o.on)
   const anyOn = outputs.some((o) => o.on)
   return parts.join(", ") + (anyOn && !congregationOn ? ". Only the stage is on; the congregation sees nothing." : "")
