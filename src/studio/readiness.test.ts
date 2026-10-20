@@ -25,6 +25,21 @@ describe("computeReadiness", () => {
     expect(c?.fix).toBe("outputs")
   })
 
+  it("lists each output and warns when only the stage screen is on", () => {
+    const outputs = [
+      { name: "Main Display", role: "congregation" as const, kind: "display" as const, on: false },
+      { name: "Stage", role: "stage" as const, kind: "display" as const, on: true },
+    ]
+    const r = computeReadiness({ ...good, outputsConfigured: 2, outputsOnAir: 1, outputs })
+    const c = r.checks.find((x) => x.id === "outputs")
+    expect(c?.status).toBe("warn")
+    expect(c?.detail).toBe("Main Display · off · congregation, Stage · on · stage. Only the stage is on; the congregation sees nothing.")
+    expect(c?.fix).toBe("outputs")
+    outputs[0].on = true
+    const ok = computeReadiness({ ...good, outputsConfigured: 2, outputsOnAir: 2, outputs })
+    expect(ok.checks.find((x) => x.id === "outputs")).toMatchObject({ status: "ok", detail: "Main Display · on · congregation, Stage · on · stage" })
+  })
+
   it("pictures missing their file block readiness", () => {
     const r = computeReadiness({ ...good, missingMedia: 2 })
     expect(r.ready).toBe(false)
