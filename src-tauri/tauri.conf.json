@@ -27,7 +27,10 @@
     }
   },
   "bundle": {
-    "resources": { "../data/rhema.db": "rhema.db" },
+    "resources": {
+      "../data/rhema.db": "rhema.db",
+      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md"
+    },
     "active": true,
     "targets": "all",
     "macOS": {
