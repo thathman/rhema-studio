@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.36 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.37 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -76,7 +76,7 @@
 | OP-003 Independent language/style per output | P1 | IN PR | OP-001,SO-006 | output-language PR: each congregation output chooses Both / First only / Second only (verses and lyrics; second falls back to the prepared frame, never blank); style per output already via themes; 2 tests |
 | OP-004 Multiview and device health | P1 | MERGED (health) | OP-001 | PR #26: Home readiness lists every output (on/off, congregation/stage/stream) and warns when only the stage screen is on; 1 test. Multiview thumbnails and disconnected-monitor detection later |
 | OP-005 NDI/OBS and external output stability | P0 | BACKLOG | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
-| OP-006 Paired mobile/LAN control with roles | P1 | MERGED (shared key #66, #69) / IN PR (pairing + revocation) / BACKLOG (roles) | OP-001 | remote-secret PR (#63): optional key in Settings → Remote; HTTP `/command` needs `X-Rhema-Key` or `Authorization: Bearer` (401 otherwise, health stays open), OSC needs the key as first string argument; blank keeps today's behaviour; 2 crate tests. Pairing, roles and revocation later |
+| OP-006 Paired mobile/LAN control with roles | P1 | MERGED (shared key #66, #69; pairing + revocation #77) / BACKLOG (roles) | OP-001 | remote-secret PR (#63): optional key in Settings → Remote; HTTP `/command` needs `X-Rhema-Key` or `Authorization: Bearer` (401 otherwise, health stays open), OSC needs the key as first string argument; blank keeps today's behaviour; 2 crate tests. Pairing, roles and revocation later |
 
 ## Milestone 5 — Timers, cues, rehearsal
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.37):** PRs #57–#77 merged; rows reconciled (OP-006 pairing, QA-006 remote part, SO-011 attachments, CL-001/002/003 first slices, AR-001/003, QA-002/003).
 - **2026-10-20 (rev 0.36):** PRs #47–#53 merged; rows reconciled (SO-003/004/005/006/008/009/010/011, PT-003, AR-001, QA-004/005/008).
 - **2026-10-20 (rev 0.35):** brand-variants PR opened (CV-004 variants + font warning).
 - **2026-10-20 (rev 0.34):** cues-macros PR opened (PT-003 IN PR).
