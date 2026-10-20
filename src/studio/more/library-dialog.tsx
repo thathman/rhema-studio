@@ -12,6 +12,7 @@ import { useSongStore } from "@/stores/song-store"
 import { useShellStore } from "@/studio/shell-store"
 import { backupDatabaseToFile, contentStatus, exportServicePackageToFile, exportSongsToFile, importServicePackageFromFile, importSongsFromFiles, restoreDatabaseFromFile, type ImportOutcome } from "@/lib/song-files"
 import { useJournalStore } from "@/stores/journal-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { formatJournal } from "@/lib/journal"
 import { monotonicNow } from "@/stores/timer-store"
 import { save } from "@tauri-apps/plugin-dialog"
@@ -244,7 +245,8 @@ function JournalBlock() {
   const current = useServiceStore((s) => s.current)
   const items = useQueueStore((s) => s.items)
   const [busy, setBusy] = useState(false)
-  const text = () => formatJournal(current?.title ?? "Service", entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)])))
+  const operator = useSettingsStore((s) => s.operatorName.trim())
+  const text = () => formatJournal(`${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`, entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)])))
   const saveLog = async () => {
     setBusy(true)
     try {

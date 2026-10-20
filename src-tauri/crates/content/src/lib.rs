@@ -660,13 +660,37 @@ fn check_revision(tx: &Transaction<'_>, program_id: &str, expected: i64) -> Resu
     }
 }
 
+/// Who is operating this app session (Settings → your name). Recorded on
+/// every audit row; `None` when nobody has typed a name. One per process:
+/// the desktop app is single-operator.
+static ACTOR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn set_actor(name: Option<&str>) {
+    let name = name.map(str::trim).filter(|n| !n.is_empty()).map(String::from);
+    *ACTOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = name;
+}
+
+fn actor() -> Option<String> {
+    ACTOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+}
+
 fn audit(tx: &Transaction<'_>, entity: &str, entity_id: &str, action: &str, payload: &serde_json::Value) -> Result<()> {
-    // `actor` (added in 0002) stays NULL until there is a real user model, so
-    // the insert names only the columns every schema version has.
-    tx.execute(
-        "INSERT INTO audit_events (entity, entity_id, action, payload) VALUES (?1, ?2, ?3, ?4)",
-        params![entity, entity_id, action, payload.to_string()],
-    )?;
+    // `actor` was added in 0002; tests write to older files, so name it only when it exists.
+    let has_actor = tx
+        .prepare("SELECT 1 FROM pragma_table_info('audit_events') WHERE name = 'actor'")
+        .and_then(|mut st| st.exists([]))
+        .unwrap_or(false);
+    if has_actor {
+        tx.execute(
+            "INSERT INTO audit_events (entity, entity_id, action, payload, actor) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![entity, entity_id, action, payload.to_string(), actor()],
+        )?;
+    } else {
+        tx.execute(
+            "INSERT INTO audit_events (entity, entity_id, action, payload) VALUES (?1, ?2, ?3, ?4)",
+            params![entity, entity_id, action, payload.to_string()],
+        )?;
+    }
     Ok(())
 }
 

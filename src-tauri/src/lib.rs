@@ -140,6 +140,7 @@ pub fn run() {
             commands::content::content_create_program,
             commands::content::content_update_program,
             commands::content::content_approve_program,
+            commands::content::content_set_actor,
             commands::content::content_get_program,
             commands::content::content_replace_items,
             commands::content::content_delete_program,

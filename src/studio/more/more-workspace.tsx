@@ -14,6 +14,8 @@ import {
   ChevronRightIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { useSettingsStore } from "@/stores/settings-store"
 import { openSettings } from "@/lib/settings-dialog"
 import { useBroadcastStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
@@ -36,6 +38,8 @@ export function MoreWorkspace() {
   const [version, setVersion] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [brandOpen, setBrandOpen] = useState(false)
+  const operatorName = useSettingsStore((s) => s.operatorName)
+  const setOperatorName = useSettingsStore((s) => s.setOperatorName)
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
@@ -113,6 +117,12 @@ export function MoreWorkspace() {
               </ul>
             </section>
           ))}
+
+          <section aria-label="Operator" className="rounded-lg border border-border bg-card p-4">
+            <label htmlFor="operator-name" className="block text-sm font-medium">Your name</label>
+            <p className="mb-2 text-xs text-muted-foreground">Goes on the service log and on approvals, so "who changed this?" has an answer. Optional; stays on this computer.</p>
+            <Input id="operator-name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} placeholder="e.g. Tolu" className="h-9 max-w-xs" maxLength={60} />
+          </section>
 
           <section aria-label="About" className="rounded-lg border border-border bg-card p-4 text-xs text-muted-foreground">
             <p className="mb-1 text-sm font-medium text-foreground">

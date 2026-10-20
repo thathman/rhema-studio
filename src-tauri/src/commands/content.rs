@@ -70,6 +70,12 @@ pub fn content_create_program(
     with_db(&state, |db| db.create_program(&title, service_date.as_deref()))
 }
 
+/// The operator's name for audit rows (Settings → your name). Empty clears it.
+#[tauri::command]
+pub fn content_set_actor(name: Option<String>) {
+    rhema_content::set_actor(name.as_deref());
+}
+
 /// Mark the saved service as the one for the day; its snapshot is then kept.
 #[tauri::command]
 pub fn content_approve_program(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<Program> {
