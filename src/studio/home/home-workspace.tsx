@@ -12,6 +12,7 @@ import { computeReadiness, type ReadinessCheck, type ReadinessFix } from "@/stud
 import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
+import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -74,6 +75,8 @@ export function HomeWorkspace() {
     unknownLicenceSongs,
     missingSongs,
     missingMedia: mediaLoaded || mediaIds.length === 0 ? missingMedia : 0,
+    // Only the themes outputs actually use.
+    missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
   })
 
   const fix = (f: ReadinessFix) => {

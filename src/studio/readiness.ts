@@ -32,6 +32,8 @@ export interface ReadinessInput {
   missingSongs?: number
   /** Picture items whose file is gone from the media folder (or whose asset was removed). */
   missingMedia?: number
+  /** Fonts the themes in use ask for that this computer does not have. */
+  missingFonts?: Array<{ theme: string; font: string }>
 }
 
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
@@ -72,6 +74,9 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in the Production view to detect verses from the sermon." },
     ...(i.missingSongs
       ? [{ id: "missing-songs", status: "warn" as const, label: `${i.missingSongs} song${i.missingSongs === 1 ? "" : "s"} in the service ${i.missingSongs === 1 ? "is" : "are"} not in the library`, detail: "They cannot be shown. Remove them or import the songs again.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : []),
+    ...(i.missingFonts?.length
+      ? [{ id: "fonts", status: "warn" as const, label: `${i.missingFonts.length} theme font${i.missingFonts.length === 1 ? " is" : "s are"} not installed`, detail: i.missingFonts.map((m) => `${m.theme}: ${m.font}`).join(", ") + ". The screen will use a fallback font.", fix: "outputs" as const, fixLabel: "Open outputs" }]
       : []),
     ...(i.missingMedia
       ? [{ id: "missing-media", status: "warn" as const, label: `${i.missingMedia} picture${i.missingMedia === 1 ? "" : "s"} in the service ${i.missingMedia === 1 ? "is" : "are"} missing ${i.missingMedia === 1 ? "its" : "their"} file`, detail: "They would show nothing. Import the pictures again or remove the items.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
