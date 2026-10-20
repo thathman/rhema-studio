@@ -72,8 +72,8 @@ export function MoreWorkspace() {
       title: "Later",
       rows: [
         { icon: <TvIcon />, label: "Signage", detail: "Foyer screens and announcement playlists", planned: "Milestone 8" },
-        { icon: <ArchiveIcon />, label: "Archive", detail: "Service history and what actually went live", planned: "Milestone 9" },
-        { icon: <UsersIcon />, label: "Team", detail: "People, roles and approvals", planned: "Milestone 7" },
+        { icon: <ArchiveIcon />, label: "Archive", detail: "Earlier service logs: what actually went live, searchable (in Library)", onClick: () => setLibraryOpen(true) },
+        { icon: <UsersIcon />, label: "Team", detail: "Your name goes on the log and approvals (below). Roles and shared approvals later", planned: "Milestone 7" },
       ],
     },
     {
