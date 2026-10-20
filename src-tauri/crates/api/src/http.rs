@@ -236,7 +236,7 @@ async fn pair_handler<S: CommandSink + 'static>(
             if let Err(e) = state.sink.emit_event("remote:paired", &payload) {
                 // The app would never list it, so it could never be revoked: take it back and let the device retry.
                 log::warn!("pairing event not delivered, token withdrawn: {e}");
-                state.keys.write().unwrap_or_else(std::sync::PoisonError::into_inner).retain(|k| k.hash != entry.hash);
+                state.keys.write().unwrap_or_else(std::sync::PoisonError::into_inner).entries.retain(|k| k.hash != entry.hash);
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(PairResponse { success: false, token: None, name: None, error: Some("the app did not record the device; try again".into()) }));
             }
             let _ = state.sink.emit_event("remote:pair_closed", "{}");

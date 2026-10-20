@@ -22,7 +22,7 @@ export function pushRemoteKeys(): Promise<void> {
   remoteKeysPush = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure" })) })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure" })), requireAuth: s.remoteAuthRequired })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -56,6 +56,9 @@ interface SettingsState {
   remoteSecret: string
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
+  /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
+  remoteAuthRequired: boolean
+  setRemoteAuthRequired: (on: boolean) => void
 
   setRemoteSecret: (secret: string) => void
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
@@ -90,13 +93,18 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   operatorName: "",
   remoteSecret: "",
   remoteDevices: [],
+  remoteAuthRequired: false,
 
+  setRemoteAuthRequired: (remoteAuthRequired) => {
+    set({ remoteAuthRequired })
+    void pushRemoteKeys()
+  },
   setRemoteSecret: (remoteSecret) => {
-    set({ remoteSecret })
+    set((s) => ({ remoteSecret, remoteAuthRequired: s.remoteAuthRequired || remoteSecret.trim().length > 0 }))
     void pushRemoteKeys()
   },
   addRemoteDevice: (d) => {
-    set((s) => ({ remoteDevices: [...s.remoteDevices.filter((x) => x.hash !== d.hash), { ...d, paired_at: new Date().toISOString() }] }))
+    set((s) => ({ remoteDevices: [...s.remoteDevices.filter((x) => x.hash !== d.hash), { ...d, paired_at: new Date().toISOString() }], remoteAuthRequired: true }))
     void pushRemoteKeys()
   },
   revokeRemoteDevice: (hash) => {
@@ -129,6 +137,7 @@ const PERSISTED_KEYS = [
   "operatorName",
   "remoteSecret",
   "remoteDevices",
+  "remoteAuthRequired",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",

@@ -658,6 +658,9 @@ function RemoteControlSection() {
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
   const revokeRemoteDevice = useSettingsStore((s) => s.revokeRemoteDevice)
   const setRemoteDeviceRole = useSettingsStore((s) => s.setRemoteDeviceRole)
+  const remoteAuthRequired = useSettingsStore((s) => s.remoteAuthRequired)
+  const setRemoteAuthRequired = useSettingsStore((s) => s.setRemoteAuthRequired)
+  const anyKey = remoteSecret.trim().length > 0 || remoteDevices.length > 0
   const [pairCode, setPairCode] = useState<string | null>(null)
   const [pairStartedAt, setPairStartedAt] = useState("")
   // The backend closes the window when a device pairs; hide the code once a device newer than the window appears.
@@ -784,6 +787,15 @@ function RemoteControlSection() {
           Accept commands from other devices on this network
           <span className="block text-[0.625rem] text-muted-foreground">
             Anyone on the network can then send commands, unless a key is set or devices are paired below. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-xs">
+        <input type="checkbox" className="mt-0.5" checked={remoteAuthRequired || anyKey} disabled={anyKey} onChange={(e) => setRemoteAuthRequired(e.target.checked)} />
+        <span>
+          Require a key or a paired device
+          <span className="block text-[0.625rem] text-muted-foreground">
+            {anyKey ? "On while a key is set or a device is paired. Removing the last one keeps it on: nothing is accepted until you untick this." : remoteAuthRequired ? "On with no key and no device: every command is refused. Set a key or pair a device, or untick to accept anything." : "Off: anything on the network is accepted (as the app shipped)."}
           </span>
         </span>
       </label>

@@ -337,3 +337,4 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10v.1 | With a paired device (10u) send `{"command":"theme","value":"Dark"}` and `{"command":"next"}` with its token. Change it to "Present and change settings" in Settings, send theme again. | First theme request: 403 "may present but not change settings"; next works; after the change, theme works at once. Restart the app: the role is kept. | Unverified |
+| 10v.2 | Revoke the last paired device with no shared key set. Send `next` with no key. Untick "Require a key or a paired device", send again. | 401 while the switch is on with no keys; accepted after unticking; the switch state survives restart. | Unverified |

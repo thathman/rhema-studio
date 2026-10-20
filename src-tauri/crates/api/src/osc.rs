@@ -274,7 +274,7 @@ mod tests {
     }
 
     fn keys_for_role_test(keys: &KeySet, token: &str) {
-        keys.write().unwrap().push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present });
+        keys.write().unwrap().entries.push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present });
     }
 
     #[test]
