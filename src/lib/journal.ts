@@ -48,7 +48,7 @@ export function formatJournal(title: string, entries: JournalEntry[], nowMono: n
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
     const d = durations.find((x) => x.label === e.label && x.itemId === (e.itemId ?? null) && entries.indexOf(e) === entries.findIndex((y) => y === e))
-    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote command" }[e.kind]
+    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
     lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}`)
   }

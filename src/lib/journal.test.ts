@@ -18,6 +18,6 @@ describe("service journal", () => {
     expect(text).toContain("LIVE          John 3:16  (2:00)")
     expect(text).toContain("John 3:16: 2:00 (planned 1:00, +1:00)")
     expect(text).toContain("Amazing Grace: 3:00")
-    expect(formatJournal("x", [e(0, "remote", "macro service-start")], 1000)).toContain("remote command  macro service-start")
+    expect(formatJournal("x", [e(0, "remote", "macro service-start")], 1000)).toMatch(/remote\s+macro service-start/)
   })
 })
