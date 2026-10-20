@@ -191,6 +191,15 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10e.1 | Prepare: select an item, type a note ("read slowly"). Save, restart, reopen. Present. | Note under the item in Present; never on the output; survives restart. |
 | 10e.2 | Add a song to a service, save, then delete the song from the library on another copy of the database (or restore an older backup). Open Home. | Readiness warns "1 song in the service is not in the library" with an Open Prepare fix; the item is marked in the rundown. |
 
+## 10f. Quick screens
+
+| # | Do | Expect |
+|---|---|---|
+| 10f.1 | With a verse live, press Please stand, then Let us pray, then Back. | Each screen on air at once (no blank frame); Back returns the verse, on air. |
+| 10f.2 | Clear, then Welcome, then Back. | Welcome on air; Back goes off air again with the verse kept for Restore. |
+| 10f.3 | Please stand, then Next. | The next item goes live; Back is disabled (the operator moved on). |
+| 10f.4 | Transparent OBS theme. | The quick screen text keys like a verse; the header chip reads "LIVE · Please stand". |
+
 ## 11. What automation has and has not verified
 
 Verified by automation on the exact heads in `09-integration-merge-plan.md`:
@@ -205,6 +214,6 @@ Verified by automation on the exact heads in `09-integration-merge-plan.md`:
   migrations applied once, restart does not re-migrate, integrity check passes.
 
 Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10e, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
+sections 1–10f, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
 launch. The Windows artifact's *contents* can be inspected without Windows (see the
 report), but launching it cannot.

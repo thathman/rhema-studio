@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`).
+- Head: `38f76eb` — merge commits for PR #5 (`5d23c94`), #3 (`a3204ea`), #1 (`011b3ae`), #2 (`e66483b`), #6 songs database (`802640a`), #7 songs in the service (`351d8e2`), #8 song editor (`38f76eb`), #9 library export/import (`039602b`), #10 backup/restore (`d884791`), #11 custom slides (`570b41a`), #12 service builder (`ff09a63`), #13 verse +/− (`7c8b980`), #14 notes/readiness (`fa05eef`).
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -16,13 +16,13 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Active milestone
 
-**2C — Service Builder**: SV-001 custom slides merged (PR #11); SV-002 drag reorder and SV-003 copy service merged (PR #12); SV-005 continue-the-reading in PR (live-verse-step, #13); SV-006 notes and missing-song readiness in PR (rundown-notes-readiness); next SV-007 revisions/compare, SV-004 typo tolerance in Quick find. 2B code complete pending desktop acceptance.
+**2C — Service Builder**: SV-001 custom slides merged (PR #11); SV-002 drag reorder and SV-003 copy service merged (PR #12); SV-005 and SV-006 merged. 2C remaining: SV-007 revisions/compare, SV-004 typo tolerance, duration estimates. Milestone 3 started with MD-005 text quick screens (PR quick-screens). 2B code complete pending desktop acceptance.
 
 **2B — Songs and Hymnbooks** (`docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`). Done: crate + migration 0003 (PR #6), stores, Quick find, renderer, `presentSlide`, rundown and Present integration (PR #7). Merged: Prepare → Songs library, paste-first editor, arrangement strip, hymnbook numbers, per-item language/order controls, licence readiness line (PR #8). Merged: More → Library export/import (PR #9). Remaining for 2B: manual acceptance §10a on the desktop. Milestone 2B code is complete pending acceptance.
 
 ## Latest test results
 
-- Frontend: 342 vitest tests in 31 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
+- Frontend: 346 vitest tests in 32 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
 - Rust: `rhema-content` 28 tests pass; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
@@ -48,7 +48,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Next eligible tasks
 
-1. SV-005 (#13) and SV-006 — in PR.
-2. SV-007 service revisions (audit trail exists in the crate; UI to view and revert) or SV-004 typo-tolerant Quick find.
-3. Milestone 3: MD-001 media asset schema and import.
+1. MD-005 text quick screens — in PR (quick-screens).
+2. MD-001 media asset schema, import, hash, provenance (crate migration 0004 + More → Library media list), then MD-002 image playback as a rundown item.
+3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.
 3. SO-011 rehearsal notes/key/tempo (P2) when 2C's item editing lands.

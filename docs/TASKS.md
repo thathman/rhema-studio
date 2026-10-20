@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.11 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.12 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -51,8 +51,8 @@
 | SV-002 Unified add/reorder/edit flow across Bible/song/slide | P1 | MERGED | SO-009,SV-001 | PR #11 and PR #12 `ff09a63`: same Add and rundown controls, live highlighting by item id; service-builder PR: drag-handle reorder in Prepare (dnd-kit) beside the arrow buttons. One search box across all kinds: Quick find covers verses and songs (slides are service-local) |
 | SV-003 Service templates and multi-service variants | P1 | MERGED | SV-002 | PR #12 `ff09a63`: Copy service (fresh item ids, original untouched, refused while unsaved); 1 test. Named templates not yet (a copied service is the template) |
 | SV-004 Quick Find for Bible, hymn, song, media | P1 | BACKLOG | SO-007,SV-002 | Keyboard-safe, typo-tolerant, predictable candidate ranking |
-| SV-005 Next/Previous Verse and responsive readings | P1 | IN PR | ST-001,SV-002 | live-verse-step PR: Verse +/− continues the live reading in the item's translations, crosses chapters, stops at book ends with a warning; Shift+←/→, Standard buttons, OSC `/rhema/verse_next|verse_prev`, HTTP `verse_next|verse_prev`; 4 tests + Rust api tests. Responsive (leader/congregation) format not yet |
-| SV-006 Program notes, review readiness and duration estimates | P1 | IN PR | SV-002 | rundown-notes-readiness PR: operator note per item (Prepare edits, Present shows, never on screen, saved with the service); Home warns when a song in the service is missing from the library (looked up on Home); 1 test. Duration estimates not yet |
+| SV-005 Next/Previous Verse and responsive readings | P1 | MERGED | ST-001,SV-002 | PR #13 `7c8b980`: Verse +/− continues the live reading in the item's translations, crosses chapters, stops at book ends with a warning; Shift+←/→, Standard buttons, OSC `/rhema/verse_next|verse_prev`, HTTP `verse_next|verse_prev`; 4 tests + Rust api tests. Responsive (leader/congregation) format not yet |
+| SV-006 Program notes, review readiness and duration estimates | P1 | MERGED | SV-002 | PR #14 `fa05eef`: operator note per item (Prepare edits, Present shows, never on screen, saved with the service); Home warns when a song in the service is missing from the library (looked up on Home); 1 test. Duration estimates not yet |
 | SV-007 Persistent revisions, visual compare and revert | P1 | BACKLOG | ST-003,SV-002 | Auditable service history; reversible without affecting live |
 
 ## Milestone 3 — Media and visuals
@@ -63,7 +63,7 @@
 | MD-002 Playback (image/video/audio), aspect and timing | P1 | BACKLOG | MD-001,SV-002 | Supported codecs matrix; graceful unsupported/missing media |
 | MD-003 Backgrounds, safe text and lyric scrolling | P1 | BACKLOG | MD-002,SO-010 | Per-slide preview, readability, no display disruption |
 | MD-004 Independently addressable transparent lower-third layer | P1 | BACKLOG | MD-001 | Congregation vs OBS output independent; alpha verified |
-| MD-005 Quick Screens and persistent overlays | P1 | BACKLOG | ST-002,MD-002 | Logo/Black/Welcome/Stand/Pray, restore previous live |
+| MD-005 Quick Screens and persistent overlays | P1 | IN PR (text screens) | ST-002,MD-002 | quick-screens PR: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
 | MD-006 Local cache manifest, integrity/readiness | P0 | BACKLOG | MD-001,SV-002 | Missing file/font reported before live, release works offline |
 | MD-007 Adaptive Smart Media rendering | P2 | BACKLOG | MD-003 | Text fits styles/output without masking content or violating branding |
 
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.12):** PR #13 `7c8b980` and PR #14 `fa05eef` merged; quick-screens PR opened (MD-005 text screens IN PR).
 - **2026-10-20 (rev 0.11):** rundown-notes-readiness PR opened (SV-006 IN PR).
 - **2026-10-20 (rev 0.10):** PR #11 `570b41a` and PR #12 `ff09a63` merged (SV-001 MERGED, SV-002/SV-003 MERGED pending acceptance); live-verse-step PR opened (SV-005 IN PR).
 - **2026-10-20 (rev 0.9):** service-builder PR opened (SV-002 drag reorder, SV-003 copy service).
