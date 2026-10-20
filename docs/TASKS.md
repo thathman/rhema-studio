@@ -138,7 +138,7 @@
 | QA-005 Settings and database migration/rollback matrix | P0 | IN PR (database) | ST-003 | migration-matrix PR (#39): one crate test opens a file at every schema version 0001–0004, upgrades it (backup named after the first pending migration, data intact, songs and revisions usable), verifies the automatic backup and restores it into a current database. Corrupt-file refusal already tested. Settings/app-identity migration (ST-009) still open |
 | QA-006 Security threat review of LAN, external cues and cloud sync | P1 | BACKLOG | OP-006,CL-004 | Pairing/auth, permissions, secrets, revocation, secure defaults |
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
-| QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | BACKLOG | QA-003 | 1-page quick start, stage/production guides, diagnostics |
+| QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | IN PR (quick start) | QA-003 | `docs/QUICK-START.md`: one-page volunteer guide (prepare, present table, what cannot go wrong, if something breaks). Stage/production guide and diagnostics how-to later |
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
 | QA-010 Backup/restore incident rehearsal | P0 | BACKLOG | ST-008 | Recover approved last-good content on standby machine |
 

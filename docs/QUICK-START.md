@@ -1,0 +1,39 @@
+# Rhema Studio — Sunday in one page
+
+For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; only **Present** does.
+
+## Before the service (Prepare, 10 minutes)
+
+1. **Home** tells you if anything is wrong: Bible loaded, theme chosen, an output on a screen, songs and pictures all present, fonts installed. Fix the amber lines first; the Fix button takes you there.
+2. **Prepare → New service** (or Copy last week's). Give it a date.
+3. Add items in the order of the service:
+   - **Bible**: type `john 3 16` or a few words, press Add.
+   - **Songs**: search by title, a line of the words, or a hymn number like `245`. New song: paste the words, put a blank line between verses, write `Chorus` (or `Ẹgbẹ́ orin`) above the chorus, Make sections, Save.
+   - **Slides**: Any text or Announcement (when, where, details).
+   - **Pictures**: Import once; Add to the service.
+4. Click an item to set its languages (EN · YO), its order, a background picture, planned minutes, or a note to yourself.
+5. **Save.** The service is kept with every version (History) and backed up before upgrades.
+
+## During the service (Present, Standard view)
+
+| Want to… | Do |
+|---|---|
+| Show the next item or slide | **Next** (→ or PgDn). The button says what comes next. |
+| Go back | **Previous** (←). |
+| Show what is in the preview | **Show live**. The preview is exactly what will appear. |
+| Continue a reading | **Verse +** / **Verse −** (Shift+→ / Shift+←). Stays in the same Bible version. |
+| Take the screen down | **Clear** (Esc). **Restore** (Shift+Esc) brings it back. |
+| Please stand / Let us pray / Welcome / Offering | **Quick screens**; **Back** returns to what was live. |
+| A verse the preacher just mentioned | Type it in **Quick find**, press Enter to preview, then Show live. |
+| Keep an eye on time | **Timer** in the header: set the planned minutes, Start. Amber under two minutes, red when over. |
+| Tell the band something | **Message stage**. Only the stage screen sees it. |
+| Practise without touching the projector | **Rehearsal on**. Everything works in the app; screens freeze until you turn it off. |
+
+Things that cannot go wrong by accident: nothing goes live before it has loaded; a missing song, picture or translation is reported and the screen keeps what it had; Prepare never presents; the timer ignores the computer's clock.
+
+## If something breaks
+
+- **Screen shows nothing?** Home → outputs. Turn the output on; check it is a *congregation* output, not *stage*.
+- **Wrong language on screen?** Present header: "Saved translations" means items show in the version they were saved with; click it to override with your current Bible.
+- **Lost a service?** Prepare → History picks any earlier version. More → Library restores a whole backup.
+- **Need help?** More → Settings → Diagnostics saves the logs to send.
