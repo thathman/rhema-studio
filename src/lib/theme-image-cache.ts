@@ -123,8 +123,10 @@ export function themeImageUrls(theme: {
   reference?: { surface?: { image?: { url: string } | null } }
   verseText?: { surface?: { image?: { url: string } | null } }
   secondaryVerseText?: { surface?: { image?: { url: string } | null } }
+  logo?: { url: string } | null
 }): string[] {
   const urls = [
+    theme.logo?.url,
     theme.background?.image?.url,
     theme.textBox?.image?.url,
     theme.reference?.surface?.image?.url,

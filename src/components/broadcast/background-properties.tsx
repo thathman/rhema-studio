@@ -1,5 +1,6 @@
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { pickThemeBackgroundImage } from "@/lib/theme-designer-files"
+import type { BroadcastTheme } from "@/types"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import {
@@ -313,6 +314,64 @@ function TransparentSection() {
   )
 }
 
+/** The church logo in a corner. One picture per theme, embedded like a background image. */
+function LogoSection() {
+  const draftTheme = useBroadcastStore((s) => s.draftTheme)
+  const update = useBroadcastStore((s) => s.updateDraftNested)
+  if (!draftTheme) return null
+  const logo = draftTheme.logo ?? null
+  const set = (patch: Partial<NonNullable<BroadcastTheme["logo"]>>) =>
+    update("logo", { url: "", corner: "top-right", size: 8, opacity: 1, showOnTransparent: false, ...logo, ...patch })
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border p-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-muted-foreground">Logo</label>
+        {logo?.url && <Button variant="ghost" size="xs" onClick={() => update("logo", null)}>Remove</Button>}
+      </div>
+      <div className="flex items-center gap-2">
+        {logo?.url ? <img src={logo.url} alt="" className="h-8 w-8 rounded border border-border object-contain" /> : <span className="text-xs text-muted-foreground">No logo</span>}
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={async () => {
+            const url = await pickThemeBackgroundImage()
+            if (url) set({ url })
+          }}
+        >
+          {logo?.url ? "Change…" : "Choose picture…"}
+        </Button>
+      </div>
+      {logo?.url && (
+        <>
+          <Select value={logo.corner} onValueChange={(v) => set({ corner: v as NonNullable<BroadcastTheme["logo"]>["corner"] })}>
+            <SelectTrigger className="h-7 text-xs" aria-label="Logo corner"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="top-left">Top left</SelectItem>
+              <SelectItem value="top-right">Top right</SelectItem>
+              <SelectItem value="bottom-left">Bottom left</SelectItem>
+              <SelectItem value="bottom-right">Bottom right</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="w-12">Size</span>
+            <Slider min={4} max={25} step={1} value={[logo.size]} onValueChange={([v]) => set({ size: v })} className="flex-1" />
+            <span className="w-8 text-right tabular-nums">{logo.size}%</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="w-12">Opacity</span>
+            <Slider min={0} max={100} step={5} value={[Math.round(logo.opacity * 100)]} onValueChange={([v]) => set({ opacity: v / 100 })} className="flex-1" />
+            <span className="w-8 text-right tabular-nums">{Math.round(logo.opacity * 100)}%</span>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={logo.showOnTransparent} onChange={(e) => set({ showOnTransparent: e.target.checked })} />
+            Show on transparent (OBS) themes too
+          </label>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function BackgroundProperties() {
   const draftTheme = useBroadcastStore((s) => s.draftTheme)
   const update = useBroadcastStore((s) => s.updateDraftNested)
@@ -369,6 +428,8 @@ export function BackgroundProperties() {
       {bgType === "gradient" && <GradientSection />}
       {bgType === "image" && <ImageSection />}
       {bgType === "transparent" && <TransparentSection />}
+
+      <LogoSection />
 
       {/* The container the reference + verse sit in — always available. */}
       <SurfaceControls

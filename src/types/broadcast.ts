@@ -49,6 +49,18 @@ export interface ThemeImageFill {
   tint: string | null
 }
 
+export interface ThemeLogo {
+  /** Data URL, like every other theme image, so outputs need nothing else. */
+  url: string
+  corner: "top-left" | "top-right" | "bottom-left" | "bottom-right"
+  /** Height as a percentage of the frame height (4–25). */
+  size: number
+  /** 0–1 */
+  opacity: number
+  /** Draw it on transparent (OBS) themes too; off by default so the key stays clean. */
+  showOnTransparent: boolean
+}
+
 /**
  * A filled surface drawn behind content — the container the text lives in.
  * Content wraps inside it, inset by `padding`.
@@ -156,6 +168,8 @@ export interface BroadcastTheme {
     referenceBox?: ElementBox
     verseBox?: ElementBox
   }
+  /** A church logo in one corner (Brand Kit step 1). Absent = none. */
+  logo?: ThemeLogo | null
   transition: {
     type: "fade" | "slide" | "scale" | "none"
     duration: number
