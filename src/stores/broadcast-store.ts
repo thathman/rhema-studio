@@ -18,6 +18,8 @@ import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useSongStore } from "@/stores/song-store"
 import { forOutputLanguage } from "@/lib/output-language"
+import { signageFrame, signageIndex } from "@/lib/signage"
+import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
 export interface HeldLive {
@@ -172,11 +174,80 @@ function seedSecondaryVerseStyle(
   }
 }
 
+// ── signage loop ─────────────────────────────────────────────────────────
+// One ticker for all signage outputs; each emits only when its picture changes.
+const signageStarted = new Map<string, number>()
+const signageLast = new Map<string, number>()
+/** Per output: a ticket for the latest sync (older in-flight syncs give up) and what was last emitted. */
+const signageSeq = new Map<string, number>()
+const signageEmitted = new Map<string, string>()
+let signageTicker: ReturnType<typeof setInterval> | null = null
+
+function forgetSignage(id: string): void {
+  signageStarted.delete(id)
+  signageLast.delete(id)
+  signageSeq.delete(id)
+  signageEmitted.delete(id)
+}
+
+async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Promise<void> {
+  const ids = output.signage?.mediaIds ?? []
+  const seconds = output.signage?.seconds ?? 10
+  const ticket = (signageSeq.get(output.id) ?? 0) + 1
+  signageSeq.set(output.id, ticket)
+  if (!signageStarted.has(output.id)) signageStarted.set(output.id, monotonicNow())
+  const index = signageIndex(ids.length, signageStarted.get(output.id) ?? 0, monotonicNow(), seconds)
+  signageLast.set(output.id, index)
+  // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
+  const stamp = `${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
+  if (signageEmitted.get(output.id) === stamp) {
+    ensureSignageTicker()
+    return
+  }
+  let verse: VerseRenderData | null = null
+  if (index >= 0) {
+    try {
+      const url = await useMediaStore.getState().dataUrl(ids[index])
+      if (url) verse = signageFrame(url)
+    } catch {
+      // A missing picture shows the theme background instead of breaking the loop.
+    }
+  }
+  // A newer sync, or a role change while the picture was loading: this result is stale.
+  if (signageSeq.get(output.id) !== ticket) return
+  if (useBroadcastStore.getState().outputs.find((o) => o.id === output.id)?.role !== "signage") return
+  signageEmitted.set(output.id, stamp)
+  void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse }).catch(() => {})
+  ensureSignageTicker()
+}
+
+function ensureSignageTicker(): void {
+  if (signageTicker) return
+  signageTicker = setInterval(() => {
+    const s = useBroadcastStore.getState()
+    const signage = s.outputs.filter((o) => o.role === "signage")
+    if (signage.length === 0) {
+      if (signageTicker) clearInterval(signageTicker)
+      signageTicker = null
+      signageStarted.clear()
+      signageLast.clear()
+      signageSeq.clear()
+      signageEmitted.clear()
+      return
+    }
+    for (const o of signage) {
+      const ids = o.signage?.mediaIds ?? []
+      const next = signageIndex(ids.length, signageStarted.get(o.id) ?? monotonicNow(), monotonicNow(), o.signage?.seconds ?? 10)
+      if (next !== signageLast.get(o.id)) s.syncBroadcastOutputFor(o.id)
+    }
+  }, 1000)
+}
+
 function emitDraftToBroadcast(state: BroadcastState): void {
   if (!state.draftTheme) return
   const verse = state.isLive ? state.liveVerse : null
   for (const output of state.outputs) {
-    if (output.themeId !== state.editingThemeId || output.role === "stage") continue
+    if (output.themeId !== state.editingThemeId || output.role === "stage" || output.role === "signage") continue
     void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", {
       theme: state.draftTheme,
       verse: forOutputLanguage(verse, output.language),
@@ -314,12 +385,18 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     })),
   syncBroadcastOutputFor: (outputId: string) => {
     const s = get()
-    // Rehearsal freezes every real output at whatever it last showed.
-    if (s.rehearsal) return
     const output = s.outputs.find((o) => o.id === outputId)
     if (!output) return
     const theme = s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
     if (!theme) return
+
+    // Signage runs its own loop; neither the live output nor rehearsal touches it.
+    if (output.role === "signage") {
+      void syncSignage(output, theme)
+      return
+    }
+    // Rehearsal freezes every real output at whatever it last showed.
+    if (s.rehearsal) return
 
     if (output.role === "stage") {
       const q = useQueueStore.getState()
@@ -362,10 +439,12 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         ? { activeThemeId: patch.themeId }
         : {}),
     }))
-    if (patch.themeId || "language" in patch || "role" in patch) get().syncBroadcastOutputFor(id)
+    if ("role" in patch && patch.role !== "signage") forgetSignage(id)
+    if (patch.themeId || "language" in patch || "role" in patch || "signage" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
+    forgetSignage(id)
     set((s) => {
       const outputStatus = Object.fromEntries(
         Object.entries(s.outputStatus).filter(([statusId]) => statusId !== id)

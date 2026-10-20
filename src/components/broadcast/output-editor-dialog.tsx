@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
 import {
@@ -25,12 +25,14 @@ import {
   NDI_RESOLUTION_OPTIONS,
 } from "@/lib/broadcast-output-control"
 import { useBroadcastStore } from "@/stores"
+import { useMediaStore } from "@/stores/media-store"
 import type {
   BroadcastOutput,
   BroadcastOutputType,
   NdiAlphaMode,
   NdiFrameRate,
   NdiResolution,
+  SignageSettings,
 } from "@/types"
 
 interface OutputEditorDialogProps {
@@ -207,9 +209,11 @@ export function OutputEditorDialog({
               <SelectContent>
                 <SelectItem value="congregation">Congregation — the themed screen (projector, stream)</SelectItem>
                 <SelectItem value="stage">Stage — the live words, what is next, your note and the timer</SelectItem>
+                <SelectItem value="signage">Signage — foyer pictures on a loop, untouched by the service</SelectItem>
               </SelectContent>
             </Select>
-            {form.role !== "stage" && (
+            {form.role === "signage" && <SignagePicker value={form.signage ?? { mediaIds: [], seconds: 10 }} onChange={(signage) => patch({ signage })} />}
+            {form.role !== "stage" && form.role !== "signage" && (
               <>
                 <span id="language-label" className="mt-2 text-xs text-muted-foreground">Languages on this output</span>
                 <Select value={form.language ?? "both"} onValueChange={(v) => patch({ language: v as BroadcastOutput["language"] })}>
@@ -429,5 +433,41 @@ export function OutputEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Pick the pictures a signage output loops through, in library order, and how long each stays. */
+function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: (v: SignageSettings) => void }) {
+  const assets = useMediaStore((s) => s.assets)
+  const loaded = useMediaStore((s) => s.assets.length > 0 || s.loading)
+  useEffect(() => {
+    if (!loaded) void useMediaStore.getState().list()
+  }, [loaded])
+  const pictures = assets.filter((a) => a.kind === "image" && a.present)
+  const toggle = (id: string) =>
+    onChange({ ...value, mediaIds: value.mediaIds.includes(id) ? value.mediaIds.filter((x) => x !== id) : [...value.mediaIds, id] })
+  return (
+    <div className="mt-2 flex flex-col gap-2 text-xs">
+      <label className="flex items-center gap-2">
+        <span className="text-muted-foreground">Seconds per picture</span>
+        <Input type="number" min={1} max={600} value={value.seconds} onChange={(e) => onChange({ ...value, seconds: Math.min(600, Math.max(1, Number(e.target.value) || 10)) })} className="h-7 w-20 text-xs" />
+      </label>
+      {pictures.length === 0 ? (
+        <p className="text-muted-foreground">No pictures in the library yet. Add some in Prepare → Pictures.</p>
+      ) : (
+        <ul className="max-h-40 overflow-y-auto rounded-md border border-border" aria-label="Pictures in the loop">
+          {pictures.map((a) => (
+            <li key={a.id}>
+              <label className="flex items-center gap-2 px-2 py-1 hover:bg-muted/50">
+                <input type="checkbox" checked={value.mediaIds.includes(a.id)} onChange={() => toggle(a.id)} />
+                <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                {value.mediaIds.includes(a.id) && <span className="text-muted-foreground">#{value.mediaIds.indexOf(a.id) + 1}</span>}
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[0.625rem] text-muted-foreground">{value.mediaIds.length} picture{value.mediaIds.length === 1 ? "" : "s"} in the loop. Going live, Clear and rehearsal never change this screen.</p>
+    </div>
   )
 }
