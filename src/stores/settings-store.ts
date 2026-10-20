@@ -19,7 +19,10 @@ interface SettingsState {
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
+  /** Shared key for OSC/HTTP control; blank means nothing authenticates. */
+  remoteSecret: string
 
+  setRemoteSecret: (secret: string) => void
   setOperatorName: (name: string) => void
   setBrandKit: (kit: BrandKit) => void
   setDeepgramApiKey: (key: string | null) => void
@@ -47,7 +50,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   sttProvider: "deepgram",
   brandKit: defaultBrandKit(),
   operatorName: "",
+  remoteSecret: "",
 
+  setRemoteSecret: (remoteSecret) => set({ remoteSecret }),
   setOperatorName: (operatorName) => {
     set({ operatorName })
     void invoke("content_set_actor", { name: operatorName.trim() || null }).catch(() => {})
@@ -68,6 +73,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 const PERSISTED_KEYS = [
   "brandKit",
   "operatorName",
+  "remoteSecret",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",

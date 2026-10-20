@@ -310,3 +310,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10r.1 | After showing a few items, Library → Keep this log. Restart the app. Library → Earlier logs, search a reference you showed. | The log is listed with today's date; the search finds it; its download button saves the same text. | Unverified |
+
+### 10s. Remote control key (OP-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10s.1 | Settings → Remote: key "abc", start HTTP and OSC. `curl -X POST :8080/api/v1/command -d '{"command":"next"}'` without and with `-H "X-Rhema-Key: abc"`; send `/rhema/next` from TouchOSC without and with the string argument "abc". | Without the key: HTTP 401, OSC ignored, nothing changes on screen; with it: Next happens. Restart the app: the key is still in Settings. | Unverified |
