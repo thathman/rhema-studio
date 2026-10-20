@@ -298,3 +298,9 @@ report), but launching it cannot.
 | 10p.1 | Save a service, press Approve. Home. | Approve shows "Approved" (disabled); Home readiness: "Service approved as saved". | Unverified |
 | 10p.2 | Change an item, save. Home, then History. | Prepare: "Approve again"; Home: "Service changed since it was approved" (warn); History lists the approved version with "· approved". | Unverified |
 | 10p.3 | Save 55 more times (or script it), then open History. | The approved version is still listed; the oldest unapproved ones are gone. | Unverified |
+
+### 10q. Operator name on audit rows (CL-001)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10q.1 | More → Your name "Tolu". Approve a service. Save the service log. Restart the app. | The log's first line ends "operator: Tolu"; the name is still there after restart; `audit_events.actor` for the approve row is "Tolu" (inspect the database with sqlite3). | Unverified |

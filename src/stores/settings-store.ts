@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core"
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
@@ -16,7 +17,10 @@ interface SettingsState {
   onboardingComplete: boolean
   sttProvider: SttProvider
   brandKit: BrandKit
+  /** Who is at the desk; goes on audit rows and the service log. */
+  operatorName: string
 
+  setOperatorName: (name: string) => void
   setBrandKit: (kit: BrandKit) => void
   setDeepgramApiKey: (key: string | null) => void
   setOpenaiApiKey: (key: string | null) => void
@@ -42,7 +46,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   onboardingComplete: false,
   sttProvider: "deepgram",
   brandKit: defaultBrandKit(),
+  operatorName: "",
 
+  setOperatorName: (operatorName) => {
+    set({ operatorName })
+    void invoke("content_set_actor", { name: operatorName.trim() || null }).catch(() => {})
+  },
   setBrandKit: (brandKit) => set({ brandKit }),
   setDeepgramApiKey: (deepgramApiKey) => set({ deepgramApiKey }),
   setOpenaiApiKey: (openaiApiKey) => set({ openaiApiKey }),
@@ -58,6 +67,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 
 const PERSISTED_KEYS = [
   "brandKit",
+  "operatorName",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",
@@ -98,6 +108,8 @@ export function hydrateSettings(): Promise<void> {
       if (Object.keys(patch).length > 0) {
         useSettingsStore.setState(patch)
       }
+      const name = useSettingsStore.getState().operatorName.trim()
+      if (name) void invoke("content_set_actor", { name }).catch(() => {})
 
       // Attach only after successful hydration so as not to overwrite disk with defaults.
       // Debounce writes, so a dragged slider (e.g. gain) coalesces into a single disk write.

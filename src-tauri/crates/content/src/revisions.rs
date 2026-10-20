@@ -234,4 +234,18 @@ mod tests {
         assert_eq!(back.items[0].reference, "John 3:16");
         assert_eq!(back.program.approved_revision, Some(p.revision)); // still points at the approved content's revision
     }
+
+    #[test]
+    fn the_operator_name_is_recorded_on_audit_rows() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        crate::set_actor(Some("  Tolu  "));
+        db.approve_program(&p.id, p.revision).unwrap();
+        crate::set_actor(None);
+        let events = db.audit_events("program", &p.id).unwrap();
+        let approve = events.iter().find(|e| e.action == "approve").unwrap();
+        assert_eq!(approve.actor.as_deref(), Some("Tolu"));
+        let _ = db.update_program(&p.id, p.revision, "Sunday 9am", None).unwrap();
+        assert_eq!(db.audit_events("program", &p.id).unwrap().last().unwrap().actor, None);
+    }
 }

@@ -50,6 +50,10 @@ Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cue
 
 - A saved item goes live in the translation it was saved with; spontaneous verses follow your active translations. The Present header chip switches to "Override" to show everything in the current translation. A missing translation is reported, never substituted.
 
+## Who did what
+
+More → Your name is optional and local. When set it is written on every change (saves, approvals, imports) in the content database's audit table and at the top of the saved service log.
+
 ## Diagnostics
 
 Settings → Diagnostics → Save logs. The content database path and applied migrations are shown in More → Library.
