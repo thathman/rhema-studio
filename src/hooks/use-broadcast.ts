@@ -292,14 +292,25 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   return "presented"
 }
 
-/** Built-in screens a volunteer needs in a hurry. Text only; themed like everything else. */
+/**
+ * Built-in screens a volunteer needs in a hurry. Text only; themed like
+ * everything else. `yo` lines show under the English when a Yorùbá
+ * translation is the active or secondary Bible (the dual-language theme
+ * draws them in the secondary style).
+ */
 export const QUICK_SCREENS = {
-  welcome: { title: "Welcome", lines: ["We're glad you're here."] },
-  stand: { title: "", lines: ["Please stand"] },
-  pray: { title: "", lines: ["Let us pray"] },
-  offering: { title: "Offering", lines: ["Give as the Lord leads"] },
+  welcome: { title: "Welcome", lines: ["We're glad you're here."], yo: ["Ẹ kú àbọ̀. Inú wa dùn pé ẹ wá."] },
+  stand: { title: "", lines: ["Please stand"], yo: ["Ẹ jọ̀wọ́ ẹ dìde"] },
+  pray: { title: "", lines: ["Let us pray"], yo: ["Ẹ jẹ́ kí a gbàdúrà"] },
+  offering: { title: "Offering", lines: ["Give as the Lord leads"], yo: ["Ẹ fúnni bí Olúwa ṣe darí yín"] },
 } as const
 export type QuickScreen = keyof typeof QUICK_SCREENS
+
+/** Is a Yorùbá Bible in use right now (active or secondary)? Then screens go bilingual. */
+export function yorubaInUse(): boolean {
+  const b = useBibleStore.getState()
+  return b.translations.some((t) => t.language === "yo" && (t.id === b.activeTranslationId || t.id === b.secondaryTranslationId))
+}
 
 /**
  * Put a quick screen on air now. Whatever was live is held so Back can
@@ -308,10 +319,15 @@ export type QuickScreen = keyof typeof QUICK_SCREENS
  */
 export function presentQuickScreen(screen: QuickScreen): void {
   presentSeq += 1
-  const { title, lines } = QUICK_SCREENS[screen]
+  const { title, lines, yo } = QUICK_SCREENS[screen]
   const store = useBroadcastStore.getState()
   store.holdLive()
-  store.setLiveVerse({ kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines] }, null, { goLive: true, keepHeld: true })
+  const bilingual = yorubaInUse()
+  store.setLiveVerse(
+    { kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines], ...(bilingual ? { secondaryLines: [...yo] } : {}) },
+    null,
+    { goLive: true, keepHeld: true }
+  )
 }
 
 export const broadcastActions = {

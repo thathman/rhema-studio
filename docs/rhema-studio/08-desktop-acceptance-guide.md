@@ -199,6 +199,7 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | 10f.2 | Clear, then Welcome, then Back. | Welcome on air; Back goes off air again with the verse kept for Restore. |
 | 10f.3 | Please stand, then Next. | The next item goes live; Back is disabled (the operator moved on). |
 | 10f.4 | Transparent OBS theme. | The quick screen text keys like a verse; the header chip reads "LIVE · Please stand". |
+| 10f.5 | Set OYCB as the secondary Bible with a dual-language theme; press Please stand. | "Please stand" with "Ẹ jọ̀wọ́ ẹ dìde" under it in the secondary style; tone marks render. With KJV only, English alone. |
 
 ## 10g. Pictures (media library)
 
