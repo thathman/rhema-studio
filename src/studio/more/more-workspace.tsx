@@ -126,6 +126,14 @@ export function MoreWorkspace() {
               licenses/YORUBA-OYCB-LICENSE.md in the application resources for the changes made. Other translations carry
               their own licences; see the Bible section in Settings and the README.
             </p>
+            <p className="mt-2">
+              Cross-references from <span className="text-foreground">openbible.info</span>, used under CC BY 4.0.
+            </p>
+            <p className="mt-2">
+              NDI® is a registered trademark of Vizrt NDI AB. The optional NDI runtime is used under the NDI SDK licence; it is not
+              part of Rhema's MIT-licensed code. Fonts (Geist, Inter, Source Serif 4) are under the SIL Open Font License 1.1.
+              The full inventory is in docs/LICENSES.md.
+            </p>
           </section>
         </div>
       </div>

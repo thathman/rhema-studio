@@ -17,7 +17,7 @@
 | KJV | Public domain outside the UK (Crown patent in the UK) | `rhema.db` | Fine. |
 | NIV, ESV, NASB, NKJV, NLT, AMP | **Copyrighted** (Biblica, Crossway, Lockman, Thomas Nelson, Tyndale, Lockman). Upstream obtains them with `data/download-biblegateway.py`; their publishers' terms generally allow personal use and limited quotation, not redistribution of the full text. | `rhema.db` inside the installer (the Windows artifact built on 2026-10-20 contains them) | **Owner decision required** before any public release: either ship only KJV + OYCB (+ other public-domain/openly licensed texts) in the installer and let churches add licensed texts they hold rights to, or obtain redistribution permission. The PRD lists this under open owner decisions. No code change has been made. |
 | SpaRV, FreJND, PorBLivre (upstream's extra translations) | Public domain / open (per upstream) | may be in `rhema.db` depending on the build | Verify each source's statement before a release that includes them. |
-| openbible.info cross-references | CC BY 4.0 (openbible.info) | `rhema.db` | Attribution needed in About (currently only in the README). **To do.** |
+| openbible.info cross-references | CC BY 4.0 (openbible.info) | `rhema.db` | Attribution in More → About (PR about-notices) and the README. |
 | Song texts | None bundled | — | The song library is church content; each song carries `copyright`, `ccli_number`, `licence` and `licence_note`, and Home flags songs with no licence recorded. The app never claims a licence it does not know. |
 | Quick screens, custom slides, pictures | Church content | — | Pictures are imported by the church; the app records the original path and content hash only. |
 | Whisper speech model | MIT (whisper.cpp / OpenAI Whisper weights, MIT) | not bundled in the installer; downloaded on demand | Fine. |
@@ -30,7 +30,7 @@
 
 | Component | Terms | Notes |
 |---|---|---|
-| NDI 6 SDK runtime (`Processing.NDI.Lib.x64.dll`, 29.8 MB in the Windows installer) | NewTek/Vizrt NDI SDK licence (proprietary; redistribution of the runtime library is permitted under the SDK licence with the required notice) | `data/download-ndi-sdk.ts` fetches it; loaded at runtime via `libloading`. **To do:** add the NDI® trademark notice and SDK licence reference to More → About and the installer, as the SDK licence requires. |
+| NDI 6 SDK runtime (`Processing.NDI.Lib.x64.dll`, 29.8 MB in the Windows installer) | NewTek/Vizrt NDI SDK licence (proprietary; redistribution of the runtime library is permitted under the SDK licence with the required notice) | `data/download-ndi-sdk.ts` fetches it; loaded at runtime via `libloading`. NDI® trademark notice and SDK licence reference in More → About (PR about-notices); the installer's licence screen still shows only MIT (**to do** in the packaging workflow). |
 
 ### 3.2 Rust crates (direct dependencies, from `cargo metadata`)
 
@@ -48,6 +48,6 @@ No GPL/AGPL/LGPL code is in the direct dependency set. Transitive dependencies w
 ## 4. Open items before a public release
 
 1. **Owner decision:** which Bible texts ship in the installer (see §2). This is a material licensing choice and is not made by the engineering backlog.
-2. Add openbible.info (CC BY 4.0) and NDI® notices to More → About and to the installer's licence screen.
+2. Add the openbible.info and NDI® notices to the installer's licence screen (About has them).
 3. Add an automated licence check (`cargo deny check licenses`, `bunx license-checker --production`) to the release workflow, with an allow-list matching this document.
 4. Keep this file current: any new dependency or bundled asset gets a row here in the same PR.
