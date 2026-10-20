@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { mark } from "@/lib/latency-marks"
-import { qrDataUrl } from "@/lib/qr-bulletin"
+import { composeQrSlide } from "@/lib/qr-bulletin"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type { VerseRenderData } from "@/types"
@@ -258,19 +258,26 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
     useBroadcastStore.getState().setPresentWarning("Empty slide not shown: give it a title or some text.")
     return "empty"
   }
-  // No background: present synchronously so nothing can slip in between.
-  let image = item.background ? await backgroundFill(item.background) : undefined
+  // A QR slide is one composed picture (code + words on a white panel) with no
+  // text layer, so no scrim or words land on the code; a background picture is
+  // not used for it. Otherwise, no background means a synchronous present.
+  let render: VerseRenderData = data
   if (item.slide.link) {
     try {
-      image = { url: await qrDataUrl(item.slide.link), fit: "contain", blur: 0, brightness: 100, tint: null }
+      const body = item.slide.body.replace(/\r\n?/g, "\n").split("\n").map((l) => l.trim()).filter(Boolean)
+      const url = await composeQrSlide(item.slide.link, item.slide.title, body)
+      render = { kind: "slide", reference: "", segments: [], lines: [], image: { url, fit: "contain", blur: 0, brightness: 100, tint: null } }
     } catch (e) {
       console.warn("[broadcast] QR could not be drawn:", e)
-      useBroadcastStore.getState().setPresentWarning("The QR code could not be drawn; showing the text only.")
+      useBroadcastStore.getState().setPresentWarning("The QR code could not be drawn; showing the words and the address only.")
     }
+  } else if (item.background) {
+    const image = await backgroundFill(item.background)
+    if (image) render = { ...data, image }
   }
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: 0 })
-  useBroadcastStore.getState().setLiveVerse(image ? { ...data, image } : data, null, { goLive: opts.goLive, itemId: item.id })
+  useBroadcastStore.getState().setLiveVerse(render, null, { goLive: opts.goLive, itemId: item.id })
   return "presented"
 }
 

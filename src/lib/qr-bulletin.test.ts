@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { qrDataUrl, safeLink } from "./qr-bulletin"
+import { composeQrSlide, qrDataUrl, safeLink } from "./qr-bulletin"
 
 describe("QR bulletin", () => {
   it("accepts only plain http(s) links", () => {
@@ -16,5 +16,10 @@ describe("QR bulletin", () => {
     const url = await qrDataUrl("https://church.example/give")
     expect(url.startsWith("data:image/png;base64,")).toBe(true)
     expect(url.length).toBeGreaterThan(1000)
+  })
+
+  it("composes without a DOM by returning the bare code", async () => {
+    const url = await composeQrSlide("https://church.example/give", "Give", ["Thank you"])
+    expect(url.startsWith("data:image/png;base64,")).toBe(true)
   })
 })
