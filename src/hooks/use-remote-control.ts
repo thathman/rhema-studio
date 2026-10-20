@@ -6,6 +6,10 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { runMacro } from "@/lib/cues"
+import { useJournalStore } from "@/stores/journal-store"
+
+/** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
+const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
 import { remoteActions } from "@/lib/remote-actions"
 
 /**
@@ -24,6 +28,7 @@ export function useRemoteControl() {
         unlisteners.push(
           await listen(event, () => {
             if (cancelled) return
+            noteRemote(event)
             handler()
           }),
         )
@@ -44,13 +49,17 @@ export function useRemoteControl() {
       const uMacro = await listen<string>(REMOTE_EVENTS.macro, (event) => {
         if (cancelled) return
         const id = parsePayload(event.payload)?.id
-        if (typeof id === "string") runMacro(id)
+        if (typeof id === "string") {
+          noteRemote(`${REMOTE_EVENTS.macro} ${id}`)
+          runMacro(id)
+        }
       })
       unlisteners.push(uMacro)
 
       // remote:theme — switch active theme by name
       const u3 = await listen<string>(REMOTE_EVENTS.theme, (event) => {
         if (cancelled) return
+        noteRemote(REMOTE_EVENTS.theme)
         const payload = parsePayload(event.payload)
         const name = payload?.name as string | undefined
         if (!name) return
@@ -68,6 +77,7 @@ export function useRemoteControl() {
       // remote:opacity — set broadcast output opacity
       const u4 = await listen<string>(REMOTE_EVENTS.opacity, (event) => {
         if (cancelled) return
+        noteRemote(REMOTE_EVENTS.opacity)
         const payload = parsePayload(event.payload)
         const value = payload?.value as number | undefined
         if (value === undefined) return
@@ -81,6 +91,7 @@ export function useRemoteControl() {
       // remote:on_air — toggle live broadcast state
       const u5 = await listen<string>(REMOTE_EVENTS.on_air, (event) => {
         if (cancelled) return
+        noteRemote(REMOTE_EVENTS.on_air)
         const payload = parsePayload(event.payload)
         const active = payload?.active as boolean | undefined
         if (active === undefined) return
@@ -91,6 +102,7 @@ export function useRemoteControl() {
       // remote:confidence — set detection confidence threshold
       const u8 = await listen<string>(REMOTE_EVENTS.confidence, (event) => {
         if (cancelled) return
+        noteRemote(REMOTE_EVENTS.confidence)
         const payload = parsePayload(event.payload)
         const value = payload?.value as number | undefined
         if (value === undefined) return
