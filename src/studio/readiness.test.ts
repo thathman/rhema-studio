@@ -77,4 +77,14 @@ describe("computeReadiness", () => {
   it("missing Bible library blocks", () => {
     expect(computeReadiness({ ...good, translationsLoaded: 0 }).ready).toBe(false)
   })
+
+  it("warns about a signage loop with no pictures or with missing files", () => {
+    const base = { translationsLoaded: 1, activeThemeName: "Dark", outputsConfigured: 2, outputsOnAir: 2, rundownCount: 1, listening: false }
+    const { checks } = computeReadiness({ ...base, signage: [{ name: "Foyer", total: 0, missing: 0 }, { name: "Cafe", total: 4, missing: 1 }, { name: "Hall", total: 2, missing: 0 }] })
+    const labels = checks.filter((c) => c.id.startsWith("signage")).map((c) => [c.status, c.label])
+    expect(labels).toEqual([
+      ["warn", "Foyer: the signage loop has no pictures"],
+      ["warn", "Cafe: 1 of 4 signage pictures is missing"],
+    ])
+  })
 })

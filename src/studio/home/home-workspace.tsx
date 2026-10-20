@@ -54,7 +54,7 @@ export function HomeWorkspace() {
   const mediaIds = [...new Set(items.filter(isImageItem).map((i) => i.image.media_id))]
   const missingMedia = mediaIds.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length
   useEffect(() => {
-    if (mediaIds.length > 0 && !mediaLoaded) void useMediaStore.getState().list()
+    if ((mediaIds.length > 0 || outputs.some((o) => o.role === "signage")) && !mediaLoaded) void useMediaStore.getState().list()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per set of ids
   }, [mediaIds.join(","), mediaLoaded])
   // Home is the readiness check: make sure every song in the service has been looked up.
@@ -81,6 +81,12 @@ export function HomeWorkspace() {
     // Only the themes outputs actually use.
     missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
     approval: current ? (dirty ? "changed" : approvalState(current)) : undefined,
+    signage: outputs
+      .filter((o) => o.role === "signage")
+      .map((o) => {
+        const ids = o.signage?.mediaIds ?? []
+        return { name: o.name, total: ids.length, missing: mediaLoaded ? ids.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length : 0 }
+      }),
   })
 
   const fix = (f: ReadinessFix) => {
