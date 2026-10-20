@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
-import { parseOpenLyrics } from "./openlyrics"
+import { parseOpenLyrics, toOpenLyrics } from "./openlyrics"
+import type { SongWithSections } from "@/types"
 
 const sample = `<?xml version="1.0" encoding="UTF-8"?>
 <song xmlns="http://openlyrics.info/namespace/2009/song" version="0.8" createdIn="OpenLP 3.0">
@@ -55,5 +56,28 @@ describe("OpenLyrics import", () => {
     expect(input.arrangements).toEqual([])
     expect(input.licence).toBe("unknown")
     expect(input.sections[0].texts).toEqual({ en: "a" })
+  })
+
+  it("exports a song that imports back unchanged", () => {
+    const song: SongWithSections = {
+      song: { id: "s", title: "Amazing Grace", authors: "John Newton; Anon", copyright: "Public Domain", ccli_number: "22025", licence: "ccli", licence_note: "", primary_language: "en", tags: "", notes: "Sing slowly", key: "G", tempo: 72, revision: 1, created_at: "", updated_at: "" },
+      sections: [
+        { id: "v1", kind: "verse", label: "Verse 1", texts: { en: "Amazing grace, how sweet\n\nI once was lost", yo: "Oore-ọ̀fẹ́ <ìyanu>" } },
+        { id: "c", kind: "chorus", label: "Chorus", texts: { en: "Praise God" } },
+      ],
+      arrangements: [{ id: "a", name: "Default", sequence: ["v1", "c", "v1"], is_default: true }],
+      numbers: [{ hymnbook_id: "b", hymnbook_code: "SSS", number: "245" }],
+    }
+    const xml = toOpenLyrics(song)
+    expect(xml).toContain('<verse name="v1" lang="yo">')
+    expect(xml).toContain("&lt;ìyanu&gt;")
+    const { input, report } = parseOpenLyrics(xml, { SSS: "b" })
+    expect(report.ignored).toEqual([])
+    expect(input.title).toBe("Amazing Grace")
+    expect(input.authors).toBe("John Newton; Anon")
+    expect(input.sections[0].texts).toEqual({ en: "Amazing grace, how sweet\n\nI once was lost", yo: "Oore-ọ̀fẹ́ <ìyanu>" })
+    expect(input.arrangements).toEqual([{ name: "Default", sequence: ["#0", "#1", "#0"], is_default: true }])
+    expect(input.numbers).toEqual([{ hymnbook_id: "b", number: "245" }])
+    expect(input.notes).toBe("Sing slowly")
   })
 })
