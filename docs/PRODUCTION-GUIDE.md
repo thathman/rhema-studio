@@ -32,6 +32,8 @@ OSC addresses and HTTP commands do exactly what the buttons do, with the same sa
 
 Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cues shows each macro's steps.
 
+**Who can send these:** anyone on the network while a listener runs; nothing asks for a password. Start a listener just before the service and stop it after; if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
+
 ## Timing and the stage
 
 - **Timer**: monotonic (ignores clock changes); amber under two minutes, red when over. Planned minutes per item give "n min late/early".
