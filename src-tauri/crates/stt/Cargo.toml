@@ -30,5 +30,6 @@ whisper-rs = { version = "0.16", optional = true }
 
 [features]
 default = ["rest-fallback"]
-rest-fallback = ["reqwest"]
+rest-fallback = ["dep:reqwest"]
+openai = ["dep:reqwest"]
 whisper = ["dep:whisper-rs", "rhema-audio"]

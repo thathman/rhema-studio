@@ -53,9 +53,11 @@ speech-to-text stay inactive until you build from source and run
 
 ## Features
 
-- **Real-time speech-to-text** via local Whisper or cloud Deepgram (WebSocket streaming + REST fallback)
-  - Whisper runs locally with no API costs; Deepgram streams via WebSocket with REST fallback
+- **Speech-to-text** via local Whisper, cloud Deepgram, or cloud OpenAI Whisper
+  - Deepgram streams via WebSocket with REST fallback; OpenAI Whisper uploads each utterance and returns a final transcript
+  - Speech language selection includes English and Yoruba; Yoruba works with local or OpenAI Whisper
 - **Voice-controlled translation switching** — say "read in NIV" or "switch to ESV" to change translations instantly during a sermon
+- **Dual-translation live output** — choose a primary and optional secondary translation (for example, English KJV + Yoruba OYCB); both texts stay synchronized to the same detected reference
 - **Multi-strategy verse detection**
   - Direct reference parsing (Aho-Corasick automaton + fuzzy matching)
   - Semantic search — Qwen3-0.6B ONNX embeddings, brute-force cosine similarity over ~31k verse vectors (the `hnsw_index.rs` file is named after a future plan; today it scans linearly)
@@ -63,7 +65,7 @@ speech-to-text stay inactive until you build from source and run
   - Reading mode — locks to book/chapter as soon as it's mentioned, with voice navigation ("next chapter", "chapter 5")
   - Sermon context tracking and sentence buffering
 - **SQLite Bible database** with FTS5 full-text search (BM25 ranking by default)
-- **10 bundled translations** — KJV, NIV, ESV, NASB, NKJV, NLT, AMP, plus SpaRV (Spanish), FreJND (French), and PorBLivre (Portuguese)
+- **Bundled translations** — KJV, NIV, ESV, NASB, NKJV, NLT, AMP, plus the Open Yoruba Contemporary Bible (OYCB); the source pipeline can also include SpaRV, FreJND, and PorBLivre
 - **Cross-reference lookup** (340k+ refs from openbible.info; the bundled file ships with 344,800 entries)
 - **NDI broadcast output** for live production integration — configurable resolution, 24/30/60 fps, and three alpha modes (none, straight, premultiplied)
 - **Theme designer** — visual canvas editor for verse overlays with backgrounds (solid, gradient, image, transparent), text styling, positioning, shadows, and outlines
@@ -87,7 +89,7 @@ speech-to-text stay inactive until you build from source and run
 | **AI/ML** | ONNX Runtime (Qwen3-0.6B embeddings), Aho-Corasick, Fuse.js |
 | **Database** | SQLite via rusqlite (bundled) with FTS5 |
 | **Broadcast** | NDI 6 SDK via dynamic loading (libloading FFI) |
-| **STT** | Local Whisper via `whisper-rs`; Deepgram WebSocket + REST (`tokio-tungstenite`) |
+| **STT** | Local Whisper via `whisper-rs`; Deepgram WebSocket + REST; OpenAI Whisper API |
 
 ### Rust Crates
 
@@ -108,7 +110,7 @@ speech-to-text stay inactive until you build from source and run
 - [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) (platform-specific system dependencies)
 - [Python 3](https://www.python.org/) (only for the optional `--with-embedding` setup and downloading copyrighted translations)
 - CMake + LLVM/libclang (required for local Whisper STT) — see [Platform-specific setup](#platform-specific-setup) below
-- [Deepgram API key](https://deepgram.com/) (optional, for cloud speech-to-text instead of Whisper)
+- [Deepgram API key](https://deepgram.com/) or [OpenAI API key](https://platform.openai.com/api-keys) (optional, for cloud speech-to-text)
 
 ### Platform-specific setup
 
@@ -167,7 +169,7 @@ bun run setup:all
 This runs the required phases idempotently, skipping any whose output artifacts already exist (pass `--force` to re-run all):
 
 1. ~~Python environment~~ — skipped by default (only needed for `--with-embedding` below)
-2. Download Bible source data — single bundled archive containing all 10 translations plus the openbible.info cross-references zip
+2. Download Bible source data — the bundled archive, the official eBible OYCB Yoruba source, plus the openbible.info cross-references zip
 3. Build SQLite Bible database (`data/rhema.db` with FTS5 + cross-references)
 4. –6. ~~ONNX model + verse embeddings~~ — skipped by default (see below)
 7. Download Whisper model (`ggml-large-v3-turbo-q8_0.bin`) into `models/whisper/`
@@ -199,12 +201,12 @@ The delete matters: setup skips any artifact that already exists, so a stale ind
 
 #### Speech-to-Text Options
 
-Rhema supports two speech-to-text engines:
+Rhema supports three speech-to-text engines:
 
 **Option 1: Whisper (Local, Free)**
 Whisper runs locally on your machine with no API costs or per-minute billing.
 - Requires CMake + libclang — see [Platform-specific setup](#platform-specific-setup) above
-- The model (`ggml-large-v3-turbo-q8_0.bin`) is fetched as phase 7 of `setup:all`. Run `bun run download:whisper` to grab it on its own.
+- The multilingual model (`ggml-large-v3-turbo-q8_0.bin`) is fetched as phase 7 of `setup:all`. Run `bun run download:whisper` to grab it on its own.
 
 **Option 2: Deepgram (Cloud, Paid)**
 Create a `.env` file in the project root:
@@ -214,6 +216,9 @@ DEEPGRAM_API_KEY=your_key_here
 ```
 
 Get your API key at [deepgram.com](https://deepgram.com/)
+
+**Option 3: OpenAI Whisper (Cloud, Paid)**
+Enter an OpenAI API key in Settings → Speech Recognition, select Cloud (OpenAI Whisper), and choose English or Yorùbá. OpenAI Whisper returns a final result after each utterance rather than interim live words.
 
 ### NDI SDK (optional)
 
@@ -228,7 +233,7 @@ bun run download:ndi-sdk
 Each phase can also be run independently:
 
 ```bash
-bun run download:bible-data          # Bundled translations + cross-refs
+bun run download:bible-data          # Bundled translations, OYCB Yoruba Bible + cross-refs
 bun run build:bible                  # Build SQLite database
 bun run download:whisper             # Whisper STT model
 
@@ -330,4 +335,5 @@ Create a `.env` file in the project root (optional):
 
 | Variable | Required | Description |
 |---|---|---|
-| `DEEPGRAM_API_KEY` | Optional | API key for Deepgram speech-to-text (not needed if using Whisper) |
+| `DEEPGRAM_API_KEY` | Optional | API key for Deepgram speech-to-text |
+| `OPENAI_API_KEY` | Optional | API key for OpenAI Whisper speech-to-text |

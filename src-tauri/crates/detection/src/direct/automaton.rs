@@ -38,6 +38,81 @@ fn is_speech_safe(pattern: &str) -> bool {
     pattern.chars().any(|c| c.is_ascii_digit()) || pattern.chars().count() > 2
 }
 
+/// Common Yoruba names for the 66 books, as used by the Open Yoruba
+/// Contemporary Bible. The canonical result remains the English book name so
+/// the database and frontend can stay translation-agnostic.
+fn yoruba_aliases(number: i32) -> &'static [&'static str] {
+    match number {
+        1 => &["Gẹnẹsisi", "Genẹsisi"],
+        2 => &["Eksodu"],
+        3 => &["Lefitiku"],
+        4 => &["Numeri"],
+        5 => &["Deuteronomi"],
+        6 => &["Jẹṣua", "Jẹsua"],
+        7 => &["Onidajọ", "Onidajo"],
+        8 => &["Rutu"],
+        9 => &["1 Samuẹli", "1 Samueli", "First Samuẹli"],
+        10 => &["2 Samuẹli", "2 Samueli", "Second Samuẹli"],
+        11 => &["1 Ọba", "1 Oba", "First Ọba"],
+        12 => &["2 Ọba", "2 Oba", "Second Ọba"],
+        13 => &["1 Kronika", "First Kronika"],
+        14 => &["2 Kronika", "Second Kronika"],
+        15 => &["Esra"],
+        16 => &["Nehemiah"],
+        17 => &["Esteri"],
+        18 => &["Jobu"],
+        19 => &["Saamu"],
+        20 => &["Òwe", "Owe"],
+        21 => &["Oniwaasu"],
+        22 => &["Orin Solomoni", "Orin Solomon"],
+        23 => &["Isaiah"],
+        24 => &["Jeremiah"],
+        25 => &["Ẹkún Jeremiah", "Ekun Jeremiah"],
+        26 => &["Esekiẹli", "Esekieli"],
+        27 => &["Daniẹli", "Danieli"],
+        28 => &["Hosea"],
+        29 => &["Joẹli", "Joeli"],
+        30 => &["Amosi"],
+        31 => &["Obadiah"],
+        32 => &["Jona"],
+        33 => &["Mika"],
+        34 => &["Nahumu"],
+        35 => &["Habakuku"],
+        36 => &["Sefaniah"],
+        37 => &["Hagai"],
+        38 => &["Sekariah"],
+        39 => &["Malaki"],
+        40 => &["Matiu"],
+        41 => &["Marku"],
+        42 => &["Luku"],
+        43 => &["Johanu"],
+        44 => &["Ìṣe àwọn Aposteli", "Ise awon Aposteli"],
+        45 => &["Romu"],
+        46 => &["1 Kọrinti", "1 Korinti", "First Kọrinti"],
+        47 => &["2 Kọrinti", "2 Korinti", "Second Kọrinti"],
+        48 => &["Galatia"],
+        49 => &["Efesu"],
+        50 => &["Filipi"],
+        51 => &["Kolose"],
+        52 => &["1 Tẹsalonika", "1 Tesalonika", "First Tẹsalonika"],
+        53 => &["2 Tẹsalonika", "2 Tesalonika", "Second Tẹsalonika"],
+        54 => &["1 Timotiu", "First Timotiu"],
+        55 => &["2 Timotiu", "Second Timotiu"],
+        56 => &["Titu"],
+        57 => &["Filemoni"],
+        58 => &["Heberu"],
+        59 => &["Jakọbu", "Jakobu"],
+        60 => &["1 Peteru", "First Peteru"],
+        61 => &["2 Peteru", "Second Peteru"],
+        62 => &["1 Johanu", "First Johanu"],
+        63 => &["2 Johanu", "Second Johanu"],
+        64 => &["3 Johanu", "Third Johanu"],
+        65 => &["Juda"],
+        66 => &["Ìfihàn", "Ifihan"],
+        _ => &[],
+    }
+}
+
 impl BookMatcher {
     /// Build the automaton from all book names, abbreviations, and aliases.
     pub fn new() -> Self {
@@ -66,6 +141,15 @@ impl BookMatcher {
             for alias in book.aliases {
                 let alias_lower = alias.to_lowercase();
                 // Avoid duplicates with name and abbreviation
+                if alias_lower != book.name.to_lowercase()
+                    && alias_lower != book.abbreviation.to_lowercase()
+                {
+                    add(alias_lower, book);
+                }
+            }
+
+            for alias in yoruba_aliases(book.number) {
+                let alias_lower = alias.to_lowercase();
                 if alias_lower != book.name.to_lowercase()
                     && alias_lower != book.abbreviation.to_lowercase()
                 {
@@ -247,5 +331,24 @@ mod tests {
             .map(|m| m.book_number)
             .collect();
         assert!(books.contains(&9), "expected 1 Samuel, got {books:?}");
+    }
+
+    #[test]
+    fn yoruba_book_names_match_canonical_books() {
+        let matcher = BookMatcher::new();
+        for (text, expected) in [
+            ("Gẹnẹsisi 1:1", 1),
+            ("1 Samuẹli 3:10", 9),
+            ("1 Kọrinti 13", 46),
+            ("Johanu 3:16", 43),
+            ("Ìfihàn 22:21", 66),
+        ] {
+            let books: Vec<i32> = matcher
+                .find_books(text)
+                .iter()
+                .map(|m| m.book_number)
+                .collect();
+            assert!(books.contains(&expected), "{text:?} should match book {expected}, got {books:?}");
+        }
     }
 }

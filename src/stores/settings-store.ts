@@ -1,7 +1,8 @@
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 
-type SttProvider = "deepgram" | "whisper"
+export type SttProvider = "deepgram" | "whisper" | "openai"
+export type SpeechLanguage = "en" | "yo"
 
 interface SettingsState {
   deepgramApiKey: string | null
@@ -14,6 +15,7 @@ interface SettingsState {
   cooldownMs: number
   onboardingComplete: boolean
   sttProvider: SttProvider
+  speechLanguage: SpeechLanguage
 
   setDeepgramApiKey: (key: string | null) => void
   setOpenaiApiKey: (key: string | null) => void
@@ -25,6 +27,7 @@ interface SettingsState {
   setCooldownMs: (ms: number) => void
   setOnboardingComplete: (complete: boolean) => void
   setSttProvider: (provider: SttProvider) => void
+  setSpeechLanguage: (language: SpeechLanguage) => void
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -38,6 +41,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   cooldownMs: 2500,
   onboardingComplete: false,
   sttProvider: "deepgram",
+  speechLanguage: "en",
 
   setDeepgramApiKey: (deepgramApiKey) => set({ deepgramApiKey }),
   setOpenaiApiKey: (openaiApiKey) => set({ openaiApiKey }),
@@ -48,7 +52,20 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setConfidenceThreshold: (confidenceThreshold) => set({ confidenceThreshold }),
   setCooldownMs: (cooldownMs) => set({ cooldownMs }),
   setOnboardingComplete: (onboardingComplete) => set({ onboardingComplete }),
-  setSttProvider: (sttProvider) => set({ sttProvider }),
+  setSttProvider: (sttProvider) =>
+    set((state) => ({
+      sttProvider:
+        state.speechLanguage === "yo" && sttProvider === "deepgram"
+          ? "whisper"
+          : sttProvider,
+    })),
+  setSpeechLanguage: (speechLanguage) =>
+    set((state) => ({
+      speechLanguage,
+      ...(speechLanguage === "yo" && state.sttProvider === "deepgram"
+        ? { sttProvider: "whisper" }
+        : {}),
+    })),
 }))
 
 const PERSISTED_KEYS = [
@@ -62,6 +79,7 @@ const PERSISTED_KEYS = [
   "cooldownMs",
   "onboardingComplete",
   "sttProvider",
+  "speechLanguage",
 ] as const satisfies readonly (keyof SettingsState)[]
 
 let tauriStore: Store | null = null
@@ -90,6 +108,9 @@ export function hydrateSettings(): Promise<void> {
         }
       }
       if (Object.keys(patch).length > 0) {
+        if (patch.speechLanguage === "yo" && patch.sttProvider === "deepgram") {
+          patch.sttProvider = "whisper"
+        }
         useSettingsStore.setState(patch)
       }
 

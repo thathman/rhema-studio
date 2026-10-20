@@ -31,15 +31,25 @@ export const transcriptionActions = {
     transcript.setConnectionStatus("connecting")
 
     const settings = useSettingsStore.getState()
+    // Yoruba is not supported by Deepgram Nova-3. Enforce the local route
+    // here as a last line of defense for settings persisted by an older build
+    // or changed outside the settings dialog.
+    const provider =
+      settings.speechLanguage === "yo" && settings.sttProvider === "deepgram"
+        ? "whisper"
+        : settings.sttProvider
     try {
       await invoke("start_transcription", {
         apiKey:
-          settings.sttProvider === "deepgram"
+          provider === "deepgram"
             ? (settings.deepgramApiKey ?? "")
-            : "",
+            : provider === "openai"
+              ? (settings.openaiApiKey ?? "")
+              : "",
         deviceId: settings.audioDeviceId,
         gain: settings.gain,
-        provider: settings.sttProvider,
+        provider,
+        language: settings.speechLanguage,
       })
       transcript.setTranscribing(true)
     } catch (e) {

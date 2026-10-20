@@ -36,6 +36,7 @@ describe("settings store", () => {
     mockGet.mockImplementation(async (key: string) => {
       if (key === "gain") return 2.5
       if (key === "sttProvider") return "whisper"
+      if (key === "speechLanguage") return "yo"
       if (key === "deepgramApiKey") return "dg-key"
       return null
     })
@@ -46,10 +47,37 @@ describe("settings store", () => {
     const state = useSettingsStore.getState()
     expect(state.gain).toBe(2.5)
     expect(state.sttProvider).toBe("whisper")
+    expect(state.speechLanguage).toBe("yo")
     expect(state.deepgramApiKey).toBe("dg-key")
     // Defaults remain for keys with null
     expect(state.autoMode).toBe(false)
     expect(state.confidenceThreshold).toBe(0.8)
+  })
+
+  it("repairs an older Yoruba setting that still points at Deepgram", async () => {
+    mockGet.mockImplementation(async (key: string) => {
+      if (key === "sttProvider") return "deepgram"
+      if (key === "speechLanguage") return "yo"
+      return null
+    })
+
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    expect(useSettingsStore.getState().speechLanguage).toBe("yo")
+    expect(useSettingsStore.getState().sttProvider).toBe("whisper")
+  })
+
+  it("selecting Yoruba immediately selects local Whisper", async () => {
+    mockGet.mockResolvedValue(null)
+
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+
+    useSettingsStore.getState().setSpeechLanguage("yo")
+
+    expect(useSettingsStore.getState().speechLanguage).toBe("yo")
+    expect(useSettingsStore.getState().sttProvider).toBe("whisper")
   })
 
   it("hydrate with no persisted values falls back to defaults", async () => {

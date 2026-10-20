@@ -54,6 +54,7 @@ describe("use-transcription", () => {
         deviceId: "dev-42",
         gain: 1.5,
         provider: "whisper",
+        language: "en",
       })
     })
 
@@ -77,7 +78,69 @@ describe("use-transcription", () => {
           provider: "deepgram",
           deviceId: null,
           gain: 1.0,
+          language: "en",
         })
+      )
+    })
+
+    it("forwards the OpenAI key when provider is OpenAI Whisper", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+
+      useSettingsStore.setState({
+        sttProvider: "openai",
+        openaiApiKey: "sk-test-only",
+        speechLanguage: "yo",
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "start_transcription",
+        expect.objectContaining({
+          apiKey: "sk-test-only",
+          provider: "openai",
+          language: "yo",
+        }),
+      )
+    })
+
+    it("forwards Yoruba as the selected recognition language", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+
+      useSettingsStore.setState({
+        sttProvider: "whisper",
+        speechLanguage: "yo",
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "start_transcription",
+        expect.objectContaining({ provider: "whisper", language: "yo" }),
+      )
+    })
+
+    it("keeps Yoruba local even when an older saved provider is Deepgram", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+
+      useSettingsStore.setState({
+        sttProvider: "deepgram",
+        speechLanguage: "yo",
+        deepgramApiKey: "must-not-be-used",
+      })
+
+      await transcriptionActions.start()
+
+      expect(mockInvoke).toHaveBeenCalledWith(
+        "start_transcription",
+        expect.objectContaining({
+          apiKey: "",
+          provider: "whisper",
+          language: "yo",
+        }),
       )
     })
 

@@ -24,6 +24,18 @@ const MAX_BUFFER_SAMPLES: usize = 16_000 * 10;
 /// Whisper warns "input is too short" below 1s.
 const MIN_BUFFER_SAMPLES: usize = 16_000;
 
+/// Build conservative context parameters for desktop Whisper.
+///
+/// The crate is compiled with Metal support so macOS bundles can use it when
+/// it is stable, but the Metal backend currently aborts inside ggml on this
+/// Intel/macOS target during `whisper_full`. An abort cannot be returned as a
+/// Rust error, so local transcription must explicitly use the CPU backend.
+fn context_parameters() -> WhisperContextParameters<'static> {
+    let mut params = WhisperContextParameters::default();
+    params.use_gpu(false);
+    params
+}
+
 /// Convert i16 PCM samples to f32 in [-1.0, 1.0] range.
 fn i16_to_f32(samples: &[i16]) -> Vec<f32> {
     samples.iter().map(|&s| f32::from(s) / 32768.0).collect()
@@ -226,7 +238,7 @@ impl SttProvider for WhisperProvider {
         let inf_handle = tokio::task::spawn_blocking(move || {
             let ctx = match WhisperContext::new_with_params(
                 &model_path,
-                WhisperContextParameters::default(),
+                context_parameters(),
             ) {
                 Ok(ctx) => ctx,
                 Err(e) => {
@@ -267,6 +279,10 @@ impl SttProvider for WhisperProvider {
                 params.set_print_special(false);
                 params.set_print_realtime(false);
                 params.set_single_segment(false);
+                // Each VAD utterance is independent. Reusing decoder context
+                // across them can carry an English/garbled prior into the
+                // next Yoruba utterance.
+                params.set_no_context(true);
                 params.set_token_timestamps(true);
                 params.set_no_speech_thold(0.6);
                 params.set_suppress_blank(true);
@@ -317,5 +333,15 @@ impl SttProvider for WhisperProvider {
 
     fn name(&self) -> &'static str {
         "whisper"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::context_parameters;
+
+    #[test]
+    fn context_parameters_disable_the_unstable_gpu_backend() {
+        assert!(!context_parameters().use_gpu);
     }
 }
