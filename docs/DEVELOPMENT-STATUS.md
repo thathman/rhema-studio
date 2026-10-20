@@ -56,6 +56,6 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Next eligible tasks
 
-1. CL-006 first slice (Home offers today's approved service) — in PR (#83).
+1. #83 merged (Home offers today's approved service). Next: SG-001 screen health in readiness (missing pictures in a signage loop).
 2. Non-desktop backlog after that: SG-003 QR bulletins (needs a QR encoder dependency; decide), SG-001 screen health/cache, AR-002 OBS markers (needs OBS). Blocked on owner decisions: #72 sync approach, #33 bundled translations, #34 Canva relay; PR #4 speech (ST-004).
 3. Desktop-gated: MD-002 video (#36), MD-004 lower thirds (#37), OP-005 OBS/NDI stability, QA-010 drill (#62), acceptance rows 1–10x (#31), Windows smoke (#32); ST-009 app identity migration at release time.
