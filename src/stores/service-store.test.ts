@@ -33,6 +33,7 @@ const item = (id: string, reference: string, b: number, c: number, v: number, ex
   translation: null,
   secondary_translation: null,
   notes: null,
+  payload: null,
   ...extra,
 })
 
