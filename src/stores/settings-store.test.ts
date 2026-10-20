@@ -143,4 +143,63 @@ describe("settings store", () => {
     expect(warnSpy).toHaveBeenCalledWith("[settings] Failed to persist settings")
     warnSpy.mockRestore()
   })
+
+  it("a settings file from an older build (without this fork's keys) hydrates to defaults and is not rewritten until a change", async () => {
+    mockGet.mockImplementation(async (key: string) => {
+      const old: Record<string, unknown> = { gain: 1.2, sttProvider: "deepgram", autoMode: true, onboardingComplete: true }
+      return key in old ? old[key] : undefined
+    })
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    const s = useSettingsStore.getState()
+    expect(s.gain).toBe(1.2)
+    expect(s.autoMode).toBe(true)
+    expect(s.operatorName).toBe("")
+    expect(s.remoteSecret).toBe("")
+    expect(s.remoteDevices).toEqual([])
+    expect(s.remoteAuthRequired).toBe(false)
+    expect(mockSet).not.toHaveBeenCalled()
+    expect(mockSave).not.toHaveBeenCalled()
+  })
+
+  it("values of the wrong shape (a newer or damaged file) are skipped, never applied", async () => {
+    mockGet.mockImplementation(async (key: string) => {
+      const bad: Record<string, unknown> = {
+        remoteDevices: "not-a-list",
+        remoteAuthRequired: "yes",
+        operatorName: 42,
+        gain: "loud",
+        brandKit: ["no"],
+        cooldownMs: Number.NaN,
+      }
+      return key in bad ? bad[key] : undefined
+    })
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    const before = useSettingsStore.getState()
+    await hydrateSettings()
+    const s = useSettingsStore.getState()
+    expect(s.remoteDevices).toEqual([])
+    expect(s.remoteAuthRequired).toBe(false)
+    expect(s.operatorName).toBe("")
+    expect(s.gain).toBe(before.gain)
+    expect(s.brandKit).toEqual(before.brandKit)
+    expect(s.cooldownMs).toBe(before.cooldownMs)
+  })
+
+  it("well-formed values from this build round-trip", async () => {
+    mockGet.mockImplementation(async (key: string) => {
+      const good: Record<string, unknown> = {
+        remoteDevices: [{ hash: "a".repeat(64), name: "Tolu's phone", paired_at: "2026-10-20T20:00:00Z", role: "present" }],
+        remoteAuthRequired: true,
+        operatorName: "Tolu",
+      }
+      return key in good ? good[key] : undefined
+    })
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    const s = useSettingsStore.getState()
+    expect(s.remoteDevices).toHaveLength(1)
+    expect(s.remoteAuthRequired).toBe(true)
+    expect(s.operatorName).toBe("Tolu")
+  })
 })
