@@ -27,7 +27,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 ## Latest test results
 
 - Frontend: 367 vitest tests in 40 files pass; `tsc -b` clean; blocking ESLint subset clean (whole-repo lint has 13 pre-existing upstream files with errors, reported but not blocking).
-- Rust: `rhema-content` 35 tests pass; `rhema-api` 105; app `cargo check` and clippy in CI.
+- Rust: `rhema-content` 36 tests pass; `rhema-api` 105; app `cargo check` and clippy in CI.
 - CI on `main`: green on `40963a9`, `802640a` (PR #6 head), `351d8e2` (PR #7 head), `38f76eb` (PR #8 head), `039602b` (PR #9 head), `d884791` (PR #10 head).
 
 ## Unverified (release-acceptance blockers, not development blockers)
@@ -56,7 +56,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Next eligible tasks
 
-1. QA-005 migration/restore matrix as crate tests (#39).
+1. QA-005 migration matrix — in PR (migration-matrix, #39).
 2. CV-004/CV-005 Brand Kit and native announcement templates (#35); PT-003 cues (#38); MD-002 video (#36); MD-004 lower thirds (#37).
 3. Milestone 4 OP-001 output profiles.
 3. SV-007 service revisions UI; SV-004 typo-tolerant Quick find.

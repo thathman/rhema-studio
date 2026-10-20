@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.27 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.28 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -135,7 +135,7 @@
 | QA-002 Offline and injected-failure test suite | P0 | BACKLOG | OP-005,SV-002 | No live outage under network/API failure |
 | QA-003 Accessibility and novice-volunteer usability | P0 | BACKLOG | ST-002 | Keyboard, contrast, novice timed exercises with recorded findings |
 | QA-004 Rights and dependency license inventory | P0 | IN PR | ST-001 | `docs/LICENSES.md`: upstream MIT, OYCB CC BY-SA 4.0 (compliant), direct Rust and JS dependency licences (all permissive), fonts OFL, NDI runtime terms, song/media provenance model. **Open owner decision:** copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) are bundled in `rhema.db`/installer; openbible.info and NDI notices added to About (about-notices PR); installer licence screen still MIT-only |
-| QA-005 Settings and database migration/rollback matrix | P0 | BACKLOG | ST-003 | Upgrades, corrupt files, backup restore, app identity |
+| QA-005 Settings and database migration/rollback matrix | P0 | IN PR (database) | ST-003 | migration-matrix PR (#39): one crate test opens a file at every schema version 0001–0004, upgrades it (backup named after the first pending migration, data intact, songs and revisions usable), verifies the automatic backup and restores it into a current database. Corrupt-file refusal already tested. Settings/app-identity migration (ST-009) still open |
 | QA-006 Security threat review of LAN, external cues and cloud sync | P1 | BACKLOG | OP-006,CL-004 | Pairing/auth, permissions, secrets, revocation, secure defaults |
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
 | QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | BACKLOG | QA-003 | 1-page quick start, stage/production guides, diagnostics |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-20 (rev 0.28):** migration-matrix PR opened (QA-005 database part IN PR, #39).
 - **2026-10-20 (rev 0.27):** PR #30 merged; Issues enabled and #31–#39 opened for near-term work and the two owner decisions.
 - **2026-10-20 (rev 0.26):** PR #29 merged; canva-connect-findings PR opened (CV-001 design; owner decisions on a token relay and public-integration application flagged).
 - **2026-10-20 (rev 0.25):** PR #27 merged; licence-inventory PR opened (QA-004 IN PR; owner decision on bundled copyrighted translations flagged).
