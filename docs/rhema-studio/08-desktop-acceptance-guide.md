@@ -437,3 +437,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10aj.1 | With HTTP remote on, run `for i in $(seq 40); do curl -s -o /dev/null -w "%{http_code} " -X POST -H 'Content-Type: application/json' -d '{"command":"next"}' http://<host>:<port>/api/v1/command; done` from another computer (add the key header if one is set). | Roughly the first 20 answer 200, the rest 429; the app log shows "too many from <address>"; a phone on another address still works at once; after a second's pause the first computer works again. | Unverified |
+
+### 10al. One running copy (FR-03)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10al.1 | With Rhema running (minimise it, and start the HTTP API), launch Rhema again from the Start menu or desktop icon. | No second window or second tray icon appears; the running copy's main window comes forward (restored if minimised). The remote API keeps working; no "port in use" error. | Unverified |
