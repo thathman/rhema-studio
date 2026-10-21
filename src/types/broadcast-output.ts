@@ -93,6 +93,11 @@ export interface BroadcastOutput {
   themeId: string
   /** Kept even while type === "ndi" so switching types is lossless. */
   monitorIndex: number
+  /**
+   * The monitor's name when it was chosen. The OS list renumbers when a monitor
+   * is unplugged, so the name finds the same screen again (resolveMonitorIndex).
+   */
+  monitorName?: string | null
   ndi: BroadcastOutputNdiSettings
 }
 

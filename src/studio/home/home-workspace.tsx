@@ -49,6 +49,7 @@ export function HomeWorkspace() {
   const unsupportedItems = useServiceStore((s) => s.unsupportedItems)
   const suggested = todaysService(programs, localDate())
   const monitorCount = useMonitorStore((s) => s.count)
+  const monitorNames = useMonitorStore((s) => s.names)
   const [contentError, setContentError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -109,7 +110,7 @@ export function HomeWorkspace() {
     missingMedia: mediaLoaded || mediaIds.length === 0 ? missingMedia : 0,
     // Only the themes outputs actually use.
     missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
-    monitors: monitorCount === null ? undefined : monitorProblems(outputs, monitorCount),
+    monitors: monitorCount === null ? undefined : monitorProblems(outputs, monitorNames.length === monitorCount ? monitorNames : monitorCount),
     contentError,
     // Unsaved edits change an approved service; a service never approved stays "not approved yet".
     approval: current ? (dirty && approvalState(current) !== "none" ? "changed" : approvalState(current)) : undefined,

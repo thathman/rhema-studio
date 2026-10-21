@@ -266,7 +266,7 @@ export function OutputEditorDialog({
                 <Select
                   value={String(form.monitorIndex)}
                   onValueChange={(value) =>
-                    patch({ monitorIndex: Number(value) })
+                    patch({ monitorIndex: Number(value), monitorName: monitors[Number(value)]?.name ?? null })
                   }
                   disabled={monitors.length === 0}
                 >

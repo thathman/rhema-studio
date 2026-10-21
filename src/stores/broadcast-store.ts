@@ -302,17 +302,11 @@ function recordFrame(id: string, frame: OutputFrame): void {
 }
 
 function emitDraftToBroadcast(state: BroadcastState): void {
-  // Rehearsal freezes every real output, theme edits included.
-  if (!state.draftTheme || state.rehearsal) return
-  const verse = state.isLive ? state.liveVerse : null
+  // Rehearsal freezes every real output, theme edits included (syncBroadcastOutputFor returns early).
+  if (!state.draftTheme) return
+  // The same send as a present (with the sound flag), so the outputs on this theme show the draft.
   for (const output of state.outputs) {
-    if (output.themeId !== state.editingThemeId || output.role === "stage" || output.role === "signage") continue
-    const frame = { theme: state.draftTheme, verse: forOutputLanguage(verse, output.language), overlay: output.lowerThirds ? state.lowerThird : null }
-    recordFrame(output.id, frame)
-    void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", {
-      ...frame,
-      // (overlay rides along: the output window replaces its whole payload, so without it the band vanishes)
-    }).catch(() => {})
+    if (output.themeId === state.editingThemeId && (output.role ?? "congregation") === "congregation") useBroadcastStore.getState().syncBroadcastOutputFor(output.id)
   }
 }
 
@@ -460,8 +454,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     const output = s.outputs.find((o) => o.id === outputId)
     if (!output) return
-    const theme = s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
-    if (!theme) return
+    const saved = s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
+    if (!saved) return
+    // A theme open in the Designer shows on its congregation outputs as edited, for presents too
+    // (otherwise each present flipped the screen back to the saved theme).
+    const theme = s.draftTheme && s.editingThemeId === output.themeId && (output.role ?? "congregation") === "congregation" ? s.draftTheme : saved
 
     // Signage runs its own loop; neither the live output nor rehearsal touches it.
     if (output.role === "signage") {

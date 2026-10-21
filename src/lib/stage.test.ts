@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildStagePayload } from "./stage"
+import { buildStagePayload, stageFontVh } from "./stage"
 import { idleTimer, setDuration, start } from "./timer"
 import type { VerseQueueItem } from "@/types"
 
@@ -29,4 +29,12 @@ describe("stage payload", () => {
     expect(p.next).toBe("Psalm 23")
     expect(buildStagePayload({ isLive: true, liveVerse: null, items: [], activeIndex: null, timer: idleTimer(), now: 0 })).toEqual({ current: null, next: null, note: null, timer: null, message: null, band: null })
   })
+
+  it("stage words get smaller for long lines, not only for many lines", () => {
+    expect(stageFontVh(["Amazing grace"])).toBe(9)
+    const long = stageFontVh(["For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life. ".repeat(3)])
+    expect(long).toBeLessThan(6)
+    expect(long).toBeGreaterThanOrEqual(3)
+  })
 })
+

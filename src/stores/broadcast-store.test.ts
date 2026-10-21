@@ -531,5 +531,20 @@ describe("updateDraftNested deep paths", () => {
     expect(sent["broadcast-main"]).toBe(true)
     expect(sent["broadcast-b"]).toBe(false)
   })
+
+  it("while a theme is edited, a present shows its outputs the draft (not the saved theme), with the sound flag", async () => {
+    const { emitTo } = await import("@tauri-apps/api/event")
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const out = s.outputs[0]
+    const theme = s.themes.find((t) => t.id === out.themeId)!
+    useBroadcastStore.setState({ editingThemeId: theme.id, draftTheme: { ...theme, name: "Draft colour" }, isLive: true, rehearsal: false })
+    vi.mocked(emitTo).mockClear()
+    useBroadcastStore.getState().syncBroadcastOutputFor(out.id)
+    const sent = vi.mocked(emitTo).mock.calls.find((c) => c[1] === "broadcast:verse-update")![2] as { theme: { name: string }; sound?: boolean }
+    expect(sent.theme.name).toBe("Draft colour")
+    expect(sent).toHaveProperty("sound")
+    useBroadcastStore.setState({ editingThemeId: null, draftTheme: null, isLive: false })
+  })
 })
 
