@@ -1,3 +1,5 @@
+import { createLatencyLog } from "@/lib/latency"
+import { info as logInfoLine, warn as logWarnLine } from "@tauri-apps/plugin-log"
 import { createVideoPlayer, type VideoPlayer } from "@/lib/output-video"
 import { MAIN_OUTPUT_ID } from "@/types/broadcast-output"
 import { emitTo } from "@tauri-apps/api/event"
@@ -40,6 +42,7 @@ const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "
 // One output window is one page, so its video player lives at module level
 // (created and disposed with the window's listeners).
 let videoPlayer: VideoPlayer | null = null
+const latencyLog = createLatencyLog(`output ${OUTPUT_ID}`)
 // Frames are drawn here first; see paintFrame.
 const scratchCanvas = document.createElement("canvas")
 // Report a drawing failure once per new screen (not every frame), and say when drawing works again.
@@ -60,6 +63,8 @@ interface BroadcastPayload {
   overlay?: { line1: string; line2: string } | null
   role?: "congregation" | "stage"
   stage?: StagePayload
+  /** Wall-clock ms when the main window sent this screen (latency log). */
+  sentAt?: number
 }
 
 function BroadcastCanvas() {
@@ -252,6 +257,12 @@ function BroadcastCanvas() {
       })
       draw()
       pushNdiBurst()
+      // Send-to-drawn time, batched into the log file (QA-007 benchmarks read it from a diagnostics export).
+      if (typeof event.payload.sentAt === "number") {
+        const lines = latencyLog.record(Date.now() - event.payload.sentAt)
+        if (lines.warn) void logWarnLine(lines.warn).catch(() => {})
+        if (lines.info) void logInfoLine(lines.info).catch(() => {})
+      }
     })
 
     const unlistenNdiConfig = currentWindow.listen<NdiConfigEventPayload>("broadcast:ndi-config", (event) => {

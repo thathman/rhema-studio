@@ -468,6 +468,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       theme,
       verse,
       overlay,
+      // When the screen was sent, so the output can log how long drawing took (QA-007).
+      sentAt: Date.now(),
     }).catch(() => {})
   },
   syncBroadcastOutput: () => {
