@@ -111,4 +111,33 @@ describe("bilingual quick screens", () => {
     presentActions.back()
     expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:16")
   })
+
+  it("quick screen, then Clear, then Back: the held content comes back but stays off air", async () => {
+    await presentVerse(verse(43, 3, 16), { goLive: true, itemId: "it-1" })
+    presentActions.quickScreen("black")
+    presentActions.clear()
+    presentActions.back()
+    const s = useBroadcastStore.getState()
+    expect(s.isLive).toBe(false)
+    expect(s.liveVerse?.reference).toContain("Book43 3:16")
+    presentActions.restore()
+    expect(useBroadcastStore.getState().liveVerse?.reference).toContain("Book43 3:16")
+  })
+
+  it("Back asks for approval like any go-live when the service is not approved", async () => {
+    const { useServiceStore } = await import("@/stores/service-store")
+    const { useSettingsStore } = await import("@/stores/settings-store")
+    const { useApprovalGateStore } = await import("@/stores/approval-gate-store")
+    useBroadcastStore.setState({ isLive: true, rehearsal: false, heldLive: { liveVerse: { kind: "verse", reference: "Book43 3:16", segments: [] } as never, liveSourceVerse: null, liveItem: null, liveSlide: null, liveItemId: "it-1", wasLive: true }, liveVerse: { kind: "slide", reference: "", segments: [], lines: [], screen: "black", quick: true } as never })
+    useServiceStore.setState({ current: { id: "p1", title: "Sunday", revision: 1, approved_revision: null } as never })
+    useSettingsStore.setState({ requireApproval: true })
+    useApprovalGateStore.setState({ held: null, retry: null, acknowledged: [] })
+    presentActions.back()
+    expect(useApprovalGateStore.getState().held).not.toBeNull()
+    expect(useBroadcastStore.getState().liveVerse?.screen).toBe("black")
+    useSettingsStore.setState({ requireApproval: false })
+    useApprovalGateStore.setState({ held: null, retry: null, acknowledged: [] })
+    useServiceStore.setState({ current: null })
+  })
 })
+

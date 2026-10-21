@@ -78,4 +78,15 @@ describe("continue the reading (verse next/prev on the live output)", () => {
     expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:2")
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
+
+  it("with a song or quick screen on air, Verse + steps the preview and leaves the screen alone", async () => {
+    const song = { kind: "slide", reference: "Amazing Grace", segments: [], lines: ["Amazing grace"] } as never
+    useBroadcastStore.setState({ isLive: true, liveVerse: song, liveSourceVerse: null })
+    useBibleStore.setState({ selectedVerse: verse(1, 43, 3, 1), currentChapter: [verse(1, 43, 3, 1), verse(1, 43, 3, 2)] })
+    await stepLiveVerse(1)
+    await flush()
+    expect(useBibleStore.getState().selectedVerse?.verse).toBe(2)
+    expect(useBroadcastStore.getState().liveVerse).toBe(song)
+  })
 })
+

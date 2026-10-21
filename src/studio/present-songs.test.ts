@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { presentActions } from "./present-actions"
 import { remoteActions } from "@/lib/remote-actions"
-import { presentSlide } from "@/hooks/use-broadcast"
+import { presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -179,6 +179,41 @@ describe("stepping through a song in the rundown", () => {
     await flush()
     expect(useBroadcastStore.getState().isLive).toBe(true)
     expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+  })
+
+  it("Restore brings back what was cleared, even after a verse was clicked meanwhile; Next carries on in the song", async () => {
+    useQueueStore.setState({ items: [songItem()] })
+    presentActions.next()
+    await flush()
+    presentActions.next()
+    await flush()
+    presentActions.clear()
+    await presentVerse({ id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "t" }) // browsing, off air
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    presentActions.restore()
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(1)
+    presentActions.clear()
+    await presentVerse({ id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "t" })
+    presentActions.next()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+  })
+
+  it("a quick screen during a song: Next and Previous carry on in the song", async () => {
+    useQueueStore.setState({ items: [songItem()] })
+    presentActions.next()
+    await flush()
+    presentActions.next()
+    await flush()
+    presentActions.quickScreen("stand")
+    presentActions.next()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+    presentActions.quickScreen("pray")
+    presentActions.prev()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(1)
   })
 
   it("Show live presents the previewed slide and marks the item active", async () => {

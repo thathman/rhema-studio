@@ -1,3 +1,4 @@
+import { approvalHolds } from "@/stores/approval-gate-store"
 import { presentQueueItem, remoteActions } from "@/lib/remote-actions"
 import { bibleActions } from "@/hooks/use-bible"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
@@ -67,7 +68,11 @@ export const presentActions = {
   quickScreen: (screen: QuickScreen) => presentQuickScreen(screen),
   /** Return to what was live before the quick screen. */
   back: () => {
-    useBroadcastStore.getState().releaseHeld()
+    const b = useBroadcastStore.getState()
+    const held = b.heldLive
+    // Back puts the held content on air: a go-live like any other (CL-002 gate).
+    if (held && held.wasLive && b.isLive && !held.liveVerse.screen && !held.liveVerse.quick && approvalHolds(() => presentActions.back())) return
+    b.releaseHeld()
   },
   canGoBack: () => useBroadcastStore.getState().heldLive !== null,
   clear: () => remoteActions.toggleOnAir(false),
@@ -76,6 +81,6 @@ export const presentActions = {
   },
   canRestore: () => {
     const s = useBroadcastStore.getState()
-    return !s.isLive && s.liveVerse !== null
+    return !s.isLive && (s.cleared !== null || s.liveVerse !== null)
   },
 }

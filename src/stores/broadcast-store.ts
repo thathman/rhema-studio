@@ -70,6 +70,8 @@ interface BroadcastState {
   liveItemId: string | null
   /** Set while a quick screen is up; what Back returns to. */
   heldLive: HeldLive | null
+  /** What Clear took off air; Restore brings exactly this back (browsing meanwhile does not change it). */
+  cleared: HeldLive | null
   /** Private note shown on stage outputs only. Not persisted. */
   stageMessage: string
   /** The lower third on air (outputs with lowerThirds on), or null. Session state; not saved. */
@@ -359,6 +361,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveSlide: null,
   liveItemId: null,
   heldLive: null,
+  cleared: null,
   stageMessage: "",
   lowerThird: null,
   outputFrames: {},
@@ -585,7 +588,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       return { outputStatus: { ...s.outputStatus, [id]: { ...prev, ndiError } } }
     }),
   setLive: (isLive) => {
-    set({ isLive })
+    const s = get()
+    if (!isLive && s.isLive && s.liveVerse) {
+      set({ isLive, cleared: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: true } })
+    } else if (isLive && !s.isLive && s.cleared) {
+      const c = s.cleared
+      set({ isLive, cleared: null, liveVerse: c.liveVerse, liveSourceVerse: c.liveSourceVerse, liveItem: c.liveItem, liveSlide: c.liveSlide, liveItemId: c.liveItemId })
+    } else set({ isLive, ...(isLive ? { cleared: null } : {}) })
     get().syncBroadcastOutput()
   },
   setLiveVerse: (liveVerse, source = null, opts = {}) => {
@@ -597,7 +606,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       liveItemId: opts.itemId ?? opts.slide?.itemId ?? null,
       heldLive: opts.keepHeld ? get().heldLive : null,
       presentWarning: null,
-      ...(opts.goLive ? { isLive: true } : {}),
+      ...(opts.goLive ? { isLive: true, cleared: null } : {}),
     })
     get().syncBroadcastOutput()
   },
@@ -630,7 +639,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       liveSlide: held.liveSlide,
       liveItemId: held.liveItemId,
       heldLive: null,
-      isLive: held.wasLive,
+      cleared: null,
+      // Cleared while the quick screen was up: the content comes back, still off air.
+      isLive: held.wasLive && get().isLive,
     })
     get().syncBroadcastOutput()
     return true
