@@ -429,4 +429,14 @@ describe("createFromRundown", () => {
     expect(useServiceStore.getState().current).toBeNull()
     expect(writes).toEqual(["content_create_program"])
   })
+
+  it("saves and reopens an item's end-by time; a bad one is dropped", () => {
+    const v: VerseQueueItem = { id: "e1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, end_by: "12:15", planned_minutes: 20 }
+    const [input] = toItemInputs([v, { ...v, id: "e2", end_by: "9:99" }])
+    expect(JSON.parse(input.payload ?? "{}")).toMatchObject({ end_by: "12:15", planned_minutes: 20 })
+    expect(JSON.parse(toItemInputs([{ ...v, end_by: "9:99" }])[0].payload ?? "{}").end_by).toBeUndefined()
+    const reopened = toQueueItems({ program, items: [item("e1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
+    expect(reopened.items[0].end_by).toBe("12:15")
+    expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, end_by: "12:30" }]))
+  })
 })

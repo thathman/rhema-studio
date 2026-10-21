@@ -559,3 +559,9 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10az.1 | Prepare → Slides → Responsive reading; paste Psalm 136:1–3 with L: and P: marks; Add. | One slide per exchange, each reading "Leader: …" then "All: …"; Next steps through them in order. | Unverified |
 | 10az.2 | Paste the same text without marks. | The composer says no parts are marked and how to mark them. | Unverified |
+
+### 10ba. End-by time for an item (FR-07)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ba.1 | Prepare: give the sermon item "end by" 3 minutes from now; save, reopen. Present it. | The rundown shows "by HH:MM"; the time survives reopening; the timer chip shows "by HH:MM · 3 min", amber at 2 minutes, red "past HH:MM by 1 min" after. | Unverified |

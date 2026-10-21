@@ -3,7 +3,7 @@ import type { ProgramWithItems, VerseQueueItem } from "@/types"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }))
 
-import { formatMinutes, plannedTotalMs, projectedEnd, timingSummary } from "./service-timing"
+import { endByLeftMs, formatMinutes, plannedTotalMs, projectedEnd, timingSummary } from "./service-timing"
 import { rundownSignature, toItemInputs, toQueueItems } from "@/stores/service-store"
 
 const item = (id: string, minutes: number | null): VerseQueueItem => ({
@@ -44,5 +44,15 @@ describe("service timing", () => {
       expectedEnd: now - 35 * 60_000 + 95 * 60_000,
     })
     expect(projectedEnd({ totalMs: 0, plannedSoFarMs: 0, behindMs: null }, 0, now)).toBeNull()
+  })
+
+  it("counts down to an item's end-by clock time on the same day", () => {
+    const now = new Date(2026, 9, 25, 12, 5, 30).getTime()
+    expect(endByLeftMs("12:15", now)).toBe(9.5 * 60_000)
+    expect(endByLeftMs("12:00", now)).toBe(-5.5 * 60_000)
+    expect(endByLeftMs("25:00", now)).toBeNull()
+    expect(endByLeftMs("00:10", new Date(2026, 9, 25, 23, 55).getTime())).toBe(15 * 60_000)
+    expect(endByLeftMs("23:55", new Date(2026, 9, 26, 0, 5).getTime())).toBe(-10 * 60_000)
+    expect(endByLeftMs(null, now)).toBeNull()
   })
 })
