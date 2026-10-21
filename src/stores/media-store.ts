@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { invoke } from "@tauri-apps/api/core"
+import { invoke, convertFileSrc } from "@tauri-apps/api/core"
 import { open } from "@tauri-apps/plugin-dialog"
 import { readFile } from "@tauri-apps/plugin-fs"
 import type { MediaAssetStatus, MediaImportResult } from "@/types"
@@ -20,6 +20,8 @@ interface MediaState {
   remove: (id: string) => Promise<void>
   /** The picture as a data URL (read from the media folder, cached). Null when missing. */
   dataUrl: (id: string) => Promise<string | null>
+  /** Streamed URL for a video (asset protocol); never reads the file into memory. Null when missing. */
+  fileUrl: (id: string) => Promise<string | null>
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -92,12 +94,20 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     })
   },
 
+  fileUrl: async (id) => {
+    let asset = get().assets.find((a) => a.id === id)
+    if (!asset) asset = (await get().list()).find((a) => a.id === id)
+    if (!asset || !asset.present) return null
+    return convertFileSrc(asset.path)
+  },
+
   dataUrl: async (id) => {
     const cached = get().urls[id]
     if (cached) return cached
     let asset = get().assets.find((a) => a.id === id)
     if (!asset) asset = (await get().list()).find((a) => a.id === id)
-    if (!asset || !asset.present) return null
+    // Videos stream through fileUrl; reading one whole into a data URL would stall the app.
+    if (!asset || !asset.present || asset.kind !== "image") return null
     try {
       const bytes = await readFile(asset.path)
       const url = `data:${asset.mime};base64,${toBase64(bytes)}`

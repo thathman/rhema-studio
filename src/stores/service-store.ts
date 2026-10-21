@@ -108,7 +108,7 @@ export function toItemInputs(
           translation: null,
           secondary_translation: null,
           notes: i.notes ?? null,
-          payload: JSON.stringify({ media_id: i.image.media_id, fit: i.image.fit, ...bg(i) } satisfies ImageItemPayload & { background_media_id?: string }),
+          payload: JSON.stringify({ media_id: i.image.media_id, fit: i.image.fit, ...(i.image.loop ? { loop: true } : {}), ...(i.image.sound === false ? { sound: false } : {}), ...bg(i) } satisfies ImageItemPayload & { background_media_id?: string }),
         }
       : isSlideItem(i)
       ? {
@@ -179,13 +179,13 @@ export function parseBackground(raw: string | null | undefined): { media_id: str
 }
 
 /** The picture payload of a stored item, or null when it is not well-formed. */
-export function parseImagePayload(raw: string | null | undefined): { media_id: string; fit: "cover" | "contain" | "stretch" } | null {
+export function parseImagePayload(raw: string | null | undefined): { media_id: string; fit: "cover" | "contain" | "stretch"; loop?: boolean; sound?: boolean } | null {
   if (!raw) return null
   try {
     const p = JSON.parse(raw) as Partial<ImageItemPayload>
     if (typeof p.media_id !== "string" || !p.media_id) return null
     const fit = p.fit === "contain" || p.fit === "stretch" ? p.fit : "cover"
-    return { media_id: p.media_id, fit }
+    return { media_id: p.media_id, fit, ...(p.loop === true ? { loop: true } : {}), ...(p.sound === false ? { sound: false } : {}) }
   } catch {
     return null
   }
@@ -256,7 +256,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload) })
       continue
     }
     if (it.kind === "slide") {

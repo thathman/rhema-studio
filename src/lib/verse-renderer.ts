@@ -507,6 +507,42 @@ function drawBackground(
  * background and every surface fill, so a picture behaves the same wherever it
  * is used. While the image is still loading a deterministic flat fill stands in.
  */
+/** Draw a video frame into `rect` with the item's fit (cover crops, contain letterboxes, stretch fills). */
+function drawVideoFrame(ctx: CanvasRenderingContext2D, el: HTMLVideoElement, rect: VerseLayoutRect, fit: "cover" | "contain" | "stretch"): void {
+  const vw = el.videoWidth
+  const vh = el.videoHeight
+  if (fit === "stretch") {
+    ctx.drawImage(el, rect.x, rect.y, rect.width, rect.height)
+    return
+  }
+  const scale = fit === "cover" ? Math.max(rect.width / vw, rect.height / vh) : Math.min(rect.width / vw, rect.height / vh)
+  const w = vw * scale
+  const h = vh * scale
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(rect.x, rect.y, rect.width, rect.height)
+  ctx.clip()
+  if (fit === "contain") {
+    ctx.fillStyle = "#000"
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  }
+  ctx.drawImage(el, rect.x + (rect.width - w) / 2, rect.y + (rect.height - h) / 2, w, h)
+  ctx.restore()
+}
+
+/** A plain label in the middle of the frame (a video seen from a canvas that cannot play it). */
+function drawMediaLabel(ctx: CanvasRenderingContext2D, rect: VerseLayoutRect, text: string): void {
+  ctx.save()
+  ctx.fillStyle = "rgba(0,0,0,0.55)"
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
+  ctx.fillStyle = "#ffffff"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.font = `600 ${Math.round(rect.height / 18)}px system-ui, sans-serif`
+  ctx.fillText(text, rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width * 0.9)
+  ctx.restore()
+}
+
 function drawImageFill(
   ctx: CanvasRenderingContext2D,
   image: ThemeImageFill | null,
@@ -1513,6 +1549,17 @@ function renderVerseImpl(
 
   // Draw background
   drawBackground(ctx, scaledTheme, metrics.backgroundRect, options?.imageCache)
+
+  // A video item covers the frame: its current frame where this canvas has the
+  // playing element (output windows), else "▶ name" (the main window's monitors).
+  if (verse?.video) {
+    const frame = { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }
+    const el = options?.video
+    if (el && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0) drawVideoFrame(ctx, el, frame, verse.video.fit)
+    else drawMediaLabel(ctx, frame, `▶ ${verse.video.name}`)
+    ctx.restore()
+    return metrics
+  }
 
   // A picture item covers the frame; with no text at all, nothing else is drawn.
   if (verse?.image) {

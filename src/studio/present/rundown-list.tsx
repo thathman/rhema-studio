@@ -198,8 +198,16 @@ function MissingMediaMark({ mediaId }: { mediaId: string }) {
 
 /** Prepare-only: how the picture fills the screen. */
 function ImageItemControls({ item }: { item: ImageQueueItem }) {
+  const isVideo = useMediaStore((s) => s.assets.find((a) => a.id === item.image.media_id)?.kind === "video")
+  const setImage = (patch: Partial<ImageQueueItem["image"]>) => useQueueStore.getState().updateItem(item.id, (i) => (isImageItem(i) ? { ...i, image: { ...i.image, ...patch } } : i))
   return (
-    <div className="ml-7 flex items-center gap-2 py-1 pl-2 text-xs">
+    <div className="ml-7 flex flex-wrap items-center gap-2 py-1 pl-2 text-xs">
+      {isVideo && (
+        <>
+          <label className="flex items-center gap-1"><input type="checkbox" checked={item.image.loop === true} onChange={(e) => setImage({ loop: e.target.checked })} /> Loop</label>
+          <label className="flex items-center gap-1" title="Sound plays from the main output only"><input type="checkbox" checked={item.image.sound !== false} onChange={(e) => setImage({ sound: e.target.checked })} /> Sound</label>
+        </>
+      )}
       <span className="text-muted-foreground">Fit</span>
       <Select value={item.image.fit} onValueChange={(v) => useQueueStore.getState().updateItem(item.id, (i) => (isImageItem(i) ? { ...i, image: { ...i.image, fit: v as ImageQueueItem["image"]["fit"] } } : i))}>
         <SelectTrigger className="h-6 w-32 text-xs" aria-label="Picture fit"><SelectValue /></SelectTrigger>
@@ -216,10 +224,11 @@ function ImageItemControls({ item }: { item: ImageQueueItem }) {
 /** Prepare-only: a library picture behind this item's text. */
 function BackgroundPicker({ item }: { item: QueueItem }) {
   const assets = useMediaStore((s) => s.assets)
-  const loaded = useMediaStore((s) => s.assets.length > 0 || s.loading)
+  const loaded = useMediaStore((s) => s.loaded)
+  const loading = useMediaStore((s) => s.loading)
   useEffect(() => {
-    if (!loaded) void useMediaStore.getState().list()
-  }, [loaded])
+    if (!loaded && !loading) void useMediaStore.getState().list()
+  }, [loaded, loading])
   const pictures = assets.filter((a) => a.kind === "image" && a.present)
   if (pictures.length === 0 && !item.background) return null
   return (

@@ -369,3 +369,13 @@ report), but launching it cannot.
 | 10aa.2 | Make the sender work again (restore the runtime, turn the output on). | "NDI is sending again"; the readiness line clears. A second failure within a minute does not auto-restart again. | Unverified |
 | 10aa.3 | Close OBS while NDI is on. | Nothing changes on the laptop (the sender keeps sending); reopening OBS picks the source up. | Unverified |
 | 10aa.4 | NDI output on, OBS closed; then open OBS and add the source; then close OBS. | Home outputs line reads "Stream · on · stream · nobody receiving yet (open the source in OBS)", then "· 1 receiving", then back to "nobody receiving yet" within a second or two of each change (while the Outputs dialog or Home is open). | Unverified |
+
+### 10ab. Video items (MD-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ab.1 | Prepare → Pictures → "Import pictures or videos…" an MP4 (H.264/AAC). Add it to the service; the library tile shows its first frame with ▶. | Imported once (same hash = no copy); Program preview shows "▶ name" (video plays only on outputs). | Unverified |
+| 10ab.2 | Main projector output and a second display output on. Show the video live. | It plays on both screens, smoothly, filling as the Fit says; sound comes from the main output only; Next moves on and the video stops; Clear stops it; Restore starts it again from the beginning. | Unverified |
+| 10ab.3 | Loop on → it repeats; Loop off → it holds the last frame. Sound off → silent everywhere. Save, reopen the service: both settings kept. | As described. | Unverified |
+| 10ab.4 | NDI output on, received in OBS, video live. | OBS shows the video moving at the NDI rate (not one frame every two seconds); no audio over NDI (not implemented). Note if a hidden NDI window throttles timers on this OS. | Unverified |
+| 10ab.5 | Delete the video file from the media folder, then show it live; separately, import a file the webview cannot decode (e.g. HEVC on Windows without the codec). | Missing: warning, the screen keeps what it had. Undecodable: that screen shows "▶ name", Present shows "could not play … Try an MP4 (H.264) file." | Unverified |

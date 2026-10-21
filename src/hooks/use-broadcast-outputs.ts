@@ -81,9 +81,17 @@ export function useBroadcastOutputs(): void {
       toast.success(`${output.name}: NDI is sending again`)
     })
 
+    // An output could not play a video (unsupported codec, unreadable file): say so once.
+    const unlistenMedia = listen<{ outputId?: string; name?: string }>("broadcast:media-error", (event) => {
+      const output = useBroadcastStore.getState().outputs.find((o) => o.id === event.payload?.outputId)
+      const message = `${event.payload?.name ?? "The video"} could not play${output ? ` on ${output.name}` : ""}; that screen shows its name instead. Try an MP4 (H.264) file.`
+      useBroadcastStore.getState().setPresentWarning(message)
+    })
+
     return () => {
       for (const id of timeouts) clearTimeout(id)
       void unlistenPromise.then((unlisten) => unlisten())
+      void unlistenMedia.then((unlisten) => unlisten())
       void unlistenTrouble.then((unlisten) => unlisten())
       void unlistenRecovered.then((unlisten) => unlisten())
     }

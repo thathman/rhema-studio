@@ -3,7 +3,7 @@ import { PanelHeader } from "@/components/ui/panel-header"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
-import { toCustomSlideRenderData, toImageRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
+import { toCustomSlideRenderData, toImageRenderData, toVideoRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
 import { isImageItem, isSlideItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
@@ -15,9 +15,10 @@ export function PreviewPanel() {
   const previewSongId = selectedSlide && isSongItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
   const previewMediaId = selectedSlide && isImageItem(selectedSlide.item) ? selectedSlide.item.image.media_id : null
   const previewUrl = useMediaStore((s) => (previewMediaId ? s.urls[previewMediaId] : undefined))
+  const previewIsVideo = useMediaStore((s) => (previewMediaId ? s.assets.find((a) => a.id === previewMediaId)?.kind === "video" : false))
   useEffect(() => {
-    if (previewMediaId && !previewUrl) void useMediaStore.getState().dataUrl(previewMediaId)
-  }, [previewMediaId, previewUrl])
+    if (previewMediaId && !previewUrl && !previewIsVideo) void useMediaStore.getState().dataUrl(previewMediaId)
+  }, [previewMediaId, previewUrl, previewIsVideo])
   const previewSong = useSongStore((s) => (previewSongId ? s.songs[previewSongId] : undefined))
   useEffect(() => {
     if (previewSongId && !previewSong) void useSongStore.getState().load(previewSongId).catch(() => {})
@@ -55,7 +56,8 @@ export function PreviewPanel() {
 
   let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
   if (selectedSlide && isImageItem(selectedSlide.item)) {
-    verseData = previewUrl ? toImageRenderData(selectedSlide.item, previewUrl) : null
+    // A video previews as "▶ name"; it plays only on the outputs.
+    verseData = previewIsVideo ? toVideoRenderData(selectedSlide.item, "") : previewUrl ? toImageRenderData(selectedSlide.item, previewUrl) : null
   } else if (selectedSlide && isSlideItem(selectedSlide.item)) {
     verseData = toCustomSlideRenderData(selectedSlide.item)
   } else if (selectedSlide && isSongItem(selectedSlide.item)) {

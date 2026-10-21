@@ -1,3 +1,5 @@
+import { createVideoPlayer, type VideoPlayer } from "@/lib/output-video"
+import { MAIN_OUTPUT_ID } from "@/types/broadcast-output"
 import { emitTo } from "@tauri-apps/api/event"
 import { initialNdiHealth, pushOutcome } from "@/lib/ndi-health"
 import { createRoot } from "react-dom/client"
@@ -34,6 +36,10 @@ const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "
 // Tell the main window when the NDI stream dies on the network (a few pushes
 // failing in a row) and when it comes back, so the operator sees it and the
 // app can restart the sender. The pump itself keeps trying.
+// One output window is one page, so its video player lives at module level
+// (created and disposed with the window's listeners).
+let videoPlayer: VideoPlayer | null = null
+
 let ndiHealth = initialNdiHealth()
 function reportNdi(ok: boolean, message: string): void {
   const r = pushOutcome(ndiHealth, ok)
@@ -93,6 +99,7 @@ function BroadcastCanvas() {
     const result = renderVerse(ctx, theme, verse, {
       scale: 1,
       imageCache: themeImageCache(),
+      video: videoPlayer?.element() ?? null,
     })
     if (!result) {
       ctx.fillStyle = "#000"
@@ -192,8 +199,27 @@ function BroadcastCanvas() {
 
     const currentWindow = getCurrentWebviewWindow()
     logDebug("Listener registration started", { label: currentWindow.label })
+    const player = createVideoPlayer({
+      onFrame: () => {
+        draw()
+        if (ndiConfigRef.current.active) void pushNdiFrame()
+      },
+      onEnded: () => {
+        draw()
+        pushNdiBurst()
+      },
+      onError: (name) => {
+        console.warn("[broadcast-output] video failed to play:", name)
+        void currentWindow.emitTo("main", "broadcast:media-error", { outputId: OUTPUT_ID, name }).catch(() => {})
+        draw()
+      },
+      allowSound: OUTPUT_ID === MAIN_OUTPUT_ID,
+      fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
+    })
+    videoPlayer = player
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
       if (event.payload.role === "stage") {
+        videoPlayer?.sync(undefined)
         setStage(event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null, band: null })
         return
       }
@@ -202,6 +228,7 @@ function BroadcastCanvas() {
         ...event.payload,
         theme: normalizeTheme(event.payload.theme),
       }
+      videoPlayer?.sync(event.payload.verse?.video)
       preloadThemeAssets(event.payload.theme)
       if (event.payload.verse?.image?.url) void loadThemeImage(event.payload.verse.image.url).then(() => { draw(); pushNdiBurstRef.current?.() })
       logDebug("Received broadcast:verse-update", {
@@ -253,6 +280,8 @@ function BroadcastCanvas() {
     })
 
     return () => {
+      player.dispose()
+      videoPlayer = null
       unsubscribeFonts()
       unlisten.then((fn) => fn())
       unlistenNdiConfig.then((fn) => fn())

@@ -281,6 +281,10 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
   return "presented"
 }
 
+export function toVideoRenderData(item: ImageQueueItem, url: string): VerseRenderData {
+  return { kind: "image", reference: "", segments: [], video: { url, fit: item.image.fit, loop: item.image.loop === true, sound: item.image.sound !== false, name: item.image.name } }
+}
+
 export function toImageRenderData(item: ImageQueueItem, url: string): VerseRenderData {
   return { kind: "image", reference: "", segments: [], image: { url, fit: item.image.fit, blur: 0, brightness: 100, tint: null } }
 }
@@ -293,6 +297,20 @@ export function toImageRenderData(item: ImageQueueItem, url: string): VerseRende
 export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
   presentSeq += 1
   const ticket = presentSeq
+  // A video asset streams to the outputs; nothing is decoded here.
+  const media = useMediaStore.getState()
+  const asset = media.assets.find((a) => a.id === item.image.media_id) ?? (await media.list()).find((a) => a.id === item.image.media_id)
+  if (asset?.kind === "video") {
+    const videoUrl = asset.present ? await media.fileUrl(asset.id).catch(() => null) : null
+    if (ticket !== presentSeq) return "superseded"
+    if (!videoUrl) {
+      useBroadcastStore.getState().setPresentWarning(`${item.image.name} not shown: the video file is missing from the media folder.`)
+      return "empty"
+    }
+    useBibleStore.getState().selectSlide({ item, index: 0 })
+    useBroadcastStore.getState().setLiveVerse(toVideoRenderData(item, videoUrl), null, { goLive: opts.goLive, itemId: item.id })
+    return "presented"
+  }
   let url: string | null = null
   try {
     url = await useMediaStore.getState().dataUrl(item.image.media_id)
