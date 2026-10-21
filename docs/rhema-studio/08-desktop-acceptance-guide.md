@@ -514,3 +514,10 @@ report), but launching it cannot.
 | 10at.1 | Start this build over settings from an older build that had a Deepgram key, a remote key and an OBS password. Open `settings.json` in the app data folder. | The three values are empty in the file and `secretsInKeychain` is `true`; Windows Credential Manager (Generic credentials) / macOS Keychain Access shows one "Rhema Studio" entry (`settings-secrets`). The values still work (OBS connects, remote key accepted). On macOS after an update, at most one keychain permission prompt. | Unverified |
 | 10at.2 | Restart Rhema. | Everything still works without re-entering anything. | Unverified |
 | 10at.3 | Settings → Diagnostics → Save logs after a session that logged an error mentioning the remote key. | The key appears as [redacted]. | Unverified |
+
+### 10au. Projected end and timer correction (FR-07)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10au.1 | Give three items 10 planned minutes each; start the timer and present the first item; wait 12 minutes and present the second. | The timer popover shows "Planned end" 30 minutes after the start and "now about" 2 minutes later, in red; the chip says "2 min late". | Unverified |
+| 10au.2 | Press "+1 min" then "−1 min"; save the service log. | Elapsed time moves by a minute each way (never below zero); the log has two "timer" lines. | Unverified |

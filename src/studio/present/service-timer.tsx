@@ -5,10 +5,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { elapsedMs, formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores"
-import { formatMinutes, timingSummary } from "@/lib/service-timing"
+import { formatMinutes, projectedEnd, timingSummary } from "@/lib/service-timing"
 
 const PRESETS = [20, 30, 45, 60]
+// Wall-clock time for showing end times, anchored once to the monotonic clock the timer runs on.
+const WALL_AT_MONO_ZERO = Date.now() - monotonicNow()
+/** Manual timing correction, with its line in the service log (FR-07 "with audit"). */
+function correct(minutes: number) {
+  useTimerStore.getState().adjustMinutes(minutes)
+  useJournalStore.getState().add({ kind: "timing", label: `timer corrected by ${minutes > 0 ? "+" : "−"}${Math.abs(minutes)} min` })
+}
+
+const clock = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
 
 /**
  * The service timer, in the Present header: counts the sermon or the whole
@@ -27,6 +37,7 @@ export function ServiceTimer() {
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const plan = timingSummary(items, idle ? null : activeIndex, elapsedMs(timer, now))
   const behind = plan.behindMs === null ? null : Math.round(plan.behindMs / 60_000)
+  const ends = projectedEnd(plan, elapsedMs(timer, now), WALL_AT_MONO_ZERO + now)
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -79,6 +90,20 @@ export function ServiceTimer() {
           )}
           <Button size="sm" variant="ghost" disabled={idle} onClick={() => useTimerStore.getState().reset()}><RotateCcwIcon /> Reset</Button>
           <span className="ml-auto text-xs text-muted-foreground tabular-nums">{formatMs(elapsedMs(timer, now))} elapsed</span>
+        </div>
+        {ends && (
+          <p className="mt-2 text-xs tabular-nums">
+            Planned end {clock(ends.plannedEnd)}
+            {Math.abs(ends.expectedEnd - ends.plannedEnd) >= 60_000 && (
+              <span className={cn("font-semibold", ends.expectedEnd > ends.plannedEnd ? "text-destructive" : "text-confidence-high")}> · now about {clock(ends.expectedEnd)}</span>
+            )}
+          </p>
+        )}
+        <div className="mt-2 flex items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground">Correct the timer</span>
+          <Button size="xs" variant="outline" disabled={idle} onClick={() => correct(-1)}>−1 min</Button>
+          <Button size="xs" variant="outline" disabled={idle} onClick={() => correct(1)}>+1 min</Button>
+          <span className="text-muted-foreground">(noted in the service log)</span>
         </div>
       </PopoverContent>
     </Popover>

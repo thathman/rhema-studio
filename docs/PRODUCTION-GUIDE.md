@@ -59,6 +59,9 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 
 ## Timing and the stage
 
+The service timer (Present header) also shows, once items have planned minutes and the timer runs, the planned end time and, when the service is a minute or more off plan, when it now looks like ending ("Planned end 12:30 · now about 12:41"). If the timer was started late, "Correct the timer" moves it by a minute either way; each correction is a line in the service log.
+
+
 - **Timer**: monotonic (ignores clock changes); amber under two minutes, red when over. Planned minutes per item give "n min late/early".
 - **Message stage**: a framed banner on stage outputs only. Clear it from the same control.
 - **Rehearsal**: freezes every output at what it shows; turn it off to push the current content everywhere.

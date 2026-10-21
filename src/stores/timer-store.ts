@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { idleTimer, pause, reset, setDuration, start, type TimerState } from "@/lib/timer"
+import { adjust, idleTimer, pause, reset, setDuration, start, type TimerState } from "@/lib/timer"
 
 /** The clock the engine runs on: monotonic, immune to wall-clock changes. */
 export const monotonicNow = (): number => (typeof performance !== "undefined" ? performance.now() : Date.now())
@@ -13,6 +13,8 @@ interface TimerStoreState {
   pause: () => void
   reset: () => void
   setDurationMinutes: (minutes: number) => void
+  /** Manual correction (FR-07); the caller records it in the service log (this store must not import the journal: import cycle). */
+  adjustMinutes: (minutes: number) => void
 }
 
 let ticker: ReturnType<typeof setInterval> | null = null
@@ -40,4 +42,7 @@ export const useTimerStore = create<TimerStoreState>((set, get) => ({
     ensureTicker(false)
   },
   setDurationMinutes: (minutes) => set({ timer: setDuration(get().timer, minutes * 60_000) }),
+  adjustMinutes: (minutes) => {
+    set({ timer: adjust(get().timer, minutes * 60_000, monotonicNow()) })
+  },
 }))
