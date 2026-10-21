@@ -20,6 +20,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Search and safety
+- Quick find accepts the Yorùbá Bible's book names, with or without accents ("Jòhánù 3:16", "1 Ọba 3:9").
+- macOS: Cmd+Q asks about unsaved service changes, like closing the window.
+
 ### Services
 - Optional: ask before the first go-live of a service that is not approved (More; off by default; never mid-service).
 - Items can say who is preparing them; History shows who saved each version.
