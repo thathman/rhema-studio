@@ -75,7 +75,7 @@ Found by reading PRD lines against the code (not by tests): no single-instance g
 | CV-002, CV-003, CV-006, CV-007 | Canva connection, export/import, Autofill, update checks | Owner: Canva token relay (#34; recurring cost, Canva-reviewed public integration) |
 | CL-001 | Roles and multi-user identity | Owner: who may present/approve (and the sync decision for remote users) |
 | CL-002 | "Approval required before go-live" | Owner: whether approval gates going live (project-vs-release default, PRD open decision) |
-| CL-005, CL-006 | Shared-folder delivery merged (#126). Presence, hosted sync | Decided (#72): hosted sync is a later, optional step |
+| CL-005, CL-006 | Shared-folder delivery merged (#126). Hosted sync designed (doc 20) | Owner: hosting option (own computer, rented VPS, or vendor) and whether to encrypt packages |
 | CL-007 | Team assignments and comments | Needs hosted sync (later, per #72) |
 | SG-003 | Giving/prayer action links | Owner: which external systems |
 | AR-004, AI-001, AI-002 | Opt-in transcription, AI provider abstraction, suggestions | Owner: speech/AI provider (PR #4) and archive consent/retention (PRD open decision) |
