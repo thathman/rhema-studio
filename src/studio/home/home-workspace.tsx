@@ -45,6 +45,7 @@ export function HomeWorkspace() {
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
   const missingTranslations = useServiceStore((s) => s.missingTranslations)
+  const overrideTranslations = useBibleStore((s) => s.overrideServiceTranslations)
   const unsupportedItems = useServiceStore((s) => s.unsupportedItems)
   const suggested = todaysService(programs, localDate())
   const monitorCount = useMonitorStore((s) => s.count)
@@ -112,7 +113,8 @@ export function HomeWorkspace() {
     contentError,
     // Unsaved edits change an approved service; a service never approved stays "not approved yet".
     approval: current ? (dirty && approvalState(current) !== "none" ? "changed" : approvalState(current)) : undefined,
-    missingTranslations,
+    // With "Use my translation" on, those verses show in the operator's translation.
+    missingTranslations: overrideTranslations ? [] : missingTranslations,
     unsupportedItems: unsupportedItems.length,
     signage: outputs
       .filter((o) => o.role === "signage")
