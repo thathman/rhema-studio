@@ -104,7 +104,7 @@ export function toItemInputs(
     ...(i.background ? { background_media_id: i.background.media_id } : {}),
     ...(typeof i.planned_minutes === "number" && i.planned_minutes > 0 ? { planned_minutes: i.planned_minutes } : {}),
     ...(i.end_by && isClockTime(i.end_by) ? { end_by: i.end_by } : {}),
-    ...(i.prepared_by?.trim() ? { prepared_by: i.prepared_by.trim().slice(0, 60) } : {}),
+    ...(cleanName(i.prepared_by) ? { prepared_by: cleanName(i.prepared_by) } : {}),
   })
   return items.map((i): ItemInput =>
     isImageItem(i)
@@ -169,12 +169,23 @@ export function toItemInputs(
 /** 24-hour "HH:MM". */
 export const isClockTime = (t: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)
 
+/**
+ * A short name as the crate accepts it: control characters (a pasted tab)
+ * become spaces, runs of space collapse, and it is cut at 60 whole
+ * characters (never half an emoji).
+ */
+export function cleanName(raw: string | null | undefined): string {
+  if (!raw) return ""
+  // eslint-disable-next-line no-control-regex
+  return Array.from(raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim()).slice(0, 60).join("").trim()
+}
+
 /** `prepared_by` from any item's payload (CL-007). */
 export function parsePreparedBy(raw: string | null | undefined): string | null {
   if (!raw) return null
   try {
     const p = JSON.parse(raw) as { prepared_by?: unknown }
-    return typeof p.prepared_by === "string" && p.prepared_by.trim() ? p.prepared_by.trim().slice(0, 60) : null
+    return typeof p.prepared_by === "string" ? cleanName(p.prepared_by) || null : null
   } catch {
     return null
   }

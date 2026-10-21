@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }))
 
-import { useServiceStore, toItemInputs, toQueueItems, rundownSignature } from "./service-store"
+import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanName } from "./service-store"
 import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
@@ -447,5 +447,7 @@ describe("createFromRundown", () => {
     const reopened = toQueueItems({ program, items: [item("o1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
     expect(reopened.items[0].prepared_by).toBe("Tolu (music)")
     expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, prepared_by: "Ade" }]))
+    expect(cleanName("Tolu\tMusic\n")).toBe("Tolu Music")
+    expect(Array.from(cleanName("a" + "😀".repeat(80)))).toHaveLength(60)
   })
 })
