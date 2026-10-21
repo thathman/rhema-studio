@@ -461,7 +461,18 @@ const activeTranslations = (): ActiveTranslations => {
  * the removed item's neighbours and the service log. A go-live waiting for
  * approval, or still loading, belongs to the old service and is dropped.
  */
-async function renewItemIds(): Promise<void> {
+async function idHolders() {
+  // Imported when needed: these modules import this one.
+  const [{ remapJournalItemIds }, { useApprovalGateStore }, { cancelPendingPresents }] = await Promise.all([
+    import("@/stores/journal-store"),
+    import("@/stores/approval-gate-store"),
+    import("@/hooks/use-broadcast"),
+  ])
+  return { remapJournalItemIds, useApprovalGateStore, cancelPendingPresents }
+}
+
+/** Synchronous (after `idHolders`), so no save or edit can see half the ids renewed. */
+function renewItemIds(h: Awaited<ReturnType<typeof idHolders>>): void {
   const ids = new Map(useQueueStore.getState().items.map((i) => [i.id, crypto.randomUUID()]))
   const re = (id: string | null | undefined): string | null => (id ? (ids.get(id) ?? id) : null)
   const reSlide = <T extends { itemId: string }>(s: T | null): T | null => (s ? { ...s, itemId: re(s.itemId) ?? s.itemId } : null)
@@ -478,15 +489,9 @@ async function renewItemIds(): Promise<void> {
   })
   const sel = useBibleStore.getState().selectedSlide
   if (sel) useBibleStore.setState({ selectedSlide: { ...sel, item: { ...sel.item, id: ids.get(sel.item.id) ?? sel.item.id } } })
-  // Imported when needed: these stores import this one.
-  const [{ useJournalStore }, { useApprovalGateStore }, { cancelPendingPresents }] = await Promise.all([
-    import("@/stores/journal-store"),
-    import("@/stores/approval-gate-store"),
-    import("@/hooks/use-broadcast"),
-  ])
-  useJournalStore.setState((j) => ({ entries: j.entries.map((e) => (e.itemId ? { ...e, itemId: re(e.itemId) } : e)) }))
-  useApprovalGateStore.setState({ held: null, retry: null })
-  cancelPendingPresents()
+  h.remapJournalItemIds(re)
+  h.useApprovalGateStore.setState({ held: null, retry: null })
+  h.cancelPendingPresents()
 }
 
 export const useServiceStore = create<ServiceState>((set, get) => ({
@@ -528,12 +533,14 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   createFromRundown: async (title, serviceDate, opts) => {
     if (get().current && get().dirty && !opts?.discard) return "unsaved"
+    const holders = await idHolders()
     const program = await get().createProgram(title, serviceDate, { discard: true })
     if (!program) return "failed"
-    // Item ids are unique across services: items taken from another service (or copied) get new ones, or the save is refused.
-    await renewItemIds()
     baseline = "" // the rundown is not yet what the database has
     set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [], missingTranslations: [] })
+    // Item ids are unique across services: items taken from another service (or copied) get new ones, or the save is refused.
+    // In the same tick as the new service becoming current, so the original never looks changed.
+    renewItemIds(holders)
     remember(program.id)
     if (!get().dirty) return "created"
     const saved = await get().saveCurrent()

@@ -314,6 +314,8 @@ describe("saving", () => {
     expect(useBroadcastStore.getState().liveItemId).toBe(ids[1])
     expect(useJournalStore.getState().entries[0].itemId).toBe(ids[1])
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(ids[0])
+    // The original service is never written with the new ids.
+    expect(mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items").every((c) => (c[1] as { programId: string }).programId !== program.id)).toBe(true)
     useBroadcastStore.setState({ liveItemId: null })
     useBibleStore.setState({ selectedSlide: null })
     useJournalStore.getState().clear()
