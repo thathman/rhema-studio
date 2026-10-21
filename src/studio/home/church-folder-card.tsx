@@ -21,6 +21,7 @@ export function ChurchFolderCard() {
   const [entries, setEntries] = useState<FolderEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [scanning, setScanning] = useState(false)
 
   const refresh = useCallback(async (): Promise<{ entries: FolderEntry[] | null; error: string | null }> => {
     try {
@@ -67,7 +68,22 @@ export function ChurchFolderCard() {
     <section aria-labelledby="church-folder" className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex items-center gap-2">
         <h2 id="church-folder" className="flex flex-1 items-center gap-2 text-sm font-semibold"><FolderSyncIcon className="size-4" /> Church folder</h2>
-        <Button size="sm" variant="ghost" aria-label="Look in the church folder again" onClick={() => void refresh().then((r) => { setEntries(r.entries); setError(r.error) })}><RefreshCwIcon /></Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label="Look in the church folder again"
+          disabled={scanning}
+          onClick={() => {
+            setScanning(true)
+            void refresh().then((r) => {
+              setEntries(r.entries)
+              setError(r.error)
+              setScanning(false)
+            })
+          }}
+        >
+          <RefreshCwIcon />
+        </Button>
       </div>
       {error ? (
         <p className="text-xs text-confidence-mid">{error}</p>

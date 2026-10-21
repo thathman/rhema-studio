@@ -576,7 +576,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bc.1 | Home laptop and church laptop both choose the same NAS share (or synced folder) in More → Library. At home: save and approve a service; Prepare → Publish; Publish again. | One file "<title> <date> v<n>.rhema-service.json"; the second press says this version is already there. | Unverified |
+| 10bc.1 | Home laptop and church laptop both choose the same NAS share (or synced folder) in More → Library. At home: save and approve a service; Prepare → Publish; Publish again. | Before approving: one file "<title> <date> v<n> <checksum>.rhema-service.json". After approving and pressing Publish: a second file (the approval is new content). Pressing again: "already in the church folder". | Unverified |
 | 10bc.2 | At home: change the service, save, Publish. | A second file with the next version number; the first is untouched. | Unverified |
 | 10bc.3 | At church: Home → Church folder. | One row for the service: the newest version, "1 older version", "approved by …" for the approved one only if the newest is the approved revision. | Unverified |
 | 10bc.4 | Open it. | It opens in Prepare with its songs and pictures; it is not approved here until Approve is pressed; the row then says "opened here". Nothing happened before Open was pressed. | Unverified |

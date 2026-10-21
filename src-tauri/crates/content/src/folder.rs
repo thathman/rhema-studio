@@ -4,7 +4,9 @@
 //! no accounts, no server, and nothing is ever opened or replaced without
 //! the operator choosing it.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use serde::Serialize;
 
@@ -42,9 +44,13 @@ pub struct FolderEntry {
     pub error: Option<String>,
 }
 
-/// "Sunday Service 2026-10-25 v7.rhema-service.json": readable, sortable, and
-/// a new name for every saved revision, so publishing never overwrites.
-pub fn package_file_name(title: &str, service_date: Option<&str>, revision: i64) -> String {
+/// "Sunday Service 2026-10-25 v7 3f9a0c21b7d4.rhema-service.json": readable,
+/// sortable, and ending in the start of the content checksum, so every
+/// different content (a new revision, a new approval, the same title made
+/// on another computer) gets its own file and identical content is never
+/// written twice. Publishing never replaces a different file.
+pub fn package_file_name(title: &str, service_date: Option<&str>, revision: i64, sha256: &str) -> String {
+    let tag: String = sha256.chars().take(12).collect();
     let mut base: String = title
         .chars()
         .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { ' ' })
@@ -57,8 +63,8 @@ pub fn package_file_name(title: &str, service_date: Option<&str>, revision: i64)
     }
     base = base.chars().take(80).collect();
     match service_date {
-        Some(d) => format!("{base} {d} v{revision}{PACKAGE_SUFFIX}"),
-        None => format!("{base} v{revision}{PACKAGE_SUFFIX}"),
+        Some(d) => format!("{base} {d} v{revision} {tag}{PACKAGE_SUFFIX}"),
+        None => format!("{base} v{revision} {tag}{PACKAGE_SUFFIX}"),
     }
 }
 
@@ -90,23 +96,50 @@ fn read_package(path: &Path) -> std::result::Result<(ServicePackage, PackagePayl
 /// listed with the reason, never opened.
 pub fn list_church_folder(folder: &Path) -> Result<Vec<FolderEntry>> {
     let dir = folder_dir(folder)?;
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+    let paths: Vec<PathBuf> = std::fs::read_dir(dir)
         .map_err(|e| ContentError::Invalid(format!("cannot read the church folder: {e}")))?
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.is_file() && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.ends_with(PACKAGE_SUFFIX) && !n.starts_with('.')))
         .collect();
-    paths.sort();
-    paths.truncate(MAX_FILES);
-    let mut out: Vec<FolderEntry> = paths
+    let stamp = |p: &Path| -> (u64, i64) {
+        let m = std::fs::metadata(p).ok();
+        let modified = m
+            .as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|d| i64::try_from(d.as_secs()).ok())
+            .unwrap_or(0);
+        (m.map_or(0, |m| m.len()), modified)
+    };
+    // The newest files are kept when there are too many.
+    let mut stamped: Vec<(PathBuf, u64, i64)> = paths.into_iter().map(|p| { let (len, m) = stamp(&p); (p, len, m) }).collect();
+    stamped.sort_by_key(|s| std::cmp::Reverse(s.2));
+    stamped.truncate(MAX_FILES);
+    let cache = LIST_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut out: Vec<FolderEntry> = stamped
         .iter()
-        .map(|path| {
+        .map(|(path, len, modified)| {
+            // A file already read with the same size and time is not read again (a NAS full of video packages).
+            if let Some((l, m, e)) = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(path) {
+                if l == len && m == modified {
+                    return e.clone();
+                }
+            }
+            let entry = read_entry(path, *modified);
+            cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(path.clone(), (*len, *modified, entry.clone()));
+            entry
+        })
+        .collect();
+    out.sort_by(|a, b| b.modified.cmp(&a.modified).then_with(|| b.file_name.cmp(&a.file_name)));
+    Ok(out)
+}
+
+/// Entries already read, by path, with the size and time they had then.
+type ListCache = Mutex<HashMap<PathBuf, (u64, i64, FolderEntry)>>;
+static LIST_CACHE: OnceLock<ListCache> = OnceLock::new();
+
+fn read_entry(path: &Path, modified: i64) -> FolderEntry {
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
-            let modified = std::fs::metadata(path)
-                .and_then(|m| m.modified())
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .and_then(|d| i64::try_from(d.as_secs()).ok())
-                .unwrap_or(0);
             let base = FolderEntry {
                 path: path.to_string_lossy().into_owned(),
                 file_name: file_name.clone(),
@@ -135,41 +168,47 @@ pub fn list_church_folder(folder: &Path) -> Result<Vec<FolderEntry>> {
                 },
                 Err(error) => FolderEntry { error: Some(error), ..base },
             }
-        })
-        .collect();
-    out.sort_by(|a, b| b.modified.cmp(&a.modified).then_with(|| b.file_name.cmp(&a.file_name)));
-    Ok(out)
+}
+
+/// Write an exported package into the folder (no database needed, so the
+/// caller can release the database before the slow network write). The
+/// name carries the content checksum: the same name means the same content,
+/// so an existing file is left as it is.
+pub fn write_package_to_folder(folder: &Path, pkg: &ServicePackage) -> Result<PublishResult> {
+    let dir = folder_dir(folder)?;
+    let p: PackagePayload = serde_json::from_str(&pkg.payload).map_err(|e| ContentError::Invalid(e.to_string()))?;
+    let file_name = package_file_name(&p.title, p.service_date.as_deref(), p.revision.unwrap_or(0), &pkg.sha256);
+    let path = dir.join(&file_name);
+    if path.exists() {
+        return Ok(PublishResult { path: path.to_string_lossy().into_owned(), file_name, already: true });
+    }
+    let json = serde_json::to_vec(pkg).map_err(|e| ContentError::Invalid(e.to_string()))?;
+    // A hidden, unique temporary name, then rename: a reader (or a sync tool)
+    // never sees half a file, and two computers publishing at once never share
+    // a temporary file. A rename onto a same-named file replaces identical content.
+    let tmp = dir.join(format!(".{file_name}.{}.part", uuid::Uuid::new_v4().simple()));
+    let written = std::fs::write(&tmp, &json).and_then(|()| std::fs::rename(&tmp, &path));
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(ContentError::Invalid(format!("could not write to the church folder: {e}")));
+    }
+    Ok(PublishResult { path: path.to_string_lossy().into_owned(), file_name, already: false })
 }
 
 impl ContentDb {
-    /// Publish the saved service as a new versioned file in the folder. A
-    /// revision already there is not written again; nothing is overwritten.
+    /// Export and write in one call (tests and simple callers; the app's
+    /// command exports under the database lock and writes after releasing it).
     pub fn publish_to_church_folder(&self, program_id: &str, media_dir: &Path, folder: &Path) -> Result<PublishResult> {
-        let dir = folder_dir(folder)?;
-        let program = self.get_program(program_id)?.ok_or_else(|| ContentError::NotFound(program_id.into()))?.program;
-        let file_name = package_file_name(&program.title, program.service_date.as_deref(), program.revision);
-        let path = dir.join(&file_name);
-        if path.exists() {
-            return Ok(PublishResult { path: path.to_string_lossy().into_owned(), file_name, already: true });
-        }
+        folder_dir(folder)?;
         let pkg = self.export_service_package(program_id, media_dir)?;
-        let json = serde_json::to_vec(&pkg).map_err(|e| ContentError::Invalid(e.to_string()))?;
-        // Write under a hidden name first, then rename: a reader (or a sync
-        // tool) never sees a half-written file under the real name.
-        let tmp = dir.join(format!(".{file_name}.part"));
-        std::fs::write(&tmp, &json).map_err(|e| ContentError::Invalid(format!("could not write to the church folder: {e}")))?;
-        std::fs::rename(&tmp, &path).map_err(|e| {
-            let _ = std::fs::remove_file(&tmp);
-            ContentError::Invalid(format!("could not write to the church folder: {e}"))
-        })?;
-        Ok(PublishResult { path: path.to_string_lossy().into_owned(), file_name, already: false })
+        write_package_to_folder(folder, &pkg)
     }
 
     /// Open a file from the folder as a new service on this computer (checked before anything is written).
     pub fn open_from_church_folder(&self, folder: &Path, file_name: &str, media_dir: &Path) -> Result<PackageReport> {
         let dir = folder_dir(folder)?;
         // Only a plain file name inside the folder: never a path elsewhere on the computer.
-        if file_name.contains(['/', '\\']) || file_name.starts_with('.') || !file_name.ends_with(PACKAGE_SUFFIX) {
+        if file_name.contains(['/', '\\', ':', '\0']) || file_name.starts_with('.') || !file_name.ends_with(PACKAGE_SUFFIX) {
             return Err(ContentError::Invalid("not a service file in the church folder".into()));
         }
         let (pkg, _) = read_package(&dir.join(file_name)).map_err(|e| ContentError::Invalid(format!("{file_name}: {e}")))?;
@@ -190,9 +229,10 @@ mod tests {
 
     #[test]
     fn file_names_are_readable_versioned_and_safe() {
-        assert_eq!(package_file_name("Sunday Service", Some("2026-10-25"), 7), "Sunday Service 2026-10-25 v7.rhema-service.json");
-        assert_eq!(package_file_name("../Ìsìn: 9/11 *", None, 1), "Ìsìn 9 11 v1.rhema-service.json");
-        assert_eq!(package_file_name("???", None, 2), "Service v2.rhema-service.json");
+        let sha = "3f9a0c21b7d4e5f60718293a4b5c6d7e8f9012345678901234567890abcdef12";
+        assert_eq!(package_file_name("Sunday Service", Some("2026-10-25"), 7, sha), "Sunday Service 2026-10-25 v7 3f9a0c21b7d4.rhema-service.json");
+        assert_eq!(package_file_name("../Ìsìn: 9/11 *", None, 1, sha), "Ìsìn 9 11 v1 3f9a0c21b7d4.rhema-service.json");
+        assert_eq!(package_file_name("???", None, 2, sha), "Service v2 3f9a0c21b7d4.rhema-service.json");
     }
 
     #[test]
@@ -203,12 +243,24 @@ mod tests {
         let p = home.create_program("Sunday", Some("2026-10-25")).unwrap();
         let verse = ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), ..ItemInput::default() };
         let saved = home.replace_items(&p.id, p.revision, std::slice::from_ref(&verse)).unwrap();
-        // (The approver's name is the shared operator setting, tested in revisions.rs; not asserted here to stay parallel-safe.)
-        let approved = home.approve_program(&p.id, saved.program.revision).unwrap();
 
+        let unapproved = home.publish_to_church_folder(&p.id, &media_a, &folder).unwrap();
+        assert!(!unapproved.already);
+        // Approving does not change the revision, but it is new content: a new file.
+        let approved = home.approve_program(&p.id, saved.program.revision).unwrap();
         let first = home.publish_to_church_folder(&p.id, &media_a, &folder).unwrap();
         assert!(!first.already);
-        assert_eq!(home.publish_to_church_folder(&p.id, &media_a, &folder).unwrap(), PublishResult { already: true, ..first.clone() });
+        assert_ne!(first.file_name, unapproved.file_name);
+        assert_eq!(home.publish_to_church_folder(&p.id, &media_a, &folder).unwrap(), PublishResult { already: true, ..first.clone() }, "identical content is not written twice");
+        std::fs::remove_file(&unapproved.path).unwrap();
+        // Same title, date and revision made on another computer: its own file, never skipped.
+        let other = ContentDb::open_in_memory().unwrap();
+        let op = other.create_program("Sunday", Some("2026-10-25")).unwrap();
+        other.replace_items(&op.id, op.revision, &[ItemInput { reference: "Psalm 23".into(), book_number: Some(19), chapter: Some(23), verse: Some(1), ..verse.clone() }]).unwrap();
+        let theirs = other.publish_to_church_folder(&op.id, &media_a, &folder).unwrap();
+        assert!(!theirs.already);
+        assert_ne!(theirs.file_name, first.file_name);
+        std::fs::remove_file(&theirs.path).unwrap();
         let changed = home.replace_items(&p.id, approved.revision, &[verse.clone(), verse]).unwrap();
         let second = home.publish_to_church_folder(&p.id, &media_a, &folder).unwrap();
         assert_ne!(first.file_name, second.file_name);
@@ -229,6 +281,7 @@ mod tests {
         assert_eq!(opened.program.items.len(), 2);
         assert_eq!(opened.program.program.approved_revision, None, "approval is given again at church");
         assert!(church.open_from_church_folder(&folder, "../secret.rhema-service.json", &media_b).is_err());
+        assert!(church.open_from_church_folder(&folder, "C:x.rhema-service.json", &media_b).is_err());
         assert!(church.open_from_church_folder(&folder, "Half.rhema-service.json", &media_b).is_err());
         assert!(list_church_folder(&folder.join("missing")).is_err());
     }
