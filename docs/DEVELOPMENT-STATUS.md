@@ -24,7 +24,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 516 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
+- Frontend: 515 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
 - Rust: `rhema-content` 51 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
 - Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
