@@ -472,3 +472,10 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ao.1 | More → Library → Earlier logs: press the bin next to a log. Then Prepare → Media: press the bin next to an unused picture. | Nothing is deleted on the first press; "Delete"/"Remove" and "Keep" appear in its place. Keep restores the bin; Delete/Remove deletes. | Unverified |
+
+### 10ap. Songs as text (FR-02)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ap.1 | Open a saved song with a verse, a chorus and a bridge; press **Text…** and save. Open the file in Notepad/TextEdit. | A title line, authors and copyright, then each section under "## Verse 1", "## Chorus"… in the song's main language. | Unverified |
+| 10ap.2 | New song: paste that file's contents, Make sections. Then paste lyrics copied from a chord site with `[Verse 1]` / `[Chorus]` headings. | The first gives the same sections without the title block; the second gives a verse and a chorus. | Unverified |

@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog"
 import { readFile, writeTextFile } from "@tauri-apps/plugin-fs"
 import type { ContentStatus, Hymnbook, ImportMode, ImportReport, PackageReport, RestoreReport, ServicePackage, SongExport, SongWithSections } from "@/types"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
+import { songToMarkdown } from "@/lib/lyrics"
 
 export interface ImportOutcome {
   /** Files that were read. */
@@ -35,6 +36,17 @@ export async function exportOpenLyricsToFile(song: SongWithSections): Promise<st
   })
   if (!path) return null
   await writeTextFile(path, toOpenLyrics(song))
+  return path
+}
+
+/** Save one song as Markdown / plain text (reads fine in any editor; pastes back into Rhema). Null when cancelled. */
+export async function exportSongTextToFile(song: SongWithSections, language?: string): Promise<string | null> {
+  const path = await save({
+    defaultPath: `${song.song.title.replace(/[\\/:*?"<>|]+/g, " ").trim() || "song"}.md`,
+    filters: [{ name: "Text (Markdown)", extensions: ["md", "txt"] }],
+  })
+  if (!path) return null
+  await writeTextFile(path, songToMarkdown(song, language))
   return path
 }
 
