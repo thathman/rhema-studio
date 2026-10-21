@@ -506,3 +506,11 @@ report), but launching it cannot.
 | 10as.2 | Next (Announcements), Fade out, then Previous. | Announcements goes up while the sound keeps playing; after the fade, Previous goes straight back to Welcome without starting the sound again. | Unverified |
 | 10as.4 | Make the sound the last item and step onto it; let it finish; press Next again. | Nothing restarts it. | Unverified |
 | 10as.3 | Rehearsal on; step onto the sound item. | No sound; Present says it was not played in rehearsal. | Unverified |
+
+### 10at. Secrets in the system keychain (RG-08)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10at.1 | Start this build over settings from an older build that had a Deepgram key, a remote key and an OBS password. Open `settings.json` in the app data folder. | The three values are empty in the file and `secretsInKeychain` is `true`; Windows Credential Manager (Generic credentials) / macOS Keychain Access shows one "Rhema Studio" entry (`settings-secrets`). The values still work (OBS connects, remote key accepted). On macOS after an update, at most one keychain permission prompt. | Unverified |
+| 10at.2 | Restart Rhema. | Everything still works without re-entering anything. | Unverified |
+| 10at.3 | Settings → Diagnostics → Save logs after a session that logged an error mentioning the remote key. | The key appears as [redacted]. | Unverified |

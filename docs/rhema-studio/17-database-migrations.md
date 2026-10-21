@@ -38,3 +38,4 @@ More → Library → "Restore from a backup…" does the same from inside the ap
 ## Settings
 
 Settings (`settings.json`, the app's key-value store) are read field by field; a value of the wrong shape (from an older, newer or damaged file) is skipped and the default kept (`src/stores/settings-store.ts`, tests in `settings-store.test.ts`). Newer fields are ignored by older builds.
+- From the keychain build (#115) on, API keys, the remote-control key and the OBS password live in the system keychain and are blank in `settings.json` (`secretsInKeychain: true`). An older build reads the blank values: re-enter the keys there, or copy them from the "Rhema Studio" / `settings-secrets` entry in Windows Credential Manager or Keychain Access (a small JSON object).

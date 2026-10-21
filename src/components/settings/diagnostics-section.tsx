@@ -1,3 +1,4 @@
+import { currentSecrets } from "@/stores/settings-store"
 import { useEffect, useState } from "react"
 import { DownloadIcon, LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -45,6 +46,8 @@ export function DiagnosticsSection() {
     try {
       const contents = await invoke<string>("export_diagnostics", {
         sinceMinutes: selected?.minutes ?? null,
+        // Keys live in the system keychain now, not only in the settings file the export reads.
+        extra: currentSecrets(),
       })
       const path = await save({
         defaultPath: `rhema-logs-${fileStamp()}.log`,

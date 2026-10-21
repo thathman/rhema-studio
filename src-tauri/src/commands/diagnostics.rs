@@ -209,10 +209,13 @@ fn redact_line(line: &str) -> String {
 /// Collect the log for the requested window as one text blob.
 ///
 /// `since_minutes` of `None` means everything still on disk.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_diagnostics(
     app: tauri::AppHandle,
     since_minutes: Option<u64>,
+    // The secrets the app holds in memory (most now live in the system
+    // keychain, not the settings file); redacted like the file's.
+    extra: Option<Vec<String>>,
 ) -> Result<String, String> {
     let dir = app.path().app_log_dir().map_err(|e| {
         log::error!("export_diagnostics: no log dir: {e}");
@@ -250,13 +253,14 @@ pub fn export_diagnostics(
     );
 
     // Sanitize before anything leaves the app (release gate RG-08).
-    let secrets = app
+    let mut secrets = app
         .path()
         .app_data_dir()
         .ok()
         .and_then(|d| std::fs::read_to_string(d.join("settings.json")).ok())
         .map(|s| configured_secrets(&s))
         .unwrap_or_default();
+    secrets.extend(extra.unwrap_or_default().into_iter().filter(|s| s.trim().len() >= 6));
     let body = redact(&body, &secrets);
 
     let head = header(

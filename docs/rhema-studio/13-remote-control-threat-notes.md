@@ -30,12 +30,12 @@ QA-006 first slice. What the two control surfaces expose today, verified from th
 ## OBS connection (AR-002)
 
 - Outbound only: Rhema connects to OBS's obs-websocket server; it opens no port. The CSP `connect-src` allows `ws:` so OBS can be on the streaming PC, not only this one (an injected script could therefore open a WebSocket anywhere; the app loads no remote content, so this is defence in depth only).
-- The OBS WebSocket password is stored in the local settings file in clear, like the remote key; the protocol never sends it (SHA-256 challenge). Over plain `ws://` the login answer can still be captured and the password attacked offline by anyone on that network, so keep OBS and Rhema on a staff-only network. Settings are applied with an explicit Save, never per keystroke (a per-keystroke reconnect would leak the password one prefix at a time).
+- The OBS WebSocket password, like the remote key and API keys, is kept in the system keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service; one entry holding all of them), written and read back before the settings file's copy is blanked; a keychain that cannot be read within 5 seconds is left untouched for that session; without a keychain it stays in the settings file in clear; the protocol never sends it (SHA-256 challenge). Over plain `ws://` the login answer can still be captured and the password attacked offline by anyone on that network, so keep OBS and Rhema on a staff-only network. Settings are applied with an explicit Save, never per keystroke (a per-keystroke reconnect would leak the password one prefix at a time).
 - Starting or stopping a recording is an explicit two-step action in Present; no macro or remote command does it.
 
 ## Diagnostics export (RG-08)
 
-Settings → Diagnostics → Save logs runs every line through a redaction pass first: the exact values of the configured API keys, remote key and OBS password (read from the settings file, 6+ characters) and anything after `X-Rhema-Key:`, `Authorization: Bearer `, `api_key=` or `token=` become `[redacted]`. The app does not log these; this is defence in depth for a file meant to be sent to someone else.
+Settings → Diagnostics → Save logs runs every line through a redaction pass first: the exact values of the configured API keys, remote key and OBS password (read from the keychain and the settings file; read from the settings file, 6+ characters) and anything after `X-Rhema-Key:`, `Authorization: Bearer `, `api_key=` or `token=` become `[redacted]`. The app does not log these; this is defence in depth for a file meant to be sent to someone else.
 
 ## Rate limiting (NFR-06)
 

@@ -22,7 +22,7 @@ export interface ObsSettings {
   enabled: boolean
   host: string
   port: number
-  /** obs-websocket password, kept in the local settings file like the remote key. */
+  /** obs-websocket password; kept in the system keychain when available (see SECRET_NAMES). */
   password: string
 }
 
@@ -196,6 +196,42 @@ const PERSISTED_KEYS = [
   "sttProvider",
 ] as const satisfies readonly (keyof SettingsState)[]
 
+// ── secrets in the OS credential store (RG-08) ──────────────────────────
+// All secrets are one JSON entry in the system keychain (one read, at most
+// one permission prompt). It is written and read back before the settings
+// file's copies are blanked; `secretsInKeychain: true` in the file says so.
+// Without a keychain the file keeps the values, as before.
+
+type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword"
+const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword"]
+const KEYCHAIN_TIMEOUT_MS = 5000
+
+function readSecret(s: SettingsState, name: SecretName): string {
+  return (name === "obsPassword" ? s.obs.password : (s[name] as string | null)) ?? ""
+}
+
+function withSecret(s: Partial<SettingsState>, name: SecretName, value: string, base: SettingsState): Partial<SettingsState> {
+  if (name === "obsPassword") return { ...s, obs: { ...(s.obs ?? base.obs), password: value } }
+  return { ...s, [name]: value }
+}
+
+/** The current secrets, for the diagnostics export to redact. */
+export function currentSecrets(): string[] {
+  const s = useSettingsStore.getState()
+  return SECRET_NAMES.map((n) => readSecret(s, n)).filter(Boolean)
+}
+
+/** The keychain holds our entry but it could not be read this session: never overwrite it. */
+let keychainUnreadable = false
+/** Our entry exists (we wrote or read it); only then may an empty set delete it. */
+let keychainOurs = false
+/** What the entry holds now, as far as this session knows ("" = nothing). */
+let storedJson: string | null = null
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("keychain timed out")), ms))])
+}
+
 let tauriStore: Store | null = null
 let hydrationPromise: Promise<void> | null = null
 
@@ -221,9 +257,28 @@ export function hydrateSettings(): Promise<void> {
           ;(patch as Record<string, unknown>)[key] = value
         }
       }
+      // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.
+      const merged = () => ({ ...useSettingsStore.getState(), ...patch }) as SettingsState
+      const migrate = SECRET_NAMES.some((n) => readSecret(merged(), n))
+      if ((await store.get("secretsInKeychain")) === true) {
+        try {
+          const json = await withTimeout(invoke<string | null>("secrets_get"), KEYCHAIN_TIMEOUT_MS)
+          const map = json ? (JSON.parse(json) as Record<string, unknown>) : {}
+          for (const name of SECRET_NAMES) {
+            const v = map[name]
+            if (typeof v === "string" && v && !readSecret(merged(), name)) Object.assign(patch, withSecret(patch, name, v, useSettingsStore.getState()))
+          }
+          storedJson = json ?? ""
+          keychainOurs = true
+        } catch {
+          keychainUnreadable = true
+          console.warn("[settings] the saved keys are in the system keychain but could not be read")
+        }
+      }
       if (Object.keys(patch).length > 0) {
         useSettingsStore.setState(patch)
       }
+      if (migrate && !keychainUnreadable) pendingSave = pendingSave.then(() => persistAll(useSettingsStore.getState()))
       const name = useSettingsStore.getState().operatorName.trim()
       if (name) void invoke("content_set_actor", { name }).catch(() => {})
       void pushRemoteKeys()
@@ -255,9 +310,30 @@ const SAVE_DEBOUNCE_MS = 250
 async function persistAll(state: SettingsState): Promise<void> {
   try {
     const store = await getStore()
-    for (const key of PERSISTED_KEYS) {
-      await store.set(key, state[key] as unknown)
+    // One JSON entry with every non-empty secret; the file's copies are blanked only once the keychain holds it.
+    const map: Record<string, string> = {}
+    for (const name of SECRET_NAMES) {
+      const v = readSecret(state, name)
+      if (v) map[name] = v
     }
+    const json = Object.keys(map).length ? JSON.stringify(map) : ""
+    let ok: boolean
+    if (keychainUnreadable) ok = false // keep new values in the file; the keychain entry is untouched until it can be read
+    else if (json === storedJson) ok = true
+    else if (!json && !keychainOurs) ok = true // nothing to store, and no entry of ours to delete
+    else {
+      ok = await invoke<boolean>("secrets_set", { json }).catch(() => false)
+      if (ok) {
+        storedJson = json
+        keychainOurs = json !== ""
+      }
+    }
+    let file: Partial<SettingsState> = {}
+    if (ok) for (const name of SECRET_NAMES) file = withSecret(file, name, "", state)
+    for (const key of PERSISTED_KEYS) {
+      await store.set(key, (key in file ? file[key] : state[key]) as unknown)
+    }
+    await store.set("secretsInKeychain", keychainUnreadable || (ok && json !== ""))
     await store.save()
   } catch {
     console.warn("[settings] Failed to persist settings")

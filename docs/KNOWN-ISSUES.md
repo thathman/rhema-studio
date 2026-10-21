@@ -10,7 +10,7 @@ Kept for every release candidate (release gate RG-10). "Unverified" means the be
 - Only one copy of Rhema runs per computer user; launching it again brings the running one forward. Closing the main window quits Rhema, outputs included. On macOS, Quit from the menu (Cmd+Q) may not ask about unsaved service changes; closing the window does (unverified, row 10aq).
 - NDI carries pictures, not sound. Video sound plays from the main output only.
 - A service file includes its pictures and videos; large videos make it large.
-- The OBS WebSocket password and the remote-control key are stored in the local settings file in clear; use a staff-only network (`docs/rhema-studio/13-remote-control-threat-notes.md`).
+- API keys, the remote-control key and the OBS password are kept in the system keychain (Credential Manager, Keychain, Secret Service). Where no keychain is available (some Linux desktops) they stay in the local settings file in clear. Use a staff-only network (`docs/rhema-studio/13-remote-control-threat-notes.md`).
 - Remote control has no TLS; a paired device's token travels in clear on the LAN.
 - Record chapters in OBS need OBS 30.2+ recording to Hybrid MP4; older OBS gets the mark in the service log only.
 - The program preview shows "▶ name" for videos and the words (not the code) for QR slides; outputs show the real thing.
