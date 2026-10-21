@@ -1,9 +1,10 @@
 import { approvalState } from "@/lib/approval"
 import { localDate, todaysService } from "@/lib/todays-service"
 import { monitorProblems } from "@/lib/monitor-health"
+import { contentStatus } from "@/lib/song-files"
 import { useMonitorStore } from "@/stores/monitor-store"
 import { allSignageIds } from "@/lib/signage"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { CheckIcon, TriangleAlertIcon, InfoIcon, PlayIcon, PencilRulerIcon, MonitorIcon, SettingsIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -44,6 +45,12 @@ export function HomeWorkspace() {
   const dirty = useServiceStore((s) => s.dirty)
   const suggested = todaysService(programs, localDate())
   const monitorCount = useMonitorStore((s) => s.count)
+  const [contentError, setContentError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    contentStatus().then((s) => { if (!cancelled) setContentError(s.available ? null : (s.error ?? null)) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
@@ -89,6 +96,7 @@ export function HomeWorkspace() {
     // Only the themes outputs actually use.
     missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
     monitors: monitorCount === null ? undefined : monitorProblems(outputs, monitorCount),
+    contentError,
     approval: current ? (dirty ? "changed" : approvalState(current)) : undefined,
     signage: outputs
       .filter((o) => o.role === "signage")

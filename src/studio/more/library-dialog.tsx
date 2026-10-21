@@ -159,7 +159,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
             <p className="mb-2 text-xs text-muted-foreground">
               {status?.available
                 ? `Stored at ${status.path}.${status.last_backup ? ` A copy from before the last upgrade is at ${status.last_backup}.` : ""}`
-                : "The content database is not available right now."}
+                : status?.error ? `Services and songs are unavailable: ${status.error}.` : "The content database is not available right now."}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" disabled={busy !== null || !status?.available} onClick={() => void doBackup()}><DownloadIcon /> Back up now…</Button>

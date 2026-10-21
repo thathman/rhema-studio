@@ -38,6 +38,8 @@ export interface ReadinessInput {
   missingMedia?: number
   /** Fonts the themes in use ask for that this computer does not have. */
   missingFonts?: Array<{ theme: string; font: string }>
+  /** Why services and songs are unavailable (the content database failed to open), if they are. */
+  contentError?: string | null
   /** Display outputs whose monitor is not connected, and outputs sharing one monitor. */
   monitors?: { missing: string[]; shared: string[][] }
   /** Whether the open service was approved as it is (Prepare → Approve). Absent when no service is open. */
@@ -99,6 +101,9 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           ? [{ id: `signage-missing-${s.name}`, status: "warn" as const, label: `${s.name}: ${s.missing} of ${s.total} signage picture${s.total === 1 ? "" : "s"} ${s.missing === 1 ? "is" : "are"} missing`, detail: "Those slots show the theme background. Re-import the pictures or remove them from the loop.", fix: "outputs" as const, fixLabel: "Open outputs" }]
           : [],
     ),
+    ...(i.contentError
+      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works.`, fix: "settings" as const, fixLabel: "Open diagnostics" }]
+      : []),
     ...(i.monitors?.missing.length
       ? [{ id: "monitors-missing", status: "warn" as const, label: `${i.monitors.missing.join(", ")}: ${i.monitors.missing.length === 1 ? "its monitor is" : "their monitors are"} not connected`, detail: "Check the cable, or choose a connected monitor in Outputs.", fix: "outputs" as const, fixLabel: "Open outputs" }]
       : []),
