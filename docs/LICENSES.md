@@ -49,7 +49,7 @@ No GPL/AGPL/LGPL code is in the direct dependency set. Transitive dependencies w
 
 1. ~~Owner decision: which Bible texts ship in the installer.~~ Decided 2026-10-21 (issue #33): as upstream, on the owner's stated rights; see §2 for the record.
 2. Add the openbible.info and NDI® notices to the installer's licence screen (About has them).
-3. ~~Add an automated licence check.~~ Done: `scripts/check-licenses.ts` runs in CI for the npm production tree and the Rust crate graph against `src/lib/license-policy.ts` (permissive licences; MPL-2.0, OFL-1.1 and CC-BY-4.0 allowed with notes; GPL/AGPL/LGPL-only/SSPL and missing licences fail).
+3. ~~Add an automated licence check.~~ Done: `scripts/check-licenses.ts` runs in CI for the npm production tree and the Rust crate graph against `src/lib/license-policy.ts` (permissive licences including BlueOak-1.0.0; MPL-2.0, OFL-1.1 and CC-BY-4.0 allowed with notes; GPL/AGPL/LGPL-only/SSPL, unparseable and missing licences fail). The npm walk follows Node's lookup, so nested copies (`node_modules/a/node_modules/b`) and optional dependencies that are installed are checked too.
 4. Keep this file current: any new dependency or bundled asset gets a row here in the same PR.
 
 - `tauri-plugin-opener` 2 (Rust) / `@tauri-apps/plugin-opener` (JS): MIT OR Apache-2.0. Opens a song attachment in the computer's own viewer; scoped to the media folder.

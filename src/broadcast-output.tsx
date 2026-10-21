@@ -109,7 +109,7 @@ function BroadcastCanvas() {
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       logDebug("renderVerse returned null; drew fallback frame")
     }
-    if (data.overlay) drawLowerThird(ctx, canvas.width, canvas.height, data.overlay, theme.verseText?.fontFamily)
+    if (data.overlay && verse?.screen !== "black") drawLowerThird(ctx, canvas.width, canvas.height, data.overlay, theme.verseText?.fontFamily)
   }, [logDebug])
 
   // Redraw once a theme's images land. The burst matters: without it NDI

@@ -57,7 +57,7 @@ export const CanvasVerse = memo(function CanvasVerse({
       scale,
       imageCache: themeImageCache(),
     })
-    if (overlay) drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily)
+    if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily)
   }, [theme, verse, overlay, containerWidth])
 
   // Preload every image the theme uses so the renderer finds them in the cache.
