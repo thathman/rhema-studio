@@ -1,7 +1,8 @@
 import { MessageSquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { unreadComments } from "@/lib/comments"
+import { useMemo } from "react"
+import { commentKey, unreadComments } from "@/lib/comments"
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -14,10 +15,11 @@ import { useSettingsStore } from "@/stores/settings-store"
 export function UnreadComments() {
   const current = useServiceStore((s) => s.current)
   const items = useQueueStore((s) => s.items)
-  const seenAt = useSettingsStore((s) => (current ? s.commentsSeen[current.id] : undefined))
+  const seenList = useSettingsStore((s) => s.commentsSeen)
+  const seen = useMemo(() => new Set(seenList), [seenList])
   const me = useSettingsStore((s) => s.operatorName)
   if (!current) return null
-  const unread = unreadComments(items, seenAt, me)
+  const unread = unreadComments(items, seen, me)
   if (unread.length === 0) return null
   return (
     <Popover>
@@ -38,7 +40,7 @@ export function UnreadComments() {
             </li>
           ))}
         </ul>
-        <Button size="sm" className="mt-3 w-full" onClick={() => useSettingsStore.getState().markCommentsSeen(current.id)}>
+        <Button size="sm" className="mt-3 w-full" onClick={() => useSettingsStore.getState().markCommentsSeen(unread.map(({ comment }) => commentKey(comment)))}>
           Mark as read
         </Button>
       </PopoverContent>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, ImageIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
-import { cleanComments } from "@/lib/comments"
+import { cleanComments, commentKey, MAX_COMMENTS } from "@/lib/comments"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -336,8 +336,11 @@ function CommentsEditor({ item }: { item: QueueItem }) {
   const me = useSettingsStore((s) => s.operatorName.trim())
   const comments = item.comments ?? []
   const add = () => {
+    if (comments.length >= MAX_COMMENTS) return // never push the oldest out
     const next = cleanComments([...comments, { by: me || "Unnamed", at: new Date().toISOString(), text: draft }])
-    if (next.length === comments.length && comments.length < 100) return // nothing left after cleaning
+    if (next.length === comments.length) return // nothing left after cleaning
+    // Written here, so already read here (also when no name is set).
+    useSettingsStore.getState().markCommentsSeen([commentKey(next[next.length - 1])])
     useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, comments: next }))
     setDraft("")
   }
@@ -375,7 +378,7 @@ function CommentsEditor({ item }: { item: QueueItem }) {
             }
           }}
         />
-        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || comments.length >= 100} onClick={add}>
+        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || comments.length >= MAX_COMMENTS} onClick={add}>
           Comment
         </Button>
       </div>

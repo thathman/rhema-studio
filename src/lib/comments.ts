@@ -37,18 +37,22 @@ export function parseComments(raw: string | null | undefined): ItemComment[] | n
   }
 }
 
+/** A comment's identity across computers and copies of a service: when it was written, and by whom. */
+export const commentKey = (c: ItemComment) => `${c.at}|${c.by}`
+
 /**
- * Comments this computer has not seen yet: written by someone else, after
- * the last time the comments of this service were marked read here.
- * Comments from a service file opened from the church folder count as new
- * until read, which is how a team member's note reaches the operator.
+ * Comments this computer has not read yet. Read comments are remembered by
+ * their identity, not by service or clock, so they stay read in a newer
+ * copy opened from the church folder, a duplicate or a template, and a
+ * computer whose clock is off cannot hide them. Comments written here are
+ * marked read as they are written; with a name set, that person's comments
+ * from another computer do not count either.
  */
-export function unreadComments(items: QueueItem[], seenAt: string | undefined, me: string): Array<{ item: QueueItem; comment: ItemComment }> {
-  const since = seenAt ? Date.parse(seenAt) : -Infinity
-  const mine = (me.trim() || "Unnamed").toLowerCase() // comments written here without a name are signed "Unnamed"
+export function unreadComments(items: QueueItem[], seen: ReadonlySet<string>, me: string): Array<{ item: QueueItem; comment: ItemComment }> {
+  const mine = me.trim().toLowerCase()
   return items.flatMap((item) =>
     (item.comments ?? [])
-      .filter((c) => Date.parse(c.at) > since && c.by.trim().toLowerCase() !== mine)
+      .filter((c) => !seen.has(commentKey(c)) && !(mine && c.by.trim().toLowerCase() === mine))
       .map((comment) => ({ item, comment })),
   )
 }

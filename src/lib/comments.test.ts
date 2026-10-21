@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { QueueItem } from "@/types"
-import { cleanComments, parseComments, unreadComments } from "./comments"
+import { cleanComments, commentKey, parseComments, unreadComments } from "./comments"
 
 const item = (comments: QueueItem["comments"]) => ({ id: "i1", reference: "John 3:16", comments }) as unknown as QueueItem
 
@@ -23,15 +23,13 @@ describe("team comments (CL-007)", () => {
     expect(parseComments("{}")).toBeNull()
   })
 
-  it("counts others' comments written since this computer last read them", () => {
-    const items = [item([
-      { by: "Pastor Ade", at: "2026-10-21T09:00:00Z", text: "old" },
-      { by: "Pastor Ade", at: "2026-10-21T11:00:00Z", text: "new" },
-      { by: "tolu", at: "2026-10-21T11:30:00Z", text: "my own" },
-    ])]
-    expect(unreadComments(items, undefined, "Tolu").map((u) => u.comment.text)).toEqual(["old", "new"])
-    expect(unreadComments(items, "2026-10-21T10:00:00Z", "Tolu").map((u) => u.comment.text)).toEqual(["new"])
-    expect(unreadComments(items, "2026-10-21T12:00:00Z", "Tolu")).toEqual([])
-    expect(unreadComments([item([{ by: "Unnamed", at: "2026-10-21T11:00:00Z", text: "mine, no name set" }])], undefined, "")).toEqual([])
+  it("counts comments this computer has not read, by identity, whatever the service copy or clock", () => {
+    const c = (by: string, at: string, text: string) => ({ by, at, text })
+    const items = [item([c("Pastor Ade", "2026-10-21T09:00:00Z", "old"), c("Pastor Ade", "2026-10-21T11:00:00Z", "new"), c("Tolu", "2026-10-21T11:30:00Z", "my own")])]
+    expect(unreadComments(items, new Set(), "tolu").map((u) => u.comment.text)).toEqual(["old", "new"])
+    // Read "old" in an earlier copy of the service: still read in this copy.
+    expect(unreadComments(items, new Set([commentKey(c("Pastor Ade", "2026-10-21T09:00:00Z", "old"))]), "Tolu").map((u) => u.comment.text)).toEqual(["new"])
+    // No names set on either computer: the other computer's comments still count.
+    expect(unreadComments([item([c("Unnamed", "2026-10-21T11:00:00Z", "from the pastor's laptop")])], new Set(), "")).toHaveLength(1)
   })
 })
