@@ -79,6 +79,8 @@ fontdb = "0.24.0"
 [features]
 default = ["whisper"]
 whisper = ["rhema-stt/whisper"]
+# Desktop acceptance runs only (src/qa_bridge.rs); never in a release build.
+qa-bridge = []
 
 [lints]
 workspace = true

@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "targets": ["app"],
+    "resources": {
+      "../models/whisper/ggml-large-v3-turbo-q8_0.bin": "models/whisper/ggml-large-v3-turbo-q8_0.bin",
+      "../sdk/ndi/macos/libndi.dylib": "sdk/ndi/macos/libndi.dylib"
+    }
+  }
+}

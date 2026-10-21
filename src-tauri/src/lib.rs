@@ -1,4 +1,6 @@
 mod commands;
+#[cfg(feature = "qa-bridge")]
+mod qa_bridge;
 mod events;
 mod memstats;
 mod state;
@@ -215,6 +217,10 @@ pub fn run() {
             }
 
             memstats::spawn();
+            rhema_api::set_app_version(env!("CARGO_PKG_VERSION"));
+
+            #[cfg(feature = "qa-bridge")]
+            qa_bridge::spawn(app.handle());
 
             // User content (services, rundowns) lives in the app data dir.
             // Failure here must not stop the app: live presentation does not

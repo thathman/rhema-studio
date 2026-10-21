@@ -21,6 +21,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
 ### Search and safety
+- Intel Mac: Rhema now builds and runs natively on Intel Macs. Pictures load on macOS, a first run starts in the King James Version, and the app no longer falls back to a slower internal channel at start.
 - Cues: a "Show live" step finishes before the next one runs, so a following quick screen or "Rehearsal off" behaves as expected. An all-day signage window (00:00 to 00:00) keeps to its ticked days.
 - Search: words with apostrophes or commas find verses, "John 3:16-18" and "Jn. 3:16" work, "Jude 5" goes to the verse, a song titled "Psalm 23" is found, and hymns 1–9 can be found by number.
 - Home is more truthful: a theme font missing from this computer is reported, an unapproved service warns when "Ask before showing" is on, and deleted files are noticed each time you open Home.

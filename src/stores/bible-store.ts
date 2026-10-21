@@ -72,7 +72,7 @@ interface BibleState {
 
 export const useBibleStore = create<BibleState>((set) => ({
   translations: [],
-  activeTranslationId: 1, // KJV default
+  activeTranslationId: 1, // until hydrateBibleStore picks the saved one, or KJV on a first run (id 1 is not KJV)
   secondaryTranslationId: null,
   books: [],
   searchResults: [],
@@ -115,6 +115,16 @@ export const useBibleStore = create<BibleState>((set) => ({
   setOverrideServiceTranslations: (overrideServiceTranslations) => set({ overrideServiceTranslations }),
 }))
 
+/**
+ * The translation a first run starts with: KJV when the library has it
+ * (ids follow the library file, so id 1 is not KJV: in the bundled one it is
+ * AMP), else the first downloaded one.
+ */
+export function defaultTranslationId(translations: Pick<Translation, "id" | "abbreviation" | "is_downloaded">[] | null | undefined): number | null {
+  const usable = (Array.isArray(translations) ? translations : []).filter((t) => t.is_downloaded !== false)
+  return (usable.find((t) => t.abbreviation.toUpperCase() === "KJV") ?? usable[0])?.id ?? null
+}
+
 /** Load persisted translation selections from disk into Zustand, then sync the primary to Rust. */
 export async function hydrateBibleStore(): Promise<void> {
   try {
@@ -123,10 +133,11 @@ export async function hydrateBibleStore(): Promise<void> {
       store.get<number>("activeTranslationId"),
       store.get<number | null>("secondaryTranslationId"),
     ])
+    const firstRun = typeof activeValue === "number" ? null : defaultTranslationId(await invoke<Translation[]>("list_translations").catch(() => []))
     const activeTranslationId =
       typeof activeValue === "number"
         ? activeValue
-        : useBibleStore.getState().activeTranslationId
+        : (firstRun ?? useBibleStore.getState().activeTranslationId)
     useBibleStore.getState().setActiveTranslation(activeTranslationId)
     useBibleStore
       .getState()

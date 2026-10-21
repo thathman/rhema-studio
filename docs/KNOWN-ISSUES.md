@@ -16,6 +16,7 @@ Kept for every release candidate (release gate RG-10). "Unverified" means the be
 - Settings and themes are written in place by the store plugin. If the computer loses power during a save, the file comes back as it was when Rhema last started (a copy is kept at each start); changes made since then need making again.
 - If another program locks the content database (a sync tool, an antivirus scan), Rhema waits up to 5 seconds per action before saying so; the screens keep their content.
 - The service log is kept in memory and kept in the library when Rhema closes. A crash or power cut loses the log of that run; use Keep this log during long services.
+- macOS builds are signed ad hoc and not notarised: another Mac asks before the first open (Control-click → Open). Intel Mac builds bundle ONNX Runtime's Homebrew libraries with `scripts/macos-bundle-dylibs.sh` (see `docs/rhema-studio/mac-desktop-acceptance.md`).
 - The program preview shows "▶ name" for videos and the words (not the code) for QR slides; outputs show the real thing.
 
 ## Owner decisions still open
