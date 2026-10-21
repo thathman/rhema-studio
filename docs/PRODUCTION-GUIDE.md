@@ -39,6 +39,10 @@ Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cue
 
 **Who can send these:** anyone on the network while a listener runs, unless you set a key or pair devices in Settings → Remote. Pairing: start the HTTP API, press "Pair a device", and on the phone or controller send the six-digit code once to `/api/v1/pair`; it receives its own token (HTTP header `X-Rhema-Key`, or first OSC argument) and can be revoked on its own later. Start a listener just before the service and stop it after; if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
 
+## Sound (walk-in music, backing tracks)
+
+Import MP3, M4A, WAV or OGG files in Prepare → Media (they are listed under Sounds). In Present, the ♪ button in the header lists them: Play, Pause/Resume, Fade out (3 seconds), Stop, Repeat and Volume. One sound plays at a time, on this computer's sound output; no screen changes, and NDI carries no sound. Each Play is a line in the service log. Rehearsal mode does not silence it: Play is always a deliberate press.
+
 ## Lower thirds
 
 Present → Lower third: a name and an optional title, shown as a band near the bottom of the outputs where "Show lower thirds" is on (Outputs → edit; usually the NDI stream with a transparent theme). It stays up through Next, Clear and new items until you press Hide. The projector shows it only if you turn it on for the projector; stage and signage screens never show it.

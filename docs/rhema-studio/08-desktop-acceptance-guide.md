@@ -488,3 +488,12 @@ report), but launching it cannot.
 | 10aq.2 | Close again and choose Save and close; reopen Rhema and the service. | The added item is there. | Unverified |
 | 10aq.3 | With unsaved changes, close the window, and while the question shows, close it again (or the page has frozen). | The second close quits without asking (never trapped). | Unverified |
 | 10aq.4 | With a projector output and an NDI-only output on, close the Rhema window (nothing unsaved). Then start Rhema again. | Every output window closes and Rhema exits (nothing left in Task Manager / Activity Monitor); the new start opens normally. | Unverified |
+
+### 10ar. Sound player (MD-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ar.1 | Prepare → Media: import an MP3 and an M4A. Present → ♪: Play the MP3, then Play the M4A. | Sound from the computer's speakers/desk; the second replaces the first; the chip shows the name and time left; no screen changes. | Unverified |
+| 10ar.2 | Pause, Resume, set Volume to half, Fade out. | Pause/Resume continue from the same point; the fade lasts about 3 seconds to silence, then the chip is idle; the next Play uses half volume. | Unverified |
+| 10ar.3 | Turn Repeat on and let a short sound reach its end; then More → Library → Save the log. | It starts again; the log has a "sound" line with the name for each Play. | Unverified |
+| 10ar.4 | With OBS on and a service open, look at the Present header at 1366x768. | Every chip is visible; they wrap onto a second row if needed; Standard/Production stays on screen. | Unverified |
