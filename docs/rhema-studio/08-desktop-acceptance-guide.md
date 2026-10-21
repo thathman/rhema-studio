@@ -856,3 +856,13 @@ report), but launching it cannot.
 | 10cg.3 | Open Home with a picture item; delete that file from the media folder; go to Present and back to Home. | "1 picture … missing its file". | Unverified |
 | 10cg.4 | Settings → Remote while the phone remote is running. | It shows running at once (Stop), never "Start" first. | Unverified |
 
+### 10ch. Search (seventeenth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ch.1 | Quick find: "the Lord's my shepherd", then "shepherd, I shall not want". | Psalm 23 verses are listed. | Unverified |
+| 10ch.2 | Bible quick box and Quick find: "John 3:16-18", "John 3:16, 18", "Jn. 3:16". | John 3:16 each time. | Unverified |
+| 10ch.3 | "Jude 5", "Phm 6", "3 John 4". | Jude 1:5, Philemon 1:6, 3 John 1:4. | Unverified |
+| 10ch.4 | Songs: a song titled "Psalm 23"; search "Psalm 23" in the library and Quick find. | The song is found. | Unverified |
+| 10ch.5 | Quick find: "5" with hymn 5 in a hymnbook. | Hymn 5 is listed. | Unverified |
+

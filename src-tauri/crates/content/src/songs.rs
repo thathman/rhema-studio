@@ -1015,7 +1015,12 @@ fn search_ids(conn: &Connection, q: &str, limit: usize) -> Result<Vec<String>> {
         )?;
         let rows = stmt.query_map(params![number, code, limit], |r| r.get::<_, String>(0))?;
         let ids: Vec<String> = rows.collect::<std::result::Result<_, _>>()?;
-        if !ids.is_empty() || code.is_some() {
+        // "Psalm 23", "Hymn 245": a word that is no hymnbook's code here is part of a title.
+        let is_book = match &code {
+            Some(c) => conn.query_row("SELECT 1 FROM hymnbooks WHERE upper(code) = ?1", params![c], |_| Ok(())).optional()?.is_some(),
+            None => false,
+        };
+        if !ids.is_empty() || is_book {
             return Ok(ids);
         }
         // A bare number that matches no hymn may be part of a title ("Psalm 23").
@@ -1450,6 +1455,18 @@ mod tests {
         db.delete_hymnbook(&sss.id).unwrap();
         assert_eq!(ids("245"), vec![ba.song.id.clone()]);
         assert!(db.get_song(&ag.song.id).unwrap().is_some(), "songs survive a deleted book");
+    }
+
+    #[test]
+    fn a_word_and_a_number_that_is_no_hymnbook_searches_titles() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let mut psalm = amazing_grace();
+        psalm.title = "Psalm 23".into();
+        db.create_song(&psalm).unwrap();
+        assert_eq!(db.list_songs(Some("Psalm 23"), 5).unwrap().len(), 1);
+        // A real hymnbook code still means a number in that book (none here: nothing).
+        db.upsert_hymnbook(&HymnbookInput { id: None, code: "SSS".into(), name: "Sacred Songs and Solos".into(), language: "en".into(), publisher: String::new(), licence_note: String::new() }).unwrap();
+        assert!(db.list_songs(Some("SSS 23"), 5).unwrap().is_empty());
     }
 
     #[test]

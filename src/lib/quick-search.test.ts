@@ -14,6 +14,7 @@ import {
 const mockBooks: Book[] = [
   { id: 1, translation_id: 1, book_number: 1, name: "Genesis", abbreviation: "Gen", testament: "OT" },
   { id: 43, translation_id: 1, book_number: 43, name: "John", abbreviation: "John", testament: "NT" },
+  { id: 65, translation_id: 1, book_number: 65, name: "Jude", abbreviation: "Jude", testament: "NT" },
   { id: 62, translation_id: 1, book_number: 62, name: "I John", abbreviation: "1John", testament: "NT" },
   { id: 63, translation_id: 1, book_number: 63, name: "II John", abbreviation: "2John", testament: "NT" },
   { id: 64, translation_id: 1, book_number: 64, name: "III John", abbreviation: "3John", testament: "NT" },
@@ -440,4 +441,17 @@ describe("parseTypedReference", () => {
     expect(getTabNavigationResult("Jo", "John 1:1")).toBe("John ")
     expect(getTabNavigationResult("Jòhánù 3", "Jòhánù 3:1")).toBe("Jòhánù 3:") // chapter step kept when the suggestion repeats what was typed
   })
+
+  it("ranges, lists, dotted abbreviations and one-chapter books (search audit)", () => {
+    for (const input of ["John 3:16-18", "John 3:16, 18", "Jn. 3:16"]) {
+      expect(parseTypedReference(input, mockBooks), input).toMatchObject({ book: { book_number: 43 }, chapter: 3, verse: 16 })
+      expect(getAutocompleteSuggestion(input, mockBooks), input).toMatchObject({ stage: "complete", chapter: 3, verse: 16 })
+    }
+    expect(parseTypedReference("Jude 5", mockBooks)).toMatchObject({ book: { book_number: 65 }, chapter: 1, verse: 5 })
+    expect(getAutocompleteSuggestion("Jude 5", mockBooks)).toMatchObject({ stage: "complete", chapter: 1, verse: 5 })
+    // A book with many chapters keeps "John 5" as chapter 5.
+    expect(parseTypedReference("John 5", mockBooks)).toBeNull()
+    expect(getAutocompleteSuggestion("John 5", mockBooks)).toMatchObject({ stage: "chapter", chapter: 5 })
+  })
 })
+

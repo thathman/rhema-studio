@@ -225,6 +225,12 @@ impl BibleDb {
             reason = "limit is a small page-size value that fits in i64"
         )]
         let limit_i64 = limit as i64;
+        // The operator's words, each quoted (an apostrophe, comma or hyphen is FTS syntax
+        // otherwise and the whole search failed); the last one may be half typed.
+        let query = fts_words(query);
+        if query.is_empty() {
+            return Ok(vec![]);
+        }
         let rows = stmt.query_map(
             rusqlite::params![query, translation_id, limit_i64],
             |row: &rusqlite::Row| {
@@ -495,3 +501,23 @@ mod tests {
         assert_eq!(keys.len(), 2);
     }
 }
+
+/// Typed words as an FTS5 query: each word quoted, the last one a prefix.
+fn fts_words(q: &str) -> String {
+    let words: Vec<String> = q.split_whitespace().map(|w| format!("\"{}\"", w.replace('"', "\"\""))).collect();
+    let n = words.len();
+    words.into_iter().enumerate().map(|(i, w)| if i + 1 == n { format!("{w}*") } else { w }).collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod fts_words_tests {
+    use super::fts_words;
+
+    #[test]
+    fn punctuation_is_quoted_not_syntax() {
+        assert_eq!(fts_words("the Lord's my shepherd"), "\"the\" \"Lord's\" \"my\" \"shepherd\"*");
+        assert_eq!(fts_words("say \"amen\""), "\"say\" \"\"\"amen\"\"\"*");
+        assert_eq!(fts_words("   "), "");
+    }
+}
+

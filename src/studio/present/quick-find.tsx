@@ -43,7 +43,8 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
   const runSearch = useCallback(async (raw: string) => {
     const q = raw.trim()
     const ticket = ++seq.current
-    if (q.length < 2) {
+    // One character finds nothing, except a hymn number 1–9.
+    if (q.length < 2 && !/^\d$/.test(q)) {
       setResults([])
       return
     }
