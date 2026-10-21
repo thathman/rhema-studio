@@ -33,7 +33,7 @@
 |---|---|---|---|---|
 | SO-001 Specify versioned song/section/arrangement/hymnbook schema | P1 | MERGED | ST-003,ST-005 | Spec `docs/rhema-studio/10-milestone-2b-songs-hymnbooks.md`; schema shipped as migration 0003 in PR #6 (`802640a`) |
 | SO-002 Song CRUD and history | P1 | MERGED (#6 crate, #8 editor) | SO-001 | PR #6 crate; songs-editor PR: Prepare → Songs library, New/Edit/Delete with conflict and in-use messages, unsaved-change guard |
-| SO-003 Section editor (verse/chorus/bridge/tag) | P1 | MERGED (#8) | SO-002 | songs-editor PR: paste-first parser → section cards, kind dropdown, relabel, move/remove, EN/YO side by side, validation list |
+| SO-003 Section editor (verse/chorus/bridge/tag) | P1 | MERGED (#8) / IN PR (audit: Yorùbá headings recognised however typed; Markdown export pastes back without heading lines; saving a live song's words applies next time it starts) | SO-002 | songs-editor PR: paste-first parser → section cards, kind dropdown, relabel, move/remove, EN/YO side by side, validation list |
 | SO-004 Named service-specific arrangements | P1 | MERGED (#8) | SO-003 | songs-editor PR: arrangement strip (drag, ← → Delete, buttons), named orders, default flag, per-item order and language choice in the rundown |
 | SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (#6, #7, #8, #52) | SO-002 | PR #6 crate; PR #7 Quick find; PR #8 creation and number rows; hymnbook-management PR: rename and remove in More → Library (numbers dropped, songs kept) |
 | SO-006 Multilingual lyrics | P1 | MERGED (#7, #8) | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |

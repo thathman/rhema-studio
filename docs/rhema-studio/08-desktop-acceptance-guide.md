@@ -752,3 +752,12 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bw.1 | Service open with 4 items; show items 1 and 3; add a verse from Quick find and show it; show a Bible-panel verse that is not in the service; Welcome with nothing live; Black. More → Library → Save the log. | Planned vs actual lists all 4 items in order (item 2 and 4 "not shown"), the added verse "[added during the service]", "Also shown" with the Bible-panel verse; the timeline has "quick screen Welcome" and "quick screen Black screen". | Unverified |
 | 10bw.2 | Item A live; rehearsal on; present B; rehearsal off. Save the log. | After "rehearsal off" the log has "LIVE B". | Unverified |
+
+### 10bx. Editors and outputs audit fixes (SO-003, CV-004, OP-001)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bx.1 | Song editor: paste "Ẹsẹ̀ 1 / line / blank / Ègbè / line". Export the song as text, paste it into a new song. | Two sections, verse and chorus; no "Ègbè" or "## …" line in the words. | Unverified |
+| 10bx.2 | A song live on its 2nd slide; in the song editor delete its first verse and save; press Next twice. | Next continues the song as it was live; the change shows when the song is next started. | Unverified |
+| 10bx.3 | Church brand: add a look, set the stream output to its Announcements theme, remove the look, Apply. | The stream output keeps that theme (now your own); nothing goes opaque. | Unverified |
+| 10bx.4 | Rename a Church brand theme; Apply the brand again. | The new name stays. | Unverified |

@@ -22,21 +22,26 @@ export const DEFAULT_MAX_LYRIC_LINES = 6
  * Yoruba. Matched case-insensitively, with or without a number or colon.
  */
 const HEADINGS: Array<[RegExp, SectionKind]> = [
-  [/^(verse|v|stanza|ẹsẹ|ese)\s*(\d+)?[.:]?$/i, "verse"],
-  [/^(chorus|refrain|c|ẹgbẹ́ orin|egbe orin|ẹgbẹ|egbe|ìpadàbọ̀|ipadabo)\s*(\d+)?[.:]?$/i, "chorus"],
+  // Matched with accents and tone marks folded away, so "Ẹsẹ̀ 1", "Ègbè" and "ÈGBÈ" match
+  // however they were typed (letters with the accent built in, or as separate marks).
+  [/^(verse|v|stanza|ese)\s*(\d+)?[.:]?$/i, "verse"],
+  [/^(chorus|refrain|c|egbe orin|egbe|ipadabo)\s*(\d+)?[.:]?$/i, "chorus"],
   [/^(pre-?chorus|pc)\s*(\d+)?[.:]?$/i, "prechorus"],
-  [/^(bridge|b|afárá|afara)\s*(\d+)?[.:]?$/i, "bridge"],
+  [/^(bridge|b|afara)\s*(\d+)?[.:]?$/i, "bridge"],
   [/^(tag|t)\s*(\d+)?[.:]?$/i, "tag"],
-  [/^(ending|end|outro|coda|ìparí|ipari)\s*(\d+)?[.:]?$/i, "ending"],
-  [/^(intro|introduction|ìbẹ̀rẹ̀|ibere)\s*(\d+)?[.:]?$/i, "intro"],
+  [/^(ending|end|outro|coda|ipari)\s*(\d+)?[.:]?$/i, "ending"],
+  [/^(intro|introduction|ibere)\s*(\d+)?[.:]?$/i, "intro"],
 ]
+
+const foldHeading = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "")
 
 export function matchHeading(line: string): SectionKind | null {
   // Markdown and chord-sheet spellings: "## Chorus", "**Chorus**", "[Verse 1]".
   // Not "(Chorus)": in pasted lyrics that usually means "sing the chorus again here".
   const t = line.trim().replace(/^#{1,6}\s*/, "").replace(/^\*\*(.+)\*\*$/, "$1").replace(/^\[(.+)\]$/, "$1").trim()
   if (!t || t.length > 24) return null
-  for (const [re, kind] of HEADINGS) if (re.test(t)) return kind
+  const folded = foldHeading(t)
+  for (const [re, kind] of HEADINGS) if (re.test(folded)) return kind
   return null
 }
 
@@ -69,7 +74,10 @@ export function parsePastedLyrics(text: string, language = "en"): SectionInput[]
       if (buffer.length) flush()
       continue
     }
-    const heading = matchHeading(line)
+    // "## Anything" is a heading (as songToMarkdown writes every section, whatever its label);
+    // an unknown name is a section of kind "other", never a lyric line.
+    const markdown = /^#{2,6}\s+(.+)$/.exec(line.trim())
+    const heading = markdown ? (matchHeading(markdown[1].replace(/\s*\(.*\)\s*$/, "")) ?? "other") : matchHeading(line)
     if (heading) {
       if (buffer.length) flush()
       kind = heading

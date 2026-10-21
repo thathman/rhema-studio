@@ -111,4 +111,13 @@ describe("render data", () => {
     expect(copyrightFooter(ccli.song)).toBe("Amazing Grace · John Newton · © 1990 Someone · CCLI 12345")
     expect(copyrightFooter({ ...ccli.song, licence: "unknown", ccli_number: null, copyright: "" })).toBe("Amazing Grace · John Newton")
   })
+
+  it("recognises Yorùbá headings however they were typed, and every Markdown heading (round trip)", () => {
+    const yo = parsePastedLyrics("Ẹsẹ̀ 1\nOore-ọ̀fẹ́\n\nÈgbè\nỌlọ́run\n\nÈGBÈ\nlẹ́ẹ̀kan sí i\n\n" + "E\u0300gbe\u0300\nNFD")
+    expect(yo.map((s) => s.kind)).toEqual(["verse", "chorus", "chorus", "chorus"])
+    expect(yo[1].texts.en).toBe("Ọlọ́run")
+    const md = parsePastedLyrics("# Song\n\n## Section\nwords\n\n## Verse 1 (Yoruba)\nmore")
+    expect(md.map((s) => [s.kind, s.texts.en])).toEqual([["other", "words"], ["verse", "more"]])
+  })
 })
+

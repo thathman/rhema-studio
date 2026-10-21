@@ -4,7 +4,7 @@ import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem } from "@/types"
+import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type SongWithSections } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { approvalHolds } from "@/stores/approval-gate-store"
@@ -29,7 +29,7 @@ function findLiveQueueIndex(): number | null {
  * first, "last" for stepping backwards into a song).
  * Next/Previous/double-click/OSC/HTTP all come here.
  */
-export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[] }): Promise<void> {
+export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[]; song?: SongWithSections }): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
   // Before the active item moves: a held go-live must change nothing (CL-002).
@@ -50,8 +50,8 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   }
   if (isSongItem(item)) {
     // Stepping within the live song keeps the arrangement it went live with.
-    const songItem = songAs ? { ...item, song: { ...item.song, ...songAs } } : item
-    await presentSlide(songItem, slide, { goLive: true }).catch((e) =>
+    const songItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
+    await presentSlide(songItem, slide, { goLive: true, song: songAs?.song }).catch((e) =>
       console.warn("[remote-actions] presentQueueItem (song) failed:", e),
     )
     return
@@ -91,7 +91,7 @@ function stepQueue(offset: number): Promise<void> {
       const next = live.index + offset
       if (next >= 0 && next < live.total) {
         // An arrangement or language change made while the song is live applies the next time it is entered.
-        const songAs = live.arrangementId !== undefined ? { arrangement_id: live.arrangementId, languages: live.languages ?? item.song.languages } : undefined
+        const songAs = live.arrangementId !== undefined ? { arrangement_id: live.arrangementId, languages: live.languages ?? item.song.languages, song: live.song } : undefined
         return presentQueueItem(current, next, songAs)
       }
     }
