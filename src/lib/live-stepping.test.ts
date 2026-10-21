@@ -86,6 +86,13 @@ describe("live stepping and following (audit fixes)", () => {
     remoteActions.queueNext()
     await vi.waitFor(() => expect(presentVerse).toHaveBeenCalled())
     expect((presentVerse.mock.calls[0] as unknown as [{ verse: number }])[0].verse).toBe(4) // d
+    // Another service opened since (its rundown set directly): the stale neighbours are ignored.
+    presentVerse.mockClear()
+    useQueueStore.setState({ items: [v("x", 7), v("y", 8)], activeIndex: null, removedActive: { prevId: "b", nextId: "d" } })
+    useBroadcastStore.setState({ liveItemId: null, liveVerse: null })
+    remoteActions.queueNext()
+    await vi.waitFor(() => expect(presentVerse).toHaveBeenCalled())
+    expect((presentVerse.mock.calls[0] as unknown as [{ verse: number }])[0].verse).toBe(7)
   })
 })
 

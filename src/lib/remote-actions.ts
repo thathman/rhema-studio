@@ -84,11 +84,12 @@ function stepQueue(offset: number): Promise<void> {
 
   const current = activeIndex ?? findLiveQueueIndex()
   // The live item was removed: step to the item that followed it, or the one before.
+  // (Only while one of them is still in the rundown: another service opened since makes it stale.)
   const gap = current === null ? useQueueStore.getState().removedActive : null
-  if (gap) {
-    const id = offset > 0 ? gap.nextId : gap.prevId
-    const index = id ? items.findIndex((i) => i.id === id) : -1
-    return index === -1 ? Promise.resolve() : presentQueueItem(index)
+  const known = (id: string | null) => (id ? items.findIndex((i) => i.id === id) : -1)
+  if (gap && (known(gap.prevId) !== -1 || known(gap.nextId) !== -1)) {
+    const index = known(offset > 0 ? gap.nextId : gap.prevId)
+    return index === -1 ? Promise.resolve() : presentQueueItem(index) // e.g. Previous after deleting the first item
   }
   const live = useBroadcastStore.getState().liveSlide
   if (current !== null) {
