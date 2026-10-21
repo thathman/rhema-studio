@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 06:40 WAT; every PR through #113 merged)
+- Head: see `git log fork/main` (2026-10-21 06:50 WAT; every PR through #114 merged)
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -59,7 +59,7 @@ Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-ca
 
 ## Merged 2026-10-21 (this run)
 
-#96 downgrade guard · #97 diagnostics redaction · #98 licence check, CHANGELOG, KNOWN-ISSUES · #99 Black/Logo/Technical quick screens · #100 remote rate limit · #101 review fixes (licence walk, SPDX precedence, clean Black) · #102 phone remote page + QR pairing · #103 one running copy · #104 last good frame · #105 network/privacy note + host guard · #106 quick screens fit 1366x768 (Back was clipped) · #107 deletes ask first · #108 draw-failure warnings · #109 common short book names ("Jn 3 16") · #110 songs as plain text/Markdown · #111 ask before closing with unsaved work; closing the main window quits (hidden NDI windows used to keep the process alive) · #112 sound player for walk-in music and backing tracks; header chips wrap at 1366 px · #113 sounds as service items (play when reached going forward; screens untouched; silent in rehearsal).
+#96 downgrade guard · #97 diagnostics redaction · #98 licence check, CHANGELOG, KNOWN-ISSUES · #99 Black/Logo/Technical quick screens · #100 remote rate limit · #101 review fixes (licence walk, SPDX precedence, clean Black) · #102 phone remote page + QR pairing · #103 one running copy · #104 last good frame · #105 network/privacy note + host guard · #106 quick screens fit 1366x768 (Back was clipped) · #107 deletes ask first · #108 draw-failure warnings · #109 common short book names ("Jn 3 16") · #110 songs as plain text/Markdown · #111 ask before closing with unsaved work; closing the main window quits (hidden NDI windows used to keep the process alive) · #112 sound player for walk-in music and backing tracks; header chips wrap at 1366 px · #113 sounds as service items (play when reached going forward; screens untouched; silent in rehearsal) · #114 more injected-failure tests (database fails on save, media list fails, sound fails).
 
 Found by reading PRD lines against the code (not by tests): no single-instance guard, no last-good frame, one-click log deletion, the PRD's own "Jn 3 16" example failing, the Back button clipped at 1366x768. Independent reviews of each batch found 9 more defects, all fixed.
 
