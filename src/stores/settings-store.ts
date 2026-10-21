@@ -40,6 +40,12 @@ export function pushRemoteKeys(): Promise<void> {
   })
   return remoteKeysPush
 }
+/** A church-defined cue: steps are cue action ids (validated when run, so a newer build's unknown step is skipped). */
+export interface CustomMacro {
+  id: string
+  label: string
+  steps: string[]
+}
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
@@ -60,6 +66,9 @@ interface SettingsState {
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
+  /** The church's own cues (PT-003): named, ordered steps from the cue action registry. */
+  customMacros: CustomMacro[]
+  setCustomMacros: (macros: CustomMacro[]) => void
   /** Shared key for OSC/HTTP control; blank means nothing authenticates. */
   remoteSecret: string
   /** Paired controllers: SHA-256 of each token, never the token. */
@@ -102,6 +111,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   sttProvider: "deepgram",
   brandKit: defaultBrandKit(),
   operatorName: "",
+  customMacros: [],
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
@@ -128,6 +138,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set((s) => ({ remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }))
     void pushRemoteKeys()
   },
+  setCustomMacros: (customMacros) => set({ customMacros }),
   setOperatorName: (operatorName) => {
     set({ operatorName })
     void invoke("content_set_actor", { name: operatorName.trim() || null }).catch(() => {})
@@ -170,6 +181,8 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "number" && Number.isFinite(value)
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
+    case "customMacros":
+      return Array.isArray(value) && value.every((m) => typeof m === "object" && m !== null && typeof (m as CustomMacro).id === "string" && typeof (m as CustomMacro).label === "string" && Array.isArray((m as CustomMacro).steps) && (m as CustomMacro).steps.every((s) => typeof s === "string"))
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
     default:
@@ -180,6 +193,7 @@ function acceptable(key: string, value: unknown): boolean {
 const PERSISTED_KEYS = [
   "brandKit",
   "operatorName",
+  "customMacros",
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",

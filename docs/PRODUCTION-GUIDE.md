@@ -33,7 +33,7 @@ OSC addresses and HTTP commands do exactly what the buttons do, with the same sa
 | Run a macro | `/rhema/macro "service-start"` | `macro` with `"value": "service-start"` |
 | Theme, opacity, confidence | `/rhema/theme <name>`, `/rhema/opacity <0–1>`, `/rhema/confidence <0–1>` | `theme`, `opacity`, `confidence` |
 
-Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cues shows each macro's steps.
+Macro ids: `service-start`, `offering`, `prayer`, `service-end`, plus your own: Present → Cues → New cue… builds one from the same actions (Next, Clear, quick screens, timer, stage message, rehearsal off) in the order you choose; it is saved on this computer and its id (from its name, e.g. `baptism`) is shown under it for a Stream Deck or OSC controller. Present → Cues shows each macro's steps.
 
 **Phone remote:** start the HTTP API with "Accept commands from other devices on this network" ticked, press "Pair a device", and scan the QR code with a phone on the same Wi-Fi. It opens a page with big Next, Previous, Back on air and Clear buttons and what is on air; press Pair once. Without the camera, open the address shown under the code and type the six digits. The phone stays paired until it is revoked.
 

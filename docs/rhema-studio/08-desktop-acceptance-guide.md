@@ -535,3 +535,11 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10aw.1 | Prepare: open a saved service, add an item (do not save), press the pencil, change the title and date, Save title and date. | The service list shows the new title and date; the added item is still there and still unsaved; Save then works. | Unverified |
 | 10aw.2 | Rename an approved service. | Home shows it as changed since approval (the record changed); approve again to pin it. | Unverified |
+
+### 10ay. Your own cues (PT-003)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ay.1 | Present → Cues → New cue…: name "Baptism", steps Rehearsal off, Quick screen: Black, Start the timer; Save cue. Run it. | Rehearsal goes off, the screens go black (Back returns), the timer runs; the cue shows "remote: /rhema/macro baptism". | Unverified |
+| 10ay.2 | Restart Rhema; send `/rhema/macro baptism` from a Stream Deck/OSC tool (with the key if one is set). | The cue is still there and runs from the controller. | Unverified |
+| 10ay.3 | Delete the cue (bin → Delete). | It is gone; the built-in cues cannot be deleted. | Unverified |
