@@ -8,6 +8,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { Button } from "@/components/ui/button"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
+import { SongUsageBlock } from "@/studio/more/song-usage-block"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSongStore } from "@/stores/song-store"
@@ -154,6 +155,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
           </div>
           <PackageBlock onClose={onClose} />
           <JournalBlock />
+          <SongUsageBlock />
           <HymnbookList />
           <div className="rounded-lg border border-border p-3">
             <p className="mb-1 flex items-center gap-2 font-medium"><DatabaseIcon className="size-4" /> Everything: services and songs</p>

@@ -8,7 +8,7 @@ use tauri::State;
 
 use rhema_content::{
     ContentDb, ContentError, Hymnbook, HymnbookInput, ImportMode, ImportReport, ItemInput, Program, ProgramWithItems,
-    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, ServiceLog, ServiceLogSummary, MediaAsset,
+    Revision, RevisionSummary, SongExport, SongInput, SongSummary, SongWithSections, SongUsage, ServiceLog, ServiceLogSummary, MediaAsset,
 };
 
 /// The content database is opened in `setup`; `None` means it failed to open
@@ -73,6 +73,12 @@ pub fn content_create_program(
 #[tauri::command]
 pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Option<String>, title: String, body: String) -> CmdResult<ServiceLogSummary> {
     with_db(&state, |db| db.save_service_log(program_id.as_deref(), &title, &body))
+}
+
+/// Song usage between two ISO dates, for licence (CCLI) reports.
+#[tauri::command]
+pub fn content_song_usage(state: State<'_, ContentState>, from: String, to: String) -> CmdResult<Vec<SongUsage>> {
+    with_db(&state, |db| db.song_usage(&from, &to))
 }
 
 #[tauri::command]

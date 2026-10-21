@@ -25,11 +25,13 @@ mod media;
 mod package;
 mod revisions;
 mod songs;
+mod usage;
 pub use logs::*;
 pub use media::*;
 pub use package::*;
 pub use revisions::*;
 pub use songs::*;
+pub use usage::*;
 use std::sync::Mutex;
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
