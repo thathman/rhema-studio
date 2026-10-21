@@ -12,6 +12,7 @@ import { useJournalStore } from "@/stores/journal-store"
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
 import { remoteActions } from "@/lib/remote-actions"
+import { confidenceLevel } from "@/lib/confidence"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
 
 /**
@@ -139,7 +140,7 @@ export function useRemoteControl() {
         const payload = parsePayload(event.payload)
         const value = payload?.value as number | undefined
         if (value === undefined) return
-        useSettingsStore.getState().setConfidenceThreshold(value)
+        useSettingsStore.getState().setConfidenceThreshold(confidenceLevel(value))
       })
       keep(u8)
     }

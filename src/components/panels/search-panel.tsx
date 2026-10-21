@@ -291,14 +291,23 @@ export function SearchPanel() {
   // Arrow key navigation. Up and Down run the same stepping action the remote
   // bible_next / bible_prev commands do, so the two surfaces cannot diverge.
   // Next chapter stops at the end of the book and goes on to the next book's first chapter.
+  // One step at a time (holding → must not overshoot), and a failed lookup changes nothing.
+  const stepping = useRef(false)
   const nextChapter = useCallback(async () => {
-    if (!selectedBook) return
-    const following = await fetchChapter(selectedBook.book_number, chapter + 1).catch(() => [])
-    if (following.length > 0) return setChapter((c) => c + 1)
-    const nextBook = books.find((b) => b.book_number === selectedBook.book_number + 1)
-    if (nextBook) {
-      setSelectedBook(nextBook)
-      setChapter(1)
+    if (!selectedBook || stepping.current) return
+    stepping.current = true
+    try {
+      const following = await fetchChapter(selectedBook.book_number, chapter + 1)
+      if (following.length > 0) return setChapter(chapter + 1)
+      const nextBook = books.find((b) => b.book_number === selectedBook.book_number + 1)
+      if (nextBook) {
+        setSelectedBook(nextBook)
+        setChapter(1)
+      }
+    } catch {
+      // Lookup failed: stay on this chapter.
+    } finally {
+      stepping.current = false
     }
   }, [selectedBook, chapter, books])
 
