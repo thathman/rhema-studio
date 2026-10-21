@@ -771,3 +771,13 @@ report), but launching it cannot.
 | 10by.3 | Bible panel: Genesis 50, press → (or Next chapter). | Exodus 1, not an empty Genesis 51. | Unverified |
 | 10by.4 | While listening, open Settings → Audio or Speech. | "Rhema is listening now. Changes here apply when you stop and start listening again." | Unverified |
 | 10by.5 | Auto on; send /rhema/confidence 0.95; say a verse loosely. | It appears in the preview but does not replace the screen. | Unverified |
+
+### 10bz. Regression audit fixes (interacting changes)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bz.1 | "Ask before showing" on, service not approved, Auto on: Welcome, then read a verse aloud. | No approval question appears by itself; the verse waits in the preview. Next then asks as usual. | Unverified |
+| 10bz.2 | Rundown A B C D with C live; delete C; press Previous; delete again and press Next. | Previous shows B (not A); Next shows the item after the deleted one. | Unverified |
+| 10bz.3 | A song live; edit and save its words; click a slide of it in Present and Show live. | Preview and the screen show the words as the song went live. | Unverified |
+| 10bz.4 | Present a new verse item, save the service, change the translation. | The verse on air keeps the translation it was saved with. | Unverified |
+| 10bz.5 | Black screen test at 8:30 with an empty rundown; build and run the service; save the log. | No item is marked "added during the service" unless it really was. | Unverified |

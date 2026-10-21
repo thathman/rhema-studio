@@ -3,7 +3,7 @@ import { bibleActions } from "@/hooks/use-bible"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
-import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
 import { presentQuickScreen, type QuickScreen } from "@/hooks/use-broadcast"
 import { useSongStore } from "@/stores/song-store"
 
@@ -56,9 +56,9 @@ export const presentActions = {
       .catch(() => {})
   },
   /** Put one slide of a song item in Preview; the song loads if it is not cached yet. */
-  previewSlide: (item: SongQueueItem, index: number) => {
-    useBibleStore.getState().selectSlide({ item, index })
-    void useSongStore.getState().load(item.song.song_id).catch(() => {})
+  previewSlide: (item: SongQueueItem, index: number, song?: SongWithSections) => {
+    useBibleStore.getState().selectSlide({ item, index, ...(song ? { song } : {}) })
+    if (!song) void useSongStore.getState().load(item.song.song_id).catch(() => {})
   },
   /** Continue a reading: the verse after/before the live one, same translations. */
   verseNext: () => remoteActions.verseNext(),

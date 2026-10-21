@@ -45,5 +45,21 @@ describe("service log entries (AR-001)", () => {
     useBroadcastStore.setState({ liveVerse: slide("added"), liveItemId: "added" })
     expect(useJournalStore.getState().startItemIds).toEqual(["a", "b"])
   })
+
+  it("the plan is taken at the first service content on air (not a quick screen) and again for the next service", async () => {
+    const { useQueueStore } = await import("./queue-store")
+    const { useServiceStore } = await import("./service-store")
+    const item = (id: string) => ({ id, verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 }) as never
+    useServiceStore.setState({ current: { id: "s1" } as never })
+    useJournalStore.setState({ startItemIds: null })
+    useQueueStore.setState({ items: [] })
+    useBroadcastStore.setState({ isLive: true, liveVerse: slide("", { screen: "black", quick: true }) }) // a black-screen test before the service
+    expect(useJournalStore.getState().startItemIds).toBeNull()
+    useQueueStore.setState({ items: [item("x"), item("y")] })
+    useBroadcastStore.setState({ liveVerse: slide("x"), liveItemId: "x" })
+    expect(useJournalStore.getState().startItemIds).toEqual(["x", "y"])
+    useServiceStore.setState({ current: { id: "s2" } as never })
+    expect(useJournalStore.getState().startItemIds).toBeNull()
+  })
 })
 

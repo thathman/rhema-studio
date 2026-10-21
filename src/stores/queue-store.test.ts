@@ -106,10 +106,11 @@ describe("backfillText", () => {
     expect(useQueueStore.getState().items[useQueueStore.getState().activeIndex ?? -1].id).toBe("b")
     useQueueStore.getState().reorderItems(2, 0)
     expect(useQueueStore.getState().items[useQueueStore.getState().activeIndex ?? -1].id).toBe("b")
-    // Removing the item on screen: stand on the one before it, so Next goes on (not back to the top).
+    // Removing the item on screen: no active item, but its neighbours are kept for Next/Previous.
     const before = useQueueStore.getState().items.map((i) => i.id)
+    const at = before.indexOf("b")
     useQueueStore.getState().removeItem("b")
-    const at = before.indexOf("b") - 1
-    expect(useQueueStore.getState().activeIndex).toBe(at >= 0 ? at : null)
+    expect(useQueueStore.getState().activeIndex).toBe(at > 0 ? at - 1 : null) // displays read "next" as the item that followed
+    expect(useQueueStore.getState().removedActive).toEqual({ prevId: before[at - 1] ?? null, nextId: before[at + 1] ?? null })
   })
 })

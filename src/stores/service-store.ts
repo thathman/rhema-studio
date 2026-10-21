@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { invoke } from "@tauri-apps/api/core"
 import { useQueueStore } from "@/stores/queue-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type {
   ItemInput,
@@ -721,6 +722,10 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         useQueueStore.setState((q) => ({
           items: q.items.map((i) => (isVerseItem(i) && i.translation === undefined && pins.has(i.id) ? { ...i, ...pins.get(i.id) } : i)),
         }))
+        // The copy on air is pinned too, so a later change of translation leaves it alone.
+        const live = useBroadcastStore.getState()
+        const livePin = live.liveItemId ? pins.get(live.liveItemId) : undefined
+        if (livePin) useBroadcastStore.setState({ liveItem: { ...(live.liveItem ?? {}), ...livePin } })
       }
       // What was saved is the new baseline; edits made meanwhile stay dirty.
       baseline = snapshot

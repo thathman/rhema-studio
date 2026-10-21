@@ -6,6 +6,8 @@ interface QueueState {
   activeIndex: number | null
   /** ID of the queue item currently being flash-highlighted (null = none). */
   highlightedId: string | null
+  /** The live item was removed from the rundown: the items either side of it, for Next/Previous. */
+  removedActive: { prevId: string | null; nextId: string | null } | null
 
   addItem: (item: QueueItem) => void
   removeItem: (id: string) => void
@@ -42,6 +44,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   items: [],
   activeIndex: null,
   highlightedId: null,
+  removedActive: null,
 
   addItem: (item) =>
     set((state) => {
@@ -74,9 +77,16 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     set((state) => {
       const removed = state.items.findIndex((i) => i.id === id)
       const items = state.items.filter((i) => i.id !== id)
-      // The active item itself removed: stand on the one before it, so Next
-      // goes on to the item that followed (never back to the top).
-      if (removed !== -1 && removed === state.activeIndex) return { items, activeIndex: removed > 0 ? removed - 1 : null }
+      // The active item itself removed: the position stays on the one before it (so "next"
+      // on the stage and in the rundown is the item that followed), and stepping uses both
+      // neighbours: Next goes to the one that followed, Previous to the one before (no skip).
+      if (removed !== -1 && removed === state.activeIndex) {
+        return {
+          items,
+          activeIndex: removed > 0 ? removed - 1 : null,
+          removedActive: { prevId: state.items[removed - 1]?.id ?? null, nextId: state.items[removed + 1]?.id ?? null },
+        }
+      }
       return withActiveKept(state, items)
     }),
   updateItem: (id, patch) =>
@@ -88,8 +98,8 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       items.splice(toIndex, 0, moved)
       return withActiveKept(state, items)
     }),
-  setActive: (activeIndex) => set({ activeIndex }),
-  clearQueue: () => set({ items: [], activeIndex: null }),
+  setActive: (activeIndex) => set({ activeIndex, removedActive: null }),
+  clearQueue: () => set({ items: [], activeIndex: null, removedActive: null }),
   flashItem: (id) => {
     if (flashTimer) clearTimeout(flashTimer)
     set({ highlightedId: id })
