@@ -49,10 +49,29 @@ export function normalizeInput(input: string): string {
 }
 
 /**
+ * Common short forms that are not a prefix of the book's name or the Bible
+ * database's abbreviation ("Jn" for John, "Mt", "Php"), by canonical book
+ * number so they work in every translation. Numbered books use the Roman
+ * prefix normalizeInput produces ("1 Jn" → "i jn"). Only unambiguous forms.
+ */
+const BOOK_ALIASES: Record<string, number> = {
+  gn: 1, dt: 5, jgs: 7, jdg: 7, "i sm": 9, "ii sm": 10, sos: 22, "song of songs": 22, sg: 22,
+  jl: 29, ob: 31, hb: 35, hg: 37,
+  mt: 40, mk: 41, mrk: 41, lk: 42, luk: 42, jn: 43, jhn: 43, rm: 45, php: 50, phm: 57, phlm: 57, jm: 59,
+  "i pt": 60, "ii pt": 61, "i jn": 62, "i jhn": 62, "ii jn": 63, "ii jhn": 63, "iii jn": 64, "iii jhn": 64, jd: 65,
+  rv: 66, revelations: 66,
+}
+
+/**
  * Find matching book by name or abbreviation (case insensitive)
  */
 export function findMatchingBook(bookInput: string, books: Book[]): Book | undefined {
   const normalized = normalizeInput(bookInput).toLowerCase()
+  const alias = BOOK_ALIASES[normalized.replace(/\./g, "").replace(/\s+/g, " ").trim()]
+  if (alias) {
+    const book = books.find((b) => b.book_number === alias)
+    if (book) return book
+  }
   return books.find(
     b =>
       normalizeInput(b.name).toLowerCase().startsWith(normalized) ||
