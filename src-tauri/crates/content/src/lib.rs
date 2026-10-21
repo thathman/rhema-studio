@@ -78,6 +78,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0008_service_logs", include_str!("../migrations/0008_service_logs.sql")),
     ("0009_song_attachments", include_str!("../migrations/0009_song_attachments.sql")),
     ("0010_archive_templates", include_str!("../migrations/0010_archive_templates.sql")),
+    ("0011_revision_saved_by", include_str!("../migrations/0011_revision_saved_by.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -735,7 +736,7 @@ pub fn set_actor(name: Option<&str>) {
     *ACTOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = name;
 }
 
-fn actor() -> Option<String> {
+pub(crate) fn actor() -> Option<String> {
     ACTOR.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
 }
 
@@ -831,6 +832,9 @@ struct ExtrasPayload {
     /// A clock time the item should finish by (FR-07 "target item end"), 24-hour "HH:MM".
     #[serde(default)]
     end_by: Option<String>,
+    /// Who is preparing this item (CL-007), free text, short.
+    #[serde(default)]
+    prepared_by: Option<String>,
 }
 
 fn is_clock_time(s: &str) -> bool {
@@ -849,6 +853,9 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     }
     if p.end_by.as_deref().is_some_and(|t| !is_clock_time(t)) {
         return Err(ContentError::Invalid(format!("item {i}: end-by time must be HH:MM")));
+    }
+    if p.prepared_by.as_deref().is_some_and(|n| n.chars().count() > 60 || n.chars().any(char::is_control)) {
+        return Err(ContentError::Invalid(format!("item {i}: 'prepared by' must be a short name")));
     }
     Ok(())
 }
@@ -949,7 +956,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by"]);
     }
 
     #[test]
@@ -1078,6 +1085,8 @@ mod tests {
         let too_long = ItemInput { payload: Some("{\"planned_minutes\":900}".into()), ..verse("John 3:16", 43, 3, 16) };
         assert!(matches!(db.replace_items(&p.id, 2, &[too_long]), Err(ContentError::Invalid(_))));
         let timed = ItemInput { payload: Some("{\"planned_minutes\":4.5}".into()), ..verse("John 3:16", 43, 3, 16) };
+        assert!(validate_items(&[ItemInput { payload: Some("{\"prepared_by\":\"Tolu (music)\"}".into()), ..verse("John 3:16", 43, 3, 16) }]).is_ok());
+        assert!(validate_items(&[ItemInput { payload: Some(format!("{{\"prepared_by\":\"{}\"}}", "x".repeat(61))), ..verse("John 3:16", 43, 3, 16) }]).is_err());
         for (end_by, ok) in [("12:15", true), ("00:00", true), ("23:59", true), ("24:00", false), ("12:60", false), ("9:15", false), ("12-15", false)] {
             let item = ItemInput { payload: Some(format!("{{\"end_by\":\"{end_by}\"}}")), ..verse("John 3:16", 43, 3, 16) };
             assert_eq!(validate_items(&[item]).is_ok(), ok, "{end_by}");
@@ -1159,7 +1168,7 @@ mod tests {
         let older = &MIGRATIONS[..5];
         let err = ContentDb::open_with_migrations(&tmp.db(), older).unwrap_err();
         match &err {
-            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates"]),
+            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by"]),
             other => panic!("{other:?}"),
         }
         assert!(err.to_string().contains("newer Rhema Studio"));
@@ -1180,7 +1189,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

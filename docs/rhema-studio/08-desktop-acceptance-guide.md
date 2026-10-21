@@ -603,3 +603,10 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bf.1 | Listen for a few minutes (Whisper or Deepgram), present some items, then More → Library → Service log. | "Include what was said (n recognised passages)" appears, unticked, with the notice. Keep this log without ticking: the kept log has no transcript. | Unverified |
 | 10bf.2 | Tick it and Keep this log; search Earlier logs for a phrase that was said. | The log ends with "Transcript (recognised speech by …; not checked…)" and timed passages; the search finds it. Reopening Library shows the box unticked again. | Unverified |
+
+### 10bg. Who prepares, who saved (CL-007)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bg.1 | More → Your name = "Tolu". Prepare: set "prepared by" = "Ade (music)" on a song; Save; open History. | The rundown shows "· Ade (music)" on the song; History's newest version reads "… · Tolu". | Unverified |
+| 10bg.2 | Publish to the church folder and open it on another computer. | The song still shows "· Ade (music)". | Unverified |

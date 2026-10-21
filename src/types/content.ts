@@ -129,6 +129,8 @@ export interface RevisionSummary {
   service_date: string | null
   item_count: number
   created_at: string
+  /** Who saved this version (operator name on that computer), when known. */
+  saved_by?: string | null
 }
 
 export interface Revision extends RevisionSummary {

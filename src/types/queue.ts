@@ -14,6 +14,8 @@ interface QueueItemBase {
   planned_minutes?: number | null
   /** A clock time this item should finish by, 24-hour "HH:MM" (FR-07). */
   end_by?: string | null
+  /** Who is preparing this item (CL-007): a short name. */
+  prepared_by?: string | null
 }
 
 export interface VerseQueueItem extends QueueItemBase {

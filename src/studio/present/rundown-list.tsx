@@ -94,6 +94,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {song && <SongBadges item={item} />}
                 {item.planned_minutes ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
                 {item.end_by ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
+                {item.prepared_by ? <span className="ml-1 max-w-24 shrink-0 truncate text-[0.625rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
                 {onAir && (
                   <span className="ml-auto shrink-0 text-[0.625rem] font-bold tracking-wider text-destructive uppercase">
                     Live
@@ -289,6 +290,15 @@ function PlannedMinutes({ item }: { item: QueueItem }) {
         }}
       />
       <span className="text-muted-foreground">minutes</span>
+      <span className="ml-2 text-muted-foreground">prepared by</span>
+      <Input
+        aria-label={`Who prepares ${item.reference}`}
+        value={item.prepared_by ?? ""}
+        placeholder="name"
+        maxLength={60}
+        className="h-7 w-28 text-xs"
+        onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, prepared_by: e.target.value.trim() ? e.target.value : null }))}
+      />
       <span className="ml-2 text-muted-foreground">end by</span>
       <Input
         type="time"

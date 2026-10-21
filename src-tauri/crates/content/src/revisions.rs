@@ -17,6 +17,9 @@ pub struct RevisionSummary {
     pub service_date: Option<String>,
     pub item_count: i64,
     pub created_at: String,
+    /// Who saved this version (operator name on that computer), when known (migration 0011).
+    #[serde(default)]
+    pub saved_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -57,6 +60,9 @@ pub(crate) fn snapshot(tx: &Transaction<'_>, program_id: &str) -> Result<()> {
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![new_id(), program_id, program.revision, program.title, program.service_date, json, i64::try_from(items.len()).unwrap_or(i64::MAX)],
     )?;
+    if has_saved_by(tx) {
+        tx.execute("UPDATE program_revisions SET saved_by = ?3 WHERE program_id = ?1 AND revision = ?2", params![program_id, program.revision, crate::actor()])?;
+    }
     // The approved snapshot (0007) is never pruned; older files have no such column.
     let keep_approved = if crate::has_approval_column(tx) { "AND revision != COALESCE((SELECT approved_revision FROM programs WHERE id = ?1), -1)" } else { "" };
     tx.execute(
@@ -69,7 +75,16 @@ pub(crate) fn snapshot(tx: &Transaction<'_>, program_id: &str) -> Result<()> {
     Ok(())
 }
 
-const COLS: &str = "id, program_id, revision, title, service_date, item_count, created_at";
+fn has_saved_by(conn: &Connection) -> bool {
+    conn.prepare("SELECT 1 FROM pragma_table_info('program_revisions') WHERE name = 'saved_by'")
+        .and_then(|mut st| st.exists([]))
+        .unwrap_or(false)
+}
+
+/// Summary columns; an older schema (a backup being checked) reads `saved_by` as unknown.
+fn cols(conn: &Connection) -> String {
+    format!("id, program_id, revision, title, service_date, item_count, created_at, {}", if has_saved_by(conn) { "saved_by" } else { "NULL" })
+}
 
 fn row_to_summary(r: &rusqlite::Row<'_>) -> rusqlite::Result<RevisionSummary> {
     Ok(RevisionSummary {
@@ -80,13 +95,14 @@ fn row_to_summary(r: &rusqlite::Row<'_>) -> rusqlite::Result<RevisionSummary> {
         service_date: r.get(4)?,
         item_count: r.get(5)?,
         created_at: r.get(6)?,
+        saved_by: r.get(7)?,
     })
 }
 
 fn load_revision(conn: &Connection, id: &str) -> Result<Option<Revision>> {
     let row: Option<(RevisionSummary, String)> = conn
-        .query_row(&format!("SELECT {COLS}, items FROM program_revisions WHERE id = ?1"), params![id], |r| {
-            Ok((row_to_summary(r)?, r.get::<_, String>(7)?))
+        .query_row(&format!("SELECT {}, items FROM program_revisions WHERE id = ?1", cols(conn)), params![id], |r| {
+            Ok((row_to_summary(r)?, r.get::<_, String>(8)?))
         })
         .optional()?;
     match row {
@@ -102,7 +118,7 @@ impl ContentDb {
     /// Newest first.
     pub fn list_revisions(&self, program_id: &str) -> Result<Vec<RevisionSummary>> {
         let conn = self.lock()?;
-        let mut stmt = conn.prepare(&format!("SELECT {COLS} FROM program_revisions WHERE program_id = ?1 ORDER BY revision DESC"))?;
+        let mut stmt = conn.prepare(&format!("SELECT {} FROM program_revisions WHERE program_id = ?1 ORDER BY revision DESC", cols(&conn)))?;
         let rows = stmt.query_map(params![program_id], row_to_summary)?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
@@ -244,12 +260,16 @@ mod tests {
         let p = db.create_program("Sunday", None).unwrap();
         crate::set_actor(Some("  Tolu  "));
         let approved = db.approve_program(&p.id, p.revision).unwrap();
+        crate::set_actor(Some("Tolu"));
+        let renamed = db.update_program(&p.id, approved.revision, "Sunday (Tolu)", None).unwrap();
         crate::set_actor(None);
+        let saved_by: Vec<_> = db.list_revisions(&p.id).unwrap().into_iter().map(|r| (r.revision, r.saved_by)).collect();
+        assert_eq!(saved_by.first(), Some(&(renamed.revision, Some("Tolu".to_string()))), "CL-007: who saved each version");
         assert_eq!(approved.approved_by.as_deref(), Some("Tolu"), "CL-002: who approved it");
         let events = db.audit_events("program", &p.id).unwrap();
         let approve = events.iter().find(|e| e.action == "approve").unwrap();
         assert_eq!(approve.actor.as_deref(), Some("Tolu"));
-        let _ = db.update_program(&p.id, p.revision, "Sunday 9am", None).unwrap();
+        let _ = db.update_program(&p.id, renamed.revision, "Sunday 9am", None).unwrap();
         assert_eq!(db.audit_events("program", &p.id).unwrap().last().unwrap().actor, None);
     }
 }

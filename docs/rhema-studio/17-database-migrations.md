@@ -16,6 +16,7 @@
 | 0008_service_logs | Saved service logs | none |
 | 0009_song_attachments | Song ↔ file links (chord charts, sheets) | none |
 | 0010_archive_templates | `programs.archived_at`, `programs.is_template`, `programs.approved_by` (archive a service; templates for new services; who approved) | none (all default to unset) |
+| 0011_revision_saved_by | `program_revisions.saved_by`: who saved each version (operator name) | none (older versions read as unknown) |
 
 Every migration only adds tables or nullable/defaulted columns; none rewrites or deletes existing rows. Applied SQL files are never edited; a change is always a new migration.
 

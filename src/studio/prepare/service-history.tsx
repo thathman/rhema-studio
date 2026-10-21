@@ -77,7 +77,7 @@ export function ServiceHistory() {
                 className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/50 ${picked?.revision.id === r.id ? "bg-primary/10" : ""}`}
               >
                 <span className="w-8 shrink-0 font-mono text-muted-foreground">v{r.revision}</span>
-                <span className="min-w-0 flex-1 truncate">{when(r.created_at)}{r.revision === current.revision ? " · current" : ""}{r.revision === current.approved_revision ? " · approved" : ""}</span>
+                <span className="min-w-0 flex-1 truncate">{when(r.created_at)}{r.saved_by ? ` · ${r.saved_by}` : ""}{r.revision === current.revision ? " · current" : ""}{r.revision === current.approved_revision ? " · approved" : ""}</span>
                 <span className="shrink-0 text-muted-foreground">{r.item_count} item{r.item_count === 1 ? "" : "s"}</span>
               </button>
             </li>
