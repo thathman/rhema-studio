@@ -3,18 +3,18 @@
 //! Secret Service on Linux) instead of the plain settings file (RELEASE-PLAN
 //! RG-08 "API keys secured"). The frontend falls back to the settings file
 //! when the store is unavailable, so nothing is ever lost.
+//!
+//! All secrets live in ONE entry (a JSON object), so a system that asks the
+//! user before an app reads the keychain (macOS after an update) asks once,
+//! not once per secret.
 
 use keyring::Entry;
 
 const SERVICE: &str = "Rhema Studio";
-/// The only names the frontend may read or write.
-pub const NAMES: &[&str] = &["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword"];
+const ACCOUNT: &str = "settings-secrets";
 
-fn entry(name: &str) -> Result<Entry, String> {
-    if !NAMES.contains(&name) {
-        return Err(format!("unknown secret {name:?}"));
-    }
-    Entry::new(SERVICE, name).map_err(|e| e.to_string())
+fn entry() -> Result<Entry, String> {
+    Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())
 }
 
 /// Store `value` and read it back; true only when the store returned the
@@ -31,29 +31,28 @@ pub fn set_verified(entry: &Entry, value: &str) -> Result<bool, String> {
     Ok(entry.get_password().map_err(|e| e.to_string())? == value)
 }
 
-/// `None` when nothing is stored under `name`; an error when the store
+/// The stored JSON, `None` when nothing is stored; an error when the store
 /// could not be read (locked, unavailable), which the caller must not
 /// mistake for "empty".
 #[tauri::command(async)]
-pub fn secret_get(name: String) -> Result<Option<String>, String> {
-    match entry(&name)?.get_password() {
+pub fn secrets_get() -> Result<Option<String>, String> {
+    match entry()?.get_password() {
         Ok(v) => Ok(Some(v)),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(e.to_string()),
     }
 }
 
+/// Replace the stored JSON (empty deletes it). Must be a JSON object of strings.
 #[tauri::command(async)]
-pub fn secret_set(name: String, value: String) -> Result<bool, String> {
-    set_verified(&entry(&name)?, &value)
-}
-
-/// Every stored secret, for the diagnostics export to redact.
-pub fn stored_values() -> Vec<String> {
-    NAMES
-        .iter()
-        .filter_map(|n| Entry::new(SERVICE, n).ok()?.get_password().ok())
-        .collect()
+pub fn secrets_set(json: String) -> Result<bool, String> {
+    if !json.is_empty() {
+        let v: serde_json::Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        if !v.as_object().is_some_and(|o| o.values().all(serde_json::Value::is_string)) {
+            return Err("secrets must be a JSON object of strings".into());
+        }
+    }
+    set_verified(&entry()?, &json)
 }
 
 #[cfg(test)]
@@ -61,19 +60,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_known_names_are_accepted() {
-        assert!(entry("someOtherApp").is_err());
-        assert!(entry("../deepgramApiKey").is_err());
-    }
-
-    #[test]
     fn a_value_is_verified_by_reading_it_back_and_empty_deletes() {
         keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
-        let e = Entry::new(SERVICE, "deepgramApiKey").unwrap();
-        assert_eq!(set_verified(&e, "dg-1234567890"), Ok(true));
-        assert_eq!(e.get_password().unwrap(), "dg-1234567890");
+        let e = Entry::new(SERVICE, ACCOUNT).unwrap();
+        assert_eq!(set_verified(&e, r#"{"deepgramApiKey":"dg-1234567890"}"#), Ok(true));
+        assert_eq!(e.get_password().unwrap(), r#"{"deepgramApiKey":"dg-1234567890"}"#);
         assert_eq!(set_verified(&e, ""), Ok(true));
         assert!(matches!(e.get_password(), Err(keyring::Error::NoEntry)));
         assert_eq!(set_verified(&e, ""), Ok(true), "deleting nothing is fine");
+    }
+
+    #[test]
+    fn only_a_json_object_of_strings_is_stored() {
+        assert!(secrets_set("not json".into()).is_err());
+        assert!(secrets_set("[1,2]".into()).is_err());
+        assert!(secrets_set(r#"{"a":1}"#.into()).is_err());
     }
 }

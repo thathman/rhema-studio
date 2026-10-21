@@ -511,6 +511,6 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10at.1 | Start this build over settings from an older build that had a Deepgram key, a remote key and an OBS password. Open `settings.json` in the app data folder. | The three values are empty in the file, `secretsInKeychain` lists them, and Windows Credential Manager (Generic credentials) / macOS Keychain Access shows "Rhema Studio" entries. Settings still shows the values working (OBS connects, remote key accepted). | Unverified |
+| 10at.1 | Start this build over settings from an older build that had a Deepgram key, a remote key and an OBS password. Open `settings.json` in the app data folder. | The three values are empty in the file and `secretsInKeychain` is `true`; Windows Credential Manager (Generic credentials) / macOS Keychain Access shows one "Rhema Studio" entry (`settings-secrets`). The values still work (OBS connects, remote key accepted). On macOS after an update, at most one keychain permission prompt. | Unverified |
 | 10at.2 | Restart Rhema. | Everything still works without re-entering anything. | Unverified |
 | 10at.3 | Settings → Diagnostics → Save logs after a session that logged an error mentioning the remote key. | The key appears as [redacted]. | Unverified |
