@@ -1,3 +1,4 @@
+import type { OpenedFrom } from "@/lib/church-folder"
 import { invoke } from "@tauri-apps/api/core"
 
 export type RemoteRole = "present" | "configure"
@@ -77,6 +78,9 @@ interface SettingsState {
   /** Service files already opened on this computer (sha256), so the folder list can say so. */
   openedPackages: string[]
   noteOpenedPackage: (sha256: string) => void
+  /** Which folder file each service on this computer was opened from (by local service id), to spot newer versions. */
+  openedFrom: Record<string, OpenedFrom>
+  noteOpenedFrom: (programId: string, from: OpenedFrom) => void
   /** The church's own cues (PT-003): named, ordered steps from the cue action registry. */
   customMacros: CustomMacro[]
   setCustomMacros: (macros: CustomMacro[]) => void
@@ -125,6 +129,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   customMacros: [],
   churchFolder: "",
   openedPackages: [],
+  openedFrom: {},
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
@@ -153,6 +158,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
   setCustomMacros: (customMacros) => set({ customMacros }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
+  noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-200)) })),
   noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),
   setOperatorName: (operatorName) => {
     set({ operatorName })
@@ -197,6 +203,8 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "number" && Number.isFinite(value)
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
+    case "openedFrom":
+      return typeof value === "object" && value !== null && !Array.isArray(value)
     case "openedPackages":
       return Array.isArray(value) && value.every((x) => typeof x === "string")
     case "customMacros":
@@ -214,6 +222,7 @@ const PERSISTED_KEYS = [
   "customMacros",
   "churchFolder",
   "openedPackages",
+  "openedFrom",
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",
