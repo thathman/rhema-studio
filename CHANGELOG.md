@@ -21,6 +21,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
 ### Search and safety
+- Home is more truthful: a theme font missing from this computer is reported, an unapproved service warns when "Ask before showing" is on, and deleted files are noticed each time you open Home.
 - Keyboard and screen readers: typing in the Bible quick box never changes the screen, going on or off air and warnings are read out, the Production queue and search results work from the keyboard, and focus stays in place after deleting.
 - When something fails: one view going wrong no longer blanks the window, importing a large video or opening from a network folder no longer freezes Rhema, a keychain that cannot be read says so with Retry, and cloud speech returns to real time after a network drop.
 - Outputs: Present shows a projector closed from the computer as off, an unplugged monitor is named correctly, very long text and stage words fit, and editing a theme no longer flickers on air or mutes a video.
