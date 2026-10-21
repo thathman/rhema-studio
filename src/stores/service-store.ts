@@ -640,6 +640,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       const data = await invoke<ProgramWithItems | null>("content_get_program", { id })
       if (!data) {
         set({ error: "That service no longer exists" })
+        if (rememberedServiceId() === id) remember(null) // not again at the next start
         if (get().current?.id === id) {
           closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
           set({ current: null, dirty: false })

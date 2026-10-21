@@ -89,6 +89,7 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "remote_pair_start": return "123456"
     case "remote_pair_cancel": return null
     case "get_audio_devices": return [] // the real command always returns a list; null crashed Settings
+    case "damaged_store_files": return [] // nothing is set aside in the browser
     case "content_set_actor": return null
     case "content_save_service_log": { const id = crypto.randomUUID(); logs.unshift({ id, program_id: (args.programId as string | null) ?? null, title: String(args.title), saved_at: new Date().toISOString(), bytes: String(args.body).length, body: String(args.body) }); return logs[0] }
     case "content_list_service_logs": { const q = String(args.query ?? "").toLowerCase(); return logs.filter((l) => !q || l.title.toLowerCase().includes(q) || l.body.toLowerCase().includes(q)) }
