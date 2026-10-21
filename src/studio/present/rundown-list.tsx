@@ -503,7 +503,7 @@ function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; 
           <li key={slide.index}>
             <button
               type="button"
-              onClick={() => presentActions.previewSlide(shownItem, slide.index)}
+              onClick={() => presentActions.previewSlide(shownItem, slide.index, liveSnapshot?.song)}
               onDoubleClick={mode === "present" ? () => void presentQueueItem(index, slide.index, songAs) : undefined}
               className={cn(
                 "flex h-7 w-full min-w-0 items-center gap-2 rounded px-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",

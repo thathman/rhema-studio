@@ -45,6 +45,17 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
  * go-live that is not held (approved, gate off, or let through), and is
  * never held again this session.
  */
+/** Whether a go-live now would be held, without asking or recording anything. */
+export function approvalWouldHold(opts: { leavingRehearsal?: boolean } = {}): boolean {
+  const current = useServiceStore.getState().current
+  if (!current) return false
+  const gate = useApprovalGateStore.getState()
+  if (gate.held) return true
+  if (gate.acknowledged.includes(current.id)) return false
+  if (useBroadcastStore.getState().rehearsal && !opts.leavingRehearsal) return false
+  return useSettingsStore.getState().requireApproval && approvalState(current) !== "approved"
+}
+
 export function approvalHolds(retry: () => void, opts: { leavingRehearsal?: boolean } = {}): boolean {
   const current = useServiceStore.getState().current
   if (!current) return false
@@ -52,7 +63,7 @@ export function approvalHolds(retry: () => void, opts: { leavingRehearsal?: bool
   if (gate.held) return true // one question at a time; the first request is the one kept
   if (gate.acknowledged.includes(current.id)) return false
   if (useBroadcastStore.getState().rehearsal && !opts.leavingRehearsal) return false
-  if (!useSettingsStore.getState().requireApproval || approvalState(current) === "approved") {
+  if (!approvalWouldHold(opts)) {
     useApprovalGateStore.setState({ acknowledged: [...gate.acknowledged, current.id] })
     return false
   }
@@ -63,6 +74,6 @@ export function approvalHolds(retry: () => void, opts: { leavingRehearsal?: bool
 /** Rehearsal off sends what is on the rehearsal output to the congregation, so it is a go-live too. */
 export function leaveRehearsal(): void {
   const b = useBroadcastStore.getState()
-  if (b.isLive && b.liveVerse && !b.liveVerse.screen && approvalHolds(leaveRehearsal, { leavingRehearsal: true })) return
+  if (b.isLive && b.liveVerse && !b.liveVerse.screen && !b.liveVerse.quick && approvalHolds(leaveRehearsal, { leavingRehearsal: true })) return
   b.setRehearsal(false)
 }

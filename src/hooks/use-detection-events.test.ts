@@ -51,5 +51,20 @@ describe("heard verses and the rundown", () => {
     useBroadcastStore.setState({ autoLive: false })
     useSettingsStore.setState({ confidenceThreshold: 0.8 })
   })
+
+  it("a heard verse never raises the approval question: with the service waiting for approval it stays in the preview", async () => {
+    const { useSettingsStore } = await import("@/stores/settings-store")
+    const { useApprovalGateStore } = await import("@/stores/approval-gate-store")
+    const { useBibleStore } = await import("@/stores/bible-store")
+    useServiceStore.setState({ current: { id: "p1", title: "Sunday", revision: 1, approved_revision: null } as unknown as Program })
+    useSettingsStore.setState({ requireApproval: true, confidenceThreshold: 0.5 })
+    useApprovalGateStore.setState({ held: null, retry: null, acknowledged: [] })
+    useBroadcastStore.setState({ autoLive: true, isLive: true, liveVerse: null, rehearsal: false })
+    handleVerseDetections([{ ...heard(21), confidence: 0.99 }])
+    expect(useApprovalGateStore.getState().held).toBeNull()
+    expect(useBibleStore.getState().selectedVerse?.verse).toBe(21)
+    useSettingsStore.setState({ requireApproval: false, confidenceThreshold: 0.8 })
+    useBroadcastStore.setState({ autoLive: false })
+  })
 })
 

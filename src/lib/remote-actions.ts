@@ -83,6 +83,13 @@ function stepQueue(offset: number): Promise<void> {
   if (items.length === 0) return Promise.resolve()
 
   const current = activeIndex ?? findLiveQueueIndex()
+  // The live item was removed: step to the item that followed it, or the one before.
+  const gap = current === null ? useQueueStore.getState().removedActive : null
+  if (gap) {
+    const id = offset > 0 ? gap.nextId : gap.prevId
+    const index = id ? items.findIndex((i) => i.id === id) : -1
+    return index === -1 ? Promise.resolve() : presentQueueItem(index)
+  }
   const live = useBroadcastStore.getState().liveSlide
   if (current !== null) {
     const item = items[current]
@@ -188,12 +195,12 @@ export const remoteActions = {
     const bible = useBibleStore.getState()
     const queue = useQueueStore.getState()
     if (bible.selectedSlide) {
-      const { item, index } = bible.selectedSlide
+      const { item, index, song } = bible.selectedSlide
       const idx = queue.items.findIndex((i) => i.id === item.id)
       if (idx !== -1) queue.setActive(idx)
       if (isSlideItem(item)) void presentCustomSlide(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
       else if (isImageItem(item)) void presentImage(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (image) failed:", e))
-      else void presentSlide(item, index, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
+      else void presentSlide(item, index, { goLive: true, song }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
       return
     }
     const selectedVerse = bible.selectedVerse

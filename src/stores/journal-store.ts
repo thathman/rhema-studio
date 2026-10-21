@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow } from "@/stores/timer-store"
 import type { JournalEntry } from "@/lib/journal"
 
@@ -35,6 +36,7 @@ useBroadcastStore.subscribe((s, prev) => {
     const before = seenBeforeRehearsal
     seenBeforeRehearsal = null
     if (before && before.isLive === s.isLive && before.liveVerse === s.liveVerse) return
+    if (s.isLive && s.liveVerse && !isQuick(s)) notePlan()
     if (s.isLive && s.liveVerse) add({ kind: isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId })
     else if (before?.isLive) add({ kind: "clear", label: labelOf(before), itemId: before.liveItemId })
     return
@@ -43,11 +45,20 @@ useBroadcastStore.subscribe((s, prev) => {
   const wentOn = s.isLive && (!prev.isLive || s.liveVerse !== prev.liveVerse)
   if (wentOff) add({ kind: "clear", label: labelOf(prev), itemId: prev.liveItemId })
   if (wentOn) {
-    // The first time anything goes on air, the rundown as it stands is the plan; later items were added on the day.
-    if (useJournalStore.getState().startItemIds === null) useJournalStore.setState({ startItemIds: useQueueStore.getState().items.map((i) => i.id) })
+    if (!isQuick(s)) notePlan()
     const restored = prev.liveVerse === s.liveVerse && !prev.isLive
     add({ kind: restored ? "restore" : isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId })
   }
+})
+
+/** The first time service content goes on air (not a quick screen), the rundown as it stands is the plan. */
+function notePlan() {
+  if (useJournalStore.getState().startItemIds === null) useJournalStore.setState({ startItemIds: useQueueStore.getState().items.map((i) => i.id) })
+}
+
+// Another service opened: its plan is taken when it first goes on air.
+useServiceStore.subscribe((s, prev) => {
+  if (s.current?.id !== prev.current?.id) useJournalStore.setState({ startItemIds: null })
 })
 
 type Aired = { liveVerse: { reference: string; lines?: string[]; screen?: "black" | "logo"; quick?: boolean } | null; heldLive?: unknown; liveItemId?: string | null }

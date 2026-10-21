@@ -72,4 +72,20 @@ describe("live stepping and following (audit fixes)", () => {
     // Follows never move the preview or cancel a present still loading.
     expect((presentVerse.mock.calls[0] as unknown as [unknown, { follow?: boolean }])[1].follow).toBe(true)
   })
+
+  it("after the live item is deleted, Next goes to the item after it and Previous to the one before", async () => {
+    const v = (id: string, n: number) => ({ id, verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: n, text: "t" }, reference: `John 3:${n}`, confidence: 1, source: "manual", added_at: 0 }) as unknown as QueueItem
+    useBroadcastStore.setState({ liveSlide: null, liveItemId: "c", liveVerse: { kind: "verse", reference: "John 3:3", segments: [] } as never })
+    useQueueStore.setState({ items: [v("a", 1), v("b", 2), v("c", 3), v("d", 4)], activeIndex: 2, removedActive: null })
+    useQueueStore.getState().removeItem("c")
+    remoteActions.queuePrev()
+    await vi.waitFor(() => expect(presentVerse).toHaveBeenCalled())
+    expect((presentVerse.mock.calls[0] as unknown as [{ verse: number }])[0].verse).toBe(2) // b, not a
+    presentVerse.mockClear()
+    useQueueStore.setState({ items: [v("a", 1), v("b", 2), v("d", 4)], activeIndex: null, removedActive: { prevId: "b", nextId: "d" } })
+    remoteActions.queueNext()
+    await vi.waitFor(() => expect(presentVerse).toHaveBeenCalled())
+    expect((presentVerse.mock.calls[0] as unknown as [{ verse: number }])[0].verse).toBe(4) // d
+  })
 })
+
