@@ -588,3 +588,11 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bd.1 | At church: open v7 from the church folder. At home: change, save, approve, Publish (v8). At church: Home, then Prepare with v7 open. | Home's row shows v8 "newer than the copy opened here"; Prepare shows "A newer version (v8, approved) is in the church folder. This one is v7." Nothing changed by itself; v7 is still open and unchanged. | Unverified |
 | 10bd.2 | Press "Open the newer one". | v8 opens as its own service (v7 kept); the notice goes away; approve v8 here. | Unverified |
+
+### 10be. Consent before cloud speech (RG-08, NFR-09)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10be.1 | Fresh settings, Deepgram key entered, provider Cloud (Deepgram). Start listening in the transcript panel. | A dialog "Send the microphone to Deepgram?" explains what is sent; nothing is sent until Agree (packet capture: no connection to api.deepgram.com before Agree). | Unverified |
+| 10be.2 | Agree. Then Present header. | Listening starts; the chip reads "Listening (Deepgram)"; Settings → Speech Recognition shows "Agreed on …" with Withdraw. | Unverified |
+| 10be.3 | Withdraw, start again, choose "Use local recognition instead". | Provider switches to Whisper and listening starts locally (if the model is installed); no dialog for local recognition. | Unverified |

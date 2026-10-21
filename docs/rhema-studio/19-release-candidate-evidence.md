@@ -33,7 +33,7 @@ Decision: NO-GO until the desktop rows below are done and the owner signs off
 | RG-05 Data integrity | Tests | Revisions and conflicts, migration backup, downgrade refusal (#96), unsaved-work prompt on close (#111), one running copy (#103). Restore drill #62 not done. |
 | RG-06 Multilingual fidelity | Tests | Yoruba diacritics in search and storage, pinned translations, missing-translation warnings. Projector font check not done. |
 | RG-07 Production interop | Not met | Projector, NDI, OBS 720p30 and display reconnect need hardware. NDI failures are reported and retried once. |
-| RG-08 Security and privacy | Code and tests | Pairing, keys, roles, rate limiting (#100), phone remote with strict CSP (#102), diagnostics redaction (#97), network note (#105). Secrets in the system keychain (#115). Consent text for cloud audio waits on PR #4. |
+| RG-08 Security and privacy | Code and tests | Pairing, keys, roles, rate limiting (#100), phone remote with strict CSP (#102), diagnostics redaction (#97), network note (#105). Secrets in the system keychain (#115). Consent before cloud audio: asked before the first Deepgram session (PR after #128); PR #4 providers must use the same gate. |
 | RG-09 Accessibility and recovery | Partly | Keyboard shortcuts ignore typing; Back always visible at 1366x768; deletes confirm (#107). Screen-reader and scaling checks not done. |
 | RG-10 Reproducibility | Met for this candidate | SHA and artifact digest above; lockfiles; CHANGELOG.md; migration notes; KNOWN-ISSUES.md; licence manifest, CI check, installer licence page and generated third-party notices (#122). Sign-off missing. |
 

@@ -1,3 +1,5 @@
+import { useCloudConsentStore } from "@/stores/cloud-consent-store"
+import { transcriptionActions } from "@/hooks/use-transcription"
 import { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 
@@ -287,8 +289,10 @@ function SpeechSection() {
               <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
                 Uses Deepgram Nova-3 for real-time streaming transcription.
                 Requires an API key and internet connection. Best accuracy with
-                keyword boosting for Bible terms.
+                keyword boosting for Bible terms. While listening, the microphone
+                sound is sent to Deepgram (USA); you are asked once before it first starts.
               </p>
+              <CloudConsentLine />
             </div>
           </label>
 
@@ -1205,5 +1209,28 @@ function ObsSettingsBlock() {
         {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password stays in this computer's settings file. Use a staff-only network: the login answer travels unencrypted.
       </p>
     </div>
+  )
+}
+
+/** Whether this computer agreed to send microphone audio to the cloud provider, with a way to take it back. */
+function CloudConsentLine() {
+  const at = useSettingsStore((s) => s.cloudSpeechConsentAt)
+  if (!at) return <p className="text-[0.625rem] text-muted-foreground">Not agreed yet on this computer.</p>
+  return (
+    <p className="flex items-center gap-2 text-[0.625rem] text-muted-foreground">
+      Agreed on {new Date(at).toLocaleDateString()}.
+      <button
+        type="button"
+        className="underline"
+        onClick={() => {
+          useSettingsStore.getState().setCloudSpeechConsent(false)
+          // Withdrawing stops a cloud session that is running now, not only the next one.
+          if (useCloudConsentStore.getState().runningProvider === "deepgram") void transcriptionActions.stop()
+        }}
+      >
+        Withdraw
+      </button>
+      (stops cloud listening now; asks again next time)
+    </p>
   )
 }

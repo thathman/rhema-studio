@@ -6,6 +6,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { mark } from "@/lib/latency-marks"
 import { useTauriEvent } from "./use-tauri-event"
+import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 
 interface TranscriptPartialPayload {
   text: string
@@ -27,10 +28,15 @@ const NOT_RUNNING_ERROR = "Transcription is not running"
 
 export const transcriptionActions = {
   async start(onMissingApiKey?: () => void): Promise<void> {
+    const settings = useSettingsStore.getState()
+    // RG-08 / NFR-09: no microphone audio leaves this computer until someone here has agreed to it.
+    if (settings.sttProvider === "deepgram" && !settings.cloudSpeechConsentAt) {
+      useCloudConsentStore.getState().ask(() => void transcriptionActions.start(onMissingApiKey))
+      return
+    }
     const transcript = useTranscriptStore.getState()
     transcript.setConnectionStatus("connecting")
 
-    const settings = useSettingsStore.getState()
     try {
       await invoke("start_transcription", {
         apiKey:
@@ -42,6 +48,8 @@ export const transcriptionActions = {
         provider: settings.sttProvider,
       })
       transcript.setTranscribing(true)
+      // What is actually running (the setting can change mid-session without restarting it).
+      useCloudConsentStore.setState({ runningProvider: settings.sttProvider })
     } catch (e) {
       const msg = String(e)
       transcript.setConnectionStatus("error")
@@ -63,6 +71,7 @@ export const transcriptionActions = {
       }
     }
     transcript.setTranscribing(false)
+    useCloudConsentStore.setState({ runningProvider: null })
     transcript.setPartial("")
     transcript.setConnectionStatus("disconnected")
   },

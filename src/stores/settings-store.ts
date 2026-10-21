@@ -72,6 +72,12 @@ interface SettingsState {
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
+  /**
+   * When this computer agreed that microphone audio may be sent to the cloud
+   * speech provider (ISO time); "" = not agreed (RG-08, NFR-09).
+   */
+  cloudSpeechConsentAt: string
+  setCloudSpeechConsent: (agreed: boolean) => void
   /** The church folder (NAS or synced) where services are published and opened; "" = not set (#72). */
   churchFolder: string
   setChurchFolder: (folder: string) => void
@@ -128,6 +134,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   operatorName: "",
   customMacros: [],
   churchFolder: "",
+  cloudSpeechConsentAt: "",
   openedPackages: [],
   openedFrom: {},
   remoteSecret: "",
@@ -157,6 +164,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     void pushRemoteKeys()
   },
   setCustomMacros: (customMacros) => set({ customMacros }),
+  setCloudSpeechConsent: (agreed) => set({ cloudSpeechConsentAt: agreed ? new Date().toISOString() : "" }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
   noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-200)) })),
   noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),
@@ -188,6 +196,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "operatorName":
     case "remoteSecret":
     case "churchFolder":
+    case "cloudSpeechConsentAt":
       return typeof value === "string"
     case "obs": {
       const o = value as Partial<ObsSettings>
@@ -221,6 +230,7 @@ const PERSISTED_KEYS = [
   "operatorName",
   "customMacros",
   "churchFolder",
+  "cloudSpeechConsentAt",
   "openedPackages",
   "openedFrom",
   "remoteSecret",
