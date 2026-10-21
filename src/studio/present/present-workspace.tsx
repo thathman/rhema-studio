@@ -59,6 +59,7 @@ export function PresentWorkspace() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
+  const autoLive = useBroadcastStore((s) => s.autoLive)
   const cloudSpeech = useCloudConsentStore((s) => s.runningProvider === "deepgram")
   const service = useServiceStore((s) => s.current)
   const warning = useBroadcastStore((s) => s.presentWarning)
@@ -89,6 +90,14 @@ export function PresentWorkspace() {
           title="Open outputs"
         />
         <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeech ? "Listening (Deepgram)" : "Listening") : "Listening off"} title={listening && cloudSpeech ? "Microphone sound is being sent to Deepgram" : undefined} />
+        {listening && autoLive && (
+          <StatusChip
+            tone="warn"
+            label="Auto-live on"
+            title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (also the Auto switch on the Live display panel)."
+            onClick={() => useBroadcastStore.getState().setAutoLive(false)}
+          />
+        )}
         <ServiceTimer />
         <ObsChip />
         <SoundChip />

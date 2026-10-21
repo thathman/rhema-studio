@@ -357,7 +357,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   outputFrames: {},
   rehearsal: false,
   presentWarning: null,
-  autoLive: true,
+  // Off until the operator turns it on (PRD FR-01: speech suggestions are proposals unless an
+  // automation is explicitly enabled; AI-001 "no AI output auto-live"). A saved choice is kept.
+  autoLive: false,
   isDesignerOpen: false,
   editingThemeId: null,
   renamingThemeId: null,
@@ -740,7 +742,9 @@ export function hydrateBroadcastThemes(): Promise<void> {
       const outputs = (await store.get("outputs")) as BroadcastOutput[] | undefined
       const activeId = (await store.get("activeThemeId")) as string | undefined
       const altActiveId = (await store.get("altActiveThemeId")) as string | undefined
-      const autoLive = (await store.get("autoLive")) as boolean | undefined
+      // A new key: builds before this one saved "autoLive" (default on) whenever a theme or
+      // output changed, so that value is not a choice. Only a choice made here counts.
+      const autoLive = (await store.get("autoLiveOptIn")) as boolean | undefined
 
       const patch: Partial<BroadcastState> = {}
       if (customThemes && Array.isArray(customThemes) && customThemes.length > 0) {
@@ -791,7 +795,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("outputs", state.outputs)
     // Legacy mirror of the main output's theme; older builds still read it.
     await store.set("activeThemeId", state.activeThemeId)
-    await store.set("autoLive", state.autoLive)
+    await store.set("autoLiveOptIn", state.autoLive)
     await store.save()
   } catch {
     console.warn("[broadcast] Failed to persist themes")

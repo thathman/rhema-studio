@@ -88,6 +88,10 @@ When speech recognition ran during the service, More → Library → Service log
 
 More → Library → Song usage: choose a date range (default: the last six months), Show, then Save as CSV… The report counts saved services dated in the range (a song sung twice in one service counts once), with each song's CCLI number, licence and last use, ready to copy into a CCLI (or other licensing body) report. Services without a date are not counted, so give each service its date.
 
+## Speech recognition and Auto
+
+While Rhema listens, verses it hears in the sermon appear in the preview and the detections list; the operator presents them. **Auto** (the switch on the Live display panel in Present, or Settings → Display Mode → Heard verses) makes heard verses replace what is on screen without Show live. It starts off, also after updating from a build where it was on by default: turn it on again if your church relies on it; while it is on and Rhema is listening, Present shows "Auto-live on" in the header, and clicking it turns Auto off.
+
 ## Translations
 
 Quick find understands the Yorùbá Bible's own book names as well as the English ones, with or without accents: "Johanu 3:16", "Jòhánù 3 16", "1 Ọba 3:9", "Ìṣe àwọn Aposteli 2:38" (or just "Ise 2:38"). The names are the ones printed in the bundled Yorùbá edition; other Yorùbá Bibles may spell some books differently (for example "Johannu").

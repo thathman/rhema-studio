@@ -660,3 +660,12 @@ report), but launching it cannot.
 | 10bm.1 | Song editor: add an MP3 under "Chord charts, sheets and backing tracks"; save. Put the song in the service. | The file is listed with the song. | Unverified |
 | 10bm.2 | Present: go to the song (Next or Show live), open the Sound button. | "Backing track for <song>" lists the file; Play starts it on this computer's sound output; the screens do not change; Fade out and Stop work. Nothing plays until Play is pressed. | Unverified |
 | 10bm.3 | Go to a verse item; open the Sound button. | No backing-track list (only the library's sounds). | Unverified |
+
+### 10bn. Heard verses wait for the operator (FR-01, AI-001)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bn.1 | New installation (no earlier settings). Put something on air, start listening, read "John 3:16" aloud. | The verse appears in the preview and the detections list; what is on screen does not change until Show live. Production view → Live display: Auto is off. | Unverified |
+| 10bn.2 | Turn Auto on; Standard view. | "Auto-live on" appears in the header while listening; a heard verse now replaces what is on screen. Clicking the chip turns Auto off. | Unverified |
+| 10bn.3 | Computer that used an earlier build (Auto was on by default). Update; start listening. | Auto is off until turned on again (Live display panel or Settings → Display Mode → Heard verses); after turning it on and restarting, it stays on. | Unverified |
+| 10bn.4 | Settings → Display Mode → Heard verses: choose Auto, then look at the Live display panel; switch it off there and look at Settings. | Both show the same setting. | Unverified |

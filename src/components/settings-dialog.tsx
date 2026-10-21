@@ -1,3 +1,4 @@
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
 import { useState, useEffect, useRef } from "react"
@@ -364,88 +365,52 @@ function SpeechSection() {
 /* -------------------------------------------------------------------------- */
 
 function DisplayModeSection() {
-  const {
-    autoMode,
-    setAutoMode,
-    confidenceThreshold,
-    setConfidenceThreshold,
-  } = useSettingsStore()
-
-  const thresholdPercent = Math.round(confidenceThreshold * 100)
+  // The same switch as Auto on the Live display panel in Present (FR-01: off until turned on).
+  const autoLive = useBroadcastStore((s) => s.autoLive)
+  const setAutoLive = useBroadcastStore((s) => s.setAutoLive)
 
   return (
     <div className="flex flex-col gap-6">
       {/* Mode selector */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Broadcast Mode
+          Heard verses
         </label>
 
         <RadioGroup
-          value={autoMode ? "auto" : "manual"}
-          onValueChange={(v) => setAutoMode(v === "auto")}
+          value={autoLive ? "auto" : "manual"}
+          onValueChange={(v) => setAutoLive(v === "auto")}
           className="gap-3"
         >
-          {/* Auto mode */}
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
-              !autoMode ? "hover:border-muted-foreground/25" : ""
+              autoLive ? "hover:border-muted-foreground/25" : ""
+            }`}
+          >
+            <RadioGroupItem value="manual" className="mt-0.5" />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-foreground">Wait for me (recommended)</span>
+              <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
+                A verse heard while listening goes to the preview and the detections list. It reaches the screen only when you press Show live.
+              </p>
+            </div>
+          </label>
+
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
+              !autoLive ? "hover:border-muted-foreground/25" : ""
             }`}
           >
             <RadioGroupItem value="auto" className="mt-0.5" />
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-                Automatically displays the highest-confidence detected verse on
-                broadcast output. A 2.5-second cooldown prevents rapid flickering.
-                Best for hands-off operation.
-              </p>
-            </div>
-          </label>
-
-          {/* Manual mode */}
-          <label
-            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
-              autoMode ? "hover:border-muted-foreground/25" : ""
-            }`}
-          >
-            <RadioGroupItem value="manual" className="mt-0.5" />
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-foreground">Manual</span>
-              <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-                Nothing goes to broadcast until you explicitly send it. Detected
-                verses still appear in the AI Detections panel and queue, but you
-                decide which ones to display and when. Best for important services.
+                While the output is on air, the most confident verse heard replaces what is on screen without Show live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live display panel.
               </p>
             </div>
           </label>
         </RadioGroup>
       </div>
-
-      {/* Confidence threshold — only when auto */}
-      {autoMode && (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Confidence Threshold
-            </label>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {thresholdPercent}%
-            </span>
-          </div>
-          <Slider
-            min={35}
-            max={100}
-            step={1}
-            value={[thresholdPercent]}
-            onValueChange={([v]) => setConfidenceThreshold(v / 100)}
-          />
-          <p className="text-[0.625rem] text-muted-foreground">
-            Only verses with confidence above this threshold will be sent to
-            broadcast automatically. Higher values reduce false positives.
-          </p>
-        </div>
-      )}
     </div>
   )
 }
