@@ -479,3 +479,12 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10ap.1 | Open a saved song with a verse, a chorus and a bridge; press **Text…** and save. Open the file in Notepad/TextEdit. | A title line, authors and copyright, then each section under "## Verse 1", "## Chorus"… in the song's main language. | Unverified |
 | 10ap.2 | New song: paste that file's contents, Make sections. Then paste lyrics copied from a chord site with `[Verse 1]` / `[Chorus]` headings. | The first gives the same sections without the title block; the second gives a verse and a chorus. | Unverified |
+
+### 10aq. Closing with unsaved work, and closing quits (FR-03)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10aq.1 | Open a saved service, add an item (do not save), close the Rhema window. | "Save changes before closing?" with Keep working, Close without saving, Save and close. Keep working leaves everything as it was; closing again asks again. | Unverified |
+| 10aq.2 | Close again and choose Save and close; reopen Rhema and the service. | The added item is there. | Unverified |
+| 10aq.3 | With unsaved changes, close the window, and while the question shows, close it again (or the page has frozen). | The second close quits without asking (never trapped). | Unverified |
+| 10aq.4 | With a projector output and an NDI-only output on, close the Rhema window (nothing unsaved). Then start Rhema again. | Every output window closes and Rhema exits (nothing left in Task Manager / Activity Monitor); the new start opens normally. | Unverified |

@@ -99,6 +99,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(commands::app_close::UnsavedWork::default())
+        .on_window_event(commands::app_close::on_window_event)
         .manage(Mutex::new(state::AppState::new()))
         .manage(Mutex::new(rhema_detection::DetectionPipeline::new()))
         .manage(Mutex::new(rhema_broadcast::ndi::NdiRuntime::default()))
@@ -150,6 +152,8 @@ pub fn run() {
             commands::remote::get_http_status,
             commands::remote::remote_set_keys,
             commands::remote::remote_pair_start,
+            commands::app_close::set_unsaved_work,
+            commands::app_close::close_main_window,
             commands::remote::remote_lan_address,
             commands::remote::remote_pair_cancel,
             commands::remote::update_remote_status,
