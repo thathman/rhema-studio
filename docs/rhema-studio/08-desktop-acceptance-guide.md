@@ -581,3 +581,10 @@ report), but launching it cannot.
 | 10bc.3 | At church: Home → Church folder. | One row for the service: the newest version, "1 older version", "approved by …" for the approved one only if the newest is the approved revision. | Unverified |
 | 10bc.4 | Open it. | It opens in Prepare with its songs and pictures; it is not approved here until Approve is pressed; the row then says "opened here". Nothing happened before Open was pressed. | Unverified |
 | 10bc.5 | Copy a large service into the synced folder and look at Home while it is still syncing; disconnect the NAS. | The syncing file is listed as damaged/may still be syncing and cannot be opened; with the NAS gone, the card says the folder is not available; the show is unaffected. | Unverified |
+
+### 10bd. Newer version in the church folder (CL-005, FR-08)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bd.1 | At church: open v7 from the church folder. At home: change, save, approve, Publish (v8). At church: Home, then Prepare with v7 open. | Home's row shows v8 "newer than the copy opened here"; Prepare shows "A newer version (v8, approved) is in the church folder. This one is v7." Nothing changed by itself; v7 is still open and unchanged. | Unverified |
+| 10bd.2 | Press "Open the newer one". | v8 opens as its own service (v7 kept); the notice goes away; approve v8 here. | Unverified |
