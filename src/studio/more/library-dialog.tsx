@@ -7,7 +7,7 @@ import { ArchiveIcon, BookOpenIcon, CheckIcon, DatabaseIcon, DownloadIcon, Music
 import { invoke } from "@tauri-apps/api/core"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { useServiceStore } from "@/stores/service-store"
+import { savedItemIds, useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { Button } from "@/components/ui/button"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
@@ -302,7 +302,16 @@ function JournalBlock() {
     }
   }
   const text = () =>
-    formatJournal(`${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`, entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)]))) +
+    formatJournal(
+      `${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`,
+      entries,
+      monotonicNow(),
+      new Map(items.map((i) => [i.id, plannedMs(i)])),
+      (() => {
+        const saved = current ? savedItemIds() : null
+        return items.map((i) => ({ id: i.id, label: i.reference, inserted: saved ? !saved.has(i.id) : false }))
+      })(),
+    ) +
     (withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
   const saveLog = async () => {
     setBusy(true)

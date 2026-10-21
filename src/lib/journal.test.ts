@@ -24,4 +24,20 @@ describe("service journal", () => {
     expect(twice).toContain("John 3:16  (1:00)")
     expect(twice).toContain("John 3:16  (5:00)")
   })
+
+  it("planned versus actual lists the whole service: items never shown, items added on the day, and what else was shown (FR-09)", () => {
+    const entries = [e(0, "live", "John 3:16", "a"), e(60_000, "live", "Romans 8:28", null), e(90_000, "quick", "Welcome"), e(100_000, "live", "Psalm 23", "c")]
+    const text = formatJournal("Sunday", entries, 160_000, new Map([["b", 120_000]]), [
+      { id: "a", label: "John 3:16" },
+      { id: "b", label: "Amazing Grace" },
+      { id: "c", label: "Psalm 23", inserted: true },
+    ])
+    expect(text).toContain("John 3:16: 1:00")
+    expect(text).toContain("Amazing Grace: not shown (planned 2:00)")
+    expect(text).toContain("Psalm 23: 1:00  [added during the service]")
+    expect(text).toContain("Also shown (not in the service):")
+    expect(text).toContain("Romans 8:28: 0:30")
+    expect(text).not.toContain("Welcome: ") // quick screens are in the timeline, not the plan
+  })
 })
+

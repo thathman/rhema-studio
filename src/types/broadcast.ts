@@ -28,6 +28,8 @@ export interface VerseRenderData {
    * theme logo, large and centred).
    */
   screen?: "black" | "logo"
+  /** A quick screen (Welcome, Offering…, Black, Logo): for the service log only; outputs ignore it. */
+  quick?: boolean
   /**
    * A video over the whole frame. Output windows play it in a <video> element
    * and draw its frames; anywhere without that element (the main window's
