@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { newerInFolder, newestPerService, publishLineage, type FolderEntry } from "./church-folder"
+import { newerInFolder, newestPerService, publishLineage, unchangedCopy, type FolderEntry } from "./church-folder"
 
 const e = (file_name: string, over: Partial<FolderEntry>): FolderEntry => ({
   path: `/f/${file_name}`, file_name, modified: 100, sha256: file_name, title: "Sunday", service_date: "2026-10-25", source_id: "p1",
@@ -45,6 +45,13 @@ describe("publishing a copy again (lineage)", () => {
     const entry = (revision: number, sha256: string) => ({ path: "", file_name: `${revision}`, modified: revision, sha256, title: "Sunday", service_date: "2026-10-25", source_id: "home-id", revision, approved_revision: null, approved_by: null, item_count: 1, error: null })
     const services = [{ newest: entry(12, "tolu"), older: 1, versions: [entry(12, "tolu"), entry(11, "ade")] }]
     expect(newerInFolder({ sha256: "ade", source_id: "home-id", title: "Sunday", service_date: "2026-10-25", revision: 11, local_revision: 11 }, services)?.revision).toBe(12)
+  })
+
+  it("an unchanged copy is not published again (unless approved here)", () => {
+    expect(unchangedCopy(from, "church-copy-id", 2, null)).toBe(true)
+    expect(unchangedCopy(from, "church-copy-id", 3, null)).toBe(false)
+    expect(unchangedCopy(from, "church-copy-id", 2, 2)).toBe(false) // approved here: new content
+    expect(unchangedCopy(undefined, "home-id", 11, null)).toBe(false)
   })
 })
 

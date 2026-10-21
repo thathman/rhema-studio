@@ -260,7 +260,7 @@ pub fn church_folder_publish(
         Some(l) => pkg.with_lineage(l)?,
         None => pkg,
     };
-    Ok(rhema_content::write_package_to_folder(Path::new(&folder), &pkg)?)
+    Ok(rhema_content::publish_numbered(Path::new(&folder), &pkg)?)
 }
 
 /// Service files in the church folder, newest first (damaged or half-synced ones with the reason).

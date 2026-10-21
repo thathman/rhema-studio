@@ -30,6 +30,17 @@ export interface PublishResult {
   sha256: string
   source_id: string | null
   revision: number | null
+  /** Another computer had already published this service at or after this version (not included here). */
+  numbered_after?: number | null
+}
+
+/**
+ * A copy opened from the folder with nothing changed or approved here since:
+ * publishing it would only repeat (or, unapproved, hide) the version it came from.
+ */
+export function unchangedCopy(from: OpenedFrom | undefined, programId: string, localRevision: number, approvedRevision: number | null): boolean {
+  if (!from?.source_id || from.source_id === programId || typeof from.local_revision !== "number") return false
+  return localRevision === from.local_revision && approvedRevision !== localRevision
 }
 
 /** Where a copy belongs when it is published again (see `publishLineage`). */

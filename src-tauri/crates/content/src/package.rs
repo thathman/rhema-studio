@@ -38,10 +38,17 @@ impl ServicePackage {
     /// folder, so a copy opened on another computer and published again is a
     /// newer version of the same service, not a new service at "v3" (CL-005).
     pub fn with_lineage(&self, lineage: &Lineage) -> Result<ServicePackage> {
+        self.renumbered(Some(&lineage.source_id), lineage.revision_offset)
+    }
+
+    /// The same content under another source and/or with its revision (and approved revision) moved by `offset`.
+    pub fn renumbered(&self, source_id: Option<&str>, offset: i64) -> Result<ServicePackage> {
         let mut p: PackagePayload = serde_json::from_str(&self.payload).map_err(|e| ContentError::Invalid(e.to_string()))?;
-        p.source_id = Some(lineage.source_id.clone());
-        p.revision = p.revision.map(|r| r + lineage.revision_offset);
-        p.approved_revision = p.approved_revision.map(|r| r + lineage.revision_offset);
+        if let Some(id) = source_id {
+            p.source_id = Some(id.to_string());
+        }
+        p.revision = p.revision.map(|r| r + offset);
+        p.approved_revision = p.approved_revision.map(|r| r + offset);
         let payload = serde_json::to_string(&p).map_err(|e| ContentError::Invalid(e.to_string()))?;
         let sha256 = sha256_hex(payload.as_bytes());
         Ok(ServicePackage { version: self.version, payload, sha256 })

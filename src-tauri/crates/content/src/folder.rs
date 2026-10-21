@@ -27,6 +27,10 @@ pub struct PublishResult {
     pub sha256: String,
     pub source_id: Option<String>,
     pub revision: Option<i64>,
+    /// Another computer had already published this service at or after this version:
+    /// the file was numbered after the highest one there (this revision), and those
+    /// versions' changes are not in it.
+    pub numbered_after: Option<i64>,
 }
 
 /// One service package found in the folder.
@@ -183,7 +187,7 @@ pub fn write_package_to_folder(folder: &Path, pkg: &ServicePackage) -> Result<Pu
     let p: PackagePayload = serde_json::from_str(&pkg.payload).map_err(|e| ContentError::Invalid(e.to_string()))?;
     let file_name = package_file_name(&p.title, p.service_date.as_deref(), p.revision.unwrap_or(0), &pkg.sha256);
     let path = dir.join(&file_name);
-    let result = |already: bool| PublishResult { path: path.to_string_lossy().into_owned(), file_name: file_name.clone(), already, sha256: pkg.sha256.clone(), source_id: p.source_id.clone(), revision: p.revision };
+    let result = |already: bool| PublishResult { path: path.to_string_lossy().into_owned(), file_name: file_name.clone(), already, sha256: pkg.sha256.clone(), source_id: p.source_id.clone(), revision: p.revision, numbered_after: None };
     if path.exists() {
         return Ok(result(true));
     }
@@ -198,6 +202,28 @@ pub fn write_package_to_folder(folder: &Path, pkg: &ServicePackage) -> Result<Pu
         return Err(ContentError::Invalid(format!("could not write to the church folder: {e}")));
     }
     Ok(result(false))
+}
+
+/// Version numbers stay unique per service in the folder: when another computer has
+/// already published this service at the same or a later version (with other
+/// content), this file is numbered after the highest one, and the result says so.
+/// Identical content already there is left as it is.
+pub fn publish_numbered(folder: &Path, pkg: &ServicePackage) -> Result<PublishResult> {
+    let p: PackagePayload = serde_json::from_str(&pkg.payload).map_err(|e| ContentError::Invalid(e.to_string()))?;
+    let entries = list_church_folder(folder)?;
+    if entries.iter().any(|e| e.sha256 == pkg.sha256) {
+        return write_package_to_folder(folder, pkg);
+    }
+    let highest = entries.iter().filter(|e| e.error.is_none() && e.source_id.is_some() && e.source_id == p.source_id).filter_map(|e| e.revision).max();
+    match (highest, p.revision) {
+        (Some(top), Some(rev)) if rev <= top => {
+            let renumbered = pkg.renumbered(None, top + 1 - rev)?;
+            let mut r = write_package_to_folder(folder, &renumbered)?;
+            r.numbered_after = Some(top);
+            Ok(r)
+        }
+        _ => write_package_to_folder(folder, pkg),
+    }
 }
 
 impl ContentDb {
@@ -272,6 +298,16 @@ mod tests {
         let entries = list_church_folder(&folder).unwrap();
         assert_eq!(entries.iter().filter(|e| e.source_id.as_deref() == Some(p.id.as_str())).count(), 2);
         assert!(theirs.revision > first.revision);
+        // Home meanwhile edits its own copy to the same number and publishes: numbered after theirs, and told.
+        let mine = home.replace_items(&p.id, rev, std::slice::from_ref(&verse)).unwrap().program.revision;
+        assert_eq!(Some(mine), theirs.revision, "same number on both computers");
+        let home_pkg = home.export_service_package(&p.id, &media_a).unwrap();
+        let published = publish_numbered(&folder, &home_pkg).unwrap();
+        assert_eq!(published.revision, Some(mine + 1));
+        assert_eq!(published.numbered_after, theirs.revision);
+        // The same content again: left as it is.
+        let again = publish_numbered(&folder, &home_pkg.renumbered(None, 1).unwrap()).unwrap();
+        assert!(again.already);
     }
 
     #[test]
