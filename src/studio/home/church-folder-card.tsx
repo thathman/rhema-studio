@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { FolderSyncIcon, RefreshCwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { newestPerService, type FolderEntry } from "@/lib/church-folder"
-import { useChurchFolderStore } from "@/stores/church-folder-store"
+import { entriesFor, useChurchFolderStore } from "@/stores/church-folder-store"
 import { openFolderEntry } from "@/studio/church-folder-actions"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -16,7 +16,10 @@ export function ChurchFolderCard() {
   const folder = useSettingsStore((s) => s.churchFolder)
   const opened = useSettingsStore((s) => s.openedPackages)
   const dirty = useServiceStore((s) => s.dirty)
-  const { entries, error, scanning, refresh } = useChurchFolderStore()
+  const store = useChurchFolderStore()
+  const { scanning, refresh } = store
+  const entries = entriesFor(store, folder)
+  const error = store.scannedFolder === folder ? store.error : null
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
