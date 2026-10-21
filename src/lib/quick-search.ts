@@ -41,7 +41,7 @@ export function foldMarks(input: string): string {
  * prefixes: "1 S", "I S", and "1st S" all become "I S".
  */
 export function normalizeInput(input: string): string {
-  const trimmed = foldMarks(input.trim())
+  const trimmed = ordinalWords(foldMarks(input.trim()))
   const leadingNumberMatch = trimmed.match(/^(\d+)(?:st|nd|rd|th)?\s*(.*)$/i)
 
   if (leadingNumberMatch) {
@@ -51,6 +51,38 @@ export function normalizeInput(input: string): string {
   }
 
   return trimmed
+}
+
+/**
+ * Ordinals in words, as people say and type them: "First Samuel", and the
+ * Yorùbá order "Samuẹli Kínní", "Ọba Kejì" (accents already folded).
+ * Both become the number in front ("1 Samuel", "2 Oba").
+ */
+const ORDINAL_WORDS: Record<string, number> = { first: 1, second: 2, third: 3, kinni: 1, kini: 1, keji: 2, keta: 3 }
+function ordinalWords(s: string): string {
+  const before = s.match(/^(first|second|third)\s+(.+)$/i)
+  if (before) return `${ORDINAL_WORDS[before[1].toLowerCase()]} ${before[2]}`
+  const after = s.match(/^([^\d\s]+)\s+(kinni|kini|keji|keta)\b\s*(.*)$/i)
+  if (after) return `${ORDINAL_WORDS[after[2].toLowerCase()]} ${after[1]}${after[3] ? ` ${after[3]}` : ""}`
+  return s
+}
+
+/**
+ * A book with or without a chapter ("1 Samuel", "1 Kings 3", "Psalm 23"), for
+ * Quick find to offer that chapter's first verse beside its word search. A
+ * single plain word ("john", "mark", "acts") stays a word search unless the
+ * book is numbered or a chapter follows.
+ */
+export function parseBookChapter(input: string, books: Book[]): { book: Book; chapter: number } | null {
+  const normalized = normalizeInput(input)
+  const m = normalized.match(/^([IVX]+\s+[a-zA-Z.\s]+?|[a-zA-Z][a-zA-Z.\s]*?)(?:\s+(\d{1,3}))?$/)
+  if (!m) return null
+  const numbered = /^[IVX]+\s/.test(m[1])
+  if (!numbered && !m[2]) return null
+  const book = findMatchingBook(m[1].trim().replace(/\.$/, ""), books)
+  if (!book) return null
+  const chapter = m[2] ? parseInt(m[2]) : 1
+  return chapter >= 1 ? { book, chapter } : null
 }
 
 /**
