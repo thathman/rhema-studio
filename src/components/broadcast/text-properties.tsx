@@ -450,16 +450,16 @@ function ReferenceProperties() {
   )
 }
 
-function VerseProperties() {
+export function VerseProperties() {
   const draftTheme = useBroadcastStore((s) => s.draftTheme)
   const updateOne = useBroadcastStore((s) => s.updateDraftNested)
   const [language, setLanguage] = useState<"both" | "primary" | "secondary">("both")
   const update = useStyleUpdate(language === "both")
   // Which translations are first and second right now, so the tabs say more than "primary".
-  const names = useBibleStore((s) => {
-    const name = (id: number | null) => (id === null ? null : s.translations.find((t) => t.id === id)?.abbreviation ?? null)
-    return { first: name(s.activeTranslationId), second: name(s.secondaryTranslationId) }
-  })
+  // (Two plain values: a selector returning a new object each time would re-render for ever.)
+  const first = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? null)
+  const second = useBibleStore((s) => (s.secondaryTranslationId === null ? null : (s.translations.find((t) => t.id === s.secondaryTranslationId)?.abbreviation ?? null)))
+  const names = { first, second }
 
   if (!draftTheme) return null
 
