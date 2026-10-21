@@ -97,4 +97,57 @@ describe("live output under injected failures", () => {
     expect(await presentVerse(verse(19, 23, 1), { goLive: true })).toBe("presented")
     expect(live().liveVerse?.reference).toContain("Book19 23:1")
   })
+
+  it("keeps the show running when the content database fails during a save", async () => {
+    const { useServiceStore } = await import("@/stores/service-store")
+    await presentVerse(verse(43, 3, 16), { goLive: true })
+    useQueueStore.setState({ items: [{ id: "q1", verse: verse(43, 3, 16), reference: "John 3:16", confidence: 1, source: "manual", added_at: 0 }, { id: "q2", verse: verse(43, 3, 17), reference: "John 3:17", confidence: 1, source: "manual", added_at: 0 }], activeIndex: 0 })
+    useServiceStore.setState({ current: { id: "p1", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 2 }, dirty: true, saving: false, unsupportedItems: [] } as never)
+    mockInvoke.mockImplementation(async (cmd: string, a: Record<string, unknown>) => {
+      if (cmd.startsWith("content_")) throw { kind: "database", message: "disk I/O error" }
+      if (cmd === "get_verse") return verse(a.bookNumber as number, a.chapter as number, a.verse as number)
+      return null
+    })
+    expect(await useServiceStore.getState().saveCurrent()).toBe("failed")
+    expect(live().isLive).toBe(true)
+    expect(live().liveVerse?.reference).toContain("3:16")
+    presentActions.next()
+    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(live().liveVerse?.reference).toContain("3:17")
+  })
+
+  it("keeps the verse on air when the media library cannot be listed", async () => {
+    await presentVerse(verse(43, 3, 16), { goLive: true })
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "media_list") throw { kind: "unavailable", message: "content database unavailable" }
+      return null
+    })
+    const outcome = await presentImage(picture, { goLive: true }).catch(() => "threw")
+    expect(outcome).not.toBe("presented")
+    expect(live().isLive).toBe(true)
+    expect(live().liveVerse?.reference).toContain("3:16")
+  })
+
+  it("keeps the screens as they are when a sound cannot play", async () => {
+    const { useSoundStore } = await import("@/stores/sound-store")
+    await presentVerse(verse(43, 3, 16), { goLive: true })
+    class FailingAudio {
+      loop = false
+      volume = 1
+      addEventListener() {}
+      play() { return Promise.reject(new Error("NotSupportedError")) }
+      pause() {}
+      removeAttribute() {}
+      load() {}
+    }
+    vi.stubGlobal("Audio", FailingAudio)
+    useMediaStore.setState({ fileUrl: async () => "asset://x.mp3" } as never)
+    await useSoundStore.getState().play({ id: "s1", name: "Broken" })
+    vi.unstubAllGlobals()
+    expect(useSoundStore.getState()).toMatchObject({ playing: false })
+    expect(useSoundStore.getState().error).toContain("could not play")
+    expect(live().liveVerse?.reference).toContain("3:16")
+    expect(live().isLive).toBe(true)
+  })
 })
