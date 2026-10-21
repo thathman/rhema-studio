@@ -95,8 +95,8 @@ export const useMediaStore = create<MediaState>((set, get) => ({
   },
 
   fileUrl: async (id) => {
-    let asset = get().assets.find((a) => a.id === id)
-    if (!asset) asset = (await get().list()).find((a) => a.id === id)
+    // Always a fresh listing: a file removed since the library loaded must not go live (the outputs would show an error).
+    const asset = (await get().list()).find((a) => a.id === id)
     if (!asset || !asset.present) return null
     return convertFileSrc(asset.path)
   },

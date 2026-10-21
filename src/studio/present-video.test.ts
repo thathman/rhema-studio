@@ -33,11 +33,19 @@ describe("video items", () => {
     const s = useBroadcastStore.getState()
     expect(s.isLive).toBe(true)
     expect(s.liveItemId).toBe("item-v")
-    expect(s.liveVerse?.video).toEqual({ url: `asset://localhost/${encodeURIComponent("/media/v-1.mp4")}`, fit: "cover", loop: true, sound: false, name: "Countdown" })
+    expect(s.liveVerse?.video).toMatchObject({ url: `asset://localhost/${encodeURIComponent("/media/v-1.mp4")}`, fit: "cover", loop: true, sound: false, name: "Countdown" })
+    expect(typeof s.liveVerse?.video?.token).toBe("number")
     expect(s.liveVerse?.image).toBeUndefined()
     expect(mockReadFile).not.toHaveBeenCalled()
     expect(await useMediaStore.getState().dataUrl("v-1")).toBeNull()
     expect(mockReadFile).not.toHaveBeenCalled()
+  })
+
+  it("re-check the file on every present, so one deleted since the library loaded never goes live", async () => {
+    useMediaStore.setState({ assets: [asset("v-1", "video")], loaded: true })
+    mockInvoke.mockImplementation(async (cmd: string) => (cmd === "media_list" ? [asset("v-1", "video", false)] : null))
+    expect(await presentImage(clip("v-1"), { goLive: true })).toBe("empty")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 
   it("leave the screen alone with a warning when the file is missing", async () => {

@@ -83,16 +83,24 @@ fn status(dir: &Path, asset: MediaAsset) -> MediaAssetStatus {
     }
 }
 
+fn hash_file(path: &Path) -> Result<(String, u64), String> {
+    let file = std::fs::File::open(path).map_err(|e| format!("could not read: {e}"))?;
+    let mut reader = std::io::BufReader::with_capacity(1 << 20, file);
+    let mut hasher = Sha256::new();
+    let size = std::io::copy(&mut reader, &mut hasher).map_err(|e| format!("could not read: {e}"))?;
+    Ok((format!("{:x}", hasher.finalize()), size))
+}
+
 fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Result<(MediaAsset, bool), String> {
     let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
     let (kind, mime) = kind_and_mime(ext).ok_or_else(|| format!("unsupported file type .{ext}"))?;
-    let bytes = std::fs::read(source).map_err(|e| format!("could not read: {e}"))?;
-    let hash = format!("{:x}", Sha256::digest(&bytes));
+    // Streamed: a video is never held in memory whole.
+    let (hash, size) = hash_file(source)?;
     if let Some(existing) = db.find_media_by_hash(&hash).map_err(|e| e.to_string())? {
-        // Same picture already here; make sure the file is too.
+        // Same file already here; make sure it is on disk too.
         if let Some(dest) = media_path(dir, &existing.file) {
             if !dest.is_file() {
-                std::fs::write(&dest, &bytes).map_err(|e| format!("could not restore the media file: {e}"))?;
+                std::fs::copy(source, &dest).map_err(|e| format!("could not restore the media file: {e}"))?;
             }
         }
         return Ok((existing, true));
@@ -100,14 +108,14 @@ fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Resul
     let file = format!("{hash}.{}", ext.to_ascii_lowercase());
     std::fs::create_dir_all(dir).map_err(|e| format!("could not create the media folder: {e}"))?;
     let dest = dir.join(&file);
-    std::fs::write(&dest, &bytes).map_err(|e| format!("could not copy into the media folder: {e}"))?;
+    std::fs::copy(source, &dest).map_err(|e| format!("could not copy into the media folder: {e}"))?;
     let name = source.file_stem().and_then(|s| s.to_str()).unwrap_or("Picture").to_string();
     let input = MediaInput {
         kind: kind.into(),
         name,
         file,
         hash,
-        size: i64::try_from(bytes.len()).unwrap_or(i64::MAX),
+        size: i64::try_from(size).unwrap_or(i64::MAX),
         mime: mime.into(),
         width: None,
         height: None,
@@ -125,7 +133,8 @@ fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Resul
 
 /// Copy files into the media folder (named by their SHA-256) and index them.
 /// Each file succeeds or fails on its own.
-#[tauri::command]
+// async: a large video must not block the main thread while it is hashed and copied.
+#[tauri::command(async)]
 pub fn media_import(state: State<'_, ContentState>, media: State<'_, MediaState>, paths: Vec<String>) -> CmdResult<Vec<ImportResult>> {
     let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
     let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;

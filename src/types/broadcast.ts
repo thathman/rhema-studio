@@ -27,7 +27,7 @@ export interface VerseRenderData {
    * and draw its frames; anywhere without that element (the main window's
    * monitors) the renderer shows "▶ name" instead.
    */
-  video?: { url: string; fit: "cover" | "contain" | "stretch"; loop: boolean; sound: boolean; name: string }
+  video?: { url: string; fit: "cover" | "contain" | "stretch"; loop: boolean; sound: boolean; name: string; token: number }
 }
 
 export interface RenderOptions {
@@ -38,6 +38,8 @@ export interface RenderOptions {
   imageCache?: Map<string, HTMLImageElement>
   /** The playing element for `verse.video`, when this canvas has one (output windows). */
   video?: HTMLVideoElement | null
+  /** Its state: "loading" draws only the background (no label on the live screen), "failed" draws the label. */
+  videoState?: "loading" | "ready" | "failed"
 }
 
 /** A freely positioned element region, all values in % of canvas size (0-100), x/y = top-left. */

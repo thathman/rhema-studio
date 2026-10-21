@@ -281,8 +281,8 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
   return "presented"
 }
 
-export function toVideoRenderData(item: ImageQueueItem, url: string): VerseRenderData {
-  return { kind: "image", reference: "", segments: [], video: { url, fit: item.image.fit, loop: item.image.loop === true, sound: item.image.sound !== false, name: item.image.name } }
+export function toVideoRenderData(item: ImageQueueItem, url: string, token = 0): VerseRenderData {
+  return { kind: "image", reference: "", segments: [], video: { url, fit: item.image.fit, loop: item.image.loop === true, sound: item.image.sound !== false, name: item.image.name, token } }
 }
 
 export function toImageRenderData(item: ImageQueueItem, url: string): VerseRenderData {
@@ -308,7 +308,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
       return "empty"
     }
     useBibleStore.getState().selectSlide({ item, index: 0 })
-    useBroadcastStore.getState().setLiveVerse(toVideoRenderData(item, videoUrl), null, { goLive: opts.goLive, itemId: item.id })
+    useBroadcastStore.getState().setLiveVerse(toVideoRenderData(item, videoUrl, ticket), null, { goLive: opts.goLive, itemId: item.id })
     return "presented"
   }
   let url: string | null = null

@@ -100,6 +100,7 @@ function BroadcastCanvas() {
       scale: 1,
       imageCache: themeImageCache(),
       video: videoPlayer?.element() ?? null,
+      videoState: videoPlayer?.state(),
     })
     if (!result) {
       ctx.fillStyle = "#000"
@@ -212,6 +213,7 @@ function BroadcastCanvas() {
         console.warn("[broadcast-output] video failed to play:", name)
         void currentWindow.emitTo("main", "broadcast:media-error", { outputId: OUTPUT_ID, name }).catch(() => {})
         draw()
+        pushNdiBurst()
       },
       allowSound: OUTPUT_ID === MAIN_OUTPUT_ID,
       fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),

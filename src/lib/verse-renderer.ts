@@ -1555,8 +1555,9 @@ function renderVerseImpl(
   if (verse?.video) {
     const frame = { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }
     const el = options?.video
-    if (el && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0) drawVideoFrame(ctx, el, frame, verse.video.fit)
-    else drawMediaLabel(ctx, frame, `▶ ${verse.video.name}`)
+    if (el && options?.videoState !== "failed" && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0) drawVideoFrame(ctx, el, frame, verse.video.fit)
+    // Still loading on an output: the theme background only, never a label on the live screen.
+    else if (options?.videoState !== "loading") drawMediaLabel(ctx, frame, `▶ ${verse.video.name}`)
     ctx.restore()
     return metrics
   }
