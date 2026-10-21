@@ -103,6 +103,13 @@ interface SettingsState {
   /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
   remoteAuthRequired: boolean
   setRemoteAuthRequired: (on: boolean) => void
+  /**
+   * The remote-control listeners as last left (FR-04): which were running, on
+   * which ports, and whether other devices may connect. Running listeners
+   * start again with the app, so a phone keeps working after a restart.
+   */
+  remoteListeners: { osc: boolean; http: boolean; oscPort: number; httpPort: number; lan: boolean }
+  setRemoteListeners: (patch: Partial<SettingsState["remoteListeners"]>) => void
   /** Optional OBS connection (obs-websocket v5). */
   obs: ObsSettings
   setObs: (patch: Partial<ObsSettings>) => void
@@ -148,9 +155,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
+  remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
   obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "" },
   setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
 
+  setRemoteListeners: (patch) => set((s) => ({ remoteListeners: { ...s.remoteListeners, ...patch } })),
   setRemoteAuthRequired: (remoteAuthRequired) => {
     set({ remoteAuthRequired })
     void pushRemoteKeys()
@@ -226,6 +235,11 @@ function acceptable(key: string, value: unknown): boolean {
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
     case "openedFrom":
       return typeof value === "object" && value !== null && !Array.isArray(value)
+    case "remoteListeners": {
+      const v = value as Record<string, unknown>
+      const port = (p: unknown) => typeof p === "number" && Number.isInteger(p) && p > 0 && p < 65536
+      return typeof value === "object" && value !== null && typeof v.osc === "boolean" && typeof v.http === "boolean" && typeof v.lan === "boolean" && port(v.oscPort) && port(v.httpPort)
+    }
     case "openedPackages":
     case "commentsSeen":
       return Array.isArray(value) && value.every((x) => typeof x === "string")
@@ -251,6 +265,7 @@ const PERSISTED_KEYS = [
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",
+  "remoteListeners",
   "obs",
   "deepgramApiKey",
   "openaiApiKey",

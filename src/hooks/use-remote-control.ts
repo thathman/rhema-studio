@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { useSettingsStore } from "@/stores/settings-store"
+import { pushRemoteKeys, useSettingsStore } from "@/stores/settings-store"
 import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
 import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
@@ -12,6 +12,7 @@ import { useJournalStore } from "@/stores/journal-store"
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
 import { remoteActions } from "@/lib/remote-actions"
+import { useApprovalGateStore } from "@/stores/approval-gate-store"
 
 /**
  * Listens for remote control events from the Rust backend (OSC / HTTP API)
@@ -20,6 +21,11 @@ import { remoteActions } from "@/lib/remote-actions"
  * Mount this hook once at the app root level.
  */
 export function useRemoteControl() {
+  // Listeners left running start again with the app (after the keys are in place), so a phone
+  // or Stream Deck keeps working after a restart, with the same ports and network choice.
+  useEffect(() => {
+    void restartRemoteListeners()
+  }, [])
   useEffect(() => {
     let cancelled = false
     const unlisteners: UnlistenFn[] = []
@@ -171,6 +177,8 @@ function syncStatusSnapshot() {
     liveVerse: broadcast.liveVerse?.reference ?? null,
     queueLength: queue.items.length,
     confidenceThreshold: settings.confidenceThreshold,
+    rehearsal: broadcast.rehearsal,
+    waitingForApproval: useApprovalGateStore.getState().held !== null,
   }).catch(() => {
     // Silently ignore — HTTP server may not be running
   })
@@ -192,3 +200,19 @@ function parsePayload(raw: unknown): Record<string, unknown> | null {
   }
   return null
 }
+
+export async function restartRemoteListeners(): Promise<void> {
+  const { osc, http, oscPort, httpPort, lan } = useSettingsStore.getState().remoteListeners
+  if (!osc && !http) return
+  await pushRemoteKeys()
+  const start = async (cmd: "start_osc" | "start_http", port: number, label: string) => {
+    try {
+      await invoke<number>(cmd, { port, lan })
+    } catch (e) {
+      toast.error(`${label} could not start again`, { description: `${e instanceof Error ? e.message : String(e)}. Start it in Settings → Remote.` })
+    }
+  }
+  if (osc) await start("start_osc", oscPort, "OSC remote control")
+  if (http) await start("start_http", httpPort, "Phone and HTTP remote control")
+}
+

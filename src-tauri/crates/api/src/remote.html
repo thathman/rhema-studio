@@ -78,10 +78,25 @@
     } catch { say("Cannot reach the presentation computer. Same Wi-Fi?", true) }
   })
 
+  // One id per press: if the answer is lost on Wi-Fi the phone asks again with the same id, and
+  // the computer, having already done it, does not do it twice. (No crypto.randomUUID on plain http.)
+  const pressId = () => Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
+  async function post(cmd, id) {
+    let lastError
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await fetch("/api/v1/command", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify({ command: cmd, id }) })
+      } catch (e) {
+        lastError = e
+        if (attempt < 2) { say("Sending…"); await new Promise((r) => setTimeout(r, 700)) }
+      }
+    }
+    throw lastError
+  }
   async function send(cmd, btn) {
     btn.disabled = true
     try {
-      const r = await fetch("/api/v1/command", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify({ command: cmd }) })
+      const r = await post(cmd, pressId())
       if (r.status === 401 || r.status === 403) {
         const j = await r.json().catch(() => ({}))
         if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true) }
@@ -89,7 +104,7 @@
       } else if (r.status === 429) say("Too fast; wait a second.", true)
       else if (!r.ok) say("Command failed (" + r.status + ")", true)
       else { say(""); poll() }
-    } catch { say("Cannot reach the presentation computer.", true) }
+    } catch { say("No answer from the presentation computer. Check the screen before pressing again.", true) }
     finally { btn.disabled = false }
   }
   document.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("click", () => send(b.dataset.cmd, b)))
@@ -104,7 +119,11 @@
       const s = await (await fetch("/api/v1/status", { cache: "no-store" })).json()
       $("air").textContent = s.on_air ? "On air" : "Off air"
       $("air").className = "air" + (s.on_air ? " on" : "")
-      $("live").textContent = s.live_verse || "Nothing on screen"
+      $("live").textContent = s.waiting_for_approval
+        ? "The computer is asking whether to show this service. Answer there first."
+        : s.rehearsal
+          ? "Rehearsal: the screens are frozen. " + (s.live_verse ? "Rehearsing: " + s.live_verse : "")
+          : (s.live_verse || "Nothing on screen")
     } catch {}
     polling = false
     timer = setTimeout(poll, 2000)

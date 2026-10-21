@@ -620,11 +620,14 @@ interface CommandLogEntry {
 }
 
 function RemoteControlSection() {
-  const [oscPort, setOscPort] = useState("8000")
-  const [httpPort, setHttpPort] = useState("8080")
-  // Applies to both listeners at their next start. Nothing here authenticates,
-  // so this is the only gate between the network and the live output.
-  const [remoteLan, setRemoteLan] = useState(true)
+  // Saved, so the listeners start again the same way with the app.
+  const saved = useSettingsStore((s) => s.remoteListeners)
+  const setListeners = useSettingsStore((s) => s.setRemoteListeners)
+  const [oscPort, setOscPort] = useState(String(saved.oscPort))
+  const [httpPort, setHttpPort] = useState(String(saved.httpPort))
+  // Applies to both listeners at their next start.
+  const remoteLan = saved.lan
+  const setRemoteLan = (lan: boolean) => setListeners({ lan })
   const remoteSecret = useSettingsStore((s) => s.remoteSecret)
   const setRemoteSecret = useSettingsStore((s) => s.setRemoteSecret)
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
@@ -736,11 +739,13 @@ function RemoteControlSection() {
     try {
       if (oscStatus.running) {
         await invoke("stop_osc")
+        setListeners({ osc: false })
         setOscError(null)
       } else {
         const port = parseInt(oscPort) || 8000
         const boundPort = await invoke<number>("start_osc", { port, lan: remoteLan })
         setOscPort(String(boundPort))
+        setListeners({ osc: true, oscPort: boundPort })
         setOscError(null)
       }
     } catch (e) {
@@ -752,11 +757,13 @@ function RemoteControlSection() {
     try {
       if (httpStatus.running) {
         await invoke("stop_http")
+        setListeners({ http: false })
         setHttpError(null)
       } else {
         const port = parseInt(httpPort) || 8080
         const boundPort = await invoke<number>("start_http", { port, lan: remoteLan })
         setHttpPort(String(boundPort))
+        setListeners({ http: true, httpPort: boundPort })
         setHttpError(null)
       }
     } catch (e) {

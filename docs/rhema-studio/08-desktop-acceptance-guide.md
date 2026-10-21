@@ -709,3 +709,11 @@ report), but launching it cannot.
 | 10br.3 | Quick find: type "john 3 16" quickly and press Enter at once. | The preview shows John 3:16 (not 3:1). | Unverified |
 | 10br.4 | With KJV + Yorùbá active add John 3:16, save, switch to NIV, present the item. | KJV + Yorùbá (as saved), also before reopening the service. | Unverified |
 | 10br.5 | With more than 50 songs, add "Àánú" (typed normally). Open the song library. | It is listed among the A's. | Unverified |
+
+### 10bt. Remote control audit fixes (FR-04, OP-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bt.1 | Settings → Remote: untick "other devices", start HTTP on 9090; quit and start Rhema. | HTTP is running again on 9090, local only; the box stays unticked. A phone that was paired works without opening Settings (when "other devices" is ticked). | Unverified |
+| 10bt.2 | Phone remote: walk to the edge of the Wi-Fi and press Next once. | The service steps once, even if the phone shows "Sending…" or "No answer…"; never twice for one press. | Unverified |
+| 10bt.3 | Turn rehearsal on; look at the phone. Then with the approval question showing, look again. | "Rehearsal: the screens are frozen" / "The computer is asking whether to show this service". After Clear, the phone says "Nothing on screen". | Unverified |

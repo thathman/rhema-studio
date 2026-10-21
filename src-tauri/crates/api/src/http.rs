@@ -80,6 +80,7 @@ struct AppState<S: CommandSink> {
     keys: KeySet,
     pairing: PairingWindow,
     rate: crate::rate::RateLimiter,
+    recent: RecentIds,
 }
 
 /// Snapshot of the current application state, served by `GET /api/v1/status`.
@@ -90,6 +91,12 @@ pub struct StatusSnapshot {
     pub live_verse: Option<String>,
     pub queue_length: usize,
     pub confidence_threshold: f32,
+    /// Rehearsal is on: the real screens are frozen, so a phone must not read "on air" as what people see.
+    #[serde(default)]
+    pub rehearsal: bool,
+    /// The computer is asking whether to show an unapproved service; commands wait for that answer.
+    #[serde(default)]
+    pub waiting_for_approval: bool,
 }
 
 /// Shared, thread-safe status snapshot that the frontend pushes updates to.
@@ -126,6 +133,7 @@ where
         keys: config.keys.clone(),
         pairing: config.pairing.clone(),
         rate: crate::rate::RateLimiter::default(),
+        recent: RecentIds::default(),
     });
 
     let app = Router::new()
@@ -215,6 +223,32 @@ async fn status_handler<S: CommandSink + 'static>(
 struct CommandRequest {
     #[serde(flatten)]
     command: RemoteCommand,
+    /// One id per press (FR-04 idempotent): a retry of the same press is acknowledged, not repeated.
+    #[serde(default)]
+    id: Option<String>,
+}
+
+/// Command ids seen recently, so a retried press is not carried out twice.
+#[derive(Default)]
+struct RecentIds(std::sync::Mutex<std::collections::VecDeque<(String, std::time::Instant)>>);
+
+impl RecentIds {
+    const KEEP: std::time::Duration = std::time::Duration::from_secs(60);
+    const MAX: usize = 256;
+
+    /// True the first time an id is seen within the last minute.
+    fn first_time(&self, id: &str) -> bool {
+        let Ok(mut seen) = self.0.lock() else { return true };
+        let now = std::time::Instant::now();
+        while seen.front().is_some_and(|(_, at)| now.duration_since(*at) > Self::KEEP) || seen.len() >= Self::MAX {
+            seen.pop_front();
+        }
+        if seen.iter().any(|(s, _)| s == id) {
+            return false;
+        }
+        seen.push_back((id.chars().take(64).collect(), now));
+        true
+    }
 }
 
 #[derive(Serialize)]
@@ -313,6 +347,10 @@ async fn command_handler<S: CommandSink + 'static>(
         }
         Ok(_) => {}
     }
+    if request.id.as_deref().is_some_and(|id| !state.recent.first_time(id)) {
+        log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
+        return (StatusCode::OK, Json(CommandResponse { success: true, error: None }));
+    }
     match CommandDispatcher::dispatch(&request.command, &*state.sink) {
         Ok(()) => (
             StatusCode::OK,
@@ -333,6 +371,14 @@ async fn command_handler<S: CommandSink + 'static>(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_retried_press_is_not_repeated() {
+        let recent = RecentIds::default();
+        assert!(recent.first_time("press-1"));
+        assert!(!recent.first_time("press-1"), "the same press again (a retry)");
+        assert!(recent.first_time("press-2"), "a new press");
+    }
     use super::*;
     use std::sync::Mutex;
 
