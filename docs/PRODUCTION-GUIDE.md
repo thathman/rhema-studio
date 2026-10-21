@@ -88,6 +88,8 @@ More → Library → Song usage: choose a date range (default: the last six mont
 
 ## Translations
 
+Quick find understands the Yorùbá Bible's own book names as well as the English ones, with or without accents: "Johanu 3:16", "Jòhánù 3 16", "1 Ọba 3:9", "Ìṣe àwọn Aposteli 2:38" (or just "Ise 2:38"). The names are the ones printed in the bundled Yorùbá edition; other Yorùbá Bibles may spell some books differently (for example "Johannu").
+
 - A saved item goes live in the translation it was saved with; spontaneous verses follow your active translations. The Present header chip switches to "Override" to show everything in the current translation. A missing translation is reported, never substituted.
 
 ## Who did what

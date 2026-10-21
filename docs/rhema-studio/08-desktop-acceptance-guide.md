@@ -628,3 +628,10 @@ report), but launching it cannot.
 | 10bi.1 | With Narrator (Windows) on, Tab through Present (Production view): the Bible panel's translation picker, chapter arrows and a verse's add button. | Each is announced by purpose ("Bible translation", "Next chapter", "Add John 3:16 to the service"), not just "button". | Unverified |
 | 10bi.2 | More → Themes: Tab to a theme card, press Enter; Tab to its options. | The card is announced as "Select theme …", Enter selects it, and its options button becomes visible when focused. | Unverified |
 | 10bi.3 | Windows display scaling 150%: Present at 1366x768. | Show live, Next, Clear, Back and the quick screens stay visible and readable. | Unverified |
+
+### 10bj. Yorùbá book names in Quick find (ST-001, FR-01)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bj.1 | Present → Quick find: type "Jòhánù 3:16", then "Johanu 3 16", then "1 Ọba 3:9" and "Ise 2:38". | Each previews the right verse (John 3:16, 1 Kings 3:9, Acts 2:38) in the active translation. | Unverified |
+| 10bj.2 | A Yorùbá speaker types the book names they actually use for ten common books. | Each finds the right book; note any spelling that does not, for the alias list. | Unverified |
