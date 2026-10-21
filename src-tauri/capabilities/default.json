@@ -10,7 +10,13 @@
     "core:default",
     "store:default",
     "dialog:default",
-    "fs:default",
+    "fs:create-app-specific-dirs",
+    "fs:read-app-specific-dirs-recursive",
+    "fs:deny-webview-data-windows",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$APPDATA/media/**" }]
+    },
     "fs:allow-write-text-file",
     "log:default",
     {

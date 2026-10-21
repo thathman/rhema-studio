@@ -1,0 +1,150 @@
+# Intel Mac desktop acceptance (issue #161)
+
+Real native runs of Rhema Studio on the owner's Intel Mac, 2026-10-21. Intel
+(`x86_64-apple-darwin`) only; no Apple Silicon build or test was made.
+
+**Verdict for Intel Mac QA only: GO for the owner's own evaluation, with the
+unverified rows below still open.** This is not a release decision (RELEASE-PLAN
+gates, signing and notarisation remain).
+
+## Machine
+
+| | |
+|---|---|
+| Model / CPU | MacBook Pro, Intel Core i7-8569U @ 2.80 GHz, 8 threads, 16 GB |
+| macOS | 15.7.7 (24G720), `uname -m` x86_64 |
+| Graphics / displays | Intel Iris Plus 655; one display (built-in 2560×1600 Retina) |
+| Audio | MacBook Pro microphone and speakers; an iPhone microphone (Continuity) |
+| Toolchain | Rust 1.98.1 (x86_64-apple-darwin), Bun 1.3.14, Apple clang 17 (Command Line Tools) |
+| Native deps | ONNX Runtime 1.29.0 (Homebrew), NDI runtime from `sdk/ndi/macos/libndi.dylib` (universal), Whisper model `ggml-large-v3-turbo-q8_0.bin` |
+| Other software | OBS 32.2.2 with DistroAV (NDI) and obs-websocket |
+
+## Build
+
+From `main` at `0a0d63b` plus this branch's fixes, in a separate worktree:
+
+```
+ORT_LIB_LOCATION=/usr/local/opt/onnxruntime/lib ORT_PREFER_DYNAMIC_LINK=1 \
+  bun x tauri build --target x86_64-apple-darwin --config src-tauri/tauri.mac-intel.conf.json
+scripts/macos-bundle-dylibs.sh Rhema.app Rhema-0.3.2-intel-x86_64.dmg
+```
+
+- `tauri.mac-intel.conf.json` adds the Whisper model and the NDI runtime to the
+  bundle's resources (they are found at `Resources/models/…` and
+  `Resources/sdk/…`). It builds the `.app` only; the script makes the `.dmg`.
+- `scripts/macos-bundle-dylibs.sh` copies ONNX Runtime and the Homebrew libraries
+  it pulls in (86 files: abseil, protobuf, re2, onnx) into
+  `Contents/Frameworks`, points the executable at them, re-signs ad hoc and
+  fails if anything still links outside the bundle and the OS.
+- Signing is ad hoc (`-`, as in `tauri.conf.json`). The app is not notarised:
+  on another Mac, Gatekeeper asks before the first open (Control-click → Open).
+  Notarisation needs the owner's Apple Developer identity and is not done here.
+- Artifact paths, sizes and checksums: see "Artifacts" at the end.
+
+## How the tests were run
+
+- **Isolated profile.** Every test run used a scratch `HOME`, so settings,
+  `studio.db`, media and logs lived in a scratch folder. The real folder
+  `~/Library/Application Support/com.openbezal.rhema` was backed up first
+  (`…/com.openbezal.rhema.qa-backup-20261021`) and was byte-for-byte unchanged
+  afterwards (SHA-256 of every file compared). No keychain entry was written:
+  the test profile held no keys, and the keychain entry is shared with the real
+  app, so no key was entered.
+- **WebKit storage does not follow `HOME`.** WebKit wrote to the real
+  `~/Library/WebKit/com.openbezal.rhema` during the runs. It was restored from
+  the pre-test copy afterwards (the real app had not run in between).
+- **Driving the real app.** This session has no permission to send clicks or
+  keys to other apps (Accessibility is off, and was not turned on). A QA build
+  (`cargo` feature `qa-bridge`, `src-tauri/src/qa_bridge.rs`) evaluates test
+  scripts inside the running app's own windows: real webview, real Rust
+  backend, real output windows. Scripts press the real buttons (`.click()`),
+  type into real inputs, or call the same actions the buttons call, and read
+  results back. A normal build does not contain the bridge.
+  `scripts/mac-qa/qa.py` sends a script; `scripts/mac-qa/grab.sh` saves what an
+  output window draws (its canvas).
+- **Evidence.** Output frames below are the projector window's own canvas
+  (1920×1080), not screen photographs. Full-screen captures were not kept: the
+  screen also showed other work.
+
+## Results
+
+V = verified on this Mac. U = unverified (not possible here; reason given). F = failed, then fixed on this branch and re-verified.
+
+| Area (guide §) | Step | Result |
+|---|---|---|
+| Launch | The native x86_64 app starts, Home shows readiness: "Bible library loaded (8 translations)", theme Classic Dark | V |
+| Launch | Webview IPC uses Tauri's custom protocol | F → V: the CSP's `connect-src` lacked `ipc: http://ipc.localhost`, so every call fell back to postMessage ("IPC custom protocol failed" at each start). Added; no warning after |
+| 1.1 | 8 translations incl. OYCB (Yorùbá) | V |
+| 1.2 | Quick find "John 3:16" + Enter previews, not live | V (Enter left the screen unchanged; preview John 3:16) |
+| 1.2 | First run is in KJV | F → V: the default was "translation id 1", which is AMP in the bundled library (KJV is id 4), so every new install started in the Amplified Bible. KJV is now chosen by name on a first run |
+| 1.3 | "1 Cor 13:4", "2 Sam 7:12", "3 John 1:2" | V |
+| 1.4 | "Johanu 3:16" → John 3:16; OYCB text with ẹ, ọ, ṣ and tone marks renders on the output | V ([frame](mac-acceptance/john-3-16-yoruba-kjv.jpg)) |
+| 1.6 | A verse past the chapter end (John 3:99) | V: the screen kept what was live; "John 3:99 not shown: no text in KJV." |
+| 2.3 | Primary OYCB, secondary KJV on a verse item | V: Yorùbá first, KJV below ([frame](mac-acceptance/john-3-16-yoruba-kjv.jpg)) |
+| 2.4 | Theme designer secondary-text edit | U (owner request: separate controls for each language; follow-up PR) |
+| 10a | Song with English and Yorùbá lyrics, hymnbook SSS, number 245 | V: both languages on screen ([verse](mac-acceptance/song-verse1-bilingual.jpg), [chorus](mac-acceptance/song-chorus-bilingual.jpg)) |
+| 10a | Find by "SSS 245", "245", a Yorùbá word ("iyanu"), "amazing grace" | V |
+| 10b | Custom slide (title + two lines) | V ([frame](mac-acceptance/custom-slide.jpg)) |
+| 10c | Service "QA Sunday" with slide, song, bilingual verse, Psalm 23:1 and a picture; Save | V (revision 5 in `studio.db`, five items, a note) |
+| 5 | Preview → Show live → Next (song slide 2) → Next (next item) → Clear → Restore | V: on-air state and position correct at each step; Previous back into the song lands on its last slide |
+| 10g | Picture item (import, add, present) | F → V: "the picture file is missing" although it was there. The file plugin's `read-app-specific-dirs-recursive` grants read commands but no folder, and `fs:default`'s Linux rule denies `$APPLOCALDATA/**`, which on macOS is the app data folder. The capability now grants `$APPDATA/media/**` only and keeps the Linux rule on Linux. Picture shown on the output after the fix |
+| 10j | Stage display output (second output window) | V: stage text "Welcome / Two minutes left / Tea after the service… / NEXT: Amazing Grace" (live item, private message, next) |
+| 10o, 8 | HTTP remote bound to 127.0.0.1 only; `/health`, `/status`, commands `next`, `hide`, `show` | V (`lsof`: listening on 127.0.0.1 only). `/health` reported "0.1.0" (the API crate's version): F → V, reports the app version 0.3.2 |
+| 7, 10aa | NDI sender from the bundled runtime, 1080p24 and 720p30 | V: frames received by a test receiver built on the NDI SDK (1280×720), Rhema counted 1 receiver; off again afterwards |
+| 7 | OBS receiving the NDI source; OBS connection and chapter marks | U: would add a source to the owner's OBS scenes and store the OBS password in the shared keychain |
+| 4 | Save, quit, relaunch: service reopens with items, note and picture; outputs and remote settings kept; remote listener restarts on its own | V |
+| 10aq | Closing with unsaved changes asks; "Save and close" saves and quits; the service log is kept on close | V (the close request was sent as the window's close button sends it; Rust's hold was not exercised) |
+| 10aq | Cmd+Q and the Quit menu route through the same question | U: needs a key press or menu click from outside the app |
+| 9 / RG-05 | `settings.json` cut short while closed → restored from the last good copy, with a warning | V |
+| ST-008 | `studio.db` created and migrated to 0011 on a fresh profile | V |
+| 6, 10x | Speech recognition (Whisper on this computer, Deepgram) and verse detection from speech | U: needs the microphone permission prompt answered by the owner; cloud speech needs a key in the shared keychain |
+| 10ab | Video items | U: no test video and no ffmpeg on this Mac |
+| 10ar, 10as | Sound items and sound player | U: would play audio aloud on the owner's Mac during testing |
+| 10ad | Second monitor, unplugging a monitor | U: one display only |
+| 10at | Secrets in the keychain | U: deliberately not exercised (shared entry) |
+
+## Fixed on this branch
+
+1. **Intel macOS build failed.** Tauri passes `bundle.macOS.minimumSystemVersion`
+   (default 10.13) as the deployment target, and whisper.cpp uses
+   `std::filesystem` (macOS 10.15), so `tauri build --target x86_64-apple-darwin`
+   stopped in `ggml-backend-reg.cpp`. Set to 10.15 (Tauri 2's own minimum).
+2. **Pictures never loaded on macOS** (and the media folder was unreadable on
+   every platform through the file plugin): capability fixed as above.
+3. **IPC fell back to postMessage** on every start: CSP fixed.
+4. **New installs started in the Amplified Bible**, not KJV.
+5. **`/api/v1/health` reported 0.1.0.**
+
+## Observations (not defects)
+
+- OYCB's book names are stored in English in the bundled library, so a
+  Yorùbá-only screen is headed "JOHN 3:16".
+- The queue adds new items at the top and keeps one item per verse whatever its
+  translation (a second translation is set on the item, as above).
+- A still slide goes out over NDI on each change plus a keep-alive every
+  2 seconds, so a receiver sees about 0.5 frames per second until something
+  changes.
+- The first-run walkthrough still points at the classic dashboard (owner
+  request: rewrite it for the Studio workspaces; follow-up PR).
+
+## Artifacts
+
+The final clean build (no QA bridge: the binary has no bridge code), built from
+this branch, is on the owner's Desktop, not published anywhere:
+
+| File | Size | SHA-256 |
+|---|---|---|
+| `~/Desktop/Rhema-Intel-QA/Rhema-0.3.2-intel-x86_64.dmg` | 841 MB | `30003811d8d7964850b0b93f54f61760544c201d7ed9e7aa46cfaea71c234d72` |
+| `~/Desktop/Rhema-Intel-QA/Rhema.app` (executable `Contents/MacOS/Rhema`) | 1.0 GB | `c1f98a1c252bcd328b94dccca7c126c470e22484773ece01ba3a18e55f93f0b6` |
+
+- Mach-O x86_64 only; signature ad hoc, identifier `com.openbezal.rhema`;
+  `spctl` rejects it (not notarised), as expected for a local build.
+- The bundle carries the Bible library (8 translations), licences, the Whisper
+  model, the NDI runtime and ONNX Runtime with its libraries.
+- **It uses the normal app identity**, so opening it uses the owner's real
+  Rhema data (`~/Library/Application Support/com.openbezal.rhema`) and runs any
+  pending migrations (a backup is taken before migrating). The existing
+  `/Applications/Rhema.app` was not replaced. The pre-test backup of the data
+  is at `~/Library/Application Support/com.openbezal.rhema.qa-backup-20261021`.
+- A clean smoke launch on an isolated profile started without errors and
+  without the IPC fallback warning.

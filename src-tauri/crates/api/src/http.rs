@@ -187,14 +187,21 @@ where
 struct HealthResponse {
     status: &'static str,
     service: &'static str,
-    version: &'static str,
+    version: String,
+}
+
+static APP_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The app's version for `/api/v1/health` (this crate's own version is not the app's).
+pub fn set_app_version(version: &str) {
+    let _ = APP_VERSION.set(version.to_string());
 }
 
 async fn health_handler() -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok",
         service: "rhema",
-        version: env!("CARGO_PKG_VERSION"),
+        version: APP_VERSION.get().cloned().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string()),
     })
 }
 
