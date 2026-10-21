@@ -7,7 +7,7 @@ Kept for every release candidate (release gate RG-10). "Unverified" means the be
 - **Video over NDI from a hidden window:** WebView2/WebKit may throttle timers in a hidden window to about one per second, so an NDI-only output could send video at roughly 1 fps. Visible display outputs are unaffected. Row 10ab.4.
 
 ## Limits by design (for now)
-- Only one copy of Rhema runs per computer user; launching it again brings the running one forward. Closing the main window quits Rhema, outputs included. On macOS, Quit from the menu (Cmd+Q) may not ask about unsaved service changes; closing the window does (unverified, row 10aq).
+- Only one copy of Rhema runs per computer user; launching it again brings the running one forward. Closing the main window quits Rhema, outputs included. On macOS, Quit from the menu and Cmd+Q ask about unsaved service changes like closing the window (row 10aq.5). Quitting from the Dock icon or at logout does not ask: macOS sends that straight to the app, and the framework (tao) gives no chance to hold it.
 - NDI carries pictures, not sound. Video sound plays from the main output only.
 - A service file includes its pictures and videos; large videos make it large.
 - API keys, the remote-control key and the OBS password are kept in the system keychain (Credential Manager, Keychain, Secret Service). Where no keychain is available (some Linux desktops) they stay in the local settings file in clear. Use a staff-only network (`docs/rhema-studio/13-remote-control-threat-notes.md`).

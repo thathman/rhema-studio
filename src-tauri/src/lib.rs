@@ -206,6 +206,12 @@ pub fn run() {
         .setup(|app| {
             use tauri::Manager;
 
+            // Cmd+Q asks about unsaved work like closing the window does.
+            #[cfg(target_os = "macos")]
+            if let Err(e) = commands::app_close::route_quit_through_close(app) {
+                log::warn!("[app_close] could not replace the Quit menu item: {e}");
+            }
+
             memstats::spawn();
 
             // User content (services, rundowns) lives in the app data dir.

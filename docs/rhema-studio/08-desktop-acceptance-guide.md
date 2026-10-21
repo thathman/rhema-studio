@@ -488,6 +488,7 @@ report), but launching it cannot.
 | 10aq.2 | Close again and choose Save and close; reopen Rhema and the service. | The added item is there. | Unverified |
 | 10aq.3 | With unsaved changes, close the window, and while the question shows, close it again (or the page has frozen). | The second close quits without asking (never trapped). | Unverified |
 | 10aq.4 | With a projector output and an NDI-only output on, close the Rhema window (nothing unsaved). Then start Rhema again. | Every output window closes and Rhema exits (nothing left in Task Manager / Activity Monitor); the new start opens normally. | Unverified |
+| 10aq.5 | macOS: with unsaved changes press Cmd+Q (and separately choose Rhema → Quit Rhema). | The same "Save changes before closing?" question as closing the window. Quitting from the Dock icon still quits without asking (known issue). | Unverified (the menu item is installed: startup log line seen on a Mac debug build 2026-10-21; the keystroke was not sent) |
 
 ### 10ar. Sound player (MD-002)
 
