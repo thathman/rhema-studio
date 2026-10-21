@@ -466,3 +466,9 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10an.1 | Start a packet capture on the presentation computer (Wireshark). Open Rhema with speech off, OBS off, no NDI outputs and no remote listener; present a service with verses, songs, pictures and a video for ten minutes. | No connections to the internet at all from Rhema (local NDI/mDNS only if NDI is on). | Unverified |
 | 10an.2 | Unplug the network cable / turn Wi-Fi off and present the same service. | Everything works; no errors or waits. | Unverified |
+
+### 10ao. Deletes ask first (FR-04)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ao.1 | More → Library → Earlier logs: press the bin next to a log. Then Prepare → Media: press the bin next to an unused picture. | Nothing is deleted on the first press; "Delete"/"Remove" and "Keep" appear in its place. Keep restores the bin; Delete/Remove deletes. | Unverified |
