@@ -601,7 +601,7 @@ export function SearchPanel() {
                 } catch (err) { console.error(err) }
               }}
             >
-              <SelectTrigger size="sm" className="h-7 w-[72px] shrink-0 text-xs">
+              <SelectTrigger size="sm" aria-label="Bible translation" className="h-7 w-[72px] shrink-0 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -631,7 +631,7 @@ export function SearchPanel() {
                   } catch (err) { console.error(err) }
                 }}
               >
-                <SelectTrigger size="sm" className="h-7 w-[72px] shrink-0 text-xs">
+                <SelectTrigger size="sm" aria-label="Bible translation" className="h-7 w-[72px] shrink-0 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -671,6 +671,7 @@ export function SearchPanel() {
                 disabled={chapter <= 1}
               >
                 <ArrowLeftIcon className="size-3" />
+                <span className="sr-only">Previous chapter</span>
               </Button>
               <Button
                 variant="ghost"
@@ -680,6 +681,7 @@ export function SearchPanel() {
                 }}
               >
                 <ArrowRightIcon className="size-3" />
+                <span className="sr-only">Next chapter</span>
               </Button>
             </div> : null}
           </div>
@@ -755,6 +757,7 @@ export function SearchPanel() {
                             }}
                           >
                             <PlusIcon className="size-3" />
+                            <span className="sr-only">{`Add ${verse.book_name} ${verse.chapter}:${verse.verse} to the service`}</span>
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent side="left">Add to queue</TooltipContent>
@@ -863,6 +866,7 @@ export function SearchPanel() {
                           }}
                         >
                           <PlusIcon className="size-3" />
+                          <span className="sr-only">{`Add ${result.book_name} ${result.chapter}:${result.verse} to the service`}</span>
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left">Add to queue</TooltipContent>

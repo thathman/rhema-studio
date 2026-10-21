@@ -80,7 +80,7 @@ export function TutorialTooltip({
               }`}
             />
           ))}
-          <span className="ml-1 text-[0.6875rem] tabular-nums text-muted-foreground/50">
+          <span className="ml-1 text-[0.6875rem] tabular-nums text-muted-foreground">
             {index + 1}/{size}
           </span>
         </div>

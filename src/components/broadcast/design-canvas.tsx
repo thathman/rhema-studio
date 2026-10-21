@@ -339,27 +339,24 @@ export function DesignCanvas() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/40 px-3" style={{ background: "#18181b" }}>
-        <Button variant="ghost" size="icon-xs" className="text-muted-foreground">
-          <MousePointer2Icon className="size-3.5" />
-        </Button>
+        {/* ponytail: was a button with no action; kept as a decorative mark */}
+        <MousePointer2Icon aria-hidden className="size-3.5 text-muted-foreground" />
         <div className="flex items-center gap-1.5 text-[0.625rem] text-muted-foreground">
           <Grid3X3Icon className="size-3" />
           <span>Grid</span>
         </div>
         <div className="flex-1" />
-        <Button variant="ghost" size="icon-xs" className="text-muted-foreground">
-          <SearchIcon className="size-3.5" />
-        </Button>
+        <SearchIcon aria-hidden className="size-3.5 text-muted-foreground" />
         <span className="min-w-12 text-center text-[0.625rem] font-medium tabular-nums text-muted-foreground">
           {zoomLevel}%
         </span>
-        <Button variant="ghost" size="icon-xs" onClick={zoomOut} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-xs" onClick={zoomOut} aria-label="Zoom out" title="Zoom out" className="text-muted-foreground">
           <MinusIcon className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={zoomIn} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-xs" onClick={zoomIn} aria-label="Zoom in" title="Zoom in" className="text-muted-foreground">
           <PlusIcon className="size-3" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={autoZoom} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-xs" onClick={autoZoom} aria-label="Fit to window" title="Fit to window" className="text-muted-foreground">
           <MaximizeIcon className="size-3.5" />
         </Button>
       </div>
