@@ -339,8 +339,10 @@ export const QUICK_SCREENS = {
   stand: { title: "", lines: ["Please stand"], yo: ["Ẹ jọ̀wọ́ ẹ dìde"] },
   pray: { title: "", lines: ["Let us pray"], yo: ["Ẹ jẹ́ kí a gbàdúrà"] },
   offering: { title: "Offering", lines: ["Give as the Lord leads"], yo: ["Ẹ fúnni bí Olúwa ṣe darí yín"] },
+  technical: { title: "", lines: ["We're having technical difficulties", "Please bear with us"], yo: ["A ní ìṣòro ẹ̀rọ díẹ̀", "Ẹ jọ̀wọ́ ẹ ní sùúrù"] },
 } as const
-export type QuickScreen = keyof typeof QUICK_SCREENS
+/** Text screens above, plus two without text: a black frame and the church logo. */
+export type QuickScreen = keyof typeof QUICK_SCREENS | "black" | "logo"
 
 /** Is a Yorùbá Bible in use right now (active or secondary)? Then screens go bilingual. */
 export function yorubaInUse(): boolean {
@@ -355,9 +357,13 @@ export function yorubaInUse(): boolean {
  */
 export function presentQuickScreen(screen: QuickScreen): void {
   presentSeq += 1
-  const { title, lines, yo } = QUICK_SCREENS[screen]
   const store = useBroadcastStore.getState()
   store.holdLive()
+  if (screen === "black" || screen === "logo") {
+    store.setLiveVerse({ kind: "slide", reference: "", segments: [], lines: [], screen }, null, { goLive: true, keepHeld: true })
+    return
+  }
+  const { title, lines, yo } = QUICK_SCREENS[screen]
   const bilingual = yorubaInUse()
   store.setLiveVerse(
     { kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines], ...(bilingual ? { secondaryLines: [...yo] } : {}) },

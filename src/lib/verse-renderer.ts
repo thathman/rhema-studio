@@ -1590,6 +1590,24 @@ function renderVerseImpl(
   // Draw background
   drawBackground(ctx, scaledTheme, metrics.backgroundRect, options?.imageCache)
 
+  // Whole-frame quick screens without text. Black on a transparent (keyed)
+  // theme means nothing at all, so the stream does not get a black box.
+  if (verse?.screen === "black") {
+    const { width, height } = scaledTheme.resolution
+    if (scaledTheme.background.type === "transparent") ctx.clearRect(0, 0, width, height)
+    else {
+      ctx.fillStyle = "#000"
+      ctx.fillRect(0, 0, width, height)
+    }
+    ctx.restore()
+    return metrics
+  }
+  if (verse?.screen === "logo") {
+    drawCentredLogo(ctx, scaledTheme, options?.imageCache, options?.opacity ?? 1)
+    ctx.restore()
+    return metrics
+  }
+
   // A video item covers the frame: its current frame where this canvas has the
   // playing element (output windows), else "▶ name" (the main window's monitors).
   if (verse?.video) {
@@ -1739,6 +1757,27 @@ function drawLogo(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, imageCac
   ctx.save()
   ctx.globalAlpha = baseOpacity * Math.min(1, Math.max(0, logo.opacity))
   ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height)
+  ctx.restore()
+}
+
+/** The theme's logo, large and centred (the Logo quick screen); the background alone when the theme has none. */
+function drawCentredLogo(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, imageCache: Map<string, HTMLImageElement> | undefined, baseOpacity: number): void {
+  const logo = theme.logo
+  if (!logo?.url) return
+  if (theme.background.type === "transparent" && !logo.showOnTransparent) return
+  const img = imageCache?.get(logo.url)
+  if (!img) return
+  const { width, height } = theme.resolution
+  const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1
+  let h = height * 0.4
+  let w = h * aspect
+  if (w > width * 0.7) {
+    w = width * 0.7
+    h = w / aspect
+  }
+  ctx.save()
+  ctx.globalAlpha = baseOpacity
+  ctx.drawImage(img, (width - w) / 2, (height - h) / 2, w, h)
   ctx.restore()
 }
 

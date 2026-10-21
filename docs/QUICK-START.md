@@ -23,7 +23,7 @@ For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; on
 | Show what is in the preview | **Show live**. The preview is exactly what will appear. |
 | Continue a reading | **Verse +** / **Verse −** (Shift+→ / Shift+←). Stays in the same Bible version. |
 | Take the screen down | **Clear** (Esc). **Restore** (Shift+Esc) brings it back. |
-| Please stand / Let us pray / Welcome / Offering | **Quick screens**; **Back** returns to what was live. |
+| Please stand / Let us pray / Welcome / Offering / Technical issue / Logo / Black | **Quick screens**; **Back** returns to what was live. Black is a black screen (on the stream it shows nothing); Logo shows the church logo large. |
 | A verse the preacher just mentioned | Type it in **Quick find**, press Enter to preview, then Show live. |
 | Keep an eye on time | **Timer** in the header: set the planned minutes, Start. Amber under two minutes, red when over. |
 | Tell the band something | **Message stage**. Only the stage screen sees it. |
