@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const mockInvoke = vi.fn(async (..._args: unknown[]) => null)
+const mockInvoke = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => null)
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args), convertFileSrc: (p: string) => p }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}) }))
 
@@ -45,6 +45,17 @@ describe("nothing in use on screen is deleted (data loss audit)", () => {
     expect(themeDraftChanged()).toBe(false)
     useBroadcastStore.setState({ draftTheme: { ...theme, name: "Changed" } })
     expect(themeDraftChanged()).toBe(true)
+    // Saved: the draft is what was saved (a Brand Kit theme detached in both).
+    useBroadcastStore.getState().saveTheme({ ...theme, id: "custom-1", builtin: false, brandManaged: true })
+    useBroadcastStore.getState().startEditing("custom-1")
+    useBroadcastStore.getState().updateDraft({ name: "Brand edit" })
+    useBroadcastStore.getState().saveDraft()
+    expect(themeDraftChanged()).toBe(false)
+    useBroadcastStore.getState().renameTheme("custom-1", "Renamed")
+    expect(themeDraftChanged()).toBe(false)
+    // Deleted while open: nothing left to lose.
+    useBroadcastStore.setState((s) => ({ themes: s.themes.filter((x) => x.id !== "custom-1") }))
+    expect(themeDraftChanged()).toBe(false)
     useBroadcastStore.setState({ editingThemeId: null, draftTheme: null })
   })
 

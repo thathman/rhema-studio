@@ -196,6 +196,8 @@ function ThemeCard({
                   onClick={(e) => {
                     e.stopPropagation()
                     const { inUse } = useBroadcastStore.getState().deleteTheme(theme.id)
+                    // The theme being edited is gone: close its draft (Save would bring it back).
+                    if (!inUse.length && useBroadcastStore.getState().editingThemeId === theme.id) useBroadcastStore.getState().stopEditing()
                     if (inUse.length) toast.error(`${theme.name} is used by ${inUse.join(", ")}`, { description: "Choose another theme for those outputs first (More → Outputs)." })
                   }}
                 >

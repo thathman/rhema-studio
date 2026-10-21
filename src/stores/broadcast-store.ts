@@ -448,7 +448,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         t.id === id && !t.builtin ? { ...t, name, updatedAt: Date.now(), ...(t.brandManaged ? { brandManaged: false } : {}) } : t
       ),
       draftTheme:
-        s.draftTheme?.id === id ? { ...s.draftTheme, name, updatedAt: Date.now() } : s.draftTheme,
+        s.draftTheme?.id === id ? { ...s.draftTheme, name, updatedAt: Date.now(), ...(s.draftTheme.brandManaged ? { brandManaged: false } : {}) } : s.draftTheme,
     })),
   togglePinTheme: (id) =>
     set((s) => ({
@@ -742,6 +742,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       }
     } else {
       get().saveTheme(draftTheme)
+      // The draft is now what was saved (a Brand Kit theme is detached in both).
+      set({ draftTheme })
     }
   },
   discardDraft: () => {
@@ -836,7 +838,7 @@ export function themeDraftChanged(): boolean {
   const { draftTheme, themes, editingThemeId } = useBroadcastStore.getState()
   if (!draftTheme) return false
   const saved = themes.find((t) => t.id === editingThemeId)
-  if (!saved) return true
+  if (!saved) return false // the theme was deleted: nothing left to save it over
   return JSON.stringify({ ...draftTheme, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 })
 }
 
