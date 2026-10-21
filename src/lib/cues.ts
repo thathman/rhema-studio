@@ -70,16 +70,20 @@ export function macroIdFor(label: string, taken: string[]): string {
   return id
 }
 
-/** Run a macro's steps in order. Unknown ids do nothing; a failing step does not stop the rest. */
-export function runMacro(id: string): CueId[] {
-  const macro = findMacro(id)
-  if (!macro) return []
-  for (const step of macro.steps) {
+/** Run steps in order; a failing step does not stop the rest. */
+export function runSteps(steps: CueId[]): CueId[] {
+  for (const step of steps) {
     try {
       CUE_ACTIONS[step].run()
     } catch (e) {
-      console.warn(`[cues] step ${step} of ${id} failed:`, e)
+      console.warn(`[cues] step ${step} failed:`, e)
     }
   }
-  return macro.steps
+  return steps
+}
+
+/** Run a macro by id (built-ins win over a custom cue with the same id). Unknown ids do nothing. */
+export function runMacro(id: string): CueId[] {
+  const macro = findMacro(id)
+  return macro ? runSteps(macro.steps) : []
 }

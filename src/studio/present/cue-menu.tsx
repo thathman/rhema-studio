@@ -3,7 +3,7 @@ import { ListChecksIcon, PlayIcon, PlusIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { allMacros, CUE_ACTIONS, macroIdFor, MACROS, runMacro, type CueId } from "@/lib/cues"
+import { allMacros, CUE_ACTIONS, macroIdFor, MACROS, runSteps, type CueId } from "@/lib/cues"
 import { useSettingsStore } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 
@@ -14,6 +14,9 @@ export function CueMenu() {
   const custom = useSettingsStore((s) => s.customMacros)
   const macros = allMacros(custom)
   const builtIn = new Set(MACROS.map((m) => m.id))
+  // Built-ins first, then the church's own, each with its own key and (for customs) Delete,
+  // even if a later version reused a custom cue's id for a built-in.
+  const rows = macros.map((m, i) => ({ m, custom: i >= MACROS.length }))
   const [adding, setAdding] = useState(false)
   return (
     <Popover onOpenChange={(o) => { if (!o) setAdding(false) }}>
@@ -24,18 +27,18 @@ export function CueMenu() {
       </PopoverTrigger>
       <PopoverContent align="end" className="max-h-[80vh] w-96 overflow-y-auto">
         <ul className="flex flex-col gap-2">
-          {macros.map((m) => (
-            <li key={m.id} className="rounded-md border border-border p-2">
+          {rows.map(({ m, custom: isCustom }) => (
+            <li key={`${isCustom ? "c" : "b"}-${m.id}`} className="rounded-md border border-border p-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{m.label}</p>
-                  <p className="text-xs text-muted-foreground">{builtIn.has(m.id) ? m.description : <>Your cue · remote: <code>/rhema/macro {m.id}</code></>}</p>
+                  <p className="text-xs text-muted-foreground">{!isCustom ? m.description : builtIn.has(m.id) ? "Your cue · its remote id is now taken by a built-in cue; make it again under a new name" : <>Your cue · remote: <code>/rhema/macro {m.id}</code></>}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {!builtIn.has(m.id) && (
+                  {isCustom && (
                     <ConfirmDelete label={`Delete ${m.label}`} onConfirm={() => useSettingsStore.getState().setCustomMacros(custom.filter((c) => c.id !== m.id))} />
                   )}
-                  <Button size="sm" disabled={m.steps.length === 0} onClick={() => runMacro(m.id)}><PlayIcon /> Run</Button>
+                  <Button size="sm" disabled={m.steps.length === 0} onClick={() => runSteps(m.steps)}><PlayIcon /> Run</Button>
                 </div>
               </div>
               <ol className="mt-1 flex flex-wrap gap-1 text-[0.6875rem] text-muted-foreground">

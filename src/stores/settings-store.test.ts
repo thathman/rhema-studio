@@ -202,4 +202,11 @@ describe("settings store", () => {
     expect(s.remoteAuthRequired).toBe(true)
     expect(s.operatorName).toBe("Tolu")
   })
+
+  it("keeps the good cues when one saved cue is damaged", async () => {
+    mockGet.mockImplementation(async (key: string) => (key === "customMacros" ? [{ id: "baptism", label: "Baptism", steps: ["quick.black"] }, { id: 5, label: null }, "junk"] : null))
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    expect(useSettingsStore.getState().customMacros).toEqual([{ id: "baptism", label: "Baptism", steps: ["quick.black"] }])
+  })
 })

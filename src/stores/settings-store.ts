@@ -46,6 +46,11 @@ export interface CustomMacro {
   label: string
   steps: string[]
 }
+
+function isCustomMacro(m: unknown): m is CustomMacro {
+  const c = m as CustomMacro
+  return typeof m === "object" && m !== null && typeof c.id === "string" && typeof c.label === "string" && Array.isArray(c.steps) && c.steps.every((s) => typeof s === "string")
+}
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
@@ -182,7 +187,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
     case "customMacros":
-      return Array.isArray(value) && value.every((m) => typeof m === "object" && m !== null && typeof (m as CustomMacro).id === "string" && typeof (m as CustomMacro).label === "string" && Array.isArray((m as CustomMacro).steps) && (m as CustomMacro).steps.every((s) => typeof s === "string"))
+      return Array.isArray(value) // entries are checked one by one in hydrateSettings
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
     default:
@@ -268,7 +273,8 @@ export function hydrateSettings(): Promise<void> {
       for (const key of PERSISTED_KEYS) {
         const value = await store.get(key)
         if (value !== undefined && value !== null && acceptable(key, value)) {
-          ;(patch as Record<string, unknown>)[key] = value
+          // One damaged cue must not cost the church all the others.
+          ;(patch as Record<string, unknown>)[key] = key === "customMacros" ? (value as unknown[]).filter(isCustomMacro) : value
         }
       }
       // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.
