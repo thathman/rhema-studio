@@ -36,6 +36,10 @@ fn truncate_safe(s: &str, max_bytes: usize) -> &str {
 use rhema_audio::{AudioConfig, AudioFrame};
 use rhema_stt::{DeepgramClient, SttConfig, SttProvider, TranscriptEvent};
 
+/// Which listening session is the current one: a provider from an earlier session that
+/// exits late must not turn off the one started since.
+static STT_SESSION: AtomicU64 = AtomicU64::new(0);
+
 /// Start the full audio-capture-to-transcription pipeline.
 ///
 /// 1. Opens the microphone via cpal (on a dedicated thread so the non-Send
@@ -320,6 +324,18 @@ pub async fn start_transcription(
 
     let conn_active = stt_active.clone();
     let provider_log_name = stt_provider.name().to_string();
+    let session = STT_SESSION.fetch_add(1, Ordering::SeqCst) + 1;
+    let stt_provider: Arc<dyn SttProvider> = Arc::from(stt_provider);
+
+    // Stop reaches the provider itself (it may be retrying a connection, not reading audio).
+    let watched = stt_provider.clone();
+    let watch_active = stt_active.clone();
+    tauri::async_runtime::spawn(async move {
+        while watch_active.load(Ordering::SeqCst) && STT_SESSION.load(Ordering::SeqCst) == session {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        watched.stop();
+    });
 
     // Task A: run the STT provider (Deepgram WS+REST or Whisper local).
     tauri::async_runtime::spawn(async move {
@@ -327,7 +343,9 @@ pub async fn start_transcription(
         if let Err(e) = result {
             log::error!("[STT-{provider_log_name}] Provider failed: {e}");
         }
-        conn_active.store(false, Ordering::SeqCst);
+        if STT_SESSION.load(Ordering::SeqCst) == session {
+            conn_active.store(false, Ordering::SeqCst);
+        }
         log::info!("[STT-{provider_log_name}] Provider task exited");
     });
 

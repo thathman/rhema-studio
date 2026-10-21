@@ -117,7 +117,15 @@ fn import_one(state: &ContentState, dir: &Path, source: &Path) -> Result<(MediaA
     let file = format!("{hash}.{}", ext.to_ascii_lowercase());
     std::fs::create_dir_all(dir).map_err(|e| format!("could not create the media folder: {e}"))?;
     let dest = dir.join(&file);
-    std::fs::copy(source, &dest).map_err(|e| format!("could not copy into the media folder: {e}"))?;
+    // Copied beside it and renamed into place: a copy that fails (or runs at the same time as another
+    // import of the same file) never leaves a half-written file under a registered asset's name.
+    if !dest.is_file() || std::fs::metadata(&dest).map(|m| m.len()).ok() != Some(size) {
+        let part = dir.join(format!("{file}.{}.part", std::process::id()));
+        if let Err(e) = std::fs::copy(source, &part).and_then(|_| std::fs::rename(&part, &dest)) {
+            let _ = std::fs::remove_file(&part);
+            return Err(format!("could not copy into the media folder: {e}"));
+        }
+    }
     let name = source.file_stem().and_then(|s| s.to_str()).unwrap_or("Picture").to_string();
     let input = MediaInput {
         kind: kind.into(),

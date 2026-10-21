@@ -340,6 +340,8 @@ export async function retryKeychain(): Promise<boolean> {
     keychainOurs = true
     keychainUnreadable = false
     if (Object.keys(patch).length > 0) useSettingsStore.setState(patch)
+    // Keys typed while the keychain was unreadable move into it now.
+    pendingSave = pendingSave.then(() => persistAll(useSettingsStore.getState()))
     void pushRemoteKeys()
     void import("@/hooks/use-remote-control").then((m) => m.restartRemoteListeners()).catch(() => {})
     toast.success("Saved keys read from the keychain")

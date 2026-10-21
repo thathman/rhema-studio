@@ -19,6 +19,7 @@ const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 const RECONNECT_DELAY: Duration = Duration::from_secs(1);
 /// After the WebSocket gave up, how long REST (hybrid) runs before real time is tried again.
 const HYBRID_RETRY_AFTER: Duration = Duration::from_secs(60);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Batch up to 250ms of audio before sending (at 16kHz, that is 4000 samples).
 const BATCH_SAMPLES: usize = 4000;
 
@@ -130,6 +131,7 @@ impl DeepgramClient {
                     log::info!("DeepgramClient: connection closed normally");
                     break;
                 }
+                Err(SttError::ApiKeyMissing) => return Err(SttError::ApiKeyMissing),
                 Err(e) => {
                     attempts += 1;
                     log::warn!(
@@ -178,9 +180,14 @@ impl DeepgramClient {
                 .map_err(|e| SttError::ConnectionFailed(e.to_string()))?,
         );
 
-        let (ws_stream, _response) = tokio_tungstenite::connect_async(request)
+        // Bounded: on a dead network a connect can otherwise hang for minutes.
+        let (ws_stream, _response) = tokio::time::timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(request))
             .await
-            .map_err(|e| SttError::ConnectionFailed(e.to_string()))?;
+            .map_err(|_| SttError::ConnectionFailed("timed out".into()))?
+            .map_err(|e| match e {
+                tokio_tungstenite::tungstenite::Error::Http(ref r) if r.status().as_u16() == 401 || r.status().as_u16() == 403 => SttError::ApiKeyMissing,
+                other => SttError::ConnectionFailed(other.to_string()),
+            })?;
 
         log::info!("DeepgramClient: connected to Deepgram");
         let _ = event_tx.send(TranscriptEvent::Connected).await;
@@ -462,8 +469,9 @@ impl SttProvider for DeepgramClient {
         loop {
             let result = self.connect(audio_rx.clone(), event_tx.clone()).await;
             let Err(e) = result else { return Ok(()) };
-            // No key: nothing to retry (REST needs it too).
+            // No key, or the key was refused: nothing to retry (REST needs it too).
             if matches!(e, SttError::ApiKeyMissing) {
+                let _ = event_tx.send(TranscriptEvent::Error("Deepgram refused the API key. Check it in Settings → Audio.".into())).await;
                 return Err(e);
             }
             if self.cancelled.load(Ordering::SeqCst) {
@@ -503,6 +511,14 @@ impl SttProvider for DeepgramClient {
                     }
                     audio_buffer.clear();
                     last_flush = std::time::Instant::now();
+                }
+            }
+            // What was heard since the last send is not dropped.
+            if !audio_buffer.is_empty() {
+                if let Ok(events) = rest_client.transcribe(&audio_buffer).await {
+                    for evt in events {
+                        let _ = event_tx.send(evt).await;
+                    }
                 }
             }
             log::info!("[STT-Deepgram] trying the real-time connection again");
