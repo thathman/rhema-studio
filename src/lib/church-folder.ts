@@ -33,6 +33,31 @@ export interface FolderService {
   newest: FolderEntry
   /** Older versions of the same service in the folder. */
   older: number
+  /** Every readable version, newest first. */
+  versions: FolderEntry[]
+}
+
+/** What a service on this computer was opened from (kept in settings, by local service id). */
+export interface OpenedFrom {
+  sha256: string
+  source_id: string | null
+  title: string
+  service_date: string | null
+  revision: number | null
+}
+
+const groupKey = (e: { source_id: string | null; title: string; service_date: string | null }) => e.source_id ?? `${e.title}|${e.service_date ?? ""}`
+
+/**
+ * The folder's newest version of the service a local copy was opened from,
+ * when it is a different file at the same or a later revision (a new save, or
+ * the same revision newly approved). Null when the copy is current or the
+ * service is no longer in the folder. Never opened automatically (FR-08).
+ */
+export function newerInFolder(opened: OpenedFrom, services: FolderService[]): FolderEntry | null {
+  const group = services.find((s) => groupKey(s.newest) === groupKey(opened))
+  if (!group || group.newest.sha256 === opened.sha256) return null
+  return (group.newest.revision ?? 0) >= (opened.revision ?? 0) ? group.newest : null
 }
 
 /**
@@ -44,13 +69,13 @@ export interface FolderService {
 export function newestPerService(entries: FolderEntry[]): { services: FolderService[]; broken: FolderEntry[] } {
   const groups = new Map<string, FolderEntry[]>()
   for (const e of entries.filter((x) => !x.error)) {
-    const key = e.source_id ?? `${e.title}|${e.service_date ?? ""}`
+    const key = groupKey(e)
     groups.set(key, [...(groups.get(key) ?? []), e])
   }
   const services = [...groups.values()]
     .map((list) => {
       const sorted = [...list].sort((a, b) => (b.revision ?? 0) - (a.revision ?? 0) || b.modified - a.modified)
-      return { newest: sorted[0], older: sorted.length - 1 }
+      return { newest: sorted[0], older: sorted.length - 1, versions: sorted }
     })
     .sort((a, b) => (b.newest.service_date ?? "").localeCompare(a.newest.service_date ?? "") || b.newest.modified - a.newest.modified)
   return { services, broken: entries.filter((x) => x.error) }

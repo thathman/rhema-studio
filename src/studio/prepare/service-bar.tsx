@@ -1,3 +1,4 @@
+import { NewerVersionNotice } from "@/studio/prepare/newer-version-notice"
 import { useSettingsStore } from "@/stores/settings-store"
 import { publishToChurchFolder } from "@/lib/church-folder"
 import { useState } from "react"
@@ -199,6 +200,7 @@ export function ServiceBar() {
       )}
 
       <ServiceHistory />
+      <NewerVersionNotice />
       {current && churchFolder && (
         <Button
           variant="outline"
