@@ -186,14 +186,17 @@ function StandardView() {
 
       <section className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] gap-3 overflow-hidden rounded-lg border border-border bg-card p-3">
         <QuickFind mode="present" />
-        <div className="flex flex-col gap-2 border-l border-border pl-3" role="group" aria-label="Quick screens">
-          <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Quick screens</p>
-          <div className="grid grid-cols-2 gap-2">
+        <div className="flex min-h-0 flex-col gap-2 border-l border-border pl-3" role="group" aria-label="Quick screens">
+          {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Quick screens</p>
+            <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
+          </div>
+          <div className="-m-1 grid min-h-0 grid-cols-3 content-start gap-2 overflow-y-auto p-1">
             {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => (
-              <BigButton key={s} icon={<MonitorIcon />} label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]} tone="live" className="min-w-0" onClick={() => presentActions.quickScreen(s)} />
+              <BigButton key={s} icon={null} label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]} tone="live" className="h-11 min-w-0 gap-0 px-2 text-center" onClick={() => presentActions.quickScreen(s)} />
             ))}
           </div>
-          <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="min-w-0" />
         </div>
       </section>
     </div>
