@@ -406,10 +406,14 @@ function NoteEditor({ item }: { item: QueueItem }) {
 /** Prepare-only: edit a custom slide in place. The preview follows every keystroke. */
 function CustomSlideEditor({ item }: { item: SlideQueueItem }) {
   const update = (patch: Partial<SlideQueueItem["slide"]>) =>
-    useQueueStore.getState().updateItem(item.id, (i) => (isSlideItem(i) ? { ...i, slide: { ...i.slide, ...patch }, reference: (patch.title ?? i.slide.title).trim() || i.reference } : i))
+    useQueueStore.getState().updateItem(item.id, (i) => {
+      if (!isSlideItem(i)) return i
+      const slide = { ...i.slide, ...patch }
+      return { ...i, slide, reference: slide.title.trim() || slide.body.split("\n")[0]?.trim() || "Slide" }
+    })
   return (
     <div className="ml-7 flex flex-col gap-1.5 py-1 pl-2">
-      <Input aria-label="Slide title" value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
+      <Input aria-label="Slide title" maxLength={200} value={item.slide.title} placeholder="Title" className="h-8 text-sm" onChange={(e) => update({ title: e.target.value })} />
       <Textarea
         aria-label="Slide text"
         value={item.slide.body}

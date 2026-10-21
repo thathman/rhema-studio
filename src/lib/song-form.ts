@@ -240,7 +240,7 @@ export function validateForm(f: SongForm): string[] {
   if (f.sections.length === 0) problems.push("Add at least one section of words.")
   if (f.sections.some((s) => !Object.values(s.texts).some((t) => t.trim()))) problems.push("Every section needs some words, or remove the empty one.")
   if (f.ccli_number.trim() && !/^\d{1,12}$/.test(f.ccli_number.trim())) problems.push("The CCLI number is digits only.")
-  if (f.tempo.trim() && !(Number(f.tempo) >= 20 && Number(f.tempo) <= 300)) problems.push("Tempo is beats per minute, 20 to 300.")
+  if (f.tempo.trim() && !(Number.isInteger(Number(f.tempo)) && Number(f.tempo) >= 20 && Number(f.tempo) <= 300)) problems.push("Tempo is whole beats per minute, 20 to 300.")
   for (const n of f.numbers) {
     if (n.hymnbook_id && !/^\d{1,5}[a-z]?$/i.test(n.number.trim())) problems.push(`Hymn number "${n.number}" should be a number like 245 or 12a.`)
   }

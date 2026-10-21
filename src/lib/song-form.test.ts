@@ -29,7 +29,8 @@ describe("song form", () => {
     expect(input.numbers).toEqual([{ hymnbook_id: "b1", number: "345" }])
     expect(input.ccli_number).toBe("22324")
     expect(inputFromForm({ ...form, key: " G ", tempo: "72" })).toMatchObject({ key: "G", tempo: 72 })
-    expect(validateForm({ ...form, tempo: "900" })).toContain("Tempo is beats per minute, 20 to 300.")
+    expect(validateForm({ ...form, tempo: "900" })).toContain("Tempo is whole beats per minute, 20 to 300.")
+    expect(validateForm({ ...form, tempo: "72.5" })).toContain("Tempo is whole beats per minute, 20 to 300.")
 
     const withNew = addSection(form, "bridge")
     const bridgeId = withNew.sections[2].id

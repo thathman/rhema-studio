@@ -129,7 +129,8 @@ export function toItemInputs(
       ? {
           id: i.id,
           kind: "slide",
-          reference: i.slide.title.trim() || i.slide.body.split("\n")[0]?.trim() || "Slide",
+          // The label is a short name (the database keeps at most 200 characters); the slide keeps all its words.
+          reference: [...(i.slide.title.trim() || i.slide.body.split("\n")[0]?.trim() || "Slide")].slice(0, 200).join(""),
           book_number: null,
           chapter: null,
           verse: null,
@@ -495,6 +496,17 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (get().current && get().dirty && !opts?.discard) return "unsaved"
     const program = await get().createProgram(title, serviceDate, { discard: true })
     if (!program) return "failed"
+    // Item ids are unique across services: items taken from another service get new ones
+    // (the screen's references to them follow), or the save is refused.
+    const ids = new Map(useQueueStore.getState().items.map((i) => [i.id, crypto.randomUUID()]))
+    const re = (id: string | null) => (id ? (ids.get(id) ?? id) : id)
+    useQueueStore.setState((q) => ({ items: q.items.map((i) => ({ ...i, id: ids.get(i.id) ?? i.id })), removedActive: null }))
+    const b = useBroadcastStore.getState()
+    useBroadcastStore.setState({
+      liveItemId: re(b.liveItemId),
+      liveSlide: b.liveSlide ? { ...b.liveSlide, itemId: re(b.liveSlide.itemId) ?? b.liveSlide.itemId } : null,
+      heldLive: b.heldLive ? { ...b.heldLive, liveItemId: re(b.heldLive.liveItemId), liveSlide: b.heldLive.liveSlide ? { ...b.heldLive.liveSlide, itemId: re(b.heldLive.liveSlide.itemId) ?? b.heldLive.liveSlide.itemId } : null } : null,
+    })
     baseline = "" // the rundown is not yet what the database has
     set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [], missingTranslations: [] })
     remember(program.id)

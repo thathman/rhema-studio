@@ -309,6 +309,8 @@ export interface ImportReport {
   replaced: number
   skipped: number
   hymnbooks_added: number
+  /** Hymn numbers left off because another song here already has them. */
+  numbers_skipped?: number
 }
 
 /** `payload` of a `kind = "slide"` program item. */

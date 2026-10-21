@@ -805,3 +805,14 @@ report), but launching it cannot.
 | 10cb.5 | Change a theme in the Designer; press Escape, Close, or pick another theme. Then close Rhema with a changed theme. | Rhema asks before discarding; the close question lists the theme. | Unverified |
 | 10cb.6 | Quit Rhema; damage `settings.json` in the app folder (cut it short); start Rhema. | It says the settings were put back as they were at the last start; they are. | Unverified |
 
+### 10cc. Prepare fixes (twelfth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cc.1 | Open a saved service; close it with X (the rundown stays); New service → Create. | The new service is saved with those items; the old one is unchanged. | Unverified |
+| 10cc.2 | Prepare → Slides → QR link with only a web address; Add; Save. | Saved. | Unverified |
+| 10cc.3 | Add a slide whose text is one 250-character paragraph with no title; Save. | Saved; the rundown shows the start of the text, the screen shows all of it. | Unverified |
+| 10cc.4 | On two computers enter the same hymn with the same hymnbook number; publish a service using it from one and open it on the other. | The service opens; the song arrives without the number. A library import of the same song says one hymn number was left off. | Unverified |
+| 10cc.5 | Export a Yorùbá-first song with a key and tempo as OpenLyrics; import it. | Yorùbá is still the main language; key and tempo kept. | Unverified |
+| 10cc.6 | Song editor: tempo 72.5. | "Tempo is whole beats per minute"; nothing is saved until fixed. | Unverified |
+

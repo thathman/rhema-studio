@@ -223,6 +223,9 @@ pub struct ImportReport {
     pub replaced: usize,
     pub skipped: usize,
     pub hymnbooks_added: usize,
+    /// Hymn numbers left off because another song here already has them.
+    #[serde(default)]
+    pub numbers_skipped: usize,
 }
 
 /// Payload of a `kind = 'song'` program item.
@@ -419,6 +422,10 @@ impl ContentDb {
             match (mode, exists) {
                 (ImportMode::Skip, true) => report.skipped += 1,
                 (ImportMode::Replace, true) => {
+                    let mut input = input.clone();
+                    let before = input.numbers.len();
+                    input.numbers.retain(|n| number_holder(&tx, &n.hymnbook_id, &n.number).ok().flatten().is_none_or(|(holder, _)| holder == s.song.id));
+                    report.numbers_skipped += before - input.numbers.len();
                     update_song_row(&tx, &s.song.id, &input)?;
                     let existing = existing_child_ids(&tx, &s.song.id)?;
                     write_song_children(&tx, &s.song.id, &input, &existing)?;
@@ -430,11 +437,11 @@ impl ContentDb {
                     let id = if mode == ImportMode::Duplicate || !is_valid_id(&s.song.id) { new_id() } else { s.song.id.clone() };
                     // Fresh child ids (the file's may collide with local rows);
                     // arrangements refer to sections by index instead.
-                    // A duplicate cannot take a hymn number another song holds.
+                    // A new song cannot take a hymn number another song here holds
+                    // (the same hymn entered on two computers has two ids): left off and counted.
                     let mut numbers = input.numbers.clone();
-                    if mode == ImportMode::Duplicate {
-                        numbers.retain(|n| number_holder(&tx, &n.hymnbook_id, &n.number).ok().flatten().is_none());
-                    }
+                    numbers.retain(|n| number_holder(&tx, &n.hymnbook_id, &n.number).ok().flatten().is_none());
+                    report.numbers_skipped += input.numbers.len() - numbers.len();
                     let fresh = SongInput {
                         sections: input.sections.iter().map(|x| SectionInput { id: None, ..x.clone() }).collect(),
                         arrangements: remap_arrangements(&input),
@@ -1443,6 +1450,23 @@ mod tests {
         db.delete_hymnbook(&sss.id).unwrap();
         assert_eq!(ids("245"), vec![ba.song.id.clone()]);
         assert!(db.get_song(&ag.song.id).unwrap().is_some(), "songs survive a deleted book");
+    }
+
+    #[test]
+    fn a_hymn_number_already_used_here_is_left_off_not_refused() {
+        // The same hymn entered on two computers: two ids, one number.
+        let book = || HymnbookInput { id: None, code: "SSS".into(), name: "Sacred Songs and Solos".into(), language: "en".into(), publisher: String::new(), licence_note: String::new() };
+        let a = ContentDb::open_in_memory().unwrap();
+        let b = ContentDb::open_in_memory().unwrap();
+        for db in [&a, &b] {
+            let sss = db.upsert_hymnbook(&book()).unwrap();
+            let mut ag = amazing_grace();
+            ag.numbers = vec![HymnNumberInput { hymnbook_id: sss.id, number: "245".into() }];
+            db.create_song(&ag).unwrap();
+        }
+        let r = b.import_songs(&a.export_songs(None).unwrap(), ImportMode::Skip).unwrap();
+        assert_eq!((r.added, r.numbers_skipped), (1, 1));
+        assert_eq!(b.list_songs(Some("SSS 245"), 5).unwrap().len(), 1, "the number stays with the song that had it");
     }
 
     #[test]

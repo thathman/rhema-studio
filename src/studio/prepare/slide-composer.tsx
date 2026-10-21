@@ -127,6 +127,7 @@ export function SlideComposer() {
         aria-label="Slide title"
         placeholder="Title (optional)"
         value={title}
+        maxLength={200}
         onChange={(e) => { setTitle(e.target.value); preview(e.target.value, body) }}
         className="h-10"
       />
