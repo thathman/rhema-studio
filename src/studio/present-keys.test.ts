@@ -53,11 +53,14 @@ describe("shouldIgnoreKeyboard", () => {
   })
 
   it("ignores keys inside a dialog, menu or popover, and while a modal is open (RG-09)", () => {
-    document.body.innerHTML = '<div role="menu"><button id="in-menu">Run</button></div><button id="plain">x</button>'
-    expect(shouldIgnoreKeyboard(document.getElementById("in-menu"))).toBe(true)
-    expect(shouldIgnoreKeyboard(document.getElementById("plain"))).toBe(false)
-    document.body.insertAdjacentHTML("beforeend", '<div role="dialog" data-state="open"></div>')
-    expect(shouldIgnoreKeyboard(document.getElementById("plain"))).toBe(true)
+    document.body.innerHTML = '<div role="menu"><button id="in-menu">Run</button></div><div role="dialog" data-slot="popover-content" data-state="open"><button id="in-popover">Play</button></div><button id="plain">x</button>'
+    expect(shouldIgnoreKeyboard(document.getElementById("in-menu"), "ArrowRight")).toBe(true)
+    expect(shouldIgnoreKeyboard(document.getElementById("in-popover"), "ArrowRight")).toBe(true)
+    // A presenter clicker still steps from an open popover (the popover is not modal).
+    expect(shouldIgnoreKeyboard(document.getElementById("in-popover"), "PageDown")).toBe(false)
+    expect(shouldIgnoreKeyboard(document.getElementById("plain"), "ArrowRight")).toBe(false)
+    document.body.insertAdjacentHTML("beforeend", '<div role="dialog" data-slot="dialog-content" data-state="open"></div>')
+    expect(shouldIgnoreKeyboard(document.getElementById("plain"), "PageDown")).toBe(true)
     document.body.innerHTML = ""
   })
 })

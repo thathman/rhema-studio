@@ -157,7 +157,7 @@ function StandardView() {
   // Keyboard verbs, only in Standard view and never while typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || shouldIgnoreKeyboard(e.target)) return
+      if (e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
       const action = keyToPresentAction(e)
       if (!action) return
       e.preventDefault()

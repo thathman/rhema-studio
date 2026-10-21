@@ -69,12 +69,12 @@ export function AppShell() {
       const item = NAV.find((n) => n.key === e.key)
       if (!item) return
       e.preventDefault()
-      // Never switch away under an open dialog or an unsaved song: that would discard it unasked.
-      if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
+      // Never switch away from an unsaved song or under an open dialog: that would discard it unasked.
       if (useUnsavedStore.getState().songEditor !== null) {
         toast("Save or close the song you are editing first.")
         return
       }
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
       setWorkspace(item.id)
     }
     window.addEventListener("keydown", onKey)

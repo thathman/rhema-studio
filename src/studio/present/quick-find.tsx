@@ -84,6 +84,7 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
   }, [books, hymnbooks])
 
   const onChange = (value: string) => {
+    enterPending.current = null // an Enter belongs to the text it was pressed on
     setQuery(value)
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => void runSearch(value), 180)
