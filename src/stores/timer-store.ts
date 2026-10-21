@@ -4,6 +4,25 @@ import { adjust, idleTimer, pause, reset, setDuration, start, type TimerState } 
 /** The clock the engine runs on: monotonic, immune to wall-clock changes. */
 export const monotonicNow = (): number => (typeof performance !== "undefined" ? performance.now() : Date.now())
 
+/**
+ * Wall-clock time for a monotonic reading, for showing clock times only
+ * ("Planned end 11:45", "by 12:15"). The anchor is checked every few
+ * seconds: after the laptop sleeps (the monotonic clock stops on macOS) or
+ * the system clock is set, displayed times follow the real clock again.
+ * The timer itself stays monotonic (FR-07).
+ */
+let wallAtMonoZero = Date.now() - monotonicNow()
+export const wallAt = (mono: number): number => wallAtMonoZero + mono
+export function refreshWallAnchor(): void {
+  const fresh = Date.now() - monotonicNow()
+  if (Math.abs(fresh - wallAtMonoZero) > 2000) wallAtMonoZero = fresh
+}
+if (typeof window !== "undefined") {
+  setInterval(refreshWallAnchor, 5000)
+  window.addEventListener?.("focus", refreshWallAnchor)
+  document.addEventListener?.("visibilitychange", refreshWallAnchor)
+}
+
 interface TimerStoreState {
   /** One service timer for now: the sermon or the whole service. */
   timer: TimerState

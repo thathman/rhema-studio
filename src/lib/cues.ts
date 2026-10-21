@@ -1,3 +1,6 @@
+import { useApprovalGateStore } from "@/stores/approval-gate-store"
+import { resetTimerLogged } from "@/lib/timer-reset"
+import { isRunning } from "@/lib/timer"
 import { leaveRehearsal } from "@/stores/approval-gate-store"
 import { presentActions } from "@/studio/present-actions"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -24,10 +27,16 @@ export const CUE_ACTIONS = {
   "quick.back": { label: "Back from quick screen", run: () => presentActions.back() },
   "timer.start": { label: "Start the timer", run: () => useTimerStore.getState().start() },
   "timer.pause": { label: "Pause the timer", run: () => useTimerStore.getState().pause() },
-  "timer.reset": { label: "Reset the timer", run: () => useTimerStore.getState().reset() },
+  "timer.reset": { label: "Reset the timer", run: () => resetTimerLogged() },
+  // "Start the service" twice must not wipe the timer of a service already running.
+  "timer.fresh": { label: "Start the timer from zero (unless it is running)", run: () => {
+    if (isRunning(useTimerStore.getState().timer)) return
+    resetTimerLogged()
+    useTimerStore.getState().start()
+  } },
   "stage.clearMessage": { label: "Clear the stage message", run: () => useBroadcastStore.getState().setStageMessage("") },
   "rehearsal.off": { label: "Rehearsal off", run: () => leaveRehearsal() },
-} as const satisfies Record<string, { label: string; run: () => void }>
+} as const satisfies Record<string, { label: string; run: () => unknown }>
 
 export type CueId = keyof typeof CUE_ACTIONS
 
@@ -40,7 +49,7 @@ export interface Macro {
 
 /** Built-in macros. Steps run in order; each is an ordinary action, so a macro is just a shortcut. */
 export const MACROS: Macro[] = [
-  { id: "service-start", label: "Start the service", description: "Welcome on screen, timer running, rehearsal off.", steps: ["rehearsal.off", "timer.reset", "timer.start", "quick.welcome"] },
+  { id: "service-start", label: "Start the service", description: "Welcome on screen, timer running from zero (left alone if already running), rehearsal off.", steps: ["rehearsal.off", "timer.fresh", "quick.welcome"] },
   { id: "offering", label: "Offering", description: "Offering screen; Back returns to what was live.", steps: ["quick.offering"] },
   { id: "prayer", label: "Prayer", description: "Let us pray; Back returns to what was live.", steps: ["quick.pray"] },
   { id: "service-end", label: "End the service", description: "Clear the screen, pause the timer, clear any stage message.", steps: ["clear", "timer.pause", "stage.clearMessage"] },
@@ -71,20 +80,26 @@ export function macroIdFor(label: string, taken: string[]): string {
   return id
 }
 
-/** Run steps in order; a failing step does not stop the rest. */
-export function runSteps(steps: CueId[]): CueId[] {
+/**
+ * Run steps in order, each finishing before the next starts (a Next still
+ * loading must not be cancelled by the following Clear or quick screen). A
+ * failing step does not stop the rest; a go-live held for approval stops
+ * the cue, since the operator is being asked.
+ */
+export async function runSteps(steps: CueId[]): Promise<CueId[]> {
   for (const step of steps) {
     try {
-      CUE_ACTIONS[step].run()
+      await CUE_ACTIONS[step].run()
     } catch (e) {
       console.warn(`[cues] step ${step} failed:`, e)
     }
+    if (useApprovalGateStore.getState().held) break
   }
   return steps
 }
 
 /** Run a macro by id (built-ins win over a custom cue with the same id). Unknown ids do nothing. */
-export function runMacro(id: string): CueId[] {
+export function runMacro(id: string): Promise<CueId[]> {
   const macro = findMacro(id)
-  return macro ? runSteps(macro.steps) : []
+  return macro ? runSteps(macro.steps) : Promise.resolve([])
 }

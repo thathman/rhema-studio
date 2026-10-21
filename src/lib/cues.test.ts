@@ -27,42 +27,46 @@ describe("cues and macros", () => {
     for (const m of MACROS) for (const s of m.steps) expect(CUE_ACTIONS[s]).toBeDefined()
   })
 
-  it("Start the service: rehearsal off, timer running from zero, Welcome on air", () => {
+  it("Start the service: rehearsal off, timer running from zero, Welcome on air", async () => {
     useTimerStore.getState().start()
     useTimerStore.getState().pause()
-    expect(runMacro("service-start")).toEqual(["rehearsal.off", "timer.reset", "timer.start", "quick.welcome"])
+    expect(await runMacro("service-start")).toEqual(["rehearsal.off", "timer.fresh", "quick.welcome"])
     const b = useBroadcastStore.getState()
     expect(b.rehearsal).toBe(false)
     expect(b.isLive).toBe(true)
     expect(b.liveVerse?.reference).toBe("Welcome")
     expect(useTimerStore.getState().timer.startedAt).not.toBeNull()
     expect(useTimerStore.getState().timer.accumulatedMs).toBe(0)
+    // Pressed again mid-service (a Stream Deck, the phone): the running timer is left alone.
+    const started = useTimerStore.getState().timer.startedAt
+    await runMacro("service-start")
+    expect(useTimerStore.getState().timer.startedAt).toBe(started)
     useTimerStore.getState().pause()
   })
 
   it("End the service: cleared, timer paused, stage message gone; unknown macros do nothing", async () => {
     await presentVerse(verse(16), { goLive: true })
     useTimerStore.getState().start()
-    expect(runMacro("service-end")).toEqual(["clear", "timer.pause", "stage.clearMessage"])
+    expect(await runMacro("service-end")).toEqual(["clear", "timer.pause", "stage.clearMessage"])
     const b = useBroadcastStore.getState()
     expect(b.isLive).toBe(false)
     expect(b.liveVerse?.reference).toContain("John 3:16")
     expect(b.stageMessage).toBe("")
     expect(useTimerStore.getState().timer.startedAt).toBeNull()
-    expect(runMacro("nope")).toEqual([])
+    expect(await runMacro("nope")).toEqual([])
     // Running it again is harmless.
-    expect(runMacro("service-end")).toHaveLength(3)
+    expect(await runMacro("service-end")).toHaveLength(3)
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 
   it("runs the church's own cues by id, skipping steps this build does not know", async () => {
     const { useSettingsStore } = await import("@/stores/settings-store")
     useSettingsStore.setState({ customMacros: [{ id: "baptism", label: "Baptism", steps: ["rehearsal.off", "quick.black", "future.thing"] }] })
-    expect(runMacro("baptism")).toEqual(["rehearsal.off", "quick.black"])
+    expect(await runMacro("baptism")).toEqual(["rehearsal.off", "quick.black"])
     expect(useBroadcastStore.getState().rehearsal).toBe(false)
     expect(useBroadcastStore.getState().liveVerse?.screen).toBe("black")
     useSettingsStore.setState({ customMacros: [] })
-    expect(runMacro("baptism")).toEqual([])
+    expect(await runMacro("baptism")).toEqual([])
   })
 
   it("makes readable, unique ids for new cues", async () => {
@@ -72,4 +76,23 @@ describe("cues and macros", () => {
     expect(macroIdFor("Ìpàdé àdúrà!", [])).toBe("ipade-adura")
     expect(macroIdFor("!!!", [])).toBe("cue")
   })
+
+  it("runs steps one after another: a Next still loading is not cancelled by the step after it", async () => {
+    const { useQueueStore } = await import("@/stores/queue-store")
+    const { useSettingsStore } = await import("@/stores/settings-store")
+    const item = (id: string, v: number) => ({ id, verse: verse(v), reference: `John 3:${v}`, confidence: 1, source: "manual", added_at: 0 }) as never
+    useBroadcastStore.setState({ rehearsal: false })
+    useQueueStore.setState({ items: [item("a", 16), item("b", 17)], activeIndex: 0 })
+    // The verse lookup is slow, as on a busy computer.
+    mockInvoke.mockImplementation(async (cmd: string, a: Record<string, number>) => {
+      await new Promise((r) => setTimeout(r, 20))
+      return cmd === "get_verse" ? verse(a.verse) : null
+    })
+    useSettingsStore.setState({ customMacros: [{ id: "next-offering", label: "Next then Offering", steps: ["next", "quick.offering"] }] })
+    await runMacro("next-offering")
+    // John 3:17 reached the screen before the Offering screen held it, so Back returns to it.
+    expect(useBroadcastStore.getState().heldLive?.liveVerse.reference).toContain("John 3:17")
+    useSettingsStore.setState({ customMacros: [] })
+  })
 })
+

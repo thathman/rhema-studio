@@ -484,6 +484,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       theme,
       verse,
       overlay,
+      sound: soundOutputId(get().outputs, get().outputStatus) === outputId,
       ...(changed ? { sentAt: Date.now() } : {}),
     }).catch(() => {})
   },
@@ -812,6 +813,19 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
   } catch {
     console.warn("[broadcast] Failed to persist themes")
   }
+}
+
+/**
+ * The one output that plays a video's sound: the main output when it shows the congregation,
+ * else the first congregation output whose window is open, else the first congregation output.
+ * (It used to be the output with id "main" whatever its role, so a stage or signage main
+ * output left every video silent.)
+ */
+export function soundOutputId(outputs: BroadcastOutput[], status: Record<string, { previewOpen?: boolean } | undefined>): string | null {
+  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
+  const main = congregation.find((o) => o.id === MAIN_OUTPUT_ID)
+  if (main) return main.id
+  return (congregation.find((o) => status[o.id]?.previewOpen) ?? congregation[0])?.id ?? null
 }
 
 // Stage outputs also follow the rundown (what is next) and the timer.

@@ -5,14 +5,13 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { elapsedMs, formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
-import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { monotonicNow, wallAt, useTimerStore } from "@/stores/timer-store"
 import { useJournalStore } from "@/stores/journal-store"
+import { resetTimerLogged } from "@/lib/timer-reset"
 import { useQueueStore } from "@/stores"
 import { endByLeftMs, formatMinutes, projectedEnd, timingSummary } from "@/lib/service-timing"
 
 const PRESETS = [20, 30, 45, 60]
-// Wall-clock time for showing end times, anchored once to the monotonic clock the timer runs on.
-const WALL_AT_MONO_ZERO = Date.now() - monotonicNow()
 /** Manual timing correction, with its line in the service log (FR-07 "with audit"). */
 function correct(minutes: number) {
   useTimerStore.getState().adjustMinutes(minutes)
@@ -38,10 +37,11 @@ export function ServiceTimer() {
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const plan = timingSummary(items, idle ? null : activeIndex, elapsedMs(timer, now))
   const behind = plan.behindMs === null ? null : Math.round(plan.behindMs / 60_000)
-  const ends = projectedEnd(plan, elapsedMs(timer, now), WALL_AT_MONO_ZERO + now)
+  const ends = projectedEnd(plan, elapsedMs(timer, now), wallAt(now))
   // The item in hand may have to finish by a clock time ("sermon ends by 12:15").
   const endBy = activeIndex !== null ? items[activeIndex]?.end_by ?? null : null
-  const endByLeft = endByLeftMs(endBy, WALL_AT_MONO_ZERO + now)
+  const endByLeft = endByLeftMs(endBy, wallAt(now))
+  const [armReset, setArmReset] = useState(false)
   // The timer store only ticks while the service timer runs; an end-by countdown must move regardless.
   const [, setClock] = useState(0)
   useEffect(() => {
@@ -107,7 +107,19 @@ export function ServiceTimer() {
           ) : (
             <Button size="sm" onClick={() => useTimerStore.getState().start()}><PlayIcon /> {idle ? "Start" : "Resume"}</Button>
           )}
-          <Button size="sm" variant="ghost" disabled={idle} onClick={() => useTimerStore.getState().reset()}><RotateCcwIcon /> Reset</Button>
+          <Button
+            size="sm"
+            variant={armReset ? "destructive" : "ghost"}
+            disabled={idle}
+            onClick={() => {
+              // A minute or more would be lost: ask once (FR-07 "explicit confirm"), and log it.
+              if (!armReset && elapsedMs(timer, now) >= 60_000) return setArmReset(true)
+              setArmReset(false)
+              resetTimerLogged()
+            }}
+          >
+            <RotateCcwIcon /> {armReset ? `Reset ${formatMs(elapsedMs(timer, now))}?` : "Reset"}
+          </Button>
           <span className="ml-auto text-xs text-muted-foreground tabular-nums">{formatMs(elapsedMs(timer, now))} elapsed</span>
         </div>
         {ends && (

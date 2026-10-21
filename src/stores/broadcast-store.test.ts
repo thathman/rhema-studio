@@ -508,5 +508,14 @@ describe("updateDraftNested deep paths", () => {
     expect(sent).toBeDefined()
     expect(JSON.stringify(sent?.[2])).not.toContain("base64")
   })
+
+  it("video sound plays from the congregation output, whatever the main output's role", async () => {
+    const { soundOutputId } = await import("./broadcast-store")
+    const o = (id: string, role?: string) => ({ id, role }) as never
+    expect(soundOutputId([o("main"), o("b")], {})).toBe("main")
+    expect(soundOutputId([o("main", "stage"), o("b"), o("c")], { c: { previewOpen: true } })).toBe("c")
+    expect(soundOutputId([o("main", "signage"), o("b")], {})).toBe("b")
+    expect(soundOutputId([o("main", "stage")], {})).toBeNull()
+  })
 })
 
