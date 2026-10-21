@@ -102,6 +102,8 @@ export function toItemInputs(
   active: ActiveTranslations = { primary: null, secondary: null }
 ): ItemInput[] {
   const bg = (i: QueueItem) => ({
+    // Fields from a newer version or a service file that this build does not edit: kept as they were.
+    ...(i.payload_extra ?? {}),
     ...(i.background ? { background_media_id: i.background.media_id } : {}),
     ...(typeof i.planned_minutes === "number" && i.planned_minutes > 0 ? { planned_minutes: i.planned_minutes } : {}),
     ...(i.end_by && isClockTime(i.end_by) ? { end_by: i.end_by } : {}),
@@ -180,6 +182,29 @@ export function cleanName(raw: string | null | undefined): string {
   if (!raw) return ""
   // eslint-disable-next-line no-control-regex
   return Array.from(raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim()).slice(0, 60).join("").trim()
+}
+
+/** The payload keys this build reads and writes, per item kind; anything else is kept untouched (FR-03). */
+const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "prepared_by", "comments"]
+const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
+  verse: new Set(COMMON_PAYLOAD_KEYS),
+  image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
+  slide: new Set([...COMMON_PAYLOAD_KEYS, "title", "body", "link"]),
+  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "arrangement_id", "languages"]),
+}
+
+/** Payload keys this build does not know for that kind (from a newer version or a service file), to write back unchanged. */
+export function parsePayloadExtra(raw: string | null | undefined, kind: string): Record<string, unknown> | undefined {
+  const known = KNOWN_PAYLOAD_KEYS[kind] ?? new Set(COMMON_PAYLOAD_KEYS)
+  if (!raw) return undefined
+  try {
+    const p = JSON.parse(raw) as unknown
+    if (typeof p !== "object" || p === null || Array.isArray(p)) return undefined
+    const extra = Object.fromEntries(Object.entries(p).filter(([k]) => !known.has(k)))
+    return Object.keys(extra).length ? extra : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /** `prepared_by` from any item's payload (CL-007). */
@@ -304,7 +329,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "slide") {
@@ -313,7 +338,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
@@ -331,7 +356,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
       })
       continue
     }
@@ -362,25 +387,18 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
   return { items, unsupported, missingTranslations: [...missing] }
 }
 
-/** What a save persists; verse text and timestamps are not part of it. */
+/**
+ * What a save persists (exactly the items a save writes), so every saved
+ * field counts as a change; verse text and timestamps are not part of it.
+ */
 export function rundownSignature(items: QueueItem[]): string {
-  return items
-    .map((i) => `${i.background?.media_id ?? ""}|${i.planned_minutes ?? ""}|${i.end_by ?? ""}|${i.prepared_by ?? ""}|${(i.comments ?? []).map((c) => c.at + c.text).join("~")}|` + (
-      isVerseItem(i)
-        ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
-        : isImageItem(i)
-          ? `${i.id}|image|${i.image.name}|${i.image.media_id}|${i.image.fit}|${i.notes ?? ""}`
-        : isSlideItem(i)
-          ? `${i.id}|slide|${i.slide.title}|${i.slide.body}|${i.notes ?? ""}`
-          : `${i.id}|song|${i.song.title}|${i.song.song_id}|${i.song.arrangement_id ?? ""}|${i.song.languages.join(",")}|${i.notes ?? ""}`
-    ))
-    .join("\n")
+  return JSON.stringify(toItemInputs(items))
 }
 
 function remember(id: string | null) {
@@ -407,6 +425,20 @@ function describe(e: unknown): string {
 
 // Baseline the dirty flag compares against: the rundown as last loaded/saved.
 let baseline = ""
+/** With no service open: the operator's items as they were when the last service closed (or none). */
+let closedBaseline = "[]"
+const operatorItems = (items: QueueItem[]) => items.filter((i) => i.source === "manual")
+
+/**
+ * A rundown the operator built or changed with no service open: unsaved
+ * work for the close question. Items kept from a service just closed are
+ * not; heard verses collected by themselves never are.
+ */
+export function unsavedScratch(items: QueueItem[], current: Program | null): boolean {
+  if (current) return false
+  const mine = operatorItems(items)
+  return mine.length > 0 && rundownSignature(mine) !== closedBaseline // an empty rundown is nothing to lose
+}
 // Monotonic save ticket so a slow, older save cannot overwrite a newer one.
 let saveGeneration = 0
 
@@ -609,6 +641,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       if (!data) {
         set({ error: "That service no longer exists" })
         if (get().current?.id === id) {
+          closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
           set({ current: null, dirty: false })
           remember(null)
         }
@@ -667,6 +700,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         items: toItemInputs(snapshotItems, translationAbbrev, activeTranslations()),
       })
       if (generation !== saveGeneration) return "saved" // a newer save owns the state now
+      if (get().current?.id !== current.id) return "saved" // discarded or another service opened meanwhile: do not link it back
       // What was saved is the new baseline; edits made meanwhile stay dirty.
       baseline = snapshot
       set((s) => ({
@@ -714,6 +748,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   closeProgram: (opts) => {
     if (get().dirty && !opts?.discard) return "unsaved"
+    // The rundown stays on screen: as it is now it belongs to a saved service (or was just discarded).
+    closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
     set({ current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [] })
     remember(null)
     return "closed"
@@ -722,9 +758,14 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
 // Any rundown change while a service is open makes it dirty; a change that
 // brings it back to the baseline makes it clean again.
-useQueueStore.subscribe((state) => {
+function recheckDirty() {
   const svc = useServiceStore.getState()
   if (!svc.current || svc.loading) return
-  const dirty = rundownSignature(state.items) !== baseline
+  const dirty = rundownSignature(useQueueStore.getState().items) !== baseline
   if (dirty !== svc.dirty) useServiceStore.setState({ dirty })
+}
+useQueueStore.subscribe(recheckDirty)
+// Edits made while a load was running (a rename refreshing the list, verse text filling in) count once it ends.
+useServiceStore.subscribe((s, prev) => {
+  if (prev.loading && !s.loading) recheckDirty()
 })

@@ -3,7 +3,12 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useServiceStore } from "@/stores/service-store"
+import { unsavedScratch, useServiceStore } from "@/stores/service-store"
+import { useQueueStore } from "@/stores/queue-store"
+import { useUnsavedStore } from "@/stores/unsaved-store"
+
+const anyUnsaved = () =>
+  useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current)
 
 /**
  * Closing the window with unsaved service changes (PRD FR-03). The Rust side
@@ -13,13 +18,15 @@ import { useServiceStore } from "@/stores/service-store"
 export function UnsavedCloseDialog() {
   const dirty = useServiceStore((s) => s.dirty)
   const current = useServiceStore((s) => s.current)
+  const songEditor = useUnsavedStore((s) => s.songEditor)
+  const scratch = useQueueStore((s) => unsavedScratch(s.items, current))
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    void invoke("set_unsaved_work", { unsaved: dirty }).catch(() => {})
-  }, [dirty])
+    void invoke("set_unsaved_work", { unsaved: dirty || songEditor !== null || scratch }).catch(() => {})
+  }, [dirty, songEditor, scratch])
 
   useEffect(() => {
     const un = listen("app:close-requested", () => {
@@ -33,7 +40,7 @@ export function UnsavedCloseDialog() {
   const keepWorking = () => {
     setOpen(false)
     // The close that asked cleared the hold; put it back while the work is still unsaved.
-    void invoke("set_unsaved_work", { unsaved: useServiceStore.getState().dirty }).catch(() => {})
+    void invoke("set_unsaved_work", { unsaved: anyUnsaved() }).catch(() => {})
   }
   const saveAndQuit = async () => {
     setSaving(true)
@@ -54,14 +61,18 @@ export function UnsavedCloseDialog() {
         <DialogHeader>
           <DialogTitle>Save changes before closing?</DialogTitle>
           <DialogDescription>
-            {current ? `“${current.title}” has changes that are not saved.` : "The service on screen has not been saved."} Closing without saving loses them.
+            {[
+              dirty && current ? `“${current.title}” has changes that are not saved.` : null,
+              scratch ? "The service on screen has not been saved (create a service in Prepare to keep it)." : null,
+              songEditor ? `The song “${songEditor}” is open in the editor with changes that are not saved${dirty ? "; Save and close saves the service, not the song" : ""}.` : null,
+            ].filter(Boolean).join(" ")} Closing without saving loses them.
           </DialogDescription>
         </DialogHeader>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="ghost" disabled={saving} onClick={keepWorking}>Keep working</Button>
           <Button variant="outline" className="text-destructive" disabled={saving} onClick={quit}>Close without saving</Button>
-          {current && <Button disabled={saving} autoFocus onClick={() => void saveAndQuit()}>{saving ? "Saving…" : "Save and close"}</Button>}
+          {current && dirty && <Button disabled={saving} autoFocus onClick={() => void saveAndQuit()}>{saving ? "Saving…" : "Save and close"}</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
