@@ -50,6 +50,7 @@ import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
+import { qrDataUrl } from "@/lib/qr-bulletin"
 import type { DeviceInfo } from "@/types/audio"
 
 /* -------------------------------------------------------------------------- */
@@ -639,6 +640,8 @@ function BibleSection() {
 interface RemoteStatus {
   running: boolean
   port: number | null
+  /** HTTP only: the running server accepts other devices (not just this computer). */
+  lan?: boolean
 }
 
 interface CommandLogEntry {
@@ -667,11 +670,24 @@ function RemoteControlSection() {
   // The backend closes the window when a device pairs; hide the code once a device newer than the window appears.
   const showPairCode = pairCode !== null && !remoteDevices.some((d) => d.paired_at > pairStartedAt)
   const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [pairQr, setPairQr] = useState<{ host: string; url: string; image: string } | null>(null)
+  /** Rebuild the code for another address (a VPN or second network card can make the guess wrong). */
+  const showPairQr = async (host: string, code: string, port: number) => {
+    const url = `http://${host}:${port}/remote#code=${code}`
+    setPairQr({ host, url, image: await qrDataUrl(url) })
+  }
   const startPairing = async () => {
     try {
       const code = await invoke<string>("remote_pair_start")
       setPairStartedAt(new Date().toISOString())
       setPairCode(code)
+      setPairQr(null)
+      // A phone scans this to open the remote page with the code filled in (in the
+      // fragment, so it never reaches a server log). Only offered when the running
+      // server accepts other devices (asked from the server; the tickbox may have changed since).
+      const status = await invoke<RemoteStatus>("get_http_status").catch(() => null)
+      const ip = status?.lan ? await invoke<string | null>("remote_lan_address").catch(() => null) : null
+      if (status?.lan && status.port) await showPairQr(ip ?? "", code, status.port)
       if (pairTimer.current) clearTimeout(pairTimer.current)
       pairTimer.current = setTimeout(() => setPairCode(null), 120_000)
     } catch (e) {
@@ -825,6 +841,25 @@ function RemoteControlSection() {
         </div>
         {showPairCode && (
           <div className="rounded-md border border-border bg-muted/40 p-3">
+            {pairQr && (
+              <div className="mb-2 flex items-center gap-3">
+                {pairQr.host ? <img src={pairQr.image} alt="Pairing code for a phone" className="size-32 rounded bg-white p-1" /> : null}
+                <div className="flex min-w-0 flex-col gap-1 text-[0.625rem] text-muted-foreground">
+                  <p>{pairQr.host ? <>Scan with the phone's camera (same Wi-Fi) and press Pair. Or open <code className="break-all">{pairQr.url.split("#")[0]}</code> and type the code.</> : "This computer's network address could not be found. Type it below (Wi-Fi settings show it) to get a code to scan."}</p>
+                  <label className="flex items-center gap-1">
+                    This computer's address
+                    <Input
+                      aria-label="This computer's address for the phone"
+                      defaultValue={pairQr.host}
+                      placeholder="192.168.1.20"
+                      className="h-6 w-32 text-[0.625rem]"
+                      onBlur={(e) => { const h = e.target.value.trim(); if (pairCode && httpStatus.port && /^[\w.:-]+$/.test(h) && h !== pairQr.host) void showPairQr(h, pairCode, httpStatus.port) }}
+                    />
+                  </label>
+                  <span>Wrong address (VPN, cable and Wi-Fi on different networks)? Change it to the one the phone's Wi-Fi can reach.</span>
+                </div>
+              </div>
+            )}
             <p className="text-[0.625rem] text-muted-foreground">On the device, within two minutes, send this code once:</p>
             <p className="my-1 font-mono text-2xl tracking-[0.3em]">{pairCode}</p>
             <p className="text-[0.625rem] text-muted-foreground">

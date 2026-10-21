@@ -133,6 +133,7 @@ where
         .route("/api/v1/status", get(status_handler::<S>))
         .route("/api/v1/command", post(command_handler::<S>))
         .route("/api/v1/pair", post(pair_handler::<S>))
+        .route("/remote", get(remote_page))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
         .layer(CorsLayer::permissive())
@@ -187,6 +188,20 @@ async fn health_handler() -> impl IntoResponse {
         service: "rhema",
         version: env!("CARGO_PKG_VERSION"),
     })
+}
+
+/// The phone remote: one self-contained page (pair, then Next/Previous/
+/// Back on air/Clear with the device's own token). Static, so serving it
+/// needs no key; every command it sends is checked like any other.
+async fn remote_page() -> impl IntoResponse {
+    (
+        [
+            (axum::http::header::CACHE_CONTROL, "no-store"),
+            (axum::http::header::X_FRAME_OPTIONS, "DENY"),
+            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'"),
+        ],
+        axum::response::Html(include_str!("remote.html")),
+    )
 }
 
 async fn status_handler<S: CommandSink + 'static>(
@@ -536,6 +551,18 @@ mod tests {
         assert!(statuses.iter().filter(|s| **s == 200).count() >= 20, "{statuses:?}");
         assert!(statuses.contains(&429), "{statuses:?}");
         assert!(!statuses.contains(&0), "{statuses:?}");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn the_phone_remote_page_is_served_without_a_key() {
+        let sink = Arc::new(MockSink::new());
+        let result = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() }, sink, new_shared_status()).await.expect("should bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let resp = raw_http_request(result.bound_port, "GET", "/remote", None).await;
+        assert!(resp.contains("200 OK"), "{resp}");
+        assert!(resp.contains("/api/v1/pair") && resp.contains("frame-ancestors 'none'"), "page and its CSP");
         let mut handle = result.handle;
         handle.stop();
     }

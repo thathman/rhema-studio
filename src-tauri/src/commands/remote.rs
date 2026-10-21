@@ -49,6 +49,17 @@ pub fn remote_pair_start(remote: State<'_, RemoteKeys>) -> String {
     open_pairing(&remote.pairing)
 }
 
+/// This computer's address on the local network, for the pairing QR code.
+/// A UDP "connect" only picks the outgoing interface; nothing is sent.
+/// None without a network route (then the operator types the address).
+#[tauri::command]
+pub fn remote_lan_address() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("192.0.2.1:9").ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+    (!ip.is_loopback() && !ip.is_unspecified()).then(|| ip.to_string())
+}
+
 #[tauri::command]
 pub fn remote_pair_cancel(remote: State<'_, RemoteKeys>) {
     close_pairing(&remote.pairing);
@@ -191,6 +202,8 @@ pub struct OscStatus {
 pub struct HttpRuntime {
     handle: Option<HttpHandle>,
     bound_port: Option<u16>,
+    /// Listening on the whole network (not only 127.0.0.1), as started.
+    lan: bool,
     status: SharedStatus,
 }
 
@@ -199,6 +212,7 @@ impl HttpRuntime {
         Self {
             handle: None,
             bound_port: None,
+            lan: false,
             status: new_shared_status(),
         }
     }
@@ -250,6 +264,7 @@ pub async fn start_http(
         let mut runtime = state.lock().map_err(|e| e.to_string())?;
         runtime.handle = Some(result.handle);
         runtime.bound_port = Some(bound_port);
+        runtime.lan = bind_host(lan) != "127.0.0.1";
     }
 
     log::info!("HTTP API server started on port {bound_port}");
@@ -281,6 +296,7 @@ pub async fn get_http_status(
 
     Ok(HttpStatus {
         running: runtime.handle.as_ref().is_some_and(rhema_api::HttpHandle::is_active),
+        lan: runtime.lan,
         port: runtime.bound_port,
     })
 }
@@ -324,6 +340,8 @@ pub async fn update_remote_status(
 pub struct HttpStatus {
     pub running: bool,
     pub port: Option<u16>,
+    /// Reachable from other devices (bound to 0.0.0.0).
+    pub lan: bool,
 }
 
 /// Where the listeners bind: the whole network (default, what existing setups

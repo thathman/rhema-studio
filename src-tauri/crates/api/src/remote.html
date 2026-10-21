@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>Rhema remote</title>
+<style>
+  :root { color-scheme: dark; --bg:#111; --card:#1c1c1c; --fg:#f2f2f2; --muted:#9a9a9a; --live:#d93636; --line:#333; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); padding:16px; padding-bottom:max(16px, env(safe-area-inset-bottom)); }
+  h1 { font-size:18px; margin:0 0 12px; }
+  p { margin:0 0 12px; color:var(--muted); font-size:14px; }
+  .status { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:16px; min-height:64px; }
+  .status b { display:block; color:var(--fg); font-size:17px; margin-top:2px; overflow-wrap:anywhere; }
+  .air { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; background:#333; }
+  .air.on { background:var(--live); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button { font:inherit; font-weight:600; color:var(--fg); background:var(--card); border:1px solid var(--line); border-radius:12px; min-height:88px; touch-action:manipulation; }
+  button:active { transform:scale(.98); }
+  button.big { grid-column:span 2; min-height:120px; font-size:22px; }
+  button.clear { border-color:var(--live); color:#ff8a8a; }
+  button:disabled { opacity:.5; }
+  label { display:block; font-size:14px; color:var(--muted); margin:12px 0 4px; }
+  input { font:inherit; width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  #msg { min-height:20px; margin-top:12px; font-size:14px; }
+  .err { color:#ff8a8a; }
+  [hidden] { display:none !important; }
+  .forget { background:none; border:none; min-height:44px; color:var(--muted); font-weight:400; width:100%; margin-top:16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rhema remote</h1>
+  <section id="pair" hidden>
+    <p>Pair this phone with the presentation computer. In Rhema: Settings → Remote → Pair a device, then scan its code or type the six digits here.</p>
+    <form id="pairForm">
+      <label for="code">Pairing code</label>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>
+      <label for="name">Name for this phone</label>
+      <input id="name" maxlength="60" value="Phone" required>
+      <div style="margin-top:16px"><button class="big" type="submit" style="width:100%">Pair</button></div>
+    </form>
+  </section>
+  <section id="controls" hidden>
+    <div class="status" aria-live="polite"><span id="air" class="air">Off air</span><b id="live">Nothing on screen</b></div>
+    <div class="grid">
+      <button class="big" data-cmd="next">Next ▶</button>
+      <button data-cmd="prev">◀ Previous</button>
+      <button data-cmd="show">Back on air</button>
+      <button class="big clear" data-cmd="hide">Clear screen</button>
+    </div>
+    <button class="forget" id="forget" type="button">Unpair this phone</button>
+  </section>
+  <div id="msg" role="status"></div>
+</main>
+<script>
+(() => {
+  const KEY = "rhema-remote-token"
+  const $ = (id) => document.getElementById(id)
+  const get = () => { try { return localStorage.getItem(KEY) } catch { return null } }
+  const set = (v) => { try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY) } catch {} }
+  const say = (text, bad) => { $("msg").textContent = text || ""; $("msg").className = bad ? "err" : "" }
+  const show = () => { const paired = !!get(); $("pair").hidden = paired; $("controls").hidden = !paired }
+
+  // The code arrives in the fragment (never sent to the server or kept in logs); drop it from the address bar.
+  const m = /code=(\d{6})/.exec(location.hash)
+  if (m) { $("code").value = m[1]; history.replaceState(null, "", location.pathname) }
+
+  $("pairForm").addEventListener("submit", async (e) => {
+    e.preventDefault()
+    say("Pairing…")
+    try {
+      const r = await fetch("/api/v1/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: $("code").value.trim(), name: $("name").value.trim() || "Phone" }) })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok && j.token) { set(j.token); say("Paired."); show(); poll() }
+      else say(j.error || "Pairing failed (" + r.status + ")", true)
+    } catch { say("Cannot reach the presentation computer. Same Wi-Fi?", true) }
+  })
+
+  async function send(cmd, btn) {
+    btn.disabled = true
+    try {
+      const r = await fetch("/api/v1/command", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify({ command: cmd }) })
+      if (r.status === 401 || r.status === 403) {
+        const j = await r.json().catch(() => ({}))
+        if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true) }
+        else say(j.error || "Not allowed for this phone.", true)
+      } else if (r.status === 429) say("Too fast; wait a second.", true)
+      else if (!r.ok) say("Command failed (" + r.status + ")", true)
+      else { say(""); poll() }
+    } catch { say("Cannot reach the presentation computer.", true) }
+    finally { btn.disabled = false }
+  }
+  document.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("click", () => send(b.dataset.cmd, b)))
+  $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it in Settings → Remote too.") })
+
+  let timer, polling = false
+  async function poll() {
+    clearTimeout(timer)
+    if (polling || !get() || document.hidden) return
+    polling = true
+    try {
+      const s = await (await fetch("/api/v1/status", { cache: "no-store" })).json()
+      $("air").textContent = s.on_air ? "On air" : "Off air"
+      $("air").className = "air" + (s.on_air ? " on" : "")
+      $("live").textContent = s.live_verse || "Nothing on screen"
+    } catch {}
+    polling = false
+    timer = setTimeout(poll, 2000)
+  }
+  document.addEventListener("visibilitychange", poll)
+  show(); poll()
+})()
+</script>
+</body>
+</html>

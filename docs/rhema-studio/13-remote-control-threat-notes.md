@@ -42,6 +42,13 @@ Settings → Diagnostics → Save logs runs every line through a redaction pass 
 - Every HTTP request to `/api/v1/command` and `/api/v1/pair`, and every OSC command that passed the key check, is counted per sender address (`crates/api/src/rate.rs`): a burst of 20, then 10 a second sustained. Beyond that HTTP answers 429 and OSC drops the packet; both log a warning. Buttons, Stream Deck pages and macros stay far below it; a stuck controller or a flood cannot hammer the live output, and pairing codes cannot be guessed quickly.
 - At most 256 senders are remembered (least recently seen dropped first), so spoofed UDP source addresses cannot grow memory. OSC counts a message only after its key is accepted, so packets spoofed from a Stream Deck's address without the key cannot use up its allowance. OSC fader values (confidence, opacity) are not counted: a fader sends dozens a second and the last value must land.
 
+## Phone remote and QR pairing
+
+- `GET /remote` serves one static page (no key needed to load it; every command it sends is checked like any other). Settings → Remote → Pair a device shows a QR code for `http://<this computer>:<port>/remote#code=<six digits>` when other devices may connect. The code is in the fragment, so it never reaches a server or its logs, and the page removes it from the address bar at once.
+- The page pairs with `/api/v1/pair` and keeps the device token in the phone browser's local storage; it sends Next, Previous, Back on air (show) and Clear (hide) with `Authorization: Bearer`. A revoked token gets 401 and the page returns to pairing. "Unpair this phone" forgets the token on the phone only; revoke it in Settings too.
+- The page has a strict content security policy (no outside scripts or connections, no framing). Plain HTTP on the LAN: someone on the same network who can watch traffic can copy the token, as with the shared key.
+- The status line polls `/api/v1/status`, which was already open; it shows the live reference text.
+
 ## Not done
 
-- TLS, QR pairing. (Roles per device: #78. Rate limiting: see below.) (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)
+- TLS. (Roles per device: #78. Rate limiting and the phone remote: see above.) (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)
