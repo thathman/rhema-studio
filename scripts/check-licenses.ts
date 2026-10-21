@@ -2,26 +2,34 @@
 // Usage: bun scripts/check-licenses.ts --js   (production npm dependencies)
 //        bun scripts/check-licenses.ts --rust (cargo metadata of src-tauri)
 import { existsSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { ALLOWED, licenceAllowed } from "../src/lib/license-policy"
 
 type Row = { name: string; version: string; licence: string | null }
 const failures: Row[] = []
 const seen = new Map<string, Row>()
 
+/** Node's lookup: <dir>/node_modules/<name>, then each parent's, up to the root. */
+function resolve(fromDir: string, name: string, root: string): string | null {
+  for (let d = fromDir; ; d = dirname(d)) {
+    const candidate = join(d, "node_modules", name)
+    if (existsSync(join(candidate, "package.json"))) return candidate
+    if (d === root || dirname(d) === d) return null
+  }
+}
+
 function checkJs(): void {
   const root = join(import.meta.dir, "..")
-  const top = Object.keys(JSON.parse(readFileSync(join(root, "package.json"), "utf8")).dependencies ?? {})
-  const stack = [...top]
+  const deps = (pkg: { dependencies?: object; optionalDependencies?: object }) => [...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {})]
+  const stack = deps(JSON.parse(readFileSync(join(root, "package.json"), "utf8"))).map((name) => ({ name, from: root }))
   while (stack.length) {
-    const name = stack.pop()!
-    if (seen.has(name)) continue
-    const file = join(root, "node_modules", name, "package.json")
-    if (!existsSync(file)) continue // optional, platform-specific package not installed here
-    const pkg = JSON.parse(readFileSync(file, "utf8"))
+    const { name, from } = stack.pop()!
+    const dir = resolve(from, name, root)
+    if (!dir || seen.has(dir)) continue // not installed here: optional or for another platform
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"))
     const licence = typeof pkg.license === "string" ? pkg.license : pkg.license?.type ?? null
-    seen.set(name, { name, version: pkg.version, licence })
-    stack.push(...Object.keys(pkg.dependencies ?? {}))
+    seen.set(dir, { name, version: pkg.version, licence })
+    stack.push(...deps(pkg).map((n) => ({ name: n, from: dir })))
   }
 }
 

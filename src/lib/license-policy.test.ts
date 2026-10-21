@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { alternatives, licenceAllowed } from "./license-policy"
+import { licenceAllowed } from "./license-policy"
 
 describe("dependency licence policy", () => {
   it("passes permissive expressions in every spelling the registries use", () => {
@@ -14,7 +14,12 @@ describe("dependency licence policy", () => {
     }
   })
 
-  it("parses AND inside alternatives", () => {
-    expect(alternatives("(MIT OR Apache-2.0) AND BSD-3-Clause")).toEqual([["MIT"], ["Apache-2.0", "BSD-3-Clause"]])
+  it("AND binds tighter than OR and parentheses group", () => {
+    expect(licenceAllowed("(MIT OR Apache-2.0) AND BSD-3-Clause")).toBe(true)
+    expect(licenceAllowed("(MIT OR Apache-2.0) AND GPL-3.0-only")).toBe(false)
+    expect(licenceAllowed("GPL-3.0-only AND (MIT OR Apache-2.0)")).toBe(false)
+    expect(licenceAllowed("GPL-3.0-only OR MIT AND ISC")).toBe(true)
+    expect(licenceAllowed("(MIT")).toBe(false)
+    expect(licenceAllowed("MIT OR")).toBe(false)
   })
 })
