@@ -1,6 +1,6 @@
 # Sync transport evaluation and threat model (CL-004)
 
-Status: **proposal for an owner decision**. Nothing here is built, bought or configured. It answers PRD FR-08: how a service prepared at home reaches the church laptop, with no cloud required to present and no lock-in.
+Status: **decided 2026-10-21 (issue #72)**: start with B (shared folder / NAS) and versioned service packages; optional hosted synchronization later. The first B slice is built (see "Decision" at the end). It answers PRD FR-08: how a service prepared at home reaches the church laptop, with no cloud required to present and no lock-in.
 
 ## What already exists (verified in code)
 
@@ -41,3 +41,15 @@ Status: **proposal for an owner decision**. Nothing here is built, bought or con
 
 - Approve B as the next slice (no cost), or ask for C's design first.
 - Whether service files in a shared folder should be passphrase-encrypted (adds a step for volunteers; protects words/pictures from the folder's other users).
+
+## Decision (2026-10-21, issue #72)
+
+Owner: "start with shared-folder/NAS-based delivery and versioned service packages, then introduce optional hosted synchronization."
+
+Built in the first slice:
+- **Church folder** setting (More → Library): any folder every computer can reach — a NAS share or a folder synced by Google Drive, OneDrive, Dropbox or Syncthing.
+- **Publish** (Prepare): the saved service becomes `<title> <date> v<revision> <checksum start>.rhema-service.json`. Any different content (a new revision, a new approval, a same-titled service from another computer) is a new file; identical content is not written twice and nothing is overwritten; the file is written under a unique hidden name and renamed, so other computers and sync tools never read half a file. The database is released before the write to the NAS; listing caches files it has read (by size and time). The package (still format 1, readable by older builds) now records its source service, revision, and the approval (revision and who) at the source.
+- **Church folder on Home**: the newest readable version of each service, with older-version count, "approved by … at the source / not approved", and "opened here"; damaged or still-syncing files are listed with the reason and never opened. **Open** adds it as a service on this computer; nothing opens or replaces a service by itself, and approval is given again on the church computer (FR-08: the operator explicitly accepts).
+- Opening reads only plain file names inside the chosen folder.
+
+Not built yet: passphrase encryption of files in the folder (owner question above, still open), deleting old versions from the folder (by hand for now), and option C/D (optional hosted synchronization, a later step by the decision).

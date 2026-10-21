@@ -1,3 +1,4 @@
+import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { ArchiveIcon, BookOpenIcon, CheckIcon, DatabaseIcon, DownloadIcon, MusicIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
@@ -153,6 +154,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
               </div>
             )}
           </div>
+          <ChurchFolderBlock />
           <PackageBlock onClose={onClose} />
           <JournalBlock />
           <SongUsageBlock />
@@ -188,6 +190,31 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Where services are published and opened (owner decision #72: a NAS share or synced folder). */
+function ChurchFolderBlock() {
+  const folder = useSettingsStore((s) => s.churchFolder)
+  const choose = async () => {
+    const picked = await openDialog({ directory: true, multiple: false, title: "Choose the church folder" })
+    if (typeof picked === "string" && picked) {
+      useSettingsStore.getState().setChurchFolder(picked)
+      toast.success("Church folder set", { description: picked })
+    }
+  }
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <p className="mb-1 font-medium">Church folder</p>
+      <p className="mb-2 text-xs text-muted-foreground">
+        A folder every computer can reach: a NAS share, or a folder kept in step by Google Drive, OneDrive, Dropbox or Syncthing. Prepare → Publish puts the saved service there as a new versioned file (never overwriting); Home lists the newest version of each to open. No account, no server; the files stay the church's.
+      </p>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <code className="min-w-0 flex-1 truncate rounded bg-muted px-1.5 py-1">{folder || "Not set"}</code>
+        <Button size="sm" variant="outline" onClick={() => void choose()}>Choose folder…</Button>
+        {folder && <Button size="sm" variant="ghost" onClick={() => useSettingsStore.getState().setChurchFolder("")}>Stop using it</Button>}
+      </div>
+    </div>
   )
 }
 

@@ -7,7 +7,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::State;
 
-use rhema_content::{MediaAsset, MediaInput, PackageReport, ServicePackage};
+use rhema_content::{FolderEntry, MediaAsset, MediaInput, PackageReport, PublishResult, ServicePackage};
 
 use super::content::{ContentCommandError, ContentState};
 
@@ -210,4 +210,32 @@ pub fn content_import_service_package(state: State<'_, ContentState>, media: Sta
     let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
     let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
     Ok(db.import_service_package(&package, media_dir(&media)?)?)
+}
+
+// ── church folder (owner decision #72: shared/NAS folder, versioned service files) ──
+
+/// Publish the saved service into the church folder as a new versioned file.
+#[tauri::command(async)]
+pub fn church_folder_publish(state: State<'_, ContentState>, media: State<'_, MediaState>, folder: String, program_id: String) -> CmdResult<PublishResult> {
+    // Export under the database lock, then release it before the (possibly slow) write to the NAS.
+    let pkg = {
+        let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
+        let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
+        db.export_service_package(&program_id, media_dir(&media)?)?
+    };
+    Ok(rhema_content::write_package_to_folder(Path::new(&folder), &pkg)?)
+}
+
+/// Service files in the church folder, newest first (damaged or half-synced ones with the reason).
+#[tauri::command(async)]
+pub fn church_folder_list(folder: String) -> CmdResult<Vec<FolderEntry>> {
+    Ok(rhema_content::list_church_folder(Path::new(&folder))?)
+}
+
+/// Open one file from the church folder as a new service on this computer.
+#[tauri::command(async)]
+pub fn church_folder_open(state: State<'_, ContentState>, media: State<'_, MediaState>, folder: String, file_name: String) -> CmdResult<PackageReport> {
+    let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
+    let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
+    Ok(db.open_from_church_folder(Path::new(&folder), &file_name, media_dir(&media)?)?)
 }

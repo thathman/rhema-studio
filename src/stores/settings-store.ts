@@ -71,6 +71,12 @@ interface SettingsState {
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
+  /** The church folder (NAS or synced) where services are published and opened; "" = not set (#72). */
+  churchFolder: string
+  setChurchFolder: (folder: string) => void
+  /** Service files already opened on this computer (sha256), so the folder list can say so. */
+  openedPackages: string[]
+  noteOpenedPackage: (sha256: string) => void
   /** The church's own cues (PT-003): named, ordered steps from the cue action registry. */
   customMacros: CustomMacro[]
   setCustomMacros: (macros: CustomMacro[]) => void
@@ -117,6 +123,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   brandKit: defaultBrandKit(),
   operatorName: "",
   customMacros: [],
+  churchFolder: "",
+  openedPackages: [],
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
@@ -144,6 +152,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     void pushRemoteKeys()
   },
   setCustomMacros: (customMacros) => set({ customMacros }),
+  setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
+  noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),
   setOperatorName: (operatorName) => {
     set({ operatorName })
     void invoke("content_set_actor", { name: operatorName.trim() || null }).catch(() => {})
@@ -171,6 +181,7 @@ function acceptable(key: string, value: unknown): boolean {
   switch (key) {
     case "operatorName":
     case "remoteSecret":
+    case "churchFolder":
       return typeof value === "string"
     case "obs": {
       const o = value as Partial<ObsSettings>
@@ -186,6 +197,8 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "number" && Number.isFinite(value)
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
+    case "openedPackages":
+      return Array.isArray(value) && value.every((x) => typeof x === "string")
     case "customMacros":
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
     case "brandKit":
@@ -199,6 +212,8 @@ const PERSISTED_KEYS = [
   "brandKit",
   "operatorName",
   "customMacros",
+  "churchFolder",
+  "openedPackages",
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",

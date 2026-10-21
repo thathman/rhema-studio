@@ -19,6 +19,7 @@ import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
+import { ChurchFolderCard } from "@/studio/home/church-folder-card"
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -196,6 +197,7 @@ export function HomeWorkspace() {
             )}
           </section>
 
+          <ChurchFolderCard />
           <section aria-labelledby="services" className="rounded-lg border border-border bg-card p-4">
             <h2 id="services" className="mb-2 text-sm font-semibold">Saved services</h2>
             {!current && suggested && (
