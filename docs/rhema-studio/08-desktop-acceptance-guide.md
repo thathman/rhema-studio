@@ -866,3 +866,11 @@ report), but launching it cannot.
 | 10ch.4 | Songs: a song titled "Psalm 23"; search "Psalm 23" in the library and Quick find. | The song is found. | Unverified |
 | 10ch.5 | Quick find: "5" with hymn 5 in a hymnbook. | Hymn 5 is listed. | Unverified |
 
+### 10ci. Cues and signage (eighteenth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ci.1 | Custom cue "Show live, Quick screen: Offering"; put a verse in Preview; run the cue; then Back. | The verse airs, Offering covers it, Back returns to the verse. | Unverified |
+| 10ci.2 | In rehearsal, cue "Show live, Rehearsal off" with "Ask before showing" on and the service unapproved. | The approval question appears before the congregation sees anything. | Unverified |
+| 10ci.3 | Signage playlist: only Sunday, 00:00 to 00:00, plus a fallback playlist with no schedule. | Sunday loop on Sundays only; the fallback the rest of the week. | Unverified |
+

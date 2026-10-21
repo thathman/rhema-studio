@@ -30,10 +30,12 @@ export function signageActive(schedule: SignageSchedule | undefined, now: Date):
   if (!schedule) return true
   const from = minutes(schedule.from)
   const to = minutes(schedule.to)
-  if (from === null || to === null || from === to) return true
+  if (from === null || to === null) return true
   const t = now.getHours() * 60 + now.getMinutes()
   const day = now.getDay()
   const dayOk = (d: number) => schedule.days.length === 0 || schedule.days.includes(d)
+  // The same start and end (00:00–00:00): the whole of each ticked day.
+  if (from === to) return dayOk(day)
   if (from < to) return t >= from && t < to && dayOk(day)
   // Crosses midnight: tonight's start, or the tail of yesterday's window.
   if (t >= from) return dayOk(day)

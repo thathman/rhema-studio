@@ -33,7 +33,10 @@ describe("signage loop", () => {
     expect(signageActive(vigil, mon(3))).toBe(false)
     expect(signageActive(vigil, mon(23))).toBe(false)
     expect(signageActive({ days: [0], from: "8am", to: "noon" }, mon(3))).toBe(true) // unreadable: always on
-    expect(signageActive({ days: [0], from: "09:00", to: "09:00" }, mon(3))).toBe(true)
+    // The same start and end is the whole of each ticked day ("all day Sunday"), not every day.
+    expect(signageActive({ days: [0], from: "09:00", to: "09:00" }, mon(3))).toBe(false)
+    expect(signageActive({ days: [], from: "00:00", to: "00:00" }, mon(3))).toBe(true)
+    expect(signageActive({ days: [0], from: "00:00", to: "00:00" }, new Date(2026, 9, 25, 15))).toBe(true) // a Sunday
   })
 
   it("picks the scheduled playlist whose window is open, else the unscheduled one, else none", () => {

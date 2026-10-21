@@ -49,7 +49,7 @@ export function useRemoteControl() {
 
       await register(REMOTE_EVENTS.next, remoteActions.queueNext)
       await register(REMOTE_EVENTS.prev, remoteActions.queuePrev)
-      await register(REMOTE_EVENTS.send_to_live, remoteActions.sendToLive)
+      await register(REMOTE_EVENTS.send_to_live, () => void remoteActions.sendToLive())
       await register(REMOTE_EVENTS.add_to_queue, remoteActions.addToQueue)
       await register(REMOTE_EVENTS.bible_next, remoteActions.bibleNext)
       await register(REMOTE_EVENTS.bible_prev, remoteActions.biblePrev)
