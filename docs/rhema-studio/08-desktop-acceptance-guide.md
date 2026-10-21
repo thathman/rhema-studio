@@ -898,3 +898,19 @@ report), but launching it cannot.
 | 10cl.1 | Computer A publishes v11. Computer B opens it from the church folder, changes it, saves, publishes. | The folder has v12 of the same service (one row on Home, "1 older version"), not a new service at B's own numbering. | Verified on the Intel Mac (two profiles) |
 | 10cl.2 | On A, open the service in Prepare. | "A newer version (v12) is in the church folder. This one is v11." Nothing changes by itself. | Verified on the Intel Mac |
 
+### 10cm. CAC hymn book (SO-005, SO-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cm.1 | Prepare → Hymn book → Import the hymn book… → choose `hymns_combined.json`. | "Hymn book imported: 1050 hymns"; Part 1 lists 1–1000, Part 2 lists V1–V50, each with its English title and Yorùbá first line. The Songs tab does not list them. | Checked in the browser build |
+| 10cm.2 | Type 245, then V12, then 012, then words in Yorùbá. | 245 alone; V12 switches to Part 2; 012 finds 12; words find hymns in either language. | Checked in the browser build |
+| 10cm.3 | First: English; Add hymn 245; preview; go live; set an output to "Second language only". | The item shows EN, YO; the screen shows English then Yorùbá with the footer "… · CAC Gospel Hymn Book 245" below the words; the second-only output shows only Yorùbá. | Unverified |
+| 10cm.4 | Save the service; Import the file again; open the service; save. | "Hymn book updated: 1050 hymns"; the service opens and saves; a number already used by the church's own song in a "CAC" book is left alone. | Unverified |
+
+### 10cn. Numbered books and the item fields (owner reports)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cn.1 | Quick find: "1 Samuel", "1 Samuel 3", "1 kings", "First Samuel 3:10", "Ọba Kejì 2:9". | Each puts the right book and chapter (verse 1, or the verse given) first, above any word matches. | Checked in the browser build |
+| 10cn.2 | Prepare: click an item to edit it. | Minutes, Prepared by and End by sit in labelled columns; nothing is cut off; the comment box's hint is a line under it. | Checked in the browser build |
+

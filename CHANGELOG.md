@@ -20,6 +20,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Hymn book
+- Prepare → Hymn book: the CAC Gospel Hymn Book in English and Yorùbá, Part 1 and Part 2 (various hymns). Find a hymn by number (245, V12) or by words in either language, preview it, add it. Choose which language shows first. Import it once from the hymn book file; it stays on this computer.
+
 ### Bible
 - Quick find takes a numbered book on its own or with a chapter ("1 Samuel", "1 Kings 3"), and ordinals in words ("First Samuel 3:10", "Samuẹli Kínní 3:10").
 
