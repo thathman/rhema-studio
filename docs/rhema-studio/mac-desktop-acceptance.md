@@ -129,6 +129,9 @@ Two profiles on this Mac as the home and church laptops, a local folder as the s
 | 10bc.5 | U: needs a real sync client or NAS |
 | 10bd.1 | V: after home published v10 (approved): church Home "v10 · approved · newer than the copy opened here"; Prepare: "A newer version (v10, approved) is in the church folder. This one is v9." The open v9 copy unchanged |
 | 10bd.2 | V: "Open the newer one" opened v10 as its own service; v9 kept |
+| 10bk.1 | V: Pastor Ade's comment on John 3:16 saved and published; no output shows it |
+| 10bk.2 | V: Tolu opening it saw "1 new comment" ("Pastor Ade on John 3:16 · Please read this slowly"); Mark as read cleared it |
+| 10bk.3 | F → V: Tolu's reply was published as "v3" under his own copy's id, so the folder showed it as a separate service and Pastor Ade was never told. A copy opened from the folder now publishes as a newer version of the same service (v12 after v11), and the computer that made it is told: "A newer version (v12) is in the church folder. This one is v11." Opening it: "1 new comment", Tolu's only |
 
 ## Slide-change latency (QA-007, NFR-03)
 

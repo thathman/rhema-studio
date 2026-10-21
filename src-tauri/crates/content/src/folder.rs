@@ -23,6 +23,10 @@ pub struct PublishResult {
     pub file_name: String,
     /// This revision was already in the folder; nothing was written.
     pub already: bool,
+    /// The published file's checksum and version, so the app can remember what it put there.
+    pub sha256: String,
+    pub source_id: Option<String>,
+    pub revision: Option<i64>,
 }
 
 /// One service package found in the folder.
@@ -179,8 +183,9 @@ pub fn write_package_to_folder(folder: &Path, pkg: &ServicePackage) -> Result<Pu
     let p: PackagePayload = serde_json::from_str(&pkg.payload).map_err(|e| ContentError::Invalid(e.to_string()))?;
     let file_name = package_file_name(&p.title, p.service_date.as_deref(), p.revision.unwrap_or(0), &pkg.sha256);
     let path = dir.join(&file_name);
+    let result = |already: bool| PublishResult { path: path.to_string_lossy().into_owned(), file_name: file_name.clone(), already, sha256: pkg.sha256.clone(), source_id: p.source_id.clone(), revision: p.revision };
     if path.exists() {
-        return Ok(PublishResult { path: path.to_string_lossy().into_owned(), file_name, already: true });
+        return Ok(result(true));
     }
     let json = serde_json::to_vec(pkg).map_err(|e| ContentError::Invalid(e.to_string()))?;
     // A hidden, unique temporary name, then rename: a reader (or a sync tool)
@@ -192,7 +197,7 @@ pub fn write_package_to_folder(folder: &Path, pkg: &ServicePackage) -> Result<Pu
         let _ = std::fs::remove_file(&tmp);
         return Err(ContentError::Invalid(format!("could not write to the church folder: {e}")));
     }
-    Ok(PublishResult { path: path.to_string_lossy().into_owned(), file_name, already: false })
+    Ok(result(false))
 }
 
 impl ContentDb {
@@ -240,6 +245,33 @@ mod tests {
         assert_eq!(package_file_name("Sunday Service", Some("2026-10-25"), 7, sha), "Sunday Service 2026-10-25 v7 3f9a0c21b7d4.rhema-service.json");
         assert_eq!(package_file_name("../Ìsìn: 9/11 *", None, 1, sha), "Ìsìn 9 11 v1 3f9a0c21b7d4.rhema-service.json");
         assert_eq!(package_file_name("???", None, 2, sha), "Service v2 3f9a0c21b7d4.rhema-service.json");
+    }
+
+    #[test]
+    fn a_copy_published_again_is_a_newer_version_of_the_same_service() {
+        let home = ContentDb::open_in_memory().unwrap();
+        let church = ContentDb::open_in_memory().unwrap();
+        let (folder, media_a, media_b) = (temp_dir("lineage"), temp_dir("lin-a"), temp_dir("lin-b"));
+        let p = home.create_program("Sunday", Some("2026-10-25")).unwrap();
+        let verse = ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), ..ItemInput::default() };
+        let mut rev = home.replace_items(&p.id, p.revision, std::slice::from_ref(&verse)).unwrap().program.revision;
+        for _ in 0..3 {
+            rev = home.replace_items(&p.id, rev, std::slice::from_ref(&verse)).unwrap().program.revision;
+        }
+        let first = home.publish_to_church_folder(&p.id, &media_a, &folder).unwrap();
+        assert_eq!(first.revision, Some(rev));
+        // The church opens it (its own numbering starts again), changes it and publishes.
+        let opened = church.open_from_church_folder(&folder, &first.file_name, &media_b).unwrap();
+        let copy = opened.program.program;
+        let changed = church.replace_items(&copy.id, copy.revision, &[verse.clone(), ItemInput { reference: "Psalm 23:1".into(), book_number: Some(19), chapter: Some(23), verse: Some(1), ..verse.clone() }]).unwrap();
+        let lineage = crate::Lineage { source_id: p.id.clone(), revision_offset: rev - copy.revision };
+        let pkg = church.export_service_package(&copy.id, &media_b).unwrap().with_lineage(&lineage).unwrap();
+        let theirs = write_package_to_folder(&folder, &pkg).unwrap();
+        assert_eq!(theirs.source_id.as_deref(), Some(p.id.as_str()), "the same service, not a new one");
+        assert_eq!(theirs.revision, Some(rev + (changed.program.revision - copy.revision)), "numbered after the version it was opened from");
+        let entries = list_church_folder(&folder).unwrap();
+        assert_eq!(entries.iter().filter(|e| e.source_id.as_deref() == Some(p.id.as_str())).count(), 2);
+        assert!(theirs.revision > first.revision);
     }
 
     #[test]

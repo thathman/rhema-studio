@@ -242,12 +242,23 @@ pub fn content_import_service_package(state: State<'_, ContentState>, media: Sta
 
 /// Publish the saved service into the church folder as a new versioned file.
 #[tauri::command(async)]
-pub fn church_folder_publish(state: State<'_, ContentState>, media: State<'_, MediaState>, folder: String, program_id: String) -> CmdResult<PublishResult> {
+pub fn church_folder_publish(
+    state: State<'_, ContentState>,
+    media: State<'_, MediaState>,
+    folder: String,
+    program_id: String,
+    lineage: Option<rhema_content::Lineage>,
+) -> CmdResult<PublishResult> {
     // Export under the database lock, then release it before the (possibly slow) write to the NAS.
     let pkg = {
         let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
         let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
         db.export_service_package(&program_id, media_dir(&media)?)?
+    };
+    // A copy opened from the folder goes back as a newer version of the service it came from.
+    let pkg = match &lineage {
+        Some(l) => pkg.with_lineage(l)?,
+        None => pkg,
     };
     Ok(rhema_content::write_package_to_folder(Path::new(&folder), &pkg)?)
 }

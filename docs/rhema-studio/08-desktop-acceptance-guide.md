@@ -891,3 +891,10 @@ report), but launching it cannot.
 | 10ck.1 | Fresh install (or Settings → restart the tour). | The tour starts on Home: "Four places", readiness, screens; then Prepare (service, add items, running order), Present Standard (run the service, what people see, Next/Clear/Restore, find anything, quick screens, listening), and More. Each step opens its workspace first. | Partly verified on the Intel Mac: all 13 targets exist in their workspaces and steps 1–4 ran (Home → Prepare); the rest needs the window on screen |
 | 10ck.2 | Skip, or finish the tour. | Back where you started; it does not start again; Settings can restart it. | Unverified |
 
+### 10cl. A copy goes back as a newer version (CL-005, CL-007)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cl.1 | Computer A publishes v11. Computer B opens it from the church folder, changes it, saves, publishes. | The folder has v12 of the same service (one row on Home, "1 older version"), not a new service at B's own numbering. | Verified on the Intel Mac (two profiles) |
+| 10cl.2 | On A, open the service in Prepare. | "A newer version (v12) is in the church folder. This one is v11." Nothing changes by itself. | Verified on the Intel Mac |
+

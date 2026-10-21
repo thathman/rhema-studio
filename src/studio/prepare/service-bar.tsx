@@ -2,7 +2,7 @@ import { useChurchFolderStore } from "@/stores/church-folder-store"
 import { NewerVersionNotice } from "@/studio/prepare/newer-version-notice"
 import { UnreadComments } from "@/studio/prepare/unread-comments"
 import { useSettingsStore } from "@/stores/settings-store"
-import { publishToChurchFolder } from "@/lib/church-folder"
+import { publishLineage, publishToChurchFolder } from "@/lib/church-folder"
 import { useState } from "react"
 import { toast } from "sonner"
 import { BadgeCheckIcon, CalendarIcon, CopyIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
@@ -89,7 +89,10 @@ export function ServiceBar() {
     if (!current) return
     setPublishing(true)
     try {
-      const r = await publishToChurchFolder(churchFolder, current.id)
+      const settings = useSettingsStore.getState()
+      const r = await publishToChurchFolder(churchFolder, current.id, publishLineage(settings.openedFrom[current.id], current.id, current.revision))
+      // What this computer last put in the folder: a newer version from elsewhere is then pointed out here too.
+      settings.noteOpenedFrom(current.id, { sha256: r.sha256, source_id: r.source_id, title: current.title, service_date: current.service_date ?? null, revision: r.revision, local_revision: current.revision })
       // The folder lists (Home card, newer-version notice) see the new file at once.
       void useChurchFolderStore.getState().refresh(churchFolder)
       if (r.already) toast.info("This version is already in the church folder", { description: r.file_name })
