@@ -435,7 +435,9 @@ const operatorItems = (items: QueueItem[]) => items.filter((i) => i.source === "
  * not; heard verses collected by themselves never are.
  */
 export function unsavedScratch(items: QueueItem[], current: Program | null): boolean {
-  return !current && rundownSignature(operatorItems(items)) !== closedBaseline
+  if (current) return false
+  const mine = operatorItems(items)
+  return mine.length > 0 && rundownSignature(mine) !== closedBaseline // an empty rundown is nothing to lose
 }
 // Monotonic save ticket so a slow, older save cannot overwrite a newer one.
 let saveGeneration = 0

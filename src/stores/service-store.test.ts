@@ -492,6 +492,8 @@ describe("createFromRundown", () => {
     expect(unsavedScratch(useQueueStore.getState().items, current)).toBe(false)
     useQueueStore.getState().removeItem(useQueueStore.getState().items[1].id)
     expect(unsavedScratch(useQueueStore.getState().items, current)).toBe(true)
+    useQueueStore.getState().clearQueue()
+    expect(unsavedScratch(useQueueStore.getState().items, current)).toBe(false) // nothing on screen, nothing to lose
   })
 })
 
