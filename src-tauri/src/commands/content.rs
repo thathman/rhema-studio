@@ -267,16 +267,27 @@ fn copy_error(what: &str, e: &std::io::Error) -> ContentCommandError {
 #[tauri::command(async)]
 pub fn content_backup(state: State<'_, ContentState>, path: String) -> CmdResult<()> {
     let local = local_temp("backup");
-    with_db(&state, |db| db.backup_to(&local))?;
-    let result = copy_into_place(&local, &path).map_err(|e| copy_error("Could not write the backup there", &e));
+    let result = with_db(&state, |db| db.backup_to(&local))
+        .and_then(|()| copy_into_place(&local, &path).map_err(|e| copy_error("Could not write the backup there", &e)));
     let _ = std::fs::remove_file(&local);
     result
 }
 
-/// Copy `from` to `<to>.part`, then rename it to `to`; on failure no `.part` is left behind.
+/// Copy `from` to `<to>.part`, flush it to the device, then rename it to
+/// `to`; on failure no `.part` is left behind. The flush comes before the
+/// rename so a write-cached USB stick pulled out cannot end up with a
+/// truncated file under the finished name.
 fn copy_into_place(from: &Path, to: &str) -> std::io::Result<()> {
     let part = PathBuf::from(format!("{to}.part"));
-    std::fs::copy(from, &part).and_then(|_| std::fs::rename(&part, to)).inspect_err(|_| {
+    let write = || -> std::io::Result<()> {
+        let mut src = std::fs::File::open(from)?;
+        let mut dst = std::fs::File::create(&part)?;
+        std::io::copy(&mut src, &mut dst)?;
+        dst.sync_all()?;
+        drop(dst);
+        std::fs::rename(&part, to)
+    };
+    write().inspect_err(|_| {
         let _ = std::fs::remove_file(&part);
     })
 }

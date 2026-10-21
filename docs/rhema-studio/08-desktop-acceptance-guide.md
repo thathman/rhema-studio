@@ -643,3 +643,12 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bl.1 | Put something on a projector output. More → Library → Back up now to a USB stick (or a network share); pull the stick (or unplug the network) while it is writing. | Present, the outputs and Save keep working; the backup reports that it could not be written; the stick holds no file named like a finished backup (at most nothing, never a half file under the backup's name). | Unverified |
 | 10bl.2 | Restore from a backup on a network share that is then disconnected mid-read. | The app keeps working; restore reports it could not read the backup; the current services are unchanged. | Unverified |
+
+### 10bk. Team comments (CL-007)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bk.1 | Computer A, More → Your name = "Pastor Ade". Prepare: select an item, write a comment, press Enter; Save; Publish to the church folder. | The comment shows with name and time; the row shows a speech-bubble count; nothing appears on any output. | Unverified |
+| 10bk.2 | Computer B, More → Your name = "Tolu": open that service from the church folder. | "1 new comment" in the service bar; the list shows "Pastor Ade on …" and the text. Mark as read hides it until someone else comments again. | Unverified |
+| 10bk.3 | Computer B adds a reply, saves, publishes; computer A opens the newer version. | A sees "1 new comment" (Tolu's), not its own. | Unverified |
+| 10bk.4 | Computer B: Mark as read, then open the same service again from the church folder (a new copy); duplicate it. | No comment shows as new in either copy until someone writes a new one. | Unverified |

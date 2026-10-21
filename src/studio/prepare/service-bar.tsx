@@ -1,4 +1,5 @@
 import { NewerVersionNotice } from "@/studio/prepare/newer-version-notice"
+import { UnreadComments } from "@/studio/prepare/unread-comments"
 import { useSettingsStore } from "@/stores/settings-store"
 import { publishToChurchFolder } from "@/lib/church-folder"
 import { useState } from "react"
@@ -201,6 +202,7 @@ export function ServiceBar() {
 
       <ServiceHistory />
       <NewerVersionNotice />
+      <UnreadComments />
       {current && churchFolder && (
         <Button
           variant="outline"

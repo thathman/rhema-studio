@@ -25,6 +25,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - macOS: Cmd+Q asks about unsaved service changes, like closing the window.
 
 ### Services
+- Team comments on any item (never on screen); they travel with the service file, and "n new comments" shows what others wrote.
 - Optional: ask before the first go-live of a service that is not approved (More; off by default; never mid-service).
 - Items can say who is preparing them; History shows who saved each version.
 - Church folder: publish services to a NAS or synced folder as versioned files and open the newest at church (no account, no server); a newer version of the service you opened is pointed out, never opened by itself.

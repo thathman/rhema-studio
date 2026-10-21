@@ -1,7 +1,9 @@
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
-import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, ImageIcon, MusicIcon, PresentationIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, ImageIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
+import { cleanComments, commentKey, MAX_COMMENTS } from "@/lib/comments"
+import { useSettingsStore } from "@/stores/settings-store"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -95,6 +97,13 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {item.planned_minutes ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
                 {item.end_by ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
                 {item.prepared_by ? <span className="ml-1 max-w-24 shrink-0 truncate text-[0.625rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
+                {item.comments?.length ? (
+                  <span className="ml-1 inline-flex shrink-0 items-center gap-0.5 text-[0.625rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
+                    <MessageSquareIcon className="size-3" aria-hidden />
+                    {item.comments.length}
+                    <span className="sr-only"> comments</span>
+                  </span>
+                ) : null}
                 {onAir && (
                   <span className="ml-auto shrink-0 text-[0.625rem] font-bold tracking-wider text-destructive uppercase">
                     Live
@@ -133,6 +142,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             {isSelected && mode === "prepare" && !picture && <BackgroundPicker item={item} />}
             {isSelected && mode === "prepare" && <NoteEditor item={item} />}
             {isSelected && mode === "prepare" && <PlannedMinutes item={item} />}
+            {isSelected && mode === "prepare" && <CommentsEditor item={item} />}
           </Row>
         )
       })}
@@ -310,6 +320,68 @@ function PlannedMinutes({ item }: { item: QueueItem }) {
           useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, end_by: /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null }))
         }}
       />
+    </div>
+  )
+}
+
+const commentTime = (at: string) => new Date(at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+
+/**
+ * Prepare-only: the team's comments on an item (CL-007), saved with the
+ * service and carried in service files and the church folder, so the pastor
+ * at home and the operator at church read the same thread. Never on screen.
+ */
+function CommentsEditor({ item }: { item: QueueItem }) {
+  const [draft, setDraft] = useState("")
+  const me = useSettingsStore((s) => s.operatorName.trim())
+  const comments = item.comments ?? []
+  const add = () => {
+    if (comments.length >= MAX_COMMENTS) return // never push the oldest out
+    const next = cleanComments([...comments, { by: me || "Unnamed", at: new Date().toISOString(), text: draft }])
+    if (next.length === comments.length) return // nothing left after cleaning
+    // Written here, so already read here (also when no name is set).
+    useSettingsStore.getState().markCommentsSeen([commentKey(next[next.length - 1])])
+    useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, comments: next }))
+    setDraft("")
+  }
+  const remove = (index: number) =>
+    useQueueStore.getState().updateItem(item.id, (i) => {
+      const left = (i.comments ?? []).filter((_, k) => k !== index)
+      return { ...i, comments: left.length ? left : null }
+    })
+  return (
+    <div className="ml-7 space-y-1 py-1 pl-2 text-xs">
+      {comments.map((c, k) => (
+        <div key={`${c.at}-${k}`} className="flex items-start gap-2 rounded bg-muted/40 px-2 py-1">
+          <MessageSquareIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <span className="font-medium">{c.by}</span> <span className="text-muted-foreground">{commentTime(c.at)}</span>
+            <p className="whitespace-pre-wrap break-words">{c.text}</p>
+          </div>
+          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${c.by}'s comment`} onClick={() => remove(k)}>
+            <XIcon className="size-3" />
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label={`Comment on ${item.reference}`}
+          placeholder={me ? "Comment for the team (never on screen)" : "Comment for the team — set your name in More so others know who wrote it"}
+          value={draft}
+          maxLength={1000}
+          className="h-7 text-xs"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && draft.trim()) {
+              e.preventDefault()
+              add()
+            }
+          }}
+        />
+        <Button size="sm" variant="outline" className="h-7" disabled={!draft.trim() || comments.length >= MAX_COMMENTS} onClick={add}>
+          Comment
+        </Button>
+      </div>
     </div>
   )
 }

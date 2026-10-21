@@ -89,6 +89,9 @@ interface SettingsState {
   noteOpenedPackage: (sha256: string) => void
   /** Which folder file each service on this computer was opened from (by local service id), to spot newer versions. */
   openedFrom: Record<string, OpenedFrom>
+  /** Team comments this computer has read (CL-007), by comment identity (time|author); the newest 2000. */
+  commentsSeen: string[]
+  markCommentsSeen: (keys: string[]) => void
   noteOpenedFrom: (programId: string, from: OpenedFrom) => void
   /** The church's own cues (PT-003): named, ordered steps from the cue action registry. */
   customMacros: CustomMacro[]
@@ -141,6 +144,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   cloudSpeechConsentAt: "",
   openedPackages: [],
   openedFrom: {},
+  commentsSeen: [],
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
@@ -172,6 +176,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setRequireApproval: (requireApproval) => set({ requireApproval }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
   noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-200)) })),
+  // ponytail: newest 2000 read comments; a very long-lived template could see old ones as new again. Raise the cap if that happens.
+  markCommentsSeen: (keys) => set((s) => ({ commentsSeen: [...s.commentsSeen.filter((k) => !keys.includes(k)), ...keys].slice(-2000) })),
   noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),
   setOperatorName: (operatorName) => {
     set({ operatorName })
@@ -221,6 +227,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "openedFrom":
       return typeof value === "object" && value !== null && !Array.isArray(value)
     case "openedPackages":
+    case "commentsSeen":
       return Array.isArray(value) && value.every((x) => typeof x === "string")
     case "customMacros":
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
@@ -240,6 +247,7 @@ const PERSISTED_KEYS = [
   "cloudSpeechConsentAt",
   "openedPackages",
   "openedFrom",
+  "commentsSeen",
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",
