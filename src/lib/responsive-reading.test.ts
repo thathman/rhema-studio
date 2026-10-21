@@ -30,4 +30,12 @@ describe("responsive readings", () => {
     expect(hasReadingMarks("Love is patient")).toBe(false)
     expect(hasReadingMarks("All: Amen")).toBe(true)
   })
+
+  it("keeps initials and abbreviations as text, and caps a slide at six lines", () => {
+    const t = "L: As C. S. Lewis put it,\nP.S. bring a friend\nL.A. campus prays with us\nAll: Amen"
+    expect(parseReading(t).map((l) => [l.part, l.text])).toEqual([["leader", "As C. S. Lewis put it,"], ["leader", "P.S. bring a friend"], ["leader", "L.A. campus prays with us"], ["people", "Amen"]])
+    expect(hasReadingMarks("C. S. Lewis wrote this.")).toBe(false)
+    const long = ["L: one", "two", "three", "four", "five", "six", "seven", "P: amen"].join("\n")
+    expect(readingPages(long)).toEqual(["Leader: one\ntwo\nthree\nfour\nfive\nsix", "Leader: seven\nAll: amen"])
+  })
 })

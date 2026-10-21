@@ -1,15 +1,18 @@
 /**
  * Responsive readings (PRD FR-01, SV-005): the leader reads a line, the
  * congregation answers. Pasted text marks parts with "L:" / "Leader:" and
- * "P:" / "People:" / "All:" / "C:" / "Congregation:"; a line without a mark
+ * "P:" / "People:" / "All:" / "C:" / "Congregation:" (always with a colon, so
+ * initials like "C. S. Lewis" or "P.S." stay text); a line without a mark
  * continues the part above it. Each exchange (leader then people) becomes
  * one slide, the first line of each part labelled so everyone sees when it
  * is their turn.
  */
 export type ReadingPart = "leader" | "people"
 
-const LEADER = /^(l|leader|minister|pastor)\s*[:.]\s*/i
-const PEOPLE = /^(p|people|c|congregation|all|r|response)\s*[:.]\s*/i
+const LEADER = /^(l|leader|minister|pastor)\s*:\s*/i
+const PEOPLE = /^(p|people|c|congregation|all|r|response)\s*:\s*/i
+/** Lines per slide, as for other long text (slidePages); a longer part continues on the next slide, labelled again. */
+export const READING_MAX_LINES = 6
 
 export interface ReadingLine {
   part: ReadingPart
@@ -41,7 +44,10 @@ export function readingPages(text: string, labels: Record<ReadingPart, string> =
   const pages: string[][] = []
   let prev: ReadingPart | null = null
   for (const { part, text: line } of parseReading(text)) {
-    if (pages.length === 0 || (part === "leader" && prev === "people")) pages.push([])
+    if (pages.length === 0 || (part === "leader" && prev === "people") || pages[pages.length - 1].length >= READING_MAX_LINES) {
+      pages.push([])
+      prev = null
+    }
     const page = pages[pages.length - 1]
     page.push(part !== prev ? `${labels[part]}: ${line}` : line)
     prev = part

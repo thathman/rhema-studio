@@ -139,7 +139,7 @@ export function SlideComposer() {
         className="text-sm"
       />
       <div className="flex items-center gap-2">
-        <Button size="sm" disabled={empty || (mode === "reading" && pages.length === 0)} onClick={add}><PlusIcon /> {mode === "reading" && pages.length > 1 ? `Add as ${pages.length} slides` : "Add to service"}</Button>
+        <Button size="sm" disabled={empty || (mode === "reading" && (pages.length === 0 || !hasReadingMarks(body)))} onClick={add}><PlusIcon /> {mode === "reading" && pages.length > 1 ? `Add as ${pages.length} slides` : "Add to service"}</Button>
         {mode !== "reading" && pages.length > 1 && (
           <Button size="sm" variant="outline" onClick={addPages} title="Split at blank lines, at most six lines a slide">
             Add as {pages.length} slides
