@@ -61,5 +61,7 @@ describe("live stepping and following (audit fixes)", () => {
     useBroadcastStore.setState({ autoLive: true })
     followTranslationOnAir(true)
     expect(presentVerse).toHaveBeenCalledTimes(2)
+    // Follows never move the preview or cancel a present still loading.
+    expect((presentVerse.mock.calls[0] as unknown as [unknown, { follow?: boolean }])[1].follow).toBe(true)
   })
 })

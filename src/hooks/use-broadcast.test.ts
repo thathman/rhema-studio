@@ -77,6 +77,26 @@ describe("presentVerse", () => {
     expect(liveVerse?.segments[0].text).toBe("For God so loved the world")
   })
 
+  it("follow mode: keeps the preview, does not cancel a present still loading, gives way to a newer one", async () => {
+    const onAir: Verse = { ...staleVerse, text: "old" }
+    const preview: Verse = { ...staleVerse, verse: 17, text: "browsing" }
+    useBroadcastStore.setState({ liveSourceVerse: onAir })
+    useBibleStore.setState({ selectedVerse: preview })
+    mockInvoke.mockResolvedValue({ ...onAir, translation_id: 2, text: "For God so loved the world" })
+    expect(await presentVerse(onAir, { follow: true })).toBe("presented")
+    expect(useBibleStore.getState().selectedVerse).toBe(preview)
+    expect(useBroadcastStore.getState().liveVerse?.segments[0].text).toBe("For God so loved the world")
+
+    // Something else reaches the screen while the follow is loading: the follow gives way.
+    const source = useBroadcastStore.getState().liveSourceVerse as Verse
+    let release: (v: unknown) => void = () => {}
+    mockInvoke.mockImplementation(() => new Promise((r) => { release = r }))
+    const following = presentVerse(source, { follow: true })
+    useBroadcastStore.setState({ liveSourceVerse: { ...staleVerse, verse: 18, text: "newer" } })
+    release({ ...source, text: "late" })
+    expect(await following).toBe("superseded")
+  })
+
   it("looks up by book/chapter/verse against the active translation", async () => {
     mockInvoke.mockResolvedValue(null)
 

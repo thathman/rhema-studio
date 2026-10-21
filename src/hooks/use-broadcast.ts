@@ -77,6 +77,12 @@ export interface PresentOptions {
   itemId?: string | null
   /** A library picture to draw behind the text. */
   background?: { media_id: string } | null
+  /**
+   * Re-present what is already on air in a new translation: leaves the
+   * preview and any present still loading alone, and gives way if anything
+   * else reaches the screen first.
+   */
+  follow?: boolean
 }
 
 /** Data-URL fill for a background picture, or null (missing file → no background, text still shows). */
@@ -111,8 +117,8 @@ export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_tra
  * only the preview unless the Auto toggle is on.
  */
 export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Promise<PresentOutcome> {
-  if (reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
-  presentSeq += 1
+  if (!opts.follow && reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
+  if (!opts.follow) presentSeq += 1
   const ticket = presentSeq
   const ref = `${verse.book_name} ${verse.chapter}:${verse.verse}`
   mark(`presentVerse start ${ref}`)
@@ -184,7 +190,10 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     )
 
   // Keep the preview in sync with what was just presented.
-  bibleState.selectVerse(verseToPresent)
+  if (opts.follow) {
+    // Something else reached the screen while the new translation loaded: that wins.
+    if (useBroadcastStore.getState().liveSourceVerse !== verse) return "superseded"
+  } else bibleState.selectVerse(verseToPresent)
   const data = renderEntries.length > 1
     ? toDualVerseRenderData(renderEntries)
     : toVerseRenderData(renderEntries[0]?.verse ?? verseToPresent, renderEntries[0]?.translation ?? "KJV")

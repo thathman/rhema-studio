@@ -3,6 +3,7 @@ import { presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 
 let changedByVoice = false
 
@@ -30,14 +31,22 @@ export function useLiveTranslationFollow(): void {
     const byVoice = changedByVoice
     changedByVoice = false
     if (previous === null || previous === key) return
-    followTranslationOnAir(byVoice)
+    const [prevActive, prevSecondary] = previous.split("|").map((x) => (x === "null" ? null : Number(x)))
+    followTranslationOnAir(byVoice, { activeTranslationId: prevActive as number, secondaryTranslationId: prevSecondary })
   }, [active, secondary])
 }
 
-export function followTranslationOnAir(byVoice: boolean): void {
+export function followTranslationOnAir(byVoice: boolean, before?: { activeTranslationId: number; secondaryTranslationId: number | null }): void {
   const { liveSourceVerse, liveItem, liveItemId, autoLive } = useBroadcastStore.getState()
   if (!liveSourceVerse) return
   if (byVoice && !autoLive) return
+  // An item's saved translations can make the change irrelevant to what is on air.
+  if (before) {
+    const bible = useBibleStore.getState()
+    const was = resolveTranslations(liveItem, { ...bible, ...before })
+    const now = resolveTranslations(liveItem, bible)
+    if (!isMissing(was) && !isMissing(now) && was.primary === now.primary && was.secondary === now.secondary) return
+  }
   const background = liveItemId ? (useQueueStore.getState().items.find((i) => i.id === liveItemId)?.background ?? null) : null
-  void presentVerse(liveSourceVerse, { item: liveItem, itemId: liveItemId, background })
+  void presentVerse(liveSourceVerse, { item: liveItem, itemId: liveItemId, background, follow: true })
 }
