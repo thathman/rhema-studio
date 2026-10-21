@@ -45,6 +45,8 @@ export function parseOpenLyrics(xml: string, hymnbookIds: Record<string, string>
   const authors = q(doc, "author").map((a) => a.textContent?.trim() ?? "").filter(Boolean).join("; ")
   const ccli = first(doc, "ccliNo").replace(/\D/g, "")
   const copyright = first(doc, "copyright")
+  const key = first(doc, "key").slice(0, 12)
+  const bpm = Math.round(Number(q(doc, "tempo").find((t) => (t.getAttribute("type") ?? "bpm") === "bpm")?.textContent ?? ""))
   const primary = q(doc, "verse").find((v) => v.getAttribute("lang"))?.getAttribute("lang")?.slice(0, 2).toLowerCase() ?? "en"
 
   // Sections keyed by OpenLyrics name (v1, c, b…), in order of first appearance.
@@ -80,7 +82,7 @@ export function parseOpenLyrics(xml: string, hymnbookIds: Record<string, string>
 
   if (props) {
     for (const child of Array.from(props.children)) {
-      if (!["titles", "authors", "copyright", "ccliNo", "songbooks", "verseOrder", "comments"].includes(child.localName)) ignored.push(`<${child.localName}>`)
+      if (!["titles", "authors", "copyright", "ccliNo", "songbooks", "verseOrder", "comments", "key", "tempo"].includes(child.localName)) ignored.push(`<${child.localName}>`)
     }
   }
   const notes = q(doc, "comment").map((c) => c.textContent?.trim() ?? "").filter(Boolean).join("\n")
@@ -91,9 +93,11 @@ export function parseOpenLyrics(xml: string, hymnbookIds: Record<string, string>
       authors,
       copyright,
       ccli_number: ccli || null,
-      licence: ccli ? "ccli" : "unknown",
+      licence: ccli ? "ccli" : /^public domain\.?$/i.test(copyright.trim()) ? "public_domain" : "unknown",
       primary_language: primary,
       notes,
+      key,
+      tempo: bpm >= 20 && bpm <= 300 ? bpm : null,
       sections,
       arrangements: sequence.length ? [{ name: "Default", sequence, is_default: true }] : [],
       numbers,
@@ -122,7 +126,8 @@ export function toOpenLyrics(song: SongWithSections): string {
     .filter(Boolean)
     .join(" ")
   const verses = song.sections.flatMap((s, i) =>
-    Object.entries(s.texts).map(([lang, body]) => {
+    // The song's main language first: the importer takes the first language it meets as the main one.
+    Object.entries(s.texts).sort(([a], [b]) => Number(b === song.song.primary_language) - Number(a === song.song.primary_language)).map(([lang, body]) => {
       const blocks = body.replace(/\r\n?/g, "\n").split(/\n\s*\n/).map((b) => `      <lines>${b.split("\n").map(esc).join("<br/>")}</lines>`)
       return `    <verse name="${names[i]}" lang="${esc(lang)}">\n${blocks.join("\n")}\n    </verse>`
     })
@@ -130,10 +135,12 @@ export function toOpenLyrics(song: SongWithSections): string {
   const props = [
     `    <titles><title>${esc(song.song.title)}</title></titles>`,
     song.song.authors ? `    <authors>${song.song.authors.split(";").map((a) => a.trim()).filter(Boolean).map((a) => `<author>${esc(a)}</author>`).join("")}</authors>` : "",
-    song.song.copyright ? `    <copyright>${esc(song.song.copyright)}</copyright>` : "",
+    song.song.copyright ? `    <copyright>${esc(song.song.copyright)}</copyright>` : song.song.licence === "public_domain" ? "    <copyright>Public domain</copyright>" : "",
     song.song.ccli_number ? `    <ccliNo>${esc(song.song.ccli_number)}</ccliNo>` : "",
     song.numbers.length ? `    <songbooks>${song.numbers.map((n) => `<songbook name="${esc(n.hymnbook_code)}" entry="${esc(n.number)}"/>`).join("")}</songbooks>` : "",
     order ? `    <verseOrder>${esc(order)}</verseOrder>` : "",
+    song.song.key ? `    <key>${esc(song.song.key)}</key>` : "",
+    song.song.tempo ? `    <tempo type="bpm">${song.song.tempo}</tempo>` : "",
     song.song.notes ? `    <comments><comment>${esc(song.song.notes)}</comment></comments>` : "",
   ].filter(Boolean)
   return `<?xml version="1.0" encoding="UTF-8"?>\n<song xmlns="http://openlyrics.info/namespace/2009/song" version="0.8" createdIn="Rhema Studio">\n  <properties>\n${props.join("\n")}\n  </properties>\n  <lyrics>\n${verses.join("\n")}\n  </lyrics>\n</song>\n`

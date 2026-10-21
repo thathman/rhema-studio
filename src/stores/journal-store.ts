@@ -60,6 +60,12 @@ export async function keepJournal(extra = ""): Promise<void> {
 /** What the congregation saw when rehearsal started: rehearsal ends by sending what is live now. */
 let seenBeforeRehearsal: { isLive: boolean; liveVerse: Aired["liveVerse"]; liveItemId: string | null } | null = null
 
+/** Rundown items got new ids (a new service from them): the log follows. */
+export function remapJournalItemIds(re: (id: string | null | undefined) => string | null): void {
+  useJournalStore.setState((j) => ({ entries: j.entries.map((e) => (e.itemId ? { ...e, itemId: re(e.itemId) } : e)) }))
+  if (seenBeforeRehearsal) seenBeforeRehearsal = { ...seenBeforeRehearsal, liveItemId: re(seenBeforeRehearsal.liveItemId) }
+}
+
 // Record every change of what is on air, from the one store that owns it.
 useBroadcastStore.subscribe((s, prev) => {
   const add = useJournalStore.getState().add

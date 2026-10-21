@@ -129,7 +129,8 @@ export function toItemInputs(
       ? {
           id: i.id,
           kind: "slide",
-          reference: i.slide.title.trim() || i.slide.body.split("\n")[0]?.trim() || "Slide",
+          // The label is a short name (the database keeps at most 200 characters); the slide keeps all its words.
+          reference: [...(i.slide.title.trim() || i.slide.body.split("\n")[0]?.trim() || "Slide")].slice(0, 200).join(""),
           book_number: null,
           chapter: null,
           verse: null,
@@ -454,6 +455,45 @@ const activeTranslations = (): ActiveTranslations => {
   }
 }
 
+/**
+ * Give the rundown's items new ids and move every reference to them: what is
+ * on air, held under a quick screen, selected in the preview, highlighted,
+ * the removed item's neighbours and the service log. A go-live waiting for
+ * approval, or still loading, belongs to the old service and is dropped.
+ */
+async function idHolders() {
+  // Imported when needed: these modules import this one.
+  const [{ remapJournalItemIds }, { useApprovalGateStore }, { cancelPendingPresents }] = await Promise.all([
+    import("@/stores/journal-store"),
+    import("@/stores/approval-gate-store"),
+    import("@/hooks/use-broadcast"),
+  ])
+  return { remapJournalItemIds, useApprovalGateStore, cancelPendingPresents }
+}
+
+/** Synchronous (after `idHolders`), so no save or edit can see half the ids renewed. */
+function renewItemIds(h: Awaited<ReturnType<typeof idHolders>>): void {
+  const ids = new Map(useQueueStore.getState().items.map((i) => [i.id, crypto.randomUUID()]))
+  const re = (id: string | null | undefined): string | null => (id ? (ids.get(id) ?? id) : null)
+  const reSlide = <T extends { itemId: string }>(s: T | null): T | null => (s ? { ...s, itemId: re(s.itemId) ?? s.itemId } : null)
+  useQueueStore.setState((q) => ({
+    items: q.items.map((i) => ({ ...i, id: ids.get(i.id) ?? i.id })),
+    highlightedId: re(q.highlightedId),
+    removedActive: q.removedActive ? { prevId: re(q.removedActive.prevId), nextId: re(q.removedActive.nextId) } : null,
+  }))
+  const b = useBroadcastStore.getState()
+  useBroadcastStore.setState({
+    liveItemId: re(b.liveItemId),
+    liveSlide: reSlide(b.liveSlide),
+    heldLive: b.heldLive ? { ...b.heldLive, liveItemId: re(b.heldLive.liveItemId), liveSlide: reSlide(b.heldLive.liveSlide) } : null,
+  })
+  const sel = useBibleStore.getState().selectedSlide
+  if (sel) useBibleStore.setState({ selectedSlide: { ...sel, item: { ...sel.item, id: ids.get(sel.item.id) ?? sel.item.id } } })
+  h.remapJournalItemIds(re)
+  h.useApprovalGateStore.setState({ held: null, retry: null })
+  h.cancelPendingPresents()
+}
+
 export const useServiceStore = create<ServiceState>((set, get) => ({
   programs: [],
   current: null,
@@ -493,10 +533,14 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   createFromRundown: async (title, serviceDate, opts) => {
     if (get().current && get().dirty && !opts?.discard) return "unsaved"
+    const holders = await idHolders()
     const program = await get().createProgram(title, serviceDate, { discard: true })
     if (!program) return "failed"
     baseline = "" // the rundown is not yet what the database has
     set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [], missingTranslations: [] })
+    // Item ids are unique across services: items taken from another service (or copied) get new ones, or the save is refused.
+    // In the same tick as the new service becoming current, so the original never looks changed.
+    renewItemIds(holders)
     remember(program.id)
     if (!get().dirty) return "created"
     const saved = await get().saveCurrent()
@@ -629,14 +673,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       set({ error: `This service has ${get().unsupportedItems.length} item(s) this version cannot copy; update Rhema to copy it whole.` })
       return "failed"
     }
-    // Fresh ids: the copy must never share item identity with the original.
-    const before = useQueueStore.getState().items
-    const copies = before.map((i) => ({ ...i, id: crypto.randomUUID() }))
-    useQueueStore.setState({ items: copies, activeIndex: null })
-    const r = await get().createFromRundown(title, serviceDate, { discard: true })
-    // Nothing was created: put the original's items back, so a later Save cannot renumber the original.
-    if (r === "failed") useQueueStore.setState({ items: before, activeIndex: null })
-    return r
+    // The copy gets fresh item ids (createFromRundown), never sharing identity with the original.
+    return get().createFromRundown(title, serviceDate, { discard: true })
   },
 
   openProgram: async (id, opts) => {

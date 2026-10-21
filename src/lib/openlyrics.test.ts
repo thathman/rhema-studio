@@ -42,8 +42,8 @@ describe("OpenLyrics import", () => {
     expect(report.ignored).toEqual([
       "verseOrder names not in the song: x9",
       'songbook "Unknown Book" 9 (no hymnbook with that name or code here)',
-      "<tempo>",
     ])
+    expect(input.tempo).toBe(90)
   })
 
   it("rejects files that are not OpenLyrics", () => {
@@ -80,4 +80,18 @@ describe("OpenLyrics import", () => {
     expect(input.numbers).toEqual([{ hymnbook_id: "b", number: "245" }])
     expect(input.notes).toBe("Sing slowly")
   })
+
+  it("round-trips the main language, key, tempo and a public-domain licence", () => {
+    const song = {
+      song: { id: "s", title: "Oluwa", authors: "", copyright: "", ccli_number: null, licence: "public_domain", licence_note: "", primary_language: "yo", tags: "", notes: "", key: "G", tempo: 72, revision: 1, created_at: "", updated_at: "" },
+      sections: [{ id: "a", song_id: "s", position: 0, kind: "verse", label: "", texts: { en: "Lord", yo: "Oluwa" } }],
+      arrangements: [],
+      numbers: [],
+    } as unknown as Parameters<typeof toOpenLyrics>[0]
+    const { input } = parseOpenLyrics(toOpenLyrics(song))
+    expect(input.primary_language).toBe("yo")
+    expect(input.licence).toBe("public_domain")
+    expect([input.key, input.tempo]).toEqual(["G", 72])
+  })
 })
+

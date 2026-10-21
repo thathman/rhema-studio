@@ -820,6 +820,9 @@ struct SlidePayload {
     title: String,
     #[serde(default)]
     body: String,
+    /// A QR slide's link (SG-003): content on its own.
+    #[serde(default)]
+    link: String,
 }
 
 fn validate_slide_payload(i: usize, payload: Option<&str>) -> Result<()> {
@@ -833,8 +836,8 @@ fn validate_slide_payload(i: usize, payload: Option<&str>) -> Result<()> {
     if p.body.chars().count() > MAX_NOTES {
         return Err(ContentError::Invalid(format!("item {i}: slide text longer than {MAX_NOTES} characters")));
     }
-    if p.title.trim().is_empty() && p.body.trim().is_empty() {
-        return Err(ContentError::Invalid(format!("item {i}: a slide needs a title or some text")));
+    if p.title.trim().is_empty() && p.body.trim().is_empty() && p.link.trim().is_empty() {
+        return Err(ContentError::Invalid(format!("item {i}: a slide needs a title, some text or a link")));
     }
     Ok(())
 }
@@ -901,7 +904,8 @@ pub(crate) fn validate_items(items: &[ItemInput]) -> Result<()> {
         return Err(ContentError::Invalid(format!("more than {MAX_ITEMS} items")));
     }
     let mut seen = HashSet::new();
-    for (i, it) in items.iter().enumerate() {
+    // Counted from 1 in messages, as the rundown shows them.
+    for (i, it) in (1_usize..).zip(items) {
         let kind = it.kind.trim();
         if !SUPPORTED_KINDS.contains(&kind) {
             return Err(ContentError::Invalid(format!("item {i}: unsupported kind {kind:?}")));
@@ -1146,6 +1150,12 @@ mod tests {
         assert_eq!(saved.items[0].kind, "slide");
         assert_eq!(saved.items[0].payload.as_deref(), Some(payload));
         assert!(saved.items[0].book_number.is_none());
+        // A QR slide with only a link is content too (SG-003).
+        let link_only = "{\"title\":\"\",\"body\":\"\",\"link\":\"https://example.org/give\"}";
+        db.replace_items(&p.id, 2, &[ItemInput { kind: "slide".into(), reference: "Give".into(), payload: Some(link_only.into()), ..ItemInput::default() }]).unwrap();
+        // Messages count items from 1, as the rundown does.
+        let err = db.replace_items(&p.id, 3, &[ItemInput { kind: "slide".into(), reference: String::new(), payload: Some(payload.into()), ..ItemInput::default() }]).unwrap_err();
+        assert!(err.to_string().contains("item 1"), "{err}");
     }
 
     #[test]

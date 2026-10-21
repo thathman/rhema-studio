@@ -92,6 +92,7 @@ export async function importSongsFromFiles(mode: ImportMode, hymnbooks: Hymnbook
         outcome.replaced += r.replaced
         outcome.skipped += r.skipped
         outcome.hymnbooks_added += r.hymnbooks_added
+        if (r.numbers_skipped) outcome.notes.push(`${name}: ${r.numbers_skipped} hymn number${r.numbers_skipped === 1 ? " was" : "s were"} left off (another song here already has ${r.numbers_skipped === 1 ? "it" : "them"})`)
       } else {
         const { input, report } = parseOpenLyrics(text, bookIds)
         await invoke<SongWithSections>("content_create_song", { input })

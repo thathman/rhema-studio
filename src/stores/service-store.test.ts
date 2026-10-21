@@ -282,6 +282,52 @@ describe("unsaved-change protection lives in the store", () => {
 })
 
 describe("saving", () => {
+  it("New service from the items on screen gives them new ids (ids are unique across services), and the live marker follows", async () => {
+    await openStored()
+    const { useBroadcastStore } = await import("./broadcast-store")
+    useBroadcastStore.setState({ liveItemId: "i1" })
+    useServiceStore.getState().closeProgram()
+    mockInvoke.mockImplementation(async (cmd: string, a?: { items?: ProgramItem[] }) =>
+      cmd === "content_create_program" ? { ...program, id: "p2", revision: 1 } : cmd === "content_replace_items" ? { program: { ...program, id: "p2", revision: 2 }, items: a?.items ?? [] } : null)
+    await useServiceStore.getState().createFromRundown("Evening", null, { discard: true })
+    const ids = sentItems().map((i) => String(i.id))
+    expect(ids).toHaveLength(2)
+    expect(ids).not.toContain("i1")
+    expect(useBroadcastStore.getState().liveItemId).toBe(ids[0])
+    useBroadcastStore.setState({ liveItemId: null })
+  })
+
+  it("Duplicate moves the live marker, the preview selection and the service log to the copies", async () => {
+    await openStored()
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const { useJournalStore } = await import("./journal-store")
+    const { useBibleStore } = await import("./bible-store")
+    useBroadcastStore.setState({ liveItemId: "i2" })
+    useJournalStore.setState({ entries: [{ kind: "live", label: "John 3:16", itemId: "i2", at: 0, mono: 0 }] })
+    const slideItem = { ...useQueueStore.getState().items[0], kind: "slide", slide: { title: "Hi", body: "" } }
+    useBibleStore.setState({ selectedSlide: { item: slideItem as never, index: 0 } })
+    mockInvoke.mockImplementation(async (cmd: string, a?: { items?: ProgramItem[] }) =>
+      cmd === "content_create_program" ? { ...program, id: "p3", revision: 1 } : cmd === "content_replace_items" ? { program: { ...program, id: "p3", revision: 2 }, items: a?.items ?? [] } : null)
+    expect(await useServiceStore.getState().duplicateCurrent("Copy", null)).toBe("created")
+    const ids = sentItems().map((i) => String(i.id))
+    expect(ids).not.toContain("i2")
+    expect(useBroadcastStore.getState().liveItemId).toBe(ids[1])
+    expect(useJournalStore.getState().entries[0].itemId).toBe(ids[1])
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(ids[0])
+    // The original service is never written with the new ids.
+    expect(mockInvoke.mock.calls.filter((c) => c[0] === "content_replace_items").every((c) => (c[1] as { programId: string }).programId !== program.id)).toBe(true)
+    useBroadcastStore.setState({ liveItemId: null })
+    useBibleStore.setState({ selectedSlide: null })
+    useJournalStore.getState().clear()
+  })
+
+  it("a long slide line is shortened for the label only", () => {
+    const words = "x".repeat(250)
+    const out = toItemInputs([{ id: "s1", kind: "slide", slide: { title: "", body: words }, reference: words, confidence: 1, source: "manual", added_at: 0 } as never], () => "KJV")
+    expect([...out[0].reference].length).toBe(200)
+    expect(JSON.parse(out[0].payload!).body).toBe(words)
+  })
+
   it("sends ids and the expected revision; a clean save clears dirty", async () => {
     await openStored()
     useQueueStore.getState().addItem(queueItem("Romans 8:28", 45, 8, 28))
