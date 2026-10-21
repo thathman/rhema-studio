@@ -192,7 +192,7 @@ function StandardView() {
             <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Quick screens</p>
             <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
           </div>
-          <div className="grid min-h-0 grid-cols-3 content-start gap-2 overflow-y-auto">
+          <div className="-m-1 grid min-h-0 grid-cols-3 content-start gap-2 overflow-y-auto p-1">
             {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => (
               <BigButton key={s} icon={null} label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]} tone="live" className="h-11 min-w-0 gap-0 px-2 text-center" onClick={() => presentActions.quickScreen(s)} />
             ))}
