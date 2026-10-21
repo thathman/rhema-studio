@@ -27,6 +27,26 @@ export interface PublishResult {
   path: string
   file_name: string
   already: boolean
+  sha256: string
+  source_id: string | null
+  revision: number | null
+  /** Another computer had already published this service at or after this version (not included here). */
+  numbered_after?: number | null
+}
+
+/**
+ * A copy opened from the folder with nothing changed or approved here since:
+ * publishing it would only repeat (or, unapproved, hide) the version it came from.
+ */
+export function unchangedCopy(from: OpenedFrom | undefined, programId: string, localRevision: number, approvedRevision: number | null): boolean {
+  if (!from?.source_id || from.source_id === programId || typeof from.local_revision !== "number") return false
+  return localRevision === from.local_revision && approvedRevision !== localRevision
+}
+
+/** Where a copy belongs when it is published again (see `publishLineage`). */
+export interface Lineage {
+  source_id: string
+  revision_offset: number
 }
 
 export interface FolderService {
@@ -37,13 +57,31 @@ export interface FolderService {
   versions: FolderEntry[]
 }
 
-/** What a service on this computer was opened from (kept in settings, by local service id). */
+/**
+ * What a service on this computer was opened from, or last published as
+ * (kept in settings, by local service id).
+ */
 export interface OpenedFrom {
   sha256: string
   source_id: string | null
   title: string
   service_date: string | null
   revision: number | null
+  /** This computer's revision of the service when it matched that file (its own numbering starts again on opening). */
+  local_revision?: number | null
+}
+
+/**
+ * Publishing a copy opened from the church folder: it goes back as a newer
+ * version of the same service (its source), numbered on from the version it
+ * was opened at, not as a new service at this computer's "v3" (CL-005).
+ * Null for a service made here (it is its own source).
+ */
+export function publishLineage(from: OpenedFrom | undefined, programId: string, localRevision: number): Lineage | null {
+  if (!from?.source_id || from.source_id === programId) return null
+  // Records from before local_revision was kept: the next version after the one opened.
+  const base = typeof from.local_revision === "number" ? from.local_revision : localRevision - 1
+  return { source_id: from.source_id, revision_offset: (from.revision ?? 0) - base }
 }
 
 const groupKey = (e: { source_id: string | null; title: string; service_date: string | null }) => e.source_id ?? `${e.title}|${e.service_date ?? ""}`
@@ -81,6 +119,6 @@ export function newestPerService(entries: FolderEntry[]): { services: FolderServ
   return { services, broken: entries.filter((x) => x.error) }
 }
 
-export const publishToChurchFolder = (folder: string, programId: string) => invoke<PublishResult>("church_folder_publish", { folder, programId })
+export const publishToChurchFolder = (folder: string, programId: string, lineage: Lineage | null = null) => invoke<PublishResult>("church_folder_publish", { folder, programId, lineage })
 export const listChurchFolder = (folder: string) => invoke<FolderEntry[]>("church_folder_list", { folder })
 export const openFromChurchFolder = (folder: string, fileName: string) => invoke<PackageReport>("church_folder_open", { folder, fileName })

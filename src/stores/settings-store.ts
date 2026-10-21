@@ -185,7 +185,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCloudSpeechConsent: (agreed) => set({ cloudSpeechConsentAt: agreed ? new Date().toISOString() : "" }),
   setRequireApproval: (requireApproval) => set({ requireApproval }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
-  noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-200)) })),
+  noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-1000)) })),
   // ponytail: newest 2000 read comments; a very long-lived template could see old ones as new again. Raise the cap if that happens.
   markCommentsSeen: (keys) => set((s) => ({ commentsSeen: [...s.commentsSeen.filter((k) => !keys.includes(k)), ...keys].slice(-2000) })),
   noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),

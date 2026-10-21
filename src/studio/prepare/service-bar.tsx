@@ -2,7 +2,7 @@ import { useChurchFolderStore } from "@/stores/church-folder-store"
 import { NewerVersionNotice } from "@/studio/prepare/newer-version-notice"
 import { UnreadComments } from "@/studio/prepare/unread-comments"
 import { useSettingsStore } from "@/stores/settings-store"
-import { publishToChurchFolder } from "@/lib/church-folder"
+import { publishLineage, publishToChurchFolder, unchangedCopy } from "@/lib/church-folder"
 import { useState } from "react"
 import { toast } from "sonner"
 import { BadgeCheckIcon, CalendarIcon, CopyIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
@@ -89,10 +89,18 @@ export function ServiceBar() {
     if (!current) return
     setPublishing(true)
     try {
-      const r = await publishToChurchFolder(churchFolder, current.id)
+      const settings = useSettingsStore.getState()
+      if (unchangedCopy(settings.openedFrom[current.id], current.id, current.revision, current.approved_revision ?? null)) {
+        toast.info("Nothing to publish", { description: "This copy has not changed since it was opened from the church folder." })
+        return
+      }
+      const r = await publishToChurchFolder(churchFolder, current.id, publishLineage(settings.openedFrom[current.id], current.id, current.revision))
+      // What this computer last put in the folder: a newer version from elsewhere is then pointed out here too.
+      settings.noteOpenedFrom(current.id, { sha256: r.sha256, source_id: r.source_id, title: current.title, service_date: current.service_date ?? null, revision: r.revision, local_revision: current.revision })
       // The folder lists (Home card, newer-version notice) see the new file at once.
       void useChurchFolderStore.getState().refresh(churchFolder)
-      if (r.already) toast.info("This version is already in the church folder", { description: r.file_name })
+      if (r.numbered_after) toast.warning(`Published as v${r.revision}: v${r.numbered_after} from another computer was already there`, { description: "Its changes are not in this version. Open it from the church folder to compare.", duration: 20_000 })
+      else if (r.already) toast.info("This version is already in the church folder", { description: r.file_name })
       else toast.success("Published to the church folder", { description: `${r.file_name}${approval === "approved" ? "" : " (not approved yet)"}` })
     } catch (e) {
       toast.error("Not published", { description: typeof e === "object" && e !== null && "message" in e ? String((e as { message: unknown }).message) : String(e) })

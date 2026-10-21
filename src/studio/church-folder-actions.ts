@@ -18,7 +18,7 @@ export async function openFolderEntry(folder: string, e: FolderEntry): Promise<b
     const r = await openFromChurchFolder(folder, e.file_name)
     const settings = useSettingsStore.getState()
     settings.noteOpenedPackage(e.sha256)
-    settings.noteOpenedFrom(r.program.program.id, { sha256: e.sha256, source_id: e.source_id, title: e.title, service_date: e.service_date, revision: e.revision })
+    settings.noteOpenedFrom(r.program.program.id, { sha256: e.sha256, source_id: e.source_id, title: e.title, service_date: e.service_date, revision: e.revision, local_revision: r.program.program.revision })
     // Songs and pictures the file brought are new here: look them up again (no false "missing").
     useSongStore.setState({ missing: [] })
     void useMediaStore.getState().list()

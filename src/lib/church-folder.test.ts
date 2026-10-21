@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { newerInFolder, newestPerService, type FolderEntry } from "./church-folder"
+import { newerInFolder, newestPerService, publishLineage, unchangedCopy, type FolderEntry } from "./church-folder"
 
 const e = (file_name: string, over: Partial<FolderEntry>): FolderEntry => ({
   path: `/f/${file_name}`, file_name, modified: 100, sha256: file_name, title: "Sunday", service_date: "2026-10-25", source_id: "p1",
@@ -28,3 +28,30 @@ describe("church folder listing", () => {
     expect(newerInFolder({ ...opened, source_id: "gone" }, services)).toBeNull()
   })
 })
+
+describe("publishing a copy again (lineage)", () => {
+  const from = { sha256: "a", source_id: "home-id", title: "Sunday", service_date: "2026-10-25", revision: 11, local_revision: 2 }
+  it("goes back as the same service, numbered on from the version it was opened at", () => {
+    expect(publishLineage(from, "church-copy-id", 3)).toEqual({ source_id: "home-id", revision_offset: 9 }) // local r3 → v12
+    expect(publishLineage(undefined, "home-id", 12)).toBeNull() // made here: its own source
+    expect(publishLineage({ ...from, source_id: "home-id" }, "home-id", 12)).toBeNull()
+    // A record from before local_revision was kept: the next version after the one opened.
+    const { local_revision: _unused, ...old } = from
+    void _unused
+    expect(publishLineage(old, "church-copy-id", 5)).toEqual({ source_id: "home-id", revision_offset: 7 }) // r5 → v12
+  })
+
+  it("the computer that made the service hears of the newer version once it has published", () => {
+    const entry = (revision: number, sha256: string) => ({ path: "", file_name: `${revision}`, modified: revision, sha256, title: "Sunday", service_date: "2026-10-25", source_id: "home-id", revision, approved_revision: null, approved_by: null, item_count: 1, error: null })
+    const services = [{ newest: entry(12, "tolu"), older: 1, versions: [entry(12, "tolu"), entry(11, "ade")] }]
+    expect(newerInFolder({ sha256: "ade", source_id: "home-id", title: "Sunday", service_date: "2026-10-25", revision: 11, local_revision: 11 }, services)?.revision).toBe(12)
+  })
+
+  it("an unchanged copy is not published again (unless approved here)", () => {
+    expect(unchangedCopy(from, "church-copy-id", 2, null)).toBe(true)
+    expect(unchangedCopy(from, "church-copy-id", 3, null)).toBe(false)
+    expect(unchangedCopy(from, "church-copy-id", 2, 2)).toBe(false) // approved here: new content
+    expect(unchangedCopy(undefined, "home-id", 11, null)).toBe(false)
+  })
+})
+
