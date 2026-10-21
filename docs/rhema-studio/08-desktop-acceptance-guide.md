@@ -636,3 +636,10 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bj.1 | Present → Quick find: type "Jòhánù 3:16", then "Johanu 3 16", then "1 Ọba 3:9" and "Ise 2:38". | Each previews the right verse (John 3:16, 1 Kings 3:9, Acts 2:38) in the active translation. | Unverified |
 | 10bj.2 | A Yorùbá speaker types the book names they actually use for ten common books. | Each finds the right book; note any spelling that does not, for the alias list. | Unverified |
+
+### 10bl. Backup to a drive that disappears (QA-002, NFR-01)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bl.1 | Put something on a projector output. More → Library → Back up now to a USB stick (or a network share); pull the stick (or unplug the network) while it is writing. | Present, the outputs and Save keep working; the backup reports that it could not be written; the stick holds no file named like a finished backup (at most nothing, never a half file under the backup's name). | Unverified |
+| 10bl.2 | Restore from a backup on a network share that is then disconnected mid-read. | The app keeps working; restore reports it could not read the backup; the current services are unchanged. | Unverified |

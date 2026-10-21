@@ -245,10 +245,62 @@ pub fn content_import_songs(state: State<'_, ContentState>, export: SongExport, 
     with_db(&state, |db| db.import_songs(&export, mode))
 }
 
+/// A fresh file name in the system temp folder (local disk).
+fn local_temp(label: &str) -> PathBuf {
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    std::env::temp_dir().join(format!("rhema-{label}-{}-{nanos}.db", std::process::id()))
+}
+
+fn copy_error(what: &str, e: &std::io::Error) -> ContentCommandError {
+    ContentCommandError::Database { message: format!("{what}: {e}") }
+}
+
 /// Copy the live database to `path` (SQLite online backup; safe while open).
-#[tauri::command]
+///
+/// QA-002/NFR-01: the backup is written to local disk while the database
+/// lock is held (fast), and only then copied to the chosen place with the
+/// lock released, off the main thread. A USB stick or network drive that
+/// stalls or disappears can then neither freeze the windows (outputs
+/// included) nor hold up saving. The copy lands as `<path>.part` first and
+/// is renamed when complete, so a dropped drive never leaves a file that
+/// looks like a whole backup.
+#[tauri::command(async)]
 pub fn content_backup(state: State<'_, ContentState>, path: String) -> CmdResult<()> {
-    with_db(&state, |db| db.backup_to(Path::new(&path)))
+    let local = local_temp("backup");
+    with_db(&state, |db| db.backup_to(&local))?;
+    let result = copy_into_place(&local, &path).map_err(|e| copy_error("Could not write the backup there", &e));
+    let _ = std::fs::remove_file(&local);
+    result
+}
+
+/// Copy `from` to `<to>.part`, then rename it to `to`; on failure no `.part` is left behind.
+fn copy_into_place(from: &Path, to: &str) -> std::io::Result<()> {
+    let part = PathBuf::from(format!("{to}.part"));
+    std::fs::copy(from, &part).and_then(|_| std::fs::rename(&part, to)).inspect_err(|_| {
+        let _ = std::fs::remove_file(&part);
+    })
+}
+
+#[cfg(test)]
+mod backup_copy_tests {
+    use super::copy_into_place;
+
+    #[test]
+    fn whole_file_or_nothing() {
+        let dir = std::env::temp_dir().join(format!("rhema-copy-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let from = dir.join("local.db");
+        std::fs::write(&from, b"backup bytes").unwrap();
+        let to = dir.join("usb.db");
+        copy_into_place(&from, to.to_str().unwrap()).unwrap();
+        assert_eq!(std::fs::read(&to).unwrap(), b"backup bytes");
+        assert!(!dir.join("usb.db.part").exists());
+        // A drive that is gone: an error, and nothing half-written left behind.
+        let gone = dir.join("missing-drive").join("usb.db");
+        assert!(copy_into_place(&from, gone.to_str().unwrap()).is_err());
+        assert!(!dir.join("missing-drive").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -260,8 +312,23 @@ pub struct RestoreReport {
 
 /// Replace the live database with a verified backup. The current file is
 /// snapshotted first; on any failure the previous database is reopened.
-#[tauri::command]
+///
+/// The backup is first copied to local disk without the lock (it may be on a
+/// slow or failing drive), off the main thread; the restore itself then
+/// reads only the local copy.
+#[tauri::command(async)]
 pub fn content_restore(state: State<'_, ContentState>, path: String) -> CmdResult<RestoreReport> {
+    let local = local_temp("restore");
+    std::fs::copy(&path, &local).map_err(|e| {
+        let _ = std::fs::remove_file(&local);
+        copy_error("Could not read the backup", &e)
+    })?;
+    let report = restore_local(&state, &local);
+    let _ = std::fs::remove_file(&local);
+    report
+}
+
+fn restore_local(state: &State<'_, ContentState>, path: &Path) -> CmdResult<RestoreReport> {
     let mut guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
     let current: PathBuf = guard
         .as_ref()
@@ -269,7 +336,7 @@ pub fn content_restore(state: State<'_, ContentState>, path: String) -> CmdResul
         .ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".to_string() })?;
     // Close the only handle so the file can be replaced.
     *guard = None;
-    match rhema_content::restore_from(&current, Path::new(&path)) {
+    match rhema_content::restore_from(&current, path) {
         Ok((db, snapshot)) => {
             let migrations = db.applied_migrations().unwrap_or_default();
             *guard = Some(db);
