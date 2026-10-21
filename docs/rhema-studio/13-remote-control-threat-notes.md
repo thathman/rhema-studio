@@ -39,8 +39,8 @@ Settings → Diagnostics → Save logs runs every line through a redaction pass 
 
 ## Rate limiting (NFR-06)
 
-- Every HTTP request to `/api/v1/command` and `/api/v1/pair`, and every OSC packet, is counted per sender address (`crates/api/src/rate.rs`): a burst of 20, then 10 a second sustained. Beyond that HTTP answers 429 and OSC drops the packet; both log a warning. Buttons, Stream Deck pages and macros stay far below it; a stuck controller or a flood cannot hammer the live output, and pairing codes cannot be guessed quickly.
-- At most 256 senders are remembered (least recently seen dropped first), so spoofed UDP source addresses cannot grow memory. A spoofer can still spend another sender's allowance; that is the same LAN trust as the rest of this surface.
+- Every HTTP request to `/api/v1/command` and `/api/v1/pair`, and every OSC command that passed the key check, is counted per sender address (`crates/api/src/rate.rs`): a burst of 20, then 10 a second sustained. Beyond that HTTP answers 429 and OSC drops the packet; both log a warning. Buttons, Stream Deck pages and macros stay far below it; a stuck controller or a flood cannot hammer the live output, and pairing codes cannot be guessed quickly.
+- At most 256 senders are remembered (least recently seen dropped first), so spoofed UDP source addresses cannot grow memory. OSC counts a message only after its key is accepted, so packets spoofed from a Stream Deck's address without the key cannot use up its allowance. OSC fader values (confidence, opacity) are not counted: a fader sends dozens a second and the last value must land.
 
 ## Not done
 
