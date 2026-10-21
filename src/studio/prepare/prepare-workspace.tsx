@@ -14,6 +14,7 @@ import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { SongLibrary } from "@/studio/prepare/song-library"
 import { SlideComposer } from "@/studio/prepare/slide-composer"
 import { MediaLibrary } from "@/studio/prepare/media-library"
+import { ReusePanel } from "@/studio/prepare/reuse-panel"
 
 /**
  * Service builder: order Bible passages, songs and custom slides into the
@@ -65,6 +66,7 @@ export function PrepareWorkspace() {
                   <TabsTrigger value="songs">Songs</TabsTrigger>
                   <TabsTrigger value="slides">Slides</TabsTrigger>
                   <TabsTrigger value="media">Pictures</TabsTrigger>
+                  <TabsTrigger value="reuse">Reuse</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden p-3">
@@ -78,6 +80,9 @@ export function PrepareWorkspace() {
               </TabsContent>
               <TabsContent value="media" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
                 <MediaLibrary />
+              </TabsContent>
+              <TabsContent value="reuse" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+                <ReusePanel />
               </TabsContent>
             </Tabs>
           </section>
