@@ -21,6 +21,18 @@ export function timingSummary(items: QueueItem[], liveIndex: number | null, elap
   return { totalMs, plannedSoFarMs, behindMs: elapsedMs - plannedSoFarMs }
 }
 
+/**
+ * When the service was planned to end and when it now looks like ending
+ * (FR-07 "delayed-service projections"), as wall-clock ms. The plan starts
+ * when the timer started; running late moves the end by the same amount.
+ * Null when nothing is planned or nothing is live yet.
+ */
+export function projectedEnd(summary: TimingSummary, elapsedMs: number, nowWallMs: number): { plannedEnd: number; expectedEnd: number } | null {
+  if (summary.behindMs === null || summary.totalMs === 0) return null
+  const plannedEnd = nowWallMs - elapsedMs + summary.totalMs
+  return { plannedEnd, expectedEnd: plannedEnd + summary.behindMs }
+}
+
 /** "1 h 10 min", "45 min", "" for zero. */
 export function formatMinutes(ms: number): string {
   const total = Math.round(ms / 60_000)

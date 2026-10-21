@@ -38,6 +38,15 @@ export function reset(t: TimerState): TimerState {
   return { ...t, startedAt: null, accumulatedMs: 0 }
 }
 
+/**
+ * Correct the elapsed time by `deltaMs` (the timer was started late, or
+ * left running too long). Never below zero.
+ */
+export function adjust(t: TimerState, deltaMs: number, now: number): TimerState {
+  const running = t.startedAt === null ? 0 : Math.max(0, now - t.startedAt)
+  return { ...t, accumulatedMs: Math.max(-running, t.accumulatedMs + Math.round(deltaMs)) }
+}
+
 export function setDuration(t: TimerState, durationMs: number): TimerState {
   return { ...t, durationMs: Math.max(0, Math.round(durationMs)) }
 }

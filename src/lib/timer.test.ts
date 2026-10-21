@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { elapsedMs, formatMs, idleTimer, isRunning, pause, remainingMs, reset, setDuration, start, timerTone } from "./timer"
+import { adjust, elapsedMs, formatMs, idleTimer, isRunning, pause, remainingMs, reset, setDuration, start, timerTone } from "./timer"
 
 describe("monotonic timer", () => {
   it("counts only the running stretches and ignores the wall clock entirely", () => {
@@ -36,5 +36,14 @@ describe("monotonic timer", () => {
     expect(timerTone(t, 200_000)).toBe("warn")
     expect(timerTone(t, 301_000)).toBe("over")
     expect(timerTone(start(idleTimer(), 0), 9e9)).toBe("ok")
+  })
+
+  it("corrects elapsed time either way, never below zero", () => {
+    let t = start(idleTimer(), 1000)
+    t = adjust(t, 60_000, 31_000)
+    expect(elapsedMs(t, 31_000)).toBe(90_000)
+    t = adjust(t, -5 * 60_000, 31_000)
+    expect(elapsedMs(t, 31_000)).toBe(0)
+    expect(elapsedMs(t, 41_000)).toBe(10_000)
   })
 })
