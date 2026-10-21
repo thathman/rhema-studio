@@ -12,9 +12,9 @@ export function approvalState(p: Pick<Program, "revision" | "approved_revision">
   return p.approved_revision === p.revision ? "approved" : "changed"
 }
 
-export function approvalLabel(p: Pick<Program, "revision" | "approved_revision" | "approved_at"> | null): string {
+export function approvalLabel(p: Pick<Program, "revision" | "approved_revision" | "approved_at" | "approved_by"> | null): string {
   switch (approvalState(p)) {
-    case "approved": return `Approved${p?.approved_at ? ` ${new Date(p.approved_at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : ""}`
+    case "approved": return `Approved${p?.approved_by ? ` by ${p.approved_by}` : ""}${p?.approved_at ? ` ${new Date(p.approved_at).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : ""}`
     case "changed": return `Changed since approval (v${p?.approved_revision} approved, now v${p?.revision})`
     default: return "Not approved yet"
   }

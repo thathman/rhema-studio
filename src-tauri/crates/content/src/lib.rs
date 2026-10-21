@@ -109,6 +109,9 @@ pub struct Program {
     /// A starting point for new services rather than a service to hold.
     #[serde(default)]
     pub is_template: bool,
+    /// The operator name set on this computer when it was approved, if any.
+    #[serde(default)]
+    pub approved_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -679,7 +682,7 @@ pub(crate) fn has_approval_column(conn: &Connection) -> bool {
         .unwrap_or(false)
 }
 
-fn has_archive_column(conn: &Connection) -> bool {
+pub(crate) fn has_archive_column(conn: &Connection) -> bool {
     conn.prepare("SELECT 1 FROM pragma_table_info('programs') WHERE name = 'archived_at'")
         .and_then(|mut st| st.exists([]))
         .unwrap_or(false)
@@ -688,7 +691,7 @@ fn has_archive_column(conn: &Connection) -> bool {
 /// Columns 7.. of a program row; an older schema (a backup being checked) reads as unset.
 fn approval_cols(conn: &Connection) -> String {
     let approval = if has_approval_column(conn) { ", p.approved_revision, p.approved_at" } else { ", NULL, NULL" };
-    let archive = if has_archive_column(conn) { ", p.archived_at, p.is_template" } else { ", NULL, 0" };
+    let archive = if has_archive_column(conn) { ", p.archived_at, p.is_template, p.approved_by" } else { ", NULL, 0, NULL" };
     format!("{approval}{archive}")
 }
 
@@ -705,6 +708,7 @@ fn row_to_program(r: &rusqlite::Row<'_>) -> rusqlite::Result<Program> {
         approved_at: r.get(8)?,
         archived_at: r.get(9)?,
         is_template: r.get::<_, i64>(10)? != 0,
+        approved_by: r.get(11)?,
     })
 }
 

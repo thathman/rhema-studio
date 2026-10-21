@@ -15,6 +15,8 @@ export interface Program {
   archived_at?: string | null
   /** A starting point for new services (9 am, communion, youth), not a service to hold. */
   is_template?: boolean
+  /** Operator name on the approving computer (CL-002), if one was set. */
+  approved_by?: string | null
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */

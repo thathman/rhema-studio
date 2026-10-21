@@ -542,4 +542,5 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10ax.1 | Open a service with a few items; pencil → tick Template. New service → Start from → that template; title "Sunday 1 Nov", date; Create. | The new service opens with the same items; the template is unchanged (open it again: same items, still marked template); Home's list and "today's service" never offer the template. | Unverified |
 | 10ax.2 | Pencil → Archive this service. | It disappears from the picker and Home; "Show archived (1)" brings it back into the picker; its history and logs are intact; pencil → Bring back restores it. | Unverified |
+| 10ax.4 | More → Your name = "Tolu"; Prepare → Approve. | The Approve button's tooltip and Home read "Approved by Tolu …". | Unverified |
 | 10ax.3 | Start an older build (before 0010) on this database. | It refuses with "used by a newer Rhema Studio" (downgrade guard) and leaves the file alone. | Unverified |
