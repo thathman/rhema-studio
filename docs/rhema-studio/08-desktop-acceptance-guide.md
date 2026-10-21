@@ -552,3 +552,10 @@ report), but launching it cannot.
 | 10ay.1 | Present → Cues → New cue…: name "Baptism", steps Rehearsal off, Quick screen: Black, Start the timer; Save cue. Run it. | Rehearsal goes off, the screens go black (Back returns), the timer runs; the cue shows "remote: /rhema/macro baptism". | Unverified |
 | 10ay.2 | Restart Rhema; send `/rhema/macro baptism` from a Stream Deck/OSC tool (with the key if one is set). | The cue is still there and runs from the controller. | Unverified |
 | 10ay.3 | Delete the cue (bin → Delete). | It is gone; the built-in cues cannot be deleted. | Unverified |
+
+### 10az. Responsive reading (FR-01, SV-005)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10az.1 | Prepare → Slides → Responsive reading; paste Psalm 136:1–3 with L: and P: marks; Add. | One slide per exchange, each reading "Leader: …" then "All: …"; Next steps through them in order. | Unverified |
+| 10az.2 | Paste the same text without marks. | The composer says no parts are marked and how to mark them. | Unverified |
