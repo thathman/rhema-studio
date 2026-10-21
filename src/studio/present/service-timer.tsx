@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { PauseIcon, PlayIcon, RotateCcwIcon, TimerIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +42,13 @@ export function ServiceTimer() {
   // The item in hand may have to finish by a clock time ("sermon ends by 12:15").
   const endBy = activeIndex !== null ? items[activeIndex]?.end_by ?? null : null
   const endByLeft = endByLeftMs(endBy, WALL_AT_MONO_ZERO + now)
+  // The timer store only ticks while the service timer runs; an end-by countdown must move regardless.
+  const [, setClock] = useState(0)
+  useEffect(() => {
+    if (!endBy) return
+    const id = setInterval(() => setClock((c) => c + 1), 5000)
+    return () => clearInterval(id)
+  }, [endBy])
   return (
     <Popover>
       <PopoverTrigger asChild>

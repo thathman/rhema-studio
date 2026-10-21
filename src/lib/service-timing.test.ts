@@ -51,6 +51,8 @@ describe("service timing", () => {
     expect(endByLeftMs("12:15", now)).toBe(9.5 * 60_000)
     expect(endByLeftMs("12:00", now)).toBe(-5.5 * 60_000)
     expect(endByLeftMs("25:00", now)).toBeNull()
+    expect(endByLeftMs("00:10", new Date(2026, 9, 25, 23, 55).getTime())).toBe(15 * 60_000)
+    expect(endByLeftMs("23:55", new Date(2026, 9, 26, 0, 5).getTime())).toBe(-10 * 60_000)
     expect(endByLeftMs(null, now)).toBeNull()
   })
 })
