@@ -1,3 +1,5 @@
+import { transcriptSection } from "@/lib/journal-transcript"
+import { useTranscriptStore } from "@/stores/transcript-store"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -278,6 +280,11 @@ function JournalBlock() {
   const [busy, setBusy] = useState(false)
   const [archived, setArchived] = useState(0)
   const operator = useSettingsStore((s) => s.operatorName.trim())
+  const segments = useTranscriptStore((s) => s.segments)
+  const finalCount = segments.filter((s) => s.is_final && s.text.trim()).length
+  // AR-004: the transcript goes into a log only when ticked for that log; never by default.
+  const [withTranscript, setWithTranscript] = useState(false)
+  const provider = useSettingsStore((s) => (s.sttProvider === "deepgram" ? "Deepgram (cloud)" : "Whisper (on this computer)"))
   const keepLog = async () => {
     setBusy(true)
     try {
@@ -291,7 +298,9 @@ function JournalBlock() {
       setBusy(false)
     }
   }
-  const text = () => formatJournal(`${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`, entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)])))
+  const text = () =>
+    formatJournal(`${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`, entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)]))) +
+    (withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
   const saveLog = async () => {
     setBusy(true)
     try {
@@ -310,6 +319,17 @@ function JournalBlock() {
     <div className="rounded-lg border border-border p-3">
       <p className="mb-1 font-medium">Service log</p>
       <p className="mb-2 text-xs text-muted-foreground">{entries.length ? `${entries.length} event${entries.length === 1 ? "" : "s"} since the app started: what went live and for how long, against the planned minutes.` : "Nothing has gone live yet in this run of the app."}</p>
+      {finalCount > 0 && (
+        <label className="mb-2 flex items-start gap-2 text-xs">
+          <input type="checkbox" className="mt-0.5" checked={withTranscript} onChange={(e) => setWithTranscript(e.target.checked)} />
+          <span>
+            Include what was said ({finalCount} recognised passage{finalCount === 1 ? "" : "s"})
+            <span className="block text-[0.625rem] text-muted-foreground">
+              Machine-recognised speech, not checked. It then stays in the kept log (searchable under Earlier logs) until the log is deleted. Keep it only if the people speaking know it is recorded.
+            </span>
+          </span>
+        </label>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void keepLog()}><ArchiveIcon /> Keep this log</Button>
         <Button size="sm" variant="outline" disabled={busy || entries.length === 0} onClick={() => void saveLog()}><DownloadIcon /> Save the log…</Button>

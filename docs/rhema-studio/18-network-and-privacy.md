@@ -17,6 +17,10 @@ Rhema Studio presents with no internet connection. There is no telemetry, no ana
 
 Keys the settings file can hold for later providers (`openaiApiKey`, `claudeApiKey`) are not used by any code on `main` (the OpenAI speech provider is parked in PR #4).
 
+## Transcripts on this computer
+
+Recognised speech is kept in memory while the app runs. It is written to a kept service log only when "Include what was said" is ticked for that log (More → Library → Service log; off every time), and then stays there, searchable, until the log is deleted. Short fragments can also appear in the app's own log files (see the consent text).
+
 ## Not yet done
 
 - An offline network capture on a real desktop (PRD release evidence for NFR-09): run the app through a service with a packet capture (Wireshark or `tcpdump`) and confirm that only the rows above appear. Acceptance row 10an.
