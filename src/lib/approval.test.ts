@@ -20,7 +20,7 @@ describe("approval state", () => {
     expect(approvalBlockers(items, [], [{ id: "m1", present: true }, { id: "bg", present: true }])).toEqual([])
     expect(approvalBlockers(items, ["s2"], [{ id: "m1", present: false }])).toEqual([
       "A song is not in the library: How Great.",
-      "2 pictures are missing from the media folder: Welcome, Sky.",
+      "2 media files are missing from the media folder: Welcome, Sky.",
     ])
   })
 })

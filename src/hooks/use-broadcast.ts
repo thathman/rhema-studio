@@ -291,33 +291,41 @@ export function toImageRenderData(item: ImageQueueItem, url: string): VerseRende
 }
 
 /**
+ * A sound item: its sound starts on this computer and every screen keeps
+ * what it shows. The rundown position moves (the caller set it), so Next
+ * continues after it, and Preview follows so Show live means this item.
+ */
+function playSoundItem(item: ImageQueueItem, asset: { id: string; present: boolean }): PresentOutcome {
+  useBibleStore.getState().selectSlide({ item, index: 0 })
+  if (!asset.present) {
+    useBroadcastStore.getState().setPresentWarning(`${item.image.name} not played: the sound file is missing from the media folder.`)
+    return "empty"
+  }
+  if (useBroadcastStore.getState().rehearsal) {
+    useBroadcastStore.getState().setPresentWarning(`Rehearsal: ${item.image.name} was not played. Use the ♪ button to play it on purpose.`)
+    return "presented"
+  }
+  const sound = useSoundStore.getState()
+  // Already playing (Show live again from Preview): leave it running.
+  if (sound.assetId !== asset.id || !sound.playing) void sound.play({ id: asset.id, name: item.image.name })
+  return "presented"
+}
+
+/**
  * Present a picture item: read it from the media folder (cached), decode
  * it, then put it on air in one update. A missing file is reported and the
  * output left alone; a newer present or Clear supersedes a slow read.
  */
 export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
+  const media = useMediaStore.getState()
+  const cached = media.assets.find((a) => a.id === item.image.media_id)
+  // A sound item changes no screen, so it must not supersede a screen still loading.
+  if (cached?.kind === "audio") return playSoundItem(item, cached)
   presentSeq += 1
   const ticket = presentSeq
+  const asset = cached ?? (await media.list()).find((a) => a.id === item.image.media_id)
+  if (asset?.kind === "audio") return ticket === presentSeq ? playSoundItem(item, asset) : "superseded"
   // A video asset streams to the outputs; nothing is decoded here.
-  const media = useMediaStore.getState()
-  const asset = media.assets.find((a) => a.id === item.image.media_id) ?? (await media.list()).find((a) => a.id === item.image.media_id)
-  // A sound item starts its sound on this computer; every screen keeps what it shows.
-  // The rundown position still moves (the caller set it), so Next continues after it.
-  if (asset?.kind === "audio") {
-    if (ticket !== presentSeq) return "superseded"
-    if (!asset.present) {
-      useBroadcastStore.getState().setPresentWarning(`${item.image.name} not played: the sound file is missing from the media folder.`)
-      return "empty"
-    }
-    if (useBroadcastStore.getState().rehearsal) {
-      useBroadcastStore.getState().setPresentWarning(`Rehearsal: ${item.image.name} was not played. Use the ♪ button to play it on purpose.`)
-      return "presented"
-    }
-    const sound = useSoundStore.getState()
-    // Stepping onto the same sound again (Next at the end of the service) does not restart it.
-    if (sound.assetId !== asset.id || !sound.playing) void sound.play({ id: asset.id, name: item.image.name })
-    return "presented"
-  }
   if (asset?.kind === "video") {
     const videoUrl = asset.present ? await media.fileUrl(asset.id).catch(() => null) : null
     if (ticket !== presentSeq) return "superseded"

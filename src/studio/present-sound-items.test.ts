@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ImageQueueItem, SlideQueueItem } from "@/types"
+import type { ImageQueueItem, SlideQueueItem, Verse, VerseQueueItem } from "@/types"
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(null), convertFileSrc: (p: string) => `asset://${p}` }))
+const mockInvoke = vi.fn()
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a: unknown[]) => mockInvoke(...a), convertFileSrc: (p: string) => `asset://${p}` }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn().mockResolvedValue(undefined) }))
 
 import { presentActions } from "./present-actions"
@@ -17,6 +18,8 @@ const asset = (id: string, present = true) => ({ id, kind: "audio", name: id, pr
 
 const played: string[] = []
 beforeEach(() => {
+  mockInvoke.mockReset()
+  mockInvoke.mockResolvedValue(null)
   played.length = 0
   useMediaStore.setState({ assets: [asset("walkin"), asset("gone", false)] as never, loaded: true })
   useSoundStore.setState({ assetId: null, playing: false, play: async ({ id }: { id: string }) => { played.push(id); useSoundStore.setState({ assetId: id, playing: true }) } } as never)
@@ -62,5 +65,27 @@ describe("sound items in the service (MD-002)", () => {
     await flush()
     expect(played).toEqual(["walkin"])
     expect(useBroadcastStore.getState().presentWarning).toContain("Rehearsal")
+  })
+
+  it("Previous steps over a sound item, and a sound item does not cancel a verse still loading", async () => {
+    useQueueStore.getState().setActive(2)
+    presentActions.prev()
+    await flush()
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+    expect(played).toEqual([])
+
+    let resolve!: (v: Verse) => void
+    mockInvoke.mockImplementation((cmd: string) => (cmd === "get_verse" ? new Promise<Verse>((r) => { resolve = r }) : Promise.resolve(null)))
+    const v: Verse = { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "For God so loved" }
+    const verseItem: VerseQueueItem = { id: "v1", verse: v, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0 }
+    useQueueStore.setState({ items: [verseItem, sound("a1", "walkin", "Walk-in")], activeIndex: null })
+    presentActions.next()
+    presentActions.next()
+    await flush()
+    expect(played).toEqual(["walkin"])
+    resolve(v)
+    await flush()
+    await flush()
+    expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:16")
   })
 })

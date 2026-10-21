@@ -14,6 +14,7 @@ import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
 import { isImageItem, isSlideItem, isSongItem, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useSoundStore } from "@/stores/sound-store"
 
 /**
  * The service rundown, built on the existing queue store.
@@ -188,20 +189,24 @@ function SongBadges({ item }: { item: SongQueueItem }) {
   )
 }
 
-/** "missing" after the picture's file when the library says it is gone. */
+/** "missing" after the item's file (picture, video or sound) when the library says it is gone. */
 function MissingMediaMark({ mediaId }: { mediaId: string }) {
   const asset = useMediaStore((s) => s.assets.find((a) => a.id === mediaId))
   const loaded = useMediaStore((s) => s.assets.length > 0)
   if (!loaded || asset?.present) return null
-  return <span className="shrink-0 rounded bg-destructive/15 px-1 text-[0.625rem] font-semibold text-destructive uppercase" title="The picture file is missing from the media folder">missing</span>
+  return <span className="shrink-0 rounded bg-destructive/15 px-1 text-[0.625rem] font-semibold text-destructive uppercase" title="The file is missing from the media folder">missing</span>
 }
 
 /** Picture, video or sound, by the library file the item points at. */
 function MediaKindIcon({ mediaId }: { mediaId: string }) {
   const kind = useMediaStore((s) => s.assets.find((a) => a.id === mediaId)?.kind)
-  return kind === "audio"
-    ? <Volume2Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Sound" />
-    : <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={kind === "video" ? "Video" : "Picture"} />
+  const playing = useSoundStore((s) => s.playing && s.assetId === mediaId)
+  if (kind === "audio") {
+    return playing
+      ? <span className="flex shrink-0 items-center gap-1 text-[0.625rem] font-semibold text-primary uppercase"><Volume2Icon className="size-3.5" aria-hidden /> playing</span>
+      : <Volume2Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Sound" />
+  }
+  return <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={kind === "video" ? "Video" : "Picture"} />
 }
 
 /** Prepare-only: how the picture fills the screen. */

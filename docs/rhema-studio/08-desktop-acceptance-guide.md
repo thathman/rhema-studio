@@ -502,6 +502,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10as.1 | Service: Welcome slide, a sound (Prepare → Media → Sounds → Add), Announcements. Present the Welcome slide, then Next. | The sound starts; projector and NDI still show Welcome; the rundown marks the sound item; Preview of the sound item reads "♪ name". | Unverified |
-| 10as.2 | Next again, then Previous twice and Next. | Announcements goes up while the sound keeps playing; stepping back onto the sound item does not restart it. | Unverified |
+| 10as.1 | Service: Welcome slide, a sound (Prepare → Media → Sounds → Add), Announcements. Present the Welcome slide, then Next. | The sound starts; projector and NDI still show Welcome (still marked live in the rundown); the sound item shows "playing"; Preview reads "♪ name". | Unverified |
+| 10as.2 | Next (Announcements), Fade out, then Previous. | Announcements goes up while the sound keeps playing; after the fade, Previous goes straight back to Welcome without starting the sound again. | Unverified |
+| 10as.4 | Make the sound the last item and step onto it; let it finish; press Next again. | Nothing restarts it. | Unverified |
 | 10as.3 | Rehearsal on; step onto the sound item. | No sound; Present says it was not played in rehearsal. | Unverified |
