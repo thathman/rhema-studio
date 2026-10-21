@@ -26,6 +26,19 @@ interface QueueState {
 
 let flashTimer: ReturnType<typeof setTimeout> | null = null
 
+/**
+ * New items with the active position kept on the same item (RG-03 "Next/
+ * Previous predictable"): adding at the top, removing or reordering must not
+ * leave Next pointing somewhere else. If the active item is gone, there is
+ * no active position and stepping falls back to what is live.
+ */
+function withActiveKept(state: { items: QueueItem[]; activeIndex: number | null }, items: QueueItem[]) {
+  if (state.activeIndex === null) return { items }
+  const id = state.items[state.activeIndex]?.id
+  const activeIndex = id === undefined ? -1 : items.findIndex((i) => i.id === id)
+  return { items, activeIndex: activeIndex === -1 ? null : activeIndex }
+}
+
 export const useQueueStore = create<QueueState>((set, get) => ({
   items: [],
   activeIndex: null,
@@ -34,7 +47,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   addItem: (item) =>
     set((state) => {
       // Songs may repeat in a service (opening and closing hymn); verses dedupe.
-      if (!isVerseItem(item)) return { items: [item, ...state.items] }
+      if (!isVerseItem(item)) return withActiveKept(state, [item, ...state.items])
       const idx = state.items.findIndex(
         (i) =>
           isVerseItem(i) &&
@@ -56,12 +69,10 @@ export const useQueueStore = create<QueueState>((set, get) => ({
         }
         return state
       }
-      return { items: [item, ...state.items] }
+      return withActiveKept(state, [item, ...state.items])
     }),
   removeItem: (id) =>
-    set((state) => ({
-      items: state.items.filter((i) => i.id !== id),
-    })),
+    set((state) => withActiveKept(state, state.items.filter((i) => i.id !== id))),
   updateItem: (id, patch) =>
     set((state) => ({ items: state.items.map((i) => (i.id === id ? patch(i) : i)) })),
   reorderItems: (fromIndex, toIndex) =>
@@ -69,7 +80,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       const items = [...state.items]
       const [moved] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, moved)
-      return { items }
+      return withActiveKept(state, items)
     }),
   setActive: (activeIndex) => set({ activeIndex }),
   clearQueue: () => set({ items: [], activeIndex: null }),
