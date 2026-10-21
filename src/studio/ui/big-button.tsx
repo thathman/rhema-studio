@@ -6,7 +6,8 @@ type Tone = "neutral" | "primary" | "live" | "danger"
 const TONE: Record<Tone, string> = {
   neutral: "bg-card text-foreground hover:bg-muted border-border",
   primary: "bg-primary text-primary-foreground hover:bg-primary/90 border-transparent",
-  live: "bg-live-pulse text-white hover:bg-live-pulse/90 border-transparent",
+  // A deeper red than the pulse so white text meets WCAG AA (5.2:1; the pulse red is 3.8:1).
+  live: "bg-[oklch(0.56_0.22_25)] text-white hover:bg-[oklch(0.52_0.21_25)] border-transparent",
   danger: "bg-card text-destructive hover:bg-destructive/10 border-border",
 }
 

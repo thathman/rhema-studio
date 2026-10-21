@@ -191,7 +191,7 @@ function AudioSection() {
           onValueChange={(v) => setAudioDeviceId(v === "__default__" ? null : v)}
           disabled={loading}
         >
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger aria-label="Microphone" className="h-8 text-xs">
             <SelectValue
               placeholder={loading ? "Loading devices..." : "System default"}
             />
@@ -226,6 +226,7 @@ function AudioSection() {
           </span>
         </div>
         <Slider
+          aria-label="Microphone gain"
           min={0}
           max={100}
           step={1}

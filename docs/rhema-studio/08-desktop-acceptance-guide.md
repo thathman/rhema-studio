@@ -620,3 +620,11 @@ report), but launching it cannot.
 | 10bh.4 | Gate on, unapproved service: Start the service (Welcome), then Next; press the clicker three times while the question shows, then Present anyway. | The question appears at the first item, the rundown does not move while it shows, and the first item (not the third) goes live. Later Clear then Next is never held. | Unverified |
 | 10bh.5 | Gate on, unapproved service in rehearsal with a song slide up: turn rehearsal off. | The question appears and the congregation screens stay as they were until Present anyway. | Unverified |
 | 10bh.3 | Approve the service, restart, Show live. Turn rehearsal on with another unapproved service; Show live; use Black. | No question for the approved service, in rehearsal, or for quick screens. | Unverified |
+
+### 10bi. Screen reader and keyboard names (QA-003, RG-09)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bi.1 | With Narrator (Windows) on, Tab through Present (Production view): the Bible panel's translation picker, chapter arrows and a verse's add button. | Each is announced by purpose ("Bible translation", "Next chapter", "Add John 3:16 to the service"), not just "button". | Unverified |
+| 10bi.2 | More → Themes: Tab to a theme card, press Enter; Tab to its options. | The card is announced as "Select theme …", Enter selects it, and its options button becomes visible when focused. | Unverified |
+| 10bi.3 | Windows display scaling 150%: Present at 1366x768. | Show live, Next, Clear, Back and the quick screens stay visible and readable. | Unverified |

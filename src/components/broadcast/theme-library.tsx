@@ -53,8 +53,6 @@ function ThemeCard({
 }) {
   return (
     <div
-      role="button"
-      tabIndex={0}
       onClick={() => {
         // Prevent rename exit when card is selected during rename
         if (isRenaming) return
@@ -65,8 +63,13 @@ function ThemeCard({
         isSelected && "ring-2 ring-primary"
       )}
     >
-      {/* Thumbnail */}
-      <div className="relative aspect-video w-full overflow-hidden rounded-lg">
+      {/* Thumbnail: the card's keyboard control (Enter/Space click bubbles to the card's onClick) */}
+      <button
+        type="button"
+        aria-label={`Select theme ${theme.name}`}
+        aria-pressed={isSelected}
+        className="relative aspect-video w-full overflow-hidden rounded-lg text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+      >
         <CanvasVerse theme={theme} verse={THUMBNAIL_VERSE} className="w-full" />
 
         {/* Active badge */}
@@ -82,7 +85,7 @@ function ThemeCard({
             <HeartIcon className="size-3 text-primary" strokeWidth={2} />
           </div>
         )}
-      </div>
+      </button>
 
       {/* Info */}
       <div className="flex items-center gap-1.5 px-0.5">
@@ -139,7 +142,8 @@ function ThemeCard({
             <Button
               variant="ghost"
               size="icon-xs"
-              className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+              className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              aria-label={`${theme.name} options`}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontalIcon className="size-3" />
