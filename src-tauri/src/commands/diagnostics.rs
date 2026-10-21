@@ -148,6 +148,64 @@ fn header(
     )
 }
 
+/// Values from the settings file that must never leave the computer in a
+/// diagnostics file: API keys, the remote-control key, the OBS password.
+fn configured_secrets(settings_json: &str) -> Vec<String> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(settings_json) else { return vec![] };
+    let mut out: Vec<String> = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret"]
+        .iter()
+        .filter_map(|k| v.get(*k).and_then(|x| x.as_str()))
+        .map(str::to_string)
+        .collect();
+    if let Some(p) = v.get("obs").and_then(|o| o.get("password")).and_then(|x| x.as_str()) {
+        out.push(p.to_string());
+    }
+    // Short values would redact ordinary words; a real key or password worth hiding is longer.
+    out.retain(|s| s.trim().len() >= 6);
+    out
+}
+
+/// Replace configured secrets and common credential shapes with [redacted].
+/// Defence in depth: the app does not log these, but a diagnostics file is
+/// meant to be sent to someone else.
+fn redact(text: &str, secrets: &[String]) -> String {
+    let mut out = text.to_string();
+    for s in secrets {
+        out = out.replace(s.as_str(), "[redacted]");
+    }
+    // Header- and query-style credentials: keep the name, drop the value.
+    let mut result = String::with_capacity(out.len());
+    for line in out.split_inclusive('\n') {
+        result.push_str(&redact_line(line));
+    }
+    result
+}
+
+fn redact_line(line: &str) -> String {
+    const MARKERS: [&str; 6] = ["X-Rhema-Key:", "x-rhema-key:", "Authorization: Bearer ", "authorization: bearer ", "api_key=", "token="];
+    let mut out = line.to_string();
+    for m in MARKERS {
+        let mut from = 0;
+        while let Some(pos) = out[from..].find(m) {
+            let start = from + pos + m.len();
+            let rest = &out[start..];
+            let skip = rest.len() - rest.trim_start().len();
+            let value_end = rest[skip..].find(|c: char| c.is_whitespace() || c == '&' || c == '"' || c == ',').map_or(rest.len(), |e| e + skip);
+            // Always resume on a char boundary: after the replacement, or right after the marker.
+            from = if value_end > skip {
+                out.replace_range(start + skip..start + value_end, "[redacted]");
+                start + skip + "[redacted]".len()
+            } else {
+                start + skip
+            };
+            if from >= out.len() {
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// Collect the log for the requested window as one text blob.
 ///
 /// `since_minutes` of `None` means everything still on disk.
@@ -191,6 +249,16 @@ pub fn export_diagnostics(
         |mins| format!("last {mins} minutes"),
     );
 
+    // Sanitize before anything leaves the app (release gate RG-08).
+    let secrets = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|d| std::fs::read_to_string(d.join("settings.json")).ok())
+        .map(|s| configured_secrets(&s))
+        .unwrap_or_default();
+    let body = redact(&body, &secrets);
+
     let head = header(
         app.package_info().version.to_string().as_str(),
         &window,
@@ -217,6 +285,30 @@ mod tests {
 
     fn epoch(h: u32, m: u32) -> i64 {
         to_unix_seconds(2026, 8, 19, h, m, 0)
+    }
+
+    #[test]
+    fn configured_secrets_and_credential_shapes_are_redacted() {
+        let settings = r#"{"deepgramApiKey":"dg-123456789","remoteSecret":"s3cret-key","obs":{"enabled":true,"password":"obs-pass-99"},"openaiApiKey":"","gain":1}"#;
+        let secrets = configured_secrets(settings);
+        assert_eq!(secrets, vec!["dg-123456789", "s3cret-key", "obs-pass-99"]);
+        let log = "[2026-10-21][10:00:00.000][rhema][INFO] using dg-123456789 for speech\n\
+                   [2026-10-21][10:00:01.000][rhema][WARN] request X-Rhema-Key: s3cret-key refused\n\
+                   [2026-10-21][10:00:02.000][rhema][INFO] GET /x?token=abcdef&next=1 Authorization: Bearer zzz999\n\
+                   [2026-10-21][10:00:03.000][rhema][INFO] obs password obs-pass-99 rejected\n";
+        let out = redact(log, &secrets);
+        for s in ["dg-123456789", "s3cret-key", "abcdef", "zzz999", "obs-pass-99"] {
+            assert!(!out.contains(s), "{s} leaked: {out}");
+        }
+        assert!(out.contains("token=[redacted]&next=1"));
+        assert!(out.contains("X-Rhema-Key: [redacted] refused"));
+        assert_eq!(out.lines().count(), 4);
+        // Short values are not treated as secrets; a bad settings file yields none.
+        assert!(configured_secrets(r#"{"remoteSecret":"abc"}"#).is_empty());
+        assert!(configured_secrets("not json").is_empty());
+        // A marker with no value next to multi-byte text must not panic.
+        assert_eq!(redact_line("token=&é ẹ́ token=,ọ́"), "token=&é ẹ́ token=,ọ́");
+        assert_eq!(redact_line("token=Ọlọ́run"), "token=[redacted]");
     }
 
     #[test]
