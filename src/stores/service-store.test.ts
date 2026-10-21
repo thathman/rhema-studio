@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }))
 
-import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanName, unsavedScratch } from "./service-store"
+import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanName, unsavedScratch, slideLabel } from "./service-store"
 import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
@@ -554,3 +554,13 @@ describe("createFromRundown", () => {
   })
 })
 
+describe("slideLabel", () => {
+  it("keeps a page mark through saving, labelled by the page's own text", () => {
+    expect(slideLabel({ title: "", body: "Notice line 7\nNotice line 8" }, " (3/4)")).toBe("Notice line 7 (3/4)")
+    expect(slideLabel({ title: "Notices", body: "x" }, "Notices (2/4)")).toBe("Notices (2/4)")
+    expect(slideLabel({ title: "Plan (1/2)", body: "" }, "Plan (1/2)")).toBe("Plan (1/2)")
+    expect(slideLabel({ title: "", body: "" })).toBe("Slide")
+    expect([...slideLabel({ title: "a".repeat(300), body: "" }, " (1/2)")].length).toBe(200)
+    expect(slideLabel({ title: "a".repeat(300), body: "" }, " (1/2)").endsWith(" (1/2)")).toBe(true)
+  })
+})

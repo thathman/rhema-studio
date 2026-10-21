@@ -8,6 +8,7 @@ import type { SlideQueueItem } from "@/types"
 import { announcementBody } from "@/lib/announcement"
 import { safeLink } from "@/lib/qr-bulletin"
 import { slidePages } from "@/lib/slide-pages"
+import { slideLabel } from "@/stores/service-store"
 import { hasReadingMarks, readingPages } from "@/lib/responsive-reading"
 
 const EXAMPLES = [
@@ -70,7 +71,7 @@ export function SlideComposer() {
     if (pages.length < 2) return
     pages.forEach((page, i) => {
       const d = draft()
-      appendToService({ ...d, id: crypto.randomUUID(), added_at: Date.now(), slide: { ...d.slide, body: page }, reference: `${d.reference} (${i + 1}/${pages.length})` })
+      appendToService({ ...d, id: crypto.randomUUID(), added_at: Date.now(), slide: { ...d.slide, body: page }, reference: slideLabel({ ...d.slide, body: page }, ` (${i + 1}/${pages.length})`) })
     })
     reset()
   }

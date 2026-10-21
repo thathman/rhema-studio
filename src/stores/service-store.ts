@@ -97,6 +97,17 @@ export interface ActiveTranslations {
  * were added with, so changing the active translation later never rewrites a
  * saved service.
  */
+/**
+ * A slide's label: its title or first line (the database keeps at most 200
+ * characters; the slide keeps all its words), plus its page mark ("(2/4)")
+ * when it is one page of a longer text, so the order survives saving.
+ */
+export function slideLabel(slide: { title: string; body: string }, reference = ""): string {
+  const page = reference.match(/ \(\d+\/\d+\)$/)?.[0] ?? ""
+  const name = slide.title.trim() || slide.body.split("\n")[0]?.trim() || "Slide"
+  return name.endsWith(page) ? [...name].slice(0, 200).join("") : [...name].slice(0, 200 - page.length).join("") + page
+}
+
 export function toItemInputs(
   items: QueueItem[],
   translationOf: (id: number) => string | null = () => null,
@@ -129,8 +140,7 @@ export function toItemInputs(
       ? {
           id: i.id,
           kind: "slide",
-          // The label is a short name (the database keeps at most 200 characters); the slide keeps all its words.
-          reference: [...(i.slide.title.trim() || i.slide.body.split("\n")[0]?.trim() || "Slide")].slice(0, 200).join(""),
+          reference: slideLabel(i.slide, i.reference),
           book_number: null,
           chapter: null,
           verse: null,
