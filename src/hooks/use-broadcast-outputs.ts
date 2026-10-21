@@ -89,13 +89,20 @@ export function useBroadcastOutputs(): void {
     })
 
     // An output could not draw the new screen; it keeps showing the last good frame.
+    const renderWarning = (name: string) => `${name} could not draw the new screen and is still showing the previous one. Clear, or choose another item or theme.`
+    const outputName = (id?: string) => useBroadcastStore.getState().outputs.find((o) => o.id === id)?.name ?? "An output"
     const unlistenRender = listen<{ outputId?: string }>("broadcast:render-error", (event) => {
-      const output = useBroadcastStore.getState().outputs.find((o) => o.id === event.payload?.outputId)
-      useBroadcastStore.getState().setPresentWarning(`${output?.name ?? "An output"} could not draw the new screen and is still showing the previous one. Clear, or choose another item or theme.`)
+      useBroadcastStore.getState().setPresentWarning(renderWarning(outputName(event.payload?.outputId)))
+    })
+    // Drawing works again (a picture finished loading): drop that output's warning, and only that one.
+    const unlistenRenderOk = listen<{ outputId?: string }>("broadcast:render-recovered", (event) => {
+      const store = useBroadcastStore.getState()
+      if (store.presentWarning === renderWarning(outputName(event.payload?.outputId))) store.setPresentWarning(null)
     })
 
     return () => {
       void unlistenRender.then((unlisten) => unlisten())
+      void unlistenRenderOk.then((unlisten) => unlisten())
       for (const id of timeouts) clearTimeout(id)
       void unlistenPromise.then((unlisten) => unlisten())
       void unlistenMedia.then((unlisten) => unlisten())
