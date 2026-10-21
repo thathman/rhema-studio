@@ -68,6 +68,13 @@ interface BroadcastState {
   stageMessage: string
   /** The lower third on air (outputs with lowerThirds on), or null. Session state; not saved. */
   lowerThird: LowerThird | null
+  /**
+   * What each output was last sent (multiview thumbnails show exactly this).
+   * Session state; written whenever an output is synced.
+   */
+  outputFrames: Record<string, OutputFrame>
+  /** Forget what an output was last sent (its window was closed or is being reopened), so the next sync sends everything again. */
+  resetOutputRuntime: (id: string) => void
   setLowerThird: (lt: LowerThird | null) => void
   /**
    * Rehearsal: everything works in the app (Preview, Live panel, rundown)
@@ -226,6 +233,7 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   if (signageSeq.get(output.id) !== ticket) return
   if (useBroadcastStore.getState().outputs.find((o) => o.id === output.id)?.role !== "signage") return
   signageEmitted.set(output.id, stamp)
+  recordFrame(output.id, { theme, verse, overlay: null })
   void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse }).catch(() => {})
   // Warm the next picture so the swap is instant (the data URL is cached by the media store).
   if (ids.length > 1) void useMediaStore.getState().dataUrl(ids[(index + 1) % ids.length]).catch(() => {})
@@ -257,17 +265,39 @@ function ensureSignageTicker(): void {
   }, 1000)
 }
 
+export interface OutputFrame {
+  theme: BroadcastTheme
+  verse: VerseRenderData | null
+  overlay: LowerThird | null
+  /** Stage outputs: the thumbnail says "Stage display" instead of a frame. */
+  stage?: boolean
+}
+
+/** Keep what an output was last sent, for the multiview. Skips the write when nothing changed. */
+/** After a theme draft ends (saved, discarded, closed, switched), outputs that were shown the draft get the saved theme again. */
+function resyncThemeOutputs(themeId: string | null): void {
+  if (!themeId) return
+  const s = useBroadcastStore.getState()
+  for (const o of s.outputs) if (o.themeId === themeId) s.syncBroadcastOutputFor(o.id)
+}
+
+function recordFrame(id: string, frame: OutputFrame): void {
+  const prev = useBroadcastStore.getState().outputFrames[id]
+  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.stage === frame.stage) return
+  useBroadcastStore.setState((s) => ({ outputFrames: { ...s.outputFrames, [id]: frame } }))
+}
+
 function emitDraftToBroadcast(state: BroadcastState): void {
   // Rehearsal freezes every real output, theme edits included.
   if (!state.draftTheme || state.rehearsal) return
   const verse = state.isLive ? state.liveVerse : null
   for (const output of state.outputs) {
     if (output.themeId !== state.editingThemeId || output.role === "stage" || output.role === "signage") continue
+    const frame = { theme: state.draftTheme, verse: forOutputLanguage(verse, output.language), overlay: output.lowerThirds ? state.lowerThird : null }
+    recordFrame(output.id, frame)
     void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", {
-      theme: state.draftTheme,
-      verse: forOutputLanguage(verse, output.language),
-      // The output window replaces its whole payload, so the band must ride along or it vanishes.
-      overlay: output.lowerThirds ? state.lowerThird : null,
+      ...frame,
+      // (overlay rides along: the output window replaces its whole payload, so without it the band vanishes)
     }).catch(() => {})
   }
 }
@@ -324,6 +354,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   heldLive: null,
   stageMessage: "",
   lowerThird: null,
+  outputFrames: {},
   rehearsal: false,
   presentWarning: null,
   autoLive: true,
@@ -417,6 +448,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (s.rehearsal) return
 
     if (output.role === "stage") {
+      recordFrame(outputId, { theme, verse: null, overlay: null, stage: true })
       const q = useQueueStore.getState()
       void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
         theme,
@@ -429,10 +461,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       }).catch(() => {})
       return
     }
+    const verse = s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null
+    const overlay = output.lowerThirds ? s.lowerThird : null
+    recordFrame(outputId, { theme, verse, overlay })
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
-      verse: s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null,
-      overlay: output.lowerThirds ? s.lowerThird : null,
+      verse,
+      overlay,
     }).catch(() => {})
   },
   syncBroadcastOutput: () => {
@@ -464,6 +499,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
     forgetSignage(id)
+    set((s) => {
+      const outputFrames = { ...s.outputFrames }
+      delete outputFrames[id]
+      return { outputFrames }
+    })
     set((s) => {
       const outputStatus = Object.fromEntries(
         Object.entries(s.outputStatus).filter(([statusId]) => statusId !== id)
@@ -578,26 +618,43 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   // Designer
   setDesignerOpen: (isDesignerOpen) => {
     if (!isDesignerOpen) {
+      const was = get().editingThemeId
       set({ isDesignerOpen, editingThemeId: null, draftTheme: null, selectedElement: null })
+      resyncThemeOutputs(was)
     } else {
       set({ isDesignerOpen })
     }
   },
+  resetOutputRuntime: (id) => {
+    forgetSignage(id)
+    set((s) => {
+      if (!s.outputFrames[id]) return s
+      const outputFrames = { ...s.outputFrames }
+      delete outputFrames[id]
+      return { outputFrames }
+    })
+  },
   startEditing: (themeId) => {
     const theme = get().themes.find((t) => t.id === themeId)
     if (!theme) return
+    const was = get().editingThemeId
     set({
       editingThemeId: themeId,
       draftTheme: { ...theme, updatedAt: Date.now() },
       selectedElement: null,
     })
+    // Switching to another theme ends the previous draft: its outputs get their saved theme back.
+    if (was && was !== themeId) resyncThemeOutputs(was)
   },
   stopEditing: () => {
+    const was = get().editingThemeId
     set({
       editingThemeId: null,
       draftTheme: null,
       selectedElement: null,
     })
+    // Outputs may have been showing the draft; put the saved theme back.
+    resyncThemeOutputs(was)
   },
   updateDraft: (updates) => {
     set((s) => ({
@@ -652,6 +709,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const { editingThemeId } = get()
     if (editingThemeId) {
       get().startEditing(editingThemeId)
+      resyncThemeOutputs(editingThemeId)
     }
   },
   setSelectedElement: (selectedElement) => set({ selectedElement }),

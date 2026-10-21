@@ -109,6 +109,8 @@ export async function reconcileOutputStatus(output: BroadcastOutput): Promise<vo
  */
 export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
   const store = useBroadcastStore.getState()
+  // A fresh window has nothing yet: forget what was sent before so the sync sends everything.
+  store.resetOutputRuntime(output.id)
   try {
     if (output.type === "display") {
       await invoke("open_broadcast_window", {
@@ -181,6 +183,7 @@ export async function disableOutput(output: BroadcastOutput): Promise<boolean> {
     syncNdiConfigToOutput(output, false)
     await invoke("close_broadcast_window", { outputId: output.id }).catch(() => {})
     store.setOutputStatus(output.id, { previewOpen: false, ndiActive: false })
+    store.resetOutputRuntime(output.id)
     return true
   } catch (error) {
     void logError(`[broadcast-ui] disable output '${output.id}' FAILED: ${String(error)}`)

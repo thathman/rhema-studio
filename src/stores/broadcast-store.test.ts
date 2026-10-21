@@ -431,4 +431,41 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().updateDraft({ name: "Draft 3" })
     expect(emitToMock).not.toHaveBeenCalled()
   })
+
+  it("records what each output was last sent, for the multiview", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stream", name: "Stream", type: "ndi", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults, lowerThirds: true, language: "first" })
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults })
+    useBroadcastStore.setState({ isLive: true, liveVerse: { ...sampleLiveVerse, translationLines: ["For God so loved", "Nítorí Ọlọ́run"] } })
+    useBroadcastStore.getState().setLowerThird({ line1: "Pastor Tolu", line2: "" })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    const frames = useBroadcastStore.getState().outputFrames
+    expect(frames.stream.verse?.translationLines).toBeUndefined() // first language only
+    expect(frames.stream.overlay).toEqual({ line1: "Pastor Tolu", line2: "" })
+    expect(frames.main.verse?.translationLines).toHaveLength(2)
+    expect(frames.main.overlay).toBeNull()
+    expect(frames.stage.stage).toBe(true)
+    useBroadcastStore.getState().removeOutput("stream")
+    expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
+  })
+
+  it("discarding or closing a theme draft puts the saved theme back on the outputs and their cards", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const theme = s.themes[0]
+    s.setOutputTheme("main", theme.id)
+    s.startEditing(theme.id)
+    useBroadcastStore.getState().updateDraft({ name: "Draft" })
+    expect(useBroadcastStore.getState().outputFrames.main.theme.name).toBe("Draft")
+    emitToMock.mockClear()
+    useBroadcastStore.getState().discardDraft()
+    expect(useBroadcastStore.getState().outputFrames.main.theme.name).toBe(theme.name)
+    expect(emitToMock.mock.calls.some((c) => c[0] === "broadcast-main")).toBe(true)
+    useBroadcastStore.getState().updateDraft({ name: "Draft again" })
+    useBroadcastStore.getState().setDesignerOpen(false)
+    expect(useBroadcastStore.getState().outputFrames.main.theme.name).toBe(theme.name)
+    useBroadcastStore.getState().resetOutputRuntime("main")
+    expect(useBroadcastStore.getState().outputFrames.main).toBeUndefined()
+  })
 })

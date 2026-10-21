@@ -406,3 +406,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10af.1 | Open this Sunday's service. Prepare → Reuse → find last Sunday → tick the welcome slide, a song and a verse → Add. | The three items are appended in last Sunday's order; previews work (verse text filled in); last Sunday's service is unchanged; a verse already in the rundown is reported, not duplicated. Save and reopen: the copies are independent items. | Unverified |
+
+### 10ae. Multiview (OP-004)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ae.1 | Projector (both languages), stream (first language only, lower thirds on), stage, signage loop. Go live with a bilingual verse and show a lower third; open Outputs (Present header chip). | Each card shows what that output shows: the projector both languages without the band, the stream English only with the band, the stage card "Stage display", the signage card its current picture. Cards of outputs that are off are dimmed and empty. | Unverified |
