@@ -20,6 +20,25 @@ export const SAMPLE_VERSE: VerseRenderData = {
   ],
 }
 
+const GENESIS_1_1_EN = "In the beginning God created the heaven and the earth."
+const GENESIS_1_1_YO = "Ní ìbẹ̀rẹ̀ ohun gbogbo Ọlọ́run dá àwọn ọ̀run àti ayé."
+
+/** The Theme Designer's two-language sample: a verse in two translations, as a bilingual verse goes live. */
+export const SAMPLE_BILINGUAL_VERSE: VerseRenderData = {
+  reference: "Genesis 1:1",
+  segments: [{ text: GENESIS_1_1_EN }],
+  translationLines: [GENESIS_1_1_EN, GENESIS_1_1_YO],
+}
+
+/** The Theme Designer's song sample: a bilingual lyric slide (lines, then the second language). */
+export const SAMPLE_BILINGUAL_SONG: VerseRenderData = {
+  kind: "lyric",
+  reference: "Amazing Grace · Verse 1",
+  segments: [{ text: "" }],
+  lines: ["Amazing grace! how sweet the sound", "That saved a wretch like me"],
+  secondaryLines: ["Oore ọ̀fẹ́ ìyanu, bí ó ti dùn tó", "Tó gba ẹni bí èmi là"],
+}
+
 const DEFAULT_VERSE_NUMBERS: BroadcastTheme["verseNumbers"] = {
   visible: true,
   fontSize: 18,
