@@ -517,18 +517,48 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   newFromTemplate: async (templateId, title, serviceDate) => {
     if (get().dirty) return "unsaved"
-    const opened = await get().openProgram(templateId)
-    if (opened !== "ok") return "failed"
-    return get().duplicateCurrent(title, serviceDate)
+    // The template is read, never opened: nothing on this path can save into it.
+    let data: ProgramWithItems | null = null
+    try {
+      data = await invoke<ProgramWithItems | null>("content_get_program", { id: templateId })
+    } catch (e) {
+      set({ error: describe(e) })
+      return "failed"
+    }
+    if (!data) {
+      set({ error: "That template no longer exists" })
+      return "failed"
+    }
+    const bible = useBibleStore.getState()
+    const { items, unsupported } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+    if (unsupported.length > 0) {
+      set({ error: `The template has ${unsupported.length} item${unsupported.length === 1 ? "" : "s"} this version cannot copy. Open it in a newer Rhema Studio, or remove them there.` })
+      return "failed"
+    }
+    const before = useQueueStore.getState().items
+    useQueueStore.setState({ items: items.map((i) => ({ ...i, id: crypto.randomUUID() })), activeIndex: null })
+    const r = await get().createFromRundown(title, serviceDate, { discard: true })
+    if (r === "failed") {
+      useQueueStore.setState({ items: before, activeIndex: null }) // nothing was created: the screen goes back as it was
+      return r
+    }
+    // Reload the new service so verse text is filled in for Preview.
+    const created = get().current
+    if (created && r === "created") await get().openProgram(created.id, { discard: true })
+    return r
   },
 
   duplicateCurrent: async (title, serviceDate) => {
     if (!get().current) return "failed"
     if (get().dirty) return "unsaved"
     // Fresh ids: the copy must never share item identity with the original.
-    const copies = useQueueStore.getState().items.map((i) => ({ ...i, id: crypto.randomUUID() }))
+    const before = useQueueStore.getState().items
+    const copies = before.map((i) => ({ ...i, id: crypto.randomUUID() }))
     useQueueStore.setState({ items: copies, activeIndex: null })
-    return get().createFromRundown(title, serviceDate, { discard: true })
+    const r = await get().createFromRundown(title, serviceDate, { discard: true })
+    // Nothing was created: put the original's items back, so a later Save cannot renumber the original.
+    if (r === "failed") useQueueStore.setState({ items: before, activeIndex: null })
+    return r
   },
 
   openProgram: async (id, opts) => {

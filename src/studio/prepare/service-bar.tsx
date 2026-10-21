@@ -92,13 +92,14 @@ export function ServiceBar() {
   }
 
   const create = async () => {
+    const usedTemplate = fromTemplate !== ""
     const r = fromTemplate
       ? await useServiceStore.getState().newFromTemplate(fromTemplate, title, date || null)
       : await useServiceStore.getState().createFromRundown(title, date || null)
     setFromTemplate("")
     setNewOpen(false)
     if (r === "created") {
-      toast.success(count > 0 ? `Service "${title}" created and saved` : `Service "${title}" created`)
+      toast.success(usedTemplate ? `Service "${title}" created from the template` : count > 0 ? `Service "${title}" created and saved` : `Service "${title}" created`)
       setTitle("")
       setDate("")
     } else if (r === "created_unsaved") {
@@ -306,7 +307,7 @@ export function ServiceBar() {
               </>
             )}
             <p className="text-[0.6875rem] text-muted-foreground">
-              {fromTemplate ? "A copy of the template's items (the template is not changed)." : count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
+              {fromTemplate ? `A copy of the template's items (the template is not changed).${!current && count > 0 ? ` The ${count} unsaved item${count === 1 ? "" : "s"} on screen will be replaced.` : ""}` : count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
             </p>
             <div className="mt-1 flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={() => setNewOpen(false)}>Cancel</Button>
