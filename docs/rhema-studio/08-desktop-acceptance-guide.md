@@ -380,3 +380,10 @@ report), but launching it cannot.
 | 10ab.4 | NDI output on, received in OBS, video live. Repeat with an NDI-only (hidden window) output that is not the main output. | OBS shows the video moving at the NDI rate; no audio over NDI (not implemented). **Known risk:** WebView2/WebKit may throttle timers in a hidden window to about 1 Hz, so an NDI-only output could send roughly one frame a second; record the rate seen. | Unverified |
 | 10ab.6 | Import a 2 GB video. | The app stays responsive during the copy (the import is hashed and copied as a stream, off the main thread); memory does not climb by the file's size. | Unverified |
 | 10ab.5 | Delete the video file from the media folder, then show it live; separately, import a file the webview cannot decode (e.g. HEVC on Windows without the codec). | Missing: warning, the screen keeps what it had. Undecodable: that screen shows "▶ name", Present shows "could not play … Try an MP4 (H.264) file." | Unverified |
+
+### 10ad. Monitors (OP-004)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ad.1 | Projector output on its monitor. Unplug the projector cable. | Within about five seconds: "<output>: its monitor was disconnected" toast; Home readiness warns with Open outputs. Plug it back: the warning clears (turn the output on again if the OS closed the window). | Unverified |
+| 10ad.2 | Set two display outputs to the same monitor. | Home warns "<A> and <B> use the same monitor". | Unverified |

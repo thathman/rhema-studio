@@ -109,4 +109,12 @@ describe("computeReadiness", () => {
     expect(computeReadiness({ ...base, outputs: [main, { ...stream, receivers: 1 }] }).checks.find((x) => x.id === "outputs")?.detail).toContain("Stream · on · stream · 1 receiving")
     expect(computeReadiness({ ...base, outputs: [main, { ...stream, receivers: null }] }).checks.find((x) => x.id === "outputs")?.detail).toMatch(/Stream · on · stream$/)
   })
+
+  it("warns about display outputs whose monitor is gone or shared", () => {
+    const base = { translationsLoaded: 1, activeThemeName: "Dark", outputsConfigured: 2, outputsOnAir: 1, rundownCount: 1, listening: false }
+    const { checks } = computeReadiness({ ...base, monitors: { missing: ["Stage"], shared: [["Main", "Lobby"]] } })
+    expect(checks.find((c) => c.id === "monitors-missing")).toMatchObject({ status: "warn", label: "Stage: its monitor is not connected", fix: "outputs" })
+    expect(checks.find((c) => c.id === "monitors-shared")?.label).toBe("Main and Lobby use the same monitor")
+    expect(computeReadiness({ ...base, monitors: { missing: [], shared: [] } }).checks.some((c) => c.id.startsWith("monitors"))).toBe(false)
+  })
 })
