@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.40 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.41 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -121,7 +121,7 @@
 | SG-002 Scheduled announcements/playlists | P2 | MERGED (#80 time window, #86 playlists) | SG-001 | signage-schedule PR: days + from/to (local time, crosses midnight) on the loop; outside the window the theme background shows; an unreadable time keeps the loop on; 1 test with fixed local dates. Multiple playlists later |
 | SG-003 QR digital bulletins and optional action links | P2 | MERGED (first slice #85) / BACKLOG (action links) | SV-002 | qr-bulletin PR: Prepare → Slides → "QR link": a full http(s) address only (no credentials, ≤300 chars), drawn offline as one composed picture (white panel: code left, title/lines/address right; no text layer or scrim over the code) so what is scanned is what is read; nothing tracked; saved in the slide payload. Known limit: the preview panel shows the words only. Giving/prayer integrations later |
 | AR-001 Runtime journal/service event log | P1 | MERGED (#53, #60 remote commands) | CL-002,PT-001 | service-journal PR: in-memory log of every go-live, clear, restore, quick screen, stage message and rehearsal toggle (monotonic durations), 'Save the log…' as text from More → Library with planned-versus-actual per item; 2 tests. Persistence and OBS markers later |
-| AR-002 OBS recording markers and sermon metadata | P2 | BACKLOG | AR-001,OP-005 | No fake recorded status; failures visible |
+| AR-002 OBS recording markers and sermon metadata | P2 | MERGED (#95 optional OBS connection: real recording status, start/stop, marks as log lines and chapters) | AR-001,OP-005 | No fake recorded status; failures visible |
 | AR-003 Searchable archive and series reuse | P2 | MERGED (#65 logs, #94 reuse items) | AR-001 | log-archive PR: migration 0008 `service_logs`; Library → Keep this log stores the text; Earlier logs lists newest first, searches title/body, saves any log as a file, deletes; logs outlive their service; 1 crate test. Series reuse later |
 | AR-004 Opt-in transcription and archive indexing | P2 | BACKLOG | AR-003 | Provider-consent, corrections and privacy |
 | AI-001 Provider abstraction, privacy and human approval | P2 | BACKLOG | AR-004 | Offline mode unaffected; no AI output auto-live |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-21 (rev 0.41):** owner decision #33 recorded (bundled translations ship as upstream); PRs #89–#95 merged (NDI receivers, video, lower thirds, monitors, multiview, reuse, OBS); MD-002 video, MD-004, OP-004, AR-002, AR-003 merged.
 - **2026-10-21 (rev 0.40):** eleven rows still at IN PR after their merges reconciled (SO-002, SO-007, OP-002, OP-003, CL-001–004, SG-003, QA-002, QA-010).
 - **2026-10-21 (rev 0.39):** PRs #86 (signage playlists + preload) and #87 (long text as pages) merged; five stale rows reconciled (CV-004, AR-001, AR-003, PT-002, PT-004).
 - **2026-10-21 (rev 0.38):** PRs #78–#85 merged (roles, signage loop/schedule/health, lint debt, settings migration tests, today's service, QR slides); rows reconciled.

@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 04:40 WAT)
+- Head: see `git log fork/main` (2026-10-21 04:46 WAT)
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -24,7 +24,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 424 vitest tests in 61 files pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
+- Frontend: 428 vitest tests in 62 files pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
 - Rust: `rhema-content` 44 tests pass; `rhema-api` 115; app `cargo check` and clippy in CI.
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
 
@@ -55,6 +55,14 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Next eligible tasks
 
-1. AR-002 optional OBS connection — in PR (#95). After it, the buildable backlog is small: SG-003 action links (external giving/prayer systems need a product choice), PT-006 MIDI (needs a Rust MIDI crate; WebKit has no Web MIDI), ST-009 identity migration at release time.
-2. Blocked on owner decisions: #72 sync approach (CL-005/006 remote delivery), #34 Canva relay (CV-002…); PR #4 speech (ST-004; AR-004 and AI-001 follow it).
-3. Desktop or hardware only: rows 10ab (video), 10ac (lower thirds), 10ad (monitors), 10ae (multiview), 10ag (OBS), OP-005 OBS 720p30 smoke, QA-010 drill (#62), QA-007 benchmarks, acceptance rows 1–10ag (#31), Windows smoke (#32).
+Every backlog row now has its buildable part merged. What remains, by why it is not being built:
+
+1. **Owner decisions (product direction):**
+   - #72 sync approach → CL-005 remote drafts/approvals, CL-006 remote delivery, CL-007 team comments, QA-006 cloud-sync review.
+   - #34 Canva relay (recurring cost, Canva-reviewed public integration) → CV-002, CV-003, CV-006, CV-007.
+   - PR #4 speech provider and bundling → ST-004, then AR-004 opt-in transcription and AI-001/AI-002.
+   - App identity for release (PRD open decision "branding/installer app-ID migration") → ST-009.
+   - Who may present and whether approval must gate going live → CL-001 roles, CL-002 "approval required before go-live".
+   - Which external giving/prayer systems to link → SG-003 action links.
+   - PT-006 song-playback sync: which playback source (MIDI clock, backing tracks) to support.
+2. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10ag (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.
