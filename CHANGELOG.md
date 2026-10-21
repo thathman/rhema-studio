@@ -39,6 +39,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 ### Outputs and production
 - Output roles (congregation, stage, signage); stage display with messages, timer, key/tempo; signage loops with playlists and schedules; lower thirds on opted-in outputs; multiview in Outputs; NDI trouble detection with one automatic restart.
 - Remote control over OSC and HTTP with macros, a this-computer-only option, an optional shared key, device pairing, revocation and roles; a phone remote page paired by scanning a QR code; per-sender rate limiting.
+- Your own cues: named sequences of the same safe actions, run from Present or by id from a Stream Deck/OSC controller.
 - Optional OBS connection: OBS's own recording status, start/stop, sermon marks as log lines and chapters.
 
 ### Data and operations
