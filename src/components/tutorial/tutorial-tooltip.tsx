@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { SparklesIcon, ChevronLeftIcon } from "lucide-react"
 import type { TooltipRenderProps, Controls } from "react-joyride"
 
@@ -17,9 +17,12 @@ export function TutorialTooltip({
   const indexRef = useRef(index)
   const isLastStepRef = useRef(isLastStep)
 
-  controlsRef.current = controls
-  indexRef.current = index
-  isLastStepRef.current = isLastStep
+  // Latest values for the key handler, updated after render (not during it).
+  useLayoutEffect(() => {
+    controlsRef.current = controls
+    indexRef.current = index
+    isLastStepRef.current = isLastStep
+  })
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -60,8 +60,8 @@ export function BroadcastOutputsDialog({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busyIds, setBusyIds] = useState<string[]>([])
 
-  const fetchMonitors = useCallback(async () => {
-    setMonitorsRefreshing(true)
+  // Returns the monitors; callers set state when it resolves (never synchronously in an effect).
+  const fetchMonitors = useCallback(async (): Promise<Monitor[]> => {
     try {
       const result = await availableMonitors()
       void logInfo(
@@ -69,18 +69,23 @@ export function BroadcastOutputsDialog({
           .map((m) => `${m.name ?? "?"} ${m.size.width}x${m.size.height}`)
           .join(", ")}`,
       )
-      setMonitors(result)
+      return result
     } catch (error) {
       void logError(`[broadcast-ui] availableMonitors FAILED: ${String(error)}`)
       toast.error("Could not list monitors", { description: String(error) })
-      setMonitors([])
-    } finally {
-      setMonitorsRefreshing(false)
+      return []
     }
   }, [])
 
   useEffect(() => {
-    if (open) void fetchMonitors()
+    if (!open) return
+    let cancelled = false
+    void fetchMonitors().then((m) => {
+      if (!cancelled) setMonitors(m)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [open, fetchMonitors])
 
   // Keep the cards in sync with reality: a projector closed at the OS level
@@ -254,7 +259,13 @@ export function BroadcastOutputsDialog({
         draft={newOutputDraft}
         monitors={monitors}
         monitorsRefreshing={monitorsRefreshing}
-        onRefreshMonitors={() => void fetchMonitors()}
+        onRefreshMonitors={() => {
+          setMonitorsRefreshing(true)
+          void fetchMonitors().then((m) => {
+            setMonitors(m)
+            setMonitorsRefreshing(false)
+          })
+        }}
         onSubmit={handleEditorSubmit}
       />
     </>
