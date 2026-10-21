@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 07:10 WAT; every PR through #115 merged)
+- Head: see `git log fork/main` (2026-10-21 07:20 WAT; every PR through #116 merged)
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -34,7 +34,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-candidate-evidence.md` (decision: NO-GO until desktop rows and owner sign-off).
 
 
-- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10at). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
+- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10au). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
 - Windows installer: workflow run 39546898905 built `main` at `0305327` (artifact `rhema-windows-x64-installer`, 99,250,688 bytes, artifact digest sha256:febc816174afe10380868be117d6d8a37ab81b5eb467aad1cd04e7d18d8c78ed, kept 14 days; CI run 39546870731 green on the same commit). Earlier: run 39541733204 at `7bf70ee`. Not installed or launched; not a release.
 - Yoruba speech recognition and the OpenAI provider (PR #4).
 
@@ -59,7 +59,7 @@ Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-ca
 
 ## Merged 2026-10-21 (this run)
 
-#96 downgrade guard · #97 diagnostics redaction · #98 licence check, CHANGELOG, KNOWN-ISSUES · #99 Black/Logo/Technical quick screens · #100 remote rate limit · #101 review fixes (licence walk, SPDX precedence, clean Black) · #102 phone remote page + QR pairing · #103 one running copy · #104 last good frame · #105 network/privacy note + host guard · #106 quick screens fit 1366x768 (Back was clipped) · #107 deletes ask first · #108 draw-failure warnings · #109 common short book names ("Jn 3 16") · #110 songs as plain text/Markdown · #111 ask before closing with unsaved work; closing the main window quits (hidden NDI windows used to keep the process alive) · #112 sound player for walk-in music and backing tracks; header chips wrap at 1366 px · #113 sounds as service items (play when reached going forward; screens untouched; silent in rehearsal) · #114 more injected-failure tests (database fails on save, media list fails, sound fails) · #115 API keys, remote key and OBS password in the system keychain (one entry; verified before the file copy is blanked; file fallback without a keychain).
+#96 downgrade guard · #97 diagnostics redaction · #98 licence check, CHANGELOG, KNOWN-ISSUES · #99 Black/Logo/Technical quick screens · #100 remote rate limit · #101 review fixes (licence walk, SPDX precedence, clean Black) · #102 phone remote page + QR pairing · #103 one running copy · #104 last good frame · #105 network/privacy note + host guard · #106 quick screens fit 1366x768 (Back was clipped) · #107 deletes ask first · #108 draw-failure warnings · #109 common short book names ("Jn 3 16") · #110 songs as plain text/Markdown · #111 ask before closing with unsaved work; closing the main window quits (hidden NDI windows used to keep the process alive) · #112 sound player for walk-in music and backing tracks; header chips wrap at 1366 px · #113 sounds as service items (play when reached going forward; screens untouched; silent in rehearsal) · #114 more injected-failure tests (database fails on save, media list fails, sound fails) · #115 API keys, remote key and OBS password in the system keychain (one entry; verified before the file copy is blanked; file fallback without a keychain) · #116 projected end time and audited timer correction.
 
 Found by reading PRD lines against the code (not by tests): no single-instance guard, no last-good frame, one-click log deletion, the PRD's own "Jn 3 16" example failing, the Back button clipped at 1366x768. Independent reviews of each batch found 9 more defects, all fixed.
 
@@ -75,4 +75,4 @@ Every backlog row now has its buildable part merged. What remains, by why it is 
    - Who may present and whether approval must gate going live → CL-001 roles, CL-002 "approval required before go-live".
    - Which external giving/prayer systems to link → SG-003 action links.
    - PT-006 song-playback sync: which playback source (MIDI clock, backing tracks) to support.
-2. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10at (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.
+2. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10au (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.
