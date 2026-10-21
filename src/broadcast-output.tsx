@@ -7,6 +7,7 @@ import { useRef, useEffect, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { onThemeFontsLoaded, renderVerse, drawLowerThird } from "@/lib/verse-renderer"
+import { paintFrame } from "@/lib/output-paint"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
@@ -39,6 +40,10 @@ const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "
 // One output window is one page, so its video player lives at module level
 // (created and disposed with the window's listeners).
 let videoPlayer: VideoPlayer | null = null
+// Frames are drawn here first; see paintFrame.
+const scratchCanvas = document.createElement("canvas")
+// Report a drawing failure once per run of failures, not every frame.
+let frameFailing = false
 
 let ndiHealth = initialNdiHealth()
 function reportNdi(ok: boolean, message: string): void {
@@ -96,20 +101,23 @@ function BroadcastCanvas() {
     }
 
     const { theme, verse } = data
-    canvas.width = theme.resolution.width
-    canvas.height = theme.resolution.height
-    const result = renderVerse(ctx, theme, verse, {
-      scale: 1,
-      imageCache: themeImageCache(),
-      video: videoPlayer?.element() ?? null,
-      videoState: videoPlayer?.state(),
+    const { width, height } = theme.resolution
+    const ok = paintFrame(canvas, scratchCanvas, width, height, (fctx) => {
+      const result = renderVerse(fctx, theme, verse, {
+        scale: 1,
+        imageCache: themeImageCache(),
+        video: videoPlayer?.element() ?? null,
+        videoState: videoPlayer?.state(),
+      })
+      if (!result) {
+        fctx.fillStyle = "#000"
+        fctx.fillRect(0, 0, width, height)
+        logDebug("renderVerse returned null; drew fallback frame")
+      }
+      if (data.overlay && verse?.screen !== "black") drawLowerThird(fctx, width, height, data.overlay, theme.verseText?.fontFamily)
     })
-    if (!result) {
-      ctx.fillStyle = "#000"
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      logDebug("renderVerse returned null; drew fallback frame")
-    }
-    if (data.overlay && verse?.screen !== "black") drawLowerThird(ctx, canvas.width, canvas.height, data.overlay, theme.verseText?.fontFamily)
+    if (!ok && !frameFailing) void getCurrentWebviewWindow().emitTo("main", "broadcast:render-error", { outputId: OUTPUT_ID }).catch(() => {})
+    frameFailing = !ok
   }, [logDebug])
 
   // Redraw once a theme's images land. The burst matters: without it NDI

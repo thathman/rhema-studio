@@ -53,11 +53,17 @@ export const CanvasVerse = memo(function CanvasVerse({
 
     ctx.scale(dpr, dpr)
     const scale = displayW / theme.resolution.width
-    renderVerse(ctx, theme, verse, {
-      scale,
-      imageCache: themeImageCache(),
-    })
-    if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily)
+    // A preview that cannot draw (broken picture, damaged theme) stays blank
+    // rather than throwing out of the effect and taking the operator's screen with it.
+    try {
+      renderVerse(ctx, theme, verse, {
+        scale,
+        imageCache: themeImageCache(),
+      })
+      if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily)
+    } catch (e) {
+      console.error("[canvas-verse] preview failed to draw", e)
+    }
   }, [theme, verse, overlay, containerWidth])
 
   // Preload every image the theme uses so the renderer finds them in the cache.

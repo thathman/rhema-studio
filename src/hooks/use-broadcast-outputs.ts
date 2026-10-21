@@ -88,7 +88,14 @@ export function useBroadcastOutputs(): void {
       useBroadcastStore.getState().setPresentWarning(message)
     })
 
+    // An output could not draw the new screen; it keeps showing the last good frame.
+    const unlistenRender = listen<{ outputId?: string }>("broadcast:render-error", (event) => {
+      const output = useBroadcastStore.getState().outputs.find((o) => o.id === event.payload?.outputId)
+      useBroadcastStore.getState().setPresentWarning(`${output?.name ?? "An output"} could not draw the new screen and is still showing the previous one. Clear, or choose another item or theme.`)
+    })
+
     return () => {
+      void unlistenRender.then((unlisten) => unlisten())
       for (const id of timeouts) clearTimeout(id)
       void unlistenPromise.then((unlisten) => unlisten())
       void unlistenMedia.then((unlisten) => unlisten())
