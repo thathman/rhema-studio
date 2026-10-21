@@ -469,4 +469,18 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().resetOutputRuntime("main")
     expect(useBroadcastStore.getState().outputFrames.main).toBeUndefined()
   })
+
+  it("ignores the old default-on autoLive value and keeps only a choice saved under the new key", async () => {
+    for (const [saved, expected] of [[{ autoLive: true }, false], [{ autoLive: true, autoLiveOptIn: true }, true], [{ autoLiveOptIn: false }, false]] as const) {
+      vi.resetModules()
+      vi.doMock("@tauri-apps/plugin-store", () => ({
+        load: async () => ({ get: async (key: string) => (saved as Record<string, unknown>)[key], set: async () => {}, save: async () => {} }),
+      }))
+      const { useBroadcastStore, hydrateBroadcastThemes } = await import("./broadcast-store")
+      await hydrateBroadcastThemes()
+      expect(useBroadcastStore.getState().autoLive, JSON.stringify(saved)).toBe(expected)
+      vi.doUnmock("@tauri-apps/plugin-store")
+    }
+  })
 })
+

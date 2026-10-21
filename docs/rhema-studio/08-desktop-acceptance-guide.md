@@ -659,4 +659,5 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bn.1 | New installation (no earlier settings). Put something on air, start listening, read "John 3:16" aloud. | The verse appears in the preview and the detections list; what is on screen does not change until Show live. Production view → Live display: Auto is off. | Unverified |
 | 10bn.2 | Turn Auto on; Standard view. | "Auto-live on" appears in the header while listening; a heard verse now replaces what is on screen. Clicking the chip turns Auto off. | Unverified |
-| 10bn.3 | Computer that had Auto on before this build. | Auto is still on (the saved choice is kept), and the chip shows while listening. | Unverified |
+| 10bn.3 | Computer that used an earlier build (Auto was on by default). Update; start listening. | Auto is off until turned on again (Live display panel or Settings → Display Mode → Heard verses); after turning it on and restarting, it stays on. | Unverified |
+| 10bn.4 | Settings → Display Mode → Heard verses: choose Auto, then look at the Live display panel; switch it off there and look at Settings. | Both show the same setting. | Unverified |

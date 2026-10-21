@@ -94,7 +94,7 @@ export function PresentWorkspace() {
           <StatusChip
             tone="warn"
             label="Auto-live on"
-            title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (Production view → Live display → Auto)."
+            title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (also the Auto switch on the Live display panel)."
             onClick={() => useBroadcastStore.getState().setAutoLive(false)}
           />
         )}

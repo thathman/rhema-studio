@@ -106,7 +106,7 @@ export function LiveOutputPanel() {
       <PanelHeader title="Live display">
         <label
           className="flex items-center gap-2"
-          title="When on, detected verses are presented to the live display automatically. Turn off for manual control."
+          title="Auto: while on air, a verse heard while listening replaces what is on screen without Show live. Off (the default): heard verses wait in the preview."
         >
           <span
             className={cn(
