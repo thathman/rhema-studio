@@ -184,19 +184,23 @@ export function cleanName(raw: string | null | undefined): string {
   return Array.from(raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim()).slice(0, 60).join("").trim()
 }
 
-/** Every payload key this build reads and writes; anything else is kept untouched (FR-03). */
-const KNOWN_PAYLOAD_KEYS = new Set([
-  "background_media_id", "planned_minutes", "end_by", "prepared_by", "comments",
-  "media_id", "fit", "loop", "sound", "title", "body", "link", "song_id", "arrangement_id", "languages",
-])
+/** The payload keys this build reads and writes, per item kind; anything else is kept untouched (FR-03). */
+const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "prepared_by", "comments"]
+const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
+  verse: new Set(COMMON_PAYLOAD_KEYS),
+  image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
+  slide: new Set([...COMMON_PAYLOAD_KEYS, "title", "body", "link"]),
+  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "arrangement_id", "languages"]),
+}
 
-/** Payload keys this build does not know (from a newer version or a service file), to write back unchanged. */
-export function parsePayloadExtra(raw: string | null | undefined): Record<string, unknown> | undefined {
+/** Payload keys this build does not know for that kind (from a newer version or a service file), to write back unchanged. */
+export function parsePayloadExtra(raw: string | null | undefined, kind: string): Record<string, unknown> | undefined {
+  const known = KNOWN_PAYLOAD_KEYS[kind] ?? new Set(COMMON_PAYLOAD_KEYS)
   if (!raw) return undefined
   try {
     const p = JSON.parse(raw) as unknown
     if (typeof p !== "object" || p === null || Array.isArray(p)) return undefined
-    const extra = Object.fromEntries(Object.entries(p).filter(([k]) => !KNOWN_PAYLOAD_KEYS.has(k)))
+    const extra = Object.fromEntries(Object.entries(p).filter(([k]) => !known.has(k)))
     return Object.keys(extra).length ? extra : undefined
   } catch {
     return undefined
@@ -325,7 +329,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "slide") {
@@ -334,7 +338,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
@@ -352,7 +356,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
       })
       continue
     }
@@ -383,7 +387,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
   return { items, unsupported, missingTranslations: [...missing] }
@@ -421,6 +425,18 @@ function describe(e: unknown): string {
 
 // Baseline the dirty flag compares against: the rundown as last loaded/saved.
 let baseline = ""
+/** With no service open: the operator's items as they were when the last service closed (or none). */
+let closedBaseline = "[]"
+const operatorItems = (items: QueueItem[]) => items.filter((i) => i.source === "manual")
+
+/**
+ * A rundown the operator built or changed with no service open: unsaved
+ * work for the close question. Items kept from a service just closed are
+ * not; heard verses collected by themselves never are.
+ */
+export function unsavedScratch(items: QueueItem[], current: Program | null): boolean {
+  return !current && rundownSignature(operatorItems(items)) !== closedBaseline
+}
 // Monotonic save ticket so a slow, older save cannot overwrite a newer one.
 let saveGeneration = 0
 
@@ -623,6 +639,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       if (!data) {
         set({ error: "That service no longer exists" })
         if (get().current?.id === id) {
+          closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
           set({ current: null, dirty: false })
           remember(null)
         }
@@ -729,6 +746,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   closeProgram: (opts) => {
     if (get().dirty && !opts?.discard) return "unsaved"
+    // The rundown stays on screen: as it is now it belongs to a saved service (or was just discarded).
+    closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
     set({ current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [] })
     remember(null)
     return "closed"

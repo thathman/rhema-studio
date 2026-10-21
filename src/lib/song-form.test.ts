@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
-  addArrangement, addSection, applyPaste, appendStep, defaultLabel, defaultSteps, emptyForm, formFromSong, formLanguages,
+  addArrangement, addSection, applyPaste, appendStep, defaultLabel, defaultSteps, emptyForm, formFromSong, newSongInputFromForm, formLanguages,
   inputFromForm, moveSection, moveStep, removeArrangement, removeSection, removeStep, updateArrangement, validateForm,
 } from "./song-form"
 import type { SongWithSections } from "@/types"
@@ -92,4 +92,24 @@ describe("song form", () => {
     expect(validateForm(form)).toEqual(["Two arrangements have the same name."])
     expect(formLanguages(formFromSong(stored))).toEqual(["en", "yo"])
   })
+
+  it("a conflict's 'save mine as a new song' carries no ids or hymn numbers from the original, within the title limit", () => {
+    const f = formFromSong(sampleSongForNew())
+    const input = newSongInputFromForm(f, " (my version)")
+    expect(input.sections.every((s) => s.id === undefined)).toBe(true)
+    expect((input.arrangements ?? []).every((a) => a.id === undefined && a.sequence.every((x) => x.startsWith("#")))).toBe(true)
+    expect(input.numbers).toEqual([])
+    expect(input.title.endsWith(" (my version)")).toBe(true)
+    expect(Array.from(newSongInputFromForm({ ...f, title: "x".repeat(200) }, " (my version)").title)).toHaveLength(200)
+  })
 })
+
+function sampleSongForNew() {
+  return {
+    song: { id: "song-1", title: "Amazing Grace", authors: "", copyright: "", ccli_number: null, licence: "public_domain", licence_note: "", primary_language: "en", tags: "", notes: "", key: "", tempo: null, revision: 3, created_at: "", updated_at: "" },
+    sections: [{ id: "sec-a", kind: "verse", label: "Verse 1", texts: { en: "Amazing grace" } }, { id: "sec-b", kind: "chorus", label: "Chorus", texts: { en: "My chains" } }],
+    arrangements: [{ id: "arr-1", name: "Default", sequence: ["sec-a", "sec-b", "sec-a"], is_default: true }],
+    numbers: [{ hymnbook_id: "hb-1", hymnbook_name: "SSS", number: "245" }],
+  } as unknown as Parameters<typeof formFromSong>[0]
+}
+

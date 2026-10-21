@@ -3,13 +3,12 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useServiceStore } from "@/stores/service-store"
+import { unsavedScratch, useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useUnsavedStore } from "@/stores/unsaved-store"
 
-/** A rundown the operator built without creating a service (heard verses collected by themselves do not count). */
-const unsavedScratch = () => !useServiceStore.getState().current && useQueueStore.getState().items.some((i) => i.source === "manual")
-const anyUnsaved = () => useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || unsavedScratch()
+const anyUnsaved = () =>
+  useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current)
 
 /**
  * Closing the window with unsaved service changes (PRD FR-03). The Rust side
@@ -20,7 +19,7 @@ export function UnsavedCloseDialog() {
   const dirty = useServiceStore((s) => s.dirty)
   const current = useServiceStore((s) => s.current)
   const songEditor = useUnsavedStore((s) => s.songEditor)
-  const scratch = useQueueStore((s) => !current && s.items.some((i) => i.source === "manual"))
+  const scratch = useQueueStore((s) => unsavedScratch(s.items, current))
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

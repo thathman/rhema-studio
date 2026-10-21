@@ -112,6 +112,30 @@ export function inputFromForm(f: SongForm): SongInput {
   }
 }
 
+/**
+ * The form as a brand-new song (RG-05: keeping one's edits after a save
+ * conflict): no ids from the original (sections and arrangements are new,
+ * steps refer to sections by position) and no hymnbook numbers, which the
+ * original keeps. The title gets `suffix`, within the 200-character limit.
+ */
+export function newSongInputFromForm(f: SongForm, suffix: string): SongInput {
+  const base = inputFromForm(f)
+  const position = new Map(f.sections.map((s, i) => [s.id, `#${i}`]))
+  const title = Array.from(base.title || "Untitled song").slice(0, 200 - Array.from(suffix).length).join("") + suffix
+  return {
+    ...base,
+    title,
+    sections: base.sections.map((s) => ({ ...s, id: undefined })),
+    arrangements: f.arrangements.map((a) => ({
+      id: undefined,
+      name: a.name.trim(),
+      is_default: a.is_default,
+      sequence: a.steps.map((st) => position.get(st.sectionId)).filter((x): x is string => x !== undefined),
+    })),
+    numbers: [],
+  }
+}
+
 const KIND_NAME: Record<SectionKind, string> = {
   verse: "Verse", chorus: "Chorus", bridge: "Bridge", prechorus: "Pre-chorus", tag: "Tag", ending: "Ending", intro: "Intro", other: "Section",
 }

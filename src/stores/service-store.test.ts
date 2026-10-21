@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }))
 
-import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanName } from "./service-store"
+import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanName, unsavedScratch } from "./service-store"
 import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
@@ -480,6 +480,18 @@ describe("createFromRundown", () => {
     expect(useServiceStore.getState().dirty).toBe(false)
     useServiceStore.setState({ loading: false })
     expect(useServiceStore.getState().dirty).toBe(true)
+  })
+
+  it("a rundown kept after closing its service is not unsaved work; changing it, or building one with no service, is", async () => {
+    await openStored()
+    useServiceStore.getState().closeProgram()
+    const current = useServiceStore.getState().current
+    expect(unsavedScratch(useQueueStore.getState().items, current)).toBe(false)
+    // Heard verses collected with no service open do not count.
+    useQueueStore.getState().addItem({ ...(useQueueStore.getState().items[0] as VerseQueueItem), id: "heard", source: "ai-direct", verse: { ...(useQueueStore.getState().items[0] as VerseQueueItem).verse, verse: 99 } })
+    expect(unsavedScratch(useQueueStore.getState().items, current)).toBe(false)
+    useQueueStore.getState().removeItem(useQueueStore.getState().items[1].id)
+    expect(unsavedScratch(useQueueStore.getState().items, current)).toBe(true)
   })
 })
 

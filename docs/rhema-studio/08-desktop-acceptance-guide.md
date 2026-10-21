@@ -698,3 +698,4 @@ report), but launching it cannot.
 | 10bq.3 | Open a song on two computers sharing a church folder… or in two editors via a backup; save on one, then save on the other. | The second shows the conflict and "Save mine as a new song", which keeps the edits as "<title> (my version)". | Unverified |
 | 10bq.4 | Give the NDI/stream output a custom lower-third theme; delete that theme in the theme library. | Refused: "<theme> is used by <output>"; the output keeps its theme. | Unverified |
 | 10bq.5 | Rename the service and at once reorder an item; close the window. | Closing asks (the reorder was not lost). | Unverified |
+| 10bq.6 | Open a saved service, Close service (the rundown stays), quit Rhema. Then reopen, Close service, remove one item, quit. | First time: no question. Second time: "The service on screen has not been saved". | Unverified |

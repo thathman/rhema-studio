@@ -16,7 +16,7 @@ import { openPath } from "@tauri-apps/plugin-opener"
 import { isContentCommandError, LICENCES, SECTION_KINDS } from "@/types/content"
 import type { Licence, MediaAsset, SectionKind, SongWithSections } from "@/types"
 import {
-  addArrangement, addSection, applyPaste, emptyForm, formFromSong, formLanguages, inputFromForm, moveSection,
+  addArrangement, addSection, applyPaste, emptyForm, formFromSong, formLanguages, inputFromForm, moveSection, newSongInputFromForm,
   removeArrangement, removeSection, updateArrangement, validateForm, type SongForm,
 } from "@/lib/song-form"
 import { ArrangementStrip } from "@/studio/prepare/arrangement-strip"
@@ -107,9 +107,10 @@ function EditorDialog({
   const [conflicted, setConflicted] = useState(false)
   // A save conflict: keep these edits as a new song rather than lose them (RG-05).
   const saveAsNew = async () => {
+    if (problems.length > 0) return
     setSaving(true)
     try {
-      const saved = await useSongStore.getState().create({ ...inputFromForm(form), title: `${form.title.trim() || "Untitled song"} (my version)` })
+      const saved = await useSongStore.getState().create(newSongInputFromForm(form, " (my version)"))
       toast.success(`${saved.song.title} saved as a new song`)
       onSaved?.(saved)
       onClose()
