@@ -21,6 +21,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
 ### Search and safety
+- Next always goes to the item after the one on screen, also after adding, removing or reordering items during the service. Heard verses no longer change your place or add themselves to an open service.
 - Verses heard by speech recognition wait in the preview until Show live. Auto (heard verses go straight on air) is off, also after updating; turn it on again under Live display or Settings → Display Mode if you rely on it.
 - Backing up to, or restoring from, a USB stick or network share that stalls no longer freezes the app or its outputs.
 - Quick find accepts the Yorùbá Bible's book names, with or without accents ("Jòhánù 3:16", "1 Ọba 3:9").
