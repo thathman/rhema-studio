@@ -54,5 +54,6 @@ No GPL/AGPL/LGPL code is in the direct dependency set. Transitive dependencies w
 
 - `tauri-plugin-opener` 2 (Rust) / `@tauri-apps/plugin-opener` (JS): MIT OR Apache-2.0. Opens a song attachment in the computer's own viewer; scoped to the media folder.
 - `qrcode` 1.5.4 (JS, MIT): draws QR codes for link slides, offline, in the app process; no network, no tracking.
+- `keyring` 3.6 (MIT OR Apache-2.0): secrets in the system credential store (RG-08).
 - `tauri-plugin-single-instance` 2.4 (MIT OR Apache-2.0, official Tauri plugin): one running copy (PRD FR-03).
 - Tauri `protocol-asset` feature (part of `tauri`, MIT OR Apache-2.0): streams videos from the media folder to output windows; scope limited to `$APPDATA/media/*` in `tauri.conf.json`; CSP `media-src` allows only the asset origin.

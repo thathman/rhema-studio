@@ -153,6 +153,8 @@ pub fn run() {
             commands::remote::remote_set_keys,
             commands::remote::remote_pair_start,
             commands::app_close::set_unsaved_work,
+            commands::secrets::secret_get,
+            commands::secrets::secret_set,
             commands::app_close::close_main_window,
             commands::remote::remote_lan_address,
             commands::remote::remote_pair_cancel,

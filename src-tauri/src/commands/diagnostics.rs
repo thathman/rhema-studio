@@ -250,13 +250,15 @@ pub fn export_diagnostics(
     );
 
     // Sanitize before anything leaves the app (release gate RG-08).
-    let secrets = app
+    let mut secrets = app
         .path()
         .app_data_dir()
         .ok()
         .and_then(|d| std::fs::read_to_string(d.join("settings.json")).ok())
         .map(|s| configured_secrets(&s))
         .unwrap_or_default();
+    // Secrets moved to the OS credential store are no longer in the settings file.
+    secrets.extend(crate::commands::secrets::stored_values().into_iter().filter(|s| s.trim().len() >= 6));
     let body = redact(&body, &secrets);
 
     let head = header(

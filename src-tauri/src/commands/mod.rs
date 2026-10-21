@@ -8,4 +8,5 @@ pub mod diagnostics;
 pub mod fonts;
 pub mod media;
 pub mod remote;
+pub mod secrets;
 pub mod stt;
