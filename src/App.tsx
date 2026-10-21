@@ -5,6 +5,7 @@ import { useBroadcastOutputs } from "@/hooks/use-broadcast-outputs"
 import { useRemoteControl } from "@/hooks/use-remote-control"
 import { useDetectionEvents } from "@/hooks/use-detection-events"
 import { useLiveTranslationFollow } from "@/hooks/use-live-translation-follow"
+import { useTranscriptionEvents } from "@/hooks/use-transcription"
 import { TutorialOverlay } from "@/components/tutorial/tutorial-overlay"
 import { Toaster, toast } from "sonner"
 import { useEffect } from "react"
@@ -16,6 +17,7 @@ export function App() {
   useBroadcastOutputs()
   useDetectionEvents()
   useLiveTranslationFollow()
+  useTranscriptionEvents()
   // A settings or themes file that could not be read was set aside at startup: say so once (RG-05).
   useEffect(() => {
     invoke<Array<[string, string]>>("damaged_store_files")

@@ -761,3 +761,13 @@ report), but launching it cannot.
 | 10bx.2 | A song live on its 2nd slide; in the song editor delete its first verse and save; press Next twice. | Next continues the song as it was live; the change shows when the song is next started. | Unverified |
 | 10bx.3 | Church brand: add a look, set the stream output to its Announcements theme, remove the look, Apply. | The stream output keeps that theme (now your own); nothing goes opaque. | Unverified |
 | 10bx.4 | Rename a Church brand theme; Apply the brand again. | The new name stays. | Unverified |
+
+### 10by. Detection, tour and settings audit fixes (FR-10, ST-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10by.1 | Start listening in Production, switch to Standard and Home; speak for a minute; unplug the microphone. | The transcript keeps growing (Library → Service log offers it); the "Audio source disconnected" warning appears. | Unverified |
+| 10by.2 | First launch: finish (or skip) the tour. | Back where you were (Home), and Present opens in Standard with its keys. | Unverified |
+| 10by.3 | Bible panel: Genesis 50, press → (or Next chapter). | Exodus 1, not an empty Genesis 51. | Unverified |
+| 10by.4 | While listening, open Settings → Audio or Speech. | "Rhema is listening now. Changes here apply when you stop and start listening again." | Unverified |
+| 10by.5 | Auto on; send /rhema/confidence 0.95; say a verse loosely. | It appears in the preview but does not replace the screen. | Unverified |

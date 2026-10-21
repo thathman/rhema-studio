@@ -82,6 +82,28 @@ export function useTranscription(options?: UseTranscriptionOptions) {
   const isTranscribing = useTranscriptStore((s) => s.isTranscribing)
   const connectionStatus = useTranscriptStore((s) => s.connectionStatus)
 
+  const onMissingApiKey = options?.onMissingApiKey
+
+  const startTranscription = useCallback(
+    () => transcriptionActions.start(onMissingApiKey),
+    [onMissingApiKey]
+  )
+
+  return {
+    segments,
+    isTranscribing,
+    connectionStatus,
+    startTranscription,
+    stopTranscription: transcriptionActions.stop,
+  }
+}
+
+/**
+ * Speech recognition events (connection, errors, a lost microphone, what was
+ * heard), handled for the whole app: listening keeps its transcript and its
+ * warnings whichever view is on screen. Mount once, at the root.
+ */
+export function useTranscriptionEvents(): void {
   // STT lifecycle events
   useTauriEvent("stt_connected", () => {
     useTranscriptStore.getState().setConnectionStatus("connected")
@@ -128,19 +150,5 @@ export function useTranscription(options?: UseTranscriptionOptions) {
       timestamp: Date.now(),
     })
   })
-
-  const onMissingApiKey = options?.onMissingApiKey
-
-  const startTranscription = useCallback(
-    () => transcriptionActions.start(onMissingApiKey),
-    [onMissingApiKey]
-  )
-
-  return {
-    segments,
-    isTranscribing,
-    connectionStatus,
-    startTranscription,
-    stopTranscription: transcriptionActions.stop,
-  }
 }
+

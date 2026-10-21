@@ -35,4 +35,21 @@ describe("heard verses and the rundown", () => {
     handleVerseDetections([heard(30)])
     expect(useQueueStore.getState().items).toHaveLength(4)
   })
+
+  it("with Auto on, only a verse at least as confident as the remote 'confidence' setting goes on air", async () => {
+    const { useSettingsStore } = await import("@/stores/settings-store")
+    const { useBibleStore } = await import("@/stores/bible-store")
+    useServiceStore.setState({ current: null })
+    useSettingsStore.setState({ confidenceThreshold: 0.9 })
+    useBroadcastStore.setState({ autoLive: true, isLive: true, liveVerse: null, rehearsal: false })
+    handleVerseDetections([{ ...heard(18), confidence: 0.85 }])
+    expect(useBibleStore.getState().selectedVerse?.verse).toBe(18) // preview only
+    await new Promise((r) => setTimeout(r, 20))
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+    handleVerseDetections([{ ...heard(19), confidence: 0.95 }])
+    await vi.waitFor(() => expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:19"))
+    useBroadcastStore.setState({ autoLive: false })
+    useSettingsStore.setState({ confidenceThreshold: 0.8 })
+  })
 })
+

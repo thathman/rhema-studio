@@ -179,9 +179,11 @@ function AudioSection() {
 
   // gain is 0.0-2.0 in store, display as 0-100%
   const gainPercent = Math.round((gain / 2.0) * 100)
+  const listening = useTranscriptStore((s) => s.isTranscribing)
 
   return (
     <div className="flex flex-col gap-6">
+      {listening && <ListeningNote />}
       {/* Device selector */}
       <div className="flex flex-col gap-2">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -247,7 +249,17 @@ function AudioSection() {
 /*  Section: Speech Recognition                                               */
 /* -------------------------------------------------------------------------- */
 
+/** Device, gain and provider are taken when listening starts (FR-10): say so while it runs. */
+function ListeningNote() {
+  return (
+    <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      Rhema is listening now. Changes here apply when you stop and start listening again.
+    </p>
+  )
+}
+
 function SpeechSection() {
+  const listeningNow = useTranscriptStore((s) => s.isTranscribing)
   const {
     sttProvider,
     setSttProvider,
@@ -266,6 +278,7 @@ function SpeechSection() {
 
   return (
     <div className="flex flex-col gap-6">
+      {listeningNow && <ListeningNote />}
       {/* Provider selector */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -405,7 +418,7 @@ function DisplayModeSection() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-                While the output is on air, the most confident verse heard replaces what is on screen without Show live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live display panel.
+                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Show live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live display panel.
               </p>
             </div>
           </label>
@@ -615,7 +628,7 @@ interface RemoteStatus {
 interface CommandLogEntry {
   id: number
   timestamp: string
-  source: "OSC" | "HTTP"
+  source: "Remote"
   command: string
 }
 
@@ -719,7 +732,7 @@ function RemoteControlSection() {
           const entry: CommandLogEntry = {
             id: logIdRef.current++,
             timestamp: new Date().toLocaleTimeString(),
-            source: "OSC", // We can't distinguish source at event level; default to OSC
+            source: "Remote", // OSC or HTTP: the event does not say which
             command: event.replace("remote:", ""),
           }
           setCommandLog((prev) => [entry, ...prev].slice(0, 50))
