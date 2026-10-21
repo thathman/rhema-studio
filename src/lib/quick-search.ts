@@ -180,8 +180,13 @@ export function getAutocompleteSuggestion(
 
   const chapter = parseInt(chapterNum)
 
-  // "Jude 5": a one-chapter book's number is the verse.
-  if (!verseNum && !trimmed.includes(":") && ONE_CHAPTER_BOOKS.has(matchingBook.book_number)) {
+  // A range or list needs a verse first ("John 3-5" is not a reference).
+  if (!verseNum && /[-–—,]/.test(normalizedInput.slice(match[1].length))) {
+    return { suggestion: "", stage: "none" }
+  }
+
+  // "Jude 5": a one-chapter book's number is the verse ("Jude 1" still offers "Jude 1:" to go on typing).
+  if (!verseNum && !trimmed.includes(":") && ONE_CHAPTER_BOOKS.has(matchingBook.book_number) && chapter > 1) {
     return { suggestion: "", matchedBook: matchingBook, chapter: 1, verse: chapter, stage: "complete" }
   }
 

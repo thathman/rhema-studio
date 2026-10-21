@@ -452,6 +452,8 @@ describe("parseTypedReference", () => {
     // A book with many chapters keeps "John 5" as chapter 5.
     expect(parseTypedReference("John 5", mockBooks)).toBeNull()
     expect(getAutocompleteSuggestion("John 5", mockBooks)).toMatchObject({ stage: "chapter", chapter: 5 })
+    expect(getAutocompleteSuggestion("John 3-5", mockBooks).stage).toBe("none")
+    expect(getAutocompleteSuggestion("Jude 1", mockBooks)).toMatchObject({ stage: "chapter", suggestion: "Jude 1:1" })
   })
 })
 
