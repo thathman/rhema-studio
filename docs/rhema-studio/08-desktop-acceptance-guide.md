@@ -426,3 +426,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ah.1 | With a current build, save a service. Install an older build (one with fewer migrations) and start it. | Home: "Saved services and songs are unavailable" with "last used by a newer Rhema Studio …"; Library repeats it; Scripture works; `studio.db` is unchanged. Following `17-database-migrations.md` → Downgrade restores the pre-upgrade copy and the older build opens it. | Unverified |
+
+### 10aj. Remote command rate limit (NFR-06)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10aj.1 | With HTTP remote on, run `for i in $(seq 40); do curl -s -o /dev/null -w "%{http_code} " -X POST -H 'Content-Type: application/json' -d '{"command":"next"}' http://<host>:<port>/api/v1/command; done` from another computer (add the key header if one is set). | Roughly the first 20 answer 200, the rest 429; the app log shows "too many from <address>"; a phone on another address still works at once; after a second's pause the first computer works again. | Unverified |

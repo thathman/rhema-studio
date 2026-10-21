@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
+    extract::ConnectInfo,
     http::HeaderMap,
     extract::State as AxumState,
     http::StatusCode,
@@ -78,6 +79,7 @@ struct AppState<S: CommandSink> {
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
     keys: KeySet,
     pairing: PairingWindow,
+    rate: crate::rate::RateLimiter,
 }
 
 /// Snapshot of the current application state, served by `GET /api/v1/status`.
@@ -123,6 +125,7 @@ where
         status,
         keys: config.keys.clone(),
         pairing: config.pairing.clone(),
+        rate: crate::rate::RateLimiter::default(),
     });
 
     let app = Router::new()
@@ -146,7 +149,7 @@ where
     tokio::spawn(async move {
         log::info!("HTTP API server started on {bind_addr} (port {bound_port})");
 
-        axum::serve(listener, app)
+        axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(async move {
                 while !*shutdown_rx.borrow_and_update() {
                     if shutdown_rx.changed().await.is_err() {
@@ -228,8 +231,12 @@ struct PairResponse {
 /// operator has the pairing window open. The token comes back exactly once.
 async fn pair_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(req): Json<PairRequest>,
 ) -> impl IntoResponse {
+    if !state.rate.allow(peer.ip()) {
+        return (StatusCode::TOO_MANY_REQUESTS, Json(PairResponse { success: false, token: None, name: None, error: Some("too many requests; slow down".into()) }));
+    }
     match try_pair(&state.pairing, &state.keys, &req.code, &req.name) {
         PairOutcome::Paired { token, entry } => {
             let payload = serde_json::json!({ "name": entry.name, "hash": entry.hash, "role": entry.role }).to_string();
@@ -266,9 +273,14 @@ fn presented_key(headers: &HeaderMap) -> Option<&str> {
 
 async fn command_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(request): Json<CommandRequest>,
 ) -> impl IntoResponse {
+    if !state.rate.allow(peer.ip()) {
+        log::warn!("HTTP command refused: too many from {}", peer.ip());
+        return (StatusCode::TOO_MANY_REQUESTS, Json(CommandResponse { success: false, error: Some("too many commands; slow down".into()) }));
+    }
     match check_key(&state.keys, presented_key(&headers)) {
         Err(reason) => {
             log::warn!("HTTP command refused: {reason}");
@@ -506,6 +518,24 @@ mod tests {
         assert!(theme.contains("403"), "{theme}");
         let shared = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"theme","value":"Dark"}"#), "X-Rhema-Key: s3cret\r\n").await;
         assert!(shared.contains("200 OK"), "{shared}");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn a_flood_from_one_sender_is_refused_with_429() {
+        let sink = Arc::new(MockSink::new());
+        let result = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() }, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let mut statuses = Vec::new();
+        for _ in 0..30 {
+            let resp = raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"next"}"#)).await;
+            statuses.push(if resp.contains("200 OK") { 200 } else if resp.contains("429") { 429 } else { 0 });
+        }
+        assert!(statuses.iter().filter(|s| **s == 200).count() >= 20, "{statuses:?}");
+        assert!(statuses.contains(&429), "{statuses:?}");
+        assert!(!statuses.contains(&0), "{statuses:?}");
         let mut handle = result.handle;
         handle.stop();
     }

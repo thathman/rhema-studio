@@ -95,6 +95,7 @@ where
     let active = Arc::new(AtomicBool::new(true));
     let thread_active = active.clone();
     let keys = config.keys.clone();
+    let rate = crate::rate::RateLimiter::default();
 
     let thread = std::thread::Builder::new()
         .name("osc-listener".into())
@@ -104,7 +105,7 @@ where
             let mut buf = [0u8; 4096];
 
             while thread_active.load(Ordering::SeqCst) {
-                let (size, _src) = match socket.recv_from(&mut buf) {
+                let (size, src) = match socket.recv_from(&mut buf) {
                     Ok(result) => result,
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock
                         || e.kind() == std::io::ErrorKind::TimedOut =>
@@ -118,6 +119,10 @@ where
                     }
                 };
 
+                if !rate.allow(src.ip()) {
+                    log::warn!("OSC message refused: too many from {}", src.ip());
+                    continue;
+                }
                 let packet = match rosc::decoder::decode_udp(&buf[..size]) {
                     Ok((_rest, packet)) => packet,
                     Err(e) => {
