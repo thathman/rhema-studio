@@ -394,3 +394,9 @@ report), but launching it cannot.
 | 10ac.1 | Outputs: turn on "Show lower thirds" for the NDI stream (transparent theme), leave it off for the projector. Present → Lower third: "Pastor Tolu" / "Senior Pastor" → Show. | The band appears on the stream (keyable in OBS over the camera), not on the projector or the stage screen. | Unverified |
 | 10ac.2 | With the band up: show a verse, Next, Clear, Restore, a video, a quick screen. | The band stays on the stream through all of it, above everything; the projector never shows it. | Unverified |
 | 10ac.3 | Hide. Then turn lower thirds off for the stream while a band is up. | Hide removes it at once; switching the output off removes it from that output at once. | Unverified |
+
+### 10ae. Multiview (OP-004)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ae.1 | Projector (both languages), stream (first language only, lower thirds on), stage, signage loop. Go live with a bilingual verse and show a lower third; open Outputs (Present header chip). | Each card shows what that output shows: the projector both languages without the band, the stream English only with the band, the stage card "Stage display", the signage card its current picture. Cards of outputs that are off are dimmed and empty. | Unverified |

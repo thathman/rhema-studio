@@ -58,8 +58,8 @@ export function OutputCard({
   busy = false,
 }: OutputCardProps) {
   const themes = useBroadcastStore((s) => s.themes)
-  const isLive = useBroadcastStore((s) => s.isLive)
-  const liveVerse = useBroadcastStore((s) => s.liveVerse)
+  // Exactly what this output was last sent: its language, lower third, signage picture or stage role.
+  const frame = useBroadcastStore((s) => s.outputFrames[output.id])
   const renameOutput = useBroadcastStore((s) => s.renameOutput)
 
   const [renaming, setRenaming] = useState(false)
@@ -81,10 +81,13 @@ export function OutputCard({
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-2.5 transition-colors hover:border-foreground/20">
       <div className="relative overflow-hidden rounded-md border border-foreground/10">
-        {theme ? (
+        {frame?.stage && onAir ? (
+          <div className="flex aspect-video w-full items-center justify-center bg-black text-xs text-white/70">Stage display: words, next, note, timer</div>
+        ) : theme ? (
           <CanvasVerse
-            theme={theme}
-            verse={isLive && onAir ? liveVerse : null}
+            theme={frame?.theme ?? theme}
+            verse={onAir ? (frame?.verse ?? null) : null}
+            overlay={onAir ? (frame?.overlay ?? null) : null}
             className={cn("aspect-video w-full", !onAir && "opacity-45 saturate-50")}
           />
         ) : (

@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, memo } from "react"
-import { onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
+import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import type { BroadcastTheme, VerseRenderData } from "@/types"
 import { cn } from "@/lib/utils"
@@ -7,12 +7,15 @@ import { cn } from "@/lib/utils"
 interface CanvasVerseProps {
   theme: BroadcastTheme
   verse: VerseRenderData | null
+  /** A lower third drawn over the frame, as the output window does. */
+  overlay?: { line1: string; line2: string } | null
   className?: string
 }
 
 export const CanvasVerse = memo(function CanvasVerse({
   theme,
   verse,
+  overlay,
   className,
 }: CanvasVerseProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -54,7 +57,8 @@ export const CanvasVerse = memo(function CanvasVerse({
       scale,
       imageCache: themeImageCache(),
     })
-  }, [theme, verse, containerWidth])
+    if (overlay) drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily)
+  }, [theme, verse, overlay, containerWidth])
 
   // Preload every image the theme uses so the renderer finds them in the cache.
   useEffect(() => {
