@@ -714,6 +714,6 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bt.1 | Settings → Remote: untick "other devices", start HTTP on 9090; quit and start Rhema. | HTTP is running again on 9090, local only; the box stays unticked. A phone that was paired works without opening Settings (when "other devices" is ticked). | Unverified |
+| 10bt.1 | Settings → Remote: untick "other devices", start HTTP on 9090; quit and start Rhema. Then tick "other devices" with no key and no paired device, start HTTP, restart; then pair a phone and restart. | Local only: running again on 9090, box still unticked. Network with no key: not restarted, with a message. With a paired phone: running again, the phone works without opening Settings. | Unverified |
 | 10bt.2 | Phone remote: walk to the edge of the Wi-Fi and press Next once. | The service steps once, even if the phone shows "Sending…" or "No answer…"; never twice for one press. | Unverified |
 | 10bt.3 | Turn rehearsal on; look at the phone. Then with the approval question showing, look again. | "Rehearsal: the screens are frozen" / "The computer is asking whether to show this service". After Clear, the phone says "Nothing on screen". | Unverified |

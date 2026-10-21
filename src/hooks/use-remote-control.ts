@@ -202,11 +202,25 @@ function parsePayload(raw: unknown): Record<string, unknown> | null {
 }
 
 export async function restartRemoteListeners(): Promise<void> {
-  const { osc, http, oscPort, httpPort, lan } = useSettingsStore.getState().remoteListeners
+  const settings = useSettingsStore.getState()
+  const { osc, http, oscPort, httpPort, lan } = settings.remoteListeners
   if (!osc && !http) return
+  // Never open the whole network by itself: a listener that accepts other devices starts again
+  // only when a key, paired devices or required sign-in protect it (NFR-06).
+  const protectedByKey = settings.remoteAuthRequired || settings.remoteSecret.trim().length > 0 || settings.remoteDevices.length > 0
+  if (lan && !protectedByKey) {
+    toast.warning("Remote control was not started again", {
+      description: "It accepted any device on the network with no key. Start it in Settings → Remote, or pair your phone there so it can start by itself.",
+      duration: 15_000,
+    })
+    return
+  }
   await pushRemoteKeys()
   const start = async (cmd: "start_osc" | "start_http", port: number, label: string) => {
     try {
+      // Already running (the window reloaded; listeners outlive it): nothing to do.
+      const status = await invoke<{ running: boolean }>(cmd === "start_osc" ? "get_osc_status" : "get_http_status").catch(() => null)
+      if (status?.running) return
       await invoke<number>(cmd, { port, lan })
     } catch (e) {
       toast.error(`${label} could not start again`, { description: `${e instanceof Error ? e.message : String(e)}. Start it in Settings → Remote.` })

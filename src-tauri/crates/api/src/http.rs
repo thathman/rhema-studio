@@ -239,14 +239,15 @@ impl RecentIds {
     /// True the first time an id is seen within the last minute.
     fn first_time(&self, id: &str) -> bool {
         let Ok(mut seen) = self.0.lock() else { return true };
+        let id: String = id.chars().take(64).collect();
         let now = std::time::Instant::now();
         while seen.front().is_some_and(|(_, at)| now.duration_since(*at) > Self::KEEP) || seen.len() >= Self::MAX {
             seen.pop_front();
         }
-        if seen.iter().any(|(s, _)| s == id) {
+        if seen.iter().any(|(s, _)| *s == id) {
             return false;
         }
-        seen.push_back((id.chars().take(64).collect(), now));
+        seen.push_back((id, now));
         true
     }
 }
@@ -526,6 +527,26 @@ mod tests {
     /// publishes. Issue #146 shipped because this test asserted the path the
     /// router happened to mount instead, so the two could drift apart and
     /// still pass.
+    #[tokio::test]
+    async fn a_retried_press_reaches_the_app_once_and_old_clients_still_work() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let press = r#"{"command":"next","id":"press-7"}"#;
+        for _ in 0..2 {
+            let r = raw_http_request(port, "POST", "/api/v1/command", Some(press)).await;
+            assert!(r.contains("200 OK"), "Expected 200, got: {r}");
+        }
+        let old = raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"next"}"#)).await;
+        assert!(old.contains("200 OK"), "a client without ids still works: {old}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.command_count(), 2, "the retried press once, the old client's once");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
     #[tokio::test]
     async fn command_endpoint_requires_the_key_when_one_is_set() {
         let sink = Arc::new(MockSink::new());
