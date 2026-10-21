@@ -781,3 +781,16 @@ report), but launching it cannot.
 | 10bz.3 | A song live; edit and save its words; click a slide of it in Present and Show live. | Preview and the screen show the words as the song went live. | Unverified |
 | 10bz.4 | Present a new verse item, save the service, change the translation. | The verse on air keeps the translation it was saved with. | Unverified |
 | 10bz.5 | Black screen test at 8:30 with an empty rundown; build and run the service; save the log. | No item is marked "added during the service" unless it really was. | Unverified |
+
+### 10ca. Clear, Restore, Back and quick screens (tenth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ca.1 | Song on slide 2; Clear; click any verse in the Bible panel; Restore. | Slide 2 of the song returns; Next then shows slide 3. | Unverified |
+| 10ca.2 | Song live; press Verse + (Shift+→). | The screen keeps the song; only the Bible panel moves. | Unverified |
+| 10ca.3 | Song on slide 2; Please stand; Next. | Slide 3 of the song. | Unverified |
+| 10ca.4 | Quick screen over a verse; Clear; Back. | The verse returns but stays off air until Restore. | Unverified |
+| 10ca.5 | "Ask before showing" on, unapproved service, rehearsal: verse, Black, rehearsal off, Back. | The approval question appears; nothing changes until answered. | Unverified |
+| 10ca.7 | Song on slide 2; Clear; look at the status chip at the top of Present. | It reads "Off air · Restore shows" and the song slide. | Unverified |
+| 10ca.6 | Rundown has John 3:1; put John 3:16 on air from the Bible panel. | The John 3:1 row is not marked LIVE. | Unverified |
+

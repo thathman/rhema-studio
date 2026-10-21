@@ -218,7 +218,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     .setLiveVerse(
       image ? { ...data, image } : data,
       verseToPresent,
-      { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null }
+      { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null, follow: opts.follow }
     )
   mark(`presentVerse end ${ref}`)
   return "presented"

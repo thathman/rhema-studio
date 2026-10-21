@@ -65,7 +65,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             selected.book_number === item.verse.book_number &&
             selected.chapter === item.verse.chapter &&
             selected.verse === item.verse.verse
-        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference))
+        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === activeIndex + 1
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
         return (

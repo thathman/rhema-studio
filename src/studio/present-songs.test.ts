@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { presentActions } from "./present-actions"
 import { remoteActions } from "@/lib/remote-actions"
-import { presentSlide } from "@/hooks/use-broadcast"
+import { presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -62,7 +62,7 @@ beforeEach(() => {
     selectedVerse: null, selectedSlide: null, activeTranslationId: 1, secondaryTranslationId: null, overrideServiceTranslations: false,
     translations: [{ id: 1, abbreviation: "KJV", title: "", language: "en", is_copyrighted: false, is_downloaded: true }],
   })
-  useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSourceVerse: null, liveItem: null, liveSlide: null, presentWarning: null })
+  useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSourceVerse: null, liveItem: null, liveSlide: null, presentWarning: null, heldLive: null, cleared: false })
   useQueueStore.setState({ items: [], activeIndex: null })
   useSongStore.setState({ songs: {} })
 })
@@ -179,6 +179,67 @@ describe("stepping through a song in the rundown", () => {
     await flush()
     expect(useBroadcastStore.getState().isLive).toBe(true)
     expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+  })
+
+  it("Restore brings back what was cleared, even after a verse was clicked meanwhile; Next carries on in the song", async () => {
+    useQueueStore.setState({ items: [songItem()] })
+    presentActions.next()
+    await flush()
+    presentActions.next()
+    await flush()
+    presentActions.clear()
+    await presentVerse({ id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "t" }) // browsing, off air
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    presentActions.restore()
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(1)
+    presentActions.clear()
+    await presentVerse({ id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "t" })
+    presentActions.next()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+  })
+
+  it("cleared under a quick screen, a click meanwhile keeps Back; a quick screen after Clear still holds the song", async () => {
+    const john = { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "t" }
+    useQueueStore.setState({ items: [songItem()] })
+    presentActions.next()
+    await flush()
+    presentActions.next()
+    await flush()
+    presentActions.quickScreen("stand")
+    presentActions.clear()
+    await presentVerse(john)
+    presentActions.restore()
+    expect(presentActions.canGoBack()).toBe(true)
+    presentActions.next()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+    presentActions.clear()
+    await presentVerse(john)
+    presentActions.quickScreen("pray")
+    presentActions.back()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+    expect(useBroadcastStore.getState().isLive).toBe(false) // it was cleared
+    await presentVerse(john) // browsing after Back still leaves the song for Restore
+    presentActions.restore()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+  })
+
+  it("a quick screen during a song: Next and Previous carry on in the song", async () => {
+    useQueueStore.setState({ items: [songItem()] })
+    presentActions.next()
+    await flush()
+    presentActions.next()
+    await flush()
+    presentActions.quickScreen("stand")
+    presentActions.next()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+    presentActions.quickScreen("pray")
+    presentActions.prev()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(1)
   })
 
   it("Show live presents the previewed slide and marks the item active", async () => {

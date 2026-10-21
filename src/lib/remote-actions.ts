@@ -83,6 +83,9 @@ function stepQueue(offset: number): Promise<void> {
   if (items.length === 0) return Promise.resolve()
 
   const current = activeIndex ?? findLiveQueueIndex()
+  // A quick screen over a song: Next/Previous carry on in the song underneath.
+  const b = useBroadcastStore.getState()
+  const live = b.liveSlide ?? (b.liveVerse?.quick ? b.heldLive?.liveSlide ?? null : null)
   // The live item was removed: step to the item that followed it, or the one before.
   // (Only while one of them is still in the rundown: another service opened since makes it stale;
   // a neighbour removed since is found from the other one.)
@@ -94,7 +97,6 @@ function stepQueue(offset: number): Promise<void> {
     const index = offset > 0 ? (nextNeighbour !== -1 ? nextNeighbour : gap.nextId === null ? -1 : prev + 1) : prev !== -1 ? prev : gap.prevId === null ? -1 : nextNeighbour - 1
     return index < 0 || index >= items.length ? Promise.resolve() : presentQueueItem(index)
   }
-  const live = useBroadcastStore.getState().liveSlide
   if (current !== null) {
     const item = items[current]
     // Within the live song, unless it has been deleted from the library (then Next moves on).
@@ -139,7 +141,9 @@ let verseStepSeq = 0
 export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
   const { liveSourceVerse: source, liveItem, liveItemId } = useBroadcastStore.getState()
   if (!source) {
-    await stepVerse(offset === 1 ? "next" : "prev", { present: true })
+    // No verse to continue: step the Bible panel. Off air it also readies that verse;
+    // with a song, slide or quick screen on air it never replaces it (preview only).
+    await stepVerse(offset === 1 ? "next" : "prev", { present: !useBroadcastStore.getState().isLive })
     return
   }
   verseStepSeq += 1

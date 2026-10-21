@@ -29,6 +29,8 @@ export interface HeldLive {
   liveSlide: LiveSlide | null
   liveItemId: string | null
   wasLive: boolean
+  /** It had been cleared (off air, kept for Restore) when the quick screen went up. */
+  wasCleared?: boolean
 }
 
 /** The song slide on the output: which rundown item, song and step. */
@@ -70,6 +72,11 @@ interface BroadcastState {
   liveItemId: string | null
   /** Set while a quick screen is up; what Back returns to. */
   heldLive: HeldLive | null
+  /**
+   * Clear took content off air. Until something goes live again, browsing (a verse
+   * clicked, Verse +/−) changes only the preview, so Restore brings back what was cleared.
+   */
+  cleared: boolean
   /** Private note shown on stage outputs only. Not persisted. */
   stageMessage: string
   /** The lower third on air (outputs with lowerThirds on), or null. Session state; not saved. */
@@ -114,7 +121,7 @@ interface BroadcastState {
   setActiveTheme: (id: string) => void
   setLive: (live: boolean) => void
   /** `goLive` puts the output on air in the same update as the verse, so no stale frame shows first. */
-  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean }) => void
+  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean; follow?: boolean }) => void
   setPresentWarning: (warning: string | null) => void
   setStageMessage: (message: string) => void
   setRehearsal: (on: boolean) => void
@@ -359,6 +366,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveSlide: null,
   liveItemId: null,
   heldLive: null,
+  cleared: false,
   stageMessage: "",
   lowerThird: null,
   outputFrames: {},
@@ -585,10 +593,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       return { outputStatus: { ...s.outputStatus, [id]: { ...prev, ndiError } } }
     }),
   setLive: (isLive) => {
-    set({ isLive })
+    const s = get()
+    set({ isLive, cleared: isLive ? false : s.cleared || (s.isLive && s.liveVerse !== null) })
     get().syncBroadcastOutput()
   },
   setLiveVerse: (liveVerse, source = null, opts = {}) => {
+    // Cleared: only a go-live (or a translation follow of the cleared verse) replaces it.
+    if (get().cleared && !opts.goLive && !opts.follow) {
+      set({ presentWarning: null })
+      return
+    }
     set({
       liveVerse,
       liveSourceVerse: source,
@@ -597,7 +611,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       liveItemId: opts.itemId ?? opts.slide?.itemId ?? null,
       heldLive: opts.keepHeld ? get().heldLive : null,
       presentWarning: null,
-      ...(opts.goLive ? { isLive: true } : {}),
+      ...(opts.goLive ? { isLive: true, cleared: false } : {}),
     })
     get().syncBroadcastOutput()
   },
@@ -618,7 +632,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   holdLive: () => {
     const s = get()
     if (s.heldLive || !s.liveVerse) return
-    set({ heldLive: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: s.isLive } })
+    set({ heldLive: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: s.isLive, wasCleared: s.cleared } })
   },
   releaseHeld: () => {
     const held = get().heldLive
@@ -630,7 +644,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       liveSlide: held.liveSlide,
       liveItemId: held.liveItemId,
       heldLive: null,
-      isLive: held.wasLive,
+      // Cleared while the quick screen was up: the content comes back, still off air.
+      isLive: held.wasLive && get().isLive,
+      // Back to off air with content that was cleared (before or during the quick screen): keep it for Restore.
+      cleared: !!held.wasCleared || (held.wasLive && !get().isLive),
     })
     get().syncBroadcastOutput()
     return true
