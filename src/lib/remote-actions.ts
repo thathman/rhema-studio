@@ -78,9 +78,9 @@ function isSoundItem(item: QueueItem | undefined): boolean {
   return useMediaStore.getState().assets.find((a) => a.id === id)?.kind === "audio"
 }
 
-function stepQueue(offset: number): void {
+function stepQueue(offset: number): Promise<void> {
   const { items, activeIndex } = useQueueStore.getState()
-  if (items.length === 0) return
+  if (items.length === 0) return Promise.resolve()
 
   const current = activeIndex ?? findLiveQueueIndex()
   const live = useBroadcastStore.getState().liveSlide
@@ -92,8 +92,7 @@ function stepQueue(offset: number): void {
       if (next >= 0 && next < live.total) {
         // An arrangement or language change made while the song is live applies the next time it is entered.
         const songAs = live.arrangementId !== undefined ? { arrangement_id: live.arrangementId, languages: live.languages ?? item.song.languages } : undefined
-        void presentQueueItem(current, next, songAs)
-        return
+        return presentQueueItem(current, next, songAs)
       }
     }
   }
@@ -107,14 +106,14 @@ function stepQueue(offset: number): void {
   if (current !== null && isSoundItem(items[target])) {
     if (offset < 0) {
       while (target > 0 && isSoundItem(items[target])) target -= 1
-      if (isSoundItem(items[target])) return
-    } else if (target === current) return
+      if (isSoundItem(items[target])) return Promise.resolve()
+    } else if (target === current) return Promise.resolve()
   }
   const atEdge = target === current
   const song = items[target] && isSongItem(items[target])
   // At the edge a song stays on its slide (re-presents it, e.g. after Clear);
   // a verse re-presents too. Entering a song from below starts at its last slide.
-  void presentQueueItem(target, song ? (atEdge ? (live?.index ?? 0) : offset < 0 ? "last" : 0) : 0)
+  return presentQueueItem(target, song ? (atEdge ? (live?.index ?? 0) : offset < 0 ? "last" : 0) : 0)
 }
 
 // Chapter-crossing ticket: a slow lookup must not land after a newer step.
@@ -228,16 +227,16 @@ export const remoteActions = {
     })
   },
 
-  queueNext: () => stepQueue(1),
-  queuePrev: () => stepQueue(-1),
+  queueNext: (): Promise<void> => stepQueue(1),
+  queuePrev: (): Promise<void> => stepQueue(-1),
 
   /** Step the Bible Text panel one verse. Leaves the queue alone. */
   bibleNext: () => stepVerse("next"),
   biblePrev: () => stepVerse("prev"),
 
   /** Continue the reading on the live output by one verse. */
-  verseNext: () => void stepLiveVerse(1),
-  versePrev: () => void stepLiveVerse(-1),
+  verseNext: (): Promise<void> => stepLiveVerse(1),
+  versePrev: (): Promise<void> => stepLiveVerse(-1),
 
   /** Off air also cancels any present still loading, so it cannot reappear later. */
   toggleOnAir: (active: boolean) => {

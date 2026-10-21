@@ -30,8 +30,8 @@ export interface VideoPlayerHooks {
   onFrame: () => void
   onEnded: () => void
   onError: (name: string) => void
-  /** Sound is played by one window only (the main output), so screens do not echo. */
-  allowSound: boolean
+  /** Sound is played by one window only, so screens do not echo; asked before each video starts. */
+  allowSound: boolean | (() => boolean)
   /** Redraw rate, read before every frame (the NDI rate when NDI is on). */
   fps: () => number
   create?: () => HTMLVideoElement
@@ -99,7 +99,7 @@ export function createVideoPlayer(h: VideoPlayerHooks): VideoPlayer {
       const v = ensure()
       name = spec.name
       v.loop = spec.loop
-      v.muted = !(spec.sound && h.allowSound)
+      v.muted = !(spec.sound && (typeof h.allowSound === "function" ? h.allowSound() : h.allowSound))
       const next = `${spec.token}|${spec.url}`
       if (key !== next) {
         key = next

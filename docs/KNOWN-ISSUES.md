@@ -20,3 +20,4 @@ Kept for every release candidate (release gate RG-10). "Unverified" means the be
 
 ## Code health
 - None open: the whole repository lints clean and CI blocks on any new lint error (ST-010).
+- The service timer counts on the computer's monotonic clock (so changing the system clock cannot corrupt it, FR-07). If the laptop sleeps during a service, the sleep is not counted on macOS; clock times shown ("Planned end", "by 12:15") follow the real clock again within seconds.
