@@ -250,7 +250,16 @@ function BroadcastCanvas() {
       frameFailing = false
       videoPlayer?.sync(event.payload.verse?.video)
       preloadThemeAssets(event.payload.theme)
-      if (event.payload.verse?.image?.url) void loadThemeImage(event.payload.verse.image.url).then(() => { draw(); pushNdiBurstRef.current?.() })
+      const sentAt = event.payload.sentAt
+      const logLatency = () => {
+        if (typeof sentAt !== "number") return
+        const lines = latencyLog.record(Date.now() - sentAt)
+        if (lines.warn) void logWarnLine(lines.warn).catch(() => {})
+        if (lines.info) void logInfoLine(lines.info).catch(() => {})
+      }
+      // A picture slide is timed when the picture itself is drawn, not its placeholder.
+      const picture = event.payload.verse?.image?.url
+      if (picture) void loadThemeImage(picture).then(() => { draw(); pushNdiBurstRef.current?.(); logLatency() })
       logDebug("Received broadcast:verse-update", {
         hasVerse: Boolean(event.payload.verse),
         themeId: event.payload.theme.id,
@@ -258,11 +267,7 @@ function BroadcastCanvas() {
       draw()
       pushNdiBurst()
       // Send-to-drawn time, batched into the log file (QA-007 benchmarks read it from a diagnostics export).
-      if (typeof event.payload.sentAt === "number") {
-        const lines = latencyLog.record(Date.now() - event.payload.sentAt)
-        if (lines.warn) void logWarnLine(lines.warn).catch(() => {})
-        if (lines.info) void logInfoLine(lines.info).catch(() => {})
-      }
+      if (!picture) logLatency()
     })
 
     const unlistenNdiConfig = currentWindow.listen<NdiConfigEventPayload>("broadcast:ndi-config", (event) => {

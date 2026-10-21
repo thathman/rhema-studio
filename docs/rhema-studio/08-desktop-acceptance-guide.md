@@ -570,4 +570,4 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bb.1 | On the target (low-end) PC with a projector output, step through 40 verses and songs; Settings → Diagnostics → Save logs. | Two "[latency] output main: 20 screen changes, median … ms, slowest … ms" lines; record the numbers in the evidence sheet (QA-007). Any change over 100 ms appears as its own warning. | Unverified |
+| 10bb.1 | On the target (low-end) PC with a projector output, step through 40 verses and songs; Settings → Diagnostics → Save logs. | "[latency] output main: 20 screen changes, median … ms, slowest … ms" lines (one per 20 real changes of screen; resends are not counted; picture slides are timed when the picture is drawn); record the numbers in the evidence sheet (QA-007). Any change over 100 ms appears as its own warning. | Unverified |
