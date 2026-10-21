@@ -565,3 +565,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ba.1 | Prepare: give the sermon item "end by" 3 minutes from now; save, reopen. Present it. | The rundown shows "by HH:MM"; the time survives reopening; the timer chip shows "by HH:MM · 3 min", amber at 2 minutes, red "past HH:MM by 1 min" after. | Unverified |
+
+### 10bb. Slide-change latency in the logs (QA-007)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bb.1 | On the target (low-end) PC with a projector output, step through 40 verses and songs; Settings → Diagnostics → Save logs. | "[latency] output main: 20 screen changes, median … ms, slowest … ms" lines (one per 20 real changes of screen; resends are not counted; picture slides are timed when the picture is drawn); record the numbers in the evidence sheet (QA-007). Any change over 100 ms appears as its own warning. | Unverified |

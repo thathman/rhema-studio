@@ -463,11 +463,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }
     const verse = s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null
     const overlay = output.lowerThirds ? s.lowerThird : null
+    // Only a real change of screen is timed (QA-007); resends after a window opens are not.
+    const changed = get().outputFrames[outputId]?.verse !== verse
     recordFrame(outputId, { theme, verse, overlay })
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
       verse,
       overlay,
+      ...(changed ? { sentAt: Date.now() } : {}),
     }).catch(() => {})
   },
   syncBroadcastOutput: () => {

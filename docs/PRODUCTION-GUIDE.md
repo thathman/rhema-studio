@@ -88,4 +88,4 @@ More → Your name is optional and local. When set it is written on every change
 
 ## Diagnostics
 
-Settings → Diagnostics → Save logs. The content database path and applied migrations are shown in More → Library.
+Settings → Diagnostics → Save logs. Each output also logs how long screens take to appear: a "[latency]" summary every 20 changes (median and slowest, from send to drawn) and a warning for any change over 100 ms, so a slow computer shows up in the saved logs. The content database path and applied migrations are shown in More → Library.
