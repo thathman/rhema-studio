@@ -95,16 +95,18 @@
   document.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("click", () => send(b.dataset.cmd, b)))
   $("forget").addEventListener("click", () => { set(null); show(); say("Unpaired here. Revoke it in Settings → Remote too.") })
 
-  let timer
+  let timer, polling = false
   async function poll() {
     clearTimeout(timer)
-    if (!get() || document.hidden) return
+    if (polling || !get() || document.hidden) return
+    polling = true
     try {
       const s = await (await fetch("/api/v1/status", { cache: "no-store" })).json()
       $("air").textContent = s.on_air ? "On air" : "Off air"
       $("air").className = "air" + (s.on_air ? " on" : "")
       $("live").textContent = s.live_verse || "Nothing on screen"
     } catch {}
+    polling = false
     timer = setTimeout(poll, 2000)
   }
   document.addEventListener("visibilitychange", poll)

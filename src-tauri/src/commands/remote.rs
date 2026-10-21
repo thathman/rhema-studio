@@ -202,6 +202,8 @@ pub struct OscStatus {
 pub struct HttpRuntime {
     handle: Option<HttpHandle>,
     bound_port: Option<u16>,
+    /// Listening on the whole network (not only 127.0.0.1), as started.
+    lan: bool,
     status: SharedStatus,
 }
 
@@ -210,6 +212,7 @@ impl HttpRuntime {
         Self {
             handle: None,
             bound_port: None,
+            lan: false,
             status: new_shared_status(),
         }
     }
@@ -261,6 +264,7 @@ pub async fn start_http(
         let mut runtime = state.lock().map_err(|e| e.to_string())?;
         runtime.handle = Some(result.handle);
         runtime.bound_port = Some(bound_port);
+        runtime.lan = bind_host(lan) != "127.0.0.1";
     }
 
     log::info!("HTTP API server started on port {bound_port}");
@@ -292,6 +296,7 @@ pub async fn get_http_status(
 
     Ok(HttpStatus {
         running: runtime.handle.as_ref().is_some_and(rhema_api::HttpHandle::is_active),
+        lan: runtime.lan,
         port: runtime.bound_port,
     })
 }
@@ -335,6 +340,8 @@ pub async fn update_remote_status(
 pub struct HttpStatus {
     pub running: bool,
     pub port: Option<u16>,
+    /// Reachable from other devices (bound to 0.0.0.0).
+    pub lan: bool,
 }
 
 /// Where the listeners bind: the whole network (default, what existing setups
