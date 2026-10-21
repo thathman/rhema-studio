@@ -21,6 +21,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
 ### Search and safety
+- Outputs: Present shows a projector closed from the computer as off, an unplugged monitor is named correctly, very long text and stage words fit, and editing a theme no longer flickers on air or mutes a video.
 - Preparing a service: New service from the items on screen now saves, QR slides with only a link and long slide text save, a service from another church computer opens even when a hymn number is already used here, and OpenLyrics files keep a song's main language, key and tempo.
 - Your data is safer: settings and themes come back after a crash during a save, closing Rhema writes the last changes and keeps the service log, pictures and songs used on screen cannot be deleted, and the Theme Designer asks before discarding edits.
 - Clear and Restore are reliable: while cleared, clicking verses only changes the preview, and the status reads "Off air · Restore shows …". Verse + never replaces a song on air, a quick screen keeps your place in a song, and Back asks for approval like any go-live.
