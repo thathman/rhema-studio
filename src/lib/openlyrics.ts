@@ -93,7 +93,7 @@ export function parseOpenLyrics(xml: string, hymnbookIds: Record<string, string>
       authors,
       copyright,
       ccli_number: ccli || null,
-      licence: ccli ? "ccli" : /^public domain\b/i.test(copyright) ? "public_domain" : "unknown",
+      licence: ccli ? "ccli" : /^public domain\.?$/i.test(copyright.trim()) ? "public_domain" : "unknown",
       primary_language: primary,
       notes,
       key,

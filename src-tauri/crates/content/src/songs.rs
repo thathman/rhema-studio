@@ -1191,7 +1191,7 @@ pub(crate) fn validate_song_payload(i: usize, payload: Option<&str>) -> Result<S
 
 /// Song items must point at songs that exist (and arrangements of that song).
 pub(crate) fn check_song_items_exist(tx: &Transaction<'_>, items: &[crate::ItemInput]) -> Result<()> {
-    for (i, it) in items.iter().enumerate().filter(|(_, it)| it.kind.trim() == "song") {
+    for (i, it) in (1_usize..).zip(items).filter(|(_, it)| it.kind.trim() == "song") {
         let p = validate_song_payload(i, it.payload.as_deref())?;
         let exists: bool = tx.query_row("SELECT 1 FROM songs WHERE id = ?1", params![p.song_id], |_| Ok(())).optional()?.is_some();
         if !exists {

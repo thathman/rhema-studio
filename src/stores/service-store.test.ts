@@ -297,6 +297,28 @@ describe("saving", () => {
     useBroadcastStore.setState({ liveItemId: null })
   })
 
+  it("Duplicate moves the live marker, the preview selection and the service log to the copies", async () => {
+    await openStored()
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const { useJournalStore } = await import("./journal-store")
+    const { useBibleStore } = await import("./bible-store")
+    useBroadcastStore.setState({ liveItemId: "i2" })
+    useJournalStore.setState({ entries: [{ kind: "live", label: "John 3:16", itemId: "i2", at: 0, mono: 0 }] })
+    const slideItem = { ...useQueueStore.getState().items[0], kind: "slide", slide: { title: "Hi", body: "" } }
+    useBibleStore.setState({ selectedSlide: { item: slideItem as never, index: 0 } })
+    mockInvoke.mockImplementation(async (cmd: string, a?: { items?: ProgramItem[] }) =>
+      cmd === "content_create_program" ? { ...program, id: "p3", revision: 1 } : cmd === "content_replace_items" ? { program: { ...program, id: "p3", revision: 2 }, items: a?.items ?? [] } : null)
+    expect(await useServiceStore.getState().duplicateCurrent("Copy", null)).toBe("created")
+    const ids = sentItems().map((i) => String(i.id))
+    expect(ids).not.toContain("i2")
+    expect(useBroadcastStore.getState().liveItemId).toBe(ids[1])
+    expect(useJournalStore.getState().entries[0].itemId).toBe(ids[1])
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(ids[0])
+    useBroadcastStore.setState({ liveItemId: null })
+    useBibleStore.setState({ selectedSlide: null })
+    useJournalStore.getState().clear()
+  })
+
   it("a long slide line is shortened for the label only", () => {
     const words = "x".repeat(250)
     const out = toItemInputs([{ id: "s1", kind: "slide", slide: { title: "", body: words }, reference: words, confidence: 1, source: "manual", added_at: 0 } as never], () => "KJV")
