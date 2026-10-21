@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { toast } from "sonner"
-import { ImageIcon, PlayIcon, PlusIcon, UploadIcon } from "lucide-react"
+import { ImageIcon, MusicIcon, PlayIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
@@ -31,7 +31,7 @@ export function MediaLibrary() {
 
   const doImport = async () => {
     try {
-      const results = await useMediaStore.getState().importFiles([{ name: "Pictures and videos", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm"] }])
+      const results = await useMediaStore.getState().importFiles([{ name: "Pictures, videos and sounds", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm", "mp3", "m4a", "aac", "wav", "ogg"] }])
       if (!results) return
       const ok = results.filter((r) => r.status === "imported").length
       const dup = results.filter((r) => r.status === "imported" && r.duplicate).length
@@ -63,11 +63,12 @@ export function MediaLibrary() {
   }
 
   const pictures = assets.filter((a) => a.kind === "image" || a.kind === "video")
+  const sounds = assets.filter((a) => a.kind === "audio")
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Button size="sm" onClick={() => void doImport()}><UploadIcon /> Import pictures or videos…</Button>
+        <Button size="sm" onClick={() => void doImport()}><UploadIcon /> Import pictures, videos or sounds…</Button>
         <span className="text-xs text-muted-foreground">Copied into the app's media folder; the originals are not needed afterwards.</span>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
@@ -104,6 +105,21 @@ export function MediaLibrary() {
           )
         })}
       </ul>
+      {sounds.length > 0 && (
+        <div className="flex flex-col gap-1 border-t border-border pt-2">
+          <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Sounds <span className="normal-case tracking-normal">· play them from Present → Sound</span></p>
+          <ul className="max-h-32 overflow-y-auto" aria-label="Sounds">
+            {sounds.map((a) => (
+              <li key={a.id} className="flex items-center gap-2 px-1 py-0.5 text-xs">
+                <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate" title={a.name}>{a.name}</span>
+                {!a.present && <span className="text-[0.625rem] text-destructive">missing</span>}
+                <ConfirmDelete label={`Remove ${a.name}`} verb="Remove" onConfirm={() => void remove(a)} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

@@ -61,12 +61,13 @@ export function WorkspaceHeader({
   children?: React.ReactNode
 }) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border px-5">
-      <div className="min-w-0">
+    // The chips wrap onto a second row on a narrow (1366 px) screen rather than push controls off the edge.
+    <header className="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-2">
+      <div className="min-w-24 shrink">
         <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
         {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
       </div>
-      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {children && <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{children}</div>}
     </header>
   )
 }
