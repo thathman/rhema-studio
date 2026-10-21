@@ -41,7 +41,9 @@ import { isSongItem } from "@/types"
 function useNextHint(): string {
   const liveSlide = useBroadcastStore((s) => s.liveSlide)
   const items = useQueueStore((s) => s.items)
-  const song = useSongStore((s) => (liveSlide ? s.songs[liveSlide.songId] : undefined))
+  const saved = useSongStore((s) => (liveSlide ? s.songs[liveSlide.songId] : undefined))
+  // The song as it went live: what Next steps through.
+  const song = liveSlide?.song ?? saved
   if (!liveSlide || !song) return "→ / PgDn"
   const item = items.find((i) => i.id === liveSlide.itemId)
   if (!item || !isSongItem(item)) return "→ / PgDn"

@@ -484,9 +484,11 @@ function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; 
   // Prepare shows the item as edited.
   const liveSnapshot = mode === "present" && liveSlide?.itemId === item.id && liveSlide.arrangementId !== undefined ? liveSlide : null
   // Clicks act on the list as shown: the live arrangement while it is live.
-  const songAs = liveSnapshot ? { arrangement_id: liveSnapshot.arrangementId ?? null, languages: liveSnapshot.languages ?? item.song.languages } : undefined
-  const shownItem: SongQueueItem = songAs ? { ...item, song: { ...item.song, ...songAs } } : item
-  const slides = buildSlides(song, shownItem.song.arrangement_id, shownItem.song.languages)
+  // …and the words it went live with: what Next steps through (an edit saved meanwhile applies next time).
+  const shownSong = liveSnapshot?.song ?? song
+  const songAs = liveSnapshot ? { arrangement_id: liveSnapshot.arrangementId ?? null, languages: liveSnapshot.languages ?? item.song.languages, song: liveSnapshot.song } : undefined
+  const shownItem: SongQueueItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
+  const slides = buildSlides(shownSong, shownItem.song.arrangement_id, shownItem.song.languages)
   const highlightLive = mode === "present" || !liveSlide || liveSlide.itemId !== item.id || (liveSlide.arrangementId === item.song.arrangement_id && (liveSlide.languages ?? []).join() === item.song.languages.join())
   if (slides.length === 0) {
     return <p className="px-9 py-1 text-xs text-confidence-mid">No lyrics in {item.song.languages.join(" / ").toUpperCase() || song.song.primary_language.toUpperCase()}.</p>
@@ -494,7 +496,7 @@ function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; 
   return (
     <ol className="mb-1 ml-7 flex flex-col gap-px border-l border-border pl-2" aria-label={`${item.reference} slides`}>
       {slides.map((slide) => {
-        const section = song.sections.find((s) => s.id === slide.sectionId)
+        const section = shownSong.sections.find((s) => s.id === slide.sectionId)
         const live = highlightLive && isLive && liveSlide?.itemId === item.id && liveSlide.index === slide.index
         const sel = selectedSlide?.item.id === item.id && selectedSlide.index === slide.index
         return (
