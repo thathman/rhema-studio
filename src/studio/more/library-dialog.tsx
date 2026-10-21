@@ -117,7 +117,10 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
+    // While a restore runs the dialog stays open (and, being modal, keeps the
+    // rest of the app untouched): edits made meanwhile would be saved to the
+    // database being replaced, or discarded when the restore finishes.
+    <Dialog open={open} onOpenChange={(o) => { if (!o && busy !== "restore") onClose() }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Library</DialogTitle>
