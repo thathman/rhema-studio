@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { ProgramItem, ProgramWithItems, VerseQueueItem } from "@/types"
+import type { ProgramItem, ProgramWithItems, QueueItem, VerseQueueItem } from "@/types"
 
 const mockInvoke = vi.fn()
 vi.mock("@tauri-apps/api/core", () => ({
@@ -459,4 +459,27 @@ describe("createFromRundown", () => {
     expect(reopened.items[0].comments).toEqual(v.comments)
     expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, comments: [...(v.comments ?? []), { by: "Tolu", at: "2026-10-21T11:00:00Z", text: "ok" }] }]))
   })
+
+  it("counts every saved field as a change (video loop/sound, slide link) and keeps payload fields it does not know (FR-03)", () => {
+    const pic = { id: "m1", kind: "image", image: { media_id: "a".repeat(64), name: "Clip", fit: "cover" }, reference: "Clip", confidence: 1, source: "manual", added_at: 0, notes: null } as unknown as QueueItem
+    expect(rundownSignature([pic])).not.toBe(rundownSignature([{ ...pic, image: { ...(pic as never as { image: object }).image, loop: true } } as unknown as QueueItem]))
+    expect(rundownSignature([pic])).not.toBe(rundownSignature([{ ...pic, image: { ...(pic as never as { image: object }).image, sound: false } } as unknown as QueueItem]))
+    const slide = { id: "s1", kind: "slide", slide: { title: "Give", body: "online", link: "https://example.org/give" }, reference: "Give", confidence: 1, source: "manual", added_at: 0, notes: null } as unknown as QueueItem
+    expect(rundownSignature([slide])).not.toBe(rundownSignature([{ ...slide, slide: { title: "Give", body: "online" } } as unknown as QueueItem]))
+
+    const payload = JSON.stringify({ title: "Hi", body: "There", transition: "fade", future: { x: 1 } })
+    const reopened = toQueueItems({ program, items: [item("s2", "Hi", 0, 0, 0, { kind: "slide", book_number: null, chapter: null, verse: null, payload })] }, 1, [])
+    const [input] = toItemInputs(reopened.items)
+    expect(JSON.parse(input.payload ?? "{}")).toMatchObject({ title: "Hi", body: "There", transition: "fade", future: { x: 1 } })
+  })
+
+  it("an edit made while a load is running still counts as unsaved once the load ends", async () => {
+    await openStored()
+    useServiceStore.setState({ loading: true })
+    useQueueStore.getState().removeItem(useQueueStore.getState().items[0].id)
+    expect(useServiceStore.getState().dirty).toBe(false)
+    useServiceStore.setState({ loading: false })
+    expect(useServiceStore.getState().dirty).toBe(true)
+  })
 })
+

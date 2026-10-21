@@ -688,3 +688,13 @@ report), but launching it cannot.
 | 10bp.3 | A song live on its 2nd slide; in Prepare change its arrangement; press Next twice. | Next continues the arrangement that was live (slide 3, then 4); entering the song again uses the new arrangement. | Unverified |
 | 10bp.4 | A song live from an unsaved rundown; delete the song in the library; press Next. | The next item goes live (no repeated "no longer in the library" warning). | Unverified |
 | 10bp.5 | Present item 5 (a verse); press Verse +; press Next. | Item 6 goes live (not item 1); a background on item 5 stays during Verse +. | Unverified |
+
+### 10bq. Data and output audit fixes (FR-03, RG-05, FR-06)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bq.1 | Saved service: tick Loop on a video item (or untick Sound, or change a QR slide's address). | The service shows unsaved; closing asks. | Unverified |
+| 10bq.2 | Edit a song in the song editor without saving; close the Rhema window. Also: Clear service, add two items in Prepare, close the window. | Both times "Save changes before closing?" names what is unsaved. | Unverified |
+| 10bq.3 | Open a song on two computers sharing a church folder… or in two editors via a backup; save on one, then save on the other. | The second shows the conflict and "Save mine as a new song", which keeps the edits as "<title> (my version)". | Unverified |
+| 10bq.4 | Give the NDI/stream output a custom lower-third theme; delete that theme in the theme library. | Refused: "<theme> is used by <output>"; the output keeps its theme. | Unverified |
+| 10bq.5 | Rename the service and at once reorder an item; close the window. | Closing asks (the reorder was not lost). | Unverified |

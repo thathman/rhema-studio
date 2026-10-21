@@ -1,3 +1,4 @@
+import { useUnsavedStore } from "@/stores/unsaved-store"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { ArrowDownIcon, ArrowUpIcon, DownloadIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
@@ -97,6 +98,27 @@ function EditorDialog({
   }, [songId])
 
   const dirty = JSON.stringify(form) !== initial
+  // The close question knows about this song while its changes are unsaved.
+  const unsavedTitle = dirty ? form.title.trim() || "Untitled song" : null
+  useEffect(() => {
+    useUnsavedStore.getState().setSongEditor(unsavedTitle)
+  }, [unsavedTitle])
+  useEffect(() => () => useUnsavedStore.getState().setSongEditor(null), [])
+  const [conflicted, setConflicted] = useState(false)
+  // A save conflict: keep these edits as a new song rather than lose them (RG-05).
+  const saveAsNew = async () => {
+    setSaving(true)
+    try {
+      const saved = await useSongStore.getState().create({ ...inputFromForm(form), title: `${form.title.trim() || "Untitled song"} (my version)` })
+      toast.success(`${saved.song.title} saved as a new song`)
+      onSaved?.(saved)
+      onClose()
+    } catch (e) {
+      setError(describe(e))
+    } finally {
+      setSaving(false)
+    }
+  }
   const problems = useMemo(() => validateForm(form), [form])
   const primary = form.primary_language
   const arrangement = form.arrangements.find((a) => a.id === arrangementId) ?? form.arrangements[0] ?? null
@@ -119,7 +141,8 @@ function EditorDialog({
       onClose()
     } catch (e) {
       if (isContentCommandError(e) && e.kind === "conflict") {
-        setError("Someone else saved this song since you opened it. Close and reopen it to see their changes; your edits here are not saved.")
+        setConflicted(true)
+        setError("Someone else saved this song since you opened it. Your edits here are not saved: keep them as a new song, or close and reopen to see their changes.")
       } else {
         setError(describe(e))
       }
@@ -261,6 +284,7 @@ function EditorDialog({
           <section className="flex min-h-0 flex-col gap-4 overflow-y-auto p-4">
             {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
             {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm">{error}</p>}
+            {conflicted && <Button variant="outline" size="sm" className="w-fit" disabled={saving} onClick={() => void saveAsNew()}>Save mine as a new song</Button>}
 
             {form.sections.length === 0 ? (
               <PasteBox paste={paste} setPaste={setPaste} lang={pasteLang} setLang={setPasteLang} onApply={() => { set(applyPaste(form, paste, pasteLang)); setPaste("") }} big />

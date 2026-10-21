@@ -1,3 +1,4 @@
+import { toast } from "sonner"
 import { useState, useMemo } from "react"
 import { useBroadcastStore } from "@/stores"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
@@ -193,7 +194,8 @@ function ThemeCard({
                   className="text-destructive"
                   onClick={(e) => {
                     e.stopPropagation()
-                    useBroadcastStore.getState().deleteTheme(theme.id)
+                    const { inUse } = useBroadcastStore.getState().deleteTheme(theme.id)
+                    if (inUse.length) toast.error(`${theme.name} is used by ${inUse.join(", ")}`, { description: "Choose another theme for those outputs first (More → Outputs)." })
                   }}
                 >
                   <Trash2Icon className="mr-2 size-3.5" />

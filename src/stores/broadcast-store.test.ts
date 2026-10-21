@@ -482,5 +482,18 @@ describe("updateDraftNested deep paths", () => {
       vi.doUnmock("@tauri-apps/plugin-store")
     }
   })
+
+  it("refuses to delete a theme an output uses, naming the outputs (FR-06)", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const custom = { ...s.themes[0], id: "lt-custom", name: "Stream lower third", builtin: false }
+    useBroadcastStore.setState({ themes: [...s.themes, custom], outputs: s.outputs.map((o, k) => (k === 0 ? { ...o, themeId: "lt-custom" } : o)) })
+    const name = useBroadcastStore.getState().outputs[0].name
+    expect(useBroadcastStore.getState().deleteTheme("lt-custom")).toEqual({ inUse: [name] })
+    expect(useBroadcastStore.getState().themes.some((t) => t.id === "lt-custom")).toBe(true)
+    useBroadcastStore.setState({ outputs: useBroadcastStore.getState().outputs.map((o) => ({ ...o, themeId: s.themes[0].id })) })
+    expect(useBroadcastStore.getState().deleteTheme("lt-custom")).toEqual({ inUse: [] })
+    expect(useBroadcastStore.getState().themes.some((t) => t.id === "lt-custom")).toBe(false)
+  })
 })
 

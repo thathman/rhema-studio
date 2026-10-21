@@ -18,6 +18,8 @@ interface QueueItemBase {
   prepared_by?: string | null
   /** Team comments on this item (CL-007); saved with the service and carried in service files. Never on screen. */
   comments?: ItemComment[] | null
+  /** Payload fields this build does not edit (from a newer version or a service file), written back unchanged (FR-03). */
+  payload_extra?: Record<string, unknown>
 }
 
 export interface VerseQueueItem extends QueueItemBase {

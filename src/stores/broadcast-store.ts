@@ -102,7 +102,8 @@ interface BroadcastState {
   loadThemes: () => void
   saveTheme: (theme: BroadcastTheme) => void
   applyBrandKit: (kit: BrandKit) => void
-  deleteTheme: (id: string) => void
+  /** Removes the theme unless an output uses it; returns those outputs' names. */
+  deleteTheme: (id: string) => { inUse: string[] }
   duplicateTheme: (id: string) => void
   createNewTheme: (layoutKind?: NewThemeLayoutKind) => void
   renameTheme: (id: string, name: string) => void
@@ -380,8 +381,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     })),
   /** Generate or refresh the Brand Kit's themes; hand-edited ones are left alone. */
   applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes) })),
-  deleteTheme: (id) =>
-    set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin) })),
+  // An output using the theme would silently fall back to Classic Dark (an opaque frame over a
+  // stream's camera, FR-06): refuse and say which outputs use it.
+  deleteTheme: (id) => {
+    const users = get().outputs.filter((o) => o.themeId === id)
+    if (users.length > 0) return { inUse: users.map((o) => o.name) }
+    set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin) }))
+    return { inUse: [] }
+  },
   duplicateTheme: (id) => {
     const s = get()
     const source = s.themes.find((t) => t.id === id)
