@@ -257,14 +257,23 @@ export function getTabNavigationResult(
     return currentInput
   }
 
-  const trimmed = currentInput.trim()
+  let trimmed = currentInput.trim()
   const suggestionTrimmed = currentSuggestion.trim()
 
   // Extract the full book name from the suggestion
-  const bookNameMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[a-zA-Z\s]+)\s+\d+:\d+$/i)
+  const bookNameMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[\p{L}\p{M}\s]+)\s+\d+:\d+$/iu)
 
   if (bookNameMatch) {
     const fullBookName = bookNameMatch[1]
+
+    // A short form or Yorùbá name ("jn", "Jòhánù 3") is not a prefix of the
+    // suggested name: carry on from that name, keeping the typed numbers.
+    const typedBook = trimmed.replace(/\s*\d[\d:\s]*$/, "")
+    const typedNumbers = trimmed.slice(typedBook.length).trim()
+    if (typedBook && !foldMarks(fullBookName).toLowerCase().startsWith(foldMarks(typedBook).toLowerCase())) {
+      if (!typedNumbers) return fullBookName + " "
+      trimmed = `${fullBookName} ${typedNumbers}`
+    }
 
     // Check if current input matches the COMPLETE book name
     const currentIsCompleteBookName =
@@ -282,7 +291,7 @@ export function getTabNavigationResult(
 
     // Stage 2: Has chapter -> advance to chapter with colon
     if (hasChapter) {
-      const chapterMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[a-zA-Z\s]+\s+\d+):\d+$/i)
+      const chapterMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[\p{L}\p{M}\s]+\s+\d+):\d+$/iu)
       if (chapterMatch) {
         return chapterMatch[1] + ":"
       }

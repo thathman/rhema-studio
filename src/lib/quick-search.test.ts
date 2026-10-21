@@ -433,5 +433,11 @@ describe("parseTypedReference", () => {
       expect(parseTypedReference(input, canon), input).toMatchObject({ book: { name: book }, chapter, verse })
     }
     expect(foldMarks("Ọlọ́run")).toBe("Olorun")
+    // Tab carries on from the suggested book name, keeping what was typed after it.
+    expect(getTabNavigationResult("Jòhánù", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jòhánù 3", "John 3:1")).toBe("John 3:")
+    expect(getTabNavigationResult("jn", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jo", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jòhánù 3", "Jòhánù 3:1")).toBe("Jòhánù 3:") // chapter step kept when the suggestion repeats what was typed
   })
 })

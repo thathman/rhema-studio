@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import {
   getAutocompleteSuggestion,
   getTabNavigationResult,
+  foldMarks,
   parseTypedReference,
 } from "@/lib/quick-search"
 import {
@@ -546,7 +547,12 @@ export function SearchPanel() {
                 <div className="absolute inset-0 flex items-center px-3 pointer-events-none z-10">
                   <span className="text-xs font-normal">
                     <span className="text-foreground">{quickInput}</span>
-                    <span className="text-gray-500 dark:text-gray-400">{quickSuggestion.slice(quickInput.length)}</span>
+                    <span className="text-gray-500 dark:text-gray-400">
+                      {/* A short form or Yorùbá name is not a prefix of the suggestion: show where it goes instead of cutting it. */}
+                      {foldMarks(quickSuggestion).toLowerCase().startsWith(foldMarks(quickInput).toLowerCase())
+                        ? quickSuggestion.slice(foldMarks(quickInput).length)
+                        : `  → ${quickSuggestion}`}
+                    </span>
                   </span>
                 </div>
               )}
