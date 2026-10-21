@@ -497,3 +497,11 @@ report), but launching it cannot.
 | 10ar.2 | Pause, Resume, set Volume to half, Fade out. | Pause/Resume continue from the same point; the fade lasts about 3 seconds to silence, then the chip is idle; the next Play uses half volume. | Unverified |
 | 10ar.3 | Turn Repeat on and let a short sound reach its end; then More → Library → Save the log. | It starts again; the log has a "sound" line with the name for each Play. | Unverified |
 | 10ar.4 | With OBS on and a service open, look at the Present header at 1366x768. | Every chip is visible; they wrap onto a second row if needed; Standard/Production stays on screen. | Unverified |
+
+### 10as. Sound as a service item (MD-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10as.1 | Service: Welcome slide, a sound (Prepare → Media → Sounds → Add), Announcements. Present the Welcome slide, then Next. | The sound starts; projector and NDI still show Welcome; the rundown marks the sound item; Preview of the sound item reads "♪ name". | Unverified |
+| 10as.2 | Next again, then Previous twice and Next. | Announcements goes up while the sound keeps playing; stepping back onto the sound item does not restart it. | Unverified |
+| 10as.3 | Rehearsal on; step onto the sound item. | No sound; Present says it was not played in rehearsal. | Unverified |

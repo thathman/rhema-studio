@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
-import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, ImageIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, ImageIcon, MusicIcon, PresentationIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -87,7 +87,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
-                {picture && <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Picture" />}
+                {picture && <MediaKindIcon mediaId={item.image.media_id} />}
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
                 <span className="truncate text-sm font-medium">{item.reference}</span>
                 {song && <SongBadges item={item} />}
@@ -196,9 +196,19 @@ function MissingMediaMark({ mediaId }: { mediaId: string }) {
   return <span className="shrink-0 rounded bg-destructive/15 px-1 text-[0.625rem] font-semibold text-destructive uppercase" title="The picture file is missing from the media folder">missing</span>
 }
 
+/** Picture, video or sound, by the library file the item points at. */
+function MediaKindIcon({ mediaId }: { mediaId: string }) {
+  const kind = useMediaStore((s) => s.assets.find((a) => a.id === mediaId)?.kind)
+  return kind === "audio"
+    ? <Volume2Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Sound" />
+    : <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={kind === "video" ? "Video" : "Picture"} />
+}
+
 /** Prepare-only: how the picture fills the screen. */
 function ImageItemControls({ item }: { item: ImageQueueItem }) {
   const isVideo = useMediaStore((s) => s.assets.find((a) => a.id === item.image.media_id)?.kind === "video")
+  const isSound = useMediaStore((s) => s.assets.find((a) => a.id === item.image.media_id)?.kind === "audio")
+  if (isSound) return <p className="ml-7 py-1 pl-2 text-xs text-muted-foreground">Plays when this item is reached (not in rehearsal); the screens keep what they show. Pause, fade or stop it with ♪ in Present.</p>
   const setImage = (patch: Partial<ImageQueueItem["image"]>) => useQueueStore.getState().updateItem(item.id, (i) => (isImageItem(i) ? { ...i, image: { ...i.image, ...patch } } : i))
   return (
     <div className="ml-7 flex flex-wrap items-center gap-2 py-1 pl-2 text-xs">

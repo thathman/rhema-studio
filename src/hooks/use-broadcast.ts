@@ -10,6 +10,7 @@ import { loadThemeImage } from "@/lib/theme-image-cache"
 import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 import { useSongStore } from "@/stores/song-store"
+import { useSoundStore } from "@/stores/sound-store"
 
 export function toVerseRenderData(
   verse: Verse,
@@ -300,6 +301,23 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   // A video asset streams to the outputs; nothing is decoded here.
   const media = useMediaStore.getState()
   const asset = media.assets.find((a) => a.id === item.image.media_id) ?? (await media.list()).find((a) => a.id === item.image.media_id)
+  // A sound item starts its sound on this computer; every screen keeps what it shows.
+  // The rundown position still moves (the caller set it), so Next continues after it.
+  if (asset?.kind === "audio") {
+    if (ticket !== presentSeq) return "superseded"
+    if (!asset.present) {
+      useBroadcastStore.getState().setPresentWarning(`${item.image.name} not played: the sound file is missing from the media folder.`)
+      return "empty"
+    }
+    if (useBroadcastStore.getState().rehearsal) {
+      useBroadcastStore.getState().setPresentWarning(`Rehearsal: ${item.image.name} was not played. Use the ♪ button to play it on purpose.`)
+      return "presented"
+    }
+    const sound = useSoundStore.getState()
+    // Stepping onto the same sound again (Next at the end of the service) does not restart it.
+    if (sound.assetId !== asset.id || !sound.playing) void sound.play({ id: asset.id, name: item.image.name })
+    return "presented"
+  }
   if (asset?.kind === "video") {
     const videoUrl = asset.present ? await media.fileUrl(asset.id).catch(() => null) : null
     if (ticket !== presentSeq) return "superseded"

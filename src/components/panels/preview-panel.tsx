@@ -16,6 +16,7 @@ export function PreviewPanel() {
   const previewMediaId = selectedSlide && isImageItem(selectedSlide.item) ? selectedSlide.item.image.media_id : null
   const previewUrl = useMediaStore((s) => (previewMediaId ? s.urls[previewMediaId] : undefined))
   const previewIsVideo = useMediaStore((s) => (previewMediaId ? s.assets.find((a) => a.id === previewMediaId)?.kind === "video" : false))
+  const previewIsSound = useMediaStore((s) => (previewMediaId ? s.assets.find((a) => a.id === previewMediaId)?.kind === "audio" : false))
   useEffect(() => {
     if (previewMediaId && !previewUrl && !previewIsVideo) void useMediaStore.getState().dataUrl(previewMediaId)
   }, [previewMediaId, previewUrl, previewIsVideo])
@@ -57,7 +58,10 @@ export function PreviewPanel() {
   let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
   if (selectedSlide && isImageItem(selectedSlide.item)) {
     // A video previews as "▶ name"; it plays only on the outputs.
-    verseData = previewIsVideo ? toVideoRenderData(selectedSlide.item, "") : previewUrl ? toImageRenderData(selectedSlide.item, previewUrl) : null
+    // A sound item has no picture: Preview says what Show live will do.
+    verseData = previewIsSound
+      ? { kind: "slide", reference: "", segments: [], lines: [`♪ ${selectedSlide.item.image.name}`, "Plays on this computer; the screens stay as they are"] }
+      : previewIsVideo ? toVideoRenderData(selectedSlide.item, "") : previewUrl ? toImageRenderData(selectedSlide.item, previewUrl) : null
   } else if (selectedSlide && isSlideItem(selectedSlide.item)) {
     verseData = toCustomSlideRenderData(selectedSlide.item)
   } else if (selectedSlide && isSongItem(selectedSlide.item)) {
