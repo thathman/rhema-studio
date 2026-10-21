@@ -495,5 +495,18 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().deleteTheme("lt-custom")).toEqual({ inUse: [] })
     expect(useBroadcastStore.getState().themes.some((t) => t.id === "lt-custom")).toBe(false)
   })
+
+  it("stage outputs are sent no theme pictures (they draw none; this goes out with every timer tick)", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const heavy = { ...s.themes[0], id: "heavy", name: "Photo", builtin: false, background: { ...s.themes[0].background, image: { url: "data:image/png;base64," + "A".repeat(1000) } } }
+    const stage = { ...s.outputs[0], id: "stage-1", role: "stage" as const, themeId: "heavy", enabled: true }
+    useBroadcastStore.setState({ themes: [...s.themes, heavy as never], outputs: [...s.outputs, stage as never], rehearsal: false })
+    emitToMock.mockClear()
+    useBroadcastStore.getState().syncBroadcastOutputFor("stage-1")
+    const sent = emitToMock.mock.calls.find((c) => String(c[0]).includes("stage-1"))
+    expect(sent).toBeDefined()
+    expect(JSON.stringify(sent?.[2])).not.toContain("base64")
+  })
 })
 

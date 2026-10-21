@@ -100,6 +100,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(commands::app_close::UnsavedWork::default())
+        .manage(commands::store_check::DamagedStoreFiles::default())
         .on_window_event(commands::app_close::on_window_event)
         .manage(Mutex::new(state::AppState::new()))
         .manage(Mutex::new(rhema_detection::DetectionPipeline::new()))
@@ -153,6 +154,7 @@ pub fn run() {
             commands::remote::remote_set_keys,
             commands::remote::remote_pair_start,
             commands::app_close::set_unsaved_work,
+            commands::store_check::damaged_store_files,
             commands::secrets::secrets_get,
             commands::secrets::secrets_set,
             commands::app_close::close_main_window,
@@ -219,6 +221,15 @@ pub fn run() {
             // depend on the content database.
             match app.path().app_data_dir() {
                 Ok(dir) => {
+                    // A damaged settings/themes file is set aside before the window reads it.
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+                    let moved = commands::store_check::set_aside_damaged(&dir, now);
+                    for (name, aside) in &moved {
+                        log::error!("{name} was damaged; set aside as {aside}");
+                    }
+                    if let Ok(mut v) = app.state::<commands::store_check::DamagedStoreFiles>().0.lock() {
+                        *v = moved;
+                    }
                     // Imported media lives beside the database.
                     let _ = app.state::<commands::media::MediaState>().0.set(dir.join("media"));
                     let path = dir.join("studio.db");

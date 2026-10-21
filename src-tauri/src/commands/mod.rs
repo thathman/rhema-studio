@@ -10,3 +10,4 @@ pub mod media;
 pub mod remote;
 pub mod secrets;
 pub mod stt;
+pub mod store_check;

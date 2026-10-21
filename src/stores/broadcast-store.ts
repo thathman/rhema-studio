@@ -463,7 +463,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       recordFrame(outputId, { theme, verse: null, overlay: null, stage: true })
       const q = useQueueStore.getState()
       void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
-        theme,
+        // The stage window draws no theme: send the built-in one (no pictures) rather than the
+        // output's, whose pictures can be megabytes, with every timer tick (NFR-03).
+        theme: CLASSIC_DARK,
         verse: null,
         role: "stage",
         stage: buildStagePayload({

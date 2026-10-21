@@ -709,3 +709,12 @@ report), but launching it cannot.
 | 10br.3 | Quick find: type "john 3 16" quickly and press Enter at once. | The preview shows John 3:16 (not 3:1). | Unverified |
 | 10br.4 | With KJV + Yorùbá active add John 3:16, save, switch to NIV, present the item. | KJV + Yorùbá (as saved), also before reopening the service. | Unverified |
 | 10br.5 | With more than 50 songs, add "Àánú" (typed normally). Open the song library. | It is listed among the A's. | Unverified |
+
+### 10bs. Startup and performance audit fixes (RG-05, NFR-03)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bs.1 | Quit Rhema; cut settings.json in the app folder in half; start Rhema. | A warning says settings were reset and names the kept file (settings.json.damaged-…); that file is still there. | Unverified |
+| 10bs.2 | Give the stage output a theme with a large photo; start the timer; watch the outputs and Activity Monitor/Task Manager. | No stutter; the stage screen shows as before. | Unverified |
+| 10bs.3 | Export a service file that contains a video, while something is on air. | The output and NDI keep moving while it saves. | Unverified |
+| 10bs.4 | Delete the service that was open last time (or restore an older backup); restart twice. | "That service no longer exists" at most once. | Unverified |
