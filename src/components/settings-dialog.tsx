@@ -50,6 +50,7 @@ import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
+import { qrDataUrl } from "@/lib/qr-bulletin"
 import type { DeviceInfo } from "@/types/audio"
 
 /* -------------------------------------------------------------------------- */
@@ -667,11 +668,20 @@ function RemoteControlSection() {
   // The backend closes the window when a device pairs; hide the code once a device newer than the window appears.
   const showPairCode = pairCode !== null && !remoteDevices.some((d) => d.paired_at > pairStartedAt)
   const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [pairQr, setPairQr] = useState<{ url: string; image: string } | null>(null)
   const startPairing = async () => {
     try {
       const code = await invoke<string>("remote_pair_start")
       setPairStartedAt(new Date().toISOString())
       setPairCode(code)
+      setPairQr(null)
+      // A phone scans this to open the remote page with the code filled in (in the
+      // fragment, so it never reaches a server log). Only offered when other devices may connect.
+      const ip = remoteLan ? await invoke<string | null>("remote_lan_address").catch(() => null) : null
+      if (ip && httpStatus.port) {
+        const url = `http://${ip}:${httpStatus.port}/remote#code=${code}`
+        setPairQr({ url, image: await qrDataUrl(url) })
+      }
       if (pairTimer.current) clearTimeout(pairTimer.current)
       pairTimer.current = setTimeout(() => setPairCode(null), 120_000)
     } catch (e) {
@@ -825,6 +835,12 @@ function RemoteControlSection() {
         </div>
         {showPairCode && (
           <div className="rounded-md border border-border bg-muted/40 p-3">
+            {pairQr && (
+              <div className="mb-2 flex items-center gap-3">
+                <img src={pairQr.image} alt="Pairing code for a phone" className="size-32 rounded bg-white p-1" />
+                <p className="text-[0.625rem] text-muted-foreground">Scan with the phone's camera (same Wi-Fi) and press Pair. Or open <code className="break-all">{pairQr.url.split("#")[0]}</code> and type the code.</p>
+              </div>
+            )}
             <p className="text-[0.625rem] text-muted-foreground">On the device, within two minutes, send this code once:</p>
             <p className="my-1 font-mono text-2xl tracking-[0.3em]">{pairCode}</p>
             <p className="text-[0.625rem] text-muted-foreground">

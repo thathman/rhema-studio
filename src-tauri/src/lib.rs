@@ -140,6 +140,7 @@ pub fn run() {
             commands::remote::get_http_status,
             commands::remote::remote_set_keys,
             commands::remote::remote_pair_start,
+            commands::remote::remote_lan_address,
             commands::remote::remote_pair_cancel,
             commands::remote::update_remote_status,
             commands::content::content_list_programs,

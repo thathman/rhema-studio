@@ -49,6 +49,17 @@ pub fn remote_pair_start(remote: State<'_, RemoteKeys>) -> String {
     open_pairing(&remote.pairing)
 }
 
+/// This computer's address on the local network, for the pairing QR code.
+/// A UDP "connect" only picks the outgoing interface; nothing is sent.
+/// None without a network route (then the operator types the address).
+#[tauri::command]
+pub fn remote_lan_address() -> Option<String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("192.0.2.1:9").ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+    (!ip.is_loopback() && !ip.is_unspecified()).then(|| ip.to_string())
+}
+
 #[tauri::command]
 pub fn remote_pair_cancel(remote: State<'_, RemoteKeys>) {
     close_pairing(&remote.pairing);

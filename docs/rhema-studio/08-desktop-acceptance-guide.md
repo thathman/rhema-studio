@@ -437,3 +437,12 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10aj.1 | With HTTP remote on, run `for i in $(seq 40); do curl -s -o /dev/null -w "%{http_code} " -X POST -H 'Content-Type: application/json' -d '{"command":"next"}' http://<host>:<port>/api/v1/command; done` from another computer (add the key header if one is set). | Roughly the first 20 answer 200, the rest 429; the app log shows "too many from <address>"; a phone on another address still works at once; after a second's pause the first computer works again. | Unverified |
+
+### 10ak. Phone remote with QR pairing (OP-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ak.1 | Settings → Remote: tick "Accept commands from other devices", start HTTP, press Pair a device. Scan the QR code with a phone on the same Wi-Fi; press Pair. | The page opens with the code filled in (and gone from the address bar); after Pair it shows Next/Previous/Back on air/Clear and the device appears in Paired devices. | Unverified |
+| 10ak.2 | Present a service; use the phone's Next, Previous, Clear, Back on air. | Each acts like the desktop button within a moment; the phone's status shows On air/Off air and the live reference. | Unverified |
+| 10ak.3 | Revoke the phone in Settings, then press Next on it. | Nothing moves; the phone says it is no longer paired and shows the pairing form. | Unverified |
+| 10ak.4 | Untick "Accept commands from other devices" and pair again. | No QR code is shown (only this computer may connect). | Unverified |
