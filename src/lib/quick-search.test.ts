@@ -402,4 +402,18 @@ describe("parseTypedReference", () => {
     expect(parseTypedReference("John 0:16", mockBooks)).toBeNull()
     expect(parseTypedReference("John 3:0", mockBooks)).toBeNull()
   })
+
+  it("understands the common short forms people type (PRD FR-01: Jn 3 16)", () => {
+    const canon: Book[] = [[1, "Genesis", "Gen"], [5, "Deuteronomy", "Deut"], [7, "Judges", "Judg"], [22, "Song of Solomon", "Song"], [40, "Matthew", "Matt"], [41, "Mark", "Mark"], [42, "Luke", "Luke"], [43, "John", "John"], [45, "Romans", "Rom"], [50, "Philippians", "Phil"], [57, "Philemon", "Phlm"], [60, "1 Peter", "1Pet"], [62, "1 John", "1John"], [64, "3 John", "3John"], [66, "Revelation", "Rev"]]
+      .map(([n, name, abbreviation]) => ({ id: n as number, translation_id: 1, book_number: n as number, name: name as string, abbreviation: abbreviation as string, testament: (n as number) < 40 ? "OT" : "NT" }))
+    const cases: Array<[string, string, number, number]> = [
+      ["Jn 3 16", "John", 3, 16], ["jn3:16", "John", 3, 16], ["Jhn 3:16", "John", 3, 16], ["Mt 5:3", "Matthew", 5, 3], ["Mk 1:1", "Mark", 1, 1],
+      ["Lk 2:1", "Luke", 2, 1], ["Rm 8:28", "Romans", 8, 28], ["Php 4:13", "Philippians", 4, 13], ["Phm 1:6", "Philemon", 1, 6], ["Dt 6:4", "Deuteronomy", 6, 4],
+      ["Jdg 6:12", "Judges", 6, 12], ["1 Pt 5:7", "1 Peter", 5, 7], ["1 Jn 4:8", "1 John", 4, 8], ["3 Jn 1:2", "3 John", 1, 2], ["Revelations 22:21", "Revelation", 22, 21],
+      ["Song of Songs 2:1", "Song of Solomon", 2, 1], ["John 3:16", "John", 3, 16], ["Gen 1 1", "Genesis", 1, 1], ["Phil 4 13", "Philippians", 4, 13],
+    ]
+    for (const [input, book, chapter, verse] of cases) {
+      expect(parseTypedReference(input, canon), input).toMatchObject({ book: { name: book }, chapter, verse })
+    }
+  })
 })
