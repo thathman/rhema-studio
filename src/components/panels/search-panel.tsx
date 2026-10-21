@@ -41,7 +41,7 @@ import { mark } from "@/lib/latency-marks"
 type SearchTab = "book" | "context"
 
 const RESULT_SOURCE_STYLES: Record<string, { text: string; label: string }> = {
-  reference: { text: "text-amber-500", label: "Reference" },
+  reference: { text: "text-amber-700 dark:text-amber-500", label: "Reference" },
   keyword: { text: "text-green-600", label: "Keyword" },
   semantic: { text: "text-indigo-300", label: "Semantic" },
 }
