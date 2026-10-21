@@ -31,7 +31,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useBible, bibleActions, findLoadedVerse } from "@/hooks/use-bible"
+import { useBible, bibleActions, fetchChapter, findLoadedVerse } from "@/hooks/use-bible"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore, useQueueStore } from "@/stores"
 import type { Book, Verse, SemanticSearchResult } from "@/types"
@@ -290,6 +290,18 @@ export function SearchPanel() {
 
   // Arrow key navigation. Up and Down run the same stepping action the remote
   // bible_next / bible_prev commands do, so the two surfaces cannot diverge.
+  // Next chapter stops at the end of the book and goes on to the next book's first chapter.
+  const nextChapter = useCallback(async () => {
+    if (!selectedBook) return
+    const following = await fetchChapter(selectedBook.book_number, chapter + 1).catch(() => [])
+    if (following.length > 0) return setChapter((c) => c + 1)
+    const nextBook = books.find((b) => b.book_number === selectedBook.book_number + 1)
+    if (nextBook) {
+      setSelectedBook(nextBook)
+      setChapter(1)
+    }
+  }, [selectedBook, chapter, books])
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
@@ -299,7 +311,7 @@ export function SearchPanel() {
         }
       } else if (e.key === "ArrowRight") {
         e.preventDefault()
-        setChapter((c) => c + 1)
+        void nextChapter()
       } else if (e.key === "ArrowDown") {
         e.preventDefault()
         void bibleActions.stepVerse("next", { present: true })
@@ -308,7 +320,7 @@ export function SearchPanel() {
         void bibleActions.stepVerse("prev", { present: true })
       }
     },
-    [chapter]
+    [chapter, nextChapter]
   )
 
   // Context search — hybrid backend (vector + FTS5 BM25) as primary,
@@ -682,9 +694,7 @@ export function SearchPanel() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => {
-                  setChapter((c) => c + 1)
-                }}
+                onClick={() => void nextChapter()}
               >
                 <ArrowRightIcon className="size-3" />
                 <span className="sr-only">Next chapter</span>

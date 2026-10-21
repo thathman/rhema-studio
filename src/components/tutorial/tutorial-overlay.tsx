@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Joyride, STATUS, type EventData } from "react-joyride"
 import { toast } from "sonner"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -53,12 +53,20 @@ export function TutorialOverlay() {
     }
   }, [isHydrated, onboardingComplete])
 
-  // The tour targets the classic dashboard, so bring it on screen first.
+  // The tour targets the classic dashboard, so bring it on screen first, and put back
+  // what was on screen when it ends (Standard is where a volunteer works, with the keys).
+  const before = useRef<{ workspace: ReturnType<typeof useShellStore.getState>["workspace"]; view: ReturnType<typeof useShellStore.getState>["presentView"] } | null>(null)
   useEffect(() => {
-    if (!isRunning) return
     const shell = useShellStore.getState()
-    shell.setPresentView("production")
-    shell.setWorkspace("present")
+    if (isRunning) {
+      before.current ??= { workspace: shell.workspace, view: shell.presentView }
+      shell.setPresentView("production")
+      shell.setWorkspace("present")
+    } else if (before.current) {
+      shell.setPresentView(before.current.view === "production" ? "standard" : before.current.view)
+      shell.setWorkspace(before.current.workspace)
+      before.current = null
+    }
   }, [isRunning])
 
   const handleEvent = useCallback((data: EventData) => {

@@ -10,6 +10,7 @@ import {
 import { bibleActions } from "@/hooks/use-bible"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { mark } from "@/lib/latency-marks"
+import { useSettingsStore } from "@/stores/settings-store"
 import { noteVoiceTranslationChange } from "@/hooks/use-live-translation-follow"
 import { pickAutoPresentTarget } from "@/lib/auto-present-target"
 import { useServiceStore } from "@/stores/service-store"
@@ -89,7 +90,9 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
       verse: directHit.verse,
       text: directHit.verse_text,
     }
-    if (useBroadcastStore.getState().autoLive) {
+    // Auto puts a heard verse on air only when it is confident enough (the remote
+    // "confidence" setting); a weaker one waits in the preview like any other.
+    if (useBroadcastStore.getState().autoLive && directHit.confidence >= useSettingsStore.getState().confidenceThreshold) {
       void presentVerse(detectedVerse)
     } else {
       bibleActions.selectVerse(detectedVerse)
