@@ -75,9 +75,9 @@ Every backlog row now has its buildable part merged. What remains, by why it is 
    - Who may present and whether approval must gate going live → CL-001 roles, CL-002 "approval required before go-live".
    - Which external giving/prayer systems to link → SG-003 action links.
    - PT-006 song-playback sync: which playback source (MIDI clock, backing tracks) to support.
-3. **Engineering items held back on purpose (2026-10-21):**
+2. **Engineering items held back on purpose (2026-10-21):**
    - macOS Quit from the menu (Cmd+Q) may skip the unsaved-service question; needs a run on a Mac to confirm how Tauri reports it (KNOWN-ISSUES).
    - Sound over NDI: needs an audio path from the webview to the NDI sender and real receivers to test.
    - Yoruba book names in reference search (e.g. "Jòhánù 3:16"): the Yoruba Bible uses English book names; a Yoruba alias list needs a Yoruba speaker to check.
    - Backing tracks tied to songs: part of PT-006, which waits on the playback-source decision.
-2. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10av (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.
+3. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10av (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.
