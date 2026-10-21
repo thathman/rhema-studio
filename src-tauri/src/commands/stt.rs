@@ -105,7 +105,7 @@ pub async fn start_transcription(
                         .ok()
                         .filter(|p| p.exists())
                         .ok_or_else(|| {
-                            "Whisper model not found. Run: bun run download:whisper"
+                            "The on-computer speech model is not installed. Choose cloud speech in Settings → Audio, or reinstall Rhema to get the model."
                                 .to_string()
                         })?
                 }

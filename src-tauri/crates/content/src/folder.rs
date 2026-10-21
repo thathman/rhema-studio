@@ -206,14 +206,21 @@ impl ContentDb {
 
     /// Open a file from the folder as a new service on this computer (checked before anything is written).
     pub fn open_from_church_folder(&self, folder: &Path, file_name: &str, media_dir: &Path) -> Result<PackageReport> {
-        let dir = folder_dir(folder)?;
-        // Only a plain file name inside the folder: never a path elsewhere on the computer.
-        if file_name.contains(['/', '\\', ':', '\0']) || file_name.starts_with('.') || !file_name.ends_with(PACKAGE_SUFFIX) {
-            return Err(ContentError::Invalid("not a service file in the church folder".into()));
-        }
-        let (pkg, _) = read_package(&dir.join(file_name)).map_err(|e| ContentError::Invalid(format!("{file_name}: {e}")))?;
+        let pkg = read_church_folder_package(folder, file_name)?;
         self.import_service_package(&pkg, media_dir)
     }
+}
+
+/// Read and check one service file from the church folder (no database needed, so callers
+/// can do the slow network read before taking the database lock).
+pub fn read_church_folder_package(folder: &Path, file_name: &str) -> Result<ServicePackage> {
+    let dir = folder_dir(folder)?;
+    // Only a plain file name inside the folder: never a path elsewhere on the computer.
+    if file_name.contains(['/', '\\', ':', '\0']) || file_name.starts_with('.') || !file_name.ends_with(PACKAGE_SUFFIX) {
+        return Err(ContentError::Invalid("not a service file in the church folder".into()));
+    }
+    let (pkg, _) = read_package(&dir.join(file_name)).map_err(|e| ContentError::Invalid(format!("{file_name}: {e}")))?;
+    Ok(pkg)
 }
 
 #[cfg(test)]

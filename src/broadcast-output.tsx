@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/error-boundary"
 import { createLatencyLog } from "@/lib/latency"
 import { info as logInfoLine, warn as logWarnLine } from "@tauri-apps/plugin-log"
 import { createVideoPlayer, type VideoPlayer } from "@/lib/output-video"
@@ -334,7 +335,8 @@ function BroadcastCanvas() {
 
   return (
     <>
-      {stage && <StageView stage={stage} />}
+      {/* A stage payload that fails to draw must not take the window's listeners with it. */}
+      {stage && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
       <canvas
         ref={canvasRef}
         style={{
