@@ -827,3 +827,13 @@ report), but launching it cannot.
 | 10cd.5 | Open the Designer on the main output's theme and change a colour; present the next verse; change the colour again. | The screen keeps showing the edited theme; no flipping. Close without saving: the saved theme returns. | Unverified |
 | 10cd.6 | Main output set to stage; play a video with sound on another congregation output; edit that output's theme. | The sound continues. | Unverified |
 
+### 10ce. Failures (fourteenth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ce.1 | Import a multi-GB video in Prepare → Pictures; while it copies, go to Present and step through songs and verses. | Present keeps working; outputs change as usual. | Unverified |
+| 10ce.2 | Church folder on a network share: start opening a service, then pull the network cable. | Rhema stays responsive; the open fails with a message. | Unverified |
+| 10ce.3 | macOS: after an update, deny (or ignore) the keychain prompt at start. | A warning says the saved keys could not be read, with Retry; Retry after allowing brings the keys back and the remote listens with its key. | Unverified |
+| 10ce.4 | Cloud speech listening; turn Wi-Fi off for 20 seconds, then on. | "Hybrid mode" shows; within about a minute real-time transcription returns. | Unverified |
+| 10ce.5 | Without the Whisper model, choose on-computer speech and Start. | The message says how to fix it in plain words (cloud speech or reinstall). | Unverified |
+

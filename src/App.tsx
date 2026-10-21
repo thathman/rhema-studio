@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/error-boundary"
 import { CloudSpeechConsent } from "@/components/cloud-speech-consent"
 import { ApprovalHoldDialog } from "@/components/approval-hold-dialog"
 import { AppShell } from "@/studio/shell/app-shell"
@@ -34,11 +35,11 @@ export function App() {
   }, [])
   return (
     <>
-      <AppShell />
-      <TutorialOverlay />
-      <CloudSpeechConsent />
-      <ApprovalHoldDialog />
-      <UnsavedCloseDialog />
+      <ErrorBoundary name="the main window"><AppShell /></ErrorBoundary>
+      <ErrorBoundary name="the tour" quiet><TutorialOverlay /></ErrorBoundary>
+      <ErrorBoundary name="the speech consent" quiet><CloudSpeechConsent /></ErrorBoundary>
+      <ErrorBoundary name="the approval question"><ApprovalHoldDialog /></ErrorBoundary>
+      <ErrorBoundary name="the close question" quiet><UnsavedCloseDialog /></ErrorBoundary>
       <Toaster position="bottom-right" />
     </>
   )

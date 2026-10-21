@@ -17,6 +17,9 @@ use crate::types::{SttConfig, TranscriptEvent, Word};
 
 const MAX_RECONNECT_ATTEMPTS: u32 = 5;
 const RECONNECT_DELAY: Duration = Duration::from_secs(1);
+/// After the WebSocket gave up, how long REST (hybrid) runs before real time is tried again.
+const HYBRID_RETRY_AFTER: Duration = Duration::from_secs(60);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Batch up to 250ms of audio before sending (at 16kHz, that is 4000 samples).
 const BATCH_SAMPLES: usize = 4000;
 
@@ -128,6 +131,7 @@ impl DeepgramClient {
                     log::info!("DeepgramClient: connection closed normally");
                     break;
                 }
+                Err(SttError::ApiKeyMissing) => return Err(SttError::ApiKeyMissing),
                 Err(e) => {
                     attempts += 1;
                     log::warn!(
@@ -176,9 +180,14 @@ impl DeepgramClient {
                 .map_err(|e| SttError::ConnectionFailed(e.to_string()))?,
         );
 
-        let (ws_stream, _response) = tokio_tungstenite::connect_async(request)
+        // Bounded: on a dead network a connect can otherwise hang for minutes.
+        let (ws_stream, _response) = tokio::time::timeout(CONNECT_TIMEOUT, tokio_tungstenite::connect_async(request))
             .await
-            .map_err(|e| SttError::ConnectionFailed(e.to_string()))?;
+            .map_err(|_| SttError::ConnectionFailed("timed out".into()))?
+            .map_err(|e| match e {
+                tokio_tungstenite::tungstenite::Error::Http(ref r) if r.status().as_u16() == 401 || r.status().as_u16() == 403 => SttError::ApiKeyMissing,
+                other => SttError::ConnectionFailed(other.to_string()),
+            })?;
 
         log::info!("DeepgramClient: connected to Deepgram");
         let _ = event_tx.send(TranscriptEvent::Connected).await;
@@ -457,71 +466,63 @@ impl SttProvider for DeepgramClient {
         audio_rx: Receiver<Vec<i16>>,
         event_tx: mpsc::Sender<TranscriptEvent>,
     ) -> Result<(), SttError> {
-        let result = self.connect(audio_rx.clone(), event_tx.clone()).await;
-
-        // On max reconnect failure, fall back to REST mode (hybrid).
-        if let Err(ref e) = result {
-            log::warn!(
-                "[STT-Deepgram] WebSocket failed after retries: {e}, switching to REST fallback"
-            );
+        loop {
+            let result = self.connect(audio_rx.clone(), event_tx.clone()).await;
+            let Err(e) = result else { return Ok(()) };
+            // No key, or the key was refused: nothing to retry (REST needs it too).
+            if matches!(e, SttError::ApiKeyMissing) {
+                let _ = event_tx.send(TranscriptEvent::Error("Deepgram refused the API key. Check it in Settings → Audio.".into())).await;
+                return Err(e);
+            }
+            if self.cancelled.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+            log::warn!("[STT-Deepgram] WebSocket failed after retries: {e}, switching to REST fallback");
             let _ = event_tx
-                .send(TranscriptEvent::Error(
-                    "Connection unstable, switching to Hybrid mode".into(),
-                ))
+                .send(TranscriptEvent::Error("Connection unstable, switching to Hybrid mode (trying real time again every minute)".into()))
                 .await;
 
+            // REST for a while, then the WebSocket again: a short network drop must not cost
+            // the rest of the service its real-time transcript.
             let rest_client = crate::rest::DeepgramRestClient::new(self.config.clone());
             let mut audio_buffer: Vec<i16> = Vec::new();
-            let flush_interval = std::time::Duration::from_secs(5);
+            let flush_interval = Duration::from_secs(5);
             let mut last_flush = std::time::Instant::now();
+            let retry_at = std::time::Instant::now() + HYBRID_RETRY_AFTER;
             let cancelled = self.cancelled.clone();
 
-            loop {
+            while std::time::Instant::now() < retry_at {
                 if cancelled.load(Ordering::SeqCst) {
-                    break;
+                    return Ok(());
                 }
-
                 match audio_rx.recv_timeout(Duration::from_millis(100)) {
-                    Ok(samples) => {
-                        audio_buffer.extend(samples);
-
-                        if last_flush.elapsed() >= flush_interval && !audio_buffer.is_empty() {
-                            match rest_client.transcribe(&audio_buffer).await {
-                                Ok(events) => {
-                                    for evt in events {
-                                        let _ = event_tx.send(evt).await;
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("[STT-REST] Transcription failed: {e}");
-                                }
+                    Ok(samples) => audio_buffer.extend(samples),
+                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return Ok(()),
+                }
+                if last_flush.elapsed() >= flush_interval && !audio_buffer.is_empty() {
+                    match rest_client.transcribe(&audio_buffer).await {
+                        Ok(events) => {
+                            for evt in events {
+                                let _ = event_tx.send(evt).await;
                             }
-                            audio_buffer.clear();
-                            last_flush = std::time::Instant::now();
                         }
+                        Err(e) => log::error!("[STT-REST] Transcription failed: {e}"),
                     }
-                    Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
-                        if last_flush.elapsed() >= flush_interval && !audio_buffer.is_empty() {
-                            match rest_client.transcribe(&audio_buffer).await {
-                                Ok(events) => {
-                                    for evt in events {
-                                        let _ = event_tx.send(evt).await;
-                                    }
-                                }
-                                Err(e) => {
-                                    log::error!("[STT-REST] Transcription failed: {e}");
-                                }
-                            }
-                            audio_buffer.clear();
-                            last_flush = std::time::Instant::now();
-                        }
-                    }
-                    Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
+                    audio_buffer.clear();
+                    last_flush = std::time::Instant::now();
                 }
             }
+            // What was heard since the last send is not dropped.
+            if !audio_buffer.is_empty() {
+                if let Ok(events) = rest_client.transcribe(&audio_buffer).await {
+                    for evt in events {
+                        let _ = event_tx.send(evt).await;
+                    }
+                }
+            }
+            log::info!("[STT-Deepgram] trying the real-time connection again");
         }
-
-        Ok(())
     }
 
     fn stop(&self) {

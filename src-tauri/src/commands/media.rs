@@ -91,12 +91,21 @@ fn hash_file(path: &Path) -> Result<(String, u64), String> {
     Ok((format!("{:x}", hasher.finalize()), size))
 }
 
-fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Result<(MediaAsset, bool), String> {
+/// Run `f` with the database, holding its lock only for that call.
+fn with_content<T>(state: &ContentState, f: impl FnOnce(&rhema_content::ContentDb) -> Result<T, String>) -> Result<T, String> {
+    let guard = state.0.lock().map_err(|e| e.to_string())?;
+    let db = guard.as_ref().ok_or_else(|| "Content database is not available".to_string())?;
+    f(db)
+}
+
+// The database lock is held only for the quick lookups, never while a (possibly multi-GB,
+// possibly network) file is hashed or copied: the main-thread commands that need it would wait.
+fn import_one(state: &ContentState, dir: &Path, source: &Path) -> Result<(MediaAsset, bool), String> {
     let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
     let (kind, mime) = kind_and_mime(ext).ok_or_else(|| format!("unsupported file type .{ext}"))?;
     // Streamed: a video is never held in memory whole.
     let (hash, size) = hash_file(source)?;
-    if let Some(existing) = db.find_media_by_hash(&hash).map_err(|e| e.to_string())? {
+    if let Some(existing) = with_content(state, |db| db.find_media_by_hash(&hash).map_err(|e| e.to_string()))? {
         // Same file already here; make sure it is on disk too.
         if let Some(dest) = media_path(dir, &existing.file) {
             if !dest.is_file() {
@@ -108,7 +117,15 @@ fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Resul
     let file = format!("{hash}.{}", ext.to_ascii_lowercase());
     std::fs::create_dir_all(dir).map_err(|e| format!("could not create the media folder: {e}"))?;
     let dest = dir.join(&file);
-    std::fs::copy(source, &dest).map_err(|e| format!("could not copy into the media folder: {e}"))?;
+    // Copied beside it and renamed into place: a copy that fails (or runs at the same time as another
+    // import of the same file) never leaves a half-written file under a registered asset's name.
+    if !dest.is_file() || std::fs::metadata(&dest).map(|m| m.len()).ok() != Some(size) {
+        let part = dir.join(format!("{file}.{}.part", std::process::id()));
+        if let Err(e) = std::fs::copy(source, &part).and_then(|_| std::fs::rename(&part, &dest)) {
+            let _ = std::fs::remove_file(&part);
+            return Err(format!("could not copy into the media folder: {e}"));
+        }
+    }
     let name = source.file_stem().and_then(|s| s.to_str()).unwrap_or("Picture").to_string();
     let input = MediaInput {
         kind: kind.into(),
@@ -124,11 +141,17 @@ fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Resul
         source_ref: String::new(),
         original_path: source.display().to_string(),
     };
-    let asset = db.register_media(&input).map_err(|e| {
-        let _ = std::fs::remove_file(&dest);
-        e.to_string()
-    })?;
-    Ok((asset, false))
+    match with_content(state, |db| db.register_media(&input).map_err(|e| e.to_string())) {
+        Ok(asset) => Ok((asset, false)),
+        Err(e) => {
+            // The same file imported at the same time elsewhere: it is here now, and its copy is this one.
+            if let Ok(Some(existing)) = with_content(state, |db| db.find_media_by_hash(&input.hash).map_err(|e| e.to_string())) {
+                return Ok((existing, true));
+            }
+            let _ = std::fs::remove_file(&dest);
+            Err(e)
+        }
+    }
 }
 
 /// Copy files into the media folder (named by their SHA-256) and index them.
@@ -136,12 +159,14 @@ fn import_one(db: &rhema_content::ContentDb, dir: &Path, source: &Path) -> Resul
 // async: a large video must not block the main thread while it is hashed and copied.
 #[tauri::command(async)]
 pub fn media_import(state: State<'_, ContentState>, media: State<'_, MediaState>, paths: Vec<String>) -> CmdResult<Vec<ImportResult>> {
-    let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
-    let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
+    {
+        let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
+        guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
+    }
     let dir = media_dir(&media)?;
     Ok(paths
         .iter()
-        .map(|p| match import_one(db, dir, Path::new(p)) {
+        .map(|p| match import_one(&state, dir, Path::new(p)) {
             Ok((asset, duplicate)) => ImportResult::Imported { asset: Box::new(status(dir, asset)), duplicate },
             Err(message) => ImportResult::Failed { path: p.clone(), message },
         })
@@ -236,7 +261,9 @@ pub fn church_folder_list(folder: String) -> CmdResult<Vec<FolderEntry>> {
 /// Open one file from the church folder as a new service on this computer.
 #[tauri::command(async)]
 pub fn church_folder_open(state: State<'_, ContentState>, media: State<'_, MediaState>, folder: String, file_name: String) -> CmdResult<PackageReport> {
+    // Read from the share first, without the database lock: a stalled network folder must not freeze the app.
+    let pkg = rhema_content::read_church_folder_package(Path::new(&folder), &file_name)?;
     let guard = state.0.lock().map_err(|e| ContentCommandError::Unavailable { message: e.to_string() })?;
     let db = guard.as_ref().ok_or_else(|| ContentCommandError::Unavailable { message: "Content database is not available".into() })?;
-    Ok(db.open_from_church_folder(Path::new(&folder), &file_name, media_dir(&media)?)?)
+    Ok(db.import_service_package(&pkg, media_dir(&media)?)?)
 }

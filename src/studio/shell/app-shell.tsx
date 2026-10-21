@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/error-boundary"
 import { useUnsavedStore } from "@/stores/unsaved-store"
 import { toast } from "sonner"
 import "@/stores/journal-store"
@@ -132,7 +133,10 @@ export function AppShell() {
         </div>
       </nav>
 
-      <main className="relative min-h-0 min-w-0">{WORKSPACE[workspace]()}</main>
+      <main className="relative min-h-0 min-w-0">
+        {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
+        <ErrorBoundary key={workspace} name={`the ${NAV.find((n) => n.id === workspace)?.label ?? workspace} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>
+      </main>
 
       {/* Global dialogs: reachable from every workspace, mounted exactly once. */}
       <ThemeDesigner />
