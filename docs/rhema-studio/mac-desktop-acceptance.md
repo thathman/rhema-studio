@@ -131,6 +131,12 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10ao.1 (deletes ask first) | V: the bin next to a kept log and next to an unused picture deleted nothing on the first press; Keep brought the bin back; Delete/Remove then deleted. A picture services use was refused, naming them ("qa-picture is used in: QA Sunday, …") |
 | 10av.1 (song usage) | V: three dated September services and one undated: "Great Is Thy Faithfulness, Lord · 12345 · 3", then "Amazing Grace · public domain · 2" (used twice in one service, counted once); the undated service not counted |
 | 10ap, 10av.2 | Not run: both end in the system Save dialog, which the test harness does not drive (the text and CSV formats are covered by unit tests) |
+| 10bj.1 (Yorùbá book names) | V: Quick find "Jòhánù 3:16", "Jòhánù 3 16", "johanu 3:16" → John 3:16; "1 Ọba 3:9" → 1 Kings 3:9; "Ise 2:38" → Acts 2:38 (KJV, the active translation) |
+| 10aw.1 (rename, re-date) | V: with an unsaved added item, the new title and date were listed at once; the item stayed, still unsaved; Save then worked |
+| 10aw.2 (rename an approved service) | F → V: the Approve button said "Changed since approval (v2 approved, now v3)" but Home said "Dated today, not approved yet" and the list dropped the mark. Fixed in #169: Home now says "Dated today, changed since approval" and the list "· changed since approval"; approving again shows "Today's service, approved" |
+| 10ax.1 (templates) | V: "QA Usage 3" marked Template; New service from it ("Sunday 1 Nov", 1 Nov) opened with the same items; the template unchanged and still a template; Home never listed it |
+| 10ax.2 (archive) | V: archived service gone from the picker and Home; "Show archived (1)"; its history intact; Bring back restored it |
+| 10ax.4 (approved by) | V: the Approve button's tooltip read "Approved by Tolu Wed 23:00" |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
