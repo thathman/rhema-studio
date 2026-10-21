@@ -166,6 +166,7 @@ pub fn run() {
             commands::content::content_set_actor,
             commands::content::content_save_service_log,
             commands::content::content_list_service_logs,
+            commands::content::content_song_usage,
             commands::content::content_get_service_log,
             commands::content::content_delete_service_log,
             commands::content::content_list_song_attachments,

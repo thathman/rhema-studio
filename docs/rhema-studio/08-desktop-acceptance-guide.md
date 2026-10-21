@@ -521,3 +521,10 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10au.1 | Give three items 10 planned minutes each; start the timer and present the first item; wait 12 minutes and present the second. | The timer popover shows "Planned end" 30 minutes after the start and "now about" 2 minutes later, in red; the chip says "2 min late". | Unverified |
 | 10au.2 | Press "+1 min" then "−1 min"; save the service log. | Elapsed time moves by a minute each way (never below zero); the log has two "timer" lines. | Unverified |
+
+### 10av. Song usage report (FR-09)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10av.1 | Save three dated services that use some of the same songs (one song twice in one service) and one undated service. More → Library → Song usage → Show for a range covering them. | Each song once, most used first, with its CCLI number (or "public domain"); the song used twice in one service counts 1 for that service; the undated service is not counted. | Unverified |
+| 10av.2 | Save as CSV… and open it in a spreadsheet. | Columns Title, Authors, CCLI song number, Licence, Services, Last used; titles with commas stay in one cell. | Unverified |

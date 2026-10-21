@@ -72,6 +72,10 @@ The service timer (Present header) also shows, once items have planned minutes a
 - More → Library: **Save this service as a file** carries one service with its songs and pictures to another computer (checksummed; a damaged file is refused). Export/import songs (Rhema JSON, OpenLyrics), and **Back up now / Restore** for the whole database. A restore refuses files that are not a Rhema Studio database and keeps the previous database as a snapshot next to it.
 - Before any upgrade the app copies the database to `studio.db.before-<migration>.bak`.
 
+## Song usage (licence reports)
+
+More → Library → Song usage: choose a date range (default: the last six months), Show, then Save as CSV… The report counts saved services dated in the range (a song sung twice in one service counts once), with each song's CCLI number, licence and last use, ready to copy into a CCLI (or other licensing body) report. Services without a date are not counted, so give each service its date.
+
 ## Translations
 
 - A saved item goes live in the translation it was saved with; spontaneous verses follow your active translations. The Present header chip switches to "Override" to show everything in the current translation. A missing translation is reported, never substituted.
