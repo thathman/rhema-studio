@@ -739,7 +739,7 @@ export function SearchPanel() {
                             variant="ghost"
                             size="icon-xs"
                             className={cn(
-                              "shrink-0 opacity-0 group-hover:opacity-100 transition-opacity",
+                              "shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
                               verse.id === effectiveSelectedVerseId
                                 ? "hover:bg-lime-500/20 hover:text-lime-500"
                                 : "bg-primary/40! text-primary-foreground hover:bg-primary!"
@@ -843,7 +843,7 @@ export function SearchPanel() {
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity bg-primary text-primary-foreground hover:bg-primary/80"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-primary text-primary-foreground hover:bg-primary/80"
                           onClick={(e) => {
                             e.stopPropagation()
                             useQueueStore.getState().addItem({
