@@ -48,6 +48,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Songs as plain text/Markdown (Text… in the song editor); pasted lyrics may use "## Chorus", "**Verse 2**" or "[Bridge]" headings.
 
 ### Archive
+- The service log is accurate: what goes on air when rehearsal ends is logged, quick screens are named, and planned vs actual lists every item (including ones never shown and ones added on the day) and anything else shown.
 - Optionally keep what was said (the recognised transcript) with a service log, searchable later; off by default.
 - Song usage report for licence (CCLI) reporting: songs per date range with CCLI numbers and service counts, saved as CSV.
 
