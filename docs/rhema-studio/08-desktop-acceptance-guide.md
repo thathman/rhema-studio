@@ -400,3 +400,9 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10ad.1 | Projector output on its monitor. Unplug the projector cable. | Within about five seconds: "<output>: its monitor was disconnected" toast; Home readiness warns with Open outputs. Plug it back: the warning clears (turn the output on again if the OS closed the window). | Unverified |
 | 10ad.2 | Set two display outputs to the same monitor. | Home warns "<A> and <B> use the same monitor". | Unverified |
+
+### 10af. Reuse from an earlier service (AR-003)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10af.1 | Open this Sunday's service. Prepare → Reuse → find last Sunday → tick the welcome slide, a song and a verse → Add. | The three items are appended in last Sunday's order; previews work (verse text filled in); last Sunday's service is unchanged; a verse already in the rundown is reported, not duplicated. Save and reopen: the copies are independent items. | Unverified |
