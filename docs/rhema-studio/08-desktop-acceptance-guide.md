@@ -459,3 +459,10 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10am.1 | Put a verse live on a projector and NDI. In the app data `media` folder, replace a background picture used by another theme with a text file renamed `.png`; switch the output to that theme. | If the picture cannot be drawn, the projector and NDI keep the verse as it was (no black or blank frame) and Present says the output "could not draw the new screen". Switching back to a good theme recovers at once. The Rhema window itself keeps working. | Unverified |
+
+### 10an. No hidden network traffic (NFR-09)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10an.1 | Start a packet capture on the presentation computer (Wireshark). Open Rhema with speech off, OBS off, no NDI outputs and no remote listener; present a service with verses, songs, pictures and a video for ten minutes. | No connections to the internet at all from Rhema (local NDI/mDNS only if NDI is on). | Unverified |
+| 10an.2 | Unplug the network cable / turn Wi-Fi off and present the same service. | Everything works; no errors or waits. | Unverified |
