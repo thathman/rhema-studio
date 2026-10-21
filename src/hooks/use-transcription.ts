@@ -48,6 +48,8 @@ export const transcriptionActions = {
         provider: settings.sttProvider,
       })
       transcript.setTranscribing(true)
+      // What is actually running (the setting can change mid-session without restarting it).
+      useCloudConsentStore.setState({ runningProvider: settings.sttProvider })
     } catch (e) {
       const msg = String(e)
       transcript.setConnectionStatus("error")
@@ -69,6 +71,7 @@ export const transcriptionActions = {
       }
     }
     transcript.setTranscribing(false)
+    useCloudConsentStore.setState({ runningProvider: null })
     transcript.setPartial("")
     transcript.setConnectionStatus("disconnected")
   },

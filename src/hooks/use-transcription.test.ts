@@ -234,6 +234,11 @@ describe("use-transcription", () => {
       useCloudConsentStore.getState().onAgree?.()
       await new Promise((r) => setTimeout(r, 0))
       expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({ provider: "deepgram" }))
+      expect(useCloudConsentStore.getState().runningProvider).toBe("deepgram")
+      useSettingsStore.setState({ sttProvider: "whisper" })
+      expect(useCloudConsentStore.getState().runningProvider).toBe("deepgram") // changing the setting does not change what runs
+      await transcriptionActions.stop()
+      expect(useCloudConsentStore.getState().runningProvider).toBeNull()
 
       mockInvoke.mockClear()
       useSettingsStore.setState({ sttProvider: "whisper", cloudSpeechConsentAt: "" })

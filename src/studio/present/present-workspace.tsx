@@ -1,4 +1,4 @@
-import { useSettingsStore } from "@/stores/settings-store"
+import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { useEffect } from "react"
 import {
   ChevronLeftIcon,
@@ -58,7 +58,7 @@ export function PresentWorkspace() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const listening = useTranscriptStore((s) => s.isTranscribing)
-  const cloudSpeech = useSettingsStore((s) => s.sttProvider === "deepgram")
+  const cloudSpeech = useCloudConsentStore((s) => s.runningProvider === "deepgram")
   const service = useServiceStore((s) => s.current)
   const warning = useBroadcastStore((s) => s.presentWarning)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
