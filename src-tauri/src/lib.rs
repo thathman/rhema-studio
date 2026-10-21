@@ -99,6 +99,7 @@ pub fn run() {
         .manage(Mutex::new(commands::remote::HttpRuntime::new()))
         .manage(commands::remote::RemoteKeys::new())
         .manage(commands::content::ContentState(Mutex::new(None)))
+        .manage(commands::content::ContentOpenError(Mutex::new(None)))
         .manage(commands::media::MediaState(std::sync::OnceLock::new()))
         .invoke_handler(tauri::generate_handler![
             commands::bible::list_translations,
@@ -201,7 +202,10 @@ pub fn run() {
                             let state = app.state::<commands::content::ContentState>();
                             *state.0.lock().unwrap() = Some(db);
                         }
-                        Err(e) => log::error!("Content database unavailable at {}: {e}", path.display()),
+                        Err(e) => {
+                            log::error!("Content database unavailable at {}: {e}", path.display());
+                            *app.state::<commands::content::ContentOpenError>().0.lock().unwrap() = Some(e);
+                        }
                     }
                 }
                 Err(e) => log::error!("No app data dir for content database: {e}"),

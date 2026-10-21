@@ -117,4 +117,12 @@ describe("computeReadiness", () => {
     expect(checks.find((c) => c.id === "monitors-shared")?.label).toBe("Main and Lobby use the same monitor")
     expect(computeReadiness({ ...base, monitors: { missing: [], shared: [] } }).checks.some((c) => c.id.startsWith("monitors"))).toBe(false)
   })
+
+  it("warns when saved services and songs are unavailable, with the reason", () => {
+    const base = { translationsLoaded: 1, activeThemeName: "Dark", outputsConfigured: 1, outputsOnAir: 1, rundownCount: 0, listening: false }
+    const c = computeReadiness({ ...base, contentError: "this database was last used by a newer Rhema Studio" }).checks.find((x) => x.id === "content")
+    expect(c).toMatchObject({ status: "warn", label: "Saved services and songs are unavailable" })
+    expect(c?.detail).toContain("newer Rhema Studio")
+    expect(computeReadiness(base).checks.some((x) => x.id === "content")).toBe(false)
+  })
 })

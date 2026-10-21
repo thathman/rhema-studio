@@ -275,10 +275,15 @@ pub struct ContentStatus {
     pub migrations: Vec<String>,
     /// Automatic copy made before the last migration, if any.
     pub last_backup: Option<String>,
+    /// Why the database could not be opened, in words for the operator.
+    pub error: Option<String>,
 }
 
+/// The reason the content database failed to open at start-up, if it did.
+pub struct ContentOpenError(pub Mutex<Option<String>>);
+
 #[tauri::command]
-pub fn content_status(state: State<'_, ContentState>) -> Result<ContentStatus, String> {
+pub fn content_status(state: State<'_, ContentState>, open_error: State<'_, ContentOpenError>) -> Result<ContentStatus, String> {
     let guard = state.0.lock().map_err(|e| e.to_string())?;
     Ok(match guard.as_ref() {
         Some(db) => ContentStatus {
@@ -286,7 +291,14 @@ pub fn content_status(state: State<'_, ContentState>) -> Result<ContentStatus, S
             path: db.path().map(|p| p.display().to_string()),
             migrations: db.applied_migrations().unwrap_or_default(),
             last_backup: db.last_backup().map(|p| p.display().to_string()),
+            error: None,
         },
-        None => ContentStatus { available: false, path: None, migrations: vec![], last_backup: None },
+        None => ContentStatus {
+            available: false,
+            path: None,
+            migrations: vec![],
+            last_backup: None,
+            error: open_error.0.lock().ok().and_then(|e| e.clone()),
+        },
     })
 }

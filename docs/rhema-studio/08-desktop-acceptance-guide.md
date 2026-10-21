@@ -420,3 +420,9 @@ report), but launching it cannot.
 | 10ag.2 | Present → OBS chip → Start recording… → Start. Mark "Sermon start", wait, "Sermon end". Stop recording… → Stop. | OBS records; the chip shows OBS's time; the service log has both marks with recording times; on OBS 30.2+ Hybrid MP4 the file has two chapters; on older OBS a one-time note says chapters need 30.2. | Unverified |
 | 10ag.3 | Close OBS while connected; reopen it. | Chip goes "not connected" within seconds (never shows REC from memory); reconnects by itself within 15 s of OBS coming back. | Unverified |
 | 10ag.4 | OBS on another computer on the network (its IP in Settings). | Same as 10ag.1–2. | Unverified |
+
+### 10ah. Downgrade (QA-005, RG-05)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ah.1 | With a current build, save a service. Install an older build (one with fewer migrations) and start it. | Home: "Saved services and songs are unavailable" with "last used by a newer Rhema Studio …"; Library repeats it; Scripture works; `studio.db` is unchanged. Following `17-database-migrations.md` → Downgrade restores the pre-upgrade copy and the older build opens it. | Unverified |

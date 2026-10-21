@@ -53,6 +53,10 @@ pub enum ContentError {
     Poisoned,
     #[error("in use by: {}", titles.join(", "))]
     InUse { titles: Vec<String> },
+    /// The file was last written by a newer Rhema Studio (it has migrations this build does not know).
+    /// Opening it anyway could lose what the newer version stored, so it is refused.
+    #[error("this database was last used by a newer Rhema Studio (it has {}); use that version, or restore the copy saved before it upgraded the file", versions.join(", "))]
+    NewerSchema { versions: Vec<String> },
 }
 
 pub type Result<T> = std::result::Result<T, ContentError>;
@@ -254,6 +258,13 @@ impl ContentDb {
                 let rows = stmt.query_map([], |r| r.get(0))?.collect::<std::result::Result<_, _>>()?;
                 rows
             };
+            // Downgrade guard: a migration this build does not know means a newer build wrote the file.
+            let known: HashSet<&str> = migrations.iter().map(|(v, _)| *v).collect();
+            let mut newer: Vec<String> = applied.iter().filter(|v| !known.contains(v.as_str())).cloned().collect();
+            if !newer.is_empty() {
+                newer.sort();
+                return Err(ContentError::NewerSchema { versions: newer });
+            }
             migrations.iter().filter(|(v, _)| !applied.contains(*v)).collect()
         };
         if pending.is_empty() {
@@ -1071,6 +1082,27 @@ mod tests {
         assert_eq!(db.applied_migrations().unwrap().len(), MIGRATIONS.len());
         assert!(db.last_backup().is_none(), "no pending migrations, so no backup");
         assert_eq!(db.audit_events("program", &id).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_newer_database_is_refused_by_an_older_build_and_left_untouched() {
+        let tmp = TempDir::new();
+        let id = {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            db.create_program("Sunday", None).unwrap().id
+        };
+        // An older build knows only the first five migrations.
+        let older = &MIGRATIONS[..5];
+        let err = ContentDb::open_with_migrations(&tmp.db(), older).unwrap_err();
+        match &err {
+            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments"]),
+            other => panic!("{other:?}"),
+        }
+        assert!(err.to_string().contains("newer Rhema Studio"));
+        // Nothing was changed: the current build still opens it with the data.
+        let db = ContentDb::open(&tmp.db()).unwrap();
+        assert!(db.get_program(&id).unwrap().is_some());
+        assert_eq!(db.applied_migrations().unwrap().len(), MIGRATIONS.len());
     }
 
     #[test]

@@ -74,6 +74,8 @@ export interface ContentStatus {
   migrations: string[]
   /** Automatic copy made before the last migration, if any. */
   last_backup: string | null
+  /** Why the database could not be opened (for example: written by a newer version). */
+  error?: string | null
 }
 
 // ── Media (migration 0004) ───────────────────────────────────────────────
