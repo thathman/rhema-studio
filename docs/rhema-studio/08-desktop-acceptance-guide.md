@@ -447,3 +447,9 @@ report), but launching it cannot.
 | 10ak.3 | Revoke the phone in Settings, then press Next on it. | Nothing moves; the phone says it is no longer paired and shows the pairing form. | Unverified |
 | 10ak.4 | Stop HTTP, untick "Accept commands from other devices", start HTTP, close and reopen Settings, press Pair a device. | No QR code is shown (the running server accepts only this computer), even though the reopened tickbox shows ticked. | Unverified |
 | 10ak.5 | On a laptop with a VPN on (or cable and Wi-Fi on different networks), pair a device. | If the address under the code is not one the phone can reach, typing the right one in "This computer's address" and leaving the field redraws the code; scanning it works. | Unverified |
+
+### 10al. One running copy (FR-03)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10al.1 | With Rhema running (minimise it, and start the HTTP API), launch Rhema again from the Start menu or desktop icon. | No second window or second tray icon appears; the running copy's main window comes forward (restored if minimised). The remote API keeps working; no "port in use" error. | Unverified |

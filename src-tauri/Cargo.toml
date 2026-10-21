@@ -83,3 +83,6 @@ workspace = true
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
+# FR-03: one running copy. A second launch would open the same database,
+# fight for the remote-control ports and drive the same projector outputs.
+tauri-plugin-single-instance = "2"

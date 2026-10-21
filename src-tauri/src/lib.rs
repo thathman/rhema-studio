@@ -34,6 +34,16 @@ pub fn run() {
     dotenvy::from_filename("../.env").ok();
     install_panic_hook();
     tauri::Builder::default()
+        // First, so a second launch exits before anything else starts; it
+        // brings the running copy's main window forward instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            use tauri::Manager;
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(tauri_plugin_log::log::LevelFilter::Info)
