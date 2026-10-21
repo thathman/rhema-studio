@@ -7,6 +7,7 @@ import {
   getAutocompleteSuggestion,
   getTabNavigationResult,
   parseTypedReference,
+  parseBookChapter,
   type Book,
 } from "./quick-search"
 
@@ -454,6 +455,30 @@ describe("parseTypedReference", () => {
     expect(getAutocompleteSuggestion("John 5", mockBooks)).toMatchObject({ stage: "chapter", chapter: 5 })
     expect(getAutocompleteSuggestion("John 3-5", mockBooks).stage).toBe("none")
     expect(getAutocompleteSuggestion("Jude 1", mockBooks)).toMatchObject({ stage: "chapter", suggestion: "Jude 1:1" })
+  })
+})
+
+describe("numbered books said or typed as words", () => {
+  it("reads First/Second and the Yoruba Kinni/Keji after the name", () => {
+    expect(parseTypedReference("First Samuel 3:10", arabicNumberedBooks)?.book.name).toBe("1 Samuel")
+    expect(parseTypedReference("second kings 2:9", arabicNumberedBooks)?.book.name).toBe("2 Kings")
+    expect(parseTypedReference("Samuẹli Kínní 3:10", [{ id: 9, translation_id: 2, book_number: 9, name: "1 Samuel", abbreviation: "1Sam", testament: "OT" }])?.book.name).toBe("1 Samuel")
+    expect(parseTypedReference("Johanu Kẹta 1:4", mockBooks)?.book.name).toBe("III John")
+    expect(normalizeInput("first love")).toBe("I love")
+  })
+})
+
+describe("parseBookChapter", () => {
+  it("finds a numbered book alone or with a chapter, in Roman- and Arabic-named Bibles", () => {
+    expect(parseBookChapter("1 Samuel", arabicNumberedBooks)).toMatchObject({ book: { name: "1 Samuel" }, chapter: 1 })
+    expect(parseBookChapter("1 kings 3", arabicNumberedBooks)).toMatchObject({ book: { name: "1 Kings" }, chapter: 3 })
+    expect(parseBookChapter("1 cor", mockBooks)).toMatchObject({ book: { name: "I Corinthians" }, chapter: 1 })
+    expect(parseBookChapter("Psalm 23", mockBooks)).toMatchObject({ book: { name: "Psalms" }, chapter: 23 })
+  })
+  it("leaves words alone", () => {
+    expect(parseBookChapter("john", mockBooks)).toBeNull()
+    expect(parseBookChapter("I am the way", mockBooks)).toBeNull()
+    expect(parseBookChapter("amazing grace", mockBooks)).toBeNull()
   })
 })
 

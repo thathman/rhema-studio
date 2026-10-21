@@ -1274,7 +1274,8 @@ export function computeVerseLayoutMetrics(
   const textRectX = pos.x + pad.left + surfacePad
   const textRectY = pos.y + pad.top + surfacePad
   const textRectW = textAreaW - pad.left - pad.right - surfacePad * 2
-  const textRectH = textAreaH - pad.top - pad.bottom - surfacePad * 2
+  // A song's footer line (title, copyright) has its own strip at the bottom: the words fit above it.
+  const textRectH = textAreaH - pad.top - pad.bottom - surfacePad * 2 - (verse?.footer ? footerSpace(scaledTheme) : 0)
   const textAreaRect: VerseLayoutRect = {
     x: pos.x,
     y: pos.y,
@@ -1715,7 +1716,8 @@ function renderVerseImpl(
       referenceRect.y
     )
   }
-  if (verse.footer) drawFooter(ctx, scaledTheme, verse.footer, metrics.textRect)
+  // In the strip kept under the text box for it (free layout: at the bottom of the verse box).
+  if (verse.footer) drawFooter(ctx, scaledTheme, verse.footer, metrics.textRect, metrics.verseBoxRect ? 0 : footerSpace(scaledTheme))
 
   ctx.restore()
   return metrics
@@ -1796,9 +1798,13 @@ function drawCentredLogo(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, i
 }
 
 /** Copyright line: reference style at 40% size, bottom of the text area. */
-function drawFooter(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, text: string, rect: VerseLayoutRect): void {
+const footerSize = (theme: BroadcastTheme) => Math.max(10, theme.reference.fontSize * 0.4)
+/** Height kept under the words for a footer line. */
+const footerSpace = (theme: BroadcastTheme) => footerSize(theme) * 1.6
+
+function drawFooter(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, text: string, rect: VerseLayoutRect, below: number): void {
   const ref = theme.reference
-  const size = Math.max(10, ref.fontSize * 0.4)
+  const size = footerSize(theme)
   ctx.save()
   ctx.font = `${ref.fontWeight} ${size}px "${ref.fontFamily}", sans-serif`
   ctx.fillStyle = ref.color
@@ -1807,6 +1813,6 @@ function drawFooter(ctx: CanvasRenderingContext2D, theme: BroadcastTheme, text: 
   ctx.textAlign = "center"
   let line = text
   while (line.length > 8 && ctx.measureText(line).width > rect.width) line = `${line.slice(0, -4).trimEnd()}…`
-  ctx.fillText(line, rect.x + rect.width / 2, rect.y + rect.height)
+  ctx.fillText(line, rect.x + rect.width / 2, rect.y + rect.height + below)
   ctx.restore()
 }

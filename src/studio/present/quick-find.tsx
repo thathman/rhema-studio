@@ -3,6 +3,7 @@ import { MusicIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { parseBookChapter } from "@/lib/quick-search"
 import { resolveQuickFind } from "@/lib/quick-find-resolver"
 import { songQueueItem } from "@/lib/lyrics"
 import { fuzzySongs } from "@/lib/fuzzy"
@@ -60,13 +61,17 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
       } else if (resolved.kind === "hymn") {
         found = (await songs.lookup(q, 8)).map((song) => ({ kind: "song", song }))
       } else if (q.length >= 3) {
-        const [verses, exact] = await Promise.all([
+        // "1 Samuel", "1 Kings 3", "Psalm 23": that chapter's first verse comes first, then the word search.
+        const bookChapter = parseBookChapter(q, books)
+        const [verses, exact, start] = await Promise.all([
           bibleActions.searchVerses(q, 8).catch(() => [] as Verse[]),
           songs.lookup(q, 6).catch(() => [] as SongSummary[]),
+          bookChapter ? bibleActions.fetchVerse(bookChapter.book.book_number, bookChapter.chapter, 1).catch(() => null) : Promise.resolve(null),
         ])
         // Nothing exact: forgive a typo or two against every title and first line.
         const hits = exact.length > 0 ? exact : fuzzySongs(q, await songs.all().catch(() => [] as SongSummary[]))
-        found = [...hits.map((song): Hit => ({ kind: "song", song })), ...verses.map((verse): Hit => ({ kind: "verse", verse }))]
+        const others = verses.filter((v) => !start || v.book_number !== start.book_number || v.chapter !== start.chapter || v.verse !== start.verse)
+        found = [...(start?.text?.trim() ? [{ kind: "verse", verse: start } as Hit] : []), ...hits.map((song): Hit => ({ kind: "song", song })), ...others.map((verse): Hit => ({ kind: "verse", verse }))]
       }
       if (ticket === seq.current) {
         setResults(found)
