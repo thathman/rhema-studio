@@ -1466,7 +1466,7 @@ mod tests {
         assert_eq!(db.list_songs(Some("Psalm 23"), 5).unwrap().len(), 1);
         // A real hymnbook code still means a number in that book (none here: nothing).
         db.upsert_hymnbook(&HymnbookInput { id: None, code: "SSS".into(), name: "Sacred Songs and Solos".into(), language: "en".into(), publisher: String::new(), licence_note: String::new() }).unwrap();
-        assert!(db.list_songs(Some("SSS 23"), 5).unwrap().is_empty());
+        assert_eq!(db.list_songs(Some("SSS 23"), 5).unwrap().len(), 0);
     }
 
     #[test]
