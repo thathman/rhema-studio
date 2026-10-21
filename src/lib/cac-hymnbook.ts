@@ -81,7 +81,7 @@ export function pairSections(en: RawVerse[], yo: RawVerse[]): SectionInput[] {
 export function cacHymnbookFromJson(raw: unknown): { parts: Array<{ book: HymnbookInput; songs: NumberedSong[] }>; skipped: number } {
   if (!Array.isArray(raw)) throw new Error("This is not the hymn book file: expected a list of hymns (hymns_combined.json).")
   let skipped = 0
-  const parts = CAC_PARTS.map((p) => ({ book: { code: p.code, name: p.name, language: "yo", publisher: "Christ Apostolic Church", licence_note: "" } as HymnbookInput, songs: [] as NumberedSong[], seen: new Set<string>() }))
+  const parts = CAC_PARTS.map((p) => ({ shown: p.part === 2 ? "V" : "", book: { code: p.code, name: p.name, language: "yo", publisher: "Christ Apostolic Church", licence_note: "" } as HymnbookInput, songs: [] as NumberedSong[], seen: new Set<string>() }))
   for (const h of raw as Array<Record<string, unknown>>) {
     const part = parts[CAC_PARTS.findIndex((p) => p.series === h?.series)]
     const number = typeof h?.number === "number" && Number.isInteger(h.number) && h.number > 0 ? String(h.number) : ""
@@ -97,7 +97,8 @@ export function cacHymnbookFromJson(raw: unknown): { parts: Array<{ book: Hymnbo
     const notes = [str(yo?.title) && `Yorùbá: ${str(yo?.title)}`, str(en?.tune) && `Tune: ${str(en?.tune)}`, str(en?.category)].filter(Boolean).join(" · ")
     part.songs.push({
       number,
-      song: { title, primary_language: "yo", licence: "unknown", tags: CAC_TAG, notes: [...notes].slice(0, 2000).join(""), sections },
+      // The screen's footer line then reads "<title> · CAC Gospel Hymn Book 245".
+      song: { title, primary_language: "yo", licence: "custom", licence_note: `CAC Gospel Hymn Book ${part.shown}${number}`, tags: CAC_TAG, notes: [...notes].slice(0, 2000).join(""), sections },
     })
   }
   return { parts: parts.map(({ book, songs }) => ({ book, songs })), skipped }

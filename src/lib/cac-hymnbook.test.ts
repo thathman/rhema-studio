@@ -29,7 +29,8 @@ describe("cacHymnbookFromJson", () => {
     expect(skipped).toBe(0)
     expect(parts.map((p) => [p.book.code, p.songs.map((s) => s.number)])).toEqual([["CAC", ["1", "2"]], ["CACV", ["1"]]])
     const song = parts[0].songs[0].song
-    expect(song).toMatchObject({ title: "Great shepherd", primary_language: "yo", tags: CAC_TAG })
+    expect(song).toMatchObject({ title: "Great shepherd", primary_language: "yo", tags: CAC_TAG, licence: "custom", licence_note: "CAC Gospel Hymn Book 1" })
+    expect(parts[1].songs[0].song.licence_note).toBe("CAC Gospel Hymn Book V1")
     expect(song.notes).toContain("Yorùbá: Olus'agutan eni Re")
     expect(song.sections[0].texts).toEqual({ en: "Great shepherd of thy people hear,\nThy presence now display,", yo: "Olus'agutan eni Re\nFi ara Re han wa," })
   })
