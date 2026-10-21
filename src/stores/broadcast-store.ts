@@ -258,13 +258,16 @@ function ensureSignageTicker(): void {
 }
 
 function emitDraftToBroadcast(state: BroadcastState): void {
-  if (!state.draftTheme) return
+  // Rehearsal freezes every real output, theme edits included.
+  if (!state.draftTheme || state.rehearsal) return
   const verse = state.isLive ? state.liveVerse : null
   for (const output of state.outputs) {
     if (output.themeId !== state.editingThemeId || output.role === "stage" || output.role === "signage") continue
     void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", {
       theme: state.draftTheme,
       verse: forOutputLanguage(verse, output.language),
+      // The output window replaces its whole payload, so the band must ride along or it vanishes.
+      overlay: output.lowerThirds ? state.lowerThird : null,
     }).catch(() => {})
   }
 }

@@ -512,16 +512,18 @@ function drawBackground(
  * lighter second line, in the theme's font. Drawn last, over anything,
  * including a transparent (OBS-keyed) frame.
  */
-export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, height: number, lt: { line1: string; line2: string }, fontFamily = "system-ui, sans-serif"): void {
+export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, height: number, lt: { line1: string; line2: string }, fontFamily?: string): void {
+  // Quoted: a family like "Source Serif 4 Variable" makes an unquoted font shorthand invalid, and the canvas ignores it.
+  const family = fontFamily ? `"${fontFamily.replace(/"/g, "")}", system-ui, sans-serif` : "system-ui, sans-serif"
   const marginX = Math.round(width * 0.06)
   const bandH = Math.round(height * (lt.line2 ? 0.15 : 0.1))
   const y = Math.round(height * 0.92) - bandH
   const size1 = Math.round(bandH * (lt.line2 ? 0.36 : 0.5))
   const size2 = Math.round(bandH * 0.24)
   ctx.save()
-  ctx.font = `700 ${size1}px ${fontFamily}`
+  ctx.font = `700 ${size1}px ${family}`
   const w1 = ctx.measureText(lt.line1).width
-  ctx.font = `400 ${size2}px ${fontFamily}`
+  ctx.font = `400 ${size2}px ${family}`
   const w2 = ctx.measureText(lt.line2).width
   const padX = Math.round(bandH * 0.35)
   const bandW = Math.min(width - marginX * 2, Math.max(w1, w2) + padX * 2)
@@ -533,13 +535,13 @@ export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, hei
   ctx.textAlign = "left"
   const maxW = bandW - padX * 2
   if (lt.line2) {
-    ctx.font = `700 ${size1}px ${fontFamily}`
+    ctx.font = `700 ${size1}px ${family}`
     ctx.fillText(lt.line1, marginX + padX, y + bandH * 0.36, maxW)
-    ctx.font = `400 ${size2}px ${fontFamily}`
+    ctx.font = `400 ${size2}px ${family}`
     ctx.fillStyle = "rgba(255,255,255,0.85)"
     ctx.fillText(lt.line2, marginX + padX, y + bandH * 0.72, maxW)
   } else {
-    ctx.font = `700 ${size1}px ${fontFamily}`
+    ctx.font = `700 ${size1}px ${family}`
     ctx.fillText(lt.line1, marginX + padX, y + bandH / 2, maxW)
   }
   ctx.restore()

@@ -37,7 +37,7 @@ Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cue
 
 ## Lower thirds
 
-Present → Lower third: a name and an optional title, shown as a band near the bottom of the outputs where "Show lower thirds" is on (Outputs → edit; usually the NDI stream with a transparent theme). It stays up through Next, Clear and new items until you press Hide. The projector and stage screens never show it unless you turn it on for them.
+Present → Lower third: a name and an optional title, shown as a band near the bottom of the outputs where "Show lower thirds" is on (Outputs → edit; usually the NDI stream with a transparent theme). It stays up through Next, Clear and new items until you press Hide. The projector shows it only if you turn it on for the projector; stage and signage screens never show it.
 
 ## Videos
 
