@@ -167,10 +167,20 @@ impl ContentDb {
         if revision.summary.program_id != program_id {
             return Err(ContentError::Invalid("that revision belongs to another service".into()));
         }
-        let restored = self.replace_items(program_id, expected_revision, &revision.items)?;
+        let mut restored = self.replace_items(program_id, expected_revision, &revision.items)?;
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
         audit(&tx, "program", program_id, "restore_revision", &serde_json::json!({ "from_revision": revision.summary.revision }))?;
+        // Bringing back the approved version brings back its approval: the items are the
+        // approved ones (CL-002), so the service is not left "changed since approval".
+        if crate::has_approval_column(&tx)
+            && tx.execute(
+                "UPDATE programs SET approved_revision = ?3 WHERE id = ?1 AND approved_revision = ?2",
+                params![program_id, revision.summary.revision, restored.program.revision],
+            )? > 0
+        {
+            restored.program.approved_revision = Some(restored.program.revision);
+        }
         tx.commit()?;
         Ok(restored)
     }
@@ -182,6 +192,24 @@ mod tests {
 
     fn verse(reference: &str, b: i64, c: i64, v: i64) -> ItemInput {
         ItemInput { reference: reference.into(), book_number: Some(b), chapter: Some(c), verse: Some(v), ..ItemInput::default() }
+    }
+
+    #[test]
+    fn restoring_the_approved_version_keeps_it_approved() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let saved = db.replace_items(&p.id, 1, &[verse("John 3:16", 43, 3, 16)]).unwrap(); // rev 2
+        db.approve_program(&p.id, saved.program.revision).unwrap();
+        let changed = db.replace_items(&p.id, 2, &[verse("Romans 8:28", 45, 8, 28)]).unwrap(); // rev 3
+        assert_ne!(changed.program.approved_revision, Some(changed.program.revision));
+        let approved = db.list_revisions(&p.id).unwrap().into_iter().find(|r| r.revision == 2).unwrap();
+        let restored = db.restore_revision(&p.id, 3, &approved.id).unwrap(); // rev 4, the approved items
+        assert_eq!(restored.program.approved_revision, Some(restored.program.revision));
+        assert_eq!(db.get_program(&p.id).unwrap().unwrap().program.approved_revision, Some(restored.program.revision));
+        // Restoring some other version does not approve it.
+        let other = db.list_revisions(&p.id).unwrap().into_iter().find(|r| r.revision == 3).unwrap();
+        let back = db.restore_revision(&p.id, restored.program.revision, &other.id).unwrap();
+        assert_ne!(back.program.approved_revision, Some(back.program.revision));
     }
 
     #[test]
@@ -251,7 +279,8 @@ mod tests {
         assert!(revs.len() <= usize::try_from(KEEP_REVISIONS).unwrap() + 1);
         let back = db.restore_revision(&p.id, cur.revision, &kept.id).unwrap();
         assert_eq!(back.items[0].reference, "John 3:16");
-        assert_eq!(back.program.approved_revision, Some(p.revision)); // still points at the approved content's revision
+        // The approved items are back, so the approval moves to that revision (same content).
+        assert_eq!(back.program.approved_revision, Some(back.program.revision));
     }
 
     #[test]

@@ -165,6 +165,8 @@ export interface PackageReport {
   program: ProgramWithItems
   songs_added: number
   songs_skipped: number
+  /** Songs already here whose words or orders differ from the file's; this computer's copy was kept. */
+  songs_differ?: string[]
   media_added: number
   media_reused: number
 }

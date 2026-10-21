@@ -249,7 +249,7 @@ function PackageBlock({ onClose }: { onClose: () => void }) {
       await useServiceStore.getState().loadPrograms()
       const opened = await useServiceStore.getState().openProgram(r.program.program.id)
       toast.success(`“${r.program.program.title}” added`, {
-        description: `${r.songs_added} song${r.songs_added === 1 ? "" : "s"} added, ${r.songs_skipped} already here; ${r.media_added} picture${r.media_added === 1 ? "" : "s"} added, ${r.media_reused} already here.`,
+        description: `${r.songs_added} song${r.songs_added === 1 ? "" : "s"} added, ${r.songs_skipped} already here; ${r.media_added} picture${r.media_added === 1 ? "" : "s"} added, ${r.media_reused} already here.${r.songs_differ?.length ? ` This computer's copy was kept for ${r.songs_differ.join(", ")}, which differ${r.songs_differ.length === 1 ? "s" : ""} in the file.` : ""}`,
       })
       if (opened === "ok") {
         onClose()

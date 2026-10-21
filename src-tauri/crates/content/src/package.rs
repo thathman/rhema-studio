@@ -9,7 +9,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{ContentDb, ContentError, ImportMode, ItemInput, MediaInput, ProgramWithItems, Result, SongExport};
+use crate::{ContentDb, ContentError, ImportMode, ItemInput, MediaInput, ProgramWithItems, Result, SongExport, SongWithSections};
 use std::collections::HashSet;
 
 pub const PACKAGE_VERSION: u32 = 1;
@@ -65,8 +65,24 @@ pub struct PackageReport {
     pub program: ProgramWithItems,
     pub songs_added: usize,
     pub songs_skipped: usize,
+    /// Songs already on this computer whose words or orders differ from the file's. This
+    /// computer's copy is kept (no silent overwrite, CL-005); the titles are reported.
+    #[serde(default)]
+    pub songs_differ: Vec<String>,
     pub media_added: usize,
     pub media_reused: usize,
+}
+
+/// Same words, sections and orders (ids aside), so nothing in the file is lost by keeping ours.
+fn same_song_content(a: &SongWithSections, b: &SongWithSections) -> bool {
+    let sections = |s: &SongWithSections| s.sections.iter().map(|x| (x.kind.clone(), x.label.clone(), x.texts.clone())).collect::<Vec<_>>();
+    let orders = |s: &SongWithSections| {
+        s.arrangements
+            .iter()
+            .map(|a| (a.name.trim().to_lowercase(), a.sequence.iter().map(|id| s.sections.iter().position(|x| &x.id == id)).collect::<Vec<_>>()))
+            .collect::<Vec<_>>()
+    };
+    a.song.title == b.song.title && sections(a) == sections(b) && orders(a) == orders(b)
 }
 
 fn media_input(m: &PackagedMedia, bytes: &[u8]) -> Result<MediaInput> {
@@ -160,6 +176,32 @@ impl ContentDb {
     /// Creates a new service from a package. Songs already here (same id)
     /// are kept as they are; pictures are matched by content hash. Nothing
     /// is written when the checksum or a picture's hash does not match.
+    /// Arrangement ids from the file mapped to this computer's (see the comment inside).
+    fn arrangement_map(&self, songs: &[SongWithSections]) -> Result<HashMap<String, String>> {
+        // Arrangement ids are not always stable across import (a song's generated
+        // Default has none): match the same id, then the same name, then the
+        // position, else fall back to the song's default order rather than failing.
+        let mut arrangement_map = HashMap::new();
+        for packaged in songs {
+            let Some(cur) = self.get_song(&packaged.song.id)? else { continue };
+            let fallback = cur.arrangements.iter().find(|a| a.is_default).or(cur.arrangements.first()).map(|a| a.id.clone());
+            for (pos, old) in packaged.arrangements.iter().enumerate() {
+                let new = cur
+                    .arrangements
+                    .iter()
+                    .find(|a| a.id == old.id)
+                    .or_else(|| cur.arrangements.iter().find(|a| a.name.trim().eq_ignore_ascii_case(old.name.trim())))
+                    .or_else(|| cur.arrangements.get(pos))
+                    .map(|a| a.id.clone())
+                    .or_else(|| fallback.clone());
+                if let Some(new) = new {
+                    arrangement_map.insert(old.id.clone(), new);
+                }
+            }
+        }
+        Ok(arrangement_map)
+    }
+
     pub fn import_service_package(&self, pkg: &ServicePackage, media_dir: &Path) -> Result<PackageReport> {
         if pkg.version != PACKAGE_VERSION {
             return Err(ContentError::Invalid(format!("this file is a version {} package; this app reads version {PACKAGE_VERSION}", pkg.version)));
@@ -201,21 +243,22 @@ impl ContentDb {
             crate::validate_media(&media_input(m, &bytes)?)?;
             decoded.push(bytes);
         }
-        let songs = self.import_songs(&payload.songs, ImportMode::Skip)?;
-        // Arrangement ids are not stable across import (a song's generated
-        // Default has none), so match by position, else fall back to the
-        // song's default order rather than failing the whole service.
-        let mut arrangement_map = HashMap::new();
+        // Songs already here, as they are before the import, to tell which differ from the file.
+        let mut before = HashMap::new();
         for packaged in &payload.songs.songs {
-            let Some(cur) = self.get_song(&packaged.song.id)? else { continue };
-            let fallback = cur.arrangements.iter().find(|a| a.is_default).or(cur.arrangements.first()).map(|a| a.id.clone());
-            for (pos, old) in packaged.arrangements.iter().enumerate() {
-                let new = cur.arrangements.get(pos).map(|a| a.id.clone()).or_else(|| fallback.clone());
-                if let Some(new) = new {
-                    arrangement_map.insert(old.id.clone(), new);
-                }
+            if let Some(cur) = self.get_song(&packaged.song.id)? {
+                before.insert(packaged.song.id.clone(), cur);
             }
         }
+        let songs = self.import_songs(&payload.songs, ImportMode::Skip)?;
+        let songs_differ: Vec<String> = payload
+            .songs
+            .songs
+            .iter()
+            .filter(|p| before.get(&p.song.id).is_some_and(|cur| !same_song_content(cur, p)))
+            .map(|p| p.song.title.clone())
+            .collect();
+        let arrangement_map = self.arrangement_map(&payload.songs.songs)?;
         let mut media_map = HashMap::new();
         let (mut media_added, mut media_reused) = (0, 0);
         for (m, bytes) in payload.media.iter().zip(decoded) {
@@ -260,7 +303,7 @@ impl ContentDb {
                 return Err(e);
             }
         };
-        Ok(PackageReport { program, songs_added: songs.added, songs_skipped: songs.skipped, media_added, media_reused })
+        Ok(PackageReport { program, songs_added: songs.added, songs_skipped: songs.skipped, songs_differ, media_added, media_reused })
     }
 }
 
@@ -331,6 +374,16 @@ mod tests {
         let r2 = church.import_service_package(&pkg, &church_media).unwrap();
         assert_eq!((r2.songs_added, r2.songs_skipped, r2.media_added, r2.media_reused), (0, 1, 0, 1));
         assert_eq!(church.list_programs().unwrap().len(), 2);
+        assert!(r2.songs_differ.is_empty(), "same words: nothing to report");
+
+        // Home fixes a lyric and sends a newer version: the church keeps its copy and is told.
+        let mut payload: PackagePayload = serde_json::from_str(&pkg.payload).unwrap();
+        payload.songs.songs[0].sections[0].texts.insert("en".into(), "Amazing grace, how sweet the sound".into());
+        let text = serde_json::to_string(&payload).unwrap();
+        let v2 = ServicePackage { version: 1, sha256: sha256_hex(text.as_bytes()), payload: text };
+        let r3 = church.import_service_package(&v2, &church_media).unwrap();
+        assert_eq!(r3.songs_differ, vec!["Amazing Grace".to_string()]);
+        assert_eq!(church.get_song(&s.song.id).unwrap().unwrap().sections[0].texts["en"], "Amazing grace", "no silent overwrite");
     }
 
     #[test]

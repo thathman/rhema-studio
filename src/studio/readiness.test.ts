@@ -125,4 +125,14 @@ describe("computeReadiness", () => {
     expect(c?.detail).toContain("newer Rhema Studio")
     expect(computeReadiness(base).checks.some((x) => x.id === "content")).toBe(false)
   })
+
+  it("is not ready while verses are saved for a translation this computer lacks, or items are from a newer version", () => {
+    const missing = computeReadiness({ ...good, missingTranslations: ["NIV"] })
+    expect(missing.ready).toBe(false)
+    expect(missing.checks.find((c) => c.id === "missing-translations")?.label).toContain("NIV")
+    const newer = computeReadiness({ ...good, unsupportedItems: 2 })
+    expect(newer.ready).toBe(false)
+    expect(newer.checks.find((c) => c.id === "unsupported-items")?.label).toContain("2 items")
+  })
 })
+
