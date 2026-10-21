@@ -287,44 +287,51 @@ function BackgroundPicker({ item }: { item: QueueItem }) {
 
 /** Prepare-only: planned minutes, for the service total and the on-time chip in Present. */
 function PlannedMinutes({ item }: { item: QueueItem }) {
+  const label = "mb-0.5 block text-[0.625rem] font-medium tracking-wide text-muted-foreground uppercase"
   return (
-    <div className="ml-7 flex items-center gap-2 py-1 pl-2 text-xs">
-      <span className="text-muted-foreground">Planned</span>
-      <Input
-        type="number"
-        min={0}
-        max={600}
-        step={0.5}
-        aria-label={`Planned minutes for ${item.reference}`}
-        value={item.planned_minutes ?? ""}
-        placeholder="min"
-        className="h-7 w-20 text-xs"
-        onChange={(e) => {
-          const n = Number(e.target.value)
-          useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, planned_minutes: e.target.value === "" || !(n > 0) ? null : Math.min(600, n) }))
-        }}
-      />
-      <span className="text-muted-foreground">minutes</span>
-      <span className="ml-2 text-muted-foreground">prepared by</span>
-      <Input
-        aria-label={`Who prepares ${item.reference}`}
-        value={item.prepared_by ?? ""}
-        placeholder="name"
-        maxLength={60}
-        className="h-7 w-28 text-xs"
-        onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, prepared_by: e.target.value.trim() ? e.target.value : null }))}
-      />
-      <span className="ml-2 text-muted-foreground">end by</span>
-      <Input
-        type="time"
-        aria-label={`Finish ${item.reference} by`}
-        value={item.end_by ?? ""}
-        className="h-7 w-28 text-xs"
-        onChange={(e) => {
-          const t = e.target.value
-          useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, end_by: /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null }))
-        }}
-      />
+    <div className="ml-7 grid grid-cols-[5rem_minmax(0,1fr)_6.5rem] gap-2 py-1 pl-2 text-xs">
+      <label className="min-w-0">
+        <span className={label}>Minutes</span>
+        <Input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={600}
+          step={0.5}
+          aria-label={`Planned minutes for ${item.reference}`}
+          value={item.planned_minutes ?? ""}
+          placeholder="—"
+          className="h-7 [appearance:textfield] text-xs tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          onChange={(e) => {
+            const n = Number(e.target.value)
+            useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, planned_minutes: e.target.value === "" || !(n > 0) ? null : Math.min(600, n) }))
+          }}
+        />
+      </label>
+      <label className="min-w-0">
+        <span className={label}>Prepared by</span>
+        <Input
+          aria-label={`Who prepares ${item.reference}`}
+          value={item.prepared_by ?? ""}
+          placeholder="Name"
+          maxLength={60}
+          className="h-7 text-xs"
+          onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, prepared_by: e.target.value.trim() ? e.target.value : null }))}
+        />
+      </label>
+      <label className="min-w-0">
+        <span className={label}>End by</span>
+        <Input
+          type="time"
+          aria-label={`Finish ${item.reference} by`}
+          value={item.end_by ?? ""}
+          className="h-7 px-2 text-xs tabular-nums"
+          onChange={(e) => {
+            const t = e.target.value
+            useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, end_by: /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null }))
+          }}
+        />
+      </label>
     </div>
   )
 }
@@ -371,7 +378,7 @@ function CommentsEditor({ item }: { item: QueueItem }) {
       <div className="flex items-center gap-2">
         <Input
           aria-label={`Comment on ${item.reference}`}
-          placeholder={me ? "Comment for the team (never on screen)" : "Comment for the team — set your name in More so others know who wrote it"}
+          placeholder="Comment for the team (never on screen)"
           value={draft}
           maxLength={1000}
           className="h-7 text-xs"
@@ -387,6 +394,7 @@ function CommentsEditor({ item }: { item: QueueItem }) {
           Comment
         </Button>
       </div>
+      {!me && <p className="text-[0.625rem] text-muted-foreground">Set your name in More so the team knows who wrote it.</p>}
     </div>
   )
 }
