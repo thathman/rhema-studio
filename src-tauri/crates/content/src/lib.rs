@@ -20,12 +20,14 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 mod attachments;
+mod folder;
 mod logs;
 mod media;
 mod package;
 mod revisions;
 mod songs;
 mod usage;
+pub use folder::*;
 pub use logs::*;
 pub use media::*;
 pub use package::*;

@@ -75,13 +75,14 @@ Found by reading PRD lines against the code (not by tests): no single-instance g
 | CV-002, CV-003, CV-006, CV-007 | Canva connection, export/import, Autofill, update checks | Owner: Canva token relay (#34; recurring cost, Canva-reviewed public integration) |
 | CL-001 | Roles and multi-user identity | Owner: who may present/approve (and the sync decision for remote users) |
 | CL-002 | "Approval required before go-live" | Owner: whether approval gates going live (project-vs-release default, PRD open decision) |
-| CL-005, CL-006 (remote delivery), CL-007 | Remote drafts/approvals, delivery, team comments | Owner: sync approach (#72) |
+| CL-005, CL-006 | Shared-folder delivery: in PR. Presence, hosted sync | Decided (#72): hosted sync is a later, optional step |
+| CL-007 | Team assignments and comments | Needs hosted sync (later, per #72) |
 | SG-003 | Giving/prayer action links | Owner: which external systems |
 | AR-004, AI-001, AI-002 | Opt-in transcription, AI provider abstraction, suggestions | Owner: speech/AI provider (PR #4) and archive consent/retention (PRD open decision) |
 | QA-001 | Install, launch and smoke the installer | Real Windows machine (#32) |
 | QA-002 | Network loss, OBS drop, packet capture | Real desktop (rows 10an) |
 | QA-003 | Novice usability sessions | Real volunteers |
-| QA-006 | Cloud-sync threat review | Owner: sync approach (#72) |
+| QA-006 | Cloud-sync threat review | Hosted sync not built yet (#72: later); the shared-folder threat model is in 15-sync-transport-evaluation.md |
 | QA-007 | Benchmarks on low-end hardware | Real low-end PCs (the latency logging they need: #125) |
 | QA-010 | Backup/restore drill | Real machines (#62) |
 
@@ -90,7 +91,7 @@ Found by reading PRD lines against the code (not by tests): no single-instance g
 Every backlog row now has its buildable part merged. What remains, by why it is not being built:
 
 1. **Owner decisions (product direction):**
-   - #72 sync approach → CL-005 remote drafts/approvals, CL-006 remote delivery, CL-007 team comments, QA-006 cloud-sync review.
+   - #72 sync approach: **decided 2026-10-21** (shared folder/NAS + versioned packages first; hosted sync later, optional). First slice in PR; hosted sync, CL-007 team comments and the cloud-sync threat review follow when hosted sync is taken up.
    - #34 Canva relay (recurring cost, Canva-reviewed public integration) → CV-002, CV-003, CV-006, CV-007.
    - PR #4 speech provider and bundling → ST-004, then AR-004 opt-in transcription and AI-001/AI-002.
    - App identity for release (PRD open decision "branding/installer app-ID migration") → ST-009.

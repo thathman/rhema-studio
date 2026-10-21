@@ -1,6 +1,8 @@
+import { useSettingsStore } from "@/stores/settings-store"
+import { publishToChurchFolder } from "@/lib/church-folder"
 import { useState } from "react"
 import { toast } from "sonner"
-import { BadgeCheckIcon, CalendarIcon, CopyIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import { BadgeCheckIcon, CalendarIcon, CopyIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { approvalBlockers, approvalLabel, approvalState } from "@/lib/approval"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
@@ -77,6 +79,22 @@ export function ServiceBar() {
   const [editTitle, setEditTitle] = useState("")
   const [editDate, setEditDate] = useState("")
   const [showArchived, setShowArchived] = useState(false)
+  const churchFolder = useSettingsStore((s) => s.churchFolder)
+  const [publishing, setPublishing] = useState(false)
+  // Owner decision #72: the saved service goes to the shared folder as a new versioned file.
+  const publish = async () => {
+    if (!current) return
+    setPublishing(true)
+    try {
+      const r = await publishToChurchFolder(churchFolder, current.id)
+      if (r.already) toast.info("This version is already in the church folder", { description: r.file_name })
+      else toast.success("Published to the church folder", { description: `${r.file_name}${approval === "approved" ? "" : " (not approved yet)"}` })
+    } catch (e) {
+      toast.error("Not published", { description: typeof e === "object" && e !== null && "message" in e ? String((e as { message: unknown }).message) : String(e) })
+    } finally {
+      setPublishing(false)
+    }
+  }
   const [fromTemplate, setFromTemplate] = useState("")
   const templates = programs.filter((p) => p.is_template && !p.archived_at)
   const archivedCount = programs.filter((p) => p.archived_at).length
@@ -181,6 +199,17 @@ export function ServiceBar() {
       )}
 
       <ServiceHistory />
+      {current && churchFolder && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={dirty || publishing}
+          title={dirty ? "Save first; the saved version is what is published" : `Put this saved version in the church folder (${churchFolder})`}
+          onClick={() => void publish()}
+        >
+          <FolderUpIcon /> Publish
+        </Button>
+      )}
       {current && (
         <Popover
           open={editOpen}

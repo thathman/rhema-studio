@@ -74,6 +74,10 @@ An item can also have an **end by** time (Prepare, beside its planned minutes: "
 - More → Library: **Save this service as a file** carries one service with its songs and pictures to another computer (checksummed; a damaged file is refused). Export/import songs (Rhema JSON, OpenLyrics), and **Back up now / Restore** for the whole database. A restore refuses files that are not a Rhema Studio database and keeps the previous database as a snapshot next to it.
 - Before any upgrade the app copies the database to `studio.db.before-<migration>.bak`.
 
+## Church folder (prepare at home, present at church)
+
+More → Library → Church folder → Choose folder…: a NAS share, or a folder kept in step by Google Drive, OneDrive, Dropbox or Syncthing, chosen on every computer. In Prepare, **Publish** puts the saved service there as a new file named with its date and version (`Sunday 2026-10-25 v7.rhema-service.json`); older versions stay. On Home, **Church folder** lists the newest version of each service (approved at home or not, opened here or not); **Open** adds it on this computer with its songs and pictures. Approve it again here before Sunday. A file still syncing shows as "damaged … may still be syncing" and cannot be opened until it is complete.
+
 ## Song usage (licence reports)
 
 More → Library → Song usage: choose a date range (default: the last six months), Show, then Save as CSV… The report counts saved services dated in the range (a song sung twice in one service counts once), with each song's CCLI number, licence and last use, ready to copy into a CCLI (or other licensing body) report. Services without a date are not counted, so give each service its date.

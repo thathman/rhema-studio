@@ -30,6 +30,18 @@ pub struct PackagePayload {
     pub items: Vec<ItemInput>,
     pub songs: SongExport,
     pub media: Vec<PackagedMedia>,
+    /// Where it came from (owner decision #72: versioned service packages in a
+    /// shared folder). Optional, so older files and older readers still work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
+    /// The saved revision of the source service this package is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<i64>,
+    /// The revision approved at the source, and by whom, when it was approved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_revision: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +75,11 @@ fn media_input(m: &PackagedMedia, bytes: &[u8]) -> Result<MediaInput> {
         size: i64::try_from(bytes.len()).map_err(|_| ContentError::Invalid("picture too large".into()))?, mime: m.mime.clone(),
         width: m.width, height: m.height, duration_ms: m.duration_ms, source: "package".into(), source_ref: String::new(), original_path: String::new(),
     })
+}
+
+/// SHA-256 of a package payload, as the package's `sha256` holds it.
+pub fn package_sha256(bytes: &[u8]) -> String {
+    sha256_hex(bytes)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -124,7 +141,17 @@ impl ContentDb {
                 width: a.width, height: a.height, duration_ms: a.duration_ms, data: B64.encode(bytes),
             });
         }
-        let payload = serde_json::to_string(&PackagePayload { title: p.program.title, service_date: p.program.service_date, items, songs, media })
+        let payload = serde_json::to_string(&PackagePayload {
+            title: p.program.title,
+            service_date: p.program.service_date,
+            items,
+            songs,
+            media,
+            source_id: Some(p.program.id),
+            revision: Some(p.program.revision),
+            approved_revision: p.program.approved_revision,
+            approved_by: p.program.approved_by,
+        })
             .map_err(|e| ContentError::Invalid(e.to_string()))?;
         let sha256 = sha256_hex(payload.as_bytes());
         Ok(ServicePackage { version: PACKAGE_VERSION, payload, sha256 })

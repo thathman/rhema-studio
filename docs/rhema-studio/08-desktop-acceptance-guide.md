@@ -571,3 +571,13 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bb.1 | On the target (low-end) PC with a projector output, step through 40 verses and songs; Settings → Diagnostics → Save logs. | "[latency] output main: 20 screen changes, median … ms, slowest … ms" lines (one per 20 real changes of screen; resends are not counted; picture slides are timed when the picture is drawn); record the numbers in the evidence sheet (QA-007). Any change over 100 ms appears as its own warning. | Unverified |
+
+### 10bc. Church folder (owner decision #72)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bc.1 | Home laptop and church laptop both choose the same NAS share (or synced folder) in More → Library. At home: save and approve a service; Prepare → Publish; Publish again. | One file "<title> <date> v<n>.rhema-service.json"; the second press says this version is already there. | Unverified |
+| 10bc.2 | At home: change the service, save, Publish. | A second file with the next version number; the first is untouched. | Unverified |
+| 10bc.3 | At church: Home → Church folder. | One row for the service: the newest version, "1 older version", "approved by …" for the approved one only if the newest is the approved revision. | Unverified |
+| 10bc.4 | Open it. | It opens in Prepare with its songs and pictures; it is not approved here until Approve is pressed; the row then says "opened here". Nothing happened before Open was pressed. | Unverified |
+| 10bc.5 | Copy a large service into the synced folder and look at Home while it is still syncing; disconnect the NAS. | The syncing file is listed as damaged/may still be syncing and cannot be opened; with the NAS gone, the card says the folder is not available; the show is unaffected. | Unverified |
