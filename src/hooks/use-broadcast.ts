@@ -92,6 +92,9 @@ export async function backgroundFill(background: { media_id: string } | null | u
   }
 }
 
+/** A present reaches the congregation when it asks to go live or the output is already on air (CL-002 gate). */
+const reachesScreen = (opts: { goLive?: boolean }) => !!opts.goLive || useBroadcastStore.getState().isLive
+
 export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_translation" | "held_for_approval"
 
 /**
@@ -108,7 +111,7 @@ export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_tra
  * only the preview unless the Auto toggle is on.
  */
 export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Promise<PresentOutcome> {
-  if (opts.goLive && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
+  if (reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
   const ref = `${verse.book_name} ${verse.chapter}:${verse.verse}`
@@ -207,7 +210,7 @@ export async function presentSlide(
   index: number | "last",
   opts: { goLive?: boolean } = {}
 ): Promise<PresentOutcome> {
-  if (opts.goLive && approvalHolds(() => void presentSlide(item, index, opts))) return "held_for_approval"
+  if (reachesScreen(opts) && approvalHolds(() => void presentSlide(item, index, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
   const warn = (message: string) => useBroadcastStore.getState().setPresentWarning(message)
@@ -255,7 +258,7 @@ export function toCustomSlideRenderData(item: SlideQueueItem): VerseRenderData {
  * still takes a ticket so a verse or song that was loading cannot overtake it.
  */
 export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
-  if (opts.goLive && approvalHolds(() => void presentCustomSlide(item, opts))) return "held_for_approval"
+  if (reachesScreen(opts) && approvalHolds(() => void presentCustomSlide(item, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
   const data = toCustomSlideRenderData(item)
@@ -325,7 +328,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   const cached = media.assets.find((a) => a.id === item.image.media_id)
   // A sound item changes no screen, so it must not supersede a screen still loading.
   if (cached?.kind === "audio") return playSoundItem(item, cached)
-  if (opts.goLive && approvalHolds(() => void presentImage(item, opts))) return "held_for_approval"
+  if (reachesScreen(opts) && approvalHolds(() => void presentImage(item, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
   const asset = cached ?? (await media.list()).find((a) => a.id === item.image.media_id)
