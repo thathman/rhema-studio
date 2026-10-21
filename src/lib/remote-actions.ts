@@ -85,8 +85,7 @@ function stepQueue(offset: number): Promise<void> {
   const current = activeIndex ?? findLiveQueueIndex()
   // A quick screen over a song: Next/Previous carry on in the song underneath.
   const b = useBroadcastStore.getState()
-  // Cleared and a verse clicked since: Next carries on from the song that was cleared.
-  const live = b.liveSlide ?? (b.liveVerse?.quick ? b.heldLive?.liveSlide ?? null : null) ?? (!b.isLive ? b.cleared?.liveSlide ?? null : null)
+  const live = b.liveSlide ?? (b.liveVerse?.quick ? b.heldLive?.liveSlide ?? null : null)
   // The live item was removed: step to the item that followed it, or the one before.
   // (Only while one of them is still in the rundown: another service opened since makes it stale;
   // a neighbour removed since is found from the other one.)

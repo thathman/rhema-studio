@@ -78,7 +78,7 @@ export function PresentWorkspace() {
       <WorkspaceHeader title="Present" subtitle={service ? `${service.title}${service.service_date ? ` · ${service.service_date}` : ""}` : undefined}>
         <StatusChip
           tone={isLive && liveRef ? (rehearsal ? "warn" : "live") : "off"}
-          label={isLive && liveRef ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef}` : rehearsal ? "Rehearsal · nothing live" : "Nothing live"}
+          label={isLive && liveRef ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef}` : liveRef ? `Off air · Restore shows ${liveRef}` : rehearsal ? "Rehearsal · nothing live" : "Nothing live"}
           className="max-w-80"
         />
         <StatusChip

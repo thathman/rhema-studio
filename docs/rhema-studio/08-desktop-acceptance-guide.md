@@ -791,5 +791,6 @@ report), but launching it cannot.
 | 10ca.3 | Song on slide 2; Please stand; Next. | Slide 3 of the song. | Unverified |
 | 10ca.4 | Quick screen over a verse; Clear; Back. | The verse returns but stays off air until Restore. | Unverified |
 | 10ca.5 | "Ask before showing" on, unapproved service, rehearsal: verse, Black, rehearsal off, Back. | The approval question appears; nothing changes until answered. | Unverified |
+| 10ca.7 | Song on slide 2; Clear; look at the status chip at the top of Present. | It reads "Off air · Restore shows" and the song slide. | Unverified |
 | 10ca.6 | Rundown has John 3:1; put John 3:16 on air from the Bible panel. | The John 3:1 row is not marked LIVE. | Unverified |
 

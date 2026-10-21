@@ -81,6 +81,6 @@ export const presentActions = {
   },
   canRestore: () => {
     const s = useBroadcastStore.getState()
-    return !s.isLive && (s.cleared !== null || s.liveVerse !== null)
+    return !s.isLive && s.liveVerse !== null
   },
 }

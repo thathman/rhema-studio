@@ -200,6 +200,29 @@ describe("stepping through a song in the rundown", () => {
     expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
   })
 
+  it("cleared under a quick screen, a click meanwhile keeps Back; a quick screen after Clear still holds the song", async () => {
+    const john = { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "t" }
+    useQueueStore.setState({ items: [songItem()] })
+    presentActions.next()
+    await flush()
+    presentActions.next()
+    await flush()
+    presentActions.quickScreen("stand")
+    presentActions.clear()
+    await presentVerse(john)
+    presentActions.restore()
+    expect(presentActions.canGoBack()).toBe(true)
+    presentActions.next()
+    await flush()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+    presentActions.clear()
+    await presentVerse(john)
+    presentActions.quickScreen("pray")
+    presentActions.back()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
+    expect(useBroadcastStore.getState().isLive).toBe(false) // it was cleared
+  })
+
   it("a quick screen during a song: Next and Previous carry on in the song", async () => {
     useQueueStore.setState({ items: [songItem()] })
     presentActions.next()
