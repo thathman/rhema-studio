@@ -29,6 +29,8 @@ export interface HeldLive {
   liveSlide: LiveSlide | null
   liveItemId: string | null
   wasLive: boolean
+  /** It had been cleared (off air, kept for Restore) when the quick screen went up. */
+  wasCleared?: boolean
 }
 
 /** The song slide on the output: which rundown item, song and step. */
@@ -597,7 +599,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   setLiveVerse: (liveVerse, source = null, opts = {}) => {
     // Cleared: only a go-live (or a translation follow of the cleared verse) replaces it.
-    if (get().cleared && !opts.goLive && !opts.follow) return
+    if (get().cleared && !opts.goLive && !opts.follow) {
+      set({ presentWarning: null })
+      return
+    }
     set({
       liveVerse,
       liveSourceVerse: source,
@@ -627,7 +632,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   holdLive: () => {
     const s = get()
     if (s.heldLive || !s.liveVerse) return
-    set({ heldLive: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: s.isLive } })
+    set({ heldLive: { liveVerse: s.liveVerse, liveSourceVerse: s.liveSourceVerse, liveItem: s.liveItem, liveSlide: s.liveSlide, liveItemId: s.liveItemId, wasLive: s.isLive, wasCleared: s.cleared } })
   },
   releaseHeld: () => {
     const held = get().heldLive
@@ -641,6 +646,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       heldLive: null,
       // Cleared while the quick screen was up: the content comes back, still off air.
       isLive: held.wasLive && get().isLive,
+      // Back to off air with content that was cleared (before or during the quick screen): keep it for Restore.
+      cleared: !!held.wasCleared || (held.wasLive && !get().isLive),
     })
     get().syncBroadcastOutput()
     return true

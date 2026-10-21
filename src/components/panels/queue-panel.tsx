@@ -7,7 +7,7 @@ import {
   XIcon,
   GripVerticalIcon,
 } from "lucide-react"
-import { useQueueStore } from "@/stores"
+import { useBroadcastStore, useQueueStore } from "@/stores"
 import { presentCustomSlide, presentImage, presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { bibleActions } from "@/hooks/use-bible"
 import { isImageItem, isSlideItem, isSongItem, type QueueItem } from "@/types"
@@ -24,7 +24,8 @@ function QueueItemRow({
   isHighlighted: boolean
 }) {
   const handlePresent = () => {
-    useQueueStore.getState().setActive(index)
+    // Cleared: the click only previews (Restore keeps what was cleared), so the position stays too.
+    if (!useBroadcastStore.getState().cleared) useQueueStore.getState().setActive(index)
     if (isSlideItem(item)) {
       void presentCustomSlide(item)
       return

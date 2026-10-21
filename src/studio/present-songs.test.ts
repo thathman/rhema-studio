@@ -62,7 +62,7 @@ beforeEach(() => {
     selectedVerse: null, selectedSlide: null, activeTranslationId: 1, secondaryTranslationId: null, overrideServiceTranslations: false,
     translations: [{ id: 1, abbreviation: "KJV", title: "", language: "en", is_copyrighted: false, is_downloaded: true }],
   })
-  useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSourceVerse: null, liveItem: null, liveSlide: null, presentWarning: null })
+  useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSourceVerse: null, liveItem: null, liveSlide: null, presentWarning: null, heldLive: null, cleared: false })
   useQueueStore.setState({ items: [], activeIndex: null })
   useSongStore.setState({ songs: {} })
 })
@@ -221,6 +221,9 @@ describe("stepping through a song in the rundown", () => {
     presentActions.back()
     expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
     expect(useBroadcastStore.getState().isLive).toBe(false) // it was cleared
+    await presentVerse(john) // browsing after Back still leaves the song for Restore
+    presentActions.restore()
+    expect(useBroadcastStore.getState().liveSlide?.index).toBe(2)
   })
 
   it("a quick screen during a song: Next and Previous carry on in the song", async () => {
