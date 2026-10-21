@@ -127,6 +127,10 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | Projector with the display asleep | Observed: with the Mac's display asleep macOS reports no monitors; turning a projector output on then fails with "Monitor index 0 out of range (0 available)" and the output stays off; the NDI stream needs no monitor and kept working |
 | 10q.1 (operator name) | V: More → Your name "Tolu"; approving a service wrote `audit_events.actor` "Tolu"; the kept service log's first line was "QA Today Morning — operator: Tolu"; the name was still there after a restart |
 | 10x.1 (today's approved service) | V: two services dated today, one approved; with no service open, Home highlighted "QA Today Morning · Today's service, approved" with Open |
+| 10af.1 (reuse) | V: Prepare → Reuse → QA Sunday, ticked Welcome, Amazing Grace and John 3:16 → "Add 3": "2 items added; 1 verse was already in the service"; appended in QA Sunday's order; a reused Psalm 23:1 had its text filled in; QA Sunday unchanged; saved copies have their own ids |
+| 10ao.1 (deletes ask first) | V: the bin next to a kept log and next to an unused picture deleted nothing on the first press; Keep brought the bin back; Delete/Remove then deleted. A picture services use was refused, naming them ("qa-picture is used in: QA Sunday, …") |
+| 10av.1 (song usage) | V: three dated September services and one undated: "Great Is Thy Faithfulness, Lord · 12345 · 3", then "Amazing Grace · public domain · 2" (used twice in one service, counted once); the undated service not counted |
+| 10ap, 10av.2 | Not run: both end in the system Save dialog, which the test harness does not drive (the text and CSV formats are covered by unit tests) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
