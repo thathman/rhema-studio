@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { Button } from "@/components/ui/button"
+import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSongStore } from "@/stores/song-store"
@@ -338,7 +339,7 @@ function EarlierLogs({ refresh }: { refresh: number }) {
             <span className="min-w-0 flex-1 truncate">{l.title}</span>
             <span className="shrink-0 text-muted-foreground">{new Date(l.saved_at).toLocaleDateString()}</span>
             <Button size="icon-xs" variant="ghost" aria-label={`Save ${l.title} as a file`} onClick={() => void saveAs(l)}><DownloadIcon /></Button>
-            <Button size="icon-xs" variant="ghost" aria-label={`Delete ${l.title}`} onClick={() => void remove(l.id)}><Trash2Icon /></Button>
+            <ConfirmDelete label={`Delete ${l.title}`} onConfirm={() => void remove(l.id)} />
           </li>
         ))}
       </ul>

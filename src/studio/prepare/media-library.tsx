@@ -1,8 +1,9 @@
 import { useEffect } from "react"
 import { toast } from "sonner"
-import { ImageIcon, PlayIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { ImageIcon, PlayIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { cn } from "@/lib/utils"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
@@ -96,7 +97,7 @@ export function MediaLibrary() {
                 <span className="min-w-0 flex-1 truncate text-xs font-medium" title={a.name}>{a.name}</span>
                 {!a.present && <span className="text-[0.625rem] text-destructive">missing</span>}
                 {a.width && a.height ? <span className="text-[0.625rem] text-muted-foreground">{a.width}×{a.height}</span> : null}
-                <Button variant="ghost" size="icon-xs" aria-label={`Remove ${a.name}`} onClick={() => void remove(a)}><Trash2Icon /></Button>
+                <ConfirmDelete label={`Remove ${a.name}`} verb="Remove" onConfirm={() => void remove(a)} />
                 <Button variant="outline" size="xs" disabled={!a.present} onClick={() => add(a)}><PlusIcon /> Add</Button>
               </div>
             </li>
