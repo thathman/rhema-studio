@@ -49,7 +49,7 @@ const mmss = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms
 export interface RundownLine {
   id: string
   label: string
-  /** Added after the service was last saved (during the service). */
+  /** Added after the service first went on air (during the service). */
   inserted?: boolean
 }
 

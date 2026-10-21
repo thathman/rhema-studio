@@ -65,6 +65,8 @@ interface BroadcastPayload {
   stage?: StagePayload
   /** Wall-clock ms when the main window sent this screen (latency log). */
   sentAt?: number
+  /** This output plays videos' sound. */
+  sound?: boolean
 }
 
 function BroadcastCanvas() {
@@ -231,7 +233,8 @@ function BroadcastCanvas() {
         draw()
         pushNdiBurst()
       },
-      allowSound: OUTPUT_ID === MAIN_OUTPUT_ID,
+      // The main window says which output plays a video's sound (one only, so screens do not echo).
+      allowSound: () => latestData.current?.sound ?? OUTPUT_ID === MAIN_OUTPUT_ID,
       fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
     })
     videoPlayer = player

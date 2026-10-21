@@ -736,6 +736,16 @@ report), but launching it cannot.
 | 10bu.3 | Approve a service, change it, save; History → restore the approved version; look at Home. | "Service approved as saved". | Unverified |
 | 10bu.4 | Computer A publishes v1 (with a song); computer B opens it. A fixes a lyric, publishes v2; B opens the newer one. | B is told its copy of that song was kept; the song on B is unchanged; Home shows no false missing pictures. | Unverified |
 
+### 10bv. Timers, cues and video sound audit fixes (FR-07, PT-003, MD-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bv.1 | Start the timer; after 5 minutes run "Start the service" again (Cues or the phone). | The timer keeps running from where it was. | Unverified |
+| 10bv.2 | With the timer past 1 minute press Reset; then press it again. Look at the service log. | The first press asks "Reset 5:12?"; the second resets; the log has "timer reset (it had run 5:12)". | Unverified |
+| 10bv.3 | A cue "Next then Offering": run it, then press Back. | The next item went live, then the Offering screen; Back returns to that next item. | Unverified |
+| 10bv.4 | Set an item's "end by" to a time 30 minutes away; close the laptop lid for 10 minutes; open it. | The countdown shows about 20 minutes left within seconds. | Unverified |
+| 10bv.5 | Make the main output a Stage output and a second output Congregation; present a video with sound. | Sound plays (from the congregation output). | Unverified |
+
 ### 10bw. Service log audit fixes (AR-001, FR-09)
 
 | # | Steps | Expected | Result |

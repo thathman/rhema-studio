@@ -35,4 +35,15 @@ describe("service log entries (AR-001)", () => {
     useBroadcastStore.setState({ rehearsal: false })
     expect(useJournalStore.getState().entries.map((x) => x.kind)).toEqual(["rehearsal", "rehearsal"])
   })
+
+  it("the plan is the rundown when the service first went on air; saving later does not change it", async () => {
+    const { useQueueStore } = await import("./queue-store")
+    const item = (id: string) => ({ id, verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: id, confidence: 1, source: "manual", added_at: 0 }) as never
+    useQueueStore.setState({ items: [item("a"), item("b")] })
+    useBroadcastStore.setState({ isLive: true, liveVerse: slide("a"), liveItemId: "a" })
+    useQueueStore.setState({ items: [item("a"), item("b"), item("added")] })
+    useBroadcastStore.setState({ liveVerse: slide("added"), liveItemId: "added" })
+    expect(useJournalStore.getState().startItemIds).toEqual(["a", "b"])
+  })
 })
+

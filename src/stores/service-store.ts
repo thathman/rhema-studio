@@ -425,15 +425,6 @@ function describe(e: unknown): string {
 
 // Baseline the dirty flag compares against: the rundown as last loaded/saved.
 let baseline = ""
-/** Item ids of the open service as last opened or saved (to tell items added during the service). */
-export function savedItemIds(): Set<string> {
-  try {
-    return new Set((JSON.parse(baseline || "[]") as Array<{ id?: string }>).map((i) => i.id ?? "").filter(Boolean))
-  } catch {
-    return new Set()
-  }
-}
-
 /** With no service open: the operator's items as they were when the last service closed (or none). */
 let closedBaseline = "[]"
 const operatorItems = (items: QueueItem[]) => items.filter((i) => i.source === "manual")
