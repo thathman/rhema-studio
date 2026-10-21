@@ -15,7 +15,7 @@
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
-| ST-001 Integrate numbered-book search, OYCB source and dual-language display | P0 | MERGED / MERGED (common short forms #109) | — | [PR #3](https://github.com/thathman/rhema-studio/pull/3) merged `a3204ea`; real Yoruba projector/font check still open (ST-006) |
+| ST-001 Integrate numbered-book search, OYCB source and dual-language display | P0 | MERGED / MERGED (common short forms #109) / IN PR (Yorùbá book names in Quick find, from the bundled edition) | — | [PR #3](https://github.com/thathman/rhema-studio/pull/3) merged `a3204ea`; real Yoruba projector/font check still open (ST-006) |
 | ST-002 Establish Home/Prepare/Present/More shell and two Present views | P0 | MERGED | ST-001 (stack) | [PR #1](https://github.com/thathman/rhema-studio/pull/1) merged `011b3ae`; operator rehearsal still open (ST-006) |
 | ST-003 Add versioned SQLite studio.db, migration/recovery/audit, persistent service editing | P0 | MERGED / MERGED (unsaved work on close; closing quits, #111) | ST-002 (stack) | [PR #2](https://github.com/thathman/rhema-studio/pull/2) merged `e66483b`; manual checklist `docs/rhema-studio/08-desktop-acceptance-guide.md` not yet performed |
 | ST-004 Yoruba speech and OpenAI speech provider delta | P2 | IN PR | ST-001 | [PR #4](https://github.com/thathman/rhema-studio/pull/4); decide bundling, live provider tests |

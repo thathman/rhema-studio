@@ -30,13 +30,18 @@ export function numberToRoman(num: number): string {
   return String(num)
 }
 
+/** Drop accents and tone marks ("Jòhánù" → "Johanu", "Ọba" → "Oba", "Ìṣe" → "Ise") so Yorùbá book names match however they are typed. */
+export function foldMarks(input: string): string {
+  return input.normalize("NFD").replace(/\p{M}/gu, "")
+}
+
 /**
  * Normalize numbered-book input to the Roman form used by some Bible data
  * sources. This keeps matching tolerant of Arabic, Roman, and ordinal
  * prefixes: "1 S", "I S", and "1st S" all become "I S".
  */
 export function normalizeInput(input: string): string {
-  const trimmed = input.trim()
+  const trimmed = foldMarks(input.trim())
   const leadingNumberMatch = trimmed.match(/^(\d+)(?:st|nd|rd|th)?\s*(.*)$/i)
 
   if (leadingNumberMatch) {
@@ -63,20 +68,46 @@ const BOOK_ALIASES: Record<string, number> = {
 }
 
 /**
+ * Yorùbá book names as the bundled Yorùbá Bible's own edition prints them
+ * (eBible.org "yor", the OYCB source; checked 2026-10-21), accents folded,
+ * by canonical book number. Numbered books carry the Roman prefix that
+ * normalizeInput produces ("1 Ọba" → "i oba").
+ */
+const YORUBA_BOOKS: Array<[string, number]> = [
+  ["genesisi", 1], ["eksodu", 2], ["lefitiku", 3], ["numeri", 4], ["deuteronomi", 5], ["josua", 6], ["onidajo", 7], ["rutu", 8],
+  ["i samueli", 9], ["ii samueli", 10], ["i oba", 11], ["ii oba", 12], ["i kronika", 13], ["ii kronika", 14], ["esra", 15],
+  ["nehemiah", 16], ["esteri", 17], ["jobu", 18], ["saamu", 19], ["owe", 20], ["oniwaasu", 21], ["orin solomoni", 22],
+  ["isaiah", 23], ["jeremiah", 24], ["ekun jeremiah", 25], ["esekieli", 26], ["danieli", 27], ["hosea", 28], ["joeli", 29],
+  ["amosi", 30], ["obadiah", 31], ["jona", 32], ["mika", 33], ["nahumu", 34], ["habakuku", 35], ["sefaniah", 36], ["hagai", 37],
+  ["sekariah", 38], ["malaki", 39], ["matiu", 40], ["marku", 41], ["luku", 42], ["johanu", 43], ["ise awon aposteli", 44],
+  ["romu", 45], ["i korinti", 46], ["ii korinti", 47], ["galatia", 48], ["efesu", 49], ["filipi", 50], ["kolose", 51],
+  ["i tesalonika", 52], ["ii tesalonika", 53], ["i timotiu", 54], ["ii timotiu", 55], ["titu", 56], ["filemoni", 57],
+  ["heberu", 58], ["jakobu", 59], ["i peteru", 60], ["ii peteru", 61], ["i johanu", 62], ["ii johanu", 63], ["iii johanu", 64],
+  ["juda", 65], ["ifihan", 66],
+]
+const YORUBA_EXACT = new Map(YORUBA_BOOKS)
+
+/**
  * Find matching book by name or abbreviation (case insensitive)
  */
 export function findMatchingBook(bookInput: string, books: Book[]): Book | undefined {
   const normalized = normalizeInput(bookInput).toLowerCase()
-  const alias = BOOK_ALIASES[normalized.replace(/\./g, "").replace(/\s+/g, " ").trim()]
+  const key = normalized.replace(/\./g, "").replace(/\s+/g, " ").trim()
+  const alias = BOOK_ALIASES[key] ?? YORUBA_EXACT.get(key)
   if (alias) {
     const book = books.find((b) => b.book_number === alias)
     if (book) return book
   }
-  return books.find(
+  const english = books.find(
     b =>
       normalizeInput(b.name).toLowerCase().startsWith(normalized) ||
       normalizeInput(b.abbreviation).toLowerCase().startsWith(normalized)
   )
+  if (english) return english
+  // A Yorùbá name typed in part ("Joha", "Ise"); after the English names so their behaviour is unchanged.
+  if (key.replace(/^[ivx]+ /, "").length < 3) return undefined
+  const yo = YORUBA_BOOKS.find(([name]) => name.startsWith(key))
+  return yo ? books.find((b) => b.book_number === yo[1]) : undefined
 }
 
 /**
@@ -226,14 +257,23 @@ export function getTabNavigationResult(
     return currentInput
   }
 
-  const trimmed = currentInput.trim()
+  let trimmed = currentInput.trim()
   const suggestionTrimmed = currentSuggestion.trim()
 
   // Extract the full book name from the suggestion
-  const bookNameMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[a-zA-Z\s]+)\s+\d+:\d+$/i)
+  const bookNameMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[\p{L}\p{M}\s]+)\s+\d+:\d+$/iu)
 
   if (bookNameMatch) {
     const fullBookName = bookNameMatch[1]
+
+    // A short form or Yorùbá name ("jn", "Jòhánù 3") is not a prefix of the
+    // suggested name: carry on from that name, keeping the typed numbers.
+    const typedBook = trimmed.replace(/\s*\d[\d:\s]*$/, "")
+    const typedNumbers = trimmed.slice(typedBook.length).trim()
+    if (typedBook && !foldMarks(fullBookName).toLowerCase().startsWith(foldMarks(typedBook).toLowerCase())) {
+      if (!typedNumbers) return fullBookName + " "
+      trimmed = `${fullBookName} ${typedNumbers}`
+    }
 
     // Check if current input matches the COMPLETE book name
     const currentIsCompleteBookName =
@@ -251,7 +291,7 @@ export function getTabNavigationResult(
 
     // Stage 2: Has chapter -> advance to chapter with colon
     if (hasChapter) {
-      const chapterMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[a-zA-Z\s]+\s+\d+):\d+$/i)
+      const chapterMatch = suggestionTrimmed.match(/^(((?:\d+|[IVX]+)\s+)?[\p{L}\p{M}\s]+\s+\d+):\d+$/iu)
       if (chapterMatch) {
         return chapterMatch[1] + ":"
       }

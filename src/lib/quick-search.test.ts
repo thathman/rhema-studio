@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  foldMarks,
   numberToRoman,
   normalizeInput,
   findMatchingBook,
@@ -415,5 +416,28 @@ describe("parseTypedReference", () => {
     for (const [input, book, chapter, verse] of cases) {
       expect(parseTypedReference(input, canon), input).toMatchObject({ book: { name: book }, chapter, verse })
     }
+  })
+
+  it("understands the Yorùbá Bible's own book names, with or without accents", () => {
+    const canon: Book[] = [[1, "Genesis", "Gen"], [7, "Judges", "Judg"], [11, "1 Kings", "1Kgs"], [19, "Psalms", "Ps"], [25, "Lamentations", "Lam"], [43, "John", "John"], [44, "Acts", "Acts"], [46, "1 Corinthians", "1Cor"], [62, "1 John", "1John"], [65, "Jude", "Jude"], [66, "Revelation", "Rev"]]
+      .map(([n, name, abbreviation]) => ({ id: n as number, translation_id: 2, book_number: n as number, name: name as string, abbreviation: abbreviation as string, testament: (n as number) < 40 ? "OT" : "NT" }))
+    const cases: Array<[string, string, number, number]> = [
+      ["Johanu 3:16", "John", 3, 16], ["Jòhánù 3 16", "John", 3, 16], ["Gẹnẹsisi 1:1", "Genesis", 1, 1], ["1 Ọba 3:9", "1 Kings", 3, 9],
+      ["Saamu 23:1", "Psalms", 23, 1], ["Ẹkún Jeremiah 3:22", "Lamentations", 3, 22], ["Ìṣe àwọn Aposteli 2:38", "Acts", 2, 38], ["Ise 2:38", "Acts", 2, 38],
+      ["1 Kọrinti 13:4", "1 Corinthians", 13, 4], ["1 Johanu 4:8", "1 John", 4, 8], ["Juda 1:3", "Jude", 1, 3], ["Ìfihàn 22:21", "Revelation", 22, 21],
+      ["Onidajọ 6:12", "Judges", 6, 12],
+      // English behaviour unchanged where a Yorùbá name could collide.
+      ["Jud 1:3", "Judges", 1, 3], ["John 3:16", "John", 3, 16], ["Jn 3 16", "John", 3, 16],
+    ]
+    for (const [input, book, chapter, verse] of cases) {
+      expect(parseTypedReference(input, canon), input).toMatchObject({ book: { name: book }, chapter, verse })
+    }
+    expect(foldMarks("Ọlọ́run")).toBe("Olorun")
+    // Tab carries on from the suggested book name, keeping what was typed after it.
+    expect(getTabNavigationResult("Jòhánù", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jòhánù 3", "John 3:1")).toBe("John 3:")
+    expect(getTabNavigationResult("jn", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jo", "John 1:1")).toBe("John ")
+    expect(getTabNavigationResult("Jòhánù 3", "Jòhánù 3:1")).toBe("Jòhánù 3:") // chapter step kept when the suggestion repeats what was typed
   })
 })
