@@ -678,3 +678,13 @@ report), but launching it cannot.
 | 10bo.2 | Service open, listening, on item 6. Read aloud the verse that is item 2, then a verse that is not in the service. Press Next. | Item 2 flashes; nothing is added to the service, the service is not marked unsaved; Next shows item 7. | Unverified |
 | 10bo.4 | Present on item 6; delete item 6 in the rundown; press Next. | Item 7 (the one that followed) goes live, not item 1. | Unverified |
 | 10bo.3 | No service open (Clear service), listening: read two verses aloud. | They collect in the rundown list as in the original Rhema. | Unverified |
+
+### 10bp. Live safety audit fixes (RG-03, FR-01, PRD §2)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bp.1 | Present a verse item that has a background picture. Go to Prepare and back to Present; switch Standard/Production. | The picture stays on air; nothing on screen changes. | Unverified |
+| 10bp.2 | A verse on air in KJV, Auto off, listening: say "read it in NIV". Then change the translation yourself. | The spoken change does not alter the screen (the preview may switch); your own change does, keeping the background. | Unverified |
+| 10bp.3 | A song live on its 2nd slide; in Prepare change its arrangement; press Next twice. | Next continues the arrangement that was live (slide 3, then 4); entering the song again uses the new arrangement. | Unverified |
+| 10bp.4 | A song live from an unsaved rundown; delete the song in the library; press Next. | The next item goes live (no repeated "no longer in the library" warning). | Unverified |
+| 10bp.5 | Present item 5 (a verse); press Verse +; press Next. | Item 6 goes live (not item 1); a background on item 5 stays during Verse +. | Unverified |

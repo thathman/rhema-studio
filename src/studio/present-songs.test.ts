@@ -75,7 +75,7 @@ describe("presentSlide", () => {
     expect(s.isLive).toBe(true)
     expect(s.liveVerse).toMatchObject({ kind: "lyric", reference: "Amazing Grace · Verse 1", lines: ["Amazing grace", "how sweet"] })
     expect(s.liveVerse?.footer).toBeUndefined()
-    expect(s.liveSlide).toEqual({ itemId: "item-song", songId: "song-1", index: 0, total: 3 })
+    expect(s.liveSlide).toMatchObject({ itemId: "item-song", songId: "song-1", index: 0, total: 3 })
     expect(s.liveSourceVerse).toBeNull()
     expect(useBibleStore.getState().selectedSlide).toMatchObject({ index: 0 })
   })

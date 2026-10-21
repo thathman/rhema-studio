@@ -1,18 +1,10 @@
-import { useEffect } from "react"
 import { PanelHeader } from "@/components/ui/panel-header"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { approvalHolds } from "@/stores/approval-gate-store"
 import { useBroadcastStore, useBibleStore } from "@/stores"
-import {
-  getTranslationLabel,
-  presentVerse,
-  toDualVerseRenderData,
-  toVerseRenderData,
-} from "@/hooks/use-broadcast"
-import { bibleActions } from "@/hooks/use-bible"
-import { isMissing, resolveTranslations } from "@/lib/translation-policy"
+import { presentVerse } from "@/hooks/use-broadcast"
 
 export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
@@ -20,8 +12,6 @@ export function LiveOutputPanel() {
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
-  const activeTranslationId = useBibleStore((s) => s.activeTranslationId)
-  const secondaryTranslationId = useBibleStore((s) => s.secondaryTranslationId)
 
   const activeTheme = themes.find((t) => t.id === activeThemeId) ?? themes[0]
 
@@ -29,60 +19,7 @@ export function LiveOutputPanel() {
   // follows the preview selection, so detections can't override the operator.
   const verseData = isLive ? liveVerse : null
 
-  // Refetch the live verse when the translation changes so the live output
-  // text follows the new translation. Updates the live output only — the
-  // preview keeps whatever the operator is browsing.
-  useEffect(() => {
-    const { liveSourceVerse: source, liveItem } = useBroadcastStore.getState()
-    if (!source) return
-    // Same rule as presentVerse: a verse presented from a service item keeps
-    // that item's saved translations; anything else follows the operator.
-    const choice = resolveTranslations(liveItem, useBibleStore.getState())
-    if (isMissing(choice)) return
-    const ids = [choice.primary, ...(choice.secondary !== null ? [choice.secondary] : [])]
-    void Promise.all(
-      ids.map((id) =>
-        bibleActions.fetchVerse(
-          source.book_number,
-          source.chapter,
-          source.verse,
-          id
-        )
-      )
-    )
-      .then((verses) => {
-        const primary = verses[0]
-        if (!primary?.text?.trim()) return
-        const entries = verses
-          .map((verse, index) => {
-            if (!verse?.text?.trim()) return null
-            return {
-              verse,
-              translation: getTranslationLabel(
-                ids[index],
-                index === 0 ? "KJV" : "Translation"
-              ),
-            }
-          })
-          .filter(
-            (
-              entry
-            ): entry is {
-              verse: NonNullable<typeof primary>
-              translation: string
-            } => entry !== null
-          )
-        useBroadcastStore
-          .getState()
-          .setLiveVerse(
-            entries.length > 1
-              ? toDualVerseRenderData(entries)
-              : toVerseRenderData(primary, entries[0]?.translation ?? "KJV"),
-            primary
-          )
-      })
-      .catch(() => {})
-  }, [activeTranslationId, secondaryTranslationId])
+  // Following a translation change on air lives in useLiveTranslationFollow (mounted once).
 
   const handleGoLive = (checked: boolean) => {
     if (checked && approvalHolds(() => handleGoLive(true))) return

@@ -36,6 +36,9 @@ export interface LiveSlide {
   songId: string
   index: number
   total: number
+  /** The arrangement and languages the song went live with: stepping within it keeps them (RG-03). */
+  arrangementId?: string | null
+  languages?: string[]
 }
 
 type SelectedElement = "verse" | "reference" | null

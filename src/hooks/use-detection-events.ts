@@ -10,6 +10,7 @@ import {
 import { bibleActions } from "@/hooks/use-bible"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { mark } from "@/lib/latency-marks"
+import { noteVoiceTranslationChange } from "@/hooks/use-live-translation-follow"
 import { pickAutoPresentTarget } from "@/lib/auto-present-target"
 import { useServiceStore } from "@/stores/service-store"
 import type { DetectionResult, ReadingAdvance } from "@/types"
@@ -29,6 +30,7 @@ export function useDetectionEvents(): void {
   useTauriEvent<{ abbreviation: string; translation_id: number }>(
     "translation_command",
     (data) => {
+      if (data.translation_id !== useBibleStore.getState().activeTranslationId) noteVoiceTranslationChange()
       useBibleStore.getState().setActiveTranslation(data.translation_id)
       console.log(`[VOICE] Translation switched to ${data.abbreviation}`)
     }

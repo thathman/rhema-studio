@@ -6,6 +6,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
+import { useSongStore } from "@/stores/song-store"
 import { approvalHolds } from "@/stores/approval-gate-store"
 
 /**
@@ -28,14 +29,14 @@ function findLiveQueueIndex(): number | null {
  * first, "last" for stepping backwards into a song).
  * Next/Previous/double-click/OSC/HTTP all come here.
  */
-export async function presentQueueItem(index: number, slide: number | "last" = 0): Promise<void> {
+export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[] }): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
   // Before the active item moves: a held go-live must change nothing (CL-002).
   const id = item.id
   const again = () => {
     const i = useQueueStore.getState().items.findIndex((x) => x.id === id)
-    if (i !== -1) void presentQueueItem(i, slide)
+    if (i !== -1) void presentQueueItem(i, slide, songAs)
   }
   if (!isSoundItem(item) && approvalHolds(again)) return
   useQueueStore.getState().setActive(index)
@@ -48,7 +49,9 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
     return
   }
   if (isSongItem(item)) {
-    await presentSlide(item, slide, { goLive: true }).catch((e) =>
+    // Stepping within the live song keeps the arrangement it went live with.
+    const songItem = songAs ? { ...item, song: { ...item.song, ...songAs } } : item
+    await presentSlide(songItem, slide, { goLive: true }).catch((e) =>
       console.warn("[remote-actions] presentQueueItem (song) failed:", e),
     )
     return
@@ -83,10 +86,13 @@ function stepQueue(offset: number): void {
   const live = useBroadcastStore.getState().liveSlide
   if (current !== null) {
     const item = items[current]
-    if (item && isSongItem(item) && live && live.itemId === item.id) {
+    // Within the live song, unless it has been deleted from the library (then Next moves on).
+    if (item && isSongItem(item) && live && live.itemId === item.id && useSongStore.getState().songs[item.song.song_id]) {
       const next = live.index + offset
       if (next >= 0 && next < live.total) {
-        void presentQueueItem(current, next)
+        // An arrangement or language change made while the song is live applies the next time it is entered.
+        const songAs = live.arrangementId !== undefined ? { arrangement_id: live.arrangementId, languages: live.languages ?? item.song.languages } : undefined
+        void presentQueueItem(current, next, songAs)
         return
       }
     }
@@ -121,7 +127,7 @@ let verseStepSeq = 0
  * steps the Bible panel instead (the preview), like the panel's arrows.
  */
 export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
-  const { liveSourceVerse: source, liveItem } = useBroadcastStore.getState()
+  const { liveSourceVerse: source, liveItem, liveItemId } = useBroadcastStore.getState()
   if (!source) {
     await stepVerse(offset === 1 ? "next" : "prev", { present: true })
     return
@@ -155,7 +161,9 @@ export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
     }
     const verse = { ...source, ...target, id: 0, text: "" }
     useBibleStore.getState().setPendingNavigation({ bookNumber: verse.book_number, chapter: verse.chapter, verse: verse.verse })
-    await presentVerse(verse, { item: liveItem, goLive: true })
+    // Still the operator's item (its background, and Next continues from it).
+    const background = liveItemId ? (useQueueStore.getState().items.find((i) => i.id === liveItemId)?.background ?? null) : null
+    await presentVerse(verse, { item: liveItem, goLive: true, itemId: liveItemId, background })
   } catch (e) {
     console.warn("[remote-actions] stepLiveVerse failed:", e)
   }
