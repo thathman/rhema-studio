@@ -103,6 +103,10 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10ad | Second monitor, unplugging a monitor | U: one display only |
 | 10at | Secrets in the keychain | U: deliberately not exercised (shared entry) |
 
+## Backup and restore drill (QA-010)
+
+Run the same day with two isolated profiles (production and standby) and a disk image as the USB stick: R1–R5 all pass; see `14-backup-restore-rehearsal.md`. Approval is not carried in a service file (only in a database backup).
+
 ## Fixed on this branch
 
 1. **Intel macOS build failed.** Tauri passes `bundle.macOS.minimumSystemVersion`

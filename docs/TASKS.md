@@ -140,7 +140,7 @@
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | MERGED (slide-change latency logged #125) / BACKLOG (benchmarks on real low-end PCs) | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
 | QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | MERGED (#48, #51) | QA-003 | `docs/QUICK-START.md`: one-page volunteer guide (prepare, present table, what cannot go wrong, if something breaks). `docs/PRODUCTION-GUIDE.md`: outputs, OBS/NDI, remote control and phone remote, lower thirds, video, sound, QR, timing and stage, data safety, song usage, translations, diagnostics (kept current with each feature PR) |
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
-| QA-010 Backup/restore incident rehearsal | P0 | MERGED (runbook #59) / BACKLOG (the drill itself, #62) | ST-008 | `docs/rhema-studio/14-backup-restore-rehearsal.md`: five-step drill (approve + service file + backup → standby open/restore → restore approved → USB pulled), all rows unverified until performed |
+| QA-010 Backup/restore incident rehearsal | P0 | MERGED (runbook #59) / MERGED (drill run on the owner's Intel Mac with two profiles and a disk-image USB stick: R1–R5 pass, 2026-10-21) / BACKLOG (two physical laptops and a real USB pull, #62) | ST-008 | `docs/rhema-studio/14-backup-restore-rehearsal.md`: five-step drill (approve + service file + backup → standby open/restore → restore approved → USB pulled), all rows unverified until performed |
 
 ## Roll-up / near-term sequence
 

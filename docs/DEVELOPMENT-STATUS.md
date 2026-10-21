@@ -85,7 +85,7 @@ Found by reading PRD lines against the code (not by tests): auto-live on by defa
 | QA-003 | Novice usability sessions | Real volunteers |
 | QA-006 | Cloud-sync threat review | Hosted sync not built yet (#72: later); the shared-folder threat model is in 15-sync-transport-evaluation.md |
 | QA-007 | Benchmarks on low-end hardware | Real low-end PCs (the latency logging they need: #125) |
-| QA-010 | Backup/restore drill | Real machines (#62) |
+| QA-010 | Drill run on the Intel Mac (R1–R5 pass, two profiles, disk-image stick). Two physical laptops and a real USB pull | Real second machine (#62) |
 
 ## Next eligible tasks
 
