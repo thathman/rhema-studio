@@ -20,6 +20,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Slides
+- Long text added as pages keeps each page's "(2/4)" mark after saving, and each page is labelled by its own first line.
+
 ### Home
 - A service changed since it was approved says "changed since approval" on Home and in the saved list (it read "not approved yet").
 

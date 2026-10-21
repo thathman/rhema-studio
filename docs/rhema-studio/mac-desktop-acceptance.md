@@ -137,6 +137,10 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10ax.1 (templates) | V: "QA Usage 3" marked Template; New service from it ("Sunday 1 Nov", 1 Nov) opened with the same items; the template unchanged and still a template; Home never listed it |
 | 10ax.2 (archive) | V: archived service gone from the picker and Home; "Show archived (1)"; its history intact; Bring back restored it |
 | 10ax.4 (approved by) | V: the Approve button's tooltip read "Approved by Tolu Wed 23:00" |
+| 10z.1 (long text as pages) | F → V: "Add as 4 slides" added four pages and Next stepped through them; a six-line page showed at full size on the stream. But every page was labelled by page 1's first line, and saving dropped the "(1/4)"…"(4/4)" marks. Fixed in #170: each page is labelled by its own text with its mark, the same after save and reopen |
+| 10y.1 (QR link) | V: `javascript:alert(1)` and `church.example/give` refused ("Only a full http(s) address…", Add disabled); "Give online" with `https://church.example/give` added; on air, a white panel with the code left and the title and address right; the stream frame's code decodes to exactly that address; it survived save and reopen |
+| 10bg.1 (prepared by) | V: "Ade (music)" on a song showed "· Ade (music)" in the rundown; History's newest version was saved by "Tolu" |
+| 10r.1 (earlier logs) | V: a kept log was listed after a restart with today's date; searching "Psalm 23" found it; "Revelation 22" found none. (Its download button ends in the system Save dialog: not run) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
