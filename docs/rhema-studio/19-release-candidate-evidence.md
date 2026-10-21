@@ -34,7 +34,7 @@ Decision: NO-GO until the desktop rows below are done and the owner signs off
 | RG-06 Multilingual fidelity | Tests | Yoruba diacritics in search and storage, pinned translations, missing-translation warnings. Projector font check not done. |
 | RG-07 Production interop | Not met | Projector, NDI, OBS 720p30 and display reconnect need hardware. NDI failures are reported and retried once. |
 | RG-08 Security and privacy | Code and tests | Pairing, keys, roles, rate limiting (#100), phone remote with strict CSP (#102), diagnostics redaction (#97), network note (#105). Secrets in the system keychain (#115). Consent before cloud audio: asked before the first Deepgram session (PR after #128); PR #4 providers must use the same gate. |
-| RG-09 Accessibility and recovery | Partly | Keyboard shortcuts ignore typing; Back always visible at 1366x768; deletes confirm (#107). Screen-reader and scaling checks not done. |
+| RG-09 Accessibility and recovery | Partly | Keyboard shortcuts ignore typing; Back always visible at 1366x768; deletes confirm (#107). Screen-reader and scaling checks not done. Browser shim at the minimum window 1024×600 (2026-10-21): Show live, Next, Previous, Clear, Back and all quick screens visible, no page overflow (not desktop evidence). |
 | RG-10 Reproducibility | Met for this candidate | SHA and artifact digest above; lockfiles; CHANGELOG.md; migration notes; KNOWN-ISSUES.md; licence manifest, CI check, installer licence page and generated third-party notices (#122). Sign-off missing. |
 
 ## R0 checklist (RELEASE-PLAN §5)
