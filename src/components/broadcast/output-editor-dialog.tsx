@@ -225,6 +225,10 @@ export function OutputEditorDialog({
                     <SelectItem value="second">Second language only (first when there is no second)</SelectItem>
                   </SelectContent>
                 </Select>
+                <label className="mt-2 flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={form.lowerThirds === true} onChange={(e) => patch({ lowerThirds: e.target.checked })} />
+                  <span>Show lower thirds on this output <span className="text-muted-foreground">(names and titles from Present; usually the stream)</span></span>
+                </label>
               </>
             )}
           </div>

@@ -6,8 +6,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData,
-} from "@/types"
+  VerseRenderData, LowerThird } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -67,6 +66,9 @@ interface BroadcastState {
   heldLive: HeldLive | null
   /** Private note shown on stage outputs only. Not persisted. */
   stageMessage: string
+  /** The lower third on air (outputs with lowerThirds on), or null. Session state; not saved. */
+  lowerThird: LowerThird | null
+  setLowerThird: (lt: LowerThird | null) => void
   /**
    * Rehearsal: everything works in the app (Preview, Live panel, rundown)
    * but no output window, NDI sender or stage screen receives anything.
@@ -318,6 +320,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveItemId: null,
   heldLive: null,
   stageMessage: "",
+  lowerThird: null,
   rehearsal: false,
   presentWarning: null,
   autoLive: true,
@@ -426,6 +429,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
       verse: s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null,
+      overlay: output.lowerThirds ? s.lowerThird : null,
     }).catch(() => {})
   },
   syncBroadcastOutput: () => {
@@ -452,7 +456,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
-    if (patch.themeId || "language" in patch || "role" in patch || "signage" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -536,6 +540,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setRehearsal: (rehearsal) => {
     set({ rehearsal })
     if (!rehearsal) get().syncBroadcastOutput()
+  },
+  setLowerThird: (lt) => {
+    const clean = lt && (lt.line1.trim() || lt.line2.trim()) ? { line1: lt.line1.trim(), line2: lt.line2.trim() } : null
+    set({ lowerThird: clean })
+    for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
   },
   setStageMessage: (stageMessage) => {
     set({ stageMessage })

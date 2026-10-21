@@ -27,6 +27,7 @@ import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
 import { StageMessage } from "@/studio/present/stage-message"
+import { LowerThirdControl } from "@/studio/present/lower-third"
 import { CueMenu } from "@/studio/present/cue-menu"
 import { useSongStore } from "@/stores/song-store"
 import { buildSlides } from "@/lib/lyrics"
@@ -84,6 +85,7 @@ export function PresentWorkspace() {
         />
         <StatusChip tone={listening ? "ok" : "off"} label={listening ? "Listening" : "Listening off"} />
         <ServiceTimer />
+        <LowerThirdControl />
         <StageMessage />
         <CueMenu />
         {service && (
