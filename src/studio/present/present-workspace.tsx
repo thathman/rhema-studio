@@ -189,8 +189,8 @@ function StandardView() {
         <div className="flex flex-col gap-2 border-l border-border pl-3" role="group" aria-label="Quick screens">
           <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Quick screens</p>
           <div className="grid grid-cols-2 gap-2">
-            {(["welcome", "stand", "pray", "offering"] as const).map((s) => (
-              <BigButton key={s} icon={<MonitorIcon />} label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering" }[s]} tone="live" className="min-w-0" onClick={() => presentActions.quickScreen(s)} />
+            {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => (
+              <BigButton key={s} icon={<MonitorIcon />} label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]} tone="live" className="min-w-0" onClick={() => presentActions.quickScreen(s)} />
             ))}
           </div>
           <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="min-w-0" />

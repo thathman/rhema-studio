@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInv
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn().mockResolvedValue(undefined) }))
 
 import { presentActions } from "./present-actions"
-import { presentVerse } from "@/hooks/use-broadcast"
+import { presentQuickScreen, presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -97,5 +97,18 @@ describe("bilingual quick screens", () => {
     useBibleStore.setState({ activeTranslationId: 7, secondaryTranslationId: null })
     presentActions.quickScreen("welcome")
     expect(useBroadcastStore.getState().liveVerse).toMatchObject({ reference: "Welcome", lines: ["We're glad you're here."], secondaryLines: ["Ẹ kú àbọ̀. Inú wa dùn pé ẹ wá."] })
+  })
+
+  it("black, logo and technical-issue screens go on air at once and Back returns", async () => {
+    await presentVerse(verse(43, 3, 16), { goLive: true })
+    presentQuickScreen("black")
+    expect(useBroadcastStore.getState().liveVerse).toMatchObject({ screen: "black", lines: [] })
+    expect(useBroadcastStore.getState().isLive).toBe(true)
+    presentQuickScreen("logo")
+    expect(useBroadcastStore.getState().liveVerse?.screen).toBe("logo")
+    presentQuickScreen("technical")
+    expect(useBroadcastStore.getState().liveVerse?.lines).toEqual(["We're having technical difficulties", "Please bear with us"])
+    presentActions.back()
+    expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:16")
   })
 })

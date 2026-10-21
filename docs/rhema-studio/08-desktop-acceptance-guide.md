@@ -426,3 +426,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ah.1 | With a current build, save a service. Install an older build (one with fewer migrations) and start it. | Home: "Saved services and songs are unavailable" with "last used by a newer Rhema Studio …"; Library repeats it; Scripture works; `studio.db` is unchanged. Following `17-database-migrations.md` → Downgrade restores the pre-upgrade copy and the older build opens it. | Unverified |
+
+### 10ai. Black, Logo and Technical-issue screens (FR-04)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ai.1 | A verse live on the projector (themed background) and the stream (transparent theme). Press Black, then Logo, then Technical issue, then Back. | Black: projector solid black, stream shows nothing over the camera. Logo: each output shows its own theme's logo large and centred (nothing on a theme without a logo; on the stream only if "Show on transparent" is on). Technical issue: the two lines (and Yorùbá when a Yorùbá Bible is in use). Back: the verse returns. | Unverified |

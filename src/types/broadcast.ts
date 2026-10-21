@@ -23,6 +23,12 @@ export interface VerseRenderData {
   /** A picture over the whole frame (above the theme background). */
   image?: ThemeImageFill
   /**
+   * A whole-frame quick screen with no text: "black" (fully transparent on a
+   * keyed theme, so the stream shows nothing) or "logo" (the output's own
+   * theme logo, large and centred).
+   */
+  screen?: "black" | "logo"
+  /**
    * A video over the whole frame. Output windows play it in a <video> element
    * and draw its frames; anywhere without that element (the main window's
    * monitors) the renderer shows "▶ name" instead.
