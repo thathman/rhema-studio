@@ -1,3 +1,4 @@
+import { useApprovalGateStore } from "@/stores/approval-gate-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { approvalState } from "@/lib/approval"
 import { localDate, todaysService } from "@/lib/todays-service"
@@ -69,7 +70,9 @@ export function HomeWorkspace() {
   const mediaAssets = useMediaStore((s) => s.assets)
   const mediaLoaded = useMediaStore((s) => s.loaded)
   const mediaLoading = useMediaStore((s) => s.loading)
-  const requireApproval = useSettingsStore((s) => s.requireApproval)
+  // Asked already and presented anyway this session: the gate will not ask again.
+  const gateAcknowledged = useApprovalGateStore((s) => (current ? s.acknowledged.includes(current.id) : false))
+  const requireApproval = useSettingsStore((s) => s.requireApproval) && !gateAcknowledged
   // Pictures, videos and sounds, and every item's background picture (FR-08: all assets local before Ready).
   const mediaIds = [...new Set(items.flatMap((i) => [isImageItem(i) ? i.image.media_id : null, i.background?.media_id ?? null]).filter((x): x is string => x !== null))]
   const hasSignage = outputs.some((o) => o.role === "signage")
@@ -89,7 +92,8 @@ export function HomeWorkspace() {
   }, [mediaIds.join(","), hasSignage, mediaLoaded, mediaLoading, unknownIds])
   // Each visit to Home checks the files again: one deleted since the list was loaded shows as missing.
   useEffect(() => {
-    if (useMediaStore.getState().loaded && (mediaIds.length > 0 || hasSignage)) void useMediaStore.getState().list()
+    const m = useMediaStore.getState()
+    if (m.loaded && !m.loading && (mediaIds.length > 0 || hasSignage)) void m.list()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per visit
   }, [])
   // Home is the readiness check: make sure every song in the service has been looked up.

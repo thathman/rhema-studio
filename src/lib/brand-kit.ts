@@ -141,6 +141,7 @@ export function missingThemeFonts(themes: Pick<BroadcastTheme, "name" | "verseTe
 }
 
 const fontSeen = new Map<string, boolean>()
+let measureCtx: CanvasRenderingContext2D | null | undefined
 
 /**
  * Bundled fonts are always there; a font loaded into the page (a theme's own
@@ -155,7 +156,8 @@ export function fontAvailable(family: string): boolean {
   if (known !== undefined) return known
   try {
     if ("fonts" in document && Array.from(document.fonts).some((f) => f.family.replace(/^["']|["']$/g, "") === family)) return true // a theme's own font file (loaded or loading)
-    const ctx = document.createElement("canvas").getContext("2d")
+    if (measureCtx === undefined) measureCtx = document.createElement("canvas").getContext("2d")
+    const ctx = measureCtx
     if (!ctx) return true // cannot measure here: do not warn
     const sample = "mmmmmmmmmmlli1WQ@#"
     const width = (font: string) => {
