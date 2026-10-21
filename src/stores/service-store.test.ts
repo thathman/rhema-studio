@@ -371,4 +371,21 @@ describe("createFromRundown", () => {
     expect(useServiceStore.getState()).toMatchObject({ dirty: false })
     expect(useServiceStore.getState().current?.revision).toBe(2)
   })
+
+  it("renames and re-dates the open service without touching unsaved edits; a stale revision is a conflict", async () => {
+    useServiceStore.setState({ current: { ...program }, dirty: true, programs: [] } as never)
+    mockInvoke.mockImplementation(async (cmd: string, a: Record<string, unknown>) => {
+      if (cmd === "content_update_program") return { ...program, title: a.title, service_date: a.serviceDate, revision: 2 }
+      if (cmd === "content_list_programs") return []
+      return null
+    })
+    expect(await useServiceStore.getState().updateDetails("Sunday 9 am", "2026-11-01")).toBe("ok")
+    expect(mockInvoke).toHaveBeenCalledWith("content_update_program", { id: "p1", expectedRevision: 1, title: "Sunday 9 am", serviceDate: "2026-11-01" })
+    expect(useServiceStore.getState().current).toMatchObject({ title: "Sunday 9 am", service_date: "2026-11-01", revision: 2 })
+    expect(useServiceStore.getState().dirty).toBe(true)
+
+    mockInvoke.mockImplementation(async () => { throw { kind: "conflict", message: "revision 3, expected 2" } })
+    expect(await useServiceStore.getState().updateDetails("Other", null)).toBe("conflict")
+    expect(useServiceStore.getState().current?.title).toBe("Sunday 9 am")
+  })
 })

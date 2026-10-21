@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { BadgeCheckIcon, CalendarIcon, CopyIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import { BadgeCheckIcon, CalendarIcon, CopyIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { approvalBlockers, approvalLabel, approvalState } from "@/lib/approval"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
@@ -73,6 +73,9 @@ export function ServiceBar() {
   const [dupOpen, setDupOpen] = useState(false)
   const [dupTitle, setDupTitle] = useState("")
   const [dupDate, setDupDate] = useState("")
+  const [editOpen, setEditOpen] = useState(false)
+  const [editTitle, setEditTitle] = useState("")
+  const [editDate, setEditDate] = useState("")
 
   const fail = (what: string) =>
     toast.error(what, { description: useServiceStore.getState().error ?? undefined })
@@ -101,6 +104,14 @@ export function ServiceBar() {
     } else {
       fail("Could not create service")
     }
+  }
+
+  const updateDetails = async () => {
+    const r = await useServiceStore.getState().updateDetails(editTitle, editDate || null)
+    setEditOpen(false)
+    if (r === "ok") toast.success("Service renamed")
+    else if (r === "conflict") toast.error("Not renamed: this service changed elsewhere", { description: "Reload it first." })
+    else fail("Could not rename service")
   }
 
   const duplicate = async () => {
@@ -153,6 +164,40 @@ export function ServiceBar() {
       </Select>
 
       <ServiceHistory />
+      {current && (
+        <Popover
+          open={editOpen}
+          onOpenChange={(o) => {
+            setEditOpen(o)
+            if (o) {
+              setEditTitle(current.title)
+              setEditDate(current.service_date ?? "")
+            }
+          }}
+        >
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" aria-label="Rename or change the date" title="Rename or change the date">
+              <PencilIcon />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72">
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void updateDetails()
+              }}
+            >
+              <label className="text-xs text-muted-foreground" htmlFor="edit-title">Title</label>
+              <Input id="edit-title" autoFocus value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required maxLength={200} />
+              <label className="text-xs text-muted-foreground" htmlFor="edit-date">Date (optional)</label>
+              <Input id="edit-date" type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+              <p className="text-xs text-muted-foreground">The items are not touched; unsaved changes stay unsaved.</p>
+              <Button type="submit" size="sm" disabled={!editTitle.trim()}>Save title and date</Button>
+            </form>
+          </PopoverContent>
+        </Popover>
+      )}
       {current && (
         <Popover
           open={dupOpen}

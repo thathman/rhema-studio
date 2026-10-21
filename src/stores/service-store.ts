@@ -70,6 +70,8 @@ interface ServiceState {
   listRevisions: () => Promise<RevisionSummary[]>
   /** Make a snapshot the current items (a normal save, so it is itself undoable). Refuses while unsaved. */
   restoreRevision: (revisionId: string) => Promise<OpenResult | "conflict">
+  /** Rename or re-date the open service (its items are untouched; unsaved edits stay unsaved). */
+  updateDetails: (title: string, serviceDate: string | null) => Promise<"ok" | "conflict" | "failed">
   /** Approve the saved service as it is now ("this is Sunday's"). */
   approve: () => Promise<"ok" | "unsaved" | "conflict" | "error">
 }
@@ -466,6 +468,21 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       return "error"
     }
     return get().openProgram(current.id, { discard: true })
+  },
+
+  updateDetails: async (title, serviceDate) => {
+    const current = get().current
+    if (!current) return "failed"
+    try {
+      const program = await invoke<Program>("content_update_program", { id: current.id, expectedRevision: current.revision, title, serviceDate })
+      // Only this service's record changed; a newer save or open owns the state if it moved on meanwhile.
+      if (get().current?.id === program.id) set({ current: program, error: null })
+      void get().loadPrograms()
+      return "ok"
+    } catch (e) {
+      set({ error: describe(e) })
+      return isContentCommandError(e) && e.kind === "conflict" ? "conflict" : "failed"
+    }
   },
 
   duplicateCurrent: async (title, serviceDate) => {

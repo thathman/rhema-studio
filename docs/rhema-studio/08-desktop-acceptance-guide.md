@@ -528,3 +528,10 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10av.1 | Save three dated services that use some of the same songs (one song twice in one service) and one undated service. More → Library → Song usage → Show for a range covering them. | Each song once, most used first, with its CCLI number (or "public domain"); the song used twice in one service counts 1 for that service; the undated service is not counted. | Unverified |
 | 10av.2 | Save as CSV… and open it in a spreadsheet. | Columns Title, Authors, CCLI song number, Licence, Services, Last used; titles with commas stay in one cell. | Unverified |
+
+### 10aw. Rename and re-date a service (FR-03)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10aw.1 | Prepare: open a saved service, add an item (do not save), press the pencil, change the title and date, Save title and date. | The service list shows the new title and date; the added item is still there and still unsaved; Save then works. | Unverified |
+| 10aw.2 | Rename an approved service. | Home shows it as changed since approval (the record changed); approve again to pin it. | Unverified |
