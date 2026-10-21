@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 04:46 WAT)
+- Head: see `git log fork/main` (2026-10-21 05:50 WAT; every PR through #110 merged)
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -24,14 +24,15 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 428 vitest tests in 62 files pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
-- Rust: `rhema-content` 44 tests pass; `rhema-api` 115; app `cargo check` and clippy in CI.
+- Frontend: 444 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
+- Rust: `rhema-content` 45 tests pass; `rhema-api` 120; app `cargo check` and clippy in CI.
+- Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
 
 ## Unverified (release-acceptance blockers, not development blockers)
 
-- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10z). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
-- Windows installer (run 39382133331, content branch at `1684859`) built and inspected, not installed or launched.
+- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10ap). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
+- Windows installer: workflow run 39541733204 built `main` at `7bf70ee` (artifact `rhema-windows-x64-installer`, 99,236,578 bytes, artifact digest sha256:2d91e309d46c352e90e09229f16c54e6fdd330e08dc7b550061db30f183467f9, kept 14 days). Not installed or launched; not a release.
 - Yoruba speech recognition and the OpenAI provider (PR #4).
 
 ## Important decisions
@@ -53,6 +54,12 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 - Upstream lint debt: 7 React hook patterns in untouched components (ST-010).
 - Whisper model is not bundled in the Windows installer (by design); speech is optional.
 
+## Merged 2026-10-21 (this run)
+
+#96 downgrade guard · #97 diagnostics redaction · #98 licence check, CHANGELOG, KNOWN-ISSUES · #99 Black/Logo/Technical quick screens · #100 remote rate limit · #101 review fixes (licence walk, SPDX precedence, clean Black) · #102 phone remote page + QR pairing · #103 one running copy · #104 last good frame · #105 network/privacy note + host guard · #106 quick screens fit 1366x768 (Back was clipped) · #107 deletes ask first · #108 draw-failure warnings · #109 common short book names ("Jn 3 16") · #110 songs as plain text/Markdown.
+
+Found by reading PRD lines against the code (not by tests): no single-instance guard, no last-good frame, one-click log deletion, the PRD's own "Jn 3 16" example failing, the Back button clipped at 1366x768. Independent reviews of each batch found 9 more defects, all fixed.
+
 ## Next eligible tasks
 
 Every backlog row now has its buildable part merged. What remains, by why it is not being built:
@@ -65,4 +72,4 @@ Every backlog row now has its buildable part merged. What remains, by why it is 
    - Who may present and whether approval must gate going live → CL-001 roles, CL-002 "approval required before go-live".
    - Which external giving/prayer systems to link → SG-003 action links.
    - PT-006 song-playback sync: which playback source (MIDI clock, backing tracks) to support.
-2. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10ag (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.
+2. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10ap (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.

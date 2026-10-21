@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.41 · **Updated:** 2026-10-20 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.42 · **Updated:** 2026-10-21 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -15,7 +15,7 @@
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
-| ST-001 Integrate numbered-book search, OYCB source and dual-language display | P0 | MERGED / IN PR (common short forms: Jn, Mt, Mk, Lk, Php, 1 Pt, Revelations…) | — | [PR #3](https://github.com/thathman/rhema-studio/pull/3) merged `a3204ea`; real Yoruba projector/font check still open (ST-006) |
+| ST-001 Integrate numbered-book search, OYCB source and dual-language display | P0 | MERGED / MERGED (common short forms #109) | — | [PR #3](https://github.com/thathman/rhema-studio/pull/3) merged `a3204ea`; real Yoruba projector/font check still open (ST-006) |
 | ST-002 Establish Home/Prepare/Present/More shell and two Present views | P0 | MERGED | ST-001 (stack) | [PR #1](https://github.com/thathman/rhema-studio/pull/1) merged `011b3ae`; operator rehearsal still open (ST-006) |
 | ST-003 Add versioned SQLite studio.db, migration/recovery/audit, persistent service editing | P0 | MERGED | ST-002 (stack) | [PR #2](https://github.com/thathman/rhema-studio/pull/2) merged `e66483b`; manual checklist `docs/rhema-studio/08-desktop-acceptance-guide.md` not yet performed |
 | ST-004 Yoruba speech and OpenAI speech provider delta | P2 | IN PR | ST-001 | [PR #4](https://github.com/thathman/rhema-studio/pull/4); decide bundling, live provider tests |
@@ -38,7 +38,7 @@
 | SO-005 Hymnbook catalogs and number lookup | P1 | MERGED (#6, #7, #8, #52) | SO-002 | PR #6 crate; PR #7 Quick find; PR #8 creation and number rows; hymnbook-management PR: rename and remove in More → Library (numbers dropped, songs kept) |
 | SO-006 Multilingual lyrics | P1 | MERGED (#7, #8) | SO-003,ST-001 | songs-core PR: per-language section texts, slides aligned per section, missing-language warning on the slide and in Present, diacritic-folded search |
 | SO-007 Search library | P1 | MERGED (#6 crate, #7/#25 UI) | SO-002,SO-005 | PR #6: FTS5 over title/authors/lyrics + numbers; songs-core PR: one Quick find box for verses, hymn numbers and songs |
-| SO-008 Import/export | P1 | MERGED (#6, #9, #54) / IN PR (plain text/Markdown export; Markdown and chord-sheet headings on paste, FR-02) | SO-001,SO-003 | PR #6 crate; PR #9 Library dialog (JSON export, JSON/OpenLyrics import); PR #54 editor → OpenLyrics… saves one song as .xml (round-trips through the importer) |
+| SO-008 Import/export | P1 | MERGED (#6, #9, #54) / MERGED (plain text/Markdown #110) | SO-001,SO-003 | PR #6 crate; PR #9 Library dialog (JSON export, JSON/OpenLyrics import); PR #54 editor → OpenLyrics… saves one song as .xml (round-trips through the importer) |
 | SO-009 Add songs to unified service rundown | P1 | MERGED (#7) | SO-004,ST-003 | songs-core PR: song rundown items (`kind='song'` + payload) save/reopen, Add from Quick find, slide sub-list, reorder/remove |
 | SO-010 Song/lyric renderer and Live safety | P0 | MERGED (#7) | SO-009,ST-002 | songs-core PR: `presentSlide` (atomic go-live, Clear cancels, no stale frame), lyric lines + secondary language + copyright footer in the renderer, Next/Prev step slides then items, Show live from a previewed slide; 12 tests |
 | SO-011 Rehearsal notes, key, tempo, attachments | P2 | MERGED (#50 key/tempo, #70 attachments) | SO-004 | song-key-tempo PR: migration 0006 adds key and tempo to songs (validated), editor fields, stage display shows "Key G · 72 bpm" for the live song; song notes already exist and never reach the output. Attachments later |
@@ -63,7 +63,7 @@
 | MD-002 Playback (image/video/audio), aspect and timing | P1 | MERGED (#16 pictures, #90 video) / BACKLOG (audio-only items, NDI audio) | MD-001,SV-002 | PR #16: picture rundown items with fill/show-all/stretch, atomic go-live after decode, missing file reported; Prepare → Pictures tab; 5 tests. Video and audio not yet |
 | MD-003 Backgrounds, safe text and lyric scrolling | P1 | MERGED (#18 backgrounds, #20 scrim, #87 long text as pages) | MD-002,SO-010 | PR #18: any verse, song or slide item can carry a library picture behind its text (`background_media_id` in the payload, crate-validated); picture loads before go-live; a missing file shows the words without it; Prepare picker in the rundown; 2 tests. Lyric scrolling and safe-area tuning not yet |
 | MD-004 Independently addressable transparent lower-third layer | P1 | MERGED (#91) | MD-001 | Congregation vs OBS output independent; alpha verified |
-| MD-005 Quick Screens and persistent overlays | P1 | MERGED (#15, #41 text screens; #91 lower thirds) / IN PR (black, logo, technical-issue screens, FR-04) | ST-002,MD-002 | PR #15 `8bc82eb`, bilingual (English + Yorùbá when a Yorùbá Bible is active or secondary) in bilingual-quick-screens PR: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
+| MD-005 Quick Screens and persistent overlays | P1 | MERGED (#15, #41 text screens; #91 lower thirds) / MERGED (black, logo, technical-issue screens #99, fit at 1366x768 #106) | ST-002,MD-002 | PR #15 `8bc82eb`, bilingual (English + Yorùbá when a Yorùbá Bible is active or secondary) in bilingual-quick-screens PR: Welcome / Please stand / Let us pray / Offering on air at once from the Standard view, Back returns to what was live (or off air, as it was); Next/Show live drop the hold; 4 tests. Black = Clear. Logo screen and persistent overlays wait for media (MD-001/002) |
 | MD-006 Local cache manifest, integrity/readiness | P0 | MERGED (pictures) | MD-001,SV-002 | PR #17 `5263a94`: Home warns before the service when a picture item's file is gone; rundown marks the item; presenting a missing picture never blanks the output (PR media-assets). Fonts and a release manifest later |
 | MD-007 Adaptive Smart Media rendering | P2 | MERGED (contrast) | MD-003 | PR #20: words over a photo get an automatic dark scrim scaled by the theme's text-plate opacity, none for dark-text themes; 2 tests. Layout adaptation to text length later |
 
@@ -75,8 +75,8 @@
 | OP-002 Stage confidence screen and private messages | P1 | MERGED (#23 screen, #24 messages) | OP-001 | PR #23: stage outputs show the live words (both languages), NEXT item, the operator's note and the timer; nothing themed; refreshed on every live, rundown or timer change; 2 tests. Private messages later (PT-004) |
 | OP-003 Independent language/style per output | P1 | MERGED (#55) | OP-001,SO-006 | output-language PR: each congregation output chooses Both / First only / Second only (verses and lyrics; second falls back to the prepared frame, never blank); style per output already via themes; 2 tests |
 | OP-004 Multiview and device health | P1 | MERGED (#26 health, #92 monitors, #93 multiview) | OP-001 | PR #26: Home readiness lists every output (on/off, congregation/stage/stream) and warns when only the stage screen is on; 1 test. Multiview thumbnails and disconnected-monitor detection later |
-| OP-005 NDI/OBS and external output stability | P0 | MERGED (sender trouble + one restart #88; receiver count in readiness #89) / IN PR (last good frame when a frame fails to draw, FR-04) / BACKLOG (real OBS 720p30 smoke, runtime drop on a desktop) | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
-| OP-006 Paired mobile/LAN control with roles | P1 | MERGED (#66, #69 shared key; #77 pairing + revocation; #78 roles + require-a-key switch) / IN PR (phone remote page + QR pairing) | OP-001 | remote-secret PR (#63): optional key in Settings → Remote; HTTP `/command` needs `X-Rhema-Key` or `Authorization: Bearer` (401 otherwise, health stays open), OSC needs the key as first string argument; blank keeps today's behaviour; 2 crate tests. Pairing, roles and revocation later |
+| OP-005 NDI/OBS and external output stability | P0 | MERGED (sender trouble + one restart #88; receiver count in readiness #89) / MERGED (last good frame #104, #108) / BACKLOG (real OBS 720p30 smoke, runtime drop on a desktop) | OP-001 | Real OBS 720p30 smoke, NDI recovery, app survives drop |
+| OP-006 Paired mobile/LAN control with roles | P1 | MERGED (#66, #69 shared key; #77 pairing + revocation; #78 roles + require-a-key switch) / MERGED (phone remote page + QR pairing #102) | OP-001 | remote-secret PR (#63): optional key in Settings → Remote; HTTP `/command` needs `X-Rhema-Key` or `Authorization: Bearer` (401 otherwise, health stays open), OSC needs the key as first string argument; blank keeps today's behaviour; 2 crate tests. Pairing, roles and revocation later |
 
 ## Milestone 5 — Timers, cues, rehearsal
 
@@ -131,12 +131,12 @@
 
 | Task | P | State | Depends on | Done criteria |
 |---|---|---|---|---|
-| QA-001 Windows x64 signed/unsigned packaging and hands-on smoke | P0 | BACKLOG | ST-007 | Artifact installs/launches, data stays, projectors + NDI verified |
-| QA-002 Offline and injected-failure test suite | P0 | MERGED (first slice #57) / IN PR (NFR-09 network-host guard and privacy note) / BACKLOG (network loss, OBS drop and a packet capture on a desktop) | OP-005,SV-002 | injected-failures PR: `live-safety-failures.test.ts` — song load error, unreadable picture, failure after Clear (stays cleared; Restore still works), Bible lookup failure plus a dead output window: what is on air stays on air, with a warning. OBS/NDI drop and real network loss remain desktop tests (OP-005) |
+| QA-001 Windows x64 signed/unsigned packaging and hands-on smoke | P0 | ARTIFACT BUILT (unsigned, run 39541733204 at `7bf70ee`) / BACKLOG (install, launch and smoke on Windows) | ST-007 | Artifact installs/launches, data stays, projectors + NDI verified |
+| QA-002 Offline and injected-failure test suite | P0 | MERGED (first slice #57) / MERGED (NFR-09 network-host guard and privacy note #105) / BACKLOG (network loss, OBS drop and a packet capture on a desktop) | OP-005,SV-002 | injected-failures PR: `live-safety-failures.test.ts` — song load error, unreadable picture, failure after Clear (stays cleared; Restore still works), Bible lookup failure plus a dead output window: what is on air stays on air, with a warning. OBS/NDI drop and real network loss remain desktop tests (OP-005) |
 | QA-003 Accessibility and novice-volunteer usability | P0 | MERGED (guard #68) / BACKLOG (human tests) | ST-002 | Keyboard, contrast, novice timed exercises with recorded findings |
 | QA-004 Rights and dependency license inventory | P0 | MERGED (#28; owner decision on bundled translations recorded 2026-10-21, #33) | ST-001 | `docs/LICENSES.md`: upstream MIT, OYCB CC BY-SA 4.0 (compliant), direct Rust and JS dependency licences (all permissive), fonts OFL, NDI runtime terms, song/media provenance model. **Open owner decision:** copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) are bundled in `rhema.db`/installer; openbible.info and NDI notices added to About (about-notices PR); installer licence screen still MIT-only |
 | QA-005 Settings and database migration/rollback matrix | P0 | MERGED (database #40, settings #82, downgrade guard #96) | ST-003 | migration-matrix PR (#39): one crate test opens a file at every schema version 0001–0004, upgrades it (backup named after the first pending migration, data intact, songs and revisions usable), verifies the automatic backup and restores it into a current database. Corrupt-file refusal already tested. Settings/app-identity migration (ST-009) still open |
-| QA-006 Security threat review of LAN, external cues and cloud sync | P1 | MERGED (remote control #58, #66, #69, #77, #78; OBS #95; diagnostics redaction #97) / IN PR (remote command rate limiting, NFR-06) / BACKLOG (cloud sync, after #72) | OP-006,CL-004 | Pairing/auth, permissions, secrets, revocation, secure defaults |
+| QA-006 Security threat review of LAN, external cues and cloud sync | P1 | MERGED (remote control #58, #66, #69, #77, #78; OBS #95; diagnostics redaction #97) / MERGED (rate limiting #100) / BACKLOG (cloud sync, after #72) | OP-006,CL-004 | Pairing/auth, permissions, secrets, revocation, secure defaults |
 | QA-007 Performance benchmarks on representative low-end hardware | P1 | BACKLOG | SO-010,MD-002 | 720p30 practical OBS target, slide action latency logged |
 | QA-008 Technical docs, troubleshooting, volunteer handbook | P1 | MERGED (#48, #51) | QA-003 | `docs/QUICK-START.md`: one-page volunteer guide (prepare, present table, what cannot go wrong, if something breaks). Stage/production guide and diagnostics how-to later |
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
@@ -154,6 +154,7 @@
 
 ## Revision history
 
+- **2026-10-21 (rev 0.42):** PRs #96–#110 merged (see DEVELOPMENT-STATUS); QA-001 unsigned installer artifact built from `main`.
 - **2026-10-21 (rev 0.41):** owner decision #33 recorded (bundled translations ship as upstream); PRs #89–#95 merged (NDI receivers, video, lower thirds, monitors, multiview, reuse, OBS); MD-002 video, MD-004, OP-004, AR-002, AR-003 merged.
 - **2026-10-21 (rev 0.40):** eleven rows still at IN PR after their merges reconciled (SO-002, SO-007, OP-002, OP-003, CL-001–004, SG-003, QA-002, QA-010).
 - **2026-10-21 (rev 0.39):** PRs #86 (signage playlists + preload) and #87 (long text as pages) merged; five stale rows reconciled (CV-004, AR-001, AR-003, PT-002, PT-004).
