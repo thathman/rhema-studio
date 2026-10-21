@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 
 export function useTauriEvent<T>(
@@ -6,7 +6,10 @@ export function useTauriEvent<T>(
   handler: (payload: T) => void
 ) {
   const handlerRef = useRef(handler)
-  handlerRef.current = handler
+  // The latest handler, updated after render (not during it); events always call the newest one.
+  useLayoutEffect(() => {
+    handlerRef.current = handler
+  })
 
   useEffect(() => {
     // Track whether this effect has been cleaned up.

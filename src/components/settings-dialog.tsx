@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 
 import { Button } from "@/components/ui/button"
@@ -159,22 +159,20 @@ function AudioSection() {
   const [devices, setDevices] = useState<DeviceInfo[]>([])
   const [loading, setLoading] = useState(true)
 
-  const loadDevices = useCallback(async () => {
-    try {
-      setLoading(true)
-      const result = await invoke<DeviceInfo[]>("get_audio_devices")
-      setDevices(result)
-    } catch {
-      // Tauri command may not be available during dev
-      setDevices([])
-    } finally {
-      setLoading(false)
+  // Devices load once; state is set when the call settles (not synchronously in the effect).
+  useEffect(() => {
+    let cancelled = false
+    invoke<DeviceInfo[]>("get_audio_devices")
+      .catch(() => [] as DeviceInfo[]) // the command may not be available during dev
+      .then((result) => {
+        if (cancelled) return
+        setDevices(result)
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    loadDevices()
-  }, [loadDevices])
 
   // gain is 0.0-2.0 in store, display as 0-100%
   const gainPercent = Math.round((gain / 2.0) * 100)

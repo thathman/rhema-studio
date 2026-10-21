@@ -19,4 +19,4 @@ Kept for every release candidate (release gate RG-10). "Unverified" means the be
 - Sync approach (#72), Canva relay (#34), speech provider and bundling (PR #4), app identity for release (ST-009), whether approval must gate going live, which giving/prayer systems to link.
 
 ## Code health
-- 7 ESLint errors remain in upstream components this fork has not changed (React hook patterns); CI reports them, the blocking subset is clean.
+- None open: the whole repository lints clean and CI blocks on any new lint error (ST-010).

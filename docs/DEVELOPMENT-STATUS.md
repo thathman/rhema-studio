@@ -24,7 +24,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 444 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
+- Frontend: 444 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
 - Rust: `rhema-content` 45 tests pass; `rhema-api` 120; app `cargo check` and clippy in CI.
 - Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
@@ -54,7 +54,6 @@ Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-ca
 
 - No hands-on desktop or projector verification yet of the integrated build.
 - Video in a hidden NDI-only window may be throttled to about 1 frame a second by WebView2/WebKit (row 10ab.4); visible display outputs are not affected.
-- Upstream lint debt: 7 React hook patterns in untouched components (ST-010).
 - Whisper model is not bundled in the Windows installer (by design); speech is optional.
 
 ## Merged 2026-10-21 (this run)

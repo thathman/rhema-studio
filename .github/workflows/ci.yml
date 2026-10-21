@@ -41,10 +41,7 @@ jobs:
         run: bun run build
 
   lint:
-    # Pre-existing ESLint debt lives mostly in web/, src-tauri data scripts and
-    # a few upstream panels (see docs/rhema-studio/01-existing-system-audit.md).
-    # Rhema Studio code and the stores must stay clean; the full run is
-    # reported but does not block until the debt is paid down.
+    # The whole repository lints clean (ST-010); any new error fails the job.
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -54,16 +51,7 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: ESLint (Rhema Studio code, blocking)
-        run: |
-          paths=""
-          for p in src/studio src/stores src/hooks/use-detection-events.ts src/types src/App.tsx; do
-            [ -e "$p" ] && paths="$paths $p"
-          done
-          echo "Linting:$paths"
-          bunx eslint $paths
-      - name: ESLint (whole repo, informational)
-        continue-on-error: true
+      - name: ESLint (whole repo, blocking; the upstream debt was paid down in ST-010)
         run: bunx eslint .
 
   rust:
