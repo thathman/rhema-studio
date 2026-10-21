@@ -12,6 +12,7 @@ import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceBar } from "@/studio/prepare/service-bar"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { SongLibrary } from "@/studio/prepare/song-library"
+import { HymnBook } from "@/studio/prepare/hymn-book"
 import { SlideComposer } from "@/studio/prepare/slide-composer"
 import { MediaLibrary } from "@/studio/prepare/media-library"
 import { ReusePanel } from "@/studio/prepare/reuse-panel"
@@ -64,6 +65,7 @@ export function PrepareWorkspace() {
                 <TabsList>
                   <TabsTrigger value="bible">Bible</TabsTrigger>
                   <TabsTrigger value="songs">Songs</TabsTrigger>
+                  <TabsTrigger value="hymns">Hymn book</TabsTrigger>
                   <TabsTrigger value="slides">Slides</TabsTrigger>
                   <TabsTrigger value="media">Pictures</TabsTrigger>
                   <TabsTrigger value="reuse">Reuse</TabsTrigger>
@@ -74,6 +76,9 @@ export function PrepareWorkspace() {
               </TabsContent>
               <TabsContent value="songs" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
                 <SongLibrary />
+              </TabsContent>
+              <TabsContent value="hymns" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+                <HymnBook />
               </TabsContent>
               <TabsContent value="slides" className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
                 <SlideComposer />

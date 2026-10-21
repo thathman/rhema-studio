@@ -44,7 +44,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
     if (!open) return
     useSongStore
       .getState()
-      .search("", 1000)
+      .lookup("", 5000, true)
       .then((r) => setCount(r.length))
       .catch(() => setCount(null))
     void useSongStore.getState().loadHymnbooks().catch(() => {})
@@ -74,7 +74,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
       useQueueStore.getState().clearQueue()
       useSongStore.setState({ songs: {}, results: [] })
       await useServiceStore.getState().loadPrograms()
-      const songs = await useSongStore.getState().search("", 1000)
+      const songs = await useSongStore.getState().lookup("", 5000, true)
       setCount(songs.length)
       setStatus(await contentStatus())
       toast.success("Database restored", { description: r.snapshot ? `The previous database was kept at ${r.snapshot}` : undefined })
@@ -103,7 +103,7 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
       const r = await importSongsFromFiles(mode, useSongStore.getState().hymnbooks)
       if (r) {
         setOutcome(r)
-        const songs = await useSongStore.getState().search("", 1000)
+        const songs = await useSongStore.getState().lookup("", 5000, true)
         setCount(songs.length)
       }
     } catch (e) {

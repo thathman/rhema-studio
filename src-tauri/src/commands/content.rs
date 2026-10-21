@@ -191,8 +191,9 @@ pub fn content_restore_revision(
 // ── songs and hymnbooks ────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn content_list_songs(state: State<'_, ContentState>, query: Option<String>, limit: Option<usize>) -> CmdResult<Vec<SongSummary>> {
-    with_db(&state, |db| db.list_songs(query.as_deref(), limit.unwrap_or(200).min(1000)))
+pub fn content_list_songs(state: State<'_, ContentState>, query: Option<String>, limit: Option<usize>, tag: Option<String>, with_tag: Option<bool>) -> CmdResult<Vec<SongSummary>> {
+    let tag = tag.as_deref().map(|t| (t, with_tag.unwrap_or(true)));
+    with_db(&state, |db| db.list_songs_tagged(query.as_deref(), limit.unwrap_or(200).min(5000), tag))
 }
 
 #[tauri::command]
@@ -243,6 +244,12 @@ pub fn content_export_songs(state: State<'_, ContentState>, ids: Option<Vec<Stri
 #[tauri::command]
 pub fn content_import_songs(state: State<'_, ContentState>, export: SongExport, mode: ImportMode) -> CmdResult<ImportReport> {
     with_db(&state, |db| db.import_songs(&export, mode))
+}
+
+/// A whole hymnbook (the CAC Gospel Hymn Book): hymns matched by their number in the book.
+#[tauri::command]
+pub fn content_import_hymnbook(state: State<'_, ContentState>, parts: Vec<rhema_content::HymnbookImport>) -> CmdResult<ImportReport> {
+    with_db(&state, |db| db.import_hymnbooks(&parts))
 }
 
 /// A fresh file name in the system temp folder (local disk).

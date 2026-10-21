@@ -1,7 +1,11 @@
 import { create } from "zustand"
 import { invoke } from "@tauri-apps/api/core"
 import { isSongItem, type Hymnbook, type HymnbookInput, type SongInput, type SongSummary, type SongWithSections } from "@/types"
+import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { useQueueStore } from "@/stores/queue-store"
+
+/** The song library without the hymn book kept apart from it. */
+const LIBRARY_ONLY = { tag: CAC_TAG, withTag: false }
 
 interface SongState {
   /** Loaded songs by id. Presenting reads from here; saves refresh it. */
@@ -17,7 +21,10 @@ interface SongState {
 
   /** Load (or return cached) full song. Null when it no longer exists. */
   load: (id: string, opts?: { refresh?: boolean }) => Promise<SongWithSections | null>
-  search: (query: string, limit?: number) => Promise<SongSummary[]>
+  /** The Songs tab's search (its `results`). `libraryOnly`: leave out the hymn book kept apart (the CAC hymns). */
+  search: (query: string, limit?: number, libraryOnly?: boolean) => Promise<SongSummary[]>
+  /** The same search for anyone else (Quick find, counts): never touches the Songs tab's list. */
+  lookup: (query: string, limit?: number, libraryOnly?: boolean) => Promise<SongSummary[]>
   /** Every song (cached for a minute) for the typo-tolerant fallback. */
   all: () => Promise<SongSummary[]>
   loadHymnbooks: () => Promise<Hymnbook[]>
@@ -55,11 +62,14 @@ export const useSongStore = create<SongState>((set, get) => ({
     return song
   },
 
-  search: async (query, limit = 50) => {
+  lookup: (query, limit = 50, libraryOnly = false) =>
+    invoke<SongSummary[]>("content_list_songs", { query: query.trim() || null, limit, ...(libraryOnly ? LIBRARY_ONLY : {}) }),
+
+  search: async (query, limit = 50, libraryOnly = false) => {
     const ticket = ++searchSeq
     set({ query, searching: true, error: null })
     try {
-      const results = await invoke<SongSummary[]>("content_list_songs", { query: query.trim() || null, limit })
+      const results = await invoke<SongSummary[]>("content_list_songs", { query: query.trim() || null, limit, ...(libraryOnly ? LIBRARY_ONLY : {}) })
       if (ticket === searchSeq) set({ results, searching: false })
       return results
     } catch (e) {
@@ -70,7 +80,7 @@ export const useSongStore = create<SongState>((set, get) => ({
 
   all: async () => {
     if (allCache && Date.now() - allCache.at < 60_000) return allCache.songs
-    const songs = await invoke<SongSummary[]>("content_list_songs", { query: null, limit: 1000 })
+    const songs = await invoke<SongSummary[]>("content_list_songs", { query: null, limit: 1000, ...LIBRARY_ONLY })
     allCache = { at: Date.now(), songs }
     return songs
   },

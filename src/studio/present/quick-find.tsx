@@ -59,13 +59,13 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
         const v = await bibleActions.fetchVerse(book.book_number, chapter, verse)
         found = v?.text?.trim() ? [{ kind: "verse", verse: v }] : []
       } else if (resolved.kind === "hymn") {
-        found = (await songs.search(q, 8)).map((song) => ({ kind: "song", song }))
+        found = (await songs.lookup(q, 8)).map((song) => ({ kind: "song", song }))
       } else if (q.length >= 3) {
         // "1 Samuel", "1 Kings 3", "Psalm 23": that chapter's first verse comes first, then the word search.
         const bookChapter = parseBookChapter(q, books)
         const [verses, exact, start] = await Promise.all([
           bibleActions.searchVerses(q, 8).catch(() => [] as Verse[]),
-          songs.search(q, 6).catch(() => [] as SongSummary[]),
+          songs.lookup(q, 6).catch(() => [] as SongSummary[]),
           bookChapter ? bibleActions.fetchVerse(bookChapter.book.book_number, bookChapter.chapter, 1).catch(() => null) : Promise.resolve(null),
         ])
         // Nothing exact: forgive a typo or two against every title and first line.

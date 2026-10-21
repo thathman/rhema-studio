@@ -73,6 +73,8 @@ interface SettingsState {
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
+  /** CAC hymn book: which language a hymn added to the service shows first. */
+  hymnFirstLanguage: "en" | "yo"
   /**
    * When this computer agreed that microphone audio may be sent to the cloud
    * speech provider (ISO time); "" = not agreed (RG-08, NFR-09).
@@ -120,6 +122,7 @@ interface SettingsState {
   revokeRemoteDevice: (hash: string) => void
   setRemoteDeviceRole: (hash: string, role: RemoteRole) => void
   setOperatorName: (name: string) => void
+  setHymnFirstLanguage: (lang: "en" | "yo") => void
   setBrandKit: (kit: BrandKit) => void
   setDeepgramApiKey: (key: string | null) => void
   setOpenaiApiKey: (key: string | null) => void
@@ -146,6 +149,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   sttProvider: "deepgram",
   brandKit: defaultBrandKit(),
   operatorName: "",
+  hymnFirstLanguage: "en",
   customMacros: [],
   churchFolder: "",
   requireApproval: false,
@@ -189,6 +193,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   // ponytail: newest 2000 read comments; a very long-lived template could see old ones as new again. Raise the cap if that happens.
   markCommentsSeen: (keys) => set((s) => ({ commentsSeen: [...s.commentsSeen.filter((k) => !keys.includes(k)), ...keys].slice(-2000) })),
   noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),
+  setHymnFirstLanguage: (hymnFirstLanguage) => set({ hymnFirstLanguage }),
   setOperatorName: (operatorName) => {
     set({ operatorName })
     void invoke("content_set_actor", { name: operatorName.trim() || null }).catch(() => {})
@@ -214,6 +219,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
  */
 function acceptable(key: string, value: unknown): boolean {
   switch (key) {
+    case "hymnFirstLanguage":
+      return value === "en" || value === "yo"
     case "operatorName":
     case "remoteSecret":
     case "churchFolder":
@@ -256,6 +263,7 @@ function acceptable(key: string, value: unknown): boolean {
 const PERSISTED_KEYS = [
   "brandKit",
   "operatorName",
+  "hymnFirstLanguage",
   "customMacros",
   "churchFolder",
   "requireApproval",

@@ -228,6 +228,20 @@ pub struct ImportReport {
     pub numbers_skipped: usize,
 }
 
+/// One book of a hymn book import, with its hymns.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HymnbookImport {
+    pub book: HymnbookInput,
+    pub songs: Vec<NumberedSong>,
+}
+
+/// One hymn of a hymnbook import: its number in the book and its content.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NumberedSong {
+    pub number: String,
+    pub song: SongInput,
+}
+
 /// Payload of a `kind = 'song'` program item.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SongItemPayload {
@@ -243,12 +257,20 @@ impl ContentDb {
 
     /// All songs by title, or the search results for `query`.
     pub fn list_songs(&self, query: Option<&str>, limit: usize) -> Result<Vec<SongSummary>> {
+        self.list_songs_tagged(query, limit, None)
+    }
+
+    /// The same, kept to songs with (`Some((tag, true))`) or without
+    /// (`Some((tag, false))`) a tag: a hymn book kept apart from the song
+    /// library ("cacghb") is listed on its own and left out of the library.
+    pub fn list_songs_tagged(&self, query: Option<&str>, limit: usize, tag: Option<(&str, bool)>) -> Result<Vec<SongSummary>> {
         let conn = self.lock()?;
         let ids = if let Some(q) = query.map(str::trim).filter(|q| !q.is_empty()) {
-            search_ids(&conn, q, limit)?
+            search_ids(&conn, q, limit, tag)?
         } else {
-            let mut stmt = conn.prepare("SELECT id FROM songs ORDER BY title_sort LIMIT ?1")?;
-            let rows = stmt.query_map(params![to_i64(limit)?], |r| r.get::<_, String>(0))?;
+            let mut stmt = conn.prepare(&format!("SELECT s.id FROM songs s WHERE {TAG_FILTER} ORDER BY s.title_sort LIMIT ?1"))?;
+            let (t, with) = tag_params(tag);
+            let rows = stmt.query_map(params![to_i64(limit)?, t, with], |r| r.get::<_, String>(0))?;
             rows.collect::<std::result::Result<_, _>>()?
         };
         ids.iter().map(|id| load_summary(&conn, id)).collect()
@@ -458,6 +480,83 @@ impl ContentDb {
         }
         tx.commit()?;
         Ok(report)
+    }
+}
+
+impl ContentDb {
+    /// A hymn book in one transaction (the CAC Gospel Hymn Book's two parts
+    /// from its JSON, say): all of it lands or none. Each book is found by
+    /// code or created; each hymn by its number in that book. A hymn already
+    /// there is updated in place, keeping its section and arrangement ids, so
+    /// services that use it keep working. A number held by a song that is not
+    /// one of these hymns (it lacks their tag: the church's own song) is left
+    /// alone and counted as skipped.
+    pub fn import_hymnbooks(&self, parts: &[HymnbookImport]) -> Result<ImportReport> {
+        let mut conn = self.lock()?;
+        let tx = conn.transaction()?;
+        let mut report = ImportReport::default();
+        for part in parts {
+            let book = &part.book;
+            validate_hymnbook(book)?;
+            let book_id = if let Some(b) = load_hymnbooks(&tx)?.into_iter().find(|b| b.code.eq_ignore_ascii_case(book.code.trim())) {
+                b.id
+            } else {
+                report.hymnbooks_added += 1;
+                upsert_hymnbook_tx(&tx, &HymnbookInput { id: None, ..book.clone() })?
+            };
+            for (i, n) in part.songs.iter().enumerate() {
+                let number = n.number.trim();
+                if number.is_empty() || number.chars().count() > 12 {
+                    return Err(ContentError::Invalid(format!("hymn {i}: number must be 1–12 characters")));
+                }
+                let mut input = SongInput { numbers: vec![HymnNumberInput { hymnbook_id: book_id.clone(), number: number.to_string() }], ..n.song.clone() };
+                validate_song(&input).map_err(|e| ContentError::Invalid(format!("hymn {number} ({}): {e}", input.title)))?;
+                let Some((id, _)) = number_holder(&tx, &book_id, number)? else {
+                    let id = new_id();
+                    insert_song_row(&tx, &id, &input)?;
+                    write_song_children(&tx, &id, &input, &HashSet::new())?;
+                    reindex(&tx, &id)?;
+                    report.added += 1;
+                    continue;
+                };
+                let Some(old) = load_song(&tx, &id)? else { continue };
+                let ours = input.tags.split(',').any(|t| has_tag(&old.song.tags, t));
+                if !input.tags.trim().is_empty() && !ours {
+                    report.skipped += 1;
+                    continue;
+                }
+                keep_ids(&mut input, &old);
+                update_song_row(&tx, &id, &input)?;
+                let existing = existing_child_ids(&tx, &id)?;
+                write_song_children(&tx, &id, &input, &existing)?;
+                reindex(&tx, &id)?;
+                report.replaced += 1;
+            }
+            audit(&tx, "hymnbook", &book_id, "import", &serde_json::json!({ "code": book.code.trim(), "added": report.added, "replaced": report.replaced, "skipped": report.skipped }))?;
+        }
+        tx.commit()?;
+        Ok(report)
+    }
+}
+
+/// Whether a comma-separated tag list holds `tag` (any case; an empty tag: never).
+fn has_tag(tags: &str, tag: &str) -> bool {
+    let tag = tag.trim();
+    !tag.is_empty() && tags.split(',').any(|t| t.trim().eq_ignore_ascii_case(tag))
+}
+
+/// A hymn imported again keeps its stored ids: sections by position, and its
+/// arrangements when the verse count is unchanged (otherwise its default
+/// order is generated again under the same id).
+fn keep_ids(input: &mut SongInput, old: &SongWithSections) {
+    for (sec, was) in input.sections.iter_mut().zip(&old.sections) {
+        sec.id = Some(was.id.clone());
+    }
+    if old.sections.len() == input.sections.len() {
+        input.arrangements = old.arrangements.iter().map(|a| ArrangementInput { id: Some(a.id.clone()), name: a.name.clone(), sequence: a.sequence.clone(), is_default: a.is_default }).collect();
+    } else if let Some(d) = old.arrangements.iter().find(|a| a.is_default) {
+        let refs: Vec<String> = (0..input.sections.len()).map(|i| format!("#{i}")).collect();
+        input.arrangements = vec![ArrangementInput { id: Some(d.id.clone()), name: d.name.clone(), sequence: default_sequence(&input.sections, &refs), is_default: true }];
     }
 }
 
@@ -1006,14 +1105,22 @@ pub fn fts_query(q: &str) -> String {
     tokens.into_iter().enumerate().map(|(i, t)| if i + 1 == n { format!("{t}*") } else { t }).collect::<Vec<_>>().join(" ")
 }
 
-fn search_ids(conn: &Connection, q: &str, limit: usize) -> Result<Vec<String>> {
+/// `?2` = a tag or NULL, `?3` = whether the song must have it (songs `s`).
+const TAG_FILTER: &str = "(?2 IS NULL OR (instr(',' || replace(lower(s.tags), ' ', '') || ',', ',' || ?2 || ',') > 0) = ?3)";
+
+fn tag_params(tag: Option<(&str, bool)>) -> (Option<String>, bool) {
+    tag.map_or((None, false), |(t, with)| (Some(t.trim().to_lowercase()), with))
+}
+
+fn search_ids(conn: &Connection, q: &str, limit: usize, tag: Option<(&str, bool)>) -> Result<Vec<String>> {
     let limit = to_i64(limit)?;
+    let (t, with) = tag_params(tag);
     if let Some((code, number)) = parse_hymn_number(q) {
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "SELECT h.song_id FROM hymn_numbers h JOIN hymnbooks b ON b.id = h.hymnbook_id JOIN songs s ON s.id = h.song_id
-             WHERE h.number = ?1 AND (?2 IS NULL OR upper(b.code) = ?2) ORDER BY b.code, s.title_sort LIMIT ?3",
-        )?;
-        let rows = stmt.query_map(params![number, code, limit], |r| r.get::<_, String>(0))?;
+             WHERE h.number = ?4 AND (?5 IS NULL OR upper(b.code) = ?5) AND {TAG_FILTER} ORDER BY b.code, s.title_sort LIMIT ?1"
+        ))?;
+        let rows = stmt.query_map(params![limit, t, with, number, code], |r| r.get::<_, String>(0))?;
         let ids: Vec<String> = rows.collect::<std::result::Result<_, _>>()?;
         // "Psalm 23", "Hymn 245": a word that is no hymnbook's code here is part of a title.
         let is_book = match &code {
@@ -1029,11 +1136,11 @@ fn search_ids(conn: &Connection, q: &str, limit: usize) -> Result<Vec<String>> {
     if query.is_empty() {
         return Ok(vec![]);
     }
-    let mut stmt = conn.prepare(
-        "SELECT song_id FROM song_search WHERE song_search MATCH ?1
-         ORDER BY bm25(song_search, 0.0, 10.0, 4.0, 1.0, 2.0) LIMIT ?2",
-    )?;
-    let rows = stmt.query_map(params![query, limit], |r| r.get::<_, String>(0))?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT song_search.song_id FROM song_search JOIN songs s ON s.id = song_search.song_id WHERE song_search MATCH ?4 AND {TAG_FILTER}
+         ORDER BY bm25(song_search, 0.0, 10.0, 4.0, 1.0, 2.0) LIMIT ?1"
+    ))?;
+    let rows = stmt.query_map(params![limit, t, with, query], |r| r.get::<_, String>(0))?;
     Ok(rows.collect::<std::result::Result<_, _>>()?)
 }
 
@@ -1624,4 +1731,42 @@ mod tests {
         assert_eq!(db.get_song(&s.song.id).unwrap().unwrap().sections.len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
+    #[test]
+    fn a_hymnbook_imports_by_number_and_again_in_place() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let book = HymnbookInput { id: None, code: "CAC".into(), name: "CAC Gospel Hymn Book".into(), language: "yo".into(), publisher: String::new(), licence_note: String::new() };
+        let verse = |t: &str| SectionInput { id: None, kind: "verse".into(), label: String::new(), texts: [("en".to_string(), t.to_string()), ("yo".to_string(), "Oluwa".to_string())].into() };
+        let hymn = |n: &str, en: &str| NumberedSong {
+            number: n.into(),
+            song: SongInput { title: en.into(), primary_language: "en".into(), tags: "cacghb".into(), sections: vec![verse(en), verse("Second")], ..SongInput::default() },
+        };
+        let import = |songs: Vec<NumberedSong>| db.import_hymnbooks(&[HymnbookImport { book: book.clone(), songs }]).unwrap();
+        let first = import(vec![hymn("1", "Great shepherd"), hymn("2", "O God of Bethel")]);
+        assert_eq!((first.added, first.replaced, first.hymnbooks_added), (2, 0, 1));
+        let id = db.list_songs(Some("Great shepherd"), 5).unwrap()[0].id.clone();
+        let before = db.get_song(&id).unwrap().unwrap();
+        let again = import(vec![hymn("1", "Great shepherd of thy people")]);
+        assert_eq!((again.added, again.replaced, again.hymnbooks_added), (0, 1, 0));
+        let after = db.get_song(&id).unwrap().unwrap();
+        assert_eq!(after.song.title, "Great shepherd of thy people");
+        // Services point at arrangement and section ids: imported again, they stay.
+        assert_eq!(after.arrangements.iter().map(|a| &a.id).collect::<Vec<_>>(), before.arrangements.iter().map(|a| &a.id).collect::<Vec<_>>());
+        assert_eq!(after.sections.iter().map(|s| &s.id).collect::<Vec<_>>(), before.sections.iter().map(|s| &s.id).collect::<Vec<_>>());
+        assert_eq!(db.list_songs(None, 10).unwrap().len(), 2);
+        // The church's own song numbered 3 in the same book is never overwritten.
+        let books = db.list_hymnbooks().unwrap();
+        let own = db.create_song(&SongInput { title: "Our own song".into(), sections: vec![verse("Ours")], numbers: vec![HymnNumberInput { hymnbook_id: books[0].id.clone(), number: "3".into() }], ..SongInput::default() }).unwrap();
+        let clash = import(vec![hymn("3", "Hymn three")]);
+        assert_eq!((clash.added, clash.replaced, clash.skipped), (0, 0, 1));
+        assert_eq!(db.get_song(&own.song.id).unwrap().unwrap().song.title, "Our own song");
+        // Kept apart from the song library by its tag.
+        db.create_song(&SongInput { title: "Blessed Assurance".into(), sections: vec![SectionInput { id: None, kind: "verse".into(), label: String::new(), texts: [("en".to_string(), "Blessed assurance".to_string())].into() }], ..SongInput::default() }).unwrap();
+        let titles = |tag| db.list_songs_tagged(None, 10, tag).unwrap().into_iter().map(|s| s.title).collect::<Vec<_>>();
+        assert_eq!(titles(Some(("cacghb", false))), vec!["Blessed Assurance", "Our own song"]);
+        assert_eq!(titles(Some(("CACGHB", true))).len(), 2);
+        assert_eq!(db.list_songs_tagged(Some("shepherd"), 10, Some(("cacghb", false))).unwrap().len(), 0);
+        assert_eq!(db.list_songs_tagged(Some("shepherd"), 10, Some(("cacghb", true))).unwrap().len(), 1);
+        assert_eq!(db.list_songs_tagged(Some("CAC 1"), 10, Some(("cacghb", true))).unwrap().len(), 1);
+    }
+
 }
