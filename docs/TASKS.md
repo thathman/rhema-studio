@@ -24,7 +24,7 @@
 | ST-007 Verify PR dependency merge sequence and CI after retargets | P0 | MERGED | ST-005 | Executed 2026-10-20: #5 `5d23c94` → #3 `a3204ea` → #1 `011b3ae` → #2 `e66483b`, merge commits, no duplicates (`git diff` content-branch..main = docs only). CI on `main` recorded in DEVELOPMENT-STATUS.md. Branches kept; PR #4 retargeted to `main` |
 | ST-008 Ship explicit database backup/restore UX and verified recovery exercise | P0 | MERGED | ST-003 | PR #10 `d884791`: More → Library → Back up now / Restore from a backup; crate `verify_backup` + `restore_from` (snapshot first, bad files refused, reopen on failure, older backups migrate); 2 crate tests; guide §9.4–9.6. Recovery rehearsal on a real machine (QA-010) still open |
 | ST-009 Migrate product identity and settings safely | P2 | BACKLOG | ST-003 | Existing configurations survive app-ID rename, migration/rollback tested |
-| ST-010 Correct typecheck coverage and control lint debt | P1 | MERGED (tsc; lint debt 68 → 7) / IN PR (7 → 0; whole-repo lint blocking) | ST-001 | `tsc -b` in CI (merged); lint debt documented (13 upstream files), not reduced |
+| ST-010 Correct typecheck coverage and control lint debt | P1 | MERGED (tsc; lint debt 68 → 7) / MERGED (7 → 0; whole-repo lint blocking, #123) | ST-001 | `tsc -b` in CI (merged); lint debt documented (13 upstream files), not reduced |
 | ST-011 Translation-resolution policy and atomic live activation | P0 | MERGED | ST-003,ST-005 | PR #2 (`af950eb`): item's saved translations win unless overridden; missing translation reported, never substituted; Next/Prev/Show live/OSC/HTTP go on air only with the verse; Clear cancels in-flight presents. 26 tests. Manual steps 5.0a–5.0h open |
 
 ## Milestone 2B — Songs and Hymnbooks
