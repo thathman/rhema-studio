@@ -44,6 +44,8 @@ export interface ReadinessInput {
   monitors?: { missing: string[]; shared: string[][] }
   /** Whether the open service was approved as it is (Prepare → Approve). Absent when no service is open. */
   approval?: "approved" | "changed" | "none"
+  /** "Ask before showing" is on: an unapproved service is held at its first go-live. */
+  requireApproval?: boolean
   /** Signage outputs whose loop has no pictures, or pictures whose files are gone. */
   signage?: Array<{ name: string; total: number; missing: number }>
   /** Translations the service's items were saved for that this computer does not have (they cannot show). */
@@ -69,7 +71,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
   const checks: ReadinessCheck[] = [
     i.translationsLoaded > 0
       ? { id: "bible", status: "ok", label: `Bible library loaded (${i.translationsLoaded} translation${i.translationsLoaded === 1 ? "" : "s"})` }
-      : { id: "bible", status: "warn", label: "Bible library not loaded", detail: "Scripture search and verse lookup will not work.", fix: "settings", fixLabel: "Open diagnostics" },
+      : { id: "bible", status: "warn", label: "Bible library not loaded", detail: "Scripture search and verse lookup will not work. Reinstalling Rhema puts the Bible library back; save a log for whoever supports you if it stays.", fix: "settings", fixLabel: "Save a log" },
     i.activeThemeName
       ? { id: "theme", status: "ok", label: `Theme: ${i.activeThemeName}` }
       : { id: "theme", status: "warn", label: "No theme selected", fix: "outputs", fixLabel: "Open outputs" },
@@ -95,6 +97,8 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       ? [{ id: "approval", status: "ok" as const, label: "Service approved as saved" }]
       : i.approval === "changed"
         ? [{ id: "approval", status: "warn" as const, label: "Service changed since it was approved", detail: "Approve it again, or restore the approved version from History.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+        : i.approval === "none" && i.requireApproval
+          ? [{ id: "approval", status: "warn" as const, label: "Service not approved yet", detail: "“Ask before showing” is on: the first go-live will stop and ask. Approve it in Prepare, or present anyway when asked.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
         : i.approval === "none"
           ? [{ id: "approval", status: "info" as const, label: "Service not approved yet", detail: "Optional. Approve in Prepare so the version for today is kept whatever changes later.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
           : []),
@@ -106,7 +110,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           : [],
     ),
     ...(i.contentError
-      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works.`, fix: "settings" as const, fixLabel: "Open diagnostics" }]
+      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works. If the database file is damaged, restore a backup in More → Library; save a log for whoever supports you.`, fix: "settings" as const, fixLabel: "Save a log" }]
       : []),
     ...(i.monitors?.missing.length
       ? [{ id: "monitors-missing", status: "warn" as const, label: `${i.monitors.missing.join(", ")}: ${i.monitors.missing.length === 1 ? "its monitor is" : "their monitors are"} not connected`, detail: "Check the cable, or choose a connected monitor in Outputs.", fix: "outputs" as const, fixLabel: "Open outputs" }]

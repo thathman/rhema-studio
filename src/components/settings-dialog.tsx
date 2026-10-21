@@ -703,7 +703,7 @@ function RemoteControlSection() {
 
   // Poll statuses
   useEffect(() => {
-    const interval = setInterval(async () => {
+    const poll = async () => {
       try {
         const osc = await invoke<RemoteStatus>("get_osc_status")
         setOscStatus(osc)
@@ -714,7 +714,10 @@ function RemoteControlSection() {
         setHttpStatus(http)
         if (http.running) setHttpError(null)
       } catch { /* ignore */ }
-    }, 2000)
+    }
+    // At once on opening, so running listeners never show as stopped.
+    void poll()
+    const interval = setInterval(() => void poll(), 2000)
     return () => clearInterval(interval)
   }, [])
 
@@ -1176,6 +1179,15 @@ function ObsSettingsBlock() {
   const error = useObsStore((s) => s.error)
   // Edited locally and applied with "Save", so a half-typed address or password is never tried.
   const [draft, setDraft] = useState({ host: obs.host, port: String(obs.port), password: obs.password })
+  // The saved password arriving later (keychain read again) fills an untouched box, so Save never blanks it.
+  const savedPassword = useRef(obs.password)
+  useEffect(() => {
+    if (obs.password !== savedPassword.current) {
+      const before = savedPassword.current
+      setDraft((d) => (d.password === before ? { ...d, password: obs.password } : d))
+      savedPassword.current = obs.password
+    }
+  }, [obs.password])
   const port = Number(draft.port)
   const portOk = Number.isInteger(port) && port > 0 && port < 65536
   const changed = draft.host !== obs.host || draft.port !== String(obs.port) || draft.password !== obs.password
@@ -1192,7 +1204,7 @@ function ObsSettingsBlock() {
         <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!changed || !portOk || !draft.host.trim()} onClick={() => setObs({ host: draft.host.trim(), port, password: draft.password })}>Save</Button>
       </div>
       <p className="text-[0.625rem] text-muted-foreground">
-        {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password stays in this computer's settings file. Use a staff-only network: the login answer travels unencrypted.
+        {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password is kept in the system keychain (or this computer's settings file where there is none). Use a staff-only network: the login answer travels unencrypted.
       </p>
     </div>
   )

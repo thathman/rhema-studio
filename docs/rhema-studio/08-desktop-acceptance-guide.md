@@ -847,3 +847,12 @@ report), but launching it cannot.
 | 10cf.4 | Screen reader on the Preview and Live panels. | Each reads what it shows (the reference and words). | Unverified |
 | 10cf.5 | Delete a rundown item, an arrangement step, and a cue (Keep, then Delete) using only the keyboard. | Focus lands on the next item's control, never on the page. | Unverified |
 
+### 10cg. Home and Settings (sixteenth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cg.1 | Give the main output's theme a font that is not installed (type a made-up name); open Home. | Home warns that the theme font is not installed. | Unverified |
+| 10cg.2 | More → turn on "Ask before showing"; open a service never approved; open Home. | A warning says the first go-live will stop and ask. | Unverified |
+| 10cg.3 | Open Home with a picture item; delete that file from the media folder; go to Present and back to Home. | "1 picture … missing its file". | Unverified |
+| 10cg.4 | Settings → Remote while the phone remote is running. | It shows running at once (Stop), never "Start" first. | Unverified |
+

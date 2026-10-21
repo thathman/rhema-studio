@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
 import { applyBrandKit, contrastRatio, defaultBrandKit, missingThemeFonts, readable, MANAGED_THEME_IDS } from "./brand-kit"
+import { fontAvailable as fontAvailableCheck } from "./brand-kit"
 import { BUILTIN_THEMES } from "./builtin-themes"
 
 describe("brand kit", () => {
@@ -71,6 +73,16 @@ describe("brand kit", () => {
     expect(removedButUsed.find((t) => t.id === id)?.brandManaged).toBe(false)
     const removedUnused = applyBrandKit({ ...kit, variants: [] }, withLook)
     expect(removedUnused.some((t) => t.id === id)).toBe(false)
+  })
+
+  it("a font that is not installed is reported missing (measured, not document.fonts.check)", async () => {
+    const { vi } = await import("vitest")
+    // A canvas where only "Present Font" changes the width.
+    const ctx = { font: "", measureText() { return { width: this.font.includes('"Present Font"') ? 120 : 100 } } }
+    const spy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as never)
+    expect(fontAvailableCheck("Present Font")).toBe(true)
+    expect(fontAvailableCheck("Montserrat Missing")).toBe(false)
+    spy.mockRestore()
   })
 })
 
