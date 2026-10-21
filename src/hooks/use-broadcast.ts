@@ -4,7 +4,7 @@ import { composeQrSlide } from "@/lib/qr-bulletin"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type { VerseRenderData } from "@/types"
-import type { ImageQueueItem, SlideQueueItem, SongQueueItem, Verse } from "@/types"
+import type { ImageQueueItem, SlideQueueItem, SongQueueItem, SongWithSections, Verse } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { loadThemeImage } from "@/lib/theme-image-cache"
 import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
@@ -233,7 +233,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
 export async function presentSlide(
   item: SongQueueItem,
   index: number | "last",
-  opts: { goLive?: boolean } = {}
+  opts: { goLive?: boolean; song?: SongWithSections } = {}
 ): Promise<PresentOutcome> {
   if (reachesScreen(opts) && approvalHolds(() => void presentSlide(item, index, opts))) return "held_for_approval"
   presentSeq += 1
@@ -241,7 +241,8 @@ export async function presentSlide(
   const warn = (message: string) => useBroadcastStore.getState().setPresentWarning(message)
   let song = null
   try {
-    song = await useSongStore.getState().load(item.song.song_id)
+    // Stepping within the live song uses it as it went live (see LiveSlide.song).
+    song = opts.song ?? (await useSongStore.getState().load(item.song.song_id))
   } catch (e) {
     console.warn("[broadcast] song load failed:", e)
   }
@@ -263,7 +264,7 @@ export async function presentSlide(
   useBibleStore.getState().selectSlide({ item, index: i })
   useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...(image ? { image } : {}) }, null, {
     goLive: opts.goLive,
-    slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages },
+    slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song },
   })
   if (slide.missing.length > 0) {
     warn(`${slide.sectionLabel} has no ${slide.missing.join(" / ").toUpperCase()} text; showing what there is.`)

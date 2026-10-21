@@ -61,4 +61,16 @@ describe("brand kit", () => {
     expect(missingThemeFonts(themes, (f) => f === "Geist Variable")).toEqual([{ theme: "Custom", font: "Poppins" }])
     expect(missingThemeFonts(themes, () => true)).toEqual([])
   })
+
+  it("removing a look keeps its theme while an output uses it, detached (no fall back to Classic Dark)", () => {
+    const kit = { ...defaultBrandKit(), churchName: "Grace", variants: [{ id: "youth", name: "Youth", colors: { primary: "#550088", accent: "#00ffcc" } }] }
+    const withLook = applyBrandKit(kit, BUILTIN_THEMES)
+    const id = "brand-variant-youth"
+    expect(withLook.some((t) => t.id === id)).toBe(true)
+    const removedButUsed = applyBrandKit({ ...kit, variants: [] }, withLook, new Set([id]))
+    expect(removedButUsed.find((t) => t.id === id)?.brandManaged).toBe(false)
+    const removedUnused = applyBrandKit({ ...kit, variants: [] }, withLook)
+    expect(removedUnused.some((t) => t.id === id)).toBe(false)
+  })
 })
+

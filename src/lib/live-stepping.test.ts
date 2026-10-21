@@ -45,6 +45,14 @@ describe("live stepping and following (audit fixes)", () => {
     expect(index).toBe(2)
   })
 
+  it("steps through the song as it went live, even if its words were saved since", async () => {
+    const asLive = { song: { id: "song-1" }, sections: [], arrangements: [] } as unknown as SongWithSections
+    useBroadcastStore.setState({ liveSlide: { itemId: "s1", songId: "song-1", index: 1, total: 4, arrangementId: "short", languages: ["en"], song: asLive } })
+    remoteActions.queueNext()
+    await vi.waitFor(() => expect(presentSlide).toHaveBeenCalled())
+    expect((presentSlide.mock.calls[0] as unknown as [unknown, number, { song?: unknown }])[2].song).toBe(asLive)
+  })
+
   it("a live song deleted from the library: Next moves on to the next item", async () => {
     useSongStore.setState({ songs: {} })
     remoteActions.queueNext()

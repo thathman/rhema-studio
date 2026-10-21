@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { emitTo } from "@tauri-apps/api/event"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import type {
+  SongWithSections,
   BroadcastOutput,
   BroadcastOutputStatus,
   BroadcastTheme,
@@ -39,6 +40,8 @@ export interface LiveSlide {
   /** The arrangement and languages the song went live with: stepping within it keeps them (RG-03). */
   arrangementId?: string | null
   languages?: string[]
+  /** The song as it went live: words saved in the editor meanwhile apply the next time it is entered. */
+  song?: SongWithSections
 }
 
 type SelectedElement = "verse" | "reference" | null
@@ -380,7 +383,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : [...s.themes, theme],
     })),
   /** Generate or refresh the Brand Kit's themes; hand-edited ones are left alone. */
-  applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes) })),
+  applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes, new Set(s.outputs.map((o) => o.themeId))) })),
   // An output using the theme would silently fall back to Classic Dark (an opaque frame over a
   // stream's camera, FR-06): refuse and say which outputs use it.
   deleteTheme: (id) => {
@@ -433,7 +436,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   renameTheme: (id, name) =>
     set((s) => ({
       themes: s.themes.map((t) =>
-        t.id === id && !t.builtin ? { ...t, name, updatedAt: Date.now() } : t
+        // A renamed Brand Kit theme is the church's own now: the next Apply leaves its name alone.
+        t.id === id && !t.builtin ? { ...t, name, updatedAt: Date.now(), ...(t.brandManaged ? { brandManaged: false } : {}) } : t
       ),
       draftTheme:
         s.draftTheme?.id === id ? { ...s.draftTheme, name, updatedAt: Date.now() } : s.draftTheme,

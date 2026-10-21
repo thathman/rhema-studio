@@ -138,7 +138,11 @@ export function BroadcastOutputsDialog({
     void withBusy(output.id, async () => {
       // Stop the transport first: close_broadcast_window only hides the window
       // while NDI is still running for that output.
-      await disableOutput(output)
+      // If the sender did not stop, keep the output: removed, nothing could stop it any more.
+      if ((await disableOutput(output)) === false) {
+        toast.error(`${output.name} was not removed`, { description: "Its NDI sender did not stop. Try again, or restart Rhema." })
+        return
+      }
       useBroadcastStore.getState().removeOutput(output.id)
       toast.success(`Removed ${output.name}`)
     })

@@ -67,7 +67,7 @@ export function readable(wanted: string, background: string, fallback: string): 
  * (not `brandManaged`) are never touched; everything else in `themes` is
  * returned as is.
  */
-export function applyBrandKit(kit: BrandKit, themes: BroadcastTheme[]): BroadcastTheme[] {
+export function applyBrandKit(kit: BrandKit, themes: BroadcastTheme[], inUse: ReadonlySet<string> = new Set()): BroadcastTheme[] {
   const now = Date.now()
   const bg = kit.colors.background
   const body = readable(kit.colors.text, bg, luminance(bg) > 0.5 ? "#111111" : "#ffffff")
@@ -117,9 +117,14 @@ export function applyBrandKit(kit: BrandKit, themes: BroadcastTheme[]): Broadcas
   }
   const managedIds = new Set<string>([...Object.values(MANAGED_THEME_IDS), ...generated.map((g) => g.id)])
   // Variant themes whose variant was removed go away (unless detached by a hand edit).
-  const stale = themes.filter((t) => t.id.startsWith("brand-variant-") && t.brandManaged !== false && !generated.some((g) => g.id === t.id)).map((t) => t.id)
+  // One an output still uses is kept, detached, so that output does not fall back to Classic Dark.
+  const orphans = themes.filter((t) => t.id.startsWith("brand-variant-") && t.brandManaged !== false && !generated.some((g) => g.id === t.id))
+  const stale = orphans.filter((t) => !inUse.has(t.id)).map((t) => t.id)
+  const detach = new Set(orphans.filter((t) => inUse.has(t.id)).map((t) => t.id))
   // A managed theme the church turned into a hand-edited one is left alone.
-  const keep = themes.filter((t) => (!managedIds.has(t.id) || t.brandManaged === false) && !stale.includes(t.id))
+  const keep = themes
+    .filter((t) => (!managedIds.has(t.id) || t.brandManaged === false) && !stale.includes(t.id))
+    .map((t) => (detach.has(t.id) ? { ...t, brandManaged: false } : t))
   const replaced = generated.filter((g) => !themes.some((t) => t.id === g.id && t.brandManaged === false))
   return [...keep, ...replaced]
 }

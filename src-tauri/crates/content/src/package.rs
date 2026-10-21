@@ -236,7 +236,8 @@ impl ContentDb {
                 return Err(ContentError::Invalid(format!("picture \"{}\" is damaged (hash does not match)", m.name)));
             }
             let ext = m.file.strip_prefix(m.hash.as_str()).and_then(|rest| rest.strip_prefix('.'));
-            let ext_ok = ext.is_some_and(|e| (1..=8).contains(&e.len()) && e.bytes().all(|b| b.is_ascii_alphanumeric()));
+            // Lowercase, as files are named here (an upper-case one would show as missing forever).
+            let ext_ok = ext.is_some_and(|e| (1..=8).contains(&e.len()) && e.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()));
             if m.hash.len() != 64 || !m.hash.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) || !ext_ok {
                 return Err(ContentError::Invalid(format!("picture \"{}\" has an unexpected file name", m.name)));
             }
