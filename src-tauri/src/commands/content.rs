@@ -248,8 +248,8 @@ pub fn content_import_songs(state: State<'_, ContentState>, export: SongExport, 
 
 /// A whole hymnbook (the CAC Gospel Hymn Book): hymns matched by their number in the book.
 #[tauri::command]
-pub fn content_import_hymnbook(state: State<'_, ContentState>, book: rhema_content::HymnbookInput, songs: Vec<rhema_content::NumberedSong>) -> CmdResult<ImportReport> {
-    with_db(&state, |db| db.import_hymnbook(&book, &songs))
+pub fn content_import_hymnbook(state: State<'_, ContentState>, parts: Vec<rhema_content::HymnbookImport>) -> CmdResult<ImportReport> {
+    with_db(&state, |db| db.import_hymnbooks(&parts))
 }
 
 /// A fresh file name in the system temp folder (local disk).

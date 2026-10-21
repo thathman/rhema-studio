@@ -228,6 +228,13 @@ pub struct ImportReport {
     pub numbers_skipped: usize,
 }
 
+/// One book of a hymn book import, with its hymns.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HymnbookImport {
+    pub book: HymnbookInput,
+    pub songs: Vec<NumberedSong>,
+}
+
 /// One hymn of a hymnbook import: its number in the book and its content.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NumberedSong {
@@ -477,46 +484,79 @@ impl ContentDb {
 }
 
 impl ContentDb {
-    /// A whole hymnbook in one transaction (the CAC Gospel Hymn Book from its
-    /// JSON, say). The book is found by code or created; each hymn is found by
-    /// its number in that book and updated in place (service items keep
-    /// pointing at it), or added. Importing the same book again changes nothing
-    /// but the revisions.
-    pub fn import_hymnbook(&self, book: &HymnbookInput, songs: &[NumberedSong]) -> Result<ImportReport> {
-        validate_hymnbook(book)?;
+    /// A hymn book in one transaction (the CAC Gospel Hymn Book's two parts
+    /// from its JSON, say): all of it lands or none. Each book is found by
+    /// code or created; each hymn by its number in that book. A hymn already
+    /// there is updated in place, keeping its section and arrangement ids, so
+    /// services that use it keep working. A number held by a song that is not
+    /// one of these hymns (it lacks their tag: the church's own song) is left
+    /// alone and counted as skipped.
+    pub fn import_hymnbooks(&self, parts: &[HymnbookImport]) -> Result<ImportReport> {
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
         let mut report = ImportReport::default();
-        let book_id = if let Some(b) = load_hymnbooks(&tx)?.into_iter().find(|b| b.code.eq_ignore_ascii_case(book.code.trim())) {
-            b.id
-        } else {
-            report.hymnbooks_added += 1;
-            upsert_hymnbook_tx(&tx, &HymnbookInput { id: None, ..book.clone() })?
-        };
-        for (i, n) in songs.iter().enumerate() {
-            let number = n.number.trim();
-            if number.is_empty() || number.chars().count() > 12 {
-                return Err(ContentError::Invalid(format!("hymn {i}: number must be 1–12 characters")));
-            }
-            let input = SongInput { numbers: vec![HymnNumberInput { hymnbook_id: book_id.clone(), number: number.to_string() }], ..n.song.clone() };
-            validate_song(&input).map_err(|e| ContentError::Invalid(format!("hymn {number} ({}): {e}", input.title)))?;
-            if let Some((id, _)) = number_holder(&tx, &book_id, number)? {
+        for part in parts {
+            let book = &part.book;
+            validate_hymnbook(book)?;
+            let book_id = if let Some(b) = load_hymnbooks(&tx)?.into_iter().find(|b| b.code.eq_ignore_ascii_case(book.code.trim())) {
+                b.id
+            } else {
+                report.hymnbooks_added += 1;
+                upsert_hymnbook_tx(&tx, &HymnbookInput { id: None, ..book.clone() })?
+            };
+            for (i, n) in part.songs.iter().enumerate() {
+                let number = n.number.trim();
+                if number.is_empty() || number.chars().count() > 12 {
+                    return Err(ContentError::Invalid(format!("hymn {i}: number must be 1–12 characters")));
+                }
+                let mut input = SongInput { numbers: vec![HymnNumberInput { hymnbook_id: book_id.clone(), number: number.to_string() }], ..n.song.clone() };
+                validate_song(&input).map_err(|e| ContentError::Invalid(format!("hymn {number} ({}): {e}", input.title)))?;
+                let Some((id, _)) = number_holder(&tx, &book_id, number)? else {
+                    let id = new_id();
+                    insert_song_row(&tx, &id, &input)?;
+                    write_song_children(&tx, &id, &input, &HashSet::new())?;
+                    reindex(&tx, &id)?;
+                    report.added += 1;
+                    continue;
+                };
+                let Some(old) = load_song(&tx, &id)? else { continue };
+                let ours = input.tags.split(',').any(|t| has_tag(&old.song.tags, t));
+                if !input.tags.trim().is_empty() && !ours {
+                    report.skipped += 1;
+                    continue;
+                }
+                keep_ids(&mut input, &old);
                 update_song_row(&tx, &id, &input)?;
                 let existing = existing_child_ids(&tx, &id)?;
                 write_song_children(&tx, &id, &input, &existing)?;
                 reindex(&tx, &id)?;
                 report.replaced += 1;
-            } else {
-                let id = new_id();
-                insert_song_row(&tx, &id, &input)?;
-                write_song_children(&tx, &id, &input, &HashSet::new())?;
-                reindex(&tx, &id)?;
-                report.added += 1;
             }
+            audit(&tx, "hymnbook", &book_id, "import", &serde_json::json!({ "code": book.code.trim(), "added": report.added, "replaced": report.replaced, "skipped": report.skipped }))?;
         }
-        audit(&tx, "hymnbook", &book_id, "import", &serde_json::json!({ "code": book.code.trim(), "added": report.added, "replaced": report.replaced }))?;
         tx.commit()?;
         Ok(report)
+    }
+}
+
+/// Whether a comma-separated tag list holds `tag` (any case; an empty tag: never).
+fn has_tag(tags: &str, tag: &str) -> bool {
+    let tag = tag.trim();
+    !tag.is_empty() && tags.split(',').any(|t| t.trim().eq_ignore_ascii_case(tag))
+}
+
+/// A hymn imported again keeps its stored ids: sections by position, and its
+/// arrangements when the verse count is unchanged (otherwise its default
+/// order is generated again under the same id).
+fn keep_ids(input: &mut SongInput, old: &SongWithSections) {
+    for (sec, was) in input.sections.iter_mut().zip(&old.sections) {
+        sec.id = Some(was.id.clone());
+    }
+    if old.sections.len() == input.sections.len() {
+        input.arrangements = old.arrangements.iter().map(|a| ArrangementInput { id: Some(a.id.clone()), name: a.name.clone(), sequence: a.sequence.clone(), is_default: a.is_default }).collect();
+    } else if let Some(d) = old.arrangements.iter().find(|a| a.is_default) {
+        let refs: Vec<String> = (0..input.sections.len()).map(|i| format!("#{i}")).collect();
+        input.arrangements = vec![ArrangementInput { id: Some(d.id.clone()), name: d.name.clone(), sequence: default_sequence(&input.sections, &refs), is_default: true }];
     }
 }
 
@@ -1695,28 +1735,34 @@ mod tests {
     fn a_hymnbook_imports_by_number_and_again_in_place() {
         let db = ContentDb::open_in_memory().unwrap();
         let book = HymnbookInput { id: None, code: "CAC".into(), name: "CAC Gospel Hymn Book".into(), language: "yo".into(), publisher: String::new(), licence_note: String::new() };
+        let verse = |t: &str| SectionInput { id: None, kind: "verse".into(), label: String::new(), texts: [("en".to_string(), t.to_string()), ("yo".to_string(), "Oluwa".to_string())].into() };
         let hymn = |n: &str, en: &str| NumberedSong {
             number: n.into(),
-            song: SongInput {
-                title: en.into(),
-                primary_language: "en".into(),
-                tags: "cacghb".into(),
-                sections: vec![SectionInput { id: None, kind: "verse".into(), label: String::new(), texts: [("en".to_string(), en.to_string()), ("yo".to_string(), "Oluwa".to_string())].into() }],
-                ..SongInput::default()
-            },
+            song: SongInput { title: en.into(), primary_language: "en".into(), tags: "cacghb".into(), sections: vec![verse(en), verse("Second")], ..SongInput::default() },
         };
-        let first = db.import_hymnbook(&book, &[hymn("1", "Great shepherd"), hymn("2", "O God of Bethel")]).unwrap();
+        let import = |songs: Vec<NumberedSong>| db.import_hymnbooks(&[HymnbookImport { book: book.clone(), songs }]).unwrap();
+        let first = import(vec![hymn("1", "Great shepherd"), hymn("2", "O God of Bethel")]);
         assert_eq!((first.added, first.replaced, first.hymnbooks_added), (2, 0, 1));
         let id = db.list_songs(Some("Great shepherd"), 5).unwrap()[0].id.clone();
-        let again = db.import_hymnbook(&book, &[hymn("1", "Great shepherd of thy people")]).unwrap();
+        let before = db.get_song(&id).unwrap().unwrap();
+        let again = import(vec![hymn("1", "Great shepherd of thy people")]);
         assert_eq!((again.added, again.replaced, again.hymnbooks_added), (0, 1, 0));
-        let song = db.get_song(&id).unwrap().unwrap();
-        assert_eq!(song.song.title, "Great shepherd of thy people");
+        let after = db.get_song(&id).unwrap().unwrap();
+        assert_eq!(after.song.title, "Great shepherd of thy people");
+        // Services point at arrangement and section ids: imported again, they stay.
+        assert_eq!(after.arrangements.iter().map(|a| &a.id).collect::<Vec<_>>(), before.arrangements.iter().map(|a| &a.id).collect::<Vec<_>>());
+        assert_eq!(after.sections.iter().map(|s| &s.id).collect::<Vec<_>>(), before.sections.iter().map(|s| &s.id).collect::<Vec<_>>());
         assert_eq!(db.list_songs(None, 10).unwrap().len(), 2);
+        // The church's own song numbered 3 in the same book is never overwritten.
+        let books = db.list_hymnbooks().unwrap();
+        let own = db.create_song(&SongInput { title: "Our own song".into(), sections: vec![verse("Ours")], numbers: vec![HymnNumberInput { hymnbook_id: books[0].id.clone(), number: "3".into() }], ..SongInput::default() }).unwrap();
+        let clash = import(vec![hymn("3", "Hymn three")]);
+        assert_eq!((clash.added, clash.replaced, clash.skipped), (0, 0, 1));
+        assert_eq!(db.get_song(&own.song.id).unwrap().unwrap().song.title, "Our own song");
         // Kept apart from the song library by its tag.
         db.create_song(&SongInput { title: "Blessed Assurance".into(), sections: vec![SectionInput { id: None, kind: "verse".into(), label: String::new(), texts: [("en".to_string(), "Blessed assurance".to_string())].into() }], ..SongInput::default() }).unwrap();
         let titles = |tag| db.list_songs_tagged(None, 10, tag).unwrap().into_iter().map(|s| s.title).collect::<Vec<_>>();
-        assert_eq!(titles(Some(("cacghb", false))), vec!["Blessed Assurance"]);
+        assert_eq!(titles(Some(("cacghb", false))), vec!["Blessed Assurance", "Our own song"]);
         assert_eq!(titles(Some(("CACGHB", true))).len(), 2);
         assert_eq!(db.list_songs_tagged(Some("shepherd"), 10, Some(("cacghb", false))).unwrap().len(), 0);
         assert_eq!(db.list_songs_tagged(Some("shepherd"), 10, Some(("cacghb", true))).unwrap().len(), 1);

@@ -51,24 +51,26 @@ export function HymnBook() {
   const [query, setQuery] = useState("")
   const [wordHits, setWordHits] = useState<Set<string> | null>(null)
   const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const wordSeq = useRef(0)
   const first = useSettingsStore((s) => s.hymnFirstLanguage)
-  const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  const selectedId = useBibleStore((s) => (s.selectedSlide && isSongItem(s.selectedSlide.item) ? s.selectedSlide.item.song.song_id : null))
   const file = useRef<HTMLInputElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
     try {
       setHymns(toHymns(await listCacHymns()))
+      setLoadError(null)
     } catch (e) {
-      setHymns([])
-      toast.error(e instanceof Error ? e.message : String(e))
+      setLoadError(e instanceof Error ? e.message : String(e))
     }
   }, [])
   useEffect(() => {
     let cancelled = false
     listCacHymns()
       .then((songs) => { if (!cancelled) setHymns(toHymns(songs)) })
-      .catch(() => { if (!cancelled) setHymns([]) })
+      .catch((e) => { if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e)) })
     return () => {
       cancelled = true
       if (timer.current) clearTimeout(timer.current)
@@ -82,9 +84,13 @@ export function HymnBook() {
     setQuery(value)
     if (timer.current) clearTimeout(timer.current)
     const words = value.trim()
-    if (words.length < 3 || /^v?\d+$/i.test(words)) return setWordHits(null)
+    const ticket = ++wordSeq.current
+    setWordHits(null)
+    if (words.length < 3 || /^v?\d+$/i.test(words)) return
     timer.current = setTimeout(() => {
-      void searchCacHymns(words).then((found) => setWordHits(new Set(found.map((s) => s.id)))).catch(() => setWordHits(new Set()))
+      void searchCacHymns(words)
+        .then((found) => { if (ticket === wordSeq.current) setWordHits(new Set(found.map((s) => s.id))) })
+        .catch(() => {})
     }, 200)
   }
   const shown = useMemo(() => {
@@ -92,7 +98,7 @@ export function HymnBook() {
     if (!q) return hymns.filter((h) => h.part === part)
     if (isNumber) {
       const wantPart: CacPart = /^v/i.test(q) ? 2 : part
-      const digits = q.replace(/^v/i, "")
+      const digits = q.replace(/^v/i, "").replace(/^0+(?=\d)/, "")
       return hymns.filter((h) => h.part === wantPart && String(h.number).startsWith(digits)).sort((a, b) => Number(String(b.number) === digits) - Number(String(a.number) === digits) || a.number - b.number)
     }
     const f = fold(q)
@@ -113,7 +119,7 @@ export function HymnBook() {
     try {
       const r = await importCacHymnbook(JSON.parse(await f.text()))
       toast.success(r.replaced ? `Hymn book updated: ${r.replaced} hymns${r.added ? `, ${r.added} new` : ""}` : `Hymn book imported: ${r.added} hymns`, {
-        description: r.skipped ? `${r.skipped} entries in the file had no number or words and were left out.` : "It stays on this computer.",
+        description: [r.kept ? `${r.kept} numbers already belong to your own songs; those were left alone.` : "", r.skipped ? `${r.skipped} entries in the file had no number or usable words and were left out.` : "", "It stays on this computer."].filter(Boolean).join(" "),
       })
       await load()
     } catch (e) {
@@ -124,6 +130,18 @@ export function HymnBook() {
     }
   }
   const picker = <input ref={file} type="file" accept=".json,application/json" className="hidden" aria-label="Hymn book file" onChange={(e) => void importFile(e.target.files?.[0])} />
+
+  // "V12" looks in Part 2 whichever part is chosen: the buttons say so.
+  const shownPart: CacPart = isNumber && /^v/i.test(q) ? 2 : part
+
+  if (loadError && !hymns) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-xs">
+        <p className="text-destructive">Could not read the hymn book: {loadError}</p>
+        <Button size="sm" variant="outline" onClick={() => void load()}>Try again</Button>
+      </div>
+    )
+  }
 
   if (hymns && hymns.length === 0) {
     return (
@@ -147,9 +165,9 @@ export function HymnBook() {
             <button
               key={p.part}
               type="button"
-              aria-pressed={part === p.part}
+              aria-pressed={shownPart === p.part}
               onClick={() => setPart(p.part)}
-              className={cn("rounded px-2.5 py-1 text-xs", part === p.part ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn("rounded px-2.5 py-1 text-xs", shownPart === p.part ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
               {p.label}
             </button>
@@ -184,11 +202,11 @@ export function HymnBook() {
           className="h-11 pl-9 text-sm"
         />
       </div>
-      <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-label="Hymns" aria-live="polite">
+      <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-label="Hymns">
         {!hymns && <li className="px-2 py-1 text-xs text-muted-foreground">Loading…</li>}
         {hymns && shown.length === 0 && <li className="px-2 py-4 text-center text-xs text-muted-foreground">No hymn matches.</li>}
         {shown.map((h) => {
-          const isSel = !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === h.song.id
+          const isSel = selectedId === h.song.id
           return (
             <li key={h.song.id} className="flex items-stretch gap-1">
               <button
@@ -211,7 +229,7 @@ export function HymnBook() {
         })}
       </ul>
       <div className="flex items-center justify-between text-[0.6875rem] text-muted-foreground">
-        <span>{hymns ? `${hymns.filter((h) => h.part === 1).length} hymns in Part 1 · ${hymns.filter((h) => h.part === 2).length} in Part 2` : ""}</span>
+        <span aria-live="polite">{!hymns ? "" : q ? `${shown.length} found` : `${hymns.filter((h) => h.part === 1).length} hymns in Part 1 · ${hymns.filter((h) => h.part === 2).length} in Part 2`}</span>
         <button type="button" className="underline-offset-2 hover:underline" disabled={busy} onClick={() => file.current?.click()}>{busy ? "Importing…" : "Import the file again…"}</button>
         {picker}
       </div>

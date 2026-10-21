@@ -89,7 +89,9 @@ export function cacHymnbookFromJson(raw: unknown): { parts: Array<{ book: Hymnbo
     const yo = (h?.yoruba ?? undefined) as RawHymn | undefined
     const sections = pairSections(verses(en), verses(yo)).slice(0, 60)
     const title = [...(str(en?.title) || str(yo?.title))].slice(0, 200).join("")
-    if (!part || !number || part.seen.has(number) || sections.length === 0 || !title) {
+    // A verse longer than the database takes (4000 characters) would refuse the whole import: that hymn is left out.
+    const tooLong = sections.some((x) => Object.values(x.texts).some((t) => [...t].length > 4000))
+    if (!part || !number || part.seen.has(number) || sections.length === 0 || !title || tooLong) {
       skipped++
       continue
     }
@@ -104,19 +106,16 @@ export function cacHymnbookFromJson(raw: unknown): { parts: Array<{ book: Hymnbo
   return { parts: parts.map(({ book, songs }) => ({ book, songs })), skipped }
 }
 
-/** Import (or import again: hymns are matched by number, service items keep working). */
-export async function importCacHymnbook(raw: unknown): Promise<{ added: number; replaced: number; skipped: number }> {
+/**
+ * Import (or import again: hymns are matched by number, and service items
+ * keep working). Both parts in one go: all of it or nothing. `kept`: numbers
+ * held by the church's own songs, left alone.
+ */
+export async function importCacHymnbook(raw: unknown): Promise<{ added: number; replaced: number; skipped: number; kept: number }> {
   const { parts, skipped } = cacHymnbookFromJson(raw)
   if (parts.every((p) => p.songs.length === 0)) throw new Error("No hymns found in this file.")
-  let added = 0
-  let replaced = 0
-  for (const p of parts) {
-    if (p.songs.length === 0) continue
-    const r = await invoke<ImportReport>("content_import_hymnbook", { book: p.book, songs: p.songs })
-    added += r.added
-    replaced += r.replaced
-  }
-  return { added, replaced, skipped }
+  const r = await invoke<ImportReport>("content_import_hymnbook", { parts: parts.filter((p) => p.songs.length > 0) })
+  return { added: r.added, replaced: r.replaced, skipped, kept: r.skipped }
 }
 
 /** Which part and number a listed hymn has ("CAC 245" → part 1, 245), or null for any other song. */

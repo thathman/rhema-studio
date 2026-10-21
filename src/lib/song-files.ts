@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { readFile, writeTextFile } from "@tauri-apps/plugin-fs"
-import type { ContentStatus, Hymnbook, ImportMode, ImportReport, PackageReport, RestoreReport, ServicePackage, SongExport, SongWithSections } from "@/types"
+import type { ContentStatus, Hymnbook, ImportMode, ImportReport, PackageReport, RestoreReport, ServicePackage, SongExport, SongSummary, SongWithSections } from "@/types"
+import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 import { songToMarkdown } from "@/lib/lyrics"
 
@@ -16,9 +17,10 @@ export interface ImportOutcome {
   notes: string[]
 }
 
-/** Save the whole library (or `ids`) as `rhema-songs-v1.json`. Null when cancelled. */
+/** Save the whole song library (or `ids`) as `rhema-songs-v1.json`; the CAC hymn book stays out. Null when cancelled. */
 export async function exportSongsToFile(ids?: string[]): Promise<string | null> {
-  const data = await invoke<SongExport>("content_export_songs", { ids: ids ?? null })
+  const library = ids ?? (await invoke<SongSummary[]>("content_list_songs", { query: null, limit: 5000, tag: CAC_TAG, withTag: false })).map((s) => s.id)
+  const data = await invoke<SongExport>("content_export_songs", { ids: library })
   const path = await save({
     defaultPath: `rhema-songs-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: "Rhema songs", extensions: ["json"] }],

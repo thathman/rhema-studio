@@ -21,8 +21,10 @@ interface SongState {
 
   /** Load (or return cached) full song. Null when it no longer exists. */
   load: (id: string, opts?: { refresh?: boolean }) => Promise<SongWithSections | null>
-  /** `libraryOnly`: leave out the hymn book kept apart (the CAC hymns). */
+  /** The Songs tab's search (its `results`). `libraryOnly`: leave out the hymn book kept apart (the CAC hymns). */
   search: (query: string, limit?: number, libraryOnly?: boolean) => Promise<SongSummary[]>
+  /** The same search for anyone else (Quick find, counts): never touches the Songs tab's list. */
+  lookup: (query: string, limit?: number, libraryOnly?: boolean) => Promise<SongSummary[]>
   /** Every song (cached for a minute) for the typo-tolerant fallback. */
   all: () => Promise<SongSummary[]>
   loadHymnbooks: () => Promise<Hymnbook[]>
@@ -59,6 +61,9 @@ export const useSongStore = create<SongState>((set, get) => ({
     })
     return song
   },
+
+  lookup: (query, limit = 50, libraryOnly = false) =>
+    invoke<SongSummary[]>("content_list_songs", { query: query.trim() || null, limit, ...(libraryOnly ? LIBRARY_ONLY : {}) }),
 
   search: async (query, limit = 50, libraryOnly = false) => {
     const ticket = ++searchSeq
