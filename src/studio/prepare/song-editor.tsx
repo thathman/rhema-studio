@@ -107,7 +107,7 @@ function EditorDialog({
   const [conflicted, setConflicted] = useState(false)
   // A save conflict: keep these edits as a new song rather than lose them (RG-05).
   const saveAsNew = async () => {
-    if (problems.length > 0) return
+    if (validateForm(form).length > 0) return
     setSaving(true)
     try {
       const saved = await useSongStore.getState().create(newSongInputFromForm(form, " (my version)"))
