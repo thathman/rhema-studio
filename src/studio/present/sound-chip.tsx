@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { MusicIcon, PauseIcon, PlayIcon, SquareIcon } from "lucide-react"
 import { currentSong } from "@/lib/backing-tracks"
@@ -26,16 +26,22 @@ export function SoundChip() {
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const liveItemId = useBroadcastStore((s) => s.liveItemId)
   const song = currentSong(items, liveItemId, activeIndex)
-  // The current song's sound attachments, looked up when the popover opens.
+  // The current song's sound attachments, looked up while the popover is open
+  // and again when the song changes; a slower, older lookup never wins.
+  const [open, setOpen] = useState(false)
   const [tracks, setTracks] = useState<{ songId: string; files: MediaAsset[] } | null>(null)
-  const onOpen = (open: boolean) => {
-    if (!open) return
-    if (!useMediaStore.getState().loaded) void useMediaStore.getState().list()
-    const songId = song?.song.song_id
-    if (!songId) return setTracks(null)
+  const songId = song?.song.song_id ?? null
+  useEffect(() => {
+    if (!open || !songId) return
+    let cancelled = false
     invoke<MediaAsset[]>("content_list_song_attachments", { songId })
-      .then((files) => setTracks({ songId, files: files.filter((f) => f.kind === "audio") }))
-      .catch(() => setTracks(null))
+      .then((files) => { if (!cancelled) setTracks({ songId, files: files.filter((f) => f.kind === "audio") }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [open, songId])
+  const onOpen = (next: boolean) => {
+    setOpen(next)
+    if (next && !useMediaStore.getState().loaded) void useMediaStore.getState().list()
   }
   const songTracks = song && tracks?.songId === song.song.song_id ? tracks.files : []
   return (
