@@ -22,6 +22,12 @@ export interface VerseRenderData {
   footer?: string
   /** A picture over the whole frame (above the theme background). */
   image?: ThemeImageFill
+  /**
+   * A video over the whole frame. Output windows play it in a <video> element
+   * and draw its frames; anywhere without that element (the main window's
+   * monitors) the renderer shows "▶ name" instead.
+   */
+  video?: { url: string; fit: "cover" | "contain" | "stretch"; loop: boolean; sound: boolean; name: string; token: number }
 }
 
 export interface RenderOptions {
@@ -30,6 +36,10 @@ export interface RenderOptions {
   offsetY?: number
   scale?: number // Scale factor for rendering at display size (e.g., 0.42 for 400px panel)
   imageCache?: Map<string, HTMLImageElement>
+  /** The playing element for `verse.video`, when this canvas has one (output windows). */
+  video?: HTMLVideoElement | null
+  /** Its state: "loading" draws only the background (no label on the live screen), "failed" draws the label. */
+  videoState?: "loading" | "ready" | "failed"
 }
 
 /** A freely positioned element region, all values in % of canvas size (0-100), x/y = top-left. */

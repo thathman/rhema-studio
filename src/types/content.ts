@@ -109,6 +109,8 @@ export type MediaImportResult =
 export interface ImageItemPayload {
   media_id: string
   fit?: "cover" | "contain" | "stretch" | null
+  loop?: boolean
+  sound?: boolean
 }
 
 export interface RevisionSummary {

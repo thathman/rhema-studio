@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import { toast } from "sonner"
-import { ImageIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { ImageIcon, PlayIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useBibleStore, useQueueStore } from "@/stores"
@@ -29,12 +30,12 @@ export function MediaLibrary() {
 
   const doImport = async () => {
     try {
-      const results = await useMediaStore.getState().importFiles()
+      const results = await useMediaStore.getState().importFiles([{ name: "Pictures and videos", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm"] }])
       if (!results) return
       const ok = results.filter((r) => r.status === "imported").length
       const dup = results.filter((r) => r.status === "imported" && r.duplicate).length
       const failed = results.filter((r) => r.status === "failed")
-      if (ok) toast.success(`${ok} picture${ok === 1 ? "" : "s"} added${dup ? ` (${dup} already here)` : ""}`)
+      if (ok) toast.success(`${ok} file${ok === 1 ? "" : "s"} added${dup ? ` (${dup} already here)` : ""}`)
       for (const f of failed) toast.error(`${f.path.split(/[\\/]/).pop()}: ${f.message}`)
       for (const r of results) if (r.status === "imported") void useMediaStore.getState().dataUrl(r.asset.id)
     } catch (e) {
@@ -60,12 +61,12 @@ export function MediaLibrary() {
     if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
   }
 
-  const pictures = assets.filter((a) => a.kind === "image")
+  const pictures = assets.filter((a) => a.kind === "image" || a.kind === "video")
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Button size="sm" onClick={() => void doImport()}><UploadIcon /> Import pictures…</Button>
+        <Button size="sm" onClick={() => void doImport()}><UploadIcon /> Import pictures or videos…</Button>
         <span className="text-xs text-muted-foreground">Copied into the app's media folder; the originals are not needed afterwards.</span>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
@@ -84,7 +85,12 @@ export function MediaLibrary() {
                 className="flex aspect-video items-center justify-center overflow-hidden bg-black outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 title={a.present ? "Click to preview" : "The file is missing from the media folder"}
               >
-                {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="size-6 text-muted-foreground" />}
+                {a.kind === "video" ? (
+                  <span className="relative flex h-full w-full items-center justify-center">
+                    {a.present && <VideoThumb id={a.id} />}
+                    <PlayIcon className="absolute size-7 text-white drop-shadow" />
+                  </span>
+                ) : url ? <img src={url} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="size-6 text-muted-foreground" />}
               </button>
               <div className="flex items-center gap-1 px-2 py-1">
                 <span className="min-w-0 flex-1 truncate text-xs font-medium" title={a.name}>{a.name}</span>
@@ -99,4 +105,15 @@ export function MediaLibrary() {
       </ul>
     </div>
   )
+}
+
+/** First frame of a video, streamed (metadata only); nothing plays here. */
+function VideoThumb({ id }: { id: string }) {
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void useMediaStore.getState().fileUrl(id).then((u) => { if (!cancelled) setSrc(u) })
+    return () => { cancelled = true }
+  }, [id])
+  return src ? <video src={`${src}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full object-cover" /> : null
 }

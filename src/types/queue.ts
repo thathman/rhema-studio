@@ -66,6 +66,10 @@ export interface ImageQueueRef {
   media_id: string
   name: string
   fit: "cover" | "contain" | "stretch"
+  /** Video assets only: start again at the end (default: hold the last frame). */
+  loop?: boolean
+  /** Video assets only: play the sound on the main output (default: yes). */
+  sound?: boolean
 }
 
 export interface ImageQueueItem extends QueueItemBase {
