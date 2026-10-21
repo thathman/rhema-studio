@@ -1,3 +1,5 @@
+import { availableMonitors } from "@tauri-apps/api/window"
+import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { toast } from "sonner"
 import { info as logInfo, error as logError } from "@tauri-apps/plugin-log"
 import { invoke } from "@tauri-apps/api/core"
@@ -113,9 +115,19 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
   store.resetOutputRuntime(output.id)
   try {
     if (output.type === "display") {
+      // The same screen as chosen, even if the OS renumbered monitors since.
+      let monitorIndex = output.monitorIndex
+      try {
+        const names = (await availableMonitors()).map((m) => m.name ?? null)
+        monitorIndex = resolveMonitorIndex(output, names, store.outputs.filter((o) => o.type === "display")) ?? output.monitorIndex
+        // Outputs set up before names were kept learn their monitor's name now.
+        if (!output.monitorName && names[monitorIndex]) store.updateOutput(output.id, { monitorName: names[monitorIndex] })
+      } catch {
+        // not under Tauri: the saved index
+      }
       await invoke("open_broadcast_window", {
         outputId: output.id,
-        monitorIndex: output.monitorIndex,
+        monitorIndex,
         title: output.name,
       })
       const opened = await isPreviewWindowVisible(output.id)

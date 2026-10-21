@@ -2,13 +2,17 @@ import { create } from "zustand"
 import { availableMonitors } from "@tauri-apps/api/window"
 import { toast } from "sonner"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { resolveMonitorIndex } from "@/lib/monitor-health"
+import { reconcileOutputStatus } from "@/lib/broadcast-output-control"
 
 interface MonitorState {
   /** Monitors connected now; null until the first check (or outside Tauri). */
   count: number | null
+  /** Their names in OS order (null when the OS gives none). */
+  names: (string | null)[]
 }
 
-export const useMonitorStore = create<MonitorState>(() => ({ count: null }))
+export const useMonitorStore = create<MonitorState>(() => ({ count: null, names: [] }))
 
 const POLL_MS = 5000
 
@@ -18,18 +22,23 @@ const POLL_MS = 5000
  * anything there); readiness keeps the warning until it is back or changed.
  */
 async function check(): Promise<void> {
-  let count: number
+  // An output window closed from the OS (Alt+F4) or an NDI sender that stopped: the status
+  // everyone reads (Present, Home readiness) catches up here, not only while Outputs is open.
+  const b0 = useBroadcastStore.getState()
+  for (const o of b0.outputs) if (b0.outputStatus[o.id]?.previewOpen || b0.outputStatus[o.id]?.ndiActive) void reconcileOutputStatus(o)
+  let names: (string | null)[]
   try {
-    count = (await availableMonitors()).length
+    names = (await availableMonitors()).map((m) => m.name ?? null)
   } catch {
     return // not under Tauri (tests, browser shim)
   }
+  const count = names.length
   const prev = useMonitorStore.getState().count
-  if (prev === count) return
-  useMonitorStore.setState({ count })
+  if (prev === count && useMonitorStore.getState().names.join("\u0000") === names.join("\u0000")) return
+  useMonitorStore.setState({ count, names })
   if (prev === null || count >= prev) return
   const b = useBroadcastStore.getState()
-  const lost = b.outputs.filter((o) => o.type === "display" && o.monitorIndex >= count && b.outputStatus[o.id]?.previewOpen)
+  const lost = b.outputs.filter((o) => o.type === "display" && resolveMonitorIndex(o, names, b.outputs.filter((x) => x.type === "display")) === null && b.outputStatus[o.id]?.previewOpen)
   for (const o of lost) toast.error(`${o.name}: its monitor was disconnected`, { description: "Check the cable or choose another monitor in Outputs." })
 }
 

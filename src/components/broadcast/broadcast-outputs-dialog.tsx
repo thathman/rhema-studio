@@ -1,3 +1,4 @@
+import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -118,9 +119,10 @@ export function BroadcastOutputsDialog({
       type: "display",
       themeId: outputs.find((o) => o.id === MAIN_OUTPUT_ID)?.themeId ?? themes[0]?.id ?? "",
       monitorIndex: firstFreeMonitorIndex(outputs, monitors.length),
+      monitorName: monitors[firstFreeMonitorIndex(outputs, monitors.length)]?.name ?? null,
       ndi: defaultNdiSettings(name),
     }
-  }, [draftId, outputs, themes, monitors.length])
+  }, [draftId, outputs, themes, monitors])
 
   const withBusy = async (id: string, action: () => Promise<unknown>) => {
     setBusyIds((ids) => [...ids, id])
@@ -163,6 +165,7 @@ export function BroadcastOutputsDialog({
     const transportChanged =
       existing.type !== next.type ||
       existing.monitorIndex !== next.monitorIndex ||
+      existing.monitorName !== next.monitorName ||
       existing.ndi.sourceName !== next.ndi.sourceName ||
       existing.ndi.resolution !== next.ndi.resolution ||
       existing.ndi.frameRate !== next.ndi.frameRate ||
@@ -175,6 +178,7 @@ export function BroadcastOutputsDialog({
         type: next.type,
         themeId: next.themeId,
         monitorIndex: next.monitorIndex,
+        monitorName: next.monitorName ?? null,
         ndi: next.ndi,
         role: next.role,
         language: next.language,
@@ -190,9 +194,10 @@ export function BroadcastOutputsDialog({
   }
 
   const monitorLabel = (output: BroadcastOutput) => {
-    const monitor = monitors[output.monitorIndex]
-    if (!monitor) return undefined
-    return `${monitor.name ?? `Display ${output.monitorIndex + 1}`} · ${monitor.size.width}×${monitor.size.height}`
+    const at = resolveMonitorIndex(output, monitors.map((m) => m.name ?? null), outputs.filter((o) => o.type === "display"))
+    const monitor = at === null ? undefined : monitors[at]
+    if (!monitor || at === null) return undefined
+    return `${monitor.name ?? `Display ${at + 1}`} · ${monitor.size.width}×${monitor.size.height}`
   }
 
   const onAirCount = outputs.filter((o) => {

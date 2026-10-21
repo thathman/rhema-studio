@@ -816,3 +816,14 @@ report), but launching it cannot.
 | 10cc.5 | Export a Yorùbá-first song with a key and tempo as OpenLyrics; import it. | Yorùbá is still the main language; key and tempo kept. | Unverified |
 | 10cc.6 | Song editor: tempo 72.5. | "Tempo is whole beats per minute"; nothing is saved until fixed. | Unverified |
 
+### 10cd. Outputs (thirteenth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cd.1 | Open a projector; close the Outputs dialog; close the projector window from the OS (Alt+F4). | Within a few seconds Present and Home show it off. | Unverified |
+| 10cd.2 | Three monitors: operator, projector, stage. Unplug the projector. | The warning names the projector output, not the stage one; reopening the stage output opens it on the stage screen. | Unverified |
+| 10cd.3 | Present a very long passage (several verses) in Classic Dark. | Text at the smallest size; never jumps back to full size and runs off. | Unverified |
+| 10cd.4 | Stage output on air; present a long verse or a three-verse passage. | The singers see every line from the first; smaller text for long lines. | Unverified |
+| 10cd.5 | Open the Designer on the main output's theme and change a colour; present the next verse; change the colour again. | The screen keeps showing the edited theme; no flipping. Close without saving: the saved theme returns. | Unverified |
+| 10cd.6 | Main output set to stage; play a video with sound on another congregation output; edit that output's theme. | The sound continues. | Unverified |
+

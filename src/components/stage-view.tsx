@@ -1,4 +1,5 @@
 import type { StagePayload } from "@/types"
+import { stageFontVh } from "@/lib/stage"
 
 /**
  * Stage display: plain DOM, high contrast, no theme. What the team needs at
@@ -18,10 +19,11 @@ export function StageView({ stage }: { stage: StagePayload }) {
           {stage.message}
         </div>
       )}
-      <div style={{ overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap: "1vh" }}>
+      {/* "safe center": if the words still overflow, the first line stays visible and the end is cut, never both ends. */}
+      <div style={{ overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "safe center", gap: "1vh" }}>
         {stage.current ? (
           stage.current.lines.map((line, i) => (
-            <div key={i} style={{ fontSize: `${Math.max(4, Math.min(9, 60 / Math.max(stage.current!.lines.length, 1)))}vh`, lineHeight: 1.25, fontWeight: 600 }}>{line}</div>
+            <div key={i} style={{ fontSize: `${stageFontVh(stage.current!.lines)}vh`, lineHeight: 1.25, fontWeight: 600 }}>{line}</div>
           ))
         ) : (
           <div style={{ fontSize: "6vh", color: "#555" }}>—</div>

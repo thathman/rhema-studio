@@ -21,6 +21,21 @@ function currentLines(v: VerseRenderData): string[] {
 }
 
 /** What the stage display shows. Pure, so the exact text is testable. */
+/**
+ * Stage words size (vh) so every line fits: by line count and by length,
+ * since long lines wrap. Estimated for a 16:9 screen, about 0.55em a letter.
+ */
+export function stageFontVh(lines: string[]): number {
+  const fits = (f: number) => {
+    const perLine = Math.max(1, Math.floor(160 / (0.55 * f)))
+    const rows = lines.reduce((n, l) => n + Math.max(1, Math.ceil([...l].length / perLine)), 0)
+    return rows * 1.25 * f + (lines.length - 1) <= 58
+  }
+  let f = 9
+  while (f > 3 && !fits(f)) f -= 0.25
+  return f
+}
+
 export function buildStagePayload(i: StageInput): StagePayload {
   const live = i.isLive && i.liveVerse ? i.liveVerse : null
   const active = i.activeIndex === null ? null : i.items[i.activeIndex] ?? null
