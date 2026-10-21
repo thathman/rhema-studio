@@ -21,6 +21,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
 ### Search and safety
+- Cues: a "Show live" step finishes before the next one runs, so a following quick screen or "Rehearsal off" behaves as expected. An all-day signage window (00:00 to 00:00) keeps to its ticked days.
 - Search: words with apostrophes or commas find verses, "John 3:16-18" and "Jn. 3:16" work, "Jude 5" goes to the verse, a song titled "Psalm 23" is found, and hymns 1–9 can be found by number.
 - Home is more truthful: a theme font missing from this computer is reported, an unapproved service warns when "Ask before showing" is on, and deleted files are noticed each time you open Home.
 - Keyboard and screen readers: typing in the Bible quick box never changes the screen, going on or off air and warnings are read out, the Production queue and search results work from the keyboard, and focus stays in place after deleting.
