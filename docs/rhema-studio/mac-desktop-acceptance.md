@@ -116,6 +116,16 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10al.1 (one running copy) | V: launching again left one process (single instance) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
+## Injected failures (QA-002)
+
+| Case | Result |
+|---|---|
+| Import a 300 MB video from a USB stick (disk image) and pull it at 0.7–4.4 s, seven times | V: each import reports "could not read: Input/output error"; nothing is registered and no file is left in the media folder; the app answered other requests within 0.4 s throughout (the import no longer holds the database, #157). The pulls all landed while the file was read for its checksum; the copy phase (written beside and renamed) was not hit |
+| Back up to a stick that has been pulled (10bl.1) | V: "Could not write the backup there"; creating and saving a service and quick screens keep working |
+| Restore from a stick that has been pulled (10bl.2) | V (drill R5): "Could not read the backup"; services unchanged |
+| A backup or service file cut short, or a tampered service file | V (drill R5): refused, nothing changed |
+| Network cable / Wi-Fi off during a service (10an.2), OBS dropping | U: would change the owner's network or OBS |
+
 ## Backup and restore drill (QA-010)
 
 Run the same day with two isolated profiles (production and standby) and a disk image as the USB stick: R1–R5 all pass; see `14-backup-restore-rehearsal.md`. Approval is not carried in a service file (only in a database backup).

@@ -81,7 +81,7 @@ Found by reading PRD lines against the code (not by tests): auto-live on by defa
 | AR-004 | Opt-in transcript in kept logs merged (#130). Retention policy, corrections, sermon indexing | Owner: archive consent/retention (PRD open decision) |
 | AI-001, AI-002 | Human approval of heard verses merged (#140). Provider abstraction, AI suggestions beyond verse detection | Owner: speech/AI provider (PR #4) |
 | QA-001 | Install, launch and smoke the installer | Real Windows machine (#32) |
-| QA-002 | Stalled-drive backup/restore fixed in code (#138). Network loss, OBS drop, packet capture, pulled USB stick | Real desktop (rows 10an, 10bl) |
+| QA-002 | Pulled USB stick (import, backup, restore) and damaged files verified on the Intel Mac; no-hidden-traffic check by socket listing. Network loss and OBS drop | A machine whose network and OBS may be disturbed (rows 10an.2, OBS) |
 | QA-003 | Novice usability sessions | Real volunteers |
 | QA-006 | Cloud-sync threat review | Hosted sync not built yet (#72: later); the shared-folder threat model is in 15-sync-transport-evaluation.md |
 | QA-007 | Benchmarks on low-end hardware | Real low-end PCs (the latency logging they need: #125) |
