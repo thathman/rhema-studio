@@ -4,7 +4,7 @@ import { monitorProblems } from "@/lib/monitor-health"
 import { contentStatus } from "@/lib/song-files"
 import { useMonitorStore } from "@/stores/monitor-store"
 import { allSignageIds } from "@/lib/signage"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CheckIcon, TriangleAlertIcon, InfoIcon, PlayIcon, PencilRulerIcon, MonitorIcon, SettingsIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -72,11 +72,17 @@ export function HomeWorkspace() {
   const missingMedia = mediaIds.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length
   // Load the media list once, and again when the service names a file it does not know yet
   // (a service opened from the church folder brings new pictures): never a false "missing".
-  const unknownMedia = mediaLoaded && mediaIds.some((id) => !mediaAssets.some((a) => a.id === id))
+  const unknownIds = mediaLoaded ? mediaIds.filter((id) => !mediaAssets.some((a) => a.id === id)).join(",") : ""
+  // Each set of unknown ids is looked up once: an id that is really gone stays "missing" without reloading forever.
+  const lookedUp = useRef("")
   useEffect(() => {
-    if ((mediaIds.length > 0 || hasSignage) && (!mediaLoaded || unknownMedia) && !mediaLoading) void useMediaStore.getState().list()
+    const needs = !mediaLoaded || (unknownIds !== "" && unknownIds !== lookedUp.current)
+    if ((mediaIds.length > 0 || hasSignage) && needs && !mediaLoading) {
+      lookedUp.current = unknownIds
+      void useMediaStore.getState().list()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per set of ids
-  }, [mediaIds.join(","), hasSignage, mediaLoaded, mediaLoading])
+  }, [mediaIds.join(","), hasSignage, mediaLoaded, mediaLoading, unknownIds])
   // Home is the readiness check: make sure every song in the service has been looked up.
   useEffect(() => {
     for (const id of songIds) if (!songs[id] && !missing.includes(id)) void useSongStore.getState().load(id).catch(() => {})
