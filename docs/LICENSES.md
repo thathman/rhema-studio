@@ -30,7 +30,7 @@
 
 | Component | Terms | Notes |
 |---|---|---|
-| NDI 6 SDK runtime (`Processing.NDI.Lib.x64.dll`, 29.8 MB in the Windows installer) | NewTek/Vizrt NDI SDK licence (proprietary; redistribution of the runtime library is permitted under the SDK licence with the required notice) | `data/download-ndi-sdk.ts` fetches it; loaded at runtime via `libloading`. NDI® trademark notice and SDK licence reference in More → About (PR about-notices); the installer's licence screen still shows only MIT (**to do** in the packaging workflow). |
+| NDI 6 SDK runtime (`Processing.NDI.Lib.x64.dll`, 29.8 MB in the Windows installer) | NewTek/Vizrt NDI SDK licence (proprietary; redistribution of the runtime library is permitted under the SDK licence with the required notice) | `data/download-ndi-sdk.ts` fetches it; loaded at runtime via `libloading`. NDI® trademark notice and SDK licence reference in More → About (PR about-notices); the installer's licence screen lists it (data/INSTALLER-LICENSE.txt). |
 
 ### 3.2 Rust crates (direct dependencies, from `cargo metadata`)
 
@@ -48,7 +48,7 @@ No GPL/AGPL/LGPL code is in the direct dependency set. Transitive dependencies w
 ## 4. Open items before a public release
 
 1. ~~Owner decision: which Bible texts ship in the installer.~~ Decided 2026-10-21 (issue #33): as upstream, on the owner's stated rights; see §2 for the record.
-2. Add the openbible.info and NDI® notices to the installer's licence screen (About has them).
+2. ~~Add the openbible.info and NDI® notices to the installer's licence screen.~~ Done: `bundle.licenseFile` is `data/INSTALLER-LICENSE.txt` (the MIT licence, then what else the installer contains: OYCB CC BY-SA, KJV, the other translations as in upstream, openbible.info CC BY, NDI runtime, fonts, open-source components). The installed app carries `licenses/LICENSE.txt` and `licenses/THIRD-PARTY-NOTICES.md`, which the Windows installer workflow regenerates from the exact dependency tree with every package's licence text (`bun scripts/check-licenses.ts --notices`).
 3. ~~Add an automated licence check.~~ Done: `scripts/check-licenses.ts` runs in CI for the npm production tree and the Rust crate graph against `src/lib/license-policy.ts` (permissive licences including BlueOak-1.0.0; MPL-2.0, OFL-1.1 and CC-BY-4.0 allowed with notes; GPL/AGPL/LGPL-only/SSPL, unparseable and missing licences fail). The npm walk follows Node's lookup, so nested copies (`node_modules/a/node_modules/b`) and optional dependencies that are installed are checked too.
 4. Keep this file current: any new dependency or bundled asset gets a row here in the same PR.
 

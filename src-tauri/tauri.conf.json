@@ -35,7 +35,9 @@
   "bundle": {
     "resources": {
       "../data/rhema.db": "rhema.db",
-      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md"
+      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md",
+      "../LICENSE": "licenses/LICENSE.txt",
+      "../data/THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md"
     },
     "active": true,
     "targets": "all",
@@ -50,6 +52,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "licenseFile": "../data/INSTALLER-LICENSE.txt"
   }
 }
