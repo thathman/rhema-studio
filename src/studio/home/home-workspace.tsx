@@ -234,7 +234,7 @@ export function HomeWorkspace() {
               <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
                 <span className="min-w-0 flex-1 text-sm">
                   <span className="block truncate font-medium">{suggested.program.title}</span>
-                  <span className="block text-xs text-muted-foreground">{suggested.why === "approved today" ? "Today's service, approved" : suggested.why === "today" ? "Dated today, not approved yet" : `Next approved service · ${suggested.program.service_date}`}</span>
+                  <span className="block text-xs text-muted-foreground">{suggested.why === "approved today" ? "Today's service, approved" : suggested.why === "today" ? (approvalState(suggested.program) === "changed" ? "Dated today, changed since approval" : "Dated today, not approved yet") : `Next approved service · ${suggested.program.service_date}`}</span>
                 </span>
                 <Button size="sm" disabled={dirty} onClick={() => void useServiceStore.getState().openProgram(suggested.program.id).then((r) => { if (r !== "ok") toast.error("Could not open service", { description: useServiceStore.getState().error ?? undefined }) })}>
                   Open
@@ -250,7 +250,7 @@ export function HomeWorkspace() {
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {p.title}
                       <span className="ml-2 text-xs text-muted-foreground">
-                        {p.service_date ?? "undated"} · {p.item_count} item{p.item_count === 1 ? "" : "s"}{approvalState(p) === "approved" ? " · approved" : ""}
+                        {p.service_date ?? "undated"} · {p.item_count} item{p.item_count === 1 ? "" : "s"}{approvalState(p) === "approved" ? " · approved" : approvalState(p) === "changed" ? " · changed since approval" : ""}
                       </span>
                     </span>
                     {current?.id === p.id ? (
