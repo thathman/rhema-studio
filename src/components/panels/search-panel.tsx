@@ -217,9 +217,10 @@ export function SearchPanel() {
         : null
     )
     if (!row) return
-    document
-      .getElementById(`verse-${row.id}`)
-      ?.scrollIntoView({ behavior: "smooth", block: revealBlock })
+    const el = document.getElementById(`verse-${row.id}`)
+    el?.scrollIntoView({ behavior: "smooth", block: revealBlock })
+    // Focus follows the selection when it was on a verse row, so Enter never acts on an older verse.
+    if (el && document.activeElement?.id.startsWith("verse-") && document.activeElement !== el) el.focus({ preventScroll: true })
   }, [revealRequest])
 
   const applyNavigationSelection = useCallback(
@@ -584,7 +585,12 @@ export function SearchPanel() {
                 data-tour="quick-nav"
                 value={quickInput}
                 onChange={(e) => setQuickInput(e.target.value)}
-                onKeyDown={handleQuickKeyDown}
+                onKeyDown={(e) => {
+                  // Arrows typed here move the caret: never the panel's verse stepping (which goes live).
+                  // Other keys (shortcuts with Cmd/Ctrl, the tour's keys) still reach the page.
+                  if (e.key.startsWith("Arrow") && !e.metaKey && !e.ctrlKey && !e.altKey) e.stopPropagation()
+                  handleQuickKeyDown(e)
+                }}
                 placeholder="Type: J → John 3:16"
                 className={cn(
                   "h-7 text-xs relative bg-background",
@@ -690,6 +696,7 @@ export function SearchPanel() {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label="Previous chapter"
                 onClick={() => {
                   if (chapter > 1) {
                     setChapter((c) => c - 1)
@@ -698,15 +705,14 @@ export function SearchPanel() {
                 disabled={chapter <= 1}
               >
                 <ArrowLeftIcon className="size-3" />
-                <span className="sr-only">Previous chapter</span>
               </Button>
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label="Next chapter"
                 onClick={() => void nextChapter()}
               >
                 <ArrowRightIcon className="size-3" />
-                <span className="sr-only">Next chapter</span>
               </Button>
             </div> : null}
           </div>
@@ -719,7 +725,17 @@ export function SearchPanel() {
                 <div
                   key={verse.id}
                   id={`verse-${verse.id}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleVerseClick(verse)}
+                  onKeyDown={(e) => {
+                    // Enter on the row itself (not its Add button); Space keeps scrolling the list.
+                    if (e.key === "Enter" && e.target === e.currentTarget) {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleVerseClick(verse)
+                    }
+                  }}
                   className={cn(
                     "group flex cursor-pointer items-center gap-3 rounded-lg p-3 transition-colors",
                     verse.id === effectiveSelectedVerseId
@@ -763,8 +779,9 @@ export function SearchPanel() {
                           <Button
                             variant="ghost"
                             size="icon-xs"
+                            aria-label={`Add ${verse.book_name} ${verse.chapter}:${verse.verse} to the service`}
                             className={cn(
-                              "shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity",
+                              "shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity",
                               verse.id === effectiveSelectedVerseId
                                 ? "hover:bg-lime-500/20 hover:text-lime-500"
                                 : "bg-primary/40! text-primary-foreground hover:bg-primary!"
@@ -813,6 +830,14 @@ export function SearchPanel() {
             {semanticResults.map((result, idx) => (
               <div
                 key={`${result.book_number}-${result.chapter}-${result.verse}-${idx}`}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.target === e.currentTarget) {
+                    e.preventDefault()
+                    ;(e.currentTarget as HTMLElement).click()
+                  }
+                }}
                 onClick={() => {
                   const verse: Verse = {
                     id: 0,
@@ -868,7 +893,8 @@ export function SearchPanel() {
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-primary text-primary-foreground hover:bg-primary/80"
+                          aria-label={`Add ${result.book_name} ${result.chapter}:${result.verse} to the service`}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity bg-primary text-primary-foreground hover:bg-primary/80"
                           onClick={(e) => {
                             e.stopPropagation()
                             useQueueStore.getState().addItem({

@@ -837,3 +837,13 @@ report), but launching it cannot.
 | 10ce.4 | Cloud speech listening; turn Wi-Fi off for 20 seconds, then on. | "Hybrid mode" shows; within about a minute real-time transcription returns. | Unverified |
 | 10ce.5 | Without the Whisper model, choose on-computer speech and Start. | The message says how to fix it in plain words (cloud speech or reinstall). | Unverified |
 
+### 10cf. Keyboard and screen reader (fifteenth audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cf.1 | Present → Production, output on air: type "John 3" in the Bible quick box and press the arrow keys. | The caret moves in the box; nothing goes on air. | Unverified |
+| 10cf.2 | With a screen reader (NVDA or VoiceOver): Show live, then Clear; present a picture whose file is missing. | "On air: …", "Off air" and the warning are read out. | Unverified |
+| 10cf.3 | Production view with only the keyboard: Tab to a queue item and press Enter; Tab to its remove button. | Enter shows it live; the buttons appear and are named. | Unverified |
+| 10cf.4 | Screen reader on the Preview and Live panels. | Each reads what it shows (the reference and words). | Unverified |
+| 10cf.5 | Delete a rundown item, an arrangement step, and a cue (Keep, then Delete) using only the keyboard. | Focus lands on the next item's control, never on the page. | Unverified |
+

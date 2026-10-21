@@ -85,7 +85,15 @@ export const CanvasVerse = memo(function CanvasVerse({
 
   return (
     <div ref={containerRef} className={cn("w-full", className)}>
-      <canvas ref={canvasRef} className="w-full rounded-md" />
+      <canvas ref={canvasRef} className="w-full rounded-md" role="img" aria-label={describeVerse(verse)} />
     </div>
   )
 })
+
+/** What the canvas shows, in words, for screen readers. */
+function describeVerse(verse: VerseRenderData | null): string {
+  if (!verse) return "Nothing shown"
+  if (verse.screen) return verse.screen === "black" ? "Black screen" : "Logo"
+  const words = [verse.reference, ...(verse.lines ?? []), ...(verse.lines?.length ? [] : verse.segments.map((s) => s.text))].filter(Boolean).join(" ")
+  return [...words].slice(0, 300).join("") || "Slide"
+}

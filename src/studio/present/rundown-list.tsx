@@ -1,3 +1,4 @@
+import { keepFocusInList } from "@/lib/keep-focus"
 import { useEffect, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
@@ -83,6 +84,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
               <button
                 type="button"
                 className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
+                aria-current={isSelected ? "true" : undefined}
                 onClick={() => preview(item)}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
                 title={mode === "present" ? "Click to preview, double-click to show live" : "Click to preview"}
@@ -126,7 +128,10 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                     <ArrowDownIcon />
                   </Button>
                   <Button variant="ghost" size="icon-xs" aria-label={`Remove ${item.reference}`}
-                    onClick={() => useQueueStore.getState().removeItem(item.id)}>
+                    onClick={(e) => {
+                      keepFocusInList(e.currentTarget, 'button[aria-label^="Remove "]')
+                      useQueueStore.getState().removeItem(item.id)
+                    }}>
                     <XIcon />
                   </Button>
                 </span>
@@ -507,6 +512,7 @@ function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; 
           <li key={slide.index}>
             <button
               type="button"
+              aria-current={sel ? "true" : undefined}
               onClick={() => presentActions.previewSlide(shownItem, slide.index, liveSnapshot?.song)}
               onDoubleClick={mode === "present" ? () => void presentQueueItem(index, slide.index, songAs) : undefined}
               className={cn(
@@ -518,6 +524,7 @@ function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; 
                 {section ? sectionShort(section.kind, section.label) : ""}
               </span>
               <span className="truncate text-muted-foreground">{slide.lines[0]}</span>
+              {live && <span className="ml-auto shrink-0 text-[0.625rem] font-bold tracking-wider uppercase">Live</span>}
               {slide.missing.length > 0 && (
                 <span className="ml-auto shrink-0 text-[0.625rem] text-confidence-mid uppercase" title={`No ${slide.missing.join(", ")} text for this section`}>
                   no {slide.missing.join("/")}

@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest"
 
 // Vite reads the sources at test time; no Node fs types needed in the app tsconfig.
-const sources = import.meta.glob(["./**/*.tsx", "../components/stage-view.tsx"], { query: "?raw", import: "default", eager: true }) as Record<string, string>
+const sources = import.meta.glob(["./**/*.tsx", "../components/stage-view.tsx", "../components/panels/*.tsx", "../components/broadcast/*.tsx"], { query: "?raw", import: "default", eager: true }) as Record<string, string>
 
 /** Every `<Button … size="icon…" …>` opening tag, tolerant of `=>` inside handlers. */
 function iconButtonTags(source: string): string[] {
