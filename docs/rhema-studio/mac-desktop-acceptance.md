@@ -103,6 +103,19 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10ad | Second monitor, unplugging a monitor | U: one display only |
 | 10at | Secrets in the keychain | U: deliberately not exercised (shared entry) |
 
+## Second pass: more guide rows (2026-10-21, same Mac and method)
+
+| Guide row | Result |
+|---|---|
+| 10f.1 (quick screens, Back) | V: Welcome live → Black → Please stand → Back returned Welcome, on air |
+| 10i.1 partly (timer starts and runs) | V: 30-min presets and Start in the Present header; the chip and the stage both count. Clock change and colours: U |
+| 10j.1 / 10j.2 partly (stage) | V: stage shows the live item (or "Nothing live" after Clear), the timer and NEXT; the stage message appears on the stage only (first pass) |
+| 10k.1 / 10k.2 (rehearsal) | V: with rehearsal on the projector kept "Welcome" while the operator went to the next item; rehearsal off sent it at once |
+| 10p (approval gate, opt-in) | V: an edit after approval, then Next with "Ask before showing" on: held with "This service is not approved … Nothing has gone on screen"; Present anyway put it on |
+| 10aj.1 (remote rate limit) | V: 60 fast commands from this computer: 28 accepted, 32 refused (429); accepted again after a pause |
+| 10al.1 (one running copy) | V: launching again left one process (single instance) |
+| 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
+
 ## Backup and restore drill (QA-010)
 
 Run the same day with two isolated profiles (production and standby) and a disk image as the USB stick: R1–R5 all pass; see `14-backup-restore-rehearsal.md`. Approval is not carried in a service file (only in a database backup).

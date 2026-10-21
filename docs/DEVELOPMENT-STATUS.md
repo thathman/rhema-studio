@@ -67,7 +67,7 @@ Found by reading PRD lines against the code (not by tests): auto-live on by defa
 | Row | What is left | Blocked by |
 |---|---|---|
 | ST-004 | Yorùbá speech, OpenAI provider (PR #4) | Owner: speech provider and model bundling |
-| ST-006 | Operator acceptance rows 1–10ck | Real Windows desktop and projector (#31) |
+| ST-006 | Operator acceptance rows 1–10ck: many now verified on the owner's Intel Mac (mac-desktop-acceptance.md); Windows desktop, projector and the hardware rows remain | Real Windows desktop and projector (#31) |
 | ST-009 | App identity rename with settings migration | Owner: product name / installer app ID (PRD open decision) |
 | MD-002 | Sound over NDI | Audio path to the NDI sender and real receivers to test |
 | OP-005 | OBS 720p30 smoke, NDI runtime drop | Real OBS/NDI hardware |
