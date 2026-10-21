@@ -177,7 +177,7 @@ function StandardView() {
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_minmax(0,14rem)] gap-3 p-3">
       <div className="grid min-h-0 grid-cols-[18rem_minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:grid-cols-[16rem_minmax(0,1fr)]">
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card" data-tour="present-rundown">
           <PanelHeader title="Service">
             <span className="text-xs text-muted-foreground">{count}</span>
           </PanelHeader>
@@ -208,7 +208,7 @@ function StandardView() {
       </div>
 
       <section className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] gap-3 overflow-hidden rounded-lg border border-border bg-card p-3">
-        <QuickFind mode="present" />
+        <div className="flex min-h-0 flex-col [&>*]:min-h-0 [&>*]:flex-1" data-tour="quick-find"><QuickFind mode="present" /></div>
         <div className="flex min-h-0 flex-col gap-2 border-l border-border pl-3" role="group" aria-label="Quick screens">
           {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
           <div className="flex items-center justify-between gap-2">

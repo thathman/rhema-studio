@@ -180,7 +180,7 @@ export function ServiceBar() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" data-tour="service-bar">
       <Select value={current?.id ?? ""} onValueChange={(id) => void open(id)} disabled={loading || dirty}>
         <SelectTrigger className="h-9 w-64" aria-label="Service" title={dirty ? "Save or discard changes before switching" : undefined}>
           <SelectValue placeholder={programs.length ? "Open a service…" : "No saved services yet"} />

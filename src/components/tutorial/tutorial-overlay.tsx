@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { Joyride, STATUS, type EventData } from "react-joyride"
+import { ACTIONS, EVENTS, Joyride, STATUS, type EventData } from "react-joyride"
 import { toast } from "sonner"
 import { useSettingsStore } from "@/stores/settings-store"
 import {
@@ -7,7 +7,7 @@ import {
   hydrateOnboardingState,
   persistOnboardingComplete,
 } from "@/stores/tutorial-store"
-import { TUTORIAL_STEPS } from "./tutorial-steps"
+import { TUTORIAL_STEPS, type TourPlace } from "./tutorial-steps"
 import { TutorialTooltip } from "./tutorial-tooltip"
 import { useTheme } from "@/components/theme-provider"
 import { useShellStore } from "@/studio/shell-store"
@@ -53,23 +53,37 @@ export function TutorialOverlay() {
     }
   }, [isHydrated, onboardingComplete])
 
-  // The tour targets the classic dashboard, so bring it on screen first, and put back
-  // what was on screen when it ends (Standard is where a volunteer works, with the keys).
+  // Each step opens its workspace first (and the Present view it shows), then the tour
+  // moves on; when it ends, what was on screen before comes back.
+  const [stepIndex, setStepIndex] = useState(0)
   const before = useRef<{ workspace: ReturnType<typeof useShellStore.getState>["workspace"]; view: ReturnType<typeof useShellStore.getState>["presentView"] } | null>(null)
+  const goTo = useCallback((index: number) => {
+    const place = TUTORIAL_STEPS[index]?.data as TourPlace | undefined
+    const shell = useShellStore.getState()
+    if (place) {
+      if (place.presentView) shell.setPresentView(place.presentView)
+      shell.setWorkspace(place.workspace)
+    }
+    // The workspace renders first, so the step finds its target.
+    setTimeout(() => setStepIndex(index), 250)
+  }, [])
   useEffect(() => {
     const shell = useShellStore.getState()
     if (isRunning) {
       before.current ??= { workspace: shell.workspace, view: shell.presentView }
-      shell.setPresentView("production")
-      shell.setWorkspace("present")
+      goTo(0)
     } else if (before.current) {
-      shell.setPresentView(before.current.view === "production" ? "standard" : before.current.view)
+      shell.setPresentView(before.current.view)
       shell.setWorkspace(before.current.workspace)
       before.current = null
     }
-  }, [isRunning])
+  }, [isRunning, goTo])
 
   const handleEvent = useCallback((data: EventData) => {
+    if ((data.type === EVENTS.STEP_AFTER || data.type === EVENTS.TARGET_NOT_FOUND) && data.status !== STATUS.FINISHED && data.status !== STATUS.SKIPPED) {
+      const next = data.index + (data.action === ACTIONS.PREV ? -1 : 1)
+      if (next >= 0 && next < TUTORIAL_STEPS.length) goTo(next)
+    }
     if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) {
       useTutorialStore.getState().stopTutorial()
       persistOnboardingComplete()
@@ -80,7 +94,7 @@ export function TutorialOverlay() {
         })
       }
     }
-  }, [])
+  }, [goTo])
 
   if (!isHydrated) return null
 
@@ -88,6 +102,7 @@ export function TutorialOverlay() {
     <Joyride
       steps={steps}
       run={isRunning}
+      stepIndex={stepIndex}
       continuous
       tooltipComponent={TutorialTooltip}
       onEvent={handleEvent}

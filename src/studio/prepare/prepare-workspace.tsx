@@ -48,7 +48,7 @@ export function PrepareWorkspace() {
       </WorkspaceHeader>
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(18rem,2fr)_minmax(0,3fr)] gap-3 p-3">
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card" data-tour="prepare-rundown">
           <PanelHeader title="Service">
             <span className="text-xs text-muted-foreground">{count} item{count === 1 ? "" : "s"}{planned ? ` · ${planned} planned` : ""}</span>
           </PanelHeader>
@@ -58,7 +58,7 @@ export function PrepareWorkspace() {
         </section>
 
         <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card" data-tour="prepare-add">
             <Tabs defaultValue="bible" className="flex min-h-0 flex-1 flex-col">
               <div className="border-b border-border px-3 pt-2">
                 <TabsList>

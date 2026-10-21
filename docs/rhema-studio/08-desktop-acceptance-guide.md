@@ -884,3 +884,10 @@ report), but launching it cannot.
 | 10cj.4 | "Space between languages" (Verse text, or Layout → Element spacing): 0, then 150. | The gap between the languages closes, then widens, on verses and songs; small previews scale it. | Verses verified on the Intel Mac (0 and 150); songs by test |
 | 10cj.5 | Theme Designer toolbar: Preview "One language", "Two languages", "Song". | The preview shows Genesis 1:1 in one language, in English and Yorùbá, or a bilingual song slide; second-language styling is visible while editing. | Unverified (the switch is in place on the Mac; the preview draws only while Rhema is on the visible desktop) |
 
+### 10ck. First-run tour (Studio)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ck.1 | Fresh install (or Settings → restart the tour). | The tour starts on Home: "Four places", readiness, screens; then Prepare (service, add items, running order), Present Standard (run the service, what people see, Next/Clear/Restore, find anything, quick screens, listening), and More. Each step opens its workspace first. | Partly verified on the Intel Mac: all 13 targets exist in their workspaces and steps 1–4 ran (Home → Prepare); the rest needs the window on screen |
+| 10ck.2 | Skip, or finish the tour. | Back where you started; it does not start again; Settings can restart it. | Unverified |
+
