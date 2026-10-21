@@ -6,8 +6,8 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 12:20 WAT; every PR through #131 merged)
-- Contents: see CHANGELOG.md. `studio.db` is at migration 0010 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver).
+- Head: see `git log fork/main` (2026-10-21 13:00 WAT; every PR through #132 merged)
+- Contents: see CHANGELOG.md. `studio.db` is at migration 0011 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
 ## Issues
@@ -24,7 +24,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 484 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
+- Frontend: 489 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
 - Rust: `rhema-content` 49 tests pass; `rhema-api` 120; app `cargo check` and clippy in CI.
 - Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
@@ -58,7 +58,7 @@ Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-ca
 
 ## Merged 2026-10-21 (this run)
 
-#96 downgrade guard · #97 diagnostics redaction · #98 licence check, CHANGELOG, KNOWN-ISSUES · #99 Black/Logo/Technical quick screens · #100 remote rate limit · #101 review fixes (licence walk, SPDX precedence, clean Black) · #102 phone remote page + QR pairing · #103 one running copy · #104 last good frame · #105 network/privacy note + host guard · #106 quick screens fit 1366x768 (Back was clipped) · #107 deletes ask first · #108 draw-failure warnings · #109 common short book names ("Jn 3 16") · #110 songs as plain text/Markdown · #111 ask before closing with unsaved work; closing the main window quits (hidden NDI windows used to keep the process alive) · #112 sound player for walk-in music and backing tracks; header chips wrap at 1366 px · #113 sounds as service items (play when reached going forward; screens untouched; silent in rehearsal) · #114 more injected-failure tests (database fails on save, media list fails, sound fails) · #115 API keys, remote key and OBS password in the system keychain (one entry; verified before the file copy is blanked; file fallback without a keychain) · #116 projected end time and audited timer correction · #117 song usage report (CSV) for licence reporting · #118 rename and re-date a service (the backend existed, the app had no way to call it) · #119 named service templates, archive, approver name (migration 0010); Copy can no longer renumber the original after a failed create · #120 church-defined cues (run from Present and by id from Stream Deck/OSC) · #121 responsive readings (one slide per leader/people exchange) · #122 installer licence page, LICENSE and generated third-party notices with every licence text · #123 last 7 lint errors fixed, whole-repo lint blocking in CI · #124 end-by clock time per item · #125 slide-change latency in the logs (QA-007) · #126 church folder: versioned service packages over a shared folder/NAS (owner decision #72) · #127 a newer version in the church folder is pointed out (never auto-opened) · #128 optional hosted sync design (doc 20) · #129 consent before microphone audio first goes to Deepgram (RG-08) · #130 opt-in transcript kept with a service log (AR-004) · #131 who prepares each item and who saved each version (CL-007, migration 0011).
+#96 downgrade guard · #97 diagnostics redaction · #98 licence check, CHANGELOG, KNOWN-ISSUES · #99 Black/Logo/Technical quick screens · #100 remote rate limit · #101 review fixes (licence walk, SPDX precedence, clean Black) · #102 phone remote page + QR pairing · #103 one running copy · #104 last good frame · #105 network/privacy note + host guard · #106 quick screens fit 1366x768 (Back was clipped) · #107 deletes ask first · #108 draw-failure warnings · #109 common short book names ("Jn 3 16") · #110 songs as plain text/Markdown · #111 ask before closing with unsaved work; closing the main window quits (hidden NDI windows used to keep the process alive) · #112 sound player for walk-in music and backing tracks; header chips wrap at 1366 px · #113 sounds as service items (play when reached going forward; screens untouched; silent in rehearsal) · #114 more injected-failure tests (database fails on save, media list fails, sound fails) · #115 API keys, remote key and OBS password in the system keychain (one entry; verified before the file copy is blanked; file fallback without a keychain) · #116 projected end time and audited timer correction · #117 song usage report (CSV) for licence reporting · #118 rename and re-date a service (the backend existed, the app had no way to call it) · #119 named service templates, archive, approver name (migration 0010); Copy can no longer renumber the original after a failed create · #120 church-defined cues (run from Present and by id from Stream Deck/OSC) · #121 responsive readings (one slide per leader/people exchange) · #122 installer licence page, LICENSE and generated third-party notices with every licence text · #123 last 7 lint errors fixed, whole-repo lint blocking in CI · #124 end-by clock time per item · #125 slide-change latency in the logs (QA-007) · #126 church folder: versioned service packages over a shared folder/NAS (owner decision #72) · #127 a newer version in the church folder is pointed out (never auto-opened) · #128 optional hosted sync design (doc 20) · #129 consent before microphone audio first goes to Deepgram (RG-08) · #130 opt-in transcript kept with a service log (AR-004) · #131 who prepares each item and who saved each version (CL-007, migration 0011) · #132 optional "ask before showing an unapproved service" (CL-002; off by default; only the first go-live of a service, never mid-service).
 
 Found by reading PRD lines against the code (not by tests): no single-instance guard, no last-good frame, one-click log deletion, the PRD's own "Jn 3 16" example failing, the Back button clipped at 1366x768. Independent reviews of each batch found 9 more defects, all fixed.
 
@@ -74,7 +74,7 @@ Found by reading PRD lines against the code (not by tests): no single-instance g
 | PT-006 | Song playback / MIDI sync, backing tracks tied to songs | Owner: which playback source |
 | CV-002, CV-003, CV-006, CV-007 | Canva connection, export/import, Autofill, update checks | Owner: Canva token relay (#34; recurring cost, Canva-reviewed public integration) |
 | CL-001 | Roles and multi-user identity | Owner: who may present/approve (and the sync decision for remote users) |
-| CL-002 | "Approval required before go-live" | Owner: whether approval gates going live (project-vs-release default, PRD open decision) |
+| CL-002 | Approval gate merged as an opt-in setting (#132). Whether it is on by default | Owner: the default, and who may approve (with CL-001) |
 | CL-005, CL-006 | Shared-folder delivery merged (#126). Hosted sync designed (doc 20) | Owner: hosting option (own computer, rented VPS, or vendor) and whether to encrypt packages |
 | CL-007 | Assignments and saved-by merged (#131). Comments and notifications | Need hosted sync (later, per #72) |
 | SG-003 | Giving/prayer action links | Owner: which external systems |
@@ -96,7 +96,7 @@ Every backlog row now has its buildable part merged. What remains, by why it is 
    - #34 Canva relay (recurring cost, Canva-reviewed public integration) → CV-002, CV-003, CV-006, CV-007.
    - PR #4 speech provider and bundling → ST-004, then AR-004 opt-in transcription and AI-001/AI-002.
    - App identity for release (PRD open decision "branding/installer app-ID migration") → ST-009.
-   - Who may present and whether approval must gate going live → CL-001 roles, CL-002 "approval required before go-live".
+   - Who may present → CL-001 roles; whether the approval gate (#132, off by default) should be on by default → CL-002.
    - Which external giving/prayer systems to link → SG-003 action links.
    - PT-006 song-playback sync: which playback source (MIDI clock, backing tracks) to support.
 2. **Engineering items held back on purpose (2026-10-21):**
