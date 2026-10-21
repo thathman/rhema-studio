@@ -5,7 +5,7 @@ const mockInvoke = vi.fn()
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => mockInvoke(...args) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn().mockResolvedValue(undefined) }))
 
-import { CUE_ACTIONS, MACROS, runMacro } from "./cues"
+import { CUE_ACTIONS, MACROS, runMacro, runSteps } from "./cues"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -93,6 +93,16 @@ describe("cues and macros", () => {
     // John 3:17 reached the screen before the Offering screen held it, so Back returns to it.
     expect(useBroadcastStore.getState().heldLive?.liveVerse.reference).toContain("John 3:17")
     useSettingsStore.setState({ customMacros: [] })
+  })
+
+  it("a Show live step is on air before the next step runs (a quick screen then holds it)", async () => {
+    const v: Verse = { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "t" }
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, heldLive: null, rehearsal: false })
+    useBibleStore.setState({ selectedVerse: v, selectedSlide: null })
+    await runSteps(["showLive", "quick.offering"])
+    const s = useBroadcastStore.getState()
+    expect(s.liveVerse?.quick).toBe(true)
+    expect(s.heldLive?.liveVerse.reference).toContain("John 3:16")
   })
 })
 

@@ -198,8 +198,9 @@ export const remoteActions = {
    * is in. When the preview is a rundown item, that item becomes active and its
    * saved secondary translation applies.
    */
-  sendToLive: () => {
-    if (approvalHolds(() => remoteActions.sendToLive())) return
+  // Returns when the content is on air (or the present failed), so a cue's next step waits for it.
+  sendToLive: (): Promise<void> => {
+    if (approvalHolds(() => void remoteActions.sendToLive())) return Promise.resolve()
     const bible = useBibleStore.getState()
     const queue = useQueueStore.getState()
     if (bible.selectedSlide) {
@@ -208,18 +209,20 @@ export const remoteActions = {
       const stillLive = useBroadcastStore.getState().liveSlide?.itemId === item.id
       const idx = queue.items.findIndex((i) => i.id === item.id)
       if (idx !== -1) queue.setActive(idx)
-      if (isSlideItem(item)) void presentCustomSlide(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
-      else if (isImageItem(item)) void presentImage(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (image) failed:", e))
-      else void presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
-      return
+      const presenting: Promise<unknown> = isSlideItem(item)
+        ? presentCustomSlide(item, { goLive: true })
+        : isImageItem(item)
+          ? presentImage(item, { goLive: true })
+          : presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined })
+      return presenting.then(() => {}).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
     }
     const selectedVerse = bible.selectedVerse
-    if (!selectedVerse) return
+    if (!selectedVerse) return Promise.resolve()
     const idx = queue.findDuplicate(selectedVerse.book_number, selectedVerse.chapter, selectedVerse.verse)
     const rundownItem = idx === -1 ? null : queue.items[idx]
     if (idx !== -1) queue.setActive(idx)
     const previewed = bible.translations.find((t) => t.id === selectedVerse.translation_id)?.abbreviation ?? null
-    void presentVerse(selectedVerse, {
+    return presentVerse(selectedVerse, {
       goLive: true,
       itemId: rundownItem?.id ?? null,
       background: rundownItem?.background ?? null,
@@ -227,7 +230,7 @@ export const remoteActions = {
         translation: previewed,
         secondary_translation: rundownItem && isVerseItem(rundownItem) ? (rundownItem.secondary_translation ?? null) : null,
       },
-    }).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
+    }).then(() => {}).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
   },
 
   /** Queue the verse showing in Program preview. Duplicates are dropped by the store. */
