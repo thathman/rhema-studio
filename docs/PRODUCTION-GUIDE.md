@@ -13,6 +13,8 @@ For the person running outputs, OBS and the stage screen. The volunteer guide (`
 
 ## OBS and NDI
 
+- **OBS connection (optional):** Settings → Remote control → "Connect to OBS" with OBS's address, port (4455) and WebSocket password (OBS → Tools → WebSocket Server Settings). The Present header then shows OBS's own recording state and time ("OBS ● REC 00:12:31" or "not recording"; never guessed). From its menu: start or stop recording (each asks twice), and mark "Sermon start", "Sermon end" or anything else: the mark goes into the service log with the recording time, and into the recording as a chapter on OBS 30.2+ recording to Hybrid MP4. If OBS is closed, Rhema retries every 15 seconds; nothing else depends on it.
+
 - Use a transparent theme (for example the Lower Thirds builtin) on an NDI output for keying. Pictures and quick screens key like verses; background pictures fill the frame, so use them only on the congregation output.
 - NDI frames come from the output window's canvas; a stage output does not send NDI.
 - Health: Home → outputs line (for an NDI output it also says how many receivers are connected, so "nobody receiving yet" means OBS has not picked the source up), Present header "n/m outputs on". If NDI frames stop reaching the network, a warning names the output, readiness shows "not sending", and the app restarts the sender once a minute at most; after that turn the output off and on yourself.

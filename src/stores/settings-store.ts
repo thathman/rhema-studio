@@ -18,6 +18,14 @@ let remoteKeysPush: Promise<void> = Promise.resolve()
  * wins, and a failure under Tauri is surfaced because a revoke that did not
  * reach the backend is still a working key.
  */
+export interface ObsSettings {
+  enabled: boolean
+  host: string
+  port: number
+  /** obs-websocket password, kept in the local settings file like the remote key. */
+  password: string
+}
+
 export function pushRemoteKeys(): Promise<void> {
   remoteKeysPush = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
@@ -59,6 +67,9 @@ interface SettingsState {
   /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
   remoteAuthRequired: boolean
   setRemoteAuthRequired: (on: boolean) => void
+  /** Optional OBS connection (obs-websocket v5). */
+  obs: ObsSettings
+  setObs: (patch: Partial<ObsSettings>) => void
 
   setRemoteSecret: (secret: string) => void
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
@@ -94,6 +105,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
+  obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "" },
+  setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
 
   setRemoteAuthRequired: (remoteAuthRequired) => {
     set({ remoteAuthRequired })
@@ -143,6 +156,10 @@ function acceptable(key: string, value: unknown): boolean {
     case "operatorName":
     case "remoteSecret":
       return typeof value === "string"
+    case "obs": {
+      const o = value as Partial<ObsSettings>
+      return typeof value === "object" && value !== null && typeof o.enabled === "boolean" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
+    }
     case "remoteAuthRequired":
     case "autoMode":
     case "onboardingComplete":
@@ -166,6 +183,7 @@ const PERSISTED_KEYS = [
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",
+  "obs",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",

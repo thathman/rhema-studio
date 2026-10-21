@@ -27,6 +27,12 @@ QA-006 first slice. What the two control surfaces expose today, verified from th
 3. Use a wired or staff-only network for the production laptop; never the guest Wi-Fi.
 4. Until pairing exists, treat anyone on that network as able to press Next.
 
+## OBS connection (AR-002)
+
+- Outbound only: Rhema connects to OBS's obs-websocket server; it opens no port. The CSP `connect-src` allows `ws:` so OBS can be on the streaming PC, not only this one (an injected script could therefore open a WebSocket anywhere; the app loads no remote content, so this is defence in depth only).
+- The OBS WebSocket password is stored in the local settings file in clear, like the remote key; the protocol never sends it (SHA-256 challenge). Over plain `ws://` the login answer can still be captured and the password attacked offline by anyone on that network, so keep OBS and Rhema on a staff-only network. Settings are applied with an explicit Save, never per keystroke (a per-keystroke reconnect would leak the password one prefix at a time).
+- Starting or stopping a recording is an explicit two-step action in Present; no macro or remote command does it.
+
 ## Not done
 
 - Roles per device (present vs configure), rate limiting, TLS, QR pairing. (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)
