@@ -27,7 +27,6 @@ export type {
   NdiAlphaMode,
   NdiConfigEventPayload,
   NdiFrameRate,
-  NdiFrameRequest,
   NdiResolution,
   NdiSessionInfo,
   NdiStartRequest,

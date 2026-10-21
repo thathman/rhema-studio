@@ -19,13 +19,6 @@ export interface NdiSessionInfo {
   fps: number
 }
 
-export interface NdiFrameRequest {
-  outputId: string
-  width: number
-  height: number
-  rgbaBase64: string
-}
-
 export interface NdiConfigEventPayload {
   active: boolean
   fps: number

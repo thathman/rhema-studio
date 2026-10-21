@@ -2,8 +2,7 @@
 
 use std::sync::Mutex;
 
-use base64::Engine;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::State;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use rhema_broadcast::ndi::{NdiRuntime, NdiSessionInfo, NdiStartRequest};
@@ -34,15 +33,6 @@ pub struct MonitorInfo {
     pub name: String,
     pub width: u32,
     pub height: u32,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NdiFrameRequest {
-    pub output_id: String,
-    pub width: u32,
-    pub height: u32,
-    pub rgba_base64: String,
 }
 
 #[tauri::command]
@@ -274,23 +264,45 @@ pub fn get_ndi_status(
     }
 }
 
+/// One NDI frame: the RGBA bytes as the raw request body (no base64, no JSON:
+/// at 720p that was ~5 MB of text per frame), the output and size in headers.
+/// Stays synchronous so frames reach the sender in order.
 #[tauri::command]
-pub fn push_ndi_frame(
-    runtime: State<'_, Mutex<NdiRuntime>>,
-    request: NdiFrameRequest,
-) -> Result<(), String> {
-    let rgba_data = base64::engine::general_purpose::STANDARD
-        .decode(&request.rgba_base64)
-        .map_err(|e| format!("base64 decode error: {e}"))?;
+pub fn push_ndi_frame(runtime: State<'_, Mutex<NdiRuntime>>, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let header = |name: &str| -> Result<String, String> {
+        request.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_owned).ok_or_else(|| format!("missing {name}"))
+    };
+    let output_id = header("x-ndi-output")?;
+    let width: u32 = header("x-ndi-width")?.parse().map_err(|_| "bad x-ndi-width".to_string())?;
+    let height: u32 = header("x-ndi-height")?.parse().map_err(|_| "bad x-ndi-height".to_string())?;
+    let tauri::ipc::InvokeBody::Raw(rgba) = request.body() else {
+        return Err("expected the frame as raw bytes".into());
+    };
+    check_frame_len(rgba.len(), width, height)?;
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
-    runtime
-        .send_frame_rgba(&request.output_id, request.width, request.height, &rgba_data)
-        .map_err(|e| e.to_string())
+    runtime.send_frame_rgba(&output_id, width, height, rgba).map_err(|e| e.to_string())
+}
+
+/// A frame is exactly width × height RGBA pixels.
+fn check_frame_len(len: usize, width: u32, height: u32) -> Result<(), String> {
+    let expected = (width as usize).checked_mul(height as usize).and_then(|p| p.checked_mul(4)).ok_or("frame too large")?;
+    if len == expected {
+        Ok(())
+    } else {
+        Err(format!("frame is {len} bytes, expected {expected} for {width}x{height}"))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::window_label;
+    use super::{check_frame_len, window_label};
+
+    #[test]
+    fn a_frame_must_be_exactly_its_pixels() {
+        assert!(check_frame_len(1280 * 720 * 4, 1280, 720).is_ok());
+        assert!(check_frame_len(1280 * 720 * 4 - 1, 1280, 720).is_err());
+        assert!(check_frame_len(0, u32::MAX, u32::MAX).is_err());
+    }
 
     #[test]
     fn window_label_formats_valid_ids() {
