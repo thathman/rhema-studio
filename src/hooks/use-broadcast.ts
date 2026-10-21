@@ -238,7 +238,7 @@ export async function presentSlide(
   useBibleStore.getState().selectSlide({ item, index: i })
   useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...(image ? { image } : {}) }, null, {
     goLive: opts.goLive,
-    slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length },
+    slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages },
   })
   if (slide.missing.length > 0) {
     warn(`${slide.sectionLabel} has no ${slide.missing.join(" / ").toUpperCase()} text; showing what there is.`)
