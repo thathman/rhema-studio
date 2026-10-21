@@ -9,8 +9,8 @@ type Status = "off" | "connecting" | "connected" | "error"
 interface ObsState {
   status: Status
   error: string | null
-  /** OBS's own recording state; null until known. Never guessed. */
-  recording: { active: boolean; timecode: string | null } | null
+  /** OBS's own recording state; null until OBS has answered (or after any failed check). Never guessed. */
+  recording: { active: boolean; paused: boolean; timecode: string | null } | null
   /** false once OBS said it has no record chapters (needs OBS 30.2+). */
   chapters: boolean | null
   connect: () => Promise<void>
@@ -28,12 +28,16 @@ let retry: ReturnType<typeof setTimeout> | null = null
 const url = (o: ObsSettings) => `ws://${o.host.trim() || "127.0.0.1"}:${o.port}`
 
 async function refresh(): Promise<void> {
-  if (!client) return
+  const c = client
+  if (!c) return
   try {
-    const r = await client.request<{ outputActive: boolean; outputTimecode?: string }>("GetRecordStatus")
-    useObsStore.setState({ recording: { active: r.outputActive === true, timecode: r.outputActive ? (r.outputTimecode ?? null) : null } })
+    const r = await c.request<{ outputActive: boolean; outputPaused?: boolean; outputTimecode?: string }>("GetRecordStatus")
+    if (client !== c) return
+    const active = r.outputActive === true
+    useObsStore.setState({ recording: { active, paused: active && r.outputPaused === true, timecode: active ? (r.outputTimecode ?? null) : null } })
   } catch {
-    // The close handler reports a dropped connection.
+    // Unknown is not "not recording": show nothing rather than a stale answer.
+    if (client === c) useObsStore.setState({ recording: null })
   }
 }
 
@@ -58,10 +62,9 @@ export const useObsStore = create<ObsState>((set, get) => ({
     const c = new ObsClient({
       url: url(o),
       password: o.password,
-      onEvent: (type, data) => {
-        if (type === "RecordStateChanged") {
-          useObsStore.setState((s) => ({ recording: { active: data.outputActive === true, timecode: data.outputActive === true ? (s.recording?.timecode ?? null) : null } }))
-        }
+      onEvent: (type) => {
+        // Pause/resume/start/stop: ask OBS for the full state rather than reading one flag.
+        if (type === "RecordStateChanged") void refresh()
       },
       onClose: (reason) => {
         if (client !== c) return
@@ -76,8 +79,11 @@ export const useObsStore = create<ObsState>((set, get) => ({
     try {
       await c.connect()
       if (client !== c) return
-      set({ status: "connected", error: null })
+      set({ status: "connected", error: null, recording: null })
       await refresh()
+      // A newer connect (or a disconnect) happened while waiting: this one must not start a poll.
+      if (client !== c) return
+      if (poll) clearInterval(poll)
       poll = setInterval(() => void refresh(), 2000)
     } catch (e) {
       if (client !== c) return
@@ -92,7 +98,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     const c = client
     client = null
     c?.close()
-    set({ status: "off", error: null, recording: null })
+    set({ status: "off", error: null, recording: null, chapters: null })
   },
 
   startRecording: async () => {
@@ -120,7 +126,9 @@ export const useObsStore = create<ObsState>((set, get) => ({
     if (!name) return
     await refresh()
     const rec = get().recording
-    useJournalStore.getState().add({ kind: "obs", label: rec?.active ? `${name} at ${rec.timecode ?? "?"} in the recording` : `${name} (OBS was not recording)` })
+    // Only claim "not recording" when OBS said so; otherwise the state is unknown.
+    const where = !client || !rec ? " (OBS recording state unknown)" : rec.active ? ` at ${rec.timecode ?? "?"} in the recording${rec.paused ? " (paused)" : ""}` : " (OBS was not recording)"
+    useJournalStore.getState().add({ kind: "obs", label: `${name}${where}` })
     if (!client || !rec?.active || get().chapters === false) return
     try {
       await client.request("CreateRecordChapter", { chapterName: name })
@@ -137,12 +145,24 @@ export const useObsStore = create<ObsState>((set, get) => ({
   },
 }))
 
-// Follow the settings: connect when enabled (and on changes), disconnect when off.
+// Follow the settings: connect when enabled, disconnect when off. Debounced, so
+// editing the address or password never opens a socket per keystroke (each
+// attempt would send an answer derived from a partial password).
 let lastKey = ""
+let settle: ReturnType<typeof setTimeout> | null = null
+export const OBS_SETTLE_MS = 800
 useSettingsStore.subscribe((s) => {
   const key = JSON.stringify(s.obs)
   if (key === lastKey) return
   lastKey = key
-  if (s.obs.enabled) void useObsStore.getState().connect()
-  else if (useObsStore.getState().status !== "off") useObsStore.getState().disconnect()
+  if (settle) clearTimeout(settle)
+  if (!s.obs.enabled) {
+    settle = null
+    if (useObsStore.getState().status !== "off") useObsStore.getState().disconnect()
+    return
+  }
+  settle = setTimeout(() => {
+    settle = null
+    void useObsStore.getState().connect()
+  }, OBS_SETTLE_MS)
 })

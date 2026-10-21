@@ -20,8 +20,9 @@ export function ObsChip() {
   const [confirm, setConfirm] = useState<"start" | "stop" | null>(null)
   const [label, setLabel] = useState("")
   if (!enabled) return null
-  const recording = status === "connected" && rec?.active === true
-  const text = status === "connected" ? (recording ? `OBS ● REC ${rec?.timecode?.slice(0, 8) ?? ""}` : "OBS: not recording") : status === "connecting" ? "OBS: connecting…" : "OBS: not connected"
+  const known = status === "connected" && rec !== null
+  const recording = known && rec?.active === true
+  const text = status !== "connected" ? (status === "connecting" ? "OBS: connecting…" : "OBS: not connected") : !known ? "OBS: checking…" : recording ? (rec?.paused ? `OBS ❚❚ PAUSED ${rec?.timecode?.slice(0, 8) ?? ""}` : `OBS ● REC ${rec?.timecode?.slice(0, 8) ?? ""}`) : "OBS: not recording"
   const obs = useObsStore.getState()
   return (
     <Popover onOpenChange={(o) => { if (!o) setConfirm(null) }}>
@@ -48,7 +49,9 @@ export function ObsChip() {
         ) : (
           <div className="flex flex-col gap-3 text-xs">
             <div className="flex items-center gap-2">
-              {recording ? (
+              {!known ? (
+                <span className="text-muted-foreground">Waiting for OBS to report its recording state…</span>
+              ) : recording ? (
                 confirm === "stop" ? (
                   <><span>Stop the recording?</span><Button size="sm" variant="destructive" onClick={() => { setConfirm(null); void obs.stopRecording() }}>Stop</Button><Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>Keep recording</Button></>
                 ) : (

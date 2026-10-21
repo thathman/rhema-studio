@@ -38,6 +38,7 @@ export interface ObsClientOptions {
   onClose?: (reason: string) => void
   socket?: (url: string) => WebSocket
   timeoutMs?: number
+  requestTimeoutMs?: number
 }
 
 export class ObsClient {
@@ -110,7 +111,17 @@ export class ObsClient {
     if (!ws || ws.readyState !== 1) return Promise.reject(new Error("OBS is not connected"))
     const requestId = `r${++this.seq}`
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(requestId, { resolve: resolve as (v: Record<string, unknown>) => void, reject, type: requestType })
+      // A frozen OBS or a dropped network keeps the socket open: give up and close so the state is never stale.
+      const timer = setTimeout(() => {
+        if (!this.pending.delete(requestId)) return
+        reject(new Error("OBS did not answer"))
+        ws.close()
+      }, this.o.requestTimeoutMs ?? 3000)
+      this.pending.set(requestId, {
+        resolve: (v) => { clearTimeout(timer); (resolve as (v: Record<string, unknown>) => void)(v) },
+        reject: (e) => { clearTimeout(timer); reject(e) },
+        type: requestType,
+      })
       ws.send(JSON.stringify({ op: OP.Request, d: { requestType, requestId, ...(requestData ? { requestData } : {}) } }))
     })
   }

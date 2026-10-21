@@ -52,4 +52,24 @@ describe("obs-websocket client", () => {
     obs.hello()
     await expect(connected).rejects.toThrow("wrong OBS WebSocket password")
   })
+
+  it("gives up on a request OBS never answers, rejecting it and closing the socket", async () => {
+    vi.useFakeTimers()
+    try {
+      const obs = fakeObs({})
+      const realSend = obs.ws.send
+      const client = new ObsClient({ url: "ws://x", password: "", socket: () => obs.ws as unknown as WebSocket, requestTimeoutMs: 3000 })
+      const connected = client.connect()
+      obs.hello()
+      await connected
+      obs.ws.send = (raw: string) => { if (JSON.parse(raw).op !== 6) realSend(raw) } // OBS frozen: requests get no answer
+      const r = client.request("GetRecordStatus")
+      const check = expect(r).rejects.toThrow("OBS did not answer")
+      await vi.advanceTimersByTimeAsync(3000)
+      await check
+      expect(obs.ws.close).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

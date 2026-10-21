@@ -1151,6 +1151,11 @@ function ObsSettingsBlock() {
   const setObs = useSettingsStore((s) => s.setObs)
   const status = useObsStore((s) => s.status)
   const error = useObsStore((s) => s.error)
+  // Edited locally and applied with "Save", so a half-typed address or password is never tried.
+  const [draft, setDraft] = useState({ host: obs.host, port: String(obs.port), password: obs.password })
+  const port = Number(draft.port)
+  const portOk = Number.isInteger(port) && port > 0 && port < 65536
+  const changed = draft.host !== obs.host || draft.port !== String(obs.port) || draft.password !== obs.password
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-3 text-xs">
       <label className="flex items-center gap-2 font-medium">
@@ -1158,12 +1163,13 @@ function ObsSettingsBlock() {
         Connect to OBS (recording status and marks)
       </label>
       <div className="flex flex-wrap items-center gap-2">
-        <Input aria-label="OBS address" value={obs.host} onChange={(e) => setObs({ host: e.target.value })} placeholder="127.0.0.1" className="h-7 w-40 text-xs" />
-        <Input aria-label="OBS port" type="number" value={obs.port} onChange={(e) => setObs({ port: Math.min(65535, Math.max(1, Number(e.target.value) || 4455)) })} className="h-7 w-24 text-xs" />
-        <Input aria-label="OBS WebSocket password" type="password" value={obs.password} onChange={(e) => setObs({ password: e.target.value })} placeholder="password (if set in OBS)" className="h-7 w-48 text-xs" autoComplete="off" />
+        <Input aria-label="OBS address" value={draft.host} onChange={(e) => setDraft({ ...draft, host: e.target.value })} placeholder="127.0.0.1" className="h-7 w-40 text-xs" />
+        <Input aria-label="OBS port" inputMode="numeric" value={draft.port} onChange={(e) => setDraft({ ...draft, port: e.target.value.replace(/[^0-9]/g, "") })} placeholder="4455" className="h-7 w-24 text-xs" />
+        <Input aria-label="OBS WebSocket password" type="password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="password (if set in OBS)" className="h-7 w-48 text-xs" autoComplete="off" />
+        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!changed || !portOk || !draft.host.trim()} onClick={() => setObs({ host: draft.host.trim(), port, password: draft.password })}>Save</Button>
       </div>
       <p className="text-[0.625rem] text-muted-foreground">
-        {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password stays in this computer's settings file.
+        {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password stays in this computer's settings file. Use a staff-only network: the login answer travels unencrypted.
       </p>
     </div>
   )
