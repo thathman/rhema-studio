@@ -22,7 +22,8 @@ pub fn set_aside_damaged(dir: &Path, now_secs: u64) -> Vec<(String, String)> {
     for name in STORE_FILES {
         let path = dir.join(name);
         let Ok(bytes) = std::fs::read(&path) else { continue };
-        if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok() {
+        // The store keeps an object; anything else (cut off, or not an object) would be read as empty.
+        if serde_json::from_slice::<serde_json::Value>(&bytes).is_ok_and(|v| v.is_object()) {
             continue;
         }
         let aside = format!("{name}.damaged-{now_secs}");
@@ -50,6 +51,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("settings.json"), b"{\"operatorName\": \"Tolu\"").unwrap(); // cut off
         std::fs::write(dir.join("broadcast-themes.json"), b"{}").unwrap();
+        // Parses, but is not what the store keeps: set aside too.
+        let other = dir.join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("settings.json"), b"[]").unwrap();
+        assert_eq!(set_aside_damaged(&other, 1).len(), 1);
         let moved = set_aside_damaged(&dir, 1_700_000_000);
         assert_eq!(moved, vec![("settings.json".to_string(), "settings.json.damaged-1700000000".to_string())]);
         assert!(dir.join("settings.json.damaged-1700000000").exists());
