@@ -45,3 +45,42 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         _ => {}
     }
 }
+
+/// macOS: the default menu's Quit (Cmd+Q) sends `-[NSApp terminate:]`. tao
+/// handles only `applicationWillTerminate`, so Tauri gets no `ExitRequested`
+/// it could hold and the app quits without the unsaved-service question
+/// (checked in tao 0.35.3 / tauri-runtime-wry 2.11.4). Replace that item
+/// with one that closes the main window, which goes through
+/// `on_window_event` like the window's close button. Quitting from the Dock
+/// or at logout still goes through `terminate:` (not held; KNOWN-ISSUES).
+#[cfg(target_os = "macos")]
+pub fn route_quit_through_close(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+    const QUIT_ID: &str = "rhema-quit";
+    let menu = match app.menu() {
+        Some(menu) => menu,
+        None => Menu::default(app.handle())?,
+    };
+    let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() else { return Ok(()) };
+    let items = app_menu.items()?;
+    let Some(pos) = items.iter().rposition(|item| matches!(item, MenuItemKind::Predefined(p) if p.text().is_ok_and(|t| t.starts_with("Quit")))) else {
+        return Ok(());
+    };
+    app_menu.remove_at(pos)?;
+    let label = format!("Quit {}", app.package_info().name);
+    app_menu.insert(&MenuItem::with_id(app, QUIT_ID, label, true, Some("CmdOrCtrl+Q"))?, pos)?;
+    app.set_menu(menu)?;
+    log::info!("[app_close] Quit (Cmd+Q) now asks about unsaved work");
+    app.on_menu_event(|app, event| {
+        if event.id() == QUIT_ID {
+            match app.get_webview_window("main") {
+                Some(main) => {
+                    let _ = main.close();
+                }
+                None => app.exit(0),
+            }
+        }
+    });
+    Ok(())
+}
+
