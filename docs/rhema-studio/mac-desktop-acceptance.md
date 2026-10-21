@@ -114,6 +114,11 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10p (approval gate, opt-in) | V: an edit after approval, then Next with "Ask before showing" on: held with "This service is not approved … Nothing has gone on screen"; Present anyway put it on |
 | 10aj.1 (remote rate limit) | V: 60 fast commands from this computer: 28 accepted, 32 refused (429); accepted again after a pause |
 | 10al.1 (one running copy) | V: launching again left one process (single instance) |
+| 10u.1 (pair a device) | V: Pair a device gave a code; `POST /api/v1/pair` with it returned a 64-character token; "Tolu phone paired" toast; the device listed (role "present") |
+| 10u.2 (key, revoke, restart) | V: `next` with the device's key 200, without a key 401; after Revoke 401 at once; the device list survived a restart |
+| 10u.3 (wrong codes) | V: three wrong codes 403 ("2 / 1 / 0 tries left"), then 404 "pairing is not open" |
+| 10v.1 (roles) | V: "theme" from a present-only device refused ("may present but not change settings"); after changing it to configure, accepted at once and after a restart |
+| 10v.2 (no keys left) | V: with no devices and the switch on, 401; after unticking "Require a key or a paired device", 200; the switch state survived a restart |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
