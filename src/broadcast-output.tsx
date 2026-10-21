@@ -42,7 +42,7 @@ const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "
 let videoPlayer: VideoPlayer | null = null
 // Frames are drawn here first; see paintFrame.
 const scratchCanvas = document.createElement("canvas")
-// Report a drawing failure once per run of failures, not every frame.
+// Report a drawing failure once per new screen (not every frame), and say when drawing works again.
 let frameFailing = false
 
 let ndiHealth = initialNdiHealth()
@@ -116,7 +116,7 @@ function BroadcastCanvas() {
       }
       if (data.overlay && verse?.screen !== "black") drawLowerThird(fctx, width, height, data.overlay, theme.verseText?.fontFamily)
     })
-    if (!ok && !frameFailing) void getCurrentWebviewWindow().emitTo("main", "broadcast:render-error", { outputId: OUTPUT_ID }).catch(() => {})
+    if (ok !== !frameFailing) void getCurrentWebviewWindow().emitTo("main", ok ? "broadcast:render-recovered" : "broadcast:render-error", { outputId: OUTPUT_ID }).catch(() => {})
     frameFailing = !ok
   }, [logDebug])
 
@@ -241,6 +241,8 @@ function BroadcastCanvas() {
         ...event.payload,
         theme: normalizeTheme(event.payload.theme),
       }
+      // A new screen clears the operator's warning, so a failure to draw it must be reported again.
+      frameFailing = false
       videoPlayer?.sync(event.payload.verse?.video)
       preloadThemeAssets(event.payload.theme)
       if (event.payload.verse?.image?.url) void loadThemeImage(event.payload.verse.image.url).then(() => { draw(); pushNdiBurstRef.current?.() })
