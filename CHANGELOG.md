@@ -33,6 +33,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - macOS: Cmd+Q asks about unsaved service changes, like closing the window.
 
 ### Services
+- Song editor: Yorùbá headings (Ègbè, Ẹsẹ̀) are recognised however typed, and a song exported as text pastes back without heading lines. Saving a live song's words takes effect the next time it starts. Church brand: Apply never deletes a theme an output uses, and a renamed brand theme keeps its name.
 - Home's readiness is stricter and truer: verses saved for a translation not installed here, missing background pictures and items from a newer version are flagged; no false 'missing file' after opening from the church folder. Restoring the approved version keeps it approved. Opening a newer church-folder file names songs whose words differ from this computer's.
 - Every saved detail counts as a change (video loop and sound, QR addresses); details from a newer version are kept when saving. Closing asks about an unsaved song and an unsaved rundown too. A song changed elsewhere can be kept as a new song. A theme an output uses cannot be deleted.
 - A song can carry its backing track; Present offers it under Sound while the song is up (plays only when you press Play).
