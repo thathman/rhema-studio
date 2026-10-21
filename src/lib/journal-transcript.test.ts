@@ -19,4 +19,10 @@ describe("transcript in a service log (AR-004)", () => {
     expect(s).not.toContain("a".repeat(50))
     expect(s).toContain("c".repeat(50))
   })
+
+  it("counts bytes, not letters, so Yorùbá text stays within the log limit", () => {
+    const yo = "Ọlọ́run fẹ́ aráyé tóbẹ́ẹ̀".repeat(3)
+    const s = transcriptSection([seg(yo), seg(yo), seg(yo)], "Whisper", (new TextEncoder().encode(yo).length + 30) * 2)
+    expect(s).toContain("(1 earlier passage left out for length)")
+  })
 })
