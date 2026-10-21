@@ -33,6 +33,18 @@ export function projectedEnd(summary: TimingSummary, elapsedMs: number, nowWallM
   return { plannedEnd, expectedEnd: plannedEnd + summary.behindMs }
 }
 
+/**
+ * Time left until the live item's end-by clock time ("12:15") on the day of
+ * `nowWallMs`: negative once it has passed. Null for no or a malformed time.
+ */
+export function endByLeftMs(endBy: string | null | undefined, nowWallMs: number): number | null {
+  const m = endBy ? /^([01]\d|2[0-3]):([0-5]\d)$/.exec(endBy) : null
+  if (!m) return null
+  const target = new Date(nowWallMs)
+  target.setHours(Number(m[1]), Number(m[2]), 0, 0)
+  return target.getTime() - nowWallMs
+}
+
 /** "1 h 10 min", "45 min", "" for zero. */
 export function formatMinutes(ms: number): string {
   const total = Math.round(ms / 60_000)

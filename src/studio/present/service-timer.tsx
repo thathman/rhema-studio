@@ -7,7 +7,7 @@ import { elapsedMs, formatMs, isRunning, remainingMs, timerTone } from "@/lib/ti
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores"
-import { formatMinutes, projectedEnd, timingSummary } from "@/lib/service-timing"
+import { endByLeftMs, formatMinutes, projectedEnd, timingSummary } from "@/lib/service-timing"
 
 const PRESETS = [20, 30, 45, 60]
 // Wall-clock time for showing end times, anchored once to the monotonic clock the timer runs on.
@@ -38,6 +38,9 @@ export function ServiceTimer() {
   const plan = timingSummary(items, idle ? null : activeIndex, elapsedMs(timer, now))
   const behind = plan.behindMs === null ? null : Math.round(plan.behindMs / 60_000)
   const ends = projectedEnd(plan, elapsedMs(timer, now), WALL_AT_MONO_ZERO + now)
+  // The item in hand may have to finish by a clock time ("sermon ends by 12:15").
+  const endBy = activeIndex !== null ? items[activeIndex]?.end_by ?? null : null
+  const endByLeft = endByLeftMs(endBy, WALL_AT_MONO_ZERO + now)
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -54,6 +57,14 @@ export function ServiceTimer() {
           <TimerIcon className="size-3.5" />
           {idle ? "Timer" : label}
           {tone === "over" && <span className="text-[0.625rem] font-bold uppercase">over</span>}
+          {endBy && endByLeft !== null && (
+            <span
+              className={cn("text-[0.625rem] font-semibold", endByLeft < 0 ? "text-destructive" : endByLeft <= 120_000 ? "text-confidence-mid" : "text-muted-foreground")}
+              title={`This item should finish by ${endBy}`}
+            >
+              {endByLeft < 0 ? `past ${endBy} by ${Math.ceil(-endByLeft / 60_000)} min` : `by ${endBy} · ${Math.ceil(endByLeft / 60_000)} min`}
+            </span>
+          )}
           {behind !== null && behind !== 0 && (
             <span className={cn("text-[0.625rem] font-semibold", behind > 0 ? "text-destructive" : "text-confidence-high")} title="Against the planned minutes of the items so far">
               {behind > 0 ? `${behind} min late` : `${-behind} min early`}

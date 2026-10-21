@@ -12,6 +12,8 @@ interface QueueItemBase {
   background?: { media_id: string; name: string } | null
   /** How long this item is planned to take, for service timing (PT-002). */
   planned_minutes?: number | null
+  /** A clock time this item should finish by, 24-hour "HH:MM" (FR-07). */
+  end_by?: string | null
 }
 
 export interface VerseQueueItem extends QueueItemBase {

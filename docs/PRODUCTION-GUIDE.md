@@ -61,6 +61,8 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 
 The service timer (Present header) also shows, once items have planned minutes and the timer runs, the planned end time and, when the service is a minute or more off plan, when it now looks like ending ("Planned end 12:30 · now about 12:41"). If the timer was started late, "Correct the timer" moves it by a minute either way; each correction is a line in the service log.
 
+An item can also have an **end by** time (Prepare, beside its planned minutes: "sermon ends by 12:15"). While it is the item in hand, the timer chip shows "by 12:15 · 6 min", amber in the last two minutes and red once the time has passed.
+
 
 - **Timer**: monotonic (ignores clock changes); amber under two minutes, red when over. Planned minutes per item give "n min late/early".
 - **Message stage**: a framed banner on stage outputs only. Clear it from the same control.

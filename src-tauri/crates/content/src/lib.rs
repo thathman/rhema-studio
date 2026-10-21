@@ -819,13 +819,21 @@ fn validate_slide_payload(i: usize, payload: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-/// Any item may carry `{"background_media_id": ..., "planned_minutes": ...}` in its payload.
+/// Any item may carry `{"background_media_id": ..., "planned_minutes": ..., "end_by": "HH:MM"}` in its payload.
 #[derive(Debug, Deserialize)]
 struct ExtrasPayload {
     #[serde(default)]
     background_media_id: Option<String>,
     #[serde(default)]
     planned_minutes: Option<f64>,
+    /// A clock time the item should finish by (FR-07 "target item end"), 24-hour "HH:MM".
+    #[serde(default)]
+    end_by: Option<String>,
+}
+
+fn is_clock_time(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 5 && b[2] == b':' && b[..2].iter().chain(&b[3..]).all(u8::is_ascii_digit) && &s[..2] < "24" && &s[3..] < "60"
 }
 
 fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
@@ -836,6 +844,9 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     }
     if p.planned_minutes.is_some_and(|m| !(0.0..=600.0).contains(&m) || m.is_nan()) {
         return Err(ContentError::Invalid(format!("item {i}: planned minutes must be between 0 and 600")));
+    }
+    if p.end_by.as_deref().is_some_and(|t| !is_clock_time(t)) {
+        return Err(ContentError::Invalid(format!("item {i}: end-by time must be HH:MM")));
     }
     Ok(())
 }
@@ -1065,6 +1076,10 @@ mod tests {
         let too_long = ItemInput { payload: Some("{\"planned_minutes\":900}".into()), ..verse("John 3:16", 43, 3, 16) };
         assert!(matches!(db.replace_items(&p.id, 2, &[too_long]), Err(ContentError::Invalid(_))));
         let timed = ItemInput { payload: Some("{\"planned_minutes\":4.5}".into()), ..verse("John 3:16", 43, 3, 16) };
+        for (end_by, ok) in [("12:15", true), ("00:00", true), ("23:59", true), ("24:00", false), ("12:60", false), ("9:15", false), ("12-15", false)] {
+            let item = ItemInput { payload: Some(format!("{{\"end_by\":\"{end_by}\"}}")), ..verse("John 3:16", 43, 3, 16) };
+            assert_eq!(validate_items(&[item]).is_ok(), ok, "{end_by}");
+        }
         assert!(db.replace_items(&p.id, 2, &[timed]).is_ok());
     }
 
