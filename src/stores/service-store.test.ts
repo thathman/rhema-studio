@@ -388,4 +388,45 @@ describe("createFromRundown", () => {
     expect(await useServiceStore.getState().updateDetails("Other", null)).toBe("conflict")
     expect(useServiceStore.getState().current?.title).toBe("Sunday 9 am")
   })
+
+  it("starts a new service from a template: the template's items with fresh ids, the template untouched", async () => {
+    const template: ProgramWithItems = { program: { ...program, id: "tpl", title: "9 am", is_template: true }, items: [item("i1", "John 3:16", 43, 3, 16)] }
+    const calls: Array<[string, Record<string, unknown>]> = []
+    mockInvoke.mockImplementation(async (cmd: string, a: Record<string, unknown>) => {
+      calls.push([cmd, a])
+      if (cmd === "content_get_program") return a.id === "tpl" ? template : { program: { ...program, id: "new", revision: 2 }, items: [item("n1", "John 3:16", 43, 3, 16, { program_id: "new" })] }
+      if (cmd === "content_create_program") return { ...program, id: "new", title: a.title, service_date: a.serviceDate, revision: 1 }
+      if (cmd === "content_replace_items") return { program: { ...program, id: "new", revision: 2 }, items: (a.items as Array<{ id: string }>).map((x, n) => item(x.id, "John 3:16", 43, 3, 16, { program_id: "new", position: n })) }
+      if (cmd === "content_list_programs") return []
+      return null
+    })
+    useServiceStore.setState({ current: null, dirty: false } as never)
+    expect(await useServiceStore.getState().newFromTemplate("tpl", "Sunday 25th", "2026-10-25")).toBe("created")
+    const saved = calls.find(([c]) => c === "content_replace_items")!
+    expect(saved[1].programId).toBe("new")
+    expect((saved[1].items as Array<{ id: string }>)[0].id).not.toBe("i1")
+    expect(calls.some(([c, a]) => c === "content_replace_items" && a.programId === "tpl")).toBe(false)
+    expect(useServiceStore.getState().current?.id).toBe("new")
+  })
+
+  it("a template that cannot be fully copied, or a failed create, leaves the template and the screen alone", async () => {
+    const template: ProgramWithItems = { program: { ...program, id: "tpl", is_template: true }, items: [item("i1", "John 3:16", 43, 3, 16), item("x", "?", 0, 0, 0, { kind: "future_kind" })] }
+    const writes: string[] = []
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "content_get_program") return template
+      if (cmd === "content_create_program" || cmd === "content_replace_items") { writes.push(cmd); throw { kind: "database", message: "disk full" } }
+      return null
+    })
+    useQueueStore.setState({ items: [], activeIndex: null })
+    useServiceStore.setState({ current: null, dirty: false } as never)
+    expect(await useServiceStore.getState().newFromTemplate("tpl", "New", null)).toBe("failed")
+    expect(useServiceStore.getState().error).toContain("cannot copy")
+    expect(writes).toEqual([])
+
+    template.items = [item("i1", "John 3:16", 43, 3, 16)]
+    expect(await useServiceStore.getState().newFromTemplate("tpl", "New", null)).toBe("failed")
+    expect(useQueueStore.getState().items).toEqual([])
+    expect(useServiceStore.getState().current).toBeNull()
+    expect(writes).toEqual(["content_create_program"])
+  })
 })

@@ -76,6 +76,11 @@ export function ServiceBar() {
   const [editOpen, setEditOpen] = useState(false)
   const [editTitle, setEditTitle] = useState("")
   const [editDate, setEditDate] = useState("")
+  const [showArchived, setShowArchived] = useState(false)
+  const [fromTemplate, setFromTemplate] = useState("")
+  const templates = programs.filter((p) => p.is_template && !p.archived_at)
+  const archivedCount = programs.filter((p) => p.archived_at).length
+  const listed = programs.filter((p) => !p.archived_at || showArchived || p.id === current?.id)
 
   const fail = (what: string) =>
     toast.error(what, { description: useServiceStore.getState().error ?? undefined })
@@ -87,10 +92,14 @@ export function ServiceBar() {
   }
 
   const create = async () => {
-    const r = await useServiceStore.getState().createFromRundown(title, date || null)
+    const usedTemplate = fromTemplate !== ""
+    const r = fromTemplate
+      ? await useServiceStore.getState().newFromTemplate(fromTemplate, title, date || null)
+      : await useServiceStore.getState().createFromRundown(title, date || null)
+    setFromTemplate("")
     setNewOpen(false)
     if (r === "created") {
-      toast.success(count > 0 ? `Service "${title}" created and saved` : `Service "${title}" created`)
+      toast.success(usedTemplate ? `Service "${title}" created from the template` : count > 0 ? `Service "${title}" created and saved` : `Service "${title}" created`)
       setTitle("")
       setDate("")
     } else if (r === "created_unsaved") {
@@ -154,14 +163,22 @@ export function ServiceBar() {
           <SelectValue placeholder={programs.length ? "Open a service…" : "No saved services yet"} />
         </SelectTrigger>
         <SelectContent>
-          {programs.map((p) => (
+          {listed.map((p) => (
             <SelectItem key={p.id} value={p.id}>
               {p.title}
               {p.service_date ? ` · ${p.service_date}` : ""}
+              {p.is_template ? " · template" : ""}
+              {p.archived_at ? " · archived" : ""}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+      {archivedCount > 0 && (
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Show archived ({archivedCount})
+        </label>
+      )}
 
       <ServiceHistory />
       {current && (
@@ -195,6 +212,32 @@ export function ServiceBar() {
               <p className="text-xs text-muted-foreground">The items are not touched; unsaved changes stay unsaved.</p>
               <Button type="submit" size="sm" disabled={!editTitle.trim()}>Save title and date</Button>
             </form>
+            <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3 text-xs">
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={current.is_template === true}
+                  onChange={(e) => void useServiceStore.getState().setTemplate(current.id, e.target.checked).then((ok) => { if (!ok) fail("Could not change the template mark") })}
+                />
+                <span>Template<span className="block text-muted-foreground">Offered under New service → Start from (9 am, communion, youth…). Not shown on Home.</span></span>
+              </label>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-fit"
+                onClick={() => {
+                  const archive = !current.archived_at
+                  void useServiceStore.getState().setArchived(current.id, archive).then((ok) => {
+                    setEditOpen(false)
+                    if (ok) toast.success(archive ? "Service archived" : "Service brought back", { description: archive ? "Hidden from the list; its history and logs are kept. Tick Show archived to find it." : undefined })
+                    else fail("Could not change the archive state")
+                  })
+                }}
+              >
+                {current.archived_at ? "Bring back from the archive" : "Archive this service"}
+              </Button>
+            </div>
           </PopoverContent>
         </Popover>
       )}
@@ -254,8 +297,17 @@ export function ServiceBar() {
               <CalendarIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input id="svc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="pl-8" />
             </div>
+            {templates.length > 0 && (
+              <>
+                <label className="text-xs text-muted-foreground" htmlFor="svc-from">Start from</label>
+                <select id="svc-from" value={fromTemplate} onChange={(e) => setFromTemplate(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
+                  <option value="">{count > 0 ? "The items on screen" : "Nothing (empty)"}</option>
+                  {templates.map((t) => <option key={t.id} value={t.id}>Template: {t.title}</option>)}
+                </select>
+              </>
+            )}
             <p className="text-[0.6875rem] text-muted-foreground">
-              {count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
+              {fromTemplate ? `A copy of the template's items (the template is not changed).${!current && count > 0 ? ` The ${count} unsaved item${count === 1 ? "" : "s"} on screen will be replaced.` : ""}` : count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
             </p>
             <div className="mt-1 flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={() => setNewOpen(false)}>Cancel</Button>

@@ -8,7 +8,7 @@ For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; on
 2. **Prepare → New service** (or Copy last week's). Give it a date.
 3. Add items in the order of the service:
    - **Bible**: type `john 3 16` or a few words, press Add.
-   - **Songs**: search by title, a line of the words, or a hymn number like `245`. New song: paste the words, put a blank line between verses, write `Chorus` (or `Ẹgbẹ́ orin`) above the chorus, Make sections, Save. Headings from other places work too (`## Chorus`, `[Verse 1]`, `**Bridge**`). **Text…** in the song editor saves a song as plain text to print or share; pasting that text back gives the same sections.
+   - **Songs**: search by title, a line of the words, or a hymn number like `245`. New song: paste the words, put a blank line between verses, write `Chorus` (or `Ẹgbẹ́ orin`) above the chorus, Make sections, Save. Headings from other places work too (`## Chorus`, `[Verse 1]`, `**Bridge**`). The pencil beside the service name renames or re-dates it, marks it as a **template** (then New service → Start from offers it: 9 am, communion, youth) or **archives** it (hidden from the list, kept; "Show archived" finds it). **Text…** in the song editor saves a song as plain text to print or share; pasting that text back gives the same sections.
    - **Slides**: Any text or Announcement (when, where, details).
    - **Pictures**: Import once; Add to the service.
 4. Click an item to set its languages (EN · YO), its order, a background picture, planned minutes, or a note to yourself.

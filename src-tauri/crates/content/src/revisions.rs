@@ -134,6 +134,9 @@ impl ContentDb {
             "UPDATE programs SET approved_revision = ?2, approved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
             params![program_id, expected_revision],
         )?;
+        if crate::has_archive_column(&tx) {
+            tx.execute("UPDATE programs SET approved_by = ?2 WHERE id = ?1", params![program_id, crate::actor()])?;
+        }
         audit(&tx, "program", program_id, "approve", &serde_json::json!({ "revision": expected_revision }))?;
         let program = load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.into()))?;
         tx.commit()?;
@@ -240,8 +243,9 @@ mod tests {
         let db = ContentDb::open_in_memory().unwrap();
         let p = db.create_program("Sunday", None).unwrap();
         crate::set_actor(Some("  Tolu  "));
-        db.approve_program(&p.id, p.revision).unwrap();
+        let approved = db.approve_program(&p.id, p.revision).unwrap();
         crate::set_actor(None);
+        assert_eq!(approved.approved_by.as_deref(), Some("Tolu"), "CL-002: who approved it");
         let events = db.audit_events("program", &p.id).unwrap();
         let approve = events.iter().find(|e| e.action == "approve").unwrap();
         assert_eq!(approve.actor.as_deref(), Some("Tolu"));
