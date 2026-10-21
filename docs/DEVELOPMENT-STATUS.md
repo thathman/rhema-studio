@@ -62,6 +62,29 @@ Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-ca
 
 Found by reading PRD lines against the code (not by tests): no single-instance guard, no last-good frame, one-click log deletion, the PRD's own "Jn 3 16" example failing, the Back button clipped at 1366x768. Independent reviews of each batch found 9 more defects, all fixed.
 
+## Every row not yet merged, and why (2026-10-21, after a full read of PRD, TASKS and RELEASE-PLAN)
+
+| Row | What is left | Blocked by |
+|---|---|---|
+| ST-004 | Yorùbá speech, OpenAI provider (PR #4) | Owner: speech provider and model bundling |
+| ST-006 | Operator acceptance rows 1–10ba | Real Windows desktop and projector (#31) |
+| ST-009 | App identity rename with settings migration | Owner: product name / installer app ID (PRD open decision) |
+| MD-002 | Sound over NDI | Audio path to the NDI sender and real receivers to test |
+| OP-005 | OBS 720p30 smoke, NDI runtime drop | Real OBS/NDI hardware |
+| PT-006 | Song playback / MIDI sync, backing tracks tied to songs | Owner: which playback source |
+| CV-002, CV-003, CV-006, CV-007 | Canva connection, export/import, Autofill, update checks | Owner: Canva token relay (#34; recurring cost, Canva-reviewed public integration) |
+| CL-001 | Roles and multi-user identity | Owner: who may present/approve (and the sync decision for remote users) |
+| CL-002 | "Approval required before go-live" | Owner: whether approval gates going live (project-vs-release default, PRD open decision) |
+| CL-005, CL-006 (remote delivery), CL-007 | Remote drafts/approvals, delivery, team comments | Owner: sync approach (#72) |
+| SG-003 | Giving/prayer action links | Owner: which external systems |
+| AR-004, AI-001, AI-002 | Opt-in transcription, AI provider abstraction, suggestions | Owner: speech/AI provider (PR #4) and archive consent/retention (PRD open decision) |
+| QA-001 | Install, launch and smoke the installer | Real Windows machine (#32) |
+| QA-002 | Network loss, OBS drop, packet capture | Real desktop (rows 10an) |
+| QA-003 | Novice usability sessions | Real volunteers |
+| QA-006 | Cloud-sync threat review | Owner: sync approach (#72) |
+| QA-007 | Benchmarks on low-end hardware | Real low-end PCs (the latency logging they need is in the PR after this list) |
+| QA-010 | Backup/restore drill | Real machines (#62) |
+
 ## Next eligible tasks
 
 Every backlog row now has its buildable part merged. What remains, by why it is not being built:
