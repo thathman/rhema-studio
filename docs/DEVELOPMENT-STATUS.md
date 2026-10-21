@@ -31,6 +31,9 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Unverified (release-acceptance blockers, not development blockers)
 
+Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-candidate-evidence.md` (decision: NO-GO until desktop rows and owner sign-off).
+
+
 - Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10ar). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
 - Windows installer: workflow run 39546898905 built `main` at `0305327` (artifact `rhema-windows-x64-installer`, 99,250,688 bytes, artifact digest sha256:febc816174afe10380868be117d6d8a37ab81b5eb467aad1cd04e7d18d8c78ed, kept 14 days; CI run 39546870731 green on the same commit). Earlier: run 39541733204 at `7bf70ee`. Not installed or launched; not a release.
 - Yoruba speech recognition and the OpenAI provider (PR #4).

@@ -79,6 +79,8 @@ No release passes with unresolved P0 reliability/data-loss/security issues, miss
 
 ## 6. Evidence and ownership template
 
+The current candidate's filled-in sheet: [rhema-studio/19-release-candidate-evidence.md](rhema-studio/19-release-candidate-evidence.md).
+
 Every release candidate should include:
 
 ```text
