@@ -7,7 +7,7 @@ import { approvalState } from "@/lib/approval"
  * up. Nothing undated or in the past is guessed.
  */
 export function todaysService(programs: Program[], today: string): { program: Program; why: "approved today" | "today" | "next approved" } | null {
-  const dated = programs.filter((p) => p.service_date)
+  const dated = programs.filter((p) => p.service_date && !p.archived_at && !p.is_template)
   const approved = (p: Program) => approvalState(p) === "approved"
   const todays = dated.filter((p) => p.service_date === today)
   const first = todays.find(approved)

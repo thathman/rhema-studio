@@ -134,6 +134,18 @@ pub fn content_update_program(
     with_db(&state, |db| db.update_program(&id, expected_revision, &title, service_date.as_deref()))
 }
 
+/// Archive (hide from the picker, keep) or bring back a service.
+#[tauri::command]
+pub fn content_set_program_archived(state: State<'_, ContentState>, id: String, archived: bool) -> CmdResult<Program> {
+    with_db(&state, |db| db.set_program_archived(&id, archived))
+}
+
+/// Mark a service as a template for new services, or not.
+#[tauri::command]
+pub fn content_set_program_template(state: State<'_, ContentState>, id: String, template: bool) -> CmdResult<Program> {
+    with_db(&state, |db| db.set_program_template(&id, template))
+}
+
 #[tauri::command]
 pub fn content_get_program(state: State<'_, ContentState>, id: String) -> CmdResult<Option<ProgramWithItems>> {
     with_db(&state, |db| db.get_program(&id))

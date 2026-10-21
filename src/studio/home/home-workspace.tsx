@@ -213,7 +213,7 @@ export function HomeWorkspace() {
               <p className="text-xs text-muted-foreground">None yet. Create one in Prepare to keep a rundown for Sunday.</p>
             ) : (
               <ul className="divide-y divide-border">
-                {programs.slice(0, 5).map((p) => (
+                {programs.filter((p) => !p.archived_at && !p.is_template).slice(0, 5).map((p) => (
                   <li key={p.id} className="flex items-center gap-2 py-1.5">
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {p.title}

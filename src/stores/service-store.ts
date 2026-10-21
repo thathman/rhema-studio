@@ -72,6 +72,12 @@ interface ServiceState {
   restoreRevision: (revisionId: string) => Promise<OpenResult | "conflict">
   /** Rename or re-date the open service (its items are untouched; unsaved edits stay unsaved). */
   updateDetails: (title: string, serviceDate: string | null) => Promise<"ok" | "conflict" | "failed">
+  /** Archive (hide from the picker, keep) or bring back a service. */
+  setArchived: (id: string, archived: boolean) => Promise<boolean>
+  /** Mark a service as a template for new services, or not. */
+  setTemplate: (id: string, template: boolean) => Promise<boolean>
+  /** A new service with a copy of a template's items (fresh ids; the template is untouched). */
+  newFromTemplate: (templateId: string, title: string, serviceDate: string | null) => Promise<CreateResult>
   /** Approve the saved service as it is now ("this is Sunday's"). */
   approve: () => Promise<"ok" | "unsaved" | "conflict" | "error">
 }
@@ -483,6 +489,37 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       set({ error: describe(e) })
       return isContentCommandError(e) && e.kind === "conflict" ? "conflict" : "failed"
     }
+  },
+
+  setArchived: async (id, archived) => {
+    try {
+      const program = await invoke<Program>("content_set_program_archived", { id, archived })
+      if (get().current?.id === id) set({ current: { ...get().current!, archived_at: program.archived_at } })
+      await get().loadPrograms()
+      return true
+    } catch (e) {
+      set({ error: describe(e) })
+      return false
+    }
+  },
+
+  setTemplate: async (id, template) => {
+    try {
+      const program = await invoke<Program>("content_set_program_template", { id, template })
+      if (get().current?.id === id) set({ current: { ...get().current!, is_template: program.is_template } })
+      await get().loadPrograms()
+      return true
+    } catch (e) {
+      set({ error: describe(e) })
+      return false
+    }
+  },
+
+  newFromTemplate: async (templateId, title, serviceDate) => {
+    if (get().dirty) return "unsaved"
+    const opened = await get().openProgram(templateId)
+    if (opened !== "ok") return "failed"
+    return get().duplicateCurrent(title, serviceDate)
   },
 
   duplicateCurrent: async (title, serviceDate) => {

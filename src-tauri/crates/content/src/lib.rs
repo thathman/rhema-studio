@@ -75,6 +75,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0007_approval", include_str!("../migrations/0007_approval.sql")),
     ("0008_service_logs", include_str!("../migrations/0008_service_logs.sql")),
     ("0009_song_attachments", include_str!("../migrations/0009_song_attachments.sql")),
+    ("0010_archive_templates", include_str!("../migrations/0010_archive_templates.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -102,6 +103,12 @@ pub struct Program {
     pub approved_revision: Option<i64>,
     #[serde(default)]
     pub approved_at: Option<String>,
+    /// Set when the service was archived (hidden from the picker, kept). Migration 0010.
+    #[serde(default)]
+    pub archived_at: Option<String>,
+    /// A starting point for new services rather than a service to hold.
+    #[serde(default)]
+    pub is_template: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -368,6 +375,29 @@ impl ContentDb {
         audit(&tx, "program", id, "update", &serde_json::json!({ "title": title, "service_date": service_date }))?;
         revisions::snapshot(&tx, id)?;
         let program = load_program(&tx, id)?.ok_or_else(|| ContentError::NotFound(id.to_string()))?;
+        tx.commit()?;
+        Ok(program)
+    }
+
+    /// Archive or bring back a service. Not a content change: no new revision,
+    /// so approval and open editors are unaffected. Audited.
+    pub fn set_program_archived(&self, id: &str, archived: bool) -> Result<Program> {
+        self.set_program_flag(id, "archive", if archived { "UPDATE programs SET archived_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1" } else { "UPDATE programs SET archived_at = NULL WHERE id = ?1" })
+    }
+
+    /// Mark a service as a template (a starting point for new services) or not. Audited.
+    pub fn set_program_template(&self, id: &str, template: bool) -> Result<Program> {
+        self.set_program_flag(id, "template", if template { "UPDATE programs SET is_template = 1 WHERE id = ?1" } else { "UPDATE programs SET is_template = 0 WHERE id = ?1" })
+    }
+
+    fn set_program_flag(&self, id: &str, action: &str, sql: &str) -> Result<Program> {
+        let mut conn = self.lock()?;
+        let tx = conn.transaction()?;
+        if tx.execute(sql, params![id])? == 0 {
+            return Err(ContentError::NotFound(id.to_string()));
+        }
+        let program = load_program(&tx, id)?.ok_or_else(|| ContentError::NotFound(id.to_string()))?;
+        audit(&tx, "program", id, action, &serde_json::json!({ "archived": program.archived_at.is_some(), "template": program.is_template }))?;
         tx.commit()?;
         Ok(program)
     }
@@ -649,8 +679,17 @@ pub(crate) fn has_approval_column(conn: &Connection) -> bool {
         .unwrap_or(false)
 }
 
-fn approval_cols(conn: &Connection) -> &'static str {
-    if has_approval_column(conn) { ", p.approved_revision, p.approved_at" } else { ", NULL, NULL" }
+fn has_archive_column(conn: &Connection) -> bool {
+    conn.prepare("SELECT 1 FROM pragma_table_info('programs') WHERE name = 'archived_at'")
+        .and_then(|mut st| st.exists([]))
+        .unwrap_or(false)
+}
+
+/// Columns 7.. of a program row; an older schema (a backup being checked) reads as unset.
+fn approval_cols(conn: &Connection) -> String {
+    let approval = if has_approval_column(conn) { ", p.approved_revision, p.approved_at" } else { ", NULL, NULL" };
+    let archive = if has_archive_column(conn) { ", p.archived_at, p.is_template" } else { ", NULL, 0" };
+    format!("{approval}{archive}")
 }
 
 fn row_to_program(r: &rusqlite::Row<'_>) -> rusqlite::Result<Program> {
@@ -664,6 +703,8 @@ fn row_to_program(r: &rusqlite::Row<'_>) -> rusqlite::Result<Program> {
         item_count: r.get(6)?,
         approved_revision: r.get(7)?,
         approved_at: r.get(8)?,
+        archived_at: r.get(9)?,
+        is_template: r.get::<_, i64>(10)? != 0,
     })
 }
 
@@ -891,7 +932,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates"]);
     }
 
     #[test]
@@ -1097,7 +1138,7 @@ mod tests {
         let older = &MIGRATIONS[..5];
         let err = ContentDb::open_with_migrations(&tmp.db(), older).unwrap_err();
         match &err {
-            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments"]),
+            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates"]),
             other => panic!("{other:?}"),
         }
         assert!(err.to_string().contains("newer Rhema Studio"));
@@ -1118,7 +1159,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));
@@ -1300,5 +1341,21 @@ mod tests {
         db.backup_to(&dest).unwrap();
         let copy = ContentDb::open(&dest).unwrap();
         assert_eq!(copy.get_program(&p.id).unwrap().unwrap().items.len(), 1);
+    }
+
+    #[test]
+    fn archive_and_template_flags_keep_revision_and_survive_reopen() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday 9 am", Some("2026-10-25")).unwrap();
+        assert!(p.archived_at.is_none() && !p.is_template);
+        let t = db.set_program_template(&p.id, true).unwrap();
+        assert!(t.is_template);
+        assert_eq!(t.revision, p.revision, "a flag is not a content change");
+        let a = db.set_program_archived(&p.id, true).unwrap();
+        assert!(a.archived_at.is_some() && a.is_template);
+        let listed = db.list_programs().unwrap();
+        assert!(listed[0].archived_at.is_some() && listed[0].is_template);
+        assert!(db.set_program_archived(&p.id, false).unwrap().archived_at.is_none());
+        assert!(matches!(db.set_program_archived("nope", true), Err(ContentError::NotFound(_))));
     }
 }

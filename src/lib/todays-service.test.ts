@@ -16,4 +16,15 @@ describe("today's service", () => {
   it("formats the local date like service_date", () => {
     expect(localDate(new Date(2026, 9, 5))).toBe("2026-10-05")
   })
+
+  it("never suggests an archived service or a template", () => {
+    const base = { revision: 1, created_at: "", updated_at: "", item_count: 1 }
+    const programs = [
+      { ...base, id: "t", title: "9 am template", service_date: "2026-10-25", is_template: true },
+      { ...base, id: "a", title: "Old", service_date: "2026-10-25", archived_at: "2026-10-26T00:00:00Z" },
+      { ...base, id: "s", title: "Sunday", service_date: "2026-10-25" },
+    ]
+    expect(todaysService(programs, "2026-10-25")?.program.id).toBe("s")
+    expect(todaysService(programs.slice(0, 2), "2026-10-25")).toBeNull()
+  })
 })

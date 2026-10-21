@@ -25,7 +25,7 @@ fn is_iso_date(s: &str) -> bool {
 
 impl ContentDb {
     /// Songs in services dated `from`..=`to` (ISO dates), most used first.
-    /// Services without a date are not counted.
+    /// Services without a date, and templates, are not counted.
     pub fn song_usage(&self, from: &str, to: &str) -> Result<Vec<SongUsage>> {
         if !is_iso_date(from) || !is_iso_date(to) || from > to {
             return Err(ContentError::Invalid("give a date range as YYYY-MM-DD, start first".into()));
@@ -38,7 +38,7 @@ impl ContentDb {
                FROM program_items i
                JOIN programs p ON p.id = i.program_id
                LEFT JOIN songs s ON s.id = json_extract(i.payload, '$.song_id')
-              WHERE i.kind = 'song' AND p.service_date BETWEEN ?1 AND ?2 AND sid IS NOT NULL
+              WHERE i.kind = 'song' AND p.service_date BETWEEN ?1 AND ?2 AND sid IS NOT NULL AND p.is_template = 0
               GROUP BY sid
               ORDER BY COUNT(DISTINCT p.id) DESC, 2 COLLATE NOCASE",
         )?;

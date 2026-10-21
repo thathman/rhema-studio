@@ -11,6 +11,10 @@ export interface Program {
   /** The revision approved for the service, if any (`approve_program`). */
   approved_revision?: number | null
   approved_at?: string | null
+  /** Archived: hidden from the picker, kept with its history (migration 0010). */
+  archived_at?: string | null
+  /** A starting point for new services (9 am, communion, youth), not a service to hold. */
+  is_template?: boolean
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
