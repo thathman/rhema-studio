@@ -507,6 +507,46 @@ function drawBackground(
  * background and every surface fill, so a picture behaves the same wherever it
  * is used. While the image is still loading a deterministic flat fill stands in.
  */
+/**
+ * The lower third: a dark band near the bottom with a bold first line and a
+ * lighter second line, in the theme's font. Drawn last, over anything,
+ * including a transparent (OBS-keyed) frame.
+ */
+export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, height: number, lt: { line1: string; line2: string }, fontFamily?: string): void {
+  // Quoted: a family like "Source Serif 4 Variable" makes an unquoted font shorthand invalid, and the canvas ignores it.
+  const family = fontFamily ? `"${fontFamily.replace(/"/g, "")}", system-ui, sans-serif` : "system-ui, sans-serif"
+  const marginX = Math.round(width * 0.06)
+  const bandH = Math.round(height * (lt.line2 ? 0.15 : 0.1))
+  const y = Math.round(height * 0.92) - bandH
+  const size1 = Math.round(bandH * (lt.line2 ? 0.36 : 0.5))
+  const size2 = Math.round(bandH * 0.24)
+  ctx.save()
+  ctx.font = `700 ${size1}px ${family}`
+  const w1 = ctx.measureText(lt.line1).width
+  ctx.font = `400 ${size2}px ${family}`
+  const w2 = ctx.measureText(lt.line2).width
+  const padX = Math.round(bandH * 0.35)
+  const bandW = Math.min(width - marginX * 2, Math.max(w1, w2) + padX * 2)
+  ctx.fillStyle = "rgba(0,0,0,0.78)"
+  roundRect(ctx, marginX, y, bandW, bandH, Math.round(bandH * 0.12))
+  ctx.fill()
+  ctx.fillStyle = "#ffffff"
+  ctx.textBaseline = "middle"
+  ctx.textAlign = "left"
+  const maxW = bandW - padX * 2
+  if (lt.line2) {
+    ctx.font = `700 ${size1}px ${family}`
+    ctx.fillText(lt.line1, marginX + padX, y + bandH * 0.36, maxW)
+    ctx.font = `400 ${size2}px ${family}`
+    ctx.fillStyle = "rgba(255,255,255,0.85)"
+    ctx.fillText(lt.line2, marginX + padX, y + bandH * 0.72, maxW)
+  } else {
+    ctx.font = `700 ${size1}px ${family}`
+    ctx.fillText(lt.line1, marginX + padX, y + bandH / 2, maxW)
+  }
+  ctx.restore()
+}
+
 /** Draw a video frame into `rect` with the item's fit (cover crops, contain letterboxes, stretch fills). */
 function drawVideoFrame(ctx: CanvasRenderingContext2D, el: HTMLVideoElement, rect: VerseLayoutRect, fit: "cover" | "contain" | "stretch"): void {
   const vw = el.videoWidth

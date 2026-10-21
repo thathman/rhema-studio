@@ -14,6 +14,7 @@ export type {
   BroadcastOutputLanguage,
   BroadcastOutputRole,
   SignageSettings,
+  LowerThird,
   SignageSchedule,
   SignagePlaylist,
   StagePayload,

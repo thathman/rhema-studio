@@ -355,6 +355,12 @@ report), but launching it cannot.
 | 10w.4 | With a signage output whose loop has a picture whose file was deleted, go Home. | Readiness warns "<output>: 1 of n signage pictures is missing" with Open outputs; an empty loop warns "has no pictures". | Unverified |
 | 10w.5 | Two playlists on a signage output: "Sunday" (Sun 08:00–13:00, pictures A, B) and "Rest of the week" (no times, picture C). Set the clock to Sunday 10:00, then Monday 10:00. | A/B alternate on Sunday morning; C shows at other times; the switch happens within a second of the clock change. | Unverified |
 
+### 10y. QR link slide (SG-003)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10y.1 | Prepare → Slides → QR link; title "Give online", link `https://church.example/give`. Add, go live. Scan with a phone from the back of the room. Save, reopen the service, go live again. | A white panel with a large code on the left and the title and address on the right; the phone opens exactly that address; it survives save/reopen. `javascript:` or a bare domain is refused in the composer. | Unverified |
+
 ### 10z. Long text as pages (MD-003)
 
 | # | Steps | Expected | Result |
@@ -380,3 +386,11 @@ report), but launching it cannot.
 | 10ab.4 | NDI output on, received in OBS, video live. Repeat with an NDI-only (hidden window) output that is not the main output. | OBS shows the video moving at the NDI rate; no audio over NDI (not implemented). **Known risk:** WebView2/WebKit may throttle timers in a hidden window to about 1 Hz, so an NDI-only output could send roughly one frame a second; record the rate seen. | Unverified |
 | 10ab.6 | Import a 2 GB video. | The app stays responsive during the copy (the import is hashed and copied as a stream, off the main thread); memory does not climb by the file's size. | Unverified |
 | 10ab.5 | Delete the video file from the media folder, then show it live; separately, import a file the webview cannot decode (e.g. HEVC on Windows without the codec). | Missing: warning, the screen keeps what it had. Undecodable: that screen shows "▶ name", Present shows "could not play … Try an MP4 (H.264) file." | Unverified |
+
+### 10ac. Lower thirds (MD-004)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ac.1 | Outputs: turn on "Show lower thirds" for the NDI stream (transparent theme), leave it off for the projector. Present → Lower third: "Pastor Tolu" / "Senior Pastor" → Show. | The band appears on the stream (keyable in OBS over the camera), not on the projector or the stage screen. | Unverified |
+| 10ac.2 | With the band up: show a verse, Next, Clear, Restore, a video, a quick screen. | The band stays on the stream through all of it, above everything; the projector never shows it. | Unverified |
+| 10ac.3 | Hide. Then turn lower thirds off for the stream while a band is up. | Hide removes it at once; switching the output off removes it from that output at once. | Unverified |

@@ -10,6 +10,12 @@ export type BroadcastOutputType = "display" | "ndi"
  */
 export type BroadcastOutputRole = "congregation" | "stage" | "signage"
 
+/** A name/title band kept on screen until the operator hides it; Next, Clear and new presents leave it alone. */
+export interface LowerThird {
+  line1: string
+  line2: string
+}
+
 /** A `signage` output: pictures on a loop, independent of what is live in the sanctuary. */
 export interface SignageSettings {
   /** Media ids of pictures, in order. */
@@ -81,6 +87,8 @@ export interface BroadcastOutput {
   type: BroadcastOutputType
   role?: BroadcastOutputRole
   language?: BroadcastOutputLanguage
+  /** Show the operator's lower third (name / title band) on this output, over whatever else it shows. */
+  lowerThirds?: boolean
   signage?: SignageSettings
   themeId: string
   /** Kept even while type === "ndi" so switching types is lossless. */

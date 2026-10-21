@@ -170,6 +170,7 @@ export function BroadcastOutputsDialog({
         role: next.role,
         language: next.language,
         signage: next.signage,
+        lowerThirds: next.lowerThirds,
       })
       if (wasOnAir && transportChanged) {
         const updated = useBroadcastStore.getState().outputs.find((o) => o.id === next.id)

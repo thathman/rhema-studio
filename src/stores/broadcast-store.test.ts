@@ -384,4 +384,51 @@ describe("updateDraftNested deep paths", () => {
       theme.textBox.padding
     )
   })
+
+  it("a lower third goes only to outputs that show lower thirds, and survives presents and Clear", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stream", name: "Stream", type: "ndi", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults, lowerThirds: true })
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, lowerThirds: true })
+    emitToMock.mockClear()
+    useBroadcastStore.getState().setLowerThird({ line1: "  Pastor Tolu  ", line2: "Senior Pastor" })
+    expect(useBroadcastStore.getState().lowerThird).toEqual({ line1: "Pastor Tolu", line2: "Senior Pastor" })
+    const targets = emitToMock.mock.calls.map((c) => c[0])
+    expect(targets).toEqual(["broadcast-stream"])
+    expect(emitToMock.mock.calls[0][2]).toMatchObject({ overlay: { line1: "Pastor Tolu", line2: "Senior Pastor" } })
+
+    emitToMock.mockClear()
+    useBroadcastStore.setState({ isLive: true, liveVerse: sampleLiveVerse })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    const byWindow = Object.fromEntries(emitToMock.mock.calls.map((c) => [c[0], c[2]]))
+    expect(byWindow["broadcast-stream"]).toMatchObject({ overlay: { line1: "Pastor Tolu" } })
+    expect(byWindow["broadcast-main"].overlay).toBeNull()
+    expect(byWindow["broadcast-stage"].overlay).toBeUndefined()
+
+    emitToMock.mockClear()
+    useBroadcastStore.setState({ isLive: false })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(Object.fromEntries(emitToMock.mock.calls.map((c) => [c[0], c[2]]))["broadcast-stream"]).toMatchObject({ verse: null, overlay: { line1: "Pastor Tolu" } })
+
+    useBroadcastStore.getState().setLowerThird({ line1: " ", line2: "" })
+    expect(useBroadcastStore.getState().lowerThird).toBeNull()
+  })
+
+  it("theme edits keep the lower third on the outputs that show it, and are frozen during rehearsal", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const theme = s.themes[0]
+    s.addOutput({ id: "stream", name: "Stream", type: "ndi", themeId: theme.id, monitorIndex: 0, ndi: ndiDefaults, lowerThirds: true })
+    useBroadcastStore.getState().setLowerThird({ line1: "Pastor Tolu", line2: "" })
+    useBroadcastStore.setState({ draftTheme: { ...theme, name: "Draft" }, editingThemeId: theme.id })
+    emitToMock.mockClear()
+    useBroadcastStore.getState().updateDraft({ name: "Draft 2" })
+    const toStream = emitToMock.mock.calls.filter((c) => c[0] === "broadcast-stream")
+    expect(toStream.length).toBeGreaterThan(0)
+    expect(toStream.at(-1)?.[2]).toMatchObject({ overlay: { line1: "Pastor Tolu" } })
+    emitToMock.mockClear()
+    useBroadcastStore.setState({ rehearsal: true })
+    useBroadcastStore.getState().updateDraft({ name: "Draft 3" })
+    expect(emitToMock).not.toHaveBeenCalled()
+  })
 })

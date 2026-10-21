@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client"
 import { useRef, useEffect, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
-import { onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
+import { onThemeFontsLoaded, renderVerse, drawLowerThird } from "@/lib/verse-renderer"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
@@ -51,6 +51,8 @@ function reportNdi(ok: boolean, message: string): void {
 interface BroadcastPayload {
   theme: BroadcastTheme
   verse: VerseRenderData | null
+  /** Lower third for this output, drawn over everything; null when hidden or not enabled here. */
+  overlay?: { line1: string; line2: string } | null
   role?: "congregation" | "stage"
   stage?: StagePayload
 }
@@ -107,6 +109,7 @@ function BroadcastCanvas() {
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       logDebug("renderVerse returned null; drew fallback frame")
     }
+    if (data.overlay) drawLowerThird(ctx, canvas.width, canvas.height, data.overlay, theme.verseText?.fontFamily)
   }, [logDebug])
 
   // Redraw once a theme's images land. The burst matters: without it NDI

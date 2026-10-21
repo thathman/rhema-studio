@@ -35,6 +35,18 @@ Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cue
 
 **Who can send these:** anyone on the network while a listener runs, unless you set a key or pair devices in Settings → Remote. Pairing: start the HTTP API, press "Pair a device", and on the phone or controller send the six-digit code once to `/api/v1/pair`; it receives its own token (HTTP header `X-Rhema-Key`, or first OSC argument) and can be revoked on its own later. Start a listener just before the service and stop it after; if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
 
+## Lower thirds
+
+Present → Lower third: a name and an optional title, shown as a band near the bottom of the outputs where "Show lower thirds" is on (Outputs → edit; usually the NDI stream with a transparent theme). It stays up through Next, Clear and new items until you press Hide. The projector shows it only if you turn it on for the projector; stage and signage screens never show it.
+
+## Videos
+
+Prepare → Pictures → "Import pictures or videos…" takes MP4, MOV, M4V and WebM (MP4 with H.264 plays everywhere). A video item plays on every congregation output, streamed from the media folder; **sound comes from the main output only**, so two screens never echo. Per item: Loop (otherwise it holds the last frame) and Sound. NDI carries the picture, not the sound; an NDI-only output in a hidden window may send fewer frames per second on some systems (check before relying on it). Very large videos make the "service as a file" export large, because the file travels inside it.
+
+## QR links on screen
+
+Prepare → Slides → "QR link": type a full `https://…` address (giving, sign-up, the bulletin). The code is drawn in the app, offline, on a white panel with the address printed beside it, so people see where it goes; nothing is tracked. Only plain http(s) links are accepted. The preview shows the words; the code appears on the outputs.
+
 ## Timing and the stage
 
 - **Timer**: monotonic (ignores clock changes); amber under two minutes, red when over. Planned minutes per item give "n min late/early".
