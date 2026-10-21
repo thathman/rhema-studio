@@ -217,9 +217,10 @@ export function SearchPanel() {
         : null
     )
     if (!row) return
-    document
-      .getElementById(`verse-${row.id}`)
-      ?.scrollIntoView({ behavior: "smooth", block: revealBlock })
+    const el = document.getElementById(`verse-${row.id}`)
+    el?.scrollIntoView({ behavior: "smooth", block: revealBlock })
+    // Focus follows the selection when it was on a verse row, so Enter never acts on an older verse.
+    if (el && document.activeElement?.id.startsWith("verse-") && document.activeElement !== el) el.focus({ preventScroll: true })
   }, [revealRequest])
 
   const applyNavigationSelection = useCallback(
@@ -585,8 +586,9 @@ export function SearchPanel() {
                 value={quickInput}
                 onChange={(e) => setQuickInput(e.target.value)}
                 onKeyDown={(e) => {
-                  // Keys typed here are for the box: never the panel's verse stepping (which goes live).
-                  e.stopPropagation()
+                  // Arrows typed here move the caret: never the panel's verse stepping (which goes live).
+                  // Other keys (shortcuts with Cmd/Ctrl, the tour's keys) still reach the page.
+                  if (e.key.startsWith("Arrow") && !e.metaKey && !e.ctrlKey && !e.altKey) e.stopPropagation()
                   handleQuickKeyDown(e)
                 }}
                 placeholder="Type: J → John 3:16"
@@ -727,7 +729,8 @@ export function SearchPanel() {
                   tabIndex={0}
                   onClick={() => handleVerseClick(verse)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    // Enter on the row itself (not its Add button); Space keeps scrolling the list.
+                    if (e.key === "Enter" && e.target === e.currentTarget) {
                       e.preventDefault()
                       e.stopPropagation()
                       handleVerseClick(verse)
@@ -830,7 +833,7 @@ export function SearchPanel() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+                  if (e.key === "Enter" && e.target === e.currentTarget) {
                     e.preventDefault()
                     ;(e.currentTarget as HTMLElement).click()
                   }
