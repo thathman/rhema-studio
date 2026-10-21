@@ -669,3 +669,12 @@ report), but launching it cannot.
 | 10bn.2 | Turn Auto on; Standard view. | "Auto-live on" appears in the header while listening; a heard verse now replaces what is on screen. Clicking the chip turns Auto off. | Unverified |
 | 10bn.3 | Computer that used an earlier build (Auto was on by default). Update; start listening. | Auto is off until turned on again (Live display panel or Settings → Display Mode → Heard verses); after turning it on and restarting, it stays on. | Unverified |
 | 10bn.4 | Settings → Display Mode → Heard verses: choose Auto, then look at the Live display panel; switch it off there and look at Settings. | Both show the same setting. | Unverified |
+
+### 10bo. Next stays where the operator is (RG-03)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bo.1 | Present a service, go to item 4 with Next. From Quick find add a verse; then remove item 1 in Prepare; then drag item 2 below item 5. Press Next after each. | Next always shows the item after the one on screen. | Unverified |
+| 10bo.2 | Service open, listening, on item 6. Read aloud the verse that is item 2, then a verse that is not in the service. Press Next. | Item 2 flashes; nothing is added to the service, the service is not marked unsaved; Next shows item 7. | Unverified |
+| 10bo.4 | Present on item 6; delete item 6 in the rundown; press Next. | Item 7 (the one that followed) goes live, not item 1. | Unverified |
+| 10bo.3 | No service open (Clear service), listening: read two verses aloud. | They collect in the rundown list as in the original Rhema. | Unverified |

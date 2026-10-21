@@ -96,4 +96,20 @@ describe("backfillText", () => {
 
     expect((useQueueStore.getState().items[0] as VerseQueueItem).verse.text).toBe("")
   })
+
+  it("keeps the active position on the same item when items are added, removed or reordered (RG-03)", () => {
+    const v = (id: string, n: number) => ({ id, verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 1, verse: n, text: "" }, reference: `John 1:${n}`, confidence: 1, source: "manual", added_at: 0 }) as VerseQueueItem
+    useQueueStore.setState({ items: [v("a", 1), v("b", 2), v("c", 3)], activeIndex: 1 })
+    useQueueStore.getState().addItem(v("new", 9))
+    expect(useQueueStore.getState().items[useQueueStore.getState().activeIndex ?? -1].id).toBe("b")
+    useQueueStore.getState().removeItem("a")
+    expect(useQueueStore.getState().items[useQueueStore.getState().activeIndex ?? -1].id).toBe("b")
+    useQueueStore.getState().reorderItems(2, 0)
+    expect(useQueueStore.getState().items[useQueueStore.getState().activeIndex ?? -1].id).toBe("b")
+    // Removing the item on screen: stand on the one before it, so Next goes on (not back to the top).
+    const before = useQueueStore.getState().items.map((i) => i.id)
+    useQueueStore.getState().removeItem("b")
+    const at = before.indexOf("b") - 1
+    expect(useQueueStore.getState().activeIndex).toBe(at >= 0 ? at : null)
+  })
 })

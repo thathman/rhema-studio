@@ -26,6 +26,18 @@ interface QueueState {
 
 let flashTimer: ReturnType<typeof setTimeout> | null = null
 
+/**
+ * New items with the active position kept on the same item (RG-03 "Next/
+ * Previous predictable"): adding at the top, removing or reordering must not
+ * leave Next pointing somewhere else.
+ */
+function withActiveKept(state: { items: QueueItem[]; activeIndex: number | null }, items: QueueItem[]) {
+  if (state.activeIndex === null) return { items }
+  const id = state.items[state.activeIndex]?.id
+  const activeIndex = id === undefined ? -1 : items.findIndex((i) => i.id === id)
+  return { items, activeIndex: activeIndex === -1 ? null : activeIndex }
+}
+
 export const useQueueStore = create<QueueState>((set, get) => ({
   items: [],
   activeIndex: null,
@@ -34,7 +46,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   addItem: (item) =>
     set((state) => {
       // Songs may repeat in a service (opening and closing hymn); verses dedupe.
-      if (!isVerseItem(item)) return { items: [item, ...state.items] }
+      if (!isVerseItem(item)) return withActiveKept(state, [item, ...state.items])
       const idx = state.items.findIndex(
         (i) =>
           isVerseItem(i) &&
@@ -56,12 +68,17 @@ export const useQueueStore = create<QueueState>((set, get) => ({
         }
         return state
       }
-      return { items: [item, ...state.items] }
+      return withActiveKept(state, [item, ...state.items])
     }),
   removeItem: (id) =>
-    set((state) => ({
-      items: state.items.filter((i) => i.id !== id),
-    })),
+    set((state) => {
+      const removed = state.items.findIndex((i) => i.id === id)
+      const items = state.items.filter((i) => i.id !== id)
+      // The active item itself removed: stand on the one before it, so Next
+      // goes on to the item that followed (never back to the top).
+      if (removed !== -1 && removed === state.activeIndex) return { items, activeIndex: removed > 0 ? removed - 1 : null }
+      return withActiveKept(state, items)
+    }),
   updateItem: (id, patch) =>
     set((state) => ({ items: state.items.map((i) => (i.id === id ? patch(i) : i)) })),
   reorderItems: (fromIndex, toIndex) =>
@@ -69,7 +86,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       const items = [...state.items]
       const [moved] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, moved)
-      return { items }
+      return withActiveKept(state, items)
     }),
   setActive: (activeIndex) => set({ activeIndex }),
   clearQueue: () => set({ items: [], activeIndex: null }),
