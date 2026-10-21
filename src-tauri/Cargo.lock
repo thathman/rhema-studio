@@ -4275,7 +4275,6 @@ dependencies = [
 name = "rhema"
 version = "0.3.2"
 dependencies = [
- "base64 0.22.1",
  "crossbeam-channel",
  "dotenvy",
  "fontdb",

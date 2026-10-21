@@ -16,23 +16,9 @@ import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
 import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
-import type { NdiConfigEventPayload, NdiFrameRequest, StagePayload } from "@/types"
+import type { NdiConfigEventPayload, StagePayload } from "@/types"
 import { StageView } from "@/components/stage-view"
 
-/** Convert Uint8Array/Uint8ClampedArray to base64 using Function.apply (avoids spread stack overflow) */
-function uint8ToBase64(bytes: Uint8Array | Uint8ClampedArray): string {
-  const CHUNK = 0x8000 // 32KB — safe for Function.apply
-  const parts: string[] = []
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    parts.push(
-      String.fromCharCode.apply(
-        null,
-        bytes.subarray(i, i + CHUNK) as unknown as number[],
-      ),
-    )
-  }
-  return btoa(parts.join(""))
-}
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
 const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "main"
@@ -170,16 +156,10 @@ function BroadcastCanvas() {
       }
 
       const imageData = sourceCtx.getImageData(0, 0, sourceWidth, sourceHeight)
-      const rgbaBase64 = uint8ToBase64(imageData.data)
-
-      const request: NdiFrameRequest = {
-        outputId: OUTPUT_ID,
-        width: sourceWidth,
-        height: sourceHeight,
-        rgbaBase64,
-      }
-
-      await invoke("push_ndi_frame", { request })
+      // The pixels go as the raw request body (no base64/JSON); output and size ride in headers.
+      await invoke("push_ndi_frame", new Uint8Array(imageData.data.buffer), {
+        headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-width": String(sourceWidth), "x-ndi-height": String(sourceHeight) },
+      })
       lastPushRef.current = Date.now()
       reportNdi(true, "")
     } catch (error) {

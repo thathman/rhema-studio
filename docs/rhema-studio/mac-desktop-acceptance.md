@@ -116,6 +116,18 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10al.1 (one running copy) | V: launching again left one process (single instance) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
+## Slide-change latency (QA-007, NFR-03)
+
+Measured by the output windows' own send-to-drawn log (#125), 20 changes per line, Next/Previous across slides, songs, verses and a picture, on this i7-8569U (not a low-end PC):
+
+| Output | Median | Slowest |
+|---|---|---|
+| Projector window, 1920×1080 | 6–10 ms | 73 ms |
+| NDI 1280×720 @ 30, before this change | 90–99 ms | 110 ms |
+| NDI 1280×720 @ 30, frames sent as raw bytes | 27–29 ms | 60 ms |
+
+The NDI time was mostly turning each frame (3.7 MB of pixels) into base64 text in the output window; the frame now goes as the raw request body. A receiver built on the NDI SDK got 31 frames in 5 s at 1280×720 (6 before, with the same still content and keep-alive).
+
 ## Injected failures (QA-002)
 
 | Case | Result |

@@ -66,7 +66,6 @@ rhema-api = { path = "crates/api" }
 rhema-content = { path = "crates/content" }
 crossbeam-channel = "0.5"
 dotenvy = "0.15"
-base64 = "0.22"
 sha2 = "0.10"
 sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 tauri-plugin-dialog = "2"
