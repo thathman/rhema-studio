@@ -718,3 +718,11 @@ report), but launching it cannot.
 | 10bs.2 | Give the stage output a theme with a large photo; start the timer; watch the outputs and Activity Monitor/Task Manager. | No stutter; the stage screen shows as before. | Unverified |
 | 10bs.3 | Export a service file that contains a video, while something is on air. | The output and NDI keep moving while it saves. | Unverified |
 | 10bs.4 | Delete the service that was open last time (or restore an older backup); restart twice. | "That service no longer exists" at most once. | Unverified |
+
+### 10bt. Remote control audit fixes (FR-04, OP-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bt.1 | Settings → Remote: untick "other devices", start HTTP on 9090; quit and start Rhema. Then tick "other devices" with no key and no paired device, start HTTP, restart; then pair a phone and restart. | Local only: running again on 9090, box still unticked. Network with no key: not restarted, with a message. With a paired phone: running again, the phone works without opening Settings. | Unverified |
+| 10bt.2 | Phone remote: walk to the edge of the Wi-Fi and press Next once. | The service steps once, even if the phone shows "Sending…" or "No answer…"; never twice for one press. | Unverified |
+| 10bt.3 | Turn rehearsal on; look at the phone. Then with the approval question showing, look again. | "Rehearsal: the screens are frozen" / "The computer is asking whether to show this service". After Clear, the phone says "Nothing on screen". | Unverified |

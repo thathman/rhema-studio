@@ -80,6 +80,7 @@ struct AppState<S: CommandSink> {
     keys: KeySet,
     pairing: PairingWindow,
     rate: crate::rate::RateLimiter,
+    recent: RecentIds,
 }
 
 /// Snapshot of the current application state, served by `GET /api/v1/status`.
@@ -90,6 +91,12 @@ pub struct StatusSnapshot {
     pub live_verse: Option<String>,
     pub queue_length: usize,
     pub confidence_threshold: f32,
+    /// Rehearsal is on: the real screens are frozen, so a phone must not read "on air" as what people see.
+    #[serde(default)]
+    pub rehearsal: bool,
+    /// The computer is asking whether to show an unapproved service; commands wait for that answer.
+    #[serde(default)]
+    pub waiting_for_approval: bool,
 }
 
 /// Shared, thread-safe status snapshot that the frontend pushes updates to.
@@ -126,6 +133,7 @@ where
         keys: config.keys.clone(),
         pairing: config.pairing.clone(),
         rate: crate::rate::RateLimiter::default(),
+        recent: RecentIds::default(),
     });
 
     let app = Router::new()
@@ -215,6 +223,33 @@ async fn status_handler<S: CommandSink + 'static>(
 struct CommandRequest {
     #[serde(flatten)]
     command: RemoteCommand,
+    /// One id per press (FR-04 idempotent): a retry of the same press is acknowledged, not repeated.
+    #[serde(default)]
+    id: Option<String>,
+}
+
+/// Command ids seen recently, so a retried press is not carried out twice.
+#[derive(Default)]
+struct RecentIds(std::sync::Mutex<std::collections::VecDeque<(String, std::time::Instant)>>);
+
+impl RecentIds {
+    const KEEP: std::time::Duration = std::time::Duration::from_secs(60);
+    const MAX: usize = 256;
+
+    /// True the first time an id is seen within the last minute.
+    fn first_time(&self, id: &str) -> bool {
+        let Ok(mut seen) = self.0.lock() else { return true };
+        let id: String = id.chars().take(64).collect();
+        let now = std::time::Instant::now();
+        while seen.front().is_some_and(|(_, at)| now.duration_since(*at) > Self::KEEP) || seen.len() >= Self::MAX {
+            seen.pop_front();
+        }
+        if seen.iter().any(|(s, _)| *s == id) {
+            return false;
+        }
+        seen.push_back((id, now));
+        true
+    }
 }
 
 #[derive(Serialize)]
@@ -313,6 +348,10 @@ async fn command_handler<S: CommandSink + 'static>(
         }
         Ok(_) => {}
     }
+    if request.id.as_deref().is_some_and(|id| !state.recent.first_time(id)) {
+        log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
+        return (StatusCode::OK, Json(CommandResponse { success: true, error: None }));
+    }
     match CommandDispatcher::dispatch(&request.command, &*state.sink) {
         Ok(()) => (
             StatusCode::OK,
@@ -333,6 +372,14 @@ async fn command_handler<S: CommandSink + 'static>(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_retried_press_is_not_repeated() {
+        let recent = RecentIds::default();
+        assert!(recent.first_time("press-1"));
+        assert!(!recent.first_time("press-1"), "the same press again (a retry)");
+        assert!(recent.first_time("press-2"), "a new press");
+    }
     use super::*;
     use std::sync::Mutex;
 
@@ -480,6 +527,26 @@ mod tests {
     /// publishes. Issue #146 shipped because this test asserted the path the
     /// router happened to mount instead, so the two could drift apart and
     /// still pass.
+    #[tokio::test]
+    async fn a_retried_press_reaches_the_app_once_and_old_clients_still_work() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let press = r#"{"command":"next","id":"press-7"}"#;
+        for _ in 0..2 {
+            let r = raw_http_request(port, "POST", "/api/v1/command", Some(press)).await;
+            assert!(r.contains("200 OK"), "Expected 200, got: {r}");
+        }
+        let old = raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"next"}"#)).await;
+        assert!(old.contains("200 OK"), "a client without ids still works: {old}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.command_count(), 2, "the retried press once, the old client's once");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
     #[tokio::test]
     async fn command_endpoint_requires_the_key_when_one_is_set() {
         let sink = Arc::new(MockSink::new());

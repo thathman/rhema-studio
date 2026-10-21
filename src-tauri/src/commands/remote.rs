@@ -310,6 +310,8 @@ pub async fn update_remote_status(
     live_verse: Option<String>,
     queue_length: Option<usize>,
     confidence_threshold: Option<f32>,
+    rehearsal: Option<bool>,
+    waiting_for_approval: Option<bool>,
 ) -> Result<(), String> {
     let status = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
@@ -323,14 +325,19 @@ pub async fn update_remote_status(
     if let Some(v) = active_theme {
         snapshot.active_theme = Some(v);
     }
-    if let Some(v) = live_verse {
-        snapshot.live_verse = Some(v);
-    }
+    // Always sent: None means nothing is on screen (it used to keep the last verse after Clear).
+    snapshot.live_verse = live_verse;
     if let Some(v) = queue_length {
         snapshot.queue_length = v;
     }
     if let Some(v) = confidence_threshold {
         snapshot.confidence_threshold = v;
+    }
+    if let Some(v) = rehearsal {
+        snapshot.rehearsal = v;
+    }
+    if let Some(v) = waiting_for_approval {
+        snapshot.waiting_for_approval = v;
     }
 
     Ok(())
