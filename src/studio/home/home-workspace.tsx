@@ -44,6 +44,8 @@ export function HomeWorkspace() {
   const programs = useServiceStore((s) => s.programs)
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
+  const missingTranslations = useServiceStore((s) => s.missingTranslations)
+  const unsupportedItems = useServiceStore((s) => s.unsupportedItems)
   const suggested = todaysService(programs, localDate())
   const monitorCount = useMonitorStore((s) => s.count)
   const [contentError, setContentError] = useState<string | null>(null)
@@ -64,11 +66,15 @@ export function HomeWorkspace() {
   const mediaAssets = useMediaStore((s) => s.assets)
   const mediaLoaded = useMediaStore((s) => s.loaded)
   const mediaLoading = useMediaStore((s) => s.loading)
-  const mediaIds = [...new Set(items.filter(isImageItem).map((i) => i.image.media_id))]
+  // Pictures, videos and sounds, and every item's background picture (FR-08: all assets local before Ready).
+  const mediaIds = [...new Set(items.flatMap((i) => [isImageItem(i) ? i.image.media_id : null, i.background?.media_id ?? null]).filter((x): x is string => x !== null))]
   const hasSignage = outputs.some((o) => o.role === "signage")
   const missingMedia = mediaIds.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length
+  // Load the media list once, and again when the service names a file it does not know yet
+  // (a service opened from the church folder brings new pictures): never a false "missing".
+  const unknownMedia = mediaLoaded && mediaIds.some((id) => !mediaAssets.some((a) => a.id === id))
   useEffect(() => {
-    if ((mediaIds.length > 0 || hasSignage) && !mediaLoaded && !mediaLoading) void useMediaStore.getState().list()
+    if ((mediaIds.length > 0 || hasSignage) && (!mediaLoaded || unknownMedia) && !mediaLoading) void useMediaStore.getState().list()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per set of ids
   }, [mediaIds.join(","), hasSignage, mediaLoaded, mediaLoading])
   // Home is the readiness check: make sure every song in the service has been looked up.
@@ -98,7 +104,10 @@ export function HomeWorkspace() {
     missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
     monitors: monitorCount === null ? undefined : monitorProblems(outputs, monitorCount),
     contentError,
-    approval: current ? (dirty ? "changed" : approvalState(current)) : undefined,
+    // Unsaved edits change an approved service; a service never approved stays "not approved yet".
+    approval: current ? (dirty && approvalState(current) !== "none" ? "changed" : approvalState(current)) : undefined,
+    missingTranslations,
+    unsupportedItems: unsupportedItems.length,
     signage: outputs
       .filter((o) => o.role === "signage")
       .map((o) => {

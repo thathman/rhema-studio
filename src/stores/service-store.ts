@@ -623,6 +623,11 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   duplicateCurrent: async (title, serviceDate) => {
     if (!get().current) return "failed"
     if (get().dirty) return "unsaved"
+    // Items this version cannot show would be dropped from the copy without a word: refuse, as a template does.
+    if (get().unsupportedItems.length > 0) {
+      set({ error: `This service has ${get().unsupportedItems.length} item(s) this version cannot copy; update Rhema to copy it whole.` })
+      return "failed"
+    }
     // Fresh ids: the copy must never share item identity with the original.
     const before = useQueueStore.getState().items
     const copies = before.map((i) => ({ ...i, id: crypto.randomUUID() }))

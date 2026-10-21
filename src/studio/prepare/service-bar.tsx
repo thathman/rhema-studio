@@ -1,3 +1,4 @@
+import { useChurchFolderStore } from "@/stores/church-folder-store"
 import { NewerVersionNotice } from "@/studio/prepare/newer-version-notice"
 import { UnreadComments } from "@/studio/prepare/unread-comments"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -89,6 +90,8 @@ export function ServiceBar() {
     setPublishing(true)
     try {
       const r = await publishToChurchFolder(churchFolder, current.id)
+      // The folder lists (Home card, newer-version notice) see the new file at once.
+      void useChurchFolderStore.getState().refresh(churchFolder)
       if (r.already) toast.info("This version is already in the church folder", { description: r.file_name })
       else toast.success("Published to the church folder", { description: `${r.file_name}${approval === "approved" ? "" : " (not approved yet)"}` })
     } catch (e) {

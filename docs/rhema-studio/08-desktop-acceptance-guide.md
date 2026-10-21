@@ -726,3 +726,12 @@ report), but launching it cannot.
 | 10bt.1 | Settings → Remote: untick "other devices", start HTTP on 9090; quit and start Rhema. Then tick "other devices" with no key and no paired device, start HTTP, restart; then pair a phone and restart. | Local only: running again on 9090, box still unticked. Network with no key: not restarted, with a message. With a paired phone: running again, the phone works without opening Settings. | Unverified |
 | 10bt.2 | Phone remote: walk to the edge of the Wi-Fi and press Next once. | The service steps once, even if the phone shows "Sending…" or "No answer…"; never twice for one press. | Unverified |
 | 10bt.3 | Turn rehearsal on; look at the phone. Then with the approval question showing, look again. | "Rehearsal: the screens are frozen" / "The computer is asking whether to show this service". After Clear, the phone says "Nothing on screen". | Unverified |
+
+### 10bu. Readiness and church-folder audit fixes (FR-08, CL-002, CL-005)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bu.1 | Open a service saved for a translation this computer lacks; look at Home. Delete the file of a song's background picture; look again. | "Some verses are saved for … not installed here" and the missing-file warning; not "Ready to present". | Unverified |
+| 10bu.2 | Open a never-approved service, change an item without saving; look at Home. | "Service not approved yet" (not "changed since it was approved"). | Unverified |
+| 10bu.3 | Approve a service, change it, save; History → restore the approved version; look at Home. | "Service approved as saved". | Unverified |
+| 10bu.4 | Computer A publishes v1 (with a song); computer B opens it. A fixes a lyric, publishes v2; B opens the newer one. | B is told its copy of that song was kept; the song on B is unchanged; Home shows no false missing pictures. | Unverified |
