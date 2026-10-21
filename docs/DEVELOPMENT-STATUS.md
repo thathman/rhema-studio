@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 00:48 WAT)
+- Head: see `git log fork/main` (2026-10-21 04:20 WAT)
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -24,7 +24,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 409 vitest tests in 55 files pass (410 on the receiver-count PR); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
+- Frontend: 417 vitest tests in 57 files pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
 - Rust: `rhema-content` 44 tests pass; `rhema-api` 115; app `cargo check` and clippy in CI.
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
 
@@ -49,11 +49,12 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 - **Licensing (decided 2026-10-21, #33):** the installer keeps the upstream translations (NIV, ESV, NASB, NKJV, NLT, AMP) on the owner's statement of upstream rights and fair use; `docs/LICENSES.md` §2 records the decision and the absence of written publisher permission in the repo.
 
 - No hands-on desktop or projector verification yet of the integrated build.
+- Video in a hidden NDI-only window may be throttled to about 1 frame a second by WebView2/WebKit (row 10ab.4); visible display outputs are not affected.
 - Upstream lint debt: 7 React hook patterns in untouched components (ST-010).
 - Whisper model is not bundled in the Windows installer (by design); speech is optional.
 
 ## Next eligible tasks
 
-1. OP-005 receiver count merged (#89). OP-005's remaining acceptance is a real OBS 720p30 smoke and a runtime drop on a desktop (rows 10aa.1–4).
+1. MD-004 lower thirds (#37): a persistent name/title band on the outputs that opt in, untouched by Next and Clear.
 2. Blocked on owner decisions: #72 sync approach (CL-005/006 remote delivery), #34 Canva relay (CV-002…); PR #4 speech (ST-004; AR-004 and AI-001 follow it).
-3. Desktop or hardware only: MD-002 video/audio (#36), MD-004 lower thirds (#37), AR-002 OBS markers, PT-006 MIDI, QA-010 drill (#62), QA-007 benchmarks, acceptance rows 1–10aa (#31), Windows smoke (#32); ST-009 app identity migration at release time.
+3. Desktop or hardware only: video/NDI rates and codecs (10ab), OBS 720p30 smoke (OP-005), AR-002 OBS markers, PT-006 MIDI, QA-010 drill (#62), QA-007 benchmarks, acceptance rows 1–10ab (#31), Windows smoke (#32); ST-009 app identity migration at release time.
