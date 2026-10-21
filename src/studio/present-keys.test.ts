@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
 import { keyToPresentAction, shouldIgnoreKeyboard } from "./present-keys"
 
@@ -50,4 +51,14 @@ describe("shouldIgnoreKeyboard", () => {
     expect(shouldIgnoreKeyboard(el("BODY"))).toBe(false)
     expect(shouldIgnoreKeyboard(null)).toBe(false)
   })
+
+  it("ignores keys inside a dialog, menu or popover, and while a modal is open (RG-09)", () => {
+    document.body.innerHTML = '<div role="menu"><button id="in-menu">Run</button></div><button id="plain">x</button>'
+    expect(shouldIgnoreKeyboard(document.getElementById("in-menu"))).toBe(true)
+    expect(shouldIgnoreKeyboard(document.getElementById("plain"))).toBe(false)
+    document.body.insertAdjacentHTML("beforeend", '<div role="dialog" data-state="open"></div>')
+    expect(shouldIgnoreKeyboard(document.getElementById("plain"))).toBe(true)
+    document.body.innerHTML = ""
+  })
 })
+

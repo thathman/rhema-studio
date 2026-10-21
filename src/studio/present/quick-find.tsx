@@ -34,6 +34,10 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
   }, [])
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** The query the shown results are for, and an Enter waiting for the current query's results. */
+  const resultsFor = useRef("")
+  const enterPending = useRef<string | null>(null)
+  const previewRef = useRef<(hit: Hit) => void>(() => {})
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
   const runSearch = useCallback(async (raw: string) => {
@@ -63,7 +67,15 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
         const hits = exact.length > 0 ? exact : fuzzySongs(q, await songs.all().catch(() => [] as SongSummary[]))
         found = [...hits.map((song): Hit => ({ kind: "song", song })), ...verses.map((verse): Hit => ({ kind: "verse", verse }))]
       }
-      if (ticket === seq.current) setResults(found)
+      if (ticket === seq.current) {
+        setResults(found)
+        resultsFor.current = q
+        // Enter was pressed before this search caught up with the typing: preview its result now.
+        if (enterPending.current === q) {
+          enterPending.current = null
+          if (found[0]) previewRef.current(found[0])
+        }
+      }
     } catch {
       if (ticket === seq.current) setResults([])
     } finally {
@@ -86,6 +98,10 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
     // A song previewed from Quick find is a spontaneous item (not in the rundown).
     presentActions.previewSlide(songQueueItem(hit.song, `quick-find-${hit.song.id}`), 0)
   }
+
+  useEffect(() => {
+    previewRef.current = preview
+  })
 
   const add = (hit: Hit) => {
     const queue = useQueueStore.getState()
@@ -118,7 +134,17 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
           value={query}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && results[0]) preview(results[0])
+            if (e.key === "Enter") {
+              const q = query.trim()
+              if (resultsFor.current === q) {
+                if (results[0]) preview(results[0])
+              } else {
+                // The list still shows an earlier search: search now and preview what this one finds.
+                enterPending.current = q
+                if (timer.current) clearTimeout(timer.current)
+                void runSearch(query)
+              }
+            }
             if (e.key === "Escape") onChange("")
           }}
           className="h-11 pl-9 text-sm"

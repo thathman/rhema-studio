@@ -948,14 +948,24 @@ pub fn fold(s: &str) -> String {
     s.chars()
         .filter_map(|c| match c {
             '\u{0300}'..='\u{036F}' => None,
-            'ẹ' => Some('e'),
-            'Ẹ' => Some('E'),
-            'ọ' => Some('o'),
-            'Ọ' => Some('O'),
+            // Letters with the accent built in (how they are usually typed), as well as the
+            // separate marks above, and the Yoruba underdot letters.
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'ā' | 'ǎ' => Some('a'),
+            'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Ā' | 'Ǎ' => Some('A'),
+            'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ě' | 'ẹ' => Some('e'),
+            'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ě' | 'Ẹ' => Some('E'),
+            'ì' | 'í' | 'î' | 'ï' | 'ī' | 'ǐ' => Some('i'),
+            'Ì' | 'Í' | 'Î' | 'Ï' | 'Ī' | 'Ǐ' => Some('I'),
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ō' | 'ǒ' | 'ọ' => Some('o'),
+            'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ō' | 'Ǒ' | 'Ọ' => Some('O'),
+            'ù' | 'ú' | 'û' | 'ü' | 'ū' | 'ǔ' => Some('u'),
+            'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ū' | 'Ǔ' => Some('U'),
+            'ń' | 'ǹ' | 'ñ' | 'ṅ' => Some('n'),
+            'Ń' | 'Ǹ' | 'Ñ' | 'Ṅ' => Some('N'),
+            'ḿ' => Some('m'),
+            'Ḿ' => Some('M'),
             'ṣ' => Some('s'),
             'Ṣ' => Some('S'),
-            'ṅ' => Some('n'),
-            'Ṅ' => Some('N'),
             _ => Some(c),
         })
         .collect()
@@ -1193,6 +1203,28 @@ pub(crate) fn check_song_items_exist(tx: &Transaction<'_>, items: &[crate::ItemI
     Ok(())
 }
 
+/// Sort keys written before accented letters were folded (`À` sorted after
+/// `z`, hiding such songs from the first page of the library): brought up to
+/// date when the database opens. Only rows whose key differs are written.
+pub(crate) fn refresh_title_sort(conn: &rusqlite::Connection) -> rusqlite::Result<usize> {
+    let has_songs: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'songs'", [], |r| r.get(0))?;
+    if has_songs == 0 {
+        return Ok(0);
+    }
+    let stale: Vec<(String, String)> = {
+        let mut stmt = conn.prepare("SELECT id, title, title_sort FROM songs")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))?;
+        rows.filter_map(std::result::Result::ok)
+            .filter(|(_, title, sort)| &title_sort(title) != sort)
+            .map(|(id, title, _)| (id, title_sort(&title)))
+            .collect()
+    };
+    for (id, sort) in &stale {
+        conn.execute("UPDATE songs SET title_sort = ?2 WHERE id = ?1", rusqlite::params![id, sort])?;
+    }
+    Ok(stale.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1232,6 +1264,21 @@ mod tests {
             ],
             ..SongInput::default()
         }
+    }
+
+    #[test]
+    fn stale_sort_keys_are_refreshed_on_open() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let mut input = amazing_grace();
+        input.title = "Àánú".into();
+        let s = db.create_song(&input).unwrap();
+        let conn = db.lock().unwrap();
+        // As an earlier build stored it: the built-in accent kept, so it sorted after "z".
+        conn.execute("UPDATE songs SET title_sort = 'àánú' WHERE id = ?1", [&s.song.id]).unwrap();
+        assert_eq!(refresh_title_sort(&conn).unwrap(), 1);
+        let sort: String = conn.query_row("SELECT title_sort FROM songs WHERE id = ?1", [&s.song.id], |r| r.get(0)).unwrap();
+        assert_eq!(sort, "aanu");
+        assert_eq!(refresh_title_sort(&conn).unwrap(), 0, "nothing left to change");
     }
 
     #[test]
@@ -1491,6 +1538,10 @@ mod tests {
         assert_eq!(parse_hymn_number("1 John 1:1"), None);
         assert_eq!(parse_hymn_number("123456"), None);
         assert_eq!(fold("Ọlọ́run Ṣe"), "Olorun Se");
+        // Typed with the accent built into the letter (NFC) or as separate marks (NFD): the same.
+        assert_eq!(fold("Àánú"), "Aanu");
+        assert_eq!(fold("A\u{300}a\u{301}nu\u{301}"), "Aanu");
+        assert_eq!(title_sort("Àánú Ọlọ́run"), "aanu olorun");
         assert_eq!(fts_query("amazing gra"), "\"amazing\" \"gra\"*");
         assert_eq!(fts_query("say \"hi\""), "\"say\" \"\"\"hi\"\"\"*");
         assert!(is_language_tag("en") && is_language_tag("yo") && is_language_tag("en-GB"));

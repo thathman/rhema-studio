@@ -232,6 +232,11 @@ impl ContentDb {
         let mut db = Self { conn: Mutex::new(conn), path, last_backup: None };
         db.check_integrity()?;
         db.migrate(migrations)?;
+        if let Ok(conn) = db.conn.lock() {
+            if let Err(e) = songs::refresh_title_sort(&conn) {
+                log::warn!("song sort keys not refreshed: {e}");
+            }
+        }
         Ok(db)
     }
 

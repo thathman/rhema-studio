@@ -699,3 +699,13 @@ report), but launching it cannot.
 | 10bq.4 | Give the NDI/stream output a custom lower-third theme; delete that theme in the theme library. | Refused: "<theme> is used by <output>"; the output keeps its theme. | Unverified |
 | 10bq.5 | Rename the service and at once reorder an item; close the window. | Closing asks (the reorder was not lost). | Unverified |
 | 10bq.6 | Open a saved service, Close service (the rundown stays), quit Rhema. Then reopen, Close service, remove one item, quit. | First time: no question. Second time: "The service on screen has not been saved". | Unverified |
+
+### 10br. Keyboard and language audit fixes (RG-09, RG-06)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10br.1 | Song editor open with unsaved changes; press Ctrl+3 (Cmd+3). | Stays in the editor with "Save or close the song you are editing first." | Unverified |
+| 10br.2 | Present: open the Outputs dialog (or the Cues menu); press → / PageDown / Esc inside it. | The screen does not change behind it. | Unverified |
+| 10br.3 | Quick find: type "john 3 16" quickly and press Enter at once. | The preview shows John 3:16 (not 3:1). | Unverified |
+| 10br.4 | With KJV + Yorùbá active add John 3:16, save, switch to NIV, present the item. | KJV + Yorùbá (as saved), also before reopening the service. | Unverified |
+| 10br.5 | With more than 50 songs, add "Àánú" (typed normally). Open the song library. | It is listed among the A's. | Unverified |

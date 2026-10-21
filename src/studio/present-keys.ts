@@ -13,9 +13,15 @@ interface KeyLike {
 }
 
 /** Shortcuts must never fire while the operator is typing. */
+/** A dialog, menu, popover or list has the keys (RG-09): Next/Clear must not act behind it. */
+const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]'
+const OPEN_MODAL = '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]'
+
 export function shouldIgnoreKeyboard(target: EventTarget | null): boolean {
+  if (typeof document !== "undefined" && document.querySelector?.(OPEN_MODAL)) return true
   if (!target || typeof (target as HTMLElement).tagName !== "string") return false
   const el = target as HTMLElement
+  if (el.closest?.(OVERLAY)) return true
   const tag = el.tagName.toLowerCase()
   if (tag === "input" || tag === "textarea" || tag === "select") return true
   if (el.isContentEditable) return true
