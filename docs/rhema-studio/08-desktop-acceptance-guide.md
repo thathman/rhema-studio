@@ -652,3 +652,11 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bl.1 | Put something on a projector output. More → Library → Back up now to a USB stick (or a network share); pull the stick (or unplug the network) while it is writing. | Present, the outputs and Save keep working; the backup reports that it could not be written; the stick holds no file named like a finished backup (at most nothing, never a half file under the backup's name). | Unverified |
 | 10bl.2 | Restore from a backup on a network share that is then disconnected mid-read. | The app keeps working; restore reports it could not read the backup; the current services are unchanged. | Unverified |
+
+### 10bm. A song's backing track (FR-06, SO-011)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bm.1 | Song editor: add an MP3 under "Chord charts, sheets and backing tracks"; save. Put the song in the service. | The file is listed with the song. | Unverified |
+| 10bm.2 | Present: go to the song (Next or Show live), open the Sound button. | "Backing track for <song>" lists the file; Play starts it on this computer's sound output; the screens do not change; Fade out and Stop work. Nothing plays until Play is pressed. | Unverified |
+| 10bm.3 | Go to a verse item; open the Sound button. | No backing-track list (only the library's sounds). | Unverified |

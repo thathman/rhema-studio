@@ -487,7 +487,7 @@ function Attachments({ songId }: { songId: string }) {
   const add = async () => {
     setBusy(true)
     try {
-      const results = await useMediaStore.getState().importFiles([{ name: "Chord charts and sheets", extensions: ["pdf", "png", "jpg", "jpeg"] }])
+      const results = await useMediaStore.getState().importFiles([{ name: "Chord charts, sheets and backing tracks", extensions: ["pdf", "png", "jpg", "jpeg", "mp3", "m4a", "aac", "wav", "ogg"] }])
       if (!results) return
       let latest = files
       for (const r of results) {
@@ -520,8 +520,8 @@ function Attachments({ songId }: { songId: string }) {
   }
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground">Chord charts and sheets</span>
-      {files.length === 0 && <p className="text-xs text-muted-foreground">None yet. PDF or picture; opens in the computer's own viewer, never on screen.</p>}
+      <span className="text-xs font-medium text-muted-foreground">Chord charts, sheets and backing tracks</span>
+      {files.length === 0 && <p className="text-xs text-muted-foreground">None yet. A PDF or picture opens in the computer's own viewer, never on screen. A sound (MP3, M4A, WAV, OGG) is offered under the Sound button in Present while this song is up.</p>}
       <ul className="flex flex-col gap-1">
         {files.map((m) => (
           <li key={m.id} className="flex items-center gap-2 text-xs">
