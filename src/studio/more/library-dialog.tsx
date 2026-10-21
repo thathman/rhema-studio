@@ -302,7 +302,17 @@ function JournalBlock() {
     }
   }
   const text = () =>
-    formatJournal(`${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`, entries, monotonicNow(), new Map(items.map((i) => [i.id, plannedMs(i)]))) +
+    formatJournal(
+      `${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`,
+      entries,
+      monotonicNow(),
+      new Map(items.map((i) => [i.id, plannedMs(i)])),
+      (() => {
+        // Added on the day: not in the rundown when the service first went on air (saving does not change that).
+        const start = useJournalStore.getState().startItemIds
+        return items.map((i) => ({ id: i.id, label: i.reference, inserted: start ? !start.includes(i.id) : false }))
+      })(),
+    ) +
     (withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
   const saveLog = async () => {
     setBusy(true)

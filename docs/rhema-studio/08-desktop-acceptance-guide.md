@@ -745,3 +745,10 @@ report), but launching it cannot.
 | 10bv.3 | A cue "Next then Offering": run it, then press Back. | The next item went live, then the Offering screen; Back returns to that next item. | Unverified |
 | 10bv.4 | Set an item's "end by" to a time 30 minutes away; close the laptop lid for 10 minutes; open it. | The countdown shows about 20 minutes left within seconds. | Unverified |
 | 10bv.5 | Make the main output a Stage output and a second output Congregation; present a video with sound. | Sound plays (from the congregation output). | Unverified |
+
+### 10bw. Service log audit fixes (AR-001, FR-09)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bw.1 | Service open with 4 items; show items 1 and 3; add a verse from Quick find and show it; show a Bible-panel verse that is not in the service; Welcome with nothing live; Black. More → Library → Save the log. | Planned vs actual lists all 4 items in order (item 2 and 4 "not shown"), the added verse "[added during the service]", "Also shown" with the Bible-panel verse; the timeline has "quick screen Welcome" and "quick screen Black screen". | Unverified |
+| 10bw.2 | Item A live; rehearsal on; present B; rehearsal off. Save the log. | After "rehearsal off" the log has "LIVE B". | Unverified |

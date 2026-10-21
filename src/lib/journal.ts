@@ -45,7 +45,15 @@ const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: 
 const mmss = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`
 
 /** A plain-text log a person can read or paste into a report. */
-export function formatJournal(title: string, entries: JournalEntry[], nowMono: number, planned: Map<string, number> = new Map()): string {
+/** The service as planned, in order, for the planned-versus-actual section (FR-09). */
+export interface RundownLine {
+  id: string
+  label: string
+  /** Added after the service first went on air (during the service). */
+  inserted?: boolean
+}
+
+export function formatJournal(title: string, entries: JournalEntry[], nowMono: number, planned: Map<string, number> = new Map(), rundown?: RundownLine[]): string {
   const lines = [`${title}`, `Service log — ${entries[0] ? new Date(entries[0].at).toLocaleDateString() : ""}`, ""]
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
@@ -55,12 +63,28 @@ export function formatJournal(title: string, entries: JournalEntry[], nowMono: n
     lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}`)
   }
   const totals = actualByItem(entries, nowMono)
-  if (totals.size > 0) {
+  const versus = (ms: number | undefined, plan: number | undefined) =>
+    `${ms === undefined ? "not shown" : mmss(ms)}${plan ? ` (planned ${mmss(plan)}${ms === undefined ? "" : `, ${ms > plan ? "+" : "−"}${mmss(Math.abs(ms - plan))}`})` : ""}`
+  if (rundown && rundown.length > 0) {
+    // Every item in service order, including those never shown and those added on the day.
+    lines.push("", "Planned vs actual:")
+    for (const r of rundown) lines.push(`  ${r.label}: ${versus(totals.get(r.id), planned.get(r.id))}${r.inserted ? "  [added during the service]" : ""}`)
+    // What was shown that is not (or no longer) in the service: spontaneous verses, removed items.
+    const inRundown = new Set(rundown.map((r) => r.id))
+    const other = new Map<string, number>()
+    for (const d of actualDurations(entries, nowMono)) {
+      if (d.entry.kind === "quick" || (d.itemId && inRundown.has(d.itemId))) continue
+      other.set(d.label, (other.get(d.label) ?? 0) + d.ms)
+    }
+    if (other.size > 0) {
+      lines.push("", "Also shown (not in the service):")
+      for (const [label, ms] of other) lines.push(`  ${label}: ${mmss(ms)}`)
+    }
+  } else if (totals.size > 0) {
     lines.push("", "Planned vs actual:")
     for (const [id, ms] of totals) {
       const label = entries.find((e) => e.itemId === id)?.label ?? id
-      const plan = planned.get(id)
-      lines.push(`  ${label}: ${mmss(ms)}${plan ? ` (planned ${mmss(plan)}, ${ms > plan ? "+" : "−"}${mmss(Math.abs(ms - plan))})` : ""}`)
+      lines.push(`  ${label}: ${versus(ms, planned.get(id))}`)
     }
   }
   return lines.join("\n")
