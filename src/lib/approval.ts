@@ -38,6 +38,6 @@ export function approvalBlockers(
   const pictures = items.filter(isImageItem).filter((i) => !present(i.image.media_id)).map((i) => i.image.name)
   const backgrounds = items.filter((i) => i.background && !present(i.background.media_id)).map((i) => i.background?.name ?? i.reference)
   const gone = [...pictures, ...backgrounds]
-  if (gone.length) out.push(`${gone.length === 1 ? "A picture is" : `${gone.length} pictures are`} missing from the media folder: ${gone.join(", ")}.`)
+  if (gone.length) out.push(`${gone.length === 1 ? "A media file is" : `${gone.length} media files are`} missing from the media folder: ${gone.join(", ")}.`)
   return out
 }

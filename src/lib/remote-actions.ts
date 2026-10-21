@@ -4,7 +4,8 @@ import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { isImageItem, isSlideItem, isSongItem, isVerseItem } from "@/types"
+import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem } from "@/types"
+import { useMediaStore } from "@/stores/media-store"
 
 /**
  * Find the queue index of the item currently on the live output.
@@ -59,6 +60,13 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
  * Next/Previous step through a song's slides first, then on to the next
  * item; stepping back into a song lands on its last slide.
  */
+/** A rundown item whose library file is a sound. */
+function isSoundItem(item: QueueItem | undefined): boolean {
+  if (!item || !isImageItem(item)) return false
+  const id = item.image.media_id
+  return useMediaStore.getState().assets.find((a) => a.id === id)?.kind === "audio"
+}
+
 function stepQueue(offset: number): void {
   const { items, activeIndex } = useQueueStore.getState()
   if (items.length === 0) return
@@ -75,10 +83,19 @@ function stepQueue(offset: number): void {
       }
     }
   }
-  const target =
+  let target =
     current === null
       ? 0
       : Math.min(Math.max(current + offset, 0), items.length - 1)
+  // Sound items play only when reached going forward: Previous steps over
+  // them (walk-in music does not start again on the way back), and Next at
+  // the end of the service does not replay a final sound.
+  if (current !== null && isSoundItem(items[target])) {
+    if (offset < 0) {
+      while (target > 0 && isSoundItem(items[target])) target -= 1
+      if (isSoundItem(items[target])) return
+    } else if (target === current) return
+  }
   const atEdge = target === current
   const song = items[target] && isSongItem(items[target])
   // At the edge a song stays on its slide (re-presents it, e.g. after Clear);

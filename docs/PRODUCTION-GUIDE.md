@@ -41,7 +41,9 @@ Macro ids: `service-start`, `offering`, `prayer`, `service-end`. Present → Cue
 
 ## Sound (walk-in music, backing tracks)
 
-Import MP3, M4A, WAV or OGG files in Prepare → Media (they are listed under Sounds). In Present, the ♪ button in the header lists them: Play, Pause/Resume, Fade out (3 seconds), Stop, Repeat and Volume. One sound plays at a time, on this computer's sound output; no screen changes, and NDI carries no sound. Each Play is a line in the service log. Rehearsal mode does not silence it: Play is always a deliberate press.
+Import MP3, M4A, WAV or OGG files in Prepare → Media (they are listed under Sounds). In Present, the ♪ button in the header lists them: Play, Pause/Resume, Fade out (3 seconds), Stop, Repeat and Volume. One sound plays at a time, on this computer's sound output; no screen changes, and NDI carries no sound. Each Play is a line in the service log. Rehearsal mode does not silence the ♪ button: Play there is always a deliberate press.
+
+A sound can also be a service item (Prepare → Media → Sounds → Add): when Next reaches it, the sound starts and every screen keeps what it shows; Next then carries on to the item after it. It plays only when reached going forward: Previous steps over sound items, and Next at the end of the service does not replay a last sound. The rundown shows "playing" next to it. In rehearsal a sound item does not play (Present says so).
 
 ## Lower thirds
 

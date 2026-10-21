@@ -110,7 +110,7 @@ export function MediaLibrary() {
       </ul>
       {sounds.length > 0 && (
         <div className="flex flex-col gap-1 border-t border-border pt-2">
-          <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Sounds <span className="normal-case tracking-normal">· play them from Present → Sound</span></p>
+          <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Sounds <span className="normal-case tracking-normal">· add one to the service to play it when reached, or play it any time from ♪ in Present</span></p>
           <ul className="max-h-32 overflow-y-auto" aria-label="Sounds">
             {sounds.map((a) => (
               <li key={a.id} className="flex items-center gap-2 px-1 py-0.5 text-xs">
@@ -118,6 +118,7 @@ export function MediaLibrary() {
                 <span className="min-w-0 flex-1 truncate" title={a.name}>{a.name}</span>
                 {!a.present && <span className="text-[0.625rem] text-destructive">missing</span>}
                 <ConfirmDelete label={`Remove ${a.name}`} verb="Remove" onConfirm={() => void remove(a)} />
+                <Button variant="outline" size="xs" disabled={!a.present} onClick={() => add(a)} title="Add to the service: it plays when reached, and the screens keep what they show"><PlusIcon /> Add</Button>
               </li>
             ))}
           </ul>
