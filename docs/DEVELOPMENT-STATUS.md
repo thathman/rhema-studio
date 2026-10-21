@@ -35,7 +35,7 @@ Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-ca
 
 
 - Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10bb). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
-- Windows installer: workflow run 39546898905 built `main` at `0305327` (artifact `rhema-windows-x64-installer`, 99,250,688 bytes, artifact digest sha256:febc816174afe10380868be117d6d8a37ab81b5eb467aad1cd04e7d18d8c78ed, kept 14 days; CI run 39546870731 green on the same commit). Earlier: run 39541733204 at `7bf70ee`. Not installed or launched; not a release.
+- Windows installer: workflow run 39558619566 built `main` at `4721336` (artifact 99,555,376 bytes, digest sha256:a2b11390089efa4bcfe2267ea9142825f62a15dbcdd917fd08b930c6ddd3d4e7; CI run 39558602844 green on the same commit). Not installed or launched; not a release.
 - Yoruba speech recognition and the OpenAI provider (PR #4).
 
 ## Important decisions

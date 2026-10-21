@@ -3,15 +3,15 @@
 **Not a release.** This sheet records what is proven about the newest installer build, gate by gate, so the owner can see what a release still needs. Nothing has been published, tagged or deployed. Update it whenever a new installer is built.
 
 ```text
-Release: none (candidate for R0–R3 review)   Candidate SHA: 0305327
-Artifact: GitHub Actions run 39546898905, "rhema-windows-x64-installer"
-          (NSIS .exe + MSI, unsigned), 99,250,688 bytes,
-          artifact digest sha256:febc816174afe10380868be117d6d8a37ab81b5eb467aad1cd04e7d18d8c78ed, kept 14 days
+Release: none (candidate for R0–R3 review)   Candidate SHA: 4721336
+Artifact: GitHub Actions run 39558619566, "rhema-windows-x64-installer"
+          (NSIS .exe + MSI, unsigned, with licence page and third-party notices), 99,555,376 bytes,
+          artifact digest sha256:a2b11390089efa4bcfe2267ea9142825f62a15dbcdd917fd08b930c6ddd3d4e7, kept 14 days
 Responsible engineer: Hendrix Nwaokolo   Owner acceptance: not given
-Features/tasks: every merged row in docs/TASKS.md up to PR #111; CHANGELOG.md
-Dependencies/migrations/licensing: studio.db migrations 0001–0009 (docs/rhema-studio/17-database-migrations.md);
+Features/tasks: every merged row in docs/TASKS.md up to PR #125; CHANGELOG.md
+Dependencies/migrations/licensing: studio.db migrations 0001–0010 (docs/rhema-studio/17-database-migrations.md);
           licence check in CI (scripts/check-licenses.ts); docs/LICENSES.md (owner decision #33 on bundled translations)
-CI: run 39546870731 on 0305327, success (typecheck, 440+ tests, build, lint, Rust tests/check/clippy, licences)
+CI: run 39558602844 on 4721336, success (typecheck, 476 tests, build, whole-repo lint, Rust tests/check/clippy, licences)
 Real Windows smoke: NOT DONE (no Windows machine in this environment) — issue #32
 Projection/NDI/OBS: NOT DONE — acceptance rows 10ab, OBS 720p30 (OP-005)
 Offline WAN-disconnect test: NOT DONE — rows 10an.1–2 (code review: no internet on the render path, docs/rhema-studio/18-network-and-privacy.md)
@@ -33,12 +33,12 @@ Decision: NO-GO until the desktop rows below are done and the owner signs off
 | RG-05 Data integrity | Tests | Revisions and conflicts, migration backup, downgrade refusal (#96), unsaved-work prompt on close (#111), one running copy (#103). Restore drill #62 not done. |
 | RG-06 Multilingual fidelity | Tests | Yoruba diacritics in search and storage, pinned translations, missing-translation warnings. Projector font check not done. |
 | RG-07 Production interop | Not met | Projector, NDI, OBS 720p30 and display reconnect need hardware. NDI failures are reported and retried once. |
-| RG-08 Security and privacy | Code and tests | Pairing, keys, roles, rate limiting (#100), phone remote with strict CSP (#102), diagnostics redaction (#97), network note (#105). Secrets move to the system keychain (#115, after this candidate); the `0305327` build still keeps them in the settings file in clear. Consent text for cloud audio waits on PR #4. |
+| RG-08 Security and privacy | Code and tests | Pairing, keys, roles, rate limiting (#100), phone remote with strict CSP (#102), diagnostics redaction (#97), network note (#105). Secrets in the system keychain (#115). Consent text for cloud audio waits on PR #4. |
 | RG-09 Accessibility and recovery | Partly | Keyboard shortcuts ignore typing; Back always visible at 1366x768; deletes confirm (#107). Screen-reader and scaling checks not done. |
-| RG-10 Reproducibility | Met for this candidate | SHA and artifact digest above; lockfiles; CHANGELOG.md; migration notes; KNOWN-ISSUES.md; licence manifest and CI check. Sign-off missing. |
+| RG-10 Reproducibility | Met for this candidate | SHA and artifact digest above; lockfiles; CHANGELOG.md; migration notes; KNOWN-ISSUES.md; licence manifest, CI check, installer licence page and generated third-party notices (#122). Sign-off missing. |
 
 ## R0 checklist (RELEASE-PLAN §5)
 
-- CI on the exact merged commit: done for `0305327` (run 39546870731).
+- CI on the exact merged commit: done for `4721336` (run 39558602844).
 - Windows installer built and recorded: done (above). Launched on Windows: not done; this is the blocker.
 - Everything else on the R0 list needs a real desktop or the owner.
