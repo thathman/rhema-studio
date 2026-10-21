@@ -6,7 +6,14 @@ import {
   renderVerse,
   type VerseLayoutMetrics,
 } from "@/lib/verse-renderer"
-import { seedFreeBoxesFromMetrics, SAMPLE_VERSE } from "@/lib/theme-migrations"
+import { seedFreeBoxesFromMetrics, SAMPLE_VERSE, SAMPLE_BILINGUAL_VERSE, SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
+import type { VerseRenderData } from "@/types/broadcast"
+
+/** What the Designer preview shows: one language, a verse in two, or a bilingual song slide. */
+export type PreviewSample = "one" | "two" | "song"
+const PREVIEW_SAMPLES: Record<PreviewSample, VerseRenderData> = { one: SAMPLE_VERSE, two: SAMPLE_BILINGUAL_VERSE, song: SAMPLE_BILINGUAL_SONG }
+// Read by the (module-level) redraw; the toolbar sets it and asks for a redraw.
+let previewSample: PreviewSample = "two"
 import { preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +47,7 @@ export function DesignCanvas() {
   const editingThemeId = useBroadcastStore((s) => s.editingThemeId)
   const selectedElement = useBroadcastStore((s) => s.selectedElement)
   const [zoomLevel, setZoomLevel] = useState(0)
+  const [sample, setSample] = useState<PreviewSample>(previewSample)
 
   const resyncLatestTheme = useCallback(() => {
     const latestTheme = latestThemeRef.current
@@ -345,6 +353,25 @@ export function DesignCanvas() {
           <Grid3X3Icon className="size-3" />
           <span>Grid</span>
         </div>
+        {/* Preview content: two languages by default, so second-language styling is visible while editing. */}
+        <div role="radiogroup" aria-label="Preview" className="ml-3 flex rounded-md border border-border/60 p-0.5">
+          {([["one", "One language"], ["two", "Two languages"], ["song", "Song"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={sample === value}
+              onClick={() => {
+                previewSample = value
+                setSample(value)
+                resyncLatestTheme()
+              }}
+              className={`rounded px-2 py-0.5 text-[0.625rem] font-medium ${sample === value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex-1" />
         <SearchIcon aria-hidden className="size-3.5 text-muted-foreground" />
         <span className="min-w-12 text-center text-[0.625rem] font-medium tabular-nums text-muted-foreground">
@@ -530,7 +557,7 @@ function renderThemeBitmap(
   const ctx = offscreen.getContext("2d")
   if (!ctx) return { bitmap: offscreen, metrics: null }
 
-  const metrics = renderVerse(ctx, theme, SAMPLE_VERSE, {
+  const metrics = renderVerse(ctx, theme, PREVIEW_SAMPLES[previewSample], {
     imageCache: themeImageCache(),
   })
   if (theme.background.type === "transparent") {

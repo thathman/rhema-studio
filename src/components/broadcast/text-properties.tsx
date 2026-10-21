@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { ChevronsUpDownIcon, CheckIcon } from "lucide-react"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useBibleStore } from "@/stores/bible-store"
 import { SurfaceControls, type SurfacePrefix } from "@/components/broadcast/surface-properties"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
@@ -152,9 +153,21 @@ function SectionHeader({ title, description }: { title: string; description: str
   )
 }
 
-function FontControls({ prefix }: { prefix: "verseText" | "secondaryVerseText" | "reference" }) {
-  const draftTheme = useBroadcastStore((s) => s.draftTheme)
+/**
+ * The store's nested update, or, with `both`, one that writes a verse-text
+ * change to the first and the second language together.
+ */
+function useStyleUpdate(both: boolean) {
   const update = useBroadcastStore((s) => s.updateDraftNested)
+  return (path: string, value: unknown) => {
+    update(path, value)
+    if (both && path.startsWith("verseText.")) update(`secondaryVerseText.${path.slice("verseText.".length)}`, value)
+  }
+}
+
+function FontControls({ prefix, both = false }: { prefix: "verseText" | "secondaryVerseText" | "reference"; both?: boolean }) {
+  const draftTheme = useBroadcastStore((s) => s.draftTheme)
+  const update = useStyleUpdate(both)
 
   if (!draftTheme) return null
 
@@ -437,14 +450,21 @@ function ReferenceProperties() {
   )
 }
 
-function VerseProperties() {
+export function VerseProperties() {
   const draftTheme = useBroadcastStore((s) => s.draftTheme)
-  const update = useBroadcastStore((s) => s.updateDraftNested)
-  const [language, setLanguage] = useState<"primary" | "secondary">("primary")
+  const updateOne = useBroadcastStore((s) => s.updateDraftNested)
+  const [language, setLanguage] = useState<"both" | "primary" | "secondary">("both")
+  const update = useStyleUpdate(language === "both")
+  // Which translations are first and second right now, so the tabs say more than "primary".
+  // (Two plain values: a selector returning a new object each time would re-render for ever.)
+  const first = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? null)
+  const second = useBibleStore((s) => (s.secondaryTranslationId === null ? null : (s.translations.find((t) => t.id === s.secondaryTranslationId)?.abbreviation ?? null)))
+  const names = { first, second }
 
   if (!draftTheme) return null
 
   const stylePath = language === "secondary" ? "secondaryVerseText" : "verseText"
+  const languageGap = draftTheme.layout.languageGap ?? Math.round(draftTheme.verseText.fontSize * draftTheme.verseText.lineHeight)
   const style = language === "secondary"
     ? draftTheme.secondaryVerseText ?? draftTheme.verseText
     : draftTheme.verseText
@@ -463,41 +483,64 @@ function VerseProperties() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1" role="tablist" aria-label="Verse language">
-        <Button
-          type="button"
-          size="sm"
-          variant={language === "primary" ? "secondary" : "ghost"}
-          onClick={() => setLanguage("primary")}
-          role="tab"
-          aria-selected={language === "primary"}
-        >
-          Primary
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={language === "secondary" ? "secondary" : "ghost"}
-          onClick={() => setLanguage("secondary")}
-          role="tab"
-          aria-selected={language === "secondary"}
-        >
-          Secondary
-        </Button>
+      <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1" role="tablist" aria-label="Which language to style">
+        {([
+          ["both", "Both"],
+          ["primary", names.first ? `First · ${names.first}` : "First"],
+          ["secondary", names.second ? `Second · ${names.second}` : "Second"],
+        ] as const).map(([value, label]) => (
+          <Button
+            key={value}
+            type="button"
+            size="sm"
+            variant={language === value ? "secondary" : "ghost"}
+            onClick={() => setLanguage(value)}
+            role="tab"
+            aria-selected={language === value}
+            className="min-w-0 truncate px-1.5"
+          >
+            {label}
+          </Button>
+        ))}
       </div>
       <p className="text-[11px] text-muted-foreground">
-        {language === "secondary" && !draftTheme.secondaryVerseText
-          ? "Secondary inherits primary styling until you change a setting."
-          : "Edit the styling used by this language in the live verse."}
+        {language === "both"
+          ? "Changes here apply to both languages at once. Pick First or Second to style one alone."
+          : language === "secondary" && !draftTheme.secondaryVerseText
+            ? "The second language looks like the first until you change something here."
+            : `Styles only the ${language === "primary" ? "first" : "second"} language (verses and bilingual songs).`}
       </p>
+      {language === "secondary" && draftTheme.secondaryVerseText && (
+        <Button type="button" size="sm" variant="outline" onClick={() => updateOne("secondaryVerseText", undefined)}>
+          Match the first language again
+        </Button>
+      )}
+
+      {/* The gap between the two languages (a theme setting, used by verses and songs) */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-muted-foreground" htmlFor="language-gap">Space between languages</label>
+          <span className="text-xs tabular-nums text-muted-foreground">{languageGap}px</span>
+        </div>
+        <Slider
+          id="language-gap"
+          aria-label="Space between languages"
+          min={0}
+          max={300}
+          step={1}
+          value={[languageGap]}
+          onValueChange={([v]) => updateOne("layout.languageGap", v)}
+        />
+      </div>
+
       <SectionHeader
-        title={language === "primary" ? "Primary Language Text" : "Secondary Language Text"}
-        description="Customize how this language appears"
+        title={language === "both" ? "Both Languages" : language === "primary" ? "First Language Text" : "Second Language Text"}
+        description={language === "both" ? "Font, size, colour and spacing for both" : "Customize how this language appears"}
       />
-      <FontControls prefix={stylePath} />
+      <FontControls prefix={stylePath} both={language === "both"} />
 
       {/* Verse Numbers */}
-      {language === "primary" && <div className="flex flex-col gap-3 border-t pt-3">
+      {language !== "secondary" && <div className="flex flex-col gap-3 border-t pt-3">
         <div className="flex items-center justify-between">
           <label className="text-xs font-semibold">Verse Numbers</label>
           <input
@@ -764,11 +807,13 @@ function VerseProperties() {
         )}
       </div>
 
-      <SurfaceControls
-        prefix={surfacePrefix}
-        title={language === "primary" ? "Primary Verse Plate" : "Secondary Verse Plate"}
-        description="A plate behind this language alone"
-      />
+      {language !== "both" && (
+        <SurfaceControls
+          prefix={surfacePrefix}
+          title={language === "primary" ? "First Language Plate" : "Second Language Plate"}
+          description="A plate behind this language alone"
+        />
+      )}
     </div>
   )
 }

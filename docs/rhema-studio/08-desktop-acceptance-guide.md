@@ -874,3 +874,13 @@ report), but launching it cannot.
 | 10ci.2 | In rehearsal, cue "Show live, Rehearsal off" with "Ask before showing" on and the service unapproved. | The approval question appears before the congregation sees anything. | Unverified |
 | 10ci.3 | Signage playlist: only Sunday, 00:00 to 00:00, plus a fallback playlist with no schedule. | Sunday loop on Sundays only; the fallback the rest of the week. | Unverified |
 
+### 10cj. Styling each language of a bilingual screen
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cj.1 | Theme Designer → Verse text. Tabs read Both, First · (main translation), Second · (the one under it). | The tabs name the translations in use. | Verified on the Intel Mac (2026-10-21) |
+| 10cj.2 | Both tab: change the font size and colour. Show a bilingual verse and a bilingual song. | Both languages change together. | Unverified |
+| 10cj.3 | Second tab: make the Yorùbá (second) text smaller and another colour. | Only the second language changes; "Match the first language again" undoes it. | Size and colour verified on the Intel Mac; reset unverified |
+| 10cj.4 | "Space between languages" (Verse text, or Layout → Element spacing): 0, then 150. | The gap between the languages closes, then widens, on verses and songs; small previews scale it. | Verses verified on the Intel Mac (0 and 150); songs by test |
+| 10cj.5 | Theme Designer toolbar: Preview "One language", "Two languages", "Song". | The preview shows Genesis 1:1 in one language, in English and Yorùbá, or a bilingual song slide; second-language styling is visible while editing. | Unverified (the switch is in place on the Mac; the preview draws only while Rhema is on the visible desktop) |
+
