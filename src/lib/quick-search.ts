@@ -110,6 +110,15 @@ export function findMatchingBook(bookInput: string, books: Book[]): Book | undef
   return yo ? books.find((b) => b.book_number === yo[1]) : undefined
 }
 
+/** Books of one chapter: "Jude 5" is verse 5 (Obadiah, Philemon, 2 John, 3 John, Jude). */
+const ONE_CHAPTER_BOOKS = new Set([31, 57, 63, 64, 65])
+
+/** "Jn. 3:16" → "Jn 3:16"; a dot after a book abbreviation is not part of it. */
+const dropAbbreviationDots = (s: string) => s.replace(/([a-zA-Z])\./g, "$1")
+
+/** A verse range or list after the first verse ("3:16-18", "3:16, 18"): the first verse is the one shown. */
+const RANGE_TAIL = String.raw`(?:\s*[-–—,]\s*\d+)*`
+
 /**
  * Parse Bible reference input and return autocomplete suggestion
  */
@@ -123,7 +132,7 @@ export function getAutocompleteSuggestion(
     return { suggestion: "", stage: "none" }
   }
 
-  const normalizedInput = normalizeInput(trimmed)
+  const normalizedInput = dropAbbreviationDots(normalizeInput(trimmed))
 
   // Check if it's just a number (for numbered books like "1", "2", "3")
   if (/^\d+(?:st|nd|rd|th)?$/i.test(trimmed)) {
@@ -142,7 +151,7 @@ export function getAutocompleteSuggestion(
 
   // Parse: "NumberedBook Chapter:Verse" or "BookName Chapter:Verse"
   // Match patterns like: "I J", "I John", "John", "John 3", "John 3:16"
-  const match = normalizedInput.match(/^([IVX]+\s+[a-zA-Z]+|[IVX]+\s+[a-zA-Z\s]+|[a-zA-Z\s]+?)\s*(\d+)?:?(\d+)?$/)
+  const match = normalizedInput.match(new RegExp(String.raw`^([IVX]+\s+[a-zA-Z]+|[IVX]+\s+[a-zA-Z\s]+|[a-zA-Z\s]+?)\s*(\d+)?:?(\d+)?` + RANGE_TAIL + "$"))
 
   if (!match) {
     return { suggestion: "", stage: "none" }
@@ -170,6 +179,16 @@ export function getAutocompleteSuggestion(
   }
 
   const chapter = parseInt(chapterNum)
+
+  // A range or list needs a verse first ("John 3-5" is not a reference).
+  if (!verseNum && /[-–—,]/.test(normalizedInput.slice(match[1].length))) {
+    return { suggestion: "", stage: "none" }
+  }
+
+  // "Jude 5": a one-chapter book's number is the verse ("Jude 1" still offers "Jude 1:" to go on typing).
+  if (!verseNum && !trimmed.includes(":") && ONE_CHAPTER_BOOKS.has(matchingBook.book_number) && chapter > 1) {
+    return { suggestion: "", matchedBook: matchingBook, chapter: 1, verse: chapter, stage: "complete" }
+  }
 
   // Stage 2: Suggest colon after chapter
   if (!verseNum && !trimmed.includes(':')) {
@@ -230,11 +249,17 @@ export function parseTypedReference(
   if (!trimmed) return null
 
   const normalized = normalizeInput(trimmed)
-  // Book words, then chapter and verse separated by ":", ".", or whitespace.
+  // Book words, then chapter and verse separated by ":", ".", or whitespace (a range or list after it: its first verse).
   const match = normalized.match(
-    /^([IVX]+\s+[a-zA-Z.]+|[a-zA-Z][a-zA-Z.\s]*?)\s*(\d{1,3})\s*[:.\s]\s*(\d{1,3})$/
+    new RegExp(String.raw`^([IVX]+\s+[a-zA-Z.]+|[a-zA-Z][a-zA-Z.\s]*?)\s*(\d{1,3})\s*[:.\s]\s*(\d{1,3})` + RANGE_TAIL + "$")
   )
-  if (!match) return null
+  if (!match) {
+    // "Jude 5": a one-chapter book and one number.
+    const one = normalized.match(/^([IVX]+\s+[a-zA-Z.]+|[a-zA-Z][a-zA-Z.\s]*?)\s*(\d{1,3})$/)
+    const book = one ? findMatchingBook(one[1].trim().replace(/\.$/, ""), books) : undefined
+    if (!one || !book || !ONE_CHAPTER_BOOKS.has(book.book_number) || parseInt(one[2]) < 1) return null
+    return { book, chapter: 1, verse: parseInt(one[2]) }
+  }
 
   const book = findMatchingBook(match[1].trim().replace(/\.$/, ""), books)
   if (!book) return null

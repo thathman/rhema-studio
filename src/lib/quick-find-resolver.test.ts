@@ -29,4 +29,11 @@ describe("quick find resolver", () => {
     expect(resolveQuickFind("Psalm 23", books, ["SSS"])).toEqual({ kind: "text", text: "Psalm 23" })
     expect(resolveQuickFind("   ", books)).toEqual({ kind: "empty" })
   })
+
+  it("a real hymnbook code wins over a one-chapter book name", () => {
+    const jude = { id: 65, translation_id: 1, book_number: 65, name: "Jude", abbreviation: "Jude", testament: "NT" }
+    expect(resolveQuickFind("JUDE 5", [jude], ["JUDE"])).toMatchObject({ kind: "hymn", code: "JUDE", number: "5" })
+    expect(resolveQuickFind("Jude 5", [jude], [])).toMatchObject({ kind: "reference" })
+  })
 })
+
