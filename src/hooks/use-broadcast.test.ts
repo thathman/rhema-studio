@@ -87,14 +87,44 @@ describe("presentVerse", () => {
     expect(useBibleStore.getState().selectedVerse).toBe(preview)
     expect(useBroadcastStore.getState().liveVerse?.segments[0].text).toBe("For God so loved the world")
 
-    // Something else reaches the screen while the follow is loading: the follow gives way.
+    // A different verse reaches the screen while the follow is loading: the follow gives way.
     const source = useBroadcastStore.getState().liveSourceVerse as Verse
     let release: (v: unknown) => void = () => {}
-    mockInvoke.mockImplementation(() => new Promise((r) => { release = r }))
+    mockInvoke.mockImplementation((cmd: string) => (cmd === "get_verse" ? new Promise((r) => { release = r }) : Promise.resolve(null)))
     const following = presentVerse(source, { follow: true })
     useBroadcastStore.setState({ liveSourceVerse: { ...staleVerse, verse: 18, text: "newer" } })
     release({ ...source, text: "late" })
     expect(await following).toBe("superseded")
+
+    // Two quick follows: the newer one wins, even though the first one lands first.
+    useBroadcastStore.setState({ liveSourceVerse: source })
+    const releases: Array<(v: unknown) => void> = []
+    mockInvoke.mockImplementation((cmd: string) => (cmd === "get_verse" ? new Promise((r) => { releases.push(r) }) : Promise.resolve(null)))
+    const first = presentVerse(source, { follow: true })
+    const second = presentVerse(source, { follow: true })
+    releases[0]({ ...source, text: "first" })
+    expect(await first).toBe("superseded")
+    releases[1]({ ...source, text: "second" })
+    expect(await second).toBe("presented")
+    expect(useBroadcastStore.getState().liveVerse?.segments[0].text).toBe("second")
+  })
+
+  it("a translation change while a present loads: it resolves again and shows the one now chosen", async () => {
+    useBibleStore.setState({ translations: [...useBibleStore.getState().translations, { id: 3, abbreviation: "NIV", title: "NIV", language: "en", is_copyrighted: true, is_downloaded: true }] })
+    const calls: number[] = []
+    let releaseFirst: (v: unknown) => void = () => {}
+    mockInvoke.mockImplementation((cmd: string, a: { translationId: number }) => {
+      if (cmd !== "get_verse") return Promise.resolve(null)
+      calls.push(a.translationId)
+      if (calls.length === 1) return new Promise((r) => { releaseFirst = r })
+      return Promise.resolve({ ...staleVerse, translation_id: a.translationId, text: `text in ${a.translationId}` })
+    })
+    const presenting = presentVerse(staleVerse, { goLive: true })
+    useBibleStore.setState({ activeTranslationId: 3 })
+    releaseFirst({ ...staleVerse, translation_id: 2, text: "text in 2" })
+    expect(await presenting).toBe("presented")
+    expect(calls).toEqual([2, 3])
+    expect(useBroadcastStore.getState().liveVerse?.segments[0].text).toBe("text in 3")
   })
 
   it("looks up by book/chapter/verse against the active translation", async () => {

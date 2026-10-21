@@ -59,6 +59,14 @@ export function getTranslationLabel(
 // Monotonic ticket so an older present whose refetch resolves late can't
 // overwrite a newer one (detections can present in quick succession).
 let presentSeq = 0
+/** Follows (a translation change re-presenting what is on air) have their own count: the newest wins. */
+let followSeq = 0
+
+/** The translations a present resolves against; a change while it loads means resolving again. */
+function translationsKey(): string {
+  const b = useBibleStore.getState()
+  return `${b.activeTranslationId}|${b.secondaryTranslationId}|${b.overrideServiceTranslations}`
+}
 
 /**
  * Invalidate every present still in flight. Clear/hide call this so a verse
@@ -120,6 +128,8 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   if (!opts.follow && reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
   if (!opts.follow) presentSeq += 1
   const ticket = presentSeq
+  const followTicket = opts.follow ? ++followSeq : 0
+  const startKey = translationsKey()
   const ref = `${verse.book_name} ${verse.chapter}:${verse.verse}`
   mark(`presentVerse start ${ref}`)
 
@@ -162,10 +172,19 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
 
   // A newer present (or a Clear) started while we were refetching — let it win.
   if (ticket !== presentSeq) return "superseded"
+  if (opts.follow) {
+    // A newer follow, or a different verse reached the screen meanwhile: that wins.
+    const live = useBroadcastStore.getState().liveSourceVerse
+    const sameVerse = live !== null && live.book_number === verse.book_number && live.chapter === verse.chapter && live.verse === verse.verse
+    if (followTicket !== followSeq || !sameVerse) return "superseded"
+  }
+  // The translation was changed while this loaded: resolve again, so the screen shows the one now chosen.
+  if (translationsKey() !== startKey) return presentVerse(verse, opts)
 
   // Never present a verse with no text (e.g. a citation that doesn't exist
   // in the chosen translation) — keep whatever is currently live instead.
   if (!verseToPresent.text?.trim()) {
+    if (opts.follow) return "empty" // the verse stays as it is on air; no warning for a follow
     console.warn("[broadcast] refusing to present verse with empty text:", ref)
     useBroadcastStore.getState().setPresentWarning(
       `${ref} not shown: no text in ${getTranslationLabel(choice.primary, "the chosen translation")}.`
@@ -190,10 +209,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     )
 
   // Keep the preview in sync with what was just presented.
-  if (opts.follow) {
-    // Something else reached the screen while the new translation loaded: that wins.
-    if (useBroadcastStore.getState().liveSourceVerse !== verse) return "superseded"
-  } else bibleState.selectVerse(verseToPresent)
+  if (!opts.follow) bibleState.selectVerse(verseToPresent)
   const data = renderEntries.length > 1
     ? toDualVerseRenderData(renderEntries)
     : toVerseRenderData(renderEntries[0]?.verse ?? verseToPresent, renderEntries[0]?.translation ?? "KJV")

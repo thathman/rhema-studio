@@ -483,9 +483,10 @@ function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; 
   // In Present the live song lists the arrangement it went live with (what Next steps through);
   // Prepare shows the item as edited.
   const liveSnapshot = mode === "present" && liveSlide?.itemId === item.id && liveSlide.arrangementId !== undefined ? liveSlide : null
-  const slides = liveSnapshot
-    ? buildSlides(song, liveSnapshot.arrangementId ?? null, liveSnapshot.languages ?? item.song.languages)
-    : buildSlides(song, item.song.arrangement_id, item.song.languages)
+  // Clicks act on the list as shown: the live arrangement while it is live.
+  const songAs = liveSnapshot ? { arrangement_id: liveSnapshot.arrangementId ?? null, languages: liveSnapshot.languages ?? item.song.languages } : undefined
+  const shownItem: SongQueueItem = songAs ? { ...item, song: { ...item.song, ...songAs } } : item
+  const slides = buildSlides(song, shownItem.song.arrangement_id, shownItem.song.languages)
   const highlightLive = mode === "present" || !liveSlide || liveSlide.itemId !== item.id || (liveSlide.arrangementId === item.song.arrangement_id && (liveSlide.languages ?? []).join() === item.song.languages.join())
   if (slides.length === 0) {
     return <p className="px-9 py-1 text-xs text-confidence-mid">No lyrics in {item.song.languages.join(" / ").toUpperCase() || song.song.primary_language.toUpperCase()}.</p>
@@ -500,8 +501,8 @@ function SlideList({ item, index, mode }: { item: SongQueueItem; index: number; 
           <li key={slide.index}>
             <button
               type="button"
-              onClick={() => presentActions.previewSlide(item, slide.index)}
-              onDoubleClick={mode === "present" ? () => void presentQueueItem(index, slide.index) : undefined}
+              onClick={() => presentActions.previewSlide(shownItem, slide.index)}
+              onDoubleClick={mode === "present" ? () => void presentQueueItem(index, slide.index, songAs) : undefined}
               className={cn(
                 "flex h-7 w-full min-w-0 items-center gap-2 rounded px-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 live ? "bg-live-pulse/15 text-destructive" : sel ? "bg-primary/10" : "hover:bg-muted/50"
