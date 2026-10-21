@@ -1,5 +1,7 @@
 import { approvalState } from "@/lib/approval"
 import { localDate, todaysService } from "@/lib/todays-service"
+import { monitorProblems } from "@/lib/monitor-health"
+import { useMonitorStore } from "@/stores/monitor-store"
 import { allSignageIds } from "@/lib/signage"
 import { useEffect } from "react"
 import { CheckIcon, TriangleAlertIcon, InfoIcon, PlayIcon, PencilRulerIcon, MonitorIcon, SettingsIcon } from "lucide-react"
@@ -41,6 +43,7 @@ export function HomeWorkspace() {
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
   const suggested = todaysService(programs, localDate())
+  const monitorCount = useMonitorStore((s) => s.count)
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
@@ -85,6 +88,7 @@ export function HomeWorkspace() {
     missingMedia: mediaLoaded || mediaIds.length === 0 ? missingMedia : 0,
     // Only the themes outputs actually use.
     missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
+    monitors: monitorCount === null ? undefined : monitorProblems(outputs, monitorCount),
     approval: current ? (dirty ? "changed" : approvalState(current)) : undefined,
     signage: outputs
       .filter((o) => o.role === "signage")

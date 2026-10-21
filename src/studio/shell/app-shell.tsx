@@ -1,4 +1,5 @@
 import "@/stores/journal-store"
+import "@/stores/monitor-store"
 import { useEffect } from "react"
 import {
   HouseIcon,
