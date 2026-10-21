@@ -21,6 +21,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
 ### Search and safety
+- Backing up to, or restoring from, a USB stick or network share that stalls no longer freezes the app or its outputs.
 - Quick find accepts the Yorùbá Bible's book names, with or without accents ("Jòhánù 3:16", "1 Ọba 3:9").
 - macOS: Cmd+Q asks about unsaved service changes, like closing the window.
 
