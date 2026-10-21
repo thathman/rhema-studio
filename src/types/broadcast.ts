@@ -181,6 +181,11 @@ export interface BroadcastTheme {
     textAreaWidth: number
     textAreaHeight: number
     referenceGap?: number
+    /**
+     * Space between the first and second language of a bilingual verse or song
+     * slide, in theme px. Absent: one line of the first language (as before).
+     */
+    languageGap?: number
     /** "stacked" (default): reference + verse flow as one block. "free": each is positioned by its box. */
     mode?: "stacked" | "free"
     referenceBox?: ElementBox

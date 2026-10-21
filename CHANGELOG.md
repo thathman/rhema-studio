@@ -20,6 +20,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Themes
+- Bilingual screens: the Theme Designer styles both languages together or each one alone (tabs name the translations), and a "Space between languages" setting sets the gap on verses and songs.
+
 ### Search and safety
 - Intel Mac: Rhema now builds and runs natively on Intel Macs. Pictures load on macOS, a first run starts in the King James Version, and the app no longer falls back to a slower internal channel at start.
 - Cues: a "Show live" step finishes before the next one runs, so a following quick screen or "Rehearsal off" behaves as expected. An all-day signage window (00:00 to 00:00) keeps to its ticked days.

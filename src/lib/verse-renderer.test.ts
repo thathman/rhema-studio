@@ -259,6 +259,19 @@ describe("dual translation rendering", () => {
     expect(dual.height).toBe(single.height * 3)
   })
 
+  it("the space between languages is the theme's setting, for verses and song slides", () => {
+    const theme = BUILTIN_THEMES[0]
+    const single = measureVerseHeight(stubCtx(), theme, { reference: "John 3:16", segments: [{ text: "For God so loved" }] }, 1200).height
+    const dual: VerseRenderData = { reference: "John 3:16", segments: [{ text: "For God so loved" }], translationLines: ["For God so loved", "Nitori Ọlọrun fẹ́ràn ayé"] }
+    const at = (languageGap: number | undefined) => measureVerseHeight(stubCtx(), { ...theme, layout: { ...theme.layout, languageGap } }, dual, 1200).height
+    expect(at(undefined)).toBe(single * 3) // as before: one blank line
+    expect(at(0)).toBe(single * 2)
+    expect(at(100)).toBe(single * 2 + 100)
+    const song: VerseRenderData = { kind: "slide", reference: "Amazing Grace", segments: [], lines: ["Amazing grace"], secondaryLines: ["Oore ofe"] }
+    const songAt = (languageGap: number | undefined) => measureVerseHeight(stubCtx(), { ...theme, layout: { ...theme.layout, languageGap } }, song, 1200).height
+    expect(songAt(100) - songAt(0)).toBe(100)
+  })
+
   it("uses the secondary language style for the second translation line", () => {
     const theme = BUILTIN_THEMES[0]
     const dualVerse: VerseRenderData = {

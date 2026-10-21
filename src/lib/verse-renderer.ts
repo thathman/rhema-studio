@@ -780,7 +780,7 @@ function drawVerseText(
     const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
     if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
     for (const [b, [lines, lineStyle]] of blocks.entries()) {
-      if (b > 0) currentY += baseFontSize * primaryStyle.lineHeight
+      if (b > 0) currentY += languageGapPx(theme, baseFontSize, primaryScale)
       for (const text of lines) {
         currentY += drawVerseText(ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectX, textRectWidth, currentY, lineStyle.fontSize * primaryScale, lineStyle)
       }
@@ -797,7 +797,7 @@ function drawVerseText(
       : 1
     let currentY = startY
     for (const [index, text] of verse.translationLines.entries()) {
-      if (index > 0) currentY += baseFontSize * primaryStyle.lineHeight
+      if (index > 0) currentY += languageGapPx(theme, baseFontSize, primaryScale)
       const lineStyle = index === 0 ? primaryStyle : secondaryStyle
       const lineFontSize = lineStyle.fontSize * primaryScale
       currentY += drawVerseText(
@@ -914,6 +914,15 @@ function drawVerseText(
   return currentY - startY
 }
 
+/**
+ * Space between the first and second language: the theme's setting (shrunk
+ * with the text when it is fitted smaller), else one line of the first language.
+ */
+export function languageGapPx(theme: BroadcastTheme, baseFontSize: number, primaryScale: number): number {
+  const gap = theme.layout.languageGap
+  return typeof gap === "number" && gap >= 0 ? gap * primaryScale : baseFontSize * theme.verseText.lineHeight
+}
+
 function buildScaledTheme(
   theme: BroadcastTheme,
   scale: number
@@ -922,6 +931,9 @@ function buildScaledTheme(
     ...theme.layout,
     offsetX: theme.layout.offsetX * scale,
     offsetY: theme.layout.offsetY * scale,
+    // Gaps are theme px too: a small preview shrinks them with everything else.
+    ...(typeof theme.layout.referenceGap === "number" ? { referenceGap: theme.layout.referenceGap * scale } : {}),
+    ...(typeof theme.layout.languageGap === "number" ? { languageGap: theme.layout.languageGap * scale } : {}),
     padding: {
       top: theme.layout.padding.top * scale,
       right: theme.layout.padding.right * scale,
@@ -1113,7 +1125,7 @@ export function measureVerseHeight(
     const blocks: Array<[string[], VerseTextStyle]> = [[verse.lines, primaryStyle]]
     if (verse.secondaryLines?.length) blocks.push([verse.secondaryLines, secondaryStyle])
     for (const [b, [lines, lineStyle]] of blocks.entries()) {
-      if (b > 0) height += baseFontSize * primaryStyle.lineHeight
+      if (b > 0) height += languageGapPx(theme, baseFontSize, primaryScale)
       for (const text of lines) {
         const m = measureVerseHeight(_ctx, theme, { reference: verse.reference, segments: [{ text }] }, textRectWidth, lineStyle.fontSize * primaryScale, lineStyle)
         height += m.height
@@ -1133,7 +1145,7 @@ export function measureVerseHeight(
     let height = 0
     let maxLineWidth = 1
     for (const [index, text] of verse.translationLines.entries()) {
-      if (index > 0) height += baseFontSize * primaryStyle.lineHeight
+      if (index > 0) height += languageGapPx(theme, baseFontSize, primaryScale)
       const lineStyle = index === 0 ? primaryStyle : secondaryStyle
       const lineFontSize = lineStyle.fontSize * primaryScale
       const metrics = measureVerseHeight(
