@@ -450,4 +450,13 @@ describe("createFromRundown", () => {
     expect(cleanName("Tolu\tMusic\n")).toBe("Tolu Music")
     expect(Array.from(cleanName("a" + "😀".repeat(80)))).toHaveLength(60)
   })
+
+  it("saves and reopens team comments (CL-007), and a new comment counts as an unsaved change", () => {
+    const v: VerseQueueItem = { id: "c1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, comments: [{ by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }] }
+    const [input] = toItemInputs([v])
+    expect(JSON.parse(input.payload ?? "{}").comments).toEqual([{ by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }])
+    const reopened = toQueueItems({ program, items: [item("c1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
+    expect(reopened.items[0].comments).toEqual(v.comments)
+    expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, comments: [...(v.comments ?? []), { by: "Tolu", at: "2026-10-21T11:00:00Z", text: "ok" }] }]))
+  })
 })

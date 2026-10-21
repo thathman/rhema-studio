@@ -835,6 +835,22 @@ struct ExtrasPayload {
     /// Who is preparing this item (CL-007), free text, short.
     #[serde(default)]
     prepared_by: Option<String>,
+    /// Team comments on this item (CL-007).
+    #[serde(default)]
+    comments: Option<Vec<CommentPayload>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommentPayload {
+    by: String,
+    at: String,
+    text: String,
+}
+
+fn valid_comment(c: &CommentPayload) -> bool {
+    let short = |s: &str, n: usize| s.chars().count() <= n && !s.chars().any(char::is_control);
+    let text_len = c.text.chars().count();
+    short(&c.by, 60) && short(&c.at, 40) && (1..=1000).contains(&text_len) && !c.text.chars().any(|ch| ch.is_control() && ch != '\n')
 }
 
 fn is_clock_time(s: &str) -> bool {
@@ -856,6 +872,9 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     }
     if p.prepared_by.as_deref().is_some_and(|n| n.chars().count() > 60 || n.chars().any(char::is_control)) {
         return Err(ContentError::Invalid(format!("item {i}: 'prepared by' must be a short name")));
+    }
+    if p.comments.as_ref().is_some_and(|cs| cs.len() > 100 || !cs.iter().all(valid_comment)) {
+        return Err(ContentError::Invalid(format!("item {i}: comments must be at most 100, each 1-1000 characters with a short name")));
     }
     Ok(())
 }
@@ -1087,6 +1106,11 @@ mod tests {
         let timed = ItemInput { payload: Some("{\"planned_minutes\":4.5}".into()), ..verse("John 3:16", 43, 3, 16) };
         assert!(validate_items(&[ItemInput { payload: Some("{\"prepared_by\":\"Tolu (music)\"}".into()), ..verse("John 3:16", 43, 3, 16) }]).is_ok());
         assert!(validate_items(&[ItemInput { payload: Some(format!("{{\"prepared_by\":\"{}\"}}", "x".repeat(61))), ..verse("John 3:16", 43, 3, 16) }]).is_err());
+        let comment = |text: &str| ItemInput { payload: Some(serde_json::json!({ "comments": [{ "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": text }] }).to_string()), ..verse("John 3:16", 43, 3, 16) };
+        assert!(validate_items(&[comment("Use the NKJV here\nthen pause")]).is_ok(), "CL-007 comment with a line break");
+        assert!(validate_items(&[comment("")]).is_err());
+        assert!(validate_items(&[comment(&"x".repeat(1001))]).is_err());
+        assert!(validate_items(&[comment("tab\there")]).is_err());
         for (end_by, ok) in [("12:15", true), ("00:00", true), ("23:59", true), ("24:00", false), ("12:60", false), ("9:15", false), ("12-15", false)] {
             let item = ItemInput { payload: Some(format!("{{\"end_by\":\"{end_by}\"}}")), ..verse("John 3:16", 43, 3, 16) };
             assert_eq!(validate_items(&[item]).is_ok(), ok, "{end_by}");

@@ -636,3 +636,12 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bj.1 | Present → Quick find: type "Jòhánù 3:16", then "Johanu 3 16", then "1 Ọba 3:9" and "Ise 2:38". | Each previews the right verse (John 3:16, 1 Kings 3:9, Acts 2:38) in the active translation. | Unverified |
 | 10bj.2 | A Yorùbá speaker types the book names they actually use for ten common books. | Each finds the right book; note any spelling that does not, for the alias list. | Unverified |
+
+### 10bk. Team comments (CL-007)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bk.1 | Computer A, More → Your name = "Pastor Ade". Prepare: select an item, write a comment, press Enter; Save; Publish to the church folder. | The comment shows with name and time; the row shows a speech-bubble count; nothing appears on any output. | Unverified |
+| 10bk.2 | Computer B, More → Your name = "Tolu": open that service from the church folder. | "1 new comment" in the service bar; the list shows "Pastor Ade on …" and the text. Mark as read hides it until someone else comments again. | Unverified |
+| 10bk.3 | Computer B adds a reply, saves, publishes; computer A opens the newer version. | A sees "1 new comment" (Tolu's), not its own. | Unverified |
+| 10bk.4 | Computer B: Mark as read, then open the same service again from the church folder (a new copy); duplicate it. | No comment shows as new in either copy until someone writes a new one. | Unverified |

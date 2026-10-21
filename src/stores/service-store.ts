@@ -17,6 +17,7 @@ import type {
 } from "@/types"
 import { isImageItem, isSlideItem, isVerseItem } from "@/types"
 import { safeLink } from "@/lib/qr-bulletin"
+import { cleanComments, parseComments } from "@/lib/comments"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
@@ -105,6 +106,7 @@ export function toItemInputs(
     ...(typeof i.planned_minutes === "number" && i.planned_minutes > 0 ? { planned_minutes: i.planned_minutes } : {}),
     ...(i.end_by && isClockTime(i.end_by) ? { end_by: i.end_by } : {}),
     ...(cleanName(i.prepared_by) ? { prepared_by: cleanName(i.prepared_by) } : {}),
+    ...(cleanComments(i.comments).length ? { comments: cleanComments(i.comments) } : {}),
   })
   return items.map((i): ItemInput =>
     isImageItem(i)
@@ -302,7 +304,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload) })
       continue
     }
     if (it.kind === "slide") {
@@ -311,7 +313,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload) })
       continue
     }
     if (it.kind === "song") {
@@ -329,7 +331,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload),
       })
       continue
     }
@@ -360,7 +362,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload),
     })
   }
   return { items, unsupported, missingTranslations: [...missing] }
@@ -369,7 +371,7 @@ export function toQueueItems(
 /** What a save persists; verse text and timestamps are not part of it. */
 export function rundownSignature(items: QueueItem[]): string {
   return items
-    .map((i) => `${i.background?.media_id ?? ""}|${i.planned_minutes ?? ""}|${i.end_by ?? ""}|${i.prepared_by ?? ""}|` + (
+    .map((i) => `${i.background?.media_id ?? ""}|${i.planned_minutes ?? ""}|${i.end_by ?? ""}|${i.prepared_by ?? ""}|${(i.comments ?? []).map((c) => c.at + c.text).join("~")}|` + (
       isVerseItem(i)
         ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
         : isImageItem(i)
