@@ -29,8 +29,7 @@ let flashTimer: ReturnType<typeof setTimeout> | null = null
 /**
  * New items with the active position kept on the same item (RG-03 "Next/
  * Previous predictable"): adding at the top, removing or reordering must not
- * leave Next pointing somewhere else. If the active item is gone, there is
- * no active position and stepping falls back to what is live.
+ * leave Next pointing somewhere else.
  */
 function withActiveKept(state: { items: QueueItem[]; activeIndex: number | null }, items: QueueItem[]) {
   if (state.activeIndex === null) return { items }
@@ -72,7 +71,14 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       return withActiveKept(state, [item, ...state.items])
     }),
   removeItem: (id) =>
-    set((state) => withActiveKept(state, state.items.filter((i) => i.id !== id))),
+    set((state) => {
+      const removed = state.items.findIndex((i) => i.id === id)
+      const items = state.items.filter((i) => i.id !== id)
+      // The active item itself removed: stand on the one before it, so Next
+      // goes on to the item that followed (never back to the top).
+      if (removed !== -1 && removed === state.activeIndex) return { items, activeIndex: removed > 0 ? removed - 1 : null }
+      return withActiveKept(state, items)
+    }),
   updateItem: (id, patch) =>
     set((state) => ({ items: state.items.map((i) => (i.id === id ? patch(i) : i)) })),
   reorderItems: (fromIndex, toIndex) =>

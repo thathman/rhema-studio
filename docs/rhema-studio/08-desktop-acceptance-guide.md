@@ -676,4 +676,5 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bo.1 | Present a service, go to item 4 with Next. From Quick find add a verse; then remove item 1 in Prepare; then drag item 2 below item 5. Press Next after each. | Next always shows the item after the one on screen. | Unverified |
 | 10bo.2 | Service open, listening, on item 6. Read aloud the verse that is item 2, then a verse that is not in the service. Press Next. | Item 2 flashes; nothing is added to the service, the service is not marked unsaved; Next shows item 7. | Unverified |
+| 10bo.4 | Present on item 6; delete item 6 in the rundown; press Next. | Item 7 (the one that followed) goes live, not item 1. | Unverified |
 | 10bo.3 | No service open (Clear service), listening: read two verses aloud. | They collect in the rundown list as in the original Rhema. | Unverified |

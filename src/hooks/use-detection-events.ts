@@ -106,7 +106,7 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
   const serviceOpen = useServiceStore.getState().current !== null
   for (const d of detections) {
     if (serviceOpen) {
-      if (!d.is_chapter_only && d.source === "direct") {
+      if (d.auto_queued && !d.is_chapter_only && d.source === "direct") {
         const idx = useQueueStore.getState().findDuplicate(d.book_number, d.chapter, d.verse)
         if (idx !== -1) useQueueStore.getState().flashItem(useQueueStore.getState().items[idx].id)
       }
