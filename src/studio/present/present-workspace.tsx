@@ -123,6 +123,11 @@ export function PresentWorkspace() {
         {warning && (
           <StatusChip tone="warn" label={warning} className="max-w-96" title={warning} onClick={() => useBroadcastStore.getState().setPresentWarning(null)} />
         )}
+        {/* Always present, so screen readers announce changes: what is on air, and warnings about it. */}
+        <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {isLive && liveRef ? `${rehearsal ? "Rehearsal" : "On air"}: ${liveRef}` : "Off air"}
+        </span>
+        <span role="alert" aria-atomic="true" className="sr-only">{warning ?? ""}</span>
         <div role="group" aria-label="Present view" className="ml-2 flex rounded-md border border-border p-0.5">
           {(["standard", "production"] as const).map((v) => (
             <button

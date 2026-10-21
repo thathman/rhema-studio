@@ -88,6 +88,8 @@ export function MediaLibrary() {
                 type="button"
                 onClick={() => useBibleStore.getState().selectSlide({ item: imageQueueItem(a, `library-${a.id}`), index: 0 })}
                 className="flex aspect-video items-center justify-center overflow-hidden bg-black outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label={a.present ? `Preview ${a.name}` : `${a.name}: the file is missing from the media folder`}
+                aria-pressed={sel}
                 title={a.present ? "Click to preview" : "The file is missing from the media folder"}
               >
                 {a.kind === "video" ? (

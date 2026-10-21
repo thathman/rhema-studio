@@ -69,8 +69,19 @@ function QueueItemRow({
   return (
     <div
       data-queue-idx={index}
+      role="button"
+      tabIndex={0}
+      aria-label={`${item.reference}${isActive ? ", current" : ""}: show live`}
+      aria-current={isActive ? "true" : undefined}
       onClick={handlePresent}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault()
+          handlePresent()
+        }
+      }}
       className={cn(
+        "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         "group flex h-10 cursor-pointer items-center gap-2 rounded-md px-2.5 transition-colors",
         isHighlighted
           ? "animate-pulse border border-amber-500/40 bg-amber-500/15"
@@ -89,10 +100,11 @@ function QueueItemRow({
 
       {sourceBadge}
 
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         <Button
           variant="ghost"
           size="icon-xs"
+          aria-label={`Show ${item.reference} live`}
           onClick={(e) => {
             e.stopPropagation()
             handlePresent()
@@ -100,7 +112,7 @@ function QueueItemRow({
         >
           <PlayIcon className="size-2.5" />
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={handleRemove}>
+        <Button variant="ghost" size="icon-xs" aria-label={`Remove ${item.reference}`} onClick={handleRemove}>
           <XIcon className="size-2.5" />
         </Button>
       </div>

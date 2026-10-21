@@ -169,6 +169,7 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
               <button
                 type="button"
                 onClick={() => preview(hit)}
+                aria-current={isSel ? "true" : undefined}
                 className={cn(
                   "flex min-w-0 flex-1 flex-col rounded-md px-2.5 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                   isSel ? "bg-primary/10" : "hover:bg-muted/50"

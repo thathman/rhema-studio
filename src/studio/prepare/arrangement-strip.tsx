@@ -1,3 +1,4 @@
+import { keepFocusInList } from "@/lib/keep-focus"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { PlusIcon, XIcon } from "lucide-react"
@@ -91,7 +92,7 @@ function Chip({
         onKeyDown={(e) => {
           if (e.key === "ArrowLeft") { e.preventDefault(); onMove(index - 1) }
           if (e.key === "ArrowRight") { e.preventDefault(); onMove(index + 1) }
-          if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); onRemove() }
+          if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); keepFocusInList(e.currentTarget, 'button[aria-label*=", position "]'); onRemove() }
         }}
       >
         {label}
