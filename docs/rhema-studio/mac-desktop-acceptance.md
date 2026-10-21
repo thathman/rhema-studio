@@ -119,6 +119,12 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10u.3 (wrong codes) | V: three wrong codes 403 ("2 / 1 / 0 tries left"), then 404 "pairing is not open" |
 | 10v.1 (roles) | V: "theme" from a present-only device refused ("may present but not change settings"); after changing it to configure, accepted at once and after a restart |
 | 10v.2 (no keys left) | V: with no devices and the switch on, 401; after unticking "Require a key or a paired device", 200; the switch state survived a restart |
+| 10m.1 (one language per output) | V: projector set to "First language only", NDI stream to "Second language only": for John 3:16 (OYCB + KJV) the stream drew only KJV (frame checked) and the projector frame carried only the Yorùbá |
+| 10m.2 | V: Psalm 23:1 with no second translation on the second-only stream: shown in its first language, never blank. (A saved item with no second translation follows the operator's second translation when one is set: by design, per the translation policy) |
+| 10ac.1 (lower thirds) | V: "Pastor Tolu / Senior Pastor" on the stream (lower thirds on), not on the projector (off) |
+| 10ac.2 partly | V: the band stayed through Next |
+| 10ac.3 | V: Hide removed it at once; turning lower thirds off for the stream while a band was up removed it at once |
+| Projector with the display asleep | Observed: with the Mac's display asleep macOS reports no monitors; turning a projector output on then fails with "Monitor index 0 out of range (0 available)" and the output stays off; the NDI stream needs no monitor and kept working |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
