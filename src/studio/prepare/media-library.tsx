@@ -4,6 +4,7 @@ import { ImageIcon, MusicIcon, PlayIcon, PlusIcon, UploadIcon } from "lucide-rea
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
+import { useSoundStore } from "@/stores/sound-store"
 import { cn } from "@/lib/utils"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
@@ -45,6 +46,8 @@ export function MediaLibrary() {
   }
 
   const remove = async (a: MediaAssetStatus) => {
+    // The file is about to go; a sound playing from it stops first.
+    if (useSoundStore.getState().assetId === a.id) useSoundStore.getState().stop()
     try {
       await useMediaStore.getState().remove(a.id)
       toast.success(`${a.name} removed`)

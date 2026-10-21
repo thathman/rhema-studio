@@ -40,6 +40,13 @@ function clearFade() {
   fade = null
 }
 
+/** A fade interrupted by Pause or Resume: back to the chosen volume. */
+function cancelFade(volume: number) {
+  if (!fade) return
+  clearFade()
+  if (audio) audio.volume = volume
+}
+
 export const useSoundStore = create<SoundState>((set, get) => ({
   assetId: null,
   name: "",
@@ -78,17 +85,23 @@ export const useSoundStore = create<SoundState>((set, get) => ({
   },
 
   pause: () => {
+    cancelFade(get().volume)
     audio?.pause()
-    set({ playing: false })
+    set({ playing: false, fading: false })
   },
 
   resume: () => {
-    if (!audio) return
-    void audio.play().catch(() => {})
-    set({ playing: true })
+    const el = audio
+    if (!el) return
+    cancelFade(get().volume)
+    set({ playing: true, fading: false, error: null })
+    el.play().catch((e) => {
+      if (audio === el) set({ playing: false, error: `${get().name} could not resume: ${e instanceof Error ? e.message : String(e)}` })
+    })
   },
 
   stop: () => {
+    ticket += 1 // a play() still looking up its file must not start after Stop
     clearFade()
     if (audio) {
       audio.pause()
@@ -96,7 +109,7 @@ export const useSoundStore = create<SoundState>((set, get) => ({
       audio.load()
     }
     audio = null
-    set({ assetId: null, name: "", playing: false, position: 0, duration: 0, fading: false })
+    set({ assetId: null, name: "", playing: false, position: 0, duration: 0, fading: false, error: null })
   },
 
   /** Lower the volume to nothing over `ms`, then stop; the volume setting is kept for the next sound. */

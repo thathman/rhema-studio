@@ -66,4 +66,28 @@ describe("sound player", () => {
     expect(useSoundStore.getState()).toMatchObject({ playing: false, assetId: null, volume: 0.8 })
     expect(el.paused).toBe(true)
   })
+
+  it("Stop cancels a play still finding its file; Pause during a fade keeps the sound", async () => {
+    const { useMediaStore } = await import("@/stores/media-store")
+    const { useSoundStore } = await import("@/stores/sound-store")
+    let release!: (u: string) => void
+    useMediaStore.setState({ fileUrl: () => new Promise<string>((r) => { release = r }) } as never)
+    const pending = useSoundStore.getState().play({ id: "slow", name: "Wrong track" })
+    useSoundStore.getState().stop()
+    release("asset://slow.mp3")
+    await pending
+    expect(FakeAudio.made).toHaveLength(0)
+    expect(useSoundStore.getState().assetId).toBeNull()
+
+    useMediaStore.setState({ fileUrl: async () => "asset://a.mp3" } as never)
+    useSoundStore.getState().setVolume(1)
+    await useSoundStore.getState().play({ id: "a", name: "Walk-in" })
+    const el = FakeAudio.made.at(-1)!
+    useSoundStore.getState().fadeOut(1000)
+    vi.advanceTimersByTime(500)
+    useSoundStore.getState().pause()
+    vi.advanceTimersByTime(2000)
+    expect(useSoundStore.getState()).toMatchObject({ assetId: "a", playing: false, fading: false })
+    expect(el.volume).toBe(1)
+  })
 })
