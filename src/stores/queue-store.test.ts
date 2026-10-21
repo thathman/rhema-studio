@@ -110,7 +110,7 @@ describe("backfillText", () => {
     const before = useQueueStore.getState().items.map((i) => i.id)
     const at = before.indexOf("b")
     useQueueStore.getState().removeItem("b")
-    expect(useQueueStore.getState().activeIndex).toBeNull()
+    expect(useQueueStore.getState().activeIndex).toBe(at > 0 ? at - 1 : null) // displays read "next" as the item that followed
     expect(useQueueStore.getState().removedActive).toEqual({ prevId: before[at - 1] ?? null, nextId: before[at + 1] ?? null })
   })
 })

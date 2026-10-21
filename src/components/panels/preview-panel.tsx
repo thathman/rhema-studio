@@ -22,7 +22,8 @@ export function PreviewPanel() {
   }, [previewMediaId, previewUrl, previewIsVideo])
   const savedSong = useSongStore((s) => (previewSongId ? s.songs[previewSongId] : undefined))
   // A slide picked from the live song shows the song as it went live (what Show live will present).
-  const previewSong = selectedSlide?.song ?? savedSong
+  const liveSlideItemId = useBroadcastStore((s) => s.liveSlide?.itemId ?? null)
+  const previewSong = (selectedSlide?.song && liveSlideItemId === selectedSlide.item.id ? selectedSlide.song : undefined) ?? savedSong
   useEffect(() => {
     if (previewSongId && !previewSong) void useSongStore.getState().load(previewSongId).catch(() => {})
   }, [previewSongId, previewSong])

@@ -77,10 +77,15 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     set((state) => {
       const removed = state.items.findIndex((i) => i.id === id)
       const items = state.items.filter((i) => i.id !== id)
-      // The active item itself removed: no active item, but Next goes on to the one that
-      // followed it and Previous to the one before (never back to the top, never skipping).
+      // The active item itself removed: the position stays on the one before it (so "next"
+      // on the stage and in the rundown is the item that followed), and stepping uses both
+      // neighbours: Next goes to the one that followed, Previous to the one before (no skip).
       if (removed !== -1 && removed === state.activeIndex) {
-        return { items, activeIndex: null, removedActive: { prevId: state.items[removed - 1]?.id ?? null, nextId: state.items[removed + 1]?.id ?? null } }
+        return {
+          items,
+          activeIndex: removed > 0 ? removed - 1 : null,
+          removedActive: { prevId: state.items[removed - 1]?.id ?? null, nextId: state.items[removed + 1]?.id ?? null },
+        }
       }
       return withActiveKept(state, items)
     }),

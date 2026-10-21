@@ -84,12 +84,15 @@ function stepQueue(offset: number): Promise<void> {
 
   const current = activeIndex ?? findLiveQueueIndex()
   // The live item was removed: step to the item that followed it, or the one before.
-  // (Only while one of them is still in the rundown: another service opened since makes it stale.)
-  const gap = current === null ? useQueueStore.getState().removedActive : null
+  // (Only while one of them is still in the rundown: another service opened since makes it stale;
+  // a neighbour removed since is found from the other one.)
+  const gap = useQueueStore.getState().removedActive
   const known = (id: string | null) => (id ? items.findIndex((i) => i.id === id) : -1)
-  if (gap && (known(gap.prevId) !== -1 || known(gap.nextId) !== -1)) {
-    const index = known(offset > 0 ? gap.nextId : gap.prevId)
-    return index === -1 ? Promise.resolve() : presentQueueItem(index) // e.g. Previous after deleting the first item
+  const prev = gap ? known(gap.prevId) : -1
+  const nextNeighbour = gap ? known(gap.nextId) : -1
+  if (gap && (prev !== -1 || nextNeighbour !== -1)) {
+    const index = offset > 0 ? (nextNeighbour !== -1 ? nextNeighbour : gap.nextId === null ? -1 : prev + 1) : prev !== -1 ? prev : gap.prevId === null ? -1 : nextNeighbour - 1
+    return index < 0 || index >= items.length ? Promise.resolve() : presentQueueItem(index)
   }
   const live = useBroadcastStore.getState().liveSlide
   if (current !== null) {
@@ -197,11 +200,13 @@ export const remoteActions = {
     const queue = useQueueStore.getState()
     if (bible.selectedSlide) {
       const { item, index, song } = bible.selectedSlide
+      // The copy taken when the song went live only while that song is still on air.
+      const stillLive = useBroadcastStore.getState().liveSlide?.itemId === item.id
       const idx = queue.items.findIndex((i) => i.id === item.id)
       if (idx !== -1) queue.setActive(idx)
       if (isSlideItem(item)) void presentCustomSlide(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
       else if (isImageItem(item)) void presentImage(item, { goLive: true }).catch((e) => console.warn("[remote-actions] sendToLive (image) failed:", e))
-      else void presentSlide(item, index, { goLive: true, song }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
+      else void presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined }).catch((e) => console.warn("[remote-actions] sendToLive (song) failed:", e))
       return
     }
     const selectedVerse = bible.selectedVerse

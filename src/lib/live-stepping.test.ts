@@ -82,10 +82,16 @@ describe("live stepping and following (audit fixes)", () => {
     await vi.waitFor(() => expect(presentVerse).toHaveBeenCalled())
     expect((presentVerse.mock.calls[0] as unknown as [{ verse: number }])[0].verse).toBe(2) // b, not a
     presentVerse.mockClear()
-    useQueueStore.setState({ items: [v("a", 1), v("b", 2), v("d", 4)], activeIndex: null, removedActive: { prevId: "b", nextId: "d" } })
+    useQueueStore.setState({ items: [v("a", 1), v("b", 2), v("d", 4)], activeIndex: 1, removedActive: { prevId: "b", nextId: "d" } })
     remoteActions.queueNext()
     await vi.waitFor(() => expect(presentVerse).toHaveBeenCalled())
     expect((presentVerse.mock.calls[0] as unknown as [{ verse: number }])[0].verse).toBe(4) // d
+    // The item that followed was removed too: Next goes to the item after the one before.
+    presentVerse.mockClear()
+    useQueueStore.setState({ items: [v("a", 1), v("b", 2), v("e", 5)], activeIndex: 1, removedActive: { prevId: "b", nextId: "d" } })
+    remoteActions.queueNext()
+    await vi.waitFor(() => expect(presentVerse).toHaveBeenCalled())
+    expect((presentVerse.mock.calls[0] as unknown as [{ verse: number }])[0].verse).toBe(5)
     // Another service opened since (its rundown set directly): the stale neighbours are ignored.
     presentVerse.mockClear()
     useQueueStore.setState({ items: [v("x", 7), v("y", 8)], activeIndex: null, removedActive: { prevId: "b", nextId: "d" } })
