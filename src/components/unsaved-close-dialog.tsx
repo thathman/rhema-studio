@@ -40,11 +40,16 @@ export function UnsavedCloseDialog() {
     const r = await useServiceStore.getState().saveCurrent()
     setSaving(false)
     if (r === "saved") quit()
-    else setError(r === "conflict" ? "Not saved: this service was changed elsewhere. Keep working and reload it, or quit without saving." : "Could not save. Keep working and try Save, or quit without saving.")
+    else setError({
+      conflict: "Not saved: this service was changed elsewhere. Keep working and reload it, or close without saving.",
+      unsupported: "Not saved: this service has items this version of Rhema cannot save (see Prepare). Keep working, or close without saving.",
+      nothing: "A save is already running. Wait a moment and press Save and close again.",
+    }[r as string] ?? "Could not save. Keep working and try Save, or close without saving.")
   }
 
+  // While saving, nothing else can be chosen: the save ends in quitting, so backing out mid-save is not offered.
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) keepWorking() }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !saving) keepWorking() }}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Save changes before closing?</DialogTitle>
@@ -54,8 +59,8 @@ export function UnsavedCloseDialog() {
         </DialogHeader>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
-          <Button variant="ghost" onClick={keepWorking}>Keep working</Button>
-          <Button variant="outline" className="text-destructive" onClick={quit}>Close without saving</Button>
+          <Button variant="ghost" disabled={saving} onClick={keepWorking}>Keep working</Button>
+          <Button variant="outline" className="text-destructive" disabled={saving} onClick={quit}>Close without saving</Button>
           {current && <Button disabled={saving} autoFocus onClick={() => void saveAndQuit()}>{saving ? "Saving…" : "Save and close"}</Button>}
         </DialogFooter>
       </DialogContent>
