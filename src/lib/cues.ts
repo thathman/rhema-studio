@@ -1,6 +1,7 @@
 import { presentActions } from "@/studio/present-actions"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useTimerStore } from "@/stores/timer-store"
+import { useSettingsStore, type CustomMacro } from "@/stores/settings-store"
 
 /**
  * Every operator verb, named once, so macros, the keyboard, remotes and any
@@ -44,18 +45,45 @@ export const MACROS: Macro[] = [
   { id: "service-end", label: "End the service", description: "Clear the screen, pause the timer, clear any stage message.", steps: ["clear", "timer.pause", "stage.clearMessage"] },
 ]
 
-export const findMacro = (id: string): Macro | undefined => MACROS.find((m) => m.id === id)
+const isCueId = (s: string): s is CueId => Object.prototype.hasOwnProperty.call(CUE_ACTIONS, s)
 
-/** Run a macro's steps in order. Unknown ids do nothing; a failing step does not stop the rest. */
-export function runMacro(id: string): CueId[] {
-  const macro = findMacro(id)
-  if (!macro) return []
-  for (const step of macro.steps) {
+/** A church-defined macro as a runnable one; steps this build does not know are dropped. */
+export function toMacro(m: CustomMacro): Macro {
+  return { id: m.id, label: m.label, description: "Your cue", steps: m.steps.filter(isCueId) }
+}
+
+/** Built-in macros, then the church's own (PT-003). */
+export function allMacros(custom: CustomMacro[] = useSettingsStore.getState().customMacros): Macro[] {
+  return [...MACROS, ...custom.map(toMacro)]
+}
+
+export const findMacro = (id: string): Macro | undefined => allMacros().find((m) => m.id === id)
+
+/**
+ * A readable id for a new cue (what a Stream Deck or OSC sends: `/rhema/macro baptism`):
+ * the name in lowercase letters, digits and dashes, unique among all macros.
+ */
+export function macroIdFor(label: string, taken: string[]): string {
+  const base = label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "cue"
+  let id = base
+  for (let n = 2; taken.includes(id); n++) id = `${base}-${n}`
+  return id
+}
+
+/** Run steps in order; a failing step does not stop the rest. */
+export function runSteps(steps: CueId[]): CueId[] {
+  for (const step of steps) {
     try {
       CUE_ACTIONS[step].run()
     } catch (e) {
-      console.warn(`[cues] step ${step} of ${id} failed:`, e)
+      console.warn(`[cues] step ${step} failed:`, e)
     }
   }
-  return macro.steps
+  return steps
+}
+
+/** Run a macro by id (built-ins win over a custom cue with the same id). Unknown ids do nothing. */
+export function runMacro(id: string): CueId[] {
+  const macro = findMacro(id)
+  return macro ? runSteps(macro.steps) : []
 }

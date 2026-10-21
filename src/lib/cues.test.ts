@@ -54,4 +54,22 @@ describe("cues and macros", () => {
     expect(runMacro("service-end")).toHaveLength(3)
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
+
+  it("runs the church's own cues by id, skipping steps this build does not know", async () => {
+    const { useSettingsStore } = await import("@/stores/settings-store")
+    useSettingsStore.setState({ customMacros: [{ id: "baptism", label: "Baptism", steps: ["rehearsal.off", "quick.black", "future.thing"] }] })
+    expect(runMacro("baptism")).toEqual(["rehearsal.off", "quick.black"])
+    expect(useBroadcastStore.getState().rehearsal).toBe(false)
+    expect(useBroadcastStore.getState().liveVerse?.screen).toBe("black")
+    useSettingsStore.setState({ customMacros: [] })
+    expect(runMacro("baptism")).toEqual([])
+  })
+
+  it("makes readable, unique ids for new cues", async () => {
+    const { macroIdFor } = await import("./cues")
+    expect(macroIdFor("Baptism", [])).toBe("baptism")
+    expect(macroIdFor("Start the service", ["service-start", "start-the-service"])).toBe("start-the-service-2")
+    expect(macroIdFor("Ìpàdé àdúrà!", [])).toBe("ipade-adura")
+    expect(macroIdFor("!!!", [])).toBe("cue")
+  })
 })

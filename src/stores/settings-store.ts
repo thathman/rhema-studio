@@ -40,6 +40,17 @@ export function pushRemoteKeys(): Promise<void> {
   })
   return remoteKeysPush
 }
+/** A church-defined cue: steps are cue action ids (validated when run, so a newer build's unknown step is skipped). */
+export interface CustomMacro {
+  id: string
+  label: string
+  steps: string[]
+}
+
+function isCustomMacro(m: unknown): m is CustomMacro {
+  const c = m as CustomMacro
+  return typeof m === "object" && m !== null && typeof c.id === "string" && typeof c.label === "string" && Array.isArray(c.steps) && c.steps.every((s) => typeof s === "string")
+}
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
@@ -60,6 +71,9 @@ interface SettingsState {
   brandKit: BrandKit
   /** Who is at the desk; goes on audit rows and the service log. */
   operatorName: string
+  /** The church's own cues (PT-003): named, ordered steps from the cue action registry. */
+  customMacros: CustomMacro[]
+  setCustomMacros: (macros: CustomMacro[]) => void
   /** Shared key for OSC/HTTP control; blank means nothing authenticates. */
   remoteSecret: string
   /** Paired controllers: SHA-256 of each token, never the token. */
@@ -102,6 +116,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   sttProvider: "deepgram",
   brandKit: defaultBrandKit(),
   operatorName: "",
+  customMacros: [],
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
@@ -128,6 +143,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set((s) => ({ remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }))
     void pushRemoteKeys()
   },
+  setCustomMacros: (customMacros) => set({ customMacros }),
   setOperatorName: (operatorName) => {
     set({ operatorName })
     void invoke("content_set_actor", { name: operatorName.trim() || null }).catch(() => {})
@@ -170,6 +186,8 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "number" && Number.isFinite(value)
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
+    case "customMacros":
+      return Array.isArray(value) // entries are checked one by one in hydrateSettings
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
     default:
@@ -180,6 +198,7 @@ function acceptable(key: string, value: unknown): boolean {
 const PERSISTED_KEYS = [
   "brandKit",
   "operatorName",
+  "customMacros",
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",
@@ -254,7 +273,8 @@ export function hydrateSettings(): Promise<void> {
       for (const key of PERSISTED_KEYS) {
         const value = await store.get(key)
         if (value !== undefined && value !== null && acceptable(key, value)) {
-          ;(patch as Record<string, unknown>)[key] = value
+          // One damaged cue must not cost the church all the others.
+          ;(patch as Record<string, unknown>)[key] = key === "customMacros" ? (value as unknown[]).filter(isCustomMacro) : value
         }
       }
       // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.
