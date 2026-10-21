@@ -517,5 +517,19 @@ describe("updateDraftNested deep paths", () => {
     expect(soundOutputId([o("main", "signage"), o("b")], {})).toBe("b")
     expect(soundOutputId([o("main", "stage")], {})).toBeNull()
   })
+
+  it("when the sound output changes, every output is told (only one plays: no echo)", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const main = { ...s.outputs[0], id: "main", role: "stage" as const }
+    const b = { ...s.outputs[0], id: "b", role: "congregation" as const }
+    useBroadcastStore.setState({ outputs: [main, b], rehearsal: false, isLive: true, liveVerse: { kind: "verse", reference: "John 3:16", segments: [] } as never })
+    emitToMock.mockClear()
+    // Main goes back to Congregation: main now plays the sound, and b must be told to stop.
+    useBroadcastStore.setState({ outputs: [{ ...main, role: "congregation" as const }, b] })
+    const sent = Object.fromEntries(emitToMock.mock.calls.map((c) => [String(c[0]), (c[2] as { sound?: boolean }).sound]))
+    expect(sent["broadcast-main"]).toBe(true)
+    expect(sent["broadcast-b"]).toBe(false)
+  })
 })
 

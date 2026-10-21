@@ -828,6 +828,16 @@ export function soundOutputId(outputs: BroadcastOutput[], status: Record<string,
   return (congregation.find((o) => status[o.id]?.previewOpen) ?? congregation[0])?.id ?? null
 }
 
+// When the output that plays video sound changes (a role changed, a window opened or closed), every
+// output is told, so the old one stops and only one plays: no echo.
+let lastSoundOutput: string | null | undefined
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.outputs === prev.outputs && s.outputStatus === prev.outputStatus) return
+  const now = soundOutputId(s.outputs, s.outputStatus)
+  if (lastSoundOutput !== undefined && now !== lastSoundOutput) s.syncBroadcastOutput()
+  lastSoundOutput = now
+})
+
 // Stage outputs also follow the rundown (what is next) and the timer.
 function syncStageOutputs(): void {
   const s = useBroadcastStore.getState()

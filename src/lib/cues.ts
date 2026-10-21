@@ -88,12 +88,15 @@ export function macroIdFor(label: string, taken: string[]): string {
  */
 export async function runSteps(steps: CueId[]): Promise<CueId[]> {
   for (const step of steps) {
+    const askingBefore = useApprovalGateStore.getState().held
     try {
       await CUE_ACTIONS[step].run()
     } catch (e) {
       console.warn(`[cues] step ${step} failed:`, e)
     }
-    if (useApprovalGateStore.getState().held) break
+    // Stop only when this step raised the question (one already open does not cut the cue short).
+    const asking = useApprovalGateStore.getState().held
+    if (asking && asking !== askingBefore) break
   }
   return steps
 }

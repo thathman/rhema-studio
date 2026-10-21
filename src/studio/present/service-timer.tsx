@@ -113,7 +113,11 @@ export function ServiceTimer() {
             disabled={idle}
             onClick={() => {
               // A minute or more would be lost: ask once (FR-07 "explicit confirm"), and log it.
-              if (!armReset && elapsedMs(timer, now) >= 60_000) return setArmReset(true)
+              if (!armReset && elapsedMs(timer, now) >= 60_000) {
+                setArmReset(true)
+                setTimeout(() => setArmReset(false), 5000) // asks again later rather than staying armed
+                return
+              }
               setArmReset(false)
               resetTimerLogged()
             }}
