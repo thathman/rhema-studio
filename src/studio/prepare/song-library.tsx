@@ -28,7 +28,7 @@ export function SongLibrary() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const search = useCallback((q: string) => {
-    void useSongStore.getState().search(q).then(async (exact) => {
+    void useSongStore.getState().search(q, 50, true).then(async (exact) => {
       if (exact.length > 0 || !q.trim()) return
       const near = fuzzySongs(q, await useSongStore.getState().all().catch(() => []))
       if (near.length > 0 && useSongStore.getState().query === q) useSongStore.setState({ results: near })

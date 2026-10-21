@@ -126,7 +126,28 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "content_get_revision": return null
     case "content_list_songs": {
       const q = String(args.query ?? "").toLowerCase().trim()
-      return [...songs.values()].filter((s) => !q || JSON.stringify(summary(s)).toLowerCase().includes(q) || s.sections.some((x) => Object.values(x.texts).some((t) => t.toLowerCase().includes(q)))).map(summary)
+      const tag = typeof args.tag === "string" ? args.tag.toLowerCase() : null
+      const tagged = (s: Song) => String(s.song.tags ?? "").toLowerCase().split(",").map((t) => t.trim()).includes(tag ?? "")
+      return [...songs.values()]
+        .filter((s) => !tag || tagged(s) === (args.withTag !== false))
+        .filter((s) => !q || JSON.stringify(summary(s)).toLowerCase().includes(q) || s.sections.some((x) => Object.values(x.texts).some((t) => t.toLowerCase().includes(q))))
+        .slice(0, Number(args.limit ?? 200))
+        .map(summary)
+    }
+    case "content_import_hymnbook": {
+      const book = args.book as { code: string; name: string; language?: string }
+      const existing = [...hymnbooks.values()].find((b) => b.code.toLowerCase() === book.code.toLowerCase())
+      const id = existing?.id ?? uid()
+      if (!existing) hymnbooks.set(id, { id, code: book.code, name: book.name, language: book.language ?? "yo", publisher: "", licence_note: "" })
+      let added = 0
+      let replaced = 0
+      for (const n of args.songs as Array<{ number: string; song: Record<string, unknown> }>) {
+        const holder = [...songs.values()].find((s) => s.numbers.some((x) => x.hymnbook_id === id && x.number === n.number))
+        writeSong(holder?.song.id ?? uid(), { ...n.song, numbers: [{ hymnbook_id: id, number: n.number }] }, (holder?.song.revision ?? 0) + 1)
+        if (holder) replaced += 1
+        else added += 1
+      }
+      return { added, replaced, skipped: 0, hymnbooks_added: existing ? 0 : 1, numbers_skipped: 0 }
     }
     case "content_get_song": return songs.get(String(args.id)) ?? null
     case "content_create_song": {
