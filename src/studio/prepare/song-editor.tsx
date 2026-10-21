@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { ArrowDownIcon, ArrowUpIcon, DownloadIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
-import { exportOpenLyricsToFile } from "@/lib/song-files"
+import { exportOpenLyricsToFile, exportSongTextToFile } from "@/lib/song-files"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -144,11 +144,11 @@ function EditorDialog({
   }
 
   const set = (patch: Partial<SongForm>) => setForm((f) => ({ ...f, ...patch }))
-  const exportOne = async () => {
+  const exportOne = async (as: "openlyrics" | "text" = "openlyrics") => {
     const song = songId ? useSongStore.getState().songs[songId] : undefined
     if (!song) return
     try {
-      const path = await exportOpenLyricsToFile(song)
+      const path = as === "text" ? await exportSongTextToFile(song) : await exportOpenLyricsToFile(song)
       if (path) toast.success(`Saved to ${path}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
@@ -168,6 +168,11 @@ function EditorDialog({
               {songId && (
                 <Button variant="ghost" size="sm" disabled={dirty || loading} title={dirty ? "Save first; the file is made from the saved song" : "Save this song as an OpenLyrics .xml for OpenLP"} onClick={() => void exportOne()}>
                   <DownloadIcon /> OpenLyrics…
+                </Button>
+              )}
+              {songId && (
+                <Button variant="ghost" size="sm" disabled={dirty || loading} title={dirty ? "Save first; the file is made from the saved song" : "Save this song as text (Markdown) to print, share or paste back in"} onClick={() => void exportOne("text")}>
+                  <DownloadIcon /> Text…
                 </Button>
               )}
               {songId && (

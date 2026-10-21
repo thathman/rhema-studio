@@ -32,7 +32,9 @@ const HEADINGS: Array<[RegExp, SectionKind]> = [
 ]
 
 export function matchHeading(line: string): SectionKind | null {
-  const t = line.trim()
+  // Markdown and chord-sheet spellings: "## Chorus", "**Chorus**", "[Verse 1]".
+  // Not "(Chorus)": in pasted lyrics that usually means "sing the chorus again here".
+  const t = line.trim().replace(/^#{1,6}\s*/, "").replace(/^\*\*(.+)\*\*$/, "$1").replace(/^\[(.+)\]$/, "$1").trim()
   if (!t || t.length > 24) return null
   for (const [re, kind] of HEADINGS) if (re.test(t)) return kind
   return null
@@ -53,7 +55,15 @@ export function parsePastedLyrics(text: string, language = "en"): SectionInput[]
     buffer = []
     kind = null
   }
-  for (const raw of text.replace(/\r\n?/g, "\n").split("\n")) {
+  let lines = text.replace(/\r\n?/g, "\n").split("\n")
+  // A Markdown title block ("# Title", then authors and copyright up to the
+  // first blank line), as songToMarkdown writes it, is not lyrics.
+  const first = lines.findIndex((l) => l.trim())
+  if (first >= 0 && /^#\s/.test(lines[first].trim())) {
+    const end = lines.findIndex((l, i) => i > first && !l.trim())
+    lines = end < 0 ? [] : lines.slice(end)
+  }
+  for (const raw of lines) {
     const line = raw.trimEnd()
     if (!line.trim()) {
       if (buffer.length) flush()
@@ -69,6 +79,24 @@ export function parsePastedLyrics(text: string, language = "en"): SectionInput[]
   }
   flush()
   return sections
+}
+
+/**
+ * One song as Markdown that reads as plain text too (PRD FR-02): a title
+ * block, then each section under its own "## " heading in the chosen
+ * language. Pasting it back into the song editor gives the same sections
+ * (blank lines inside a section, slide-split hints, become extra verses).
+ */
+export function songToMarkdown(song: SongWithSections, language = song.song.primary_language): string {
+  const s = song.song
+  const head = [`# ${s.title || "Untitled"}`]
+  if (s.authors.trim()) head.push(s.authors.trim())
+  const rights = [s.copyright.trim() && `© ${s.copyright.trim().replace(/^©\s*/, "")}`, s.ccli_number && `CCLI ${s.ccli_number}`].filter(Boolean).join(" · ")
+  if (rights) head.push(rights)
+  const body = song.sections
+    .filter((sec) => (sec.texts[language] ?? "").trim())
+    .map((sec) => `## ${sec.label.trim() || sec.kind[0].toUpperCase() + sec.kind.slice(1)}\n${sec.texts[language].trim()}`)
+  return [head.join("\n"), ...body].join("\n\n") + "\n"
 }
 
 // ── slides ──────────────────────────────────────────────────────────────
