@@ -78,6 +78,10 @@ An item can also have an **end by** time (Prepare, beside its planned minutes: "
 
 More → Library → Church folder → Choose folder…: a NAS share, or a folder kept in step by Google Drive, OneDrive, Dropbox or Syncthing, chosen on every computer. In Prepare, **Publish** puts the saved service there as a new file named with its date, version and a short checksum (`Sunday 2026-10-25 v7 3f9a0c21b7d4.rhema-service.json`); older versions stay. Approving and publishing again makes a new file that says so. On Home, **Church folder** lists the newest version of each service (approved at home or not, opened here or not); **Open** adds it on this computer with its songs and pictures. Approve it again here before Sunday. If someone publishes a newer version later, Prepare says "A newer version (v8) is in the church folder" above the service you opened, and Home marks the row "newer than the copy opened here"; **Open the newer one** adds it as its own service and keeps yours. Nothing is replaced by itself. A file still syncing shows as "damaged … may still be syncing" and cannot be opened until it is complete.
 
+## Keeping what was said (optional)
+
+When speech recognition ran during the service, More → Library → Service log offers "Include what was said". Ticked, the recognised passages (with times) are added to the log you keep or save; Earlier logs can then find a service by a phrase from the sermon. It is machine output, not checked; keep it only if the speakers know it is recorded. Off by default, every time.
+
 ## Song usage (licence reports)
 
 More → Library → Song usage: choose a date range (default: the last six months), Show, then Save as CSV… The report counts saved services dated in the range (a song sung twice in one service counts once), with each song's CCLI number, licence and last use, ready to copy into a CCLI (or other licensing body) report. Services without a date are not counted, so give each service its date.

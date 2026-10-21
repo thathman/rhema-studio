@@ -596,3 +596,10 @@ report), but launching it cannot.
 | 10be.1 | Fresh settings, Deepgram key entered, provider Cloud (Deepgram). Start listening in the transcript panel. | A dialog "Send the microphone to Deepgram?" explains what is sent; nothing is sent until Agree (packet capture: no connection to api.deepgram.com before Agree). | Unverified |
 | 10be.2 | Agree. Then Present header. | Listening starts; the chip reads "Listening (Deepgram)"; Settings → Speech Recognition shows "Agreed on …" with Withdraw. | Unverified |
 | 10be.3 | Withdraw, start again, choose "Use local recognition instead". | Provider switches to Whisper and listening starts locally (if the model is installed); no dialog for local recognition. | Unverified |
+
+### 10bf. Transcript in a kept log (AR-004)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bf.1 | Listen for a few minutes (Whisper or Deepgram), present some items, then More → Library → Service log. | "Include what was said (n recognised passages)" appears, unticked, with the notice. Keep this log without ticking: the kept log has no transcript. | Unverified |
+| 10bf.2 | Tick it and Keep this log; search Earlier logs for a phrase that was said. | The log ends with "Transcript (recognised speech by …; not checked…)" and timed passages; the search finds it. Reopening Library shows the box unticked again. | Unverified |
