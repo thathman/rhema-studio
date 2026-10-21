@@ -140,12 +140,33 @@ export function missingThemeFonts(themes: Pick<BroadcastTheme, "name" | "verseTe
   return out
 }
 
-/** Bundled fonts are always there; anything else is asked of the browser. */
+const fontSeen = new Map<string, boolean>()
+let measureCtx: CanvasRenderingContext2D | null | undefined
+
+/**
+ * Bundled fonts are always there; a font loaded into the page (a theme's own
+ * font file) is there; anything else is measured: text drawn in it must
+ * differ from the fallback fonts. (`document.fonts.check` answers true for a
+ * font that does not exist at all, so it cannot tell.)
+ */
 export function fontAvailable(family: string): boolean {
   if ((BRAND_FONTS as readonly string[]).includes(family)) return true
-  if (typeof document === "undefined" || !("fonts" in document)) return true
+  if (typeof document === "undefined") return true
+  const known = fontSeen.get(family)
+  if (known !== undefined) return known
   try {
-    return document.fonts.check(`16px "${family}"`)
+    if ("fonts" in document && Array.from(document.fonts).some((f) => f.family.replace(/^["']|["']$/g, "") === family)) return true // a theme's own font file (loaded or loading)
+    if (measureCtx === undefined) measureCtx = document.createElement("canvas").getContext("2d")
+    const ctx = measureCtx
+    if (!ctx) return true // cannot measure here: do not warn
+    const sample = "mmmmmmmmmmlli1WQ@#"
+    const width = (font: string) => {
+      ctx.font = font
+      return ctx.measureText(sample).width
+    }
+    const found = ["monospace", "serif", "sans-serif"].some((base) => width(`72px "${family}", ${base}`) !== width(`72px ${base}`))
+    if (found) fontSeen.set(family, true) // a missing one is measured again (it may be installed meanwhile)
+    return found
   } catch {
     return true
   }

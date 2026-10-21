@@ -1,3 +1,5 @@
+import { useApprovalGateStore } from "@/stores/approval-gate-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { approvalState } from "@/lib/approval"
 import { localDate, todaysService } from "@/lib/todays-service"
 import { monitorProblems } from "@/lib/monitor-health"
@@ -68,6 +70,9 @@ export function HomeWorkspace() {
   const mediaAssets = useMediaStore((s) => s.assets)
   const mediaLoaded = useMediaStore((s) => s.loaded)
   const mediaLoading = useMediaStore((s) => s.loading)
+  // Asked already and presented anyway this session: the gate will not ask again.
+  const gateAcknowledged = useApprovalGateStore((s) => (current ? s.acknowledged.includes(current.id) : false))
+  const requireApproval = useSettingsStore((s) => s.requireApproval) && !gateAcknowledged
   // Pictures, videos and sounds, and every item's background picture (FR-08: all assets local before Ready).
   const mediaIds = [...new Set(items.flatMap((i) => [isImageItem(i) ? i.image.media_id : null, i.background?.media_id ?? null]).filter((x): x is string => x !== null))]
   const hasSignage = outputs.some((o) => o.role === "signage")
@@ -85,6 +90,12 @@ export function HomeWorkspace() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per set of ids
   }, [mediaIds.join(","), hasSignage, mediaLoaded, mediaLoading, unknownIds])
+  // Each visit to Home checks the files again: one deleted since the list was loaded shows as missing.
+  useEffect(() => {
+    const m = useMediaStore.getState()
+    if (m.loaded && !m.loading && (mediaIds.length > 0 || hasSignage)) void m.list()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per visit
+  }, [])
   // Home is the readiness check: make sure every song in the service has been looked up.
   useEffect(() => {
     for (const id of songIds) if (!songs[id] && !missing.includes(id)) void useSongStore.getState().load(id).catch(() => {})
@@ -114,6 +125,7 @@ export function HomeWorkspace() {
     contentError,
     // Unsaved edits change an approved service; a service never approved stays "not approved yet".
     approval: current ? (dirty && approvalState(current) !== "none" ? "changed" : approvalState(current)) : undefined,
+    requireApproval,
     // With "Use my translation" on, those verses show in the operator's translation.
     missingTranslations: overrideTranslations ? [] : missingTranslations,
     unsupportedItems: unsupportedItems.length,

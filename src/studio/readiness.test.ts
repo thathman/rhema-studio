@@ -134,5 +134,13 @@ describe("computeReadiness", () => {
     expect(newer.ready).toBe(false)
     expect(newer.checks.find((c) => c.id === "unsupported-items")?.label).toContain("2 items")
   })
+
+  it("an unapproved service is a warning when 'Ask before showing' is on (the first go-live will ask)", () => {
+    const off = computeReadiness({ ...good, approval: "none" })
+    expect(off.checks.find((c) => c.id === "approval")?.status).toBe("info")
+    const on = computeReadiness({ ...good, approval: "none", requireApproval: true })
+    expect(on.checks.find((c) => c.id === "approval")?.status).toBe("warn")
+    expect(on.ready).toBe(false)
+  })
 })
 
