@@ -1,4 +1,5 @@
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
+import { leaveRehearsal } from "@/stores/approval-gate-store"
 import { useEffect } from "react"
 import {
   ChevronLeftIcon,
@@ -78,7 +79,7 @@ export function PresentWorkspace() {
         <StatusChip
           tone={rehearsal ? "warn" : "off"}
           label={rehearsal ? "Rehearsal on" : "Rehearsal off"}
-          onClick={() => useBroadcastStore.getState().setRehearsal(!rehearsal)}
+          onClick={() => (rehearsal ? leaveRehearsal() : useBroadcastStore.getState().setRehearsal(true))}
           title={rehearsal ? "Outputs, NDI and the stage screen are frozen. Click to go back to normal; they will show the current content." : "Practise without touching any screen: outputs, NDI and the stage screen keep what they show now."}
         />
         <StatusChip

@@ -1,3 +1,4 @@
+import { leaveRehearsal } from "@/stores/approval-gate-store"
 import { presentActions } from "@/studio/present-actions"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useTimerStore } from "@/stores/timer-store"
@@ -25,7 +26,7 @@ export const CUE_ACTIONS = {
   "timer.pause": { label: "Pause the timer", run: () => useTimerStore.getState().pause() },
   "timer.reset": { label: "Reset the timer", run: () => useTimerStore.getState().reset() },
   "stage.clearMessage": { label: "Clear the stage message", run: () => useBroadcastStore.getState().setStageMessage("") },
-  "rehearsal.off": { label: "Rehearsal off", run: () => useBroadcastStore.getState().setRehearsal(false) },
+  "rehearsal.off": { label: "Rehearsal off", run: () => leaveRehearsal() },
 } as const satisfies Record<string, { label: string; run: () => void }>
 
 export type CueId = keyof typeof CUE_ACTIONS

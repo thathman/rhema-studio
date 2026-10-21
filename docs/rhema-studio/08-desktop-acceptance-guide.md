@@ -617,4 +617,6 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bh.1 | More → tick "Ask before showing an unapproved service". Open a service that is not approved; Show live (also try the on-air switch and a Stream Deck/OSC go-live). | "This service is not approved" appears; nothing reaches the screen. Not now leaves the output as it was. | Unverified |
 | 10bh.2 | Show live again → Present anyway. Then edit an item, save, and press Next. | The held item goes live at once. Next after the edit is never held. | Unverified |
+| 10bh.4 | Gate on, unapproved service: Start the service (Welcome), then Next; press the clicker three times while the question shows, then Present anyway. | The question appears at the first item, the rundown does not move while it shows, and the first item (not the third) goes live. Later Clear then Next is never held. | Unverified |
+| 10bh.5 | Gate on, unapproved service in rehearsal with a song slide up: turn rehearsal off. | The question appears and the congregation screens stay as they were until Present anyway. | Unverified |
 | 10bh.3 | Approve the service, restart, Show live. Turn rehearsal on with another unapproved service; Show live; use Black. | No question for the approved service, in rehearsal, or for quick screens. | Unverified |

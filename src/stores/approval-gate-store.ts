@@ -8,10 +8,10 @@ import { useSettingsStore } from "@/stores/settings-store"
  * CL-002 "approval required before go-live", as an opt-in setting (off by
  * default; whether it should be on by default is an owner decision). When
  * on and the open service is not approved as it stands, the first go-live
- * is held and Present asks; "Present anyway" runs it. Only the first: never
- * while already on air, and never again for a service that has been live in
- * this session (an edit mid-service must not put a question in front of
- * Next). Quick screens, rehearsal and presenting with no service open are
+ * is held and Present asks; "Present anyway" runs it. Only the first: a
+ * service that has gone live once this session is never held again (an
+ * edit mid-service must not put a question in front of Next). Quick
+ * screens, sound items, rehearsal and presenting with no service open are
  * never held.
  */
 interface ApprovalGateState {
@@ -38,19 +38,31 @@ export const useApprovalGateStore = create<ApprovalGateState>((set, get) => ({
   dismiss: () => set({ held: null, retry: null }),
 }))
 
-/** True when a go-live must wait for the operator (and records what was held). */
-export function approvalHolds(retry: () => void): boolean {
-  if (!useSettingsStore.getState().requireApproval) return false
-  const broadcast = useBroadcastStore.getState()
-  if (broadcast.rehearsal || broadcast.isLive) return false
+/**
+ * True when a go-live must wait for the operator (and records what was held).
+ * Call it before any other effect (active item, cancelling presents) so a
+ * held go-live changes nothing. A service counts as started at its first
+ * go-live that is not held (approved, gate off, or let through), and is
+ * never held again this session.
+ */
+export function approvalHolds(retry: () => void, opts: { leavingRehearsal?: boolean } = {}): boolean {
   const current = useServiceStore.getState().current
   if (!current) return false
   const gate = useApprovalGateStore.getState()
+  if (gate.held) return true // one question at a time; the first request is the one kept
   if (gate.acknowledged.includes(current.id)) return false
-  if (approvalState(current) === "approved") {
+  if (useBroadcastStore.getState().rehearsal && !opts.leavingRehearsal) return false
+  if (!useSettingsStore.getState().requireApproval || approvalState(current) === "approved") {
     useApprovalGateStore.setState({ acknowledged: [...gate.acknowledged, current.id] })
     return false
   }
   useApprovalGateStore.setState({ held: { id: current.id, revision: current.revision, title: current.title }, retry })
   return true
+}
+
+/** Rehearsal off sends what is on the rehearsal output to the congregation, so it is a go-live too. */
+export function leaveRehearsal(): void {
+  const b = useBroadcastStore.getState()
+  if (b.isLive && b.liveVerse && !b.liveVerse.screen && approvalHolds(leaveRehearsal, { leavingRehearsal: true })) return
+  b.setRehearsal(false)
 }

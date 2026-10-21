@@ -321,11 +321,11 @@ function playSoundItem(item: ImageQueueItem, asset: { id: string; present: boole
  * output left alone; a newer present or Clear supersedes a slow read.
  */
 export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolean } = {}): Promise<PresentOutcome> {
-  if (opts.goLive && approvalHolds(() => void presentImage(item, opts))) return "held_for_approval"
   const media = useMediaStore.getState()
   const cached = media.assets.find((a) => a.id === item.image.media_id)
   // A sound item changes no screen, so it must not supersede a screen still loading.
   if (cached?.kind === "audio") return playSoundItem(item, cached)
+  if (opts.goLive && approvalHolds(() => void presentImage(item, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
   const asset = cached ?? (await media.list()).find((a) => a.id === item.image.media_id)
