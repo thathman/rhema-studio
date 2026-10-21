@@ -453,3 +453,9 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10al.1 | With Rhema running (minimise it, and start the HTTP API), launch Rhema again from the Start menu or desktop icon. | No second window or second tray icon appears; the running copy's main window comes forward (restored if minimised). The remote API keeps working; no "port in use" error. | Unverified |
+
+### 10am. Last good frame (FR-04)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10am.1 | Put a verse live on a projector and NDI. In the app data `media` folder, replace a background picture used by another theme with a text file renamed `.png`; switch the output to that theme. | If the picture cannot be drawn, the projector and NDI keep the verse as it was (no black or blank frame) and Present says the output "could not draw the new screen". Switching back to a good theme recovers at once. The Rhema window itself keeps working. | Unverified |
