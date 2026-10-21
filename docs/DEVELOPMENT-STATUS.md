@@ -46,7 +46,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 ## Known risks
 
 - **Canva (owner decision):** the Connect API's token exchange must run on a backend (client secret); a hosted or self-hosted relay is a cost/ops choice, and the integration must be a Canva-reviewed public one. See `docs/rhema-studio/11-canva-connect-findings.md`. CV-002 onwards waits for this.
-- **Licensing (owner decision):** the installer's `rhema.db` bundles copyrighted translations (NIV, ESV, NASB, NKJV, NLT, AMP) inherited from upstream. `docs/LICENSES.md` records this; no public release should go out before the owner decides which texts ship.
+- **Licensing (decided 2026-10-21, #33):** the installer keeps the upstream translations (NIV, ESV, NASB, NKJV, NLT, AMP) on the owner's statement of upstream rights and fair use; `docs/LICENSES.md` §2 records the decision and the absence of written publisher permission in the repo.
 
 - No hands-on desktop or projector verification yet of the integrated build.
 - Upstream lint debt: 7 React hook patterns in untouched components (ST-010).
@@ -55,5 +55,5 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 ## Next eligible tasks
 
 1. OP-005 receiver count merged (#89). OP-005's remaining acceptance is a real OBS 720p30 smoke and a runtime drop on a desktop (rows 10aa.1–4).
-2. Blocked on owner decisions: #72 sync approach (CL-005/006 remote delivery), #33 bundled translations, #34 Canva relay (CV-002…); PR #4 speech (ST-004; AR-004 and AI-001 follow it).
+2. Blocked on owner decisions: #72 sync approach (CL-005/006 remote delivery), #34 Canva relay (CV-002…); PR #4 speech (ST-004; AR-004 and AI-001 follow it).
 3. Desktop or hardware only: MD-002 video/audio (#36), MD-004 lower thirds (#37), AR-002 OBS markers, PT-006 MIDI, QA-010 drill (#62), QA-007 benchmarks, acceptance rows 1–10aa (#31), Windows smoke (#32); ST-009 app identity migration at release time.
