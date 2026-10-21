@@ -610,3 +610,11 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bg.1 | More → Your name = "Tolu". Prepare: set "prepared by" = "Ade (music)" on a song; Save; open History. | The rundown shows "· Ade (music)" on the song; History's newest version reads "… · Tolu". | Unverified |
 | 10bg.2 | Publish to the church folder and open it on another computer. | The song still shows "· Ade (music)". | Unverified |
+
+### 10bh. Approval before go-live (CL-002, opt-in)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bh.1 | More → tick "Ask before showing an unapproved service". Open a service that is not approved; Show live (also try the on-air switch and a Stream Deck/OSC go-live). | "This service is not approved" appears; nothing reaches the screen. Not now leaves the output as it was. | Unverified |
+| 10bh.2 | Show live again → Present anyway. Then edit an item, save, and press Next. | The held item goes live at once. Next after the edit is never held. | Unverified |
+| 10bh.3 | Approve the service, restart, Show live. Turn rehearsal on with another unapproved service; Show live; use Black. | No question for the approved service, in rehearsal, or for quick screens. | Unverified |

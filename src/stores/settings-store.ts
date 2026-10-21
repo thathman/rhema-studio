@@ -78,6 +78,9 @@ interface SettingsState {
    */
   cloudSpeechConsentAt: string
   setCloudSpeechConsent: (agreed: boolean) => void
+  /** CL-002: hold the first go-live of a service that is not approved as it stands (off by default). */
+  requireApproval: boolean
+  setRequireApproval: (on: boolean) => void
   /** The church folder (NAS or synced) where services are published and opened; "" = not set (#72). */
   churchFolder: string
   setChurchFolder: (folder: string) => void
@@ -134,6 +137,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   operatorName: "",
   customMacros: [],
   churchFolder: "",
+  requireApproval: false,
   cloudSpeechConsentAt: "",
   openedPackages: [],
   openedFrom: {},
@@ -165,6 +169,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
   setCustomMacros: (customMacros) => set({ customMacros }),
   setCloudSpeechConsent: (agreed) => set({ cloudSpeechConsentAt: agreed ? new Date().toISOString() : "" }),
+  setRequireApproval: (requireApproval) => set({ requireApproval }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
   noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-200)) })),
   noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),
@@ -203,6 +208,7 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "object" && value !== null && typeof o.enabled === "boolean" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
     }
     case "remoteAuthRequired":
+    case "requireApproval":
     case "autoMode":
     case "onboardingComplete":
       return typeof value === "boolean"
@@ -230,6 +236,7 @@ const PERSISTED_KEYS = [
   "operatorName",
   "customMacros",
   "churchFolder",
+  "requireApproval",
   "cloudSpeechConsentAt",
   "openedPackages",
   "openedFrom",

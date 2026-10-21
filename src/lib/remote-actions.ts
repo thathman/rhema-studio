@@ -6,6 +6,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
+import { approvalHolds } from "@/stores/approval-gate-store"
 
 /**
  * Find the queue index of the item currently on the live output.
@@ -224,6 +225,7 @@ export const remoteActions = {
 
   /** Off air also cancels any present still loading, so it cannot reappear later. */
   toggleOnAir: (active: boolean) => {
+    if (active && approvalHolds(() => remoteActions.toggleOnAir(true))) return
     if (!active) cancelPendingPresents()
     useBroadcastStore.getState().setLive(active)
   },
