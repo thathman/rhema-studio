@@ -48,6 +48,7 @@ import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
+import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import type { DeviceInfo } from "@/types/audio"
 
@@ -854,6 +855,7 @@ function RemoteControlSection() {
           </ul>
         )}
       </div>
+      <ObsSettingsBlock />
       {/* OSC */}
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -1140,5 +1142,29 @@ export function SettingsDialog() {
         </SidebarProvider>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** OBS connection (obs-websocket v5, OBS → Tools → WebSocket Server Settings). Optional: nothing needs OBS to present. */
+function ObsSettingsBlock() {
+  const obs = useSettingsStore((s) => s.obs)
+  const setObs = useSettingsStore((s) => s.setObs)
+  const status = useObsStore((s) => s.status)
+  const error = useObsStore((s) => s.error)
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border p-3 text-xs">
+      <label className="flex items-center gap-2 font-medium">
+        <input type="checkbox" checked={obs.enabled} onChange={(e) => setObs({ enabled: e.target.checked })} />
+        Connect to OBS (recording status and marks)
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input aria-label="OBS address" value={obs.host} onChange={(e) => setObs({ host: e.target.value })} placeholder="127.0.0.1" className="h-7 w-40 text-xs" />
+        <Input aria-label="OBS port" type="number" value={obs.port} onChange={(e) => setObs({ port: Math.min(65535, Math.max(1, Number(e.target.value) || 4455)) })} className="h-7 w-24 text-xs" />
+        <Input aria-label="OBS WebSocket password" type="password" value={obs.password} onChange={(e) => setObs({ password: e.target.value })} placeholder="password (if set in OBS)" className="h-7 w-48 text-xs" autoComplete="off" />
+      </div>
+      <p className="text-[0.625rem] text-muted-foreground">
+        {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password stays in this computer's settings file.
+      </p>
+    </div>
   )
 }

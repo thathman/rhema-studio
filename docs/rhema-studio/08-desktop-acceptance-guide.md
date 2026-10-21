@@ -400,3 +400,12 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10ad.1 | Projector output on its monitor. Unplug the projector cable. | Within about five seconds: "<output>: its monitor was disconnected" toast; Home readiness warns with Open outputs. Plug it back: the warning clears (turn the output on again if the OS closed the window). | Unverified |
 | 10ad.2 | Set two display outputs to the same monitor. | Home warns "<A> and <B> use the same monitor". | Unverified |
+
+### 10ag. OBS connection (AR-002)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10ag.1 | OBS 30+ with WebSocket server on and a password. Settings → Remote control → Connect to OBS with address, port and password; then a wrong password. | Right password: "Connected", Present shows "OBS: not recording". Wrong password: "Not connected: wrong OBS WebSocket password", retries every 15 s. | Unverified |
+| 10ag.2 | Present → OBS chip → Start recording… → Start. Mark "Sermon start", wait, "Sermon end". Stop recording… → Stop. | OBS records; the chip shows OBS's time; the service log has both marks with recording times; on OBS 30.2+ Hybrid MP4 the file has two chapters; on older OBS a one-time note says chapters need 30.2. | Unverified |
+| 10ag.3 | Close OBS while connected; reopen it. | Chip goes "not connected" within seconds (never shows REC from memory); reconnects by itself within 15 s of OBS coming back. | Unverified |
+| 10ag.4 | OBS on another computer on the network (its IP in Settings). | Same as 10ag.1–2. | Unverified |
