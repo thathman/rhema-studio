@@ -13,6 +13,8 @@ Kept for every release candidate (release gate RG-10). "Unverified" means the be
 - API keys, the remote-control key and the OBS password are kept in the system keychain (Credential Manager, Keychain, Secret Service). Where no keychain is available (some Linux desktops) they stay in the local settings file in clear. Use a staff-only network (`docs/rhema-studio/13-remote-control-threat-notes.md`).
 - Remote control has no TLS; a paired device's token travels in clear on the LAN.
 - Record chapters in OBS need OBS 30.2+ recording to Hybrid MP4; older OBS gets the mark in the service log only.
+- Settings and themes are written in place by the store plugin. If the computer loses power during a save, the file comes back as it was when Rhema last started (a copy is kept at each start); changes made since then need making again.
+- The service log is kept in memory and kept in the library when Rhema closes. A crash or power cut loses the log of that run; use Keep this log during long services.
 - The program preview shows "▶ name" for videos and the words (not the code) for QR slides; outputs show the real thing.
 
 ## Owner decisions still open

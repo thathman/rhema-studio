@@ -1,3 +1,4 @@
+import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { toast } from "sonner"
 import { useState, useMemo } from "react"
 import { useBroadcastStore } from "@/stores"
@@ -195,6 +196,8 @@ function ThemeCard({
                   onClick={(e) => {
                     e.stopPropagation()
                     const { inUse } = useBroadcastStore.getState().deleteTheme(theme.id)
+                    // The theme being edited is gone: close its draft (Save would bring it back).
+                    if (!inUse.length && useBroadcastStore.getState().editingThemeId === theme.id) useBroadcastStore.getState().stopEditing()
                     if (inUse.length) toast.error(`${theme.name} is used by ${inUse.join(", ")}`, { description: "Choose another theme for those outputs first (More → Outputs)." })
                   }}
                 >
@@ -289,7 +292,7 @@ export function ThemeLibrary() {
                 const theme = await importTheme()
                 if (theme) {
                   useBroadcastStore.getState().saveTheme(theme)
-                  useBroadcastStore.getState().startEditing(theme.id)
+                  if (await mayLeaveThemeDraft()) useBroadcastStore.getState().startEditing(theme.id)
                 }
               } catch (err) {
                 console.error("[theme-library] import failed:", err)
@@ -340,9 +343,7 @@ export function ThemeLibrary() {
                   isActive={theme.id === activeThemeId}
                   isRenaming={theme.id === renamingThemeId}
                   isSelected={theme.id === editingThemeId}
-                  onSelect={() =>
-                    useBroadcastStore.getState().startEditing(theme.id)
-                  }
+                  onSelect={() => void mayLeaveThemeDraft().then((ok) => ok && useBroadcastStore.getState().startEditing(theme.id))}
                 />
               ))}
             </>
@@ -361,9 +362,7 @@ export function ThemeLibrary() {
                   isActive={theme.id === activeThemeId}
                   isRenaming={theme.id === renamingThemeId}
                   isSelected={theme.id === editingThemeId}
-                  onSelect={() =>
-                    useBroadcastStore.getState().startEditing(theme.id)
-                  }
+                  onSelect={() => void mayLeaveThemeDraft().then((ok) => ok && useBroadcastStore.getState().startEditing(theme.id))}
                 />
               ))}
             </>

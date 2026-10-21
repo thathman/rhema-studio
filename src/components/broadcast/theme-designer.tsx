@@ -1,3 +1,4 @@
+import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { useEffect } from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { useBroadcastStore } from "@/stores"
@@ -27,16 +28,14 @@ export function ThemeDesigner() {
     useBroadcastStore.getState().saveDraft()
   }
 
-  const handleClose = () => {
-    useBroadcastStore.getState().setDesignerOpen(false)
+  const handleClose = async () => {
+    if (await mayLeaveThemeDraft()) useBroadcastStore.getState().setDesignerOpen(false)
   }
 
   return (
     <DialogPrimitive.Root
       open={isDesignerOpen}
-      onOpenChange={(open) =>
-        useBroadcastStore.getState().setDesignerOpen(open)
-      }
+      onOpenChange={(open) => (open ? useBroadcastStore.getState().setDesignerOpen(true) : void handleClose())}
     >
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />

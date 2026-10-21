@@ -52,7 +52,7 @@ export function MediaLibrary() {
       await useMediaStore.getState().remove(a.id)
       toast.success(`${a.name} removed`)
     } catch (e) {
-      if (isContentCommandError(e) && e.kind === "in_use") toast.error(`${a.name} is used in: ${(e.titles ?? []).join(", ")}`, { description: "Remove it from those services first." })
+      if (isContentCommandError(e) && e.kind === "in_use") toast.error(`${a.name} is used in: ${(e.titles ?? []).join(", ")}`, { description: "Remove it from those first; the file is the only copy." })
       else toast.error(e instanceof Error ? e.message : String(e))
     }
   }

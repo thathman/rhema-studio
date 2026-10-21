@@ -448,7 +448,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         t.id === id && !t.builtin ? { ...t, name, updatedAt: Date.now(), ...(t.brandManaged ? { brandManaged: false } : {}) } : t
       ),
       draftTheme:
-        s.draftTheme?.id === id ? { ...s.draftTheme, name, updatedAt: Date.now() } : s.draftTheme,
+        s.draftTheme?.id === id ? { ...s.draftTheme, name, updatedAt: Date.now(), ...(s.draftTheme.brandManaged ? { brandManaged: false } : {}) } : s.draftTheme,
     })),
   togglePinTheme: (id) =>
     set((s) => ({
@@ -742,6 +742,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       }
     } else {
       get().saveTheme(draftTheme)
+      // The draft is now what was saved (a Brand Kit theme is detached in both).
+      set({ draftTheme })
     }
   },
   discardDraft: () => {
@@ -820,6 +822,25 @@ export function hydrateBroadcastThemes(): Promise<void> {
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingSave: Promise<void> = Promise.resolve()
 const SAVE_DEBOUNCE_MS = 500
+
+/** Write a waiting (debounced) themes/outputs save now; closing the app awaits it. */
+export function flushThemeSave(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    pendingSave = pendingSave.then(() => persistBroadcastThemes(useBroadcastStore.getState()))
+  }
+  return pendingSave
+}
+
+/** The theme open in the Designer has changes that are not saved. */
+export function themeDraftChanged(): boolean {
+  const { draftTheme, themes, editingThemeId } = useBroadcastStore.getState()
+  if (!draftTheme) return false
+  const saved = themes.find((t) => t.id === editingThemeId)
+  if (!saved) return false // the theme was deleted: nothing left to save it over
+  return JSON.stringify({ ...draftTheme, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 })
+}
 
 async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
   try {

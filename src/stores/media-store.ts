@@ -2,7 +2,9 @@ import { create } from "zustand"
 import { invoke, convertFileSrc } from "@tauri-apps/api/core"
 import { open } from "@tauri-apps/plugin-dialog"
 import { readFile } from "@tauri-apps/plugin-fs"
-import type { MediaAssetStatus, MediaImportResult } from "@/types"
+import { isImageItem, type MediaAssetStatus, type MediaImportResult, type QueueItem } from "@/types"
+import { useQueueStore } from "@/stores/queue-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 
 interface MediaState {
   assets: MediaAssetStatus[]
@@ -40,6 +42,18 @@ function measure(url: string): Promise<{ width: number; height: number } | null>
     img.onerror = () => resolve(null)
     img.src = url
   })
+}
+
+/** Where a picture is used outside saved services: the rundown on screen and signage loops. */
+export function mediaUsedHere(id: string): string[] {
+  const uses = (i: QueueItem) => i.background?.media_id === id || (isImageItem(i) && i.image.media_id === id)
+  const where: string[] = []
+  if (useQueueStore.getState().items.some(uses)) where.push("the service on screen")
+  for (const o of useBroadcastStore.getState().outputs) {
+    const lists = [o.signage?.mediaIds ?? [], ...(o.signage?.playlists ?? []).map((p) => p.mediaIds)]
+    if (lists.some((l) => l.includes(id))) where.push(`the picture loop on ${o.name}`)
+  }
+  return where
 }
 
 export const useMediaStore = create<MediaState>((set, get) => ({
@@ -86,6 +100,9 @@ export const useMediaStore = create<MediaState>((set, get) => ({
   },
 
   remove: async (id) => {
+    // Saved services are checked by the database; the service on screen (maybe unsaved) and screen loops here.
+    const here = mediaUsedHere(id)
+    if (here.length) throw { kind: "in_use", message: `in use: ${here.join(", ")}`, titles: here }
     await invoke("media_delete", { id })
     set((s) => {
       const urls = { ...s.urls }

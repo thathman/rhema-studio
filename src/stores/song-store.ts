@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { invoke } from "@tauri-apps/api/core"
-import type { Hymnbook, HymnbookInput, SongInput, SongSummary, SongWithSections } from "@/types"
+import { isSongItem, type Hymnbook, type HymnbookInput, type SongInput, type SongSummary, type SongWithSections } from "@/types"
+import { useQueueStore } from "@/stores/queue-store"
 
 interface SongState {
   /** Loaded songs by id. Presenting reads from here; saves refresh it. */
@@ -95,6 +96,10 @@ export const useSongStore = create<SongState>((set, get) => ({
   },
 
   remove: async (id, expectedRevision) => {
+    // Saved services are checked by the database; the service on screen (maybe unsaved) here.
+    if (useQueueStore.getState().items.some((i) => isSongItem(i) && i.song.song_id === id)) {
+      throw { kind: "in_use", message: "in use: the service on screen", titles: ["the service on screen"] }
+    }
     invalidateSongList()
     await invoke("content_delete_song", { id, expectedRevision })
     set((s) => {

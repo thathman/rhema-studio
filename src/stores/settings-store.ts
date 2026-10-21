@@ -391,6 +391,16 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingSave: Promise<void> = Promise.resolve()
 const SAVE_DEBOUNCE_MS = 250
 
+/** Write a waiting (debounced) settings save now; closing the app awaits it. */
+export function flushSettingsSave(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    pendingSave = pendingSave.then(() => persistAll(useSettingsStore.getState()))
+  }
+  return pendingSave
+}
+
 async function persistAll(state: SettingsState): Promise<void> {
   try {
     const store = await getStore()

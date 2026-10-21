@@ -6,9 +6,23 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { unsavedScratch, useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useUnsavedStore } from "@/stores/unsaved-store"
+import { flushThemeSave, themeDraftChanged, useBroadcastStore } from "@/stores/broadcast-store"
+import { flushSettingsSave } from "@/stores/settings-store"
+import { journalUnkept, keepJournal } from "@/stores/journal-store"
 
 const anyUnsaved = () =>
-  useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current)
+  useServiceStore.getState().dirty || useUnsavedStore.getState().songEditor !== null || unsavedScratch(useQueueStore.getState().items, useServiceStore.getState().current) || themeDraftChanged()
+
+/**
+ * Before the window goes: write settings and themes changed in the last
+ * moment (their saves wait a fraction of a second) and keep the service log
+ * in the library if something was logged since it was last kept. Bounded, so
+ * a stuck write never traps the operator.
+ */
+async function beforeClose(): Promise<void> {
+  const work = Promise.allSettled([flushSettingsSave(), flushThemeSave(), journalUnkept() ? keepJournal() : Promise.resolve()])
+  await Promise.race([work, new Promise((r) => setTimeout(r, 3000))])
+}
 
 /**
  * Closing the window with unsaved service changes (PRD FR-03). The Rust side
@@ -24,23 +38,26 @@ export function UnsavedCloseDialog() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    void invoke("set_unsaved_work", { unsaved: dirty || songEditor !== null || scratch }).catch(() => {})
-  }, [dirty, songEditor, scratch])
+  const themeDraft = useBroadcastStore((s) => (s.draftTheme && themeDraftChanged() ? s.draftTheme.name : null))
 
+  // Every close comes here first (saves are written, the log kept); a second close always goes through.
   useEffect(() => {
+    void invoke("set_unsaved_work", { unsaved: true }).catch(() => {})
     const un = listen("app:close-requested", () => {
-      setError(null)
-      setOpen(true)
+      void beforeClose().then(() => {
+        if (!anyUnsaved()) return void invoke("close_main_window").catch(() => {})
+        setError(null)
+        setOpen(true)
+      })
     })
     return () => void un.then((u) => u())
   }, [])
 
-  const quit = () => void invoke("close_main_window").catch(() => {})
+  const quit = () => void beforeClose().then(() => invoke("close_main_window")).catch(() => {})
   const keepWorking = () => {
     setOpen(false)
-    // The close that asked cleared the hold; put it back while the work is still unsaved.
-    void invoke("set_unsaved_work", { unsaved: anyUnsaved() }).catch(() => {})
+    // The close that asked cleared the hold; put it back.
+    void invoke("set_unsaved_work", { unsaved: true }).catch(() => {})
   }
   const saveAndQuit = async () => {
     setSaving(true)
@@ -65,6 +82,7 @@ export function UnsavedCloseDialog() {
               dirty && current ? `“${current.title}” has changes that are not saved.` : null,
               scratch ? "The service on screen has not been saved (create a service in Prepare to keep it)." : null,
               songEditor ? `The song “${songEditor}” is open in the editor with changes that are not saved${dirty ? "; Save and close saves the service, not the song" : ""}.` : null,
+              themeDraft ? `The theme “${themeDraft}” has design changes that are not saved${dirty ? "; Save and close saves the service, not the theme" : ""}.` : null,
             ].filter(Boolean).join(" ")} Closing without saving loses them.
           </DialogDescription>
         </DialogHeader>
