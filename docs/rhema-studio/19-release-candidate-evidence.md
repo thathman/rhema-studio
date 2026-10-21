@@ -3,15 +3,15 @@
 **Not a release.** This sheet records what is proven about the newest installer build, gate by gate, so the owner can see what a release still needs. Nothing has been published, tagged or deployed. Update it whenever a new installer is built.
 
 ```text
-Release: none (candidate for R0–R3 review)   Candidate SHA: 7a0ac5c
-Artifact: GitHub Actions run 39571182784, "rhema-windows-x64-installer"
-          (NSIS .exe + MSI, unsigned, with licence page and third-party notices), 99,702,771 bytes,
-          artifact digest sha256:5b0ef3827d1c5d0dd12caa65f043f405b34caf14e8d43ace5faa78e3c323ae5f, kept 14 days
+Release: none (candidate for R0–R3 review)   Candidate SHA: ee15727
+Artifact: GitHub Actions run 39604336771, "rhema-windows-x64-installer"
+          (NSIS .exe + MSI, unsigned, with licence page and third-party notices), 99,697,879 bytes,
+          artifact digest sha256:844103d9f5a6f813ea4746365060052f54c742eccdd8bbaade36052ae5f578ed, kept 14 days
 Responsible engineer: Hendrix Nwaokolo   Owner acceptance: not given
-Features/tasks: every merged row in docs/TASKS.md up to PR #133 (#134, light-mode colours only, came after); CHANGELOG.md
+Features/tasks: every merged row in docs/TASKS.md up to PR #150 (#151 came after); CHANGELOG.md
 Dependencies/migrations/licensing: studio.db migrations 0001–0011 (docs/rhema-studio/17-database-migrations.md);
           licence check in CI (scripts/check-licenses.ts); docs/LICENSES.md (owner decision #33 on bundled translations)
-CI: run 39571181200 on 7a0ac5c, success (typecheck, 489 tests, build, whole-repo lint, Rust tests/check/clippy, licences)
+CI: run 39604002067 on ee15727, success (typecheck, 526 tests, build, whole-repo lint, Rust tests/check/clippy, licences)
 Real Windows smoke: NOT DONE (no Windows machine in this environment) — issue #32
 Projection/NDI/OBS: NOT DONE — acceptance rows 10ab, OBS 720p30 (OP-005)
 Offline WAN-disconnect test: NOT DONE — rows 10an.1–2 (code review: no internet on the render path, docs/rhema-studio/18-network-and-privacy.md)
@@ -39,6 +39,6 @@ Decision: NO-GO until the desktop rows below are done and the owner signs off
 
 ## R0 checklist (RELEASE-PLAN §5)
 
-- CI on the exact merged commit: done for `7a0ac5c` (run 39571181200).
+- CI on the exact merged commit: done for `ee15727` (run 39604002067).
 - Windows installer built and recorded: done (above). Launched on Windows: not done; this is the blocker.
 - Everything else on the R0 list needs a real desktop or the owner.

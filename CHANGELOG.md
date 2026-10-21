@@ -21,6 +21,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
 ### Search and safety
+- Speech recognition keeps its transcript and warnings whichever view is open; a remote "confidence" level decides how sure a heard verse must be for Auto. The first-run tour returns you to where you were. Next chapter in the Bible panel moves on to the next book.
 - Timers: planned-end and end-by times stay right after the laptop sleeps; Start the service never wipes a running timer; Reset asks first and is logged. Cue steps run one after another. Video sound plays from one congregation output.
 - Remote control starts again with Rhema as you left it (a listener open to the whole network with no key waits for you). A phone press is never carried out twice when the Wi-Fi drops an answer, and the phone shows rehearsal and pending approval questions.
 - A damaged settings or themes file is kept aside and reported instead of being silently replaced. Stage screens and service-file export no longer slow the outputs down.
