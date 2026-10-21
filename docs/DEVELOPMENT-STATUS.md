@@ -34,8 +34,8 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-candidate-evidence.md` (decision: NO-GO until desktop rows and owner sign-off).
 
 
-- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10bd). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
-- Windows installer: workflow run 39558619566 built `main` at `4721336` (artifact 99,555,376 bytes, digest sha256:a2b11390089efa4bcfe2267ea9142825f62a15dbcdd917fd08b930c6ddd3d4e7; CI run 39558602844 green on the same commit). Not installed or launched; not a release.
+- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10bi). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
+- Windows installer: workflow run 39571182784 built `main` at `7a0ac5c` (artifact 99,702,771 bytes, digest sha256:5b0ef3827d1c5d0dd12caa65f043f405b34caf14e8d43ace5faa78e3c323ae5f; CI run 39571181200 green on the same commit; #134 came after). Not installed or launched; not a release.
 - Yoruba speech recognition and the OpenAI provider (PR #4).
 
 ## Important decisions
@@ -67,7 +67,7 @@ Found by reading PRD lines against the code (not by tests): no single-instance g
 | Row | What is left | Blocked by |
 |---|---|---|
 | ST-004 | Yorùbá speech, OpenAI provider (PR #4) | Owner: speech provider and model bundling |
-| ST-006 | Operator acceptance rows 1–10be | Real Windows desktop and projector (#31) |
+| ST-006 | Operator acceptance rows 1–10bi | Real Windows desktop and projector (#31) |
 | ST-009 | App identity rename with settings migration | Owner: product name / installer app ID (PRD open decision) |
 | MD-002 | Sound over NDI | Audio path to the NDI sender and real receivers to test |
 | OP-005 | OBS 720p30 smoke, NDI runtime drop | Real OBS/NDI hardware |
@@ -104,4 +104,4 @@ Every backlog row now has its buildable part merged. What remains, by why it is 
    - Sound over NDI: needs an audio path from the webview to the NDI sender and real receivers to test.
    - Yoruba book names in reference search (e.g. "Jòhánù 3:16"): the Yoruba Bible uses English book names; a Yoruba alias list needs a Yoruba speaker to check.
    - Backing tracks tied to songs: part of PT-006, which waits on the playback-source decision.
-3. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10bd (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.
+3. **Real desktop or hardware (release gate, not development):** acceptance rows 1–10bi (#31), Windows smoke (#32), OBS 720p30 smoke (OP-005), video/NDI rates (10ab), QA-010 drill (#62), QA-007 benchmarks on low-end hardware, QA-003 novice usability sessions.

@@ -3,20 +3,20 @@
 **Not a release.** This sheet records what is proven about the newest installer build, gate by gate, so the owner can see what a release still needs. Nothing has been published, tagged or deployed. Update it whenever a new installer is built.
 
 ```text
-Release: none (candidate for R0–R3 review)   Candidate SHA: 4721336
-Artifact: GitHub Actions run 39558619566, "rhema-windows-x64-installer"
-          (NSIS .exe + MSI, unsigned, with licence page and third-party notices), 99,555,376 bytes,
-          artifact digest sha256:a2b11390089efa4bcfe2267ea9142825f62a15dbcdd917fd08b930c6ddd3d4e7, kept 14 days
+Release: none (candidate for R0–R3 review)   Candidate SHA: 7a0ac5c
+Artifact: GitHub Actions run 39571182784, "rhema-windows-x64-installer"
+          (NSIS .exe + MSI, unsigned, with licence page and third-party notices), 99,702,771 bytes,
+          artifact digest sha256:5b0ef3827d1c5d0dd12caa65f043f405b34caf14e8d43ace5faa78e3c323ae5f, kept 14 days
 Responsible engineer: Hendrix Nwaokolo   Owner acceptance: not given
-Features/tasks: every merged row in docs/TASKS.md up to PR #125; CHANGELOG.md
-Dependencies/migrations/licensing: studio.db migrations 0001–0010 (docs/rhema-studio/17-database-migrations.md);
+Features/tasks: every merged row in docs/TASKS.md up to PR #133 (#134, light-mode colours only, came after); CHANGELOG.md
+Dependencies/migrations/licensing: studio.db migrations 0001–0011 (docs/rhema-studio/17-database-migrations.md);
           licence check in CI (scripts/check-licenses.ts); docs/LICENSES.md (owner decision #33 on bundled translations)
-CI: run 39558602844 on 4721336, success (typecheck, 476 tests, build, whole-repo lint, Rust tests/check/clippy, licences)
+CI: run 39571181200 on 7a0ac5c, success (typecheck, 489 tests, build, whole-repo lint, Rust tests/check/clippy, licences)
 Real Windows smoke: NOT DONE (no Windows machine in this environment) — issue #32
 Projection/NDI/OBS: NOT DONE — acceptance rows 10ab, OBS 720p30 (OP-005)
 Offline WAN-disconnect test: NOT DONE — rows 10an.1–2 (code review: no internet on the render path, docs/rhema-studio/18-network-and-privacy.md)
-Data persistence/migration/restore: automated tests pass (45 content-crate tests incl. downgrade refusal); desktop drill NOT DONE — #62
-Keyboard/accessibility: automated guard (#68); layout measured at 1366x768 in the browser shim (#106, #112); human sessions NOT DONE (QA-003)
+Data persistence/migration/restore: automated tests pass (49 content-crate tests incl. downgrade refusal); desktop drill NOT DONE — #62
+Keyboard/accessibility: automated guard (#68); axe WCAG 2.1 AA check clean on every main screen (#133, #134); layout measured at 1366x768 in the browser shim (#106, #112); human sessions NOT DONE (QA-003)
 Known critical issues: none known in code; all desktop behaviour unverified (docs/KNOWN-ISSUES.md)
 Rollback: install the previous build; a newer studio.db is refused by older builds — restore the automatic pre-upgrade copy (17-database-migrations.md)
 Decision: NO-GO until the desktop rows below are done and the owner signs off
@@ -39,6 +39,6 @@ Decision: NO-GO until the desktop rows below are done and the owner signs off
 
 ## R0 checklist (RELEASE-PLAN §5)
 
-- CI on the exact merged commit: done for `4721336` (run 39558602844).
+- CI on the exact merged commit: done for `7a0ac5c` (run 39571181200).
 - Windows installer built and recorded: done (above). Launched on Windows: not done; this is the blocker.
 - Everything else on the R0 list needs a real desktop or the owner.
