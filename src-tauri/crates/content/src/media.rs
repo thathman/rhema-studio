@@ -183,10 +183,12 @@ fn load_media(conn: &Connection, id: &str) -> Result<Option<MediaAsset>> {
 
 fn services_using_media(conn: &Connection, media_id: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT p.title FROM program_items i JOIN programs p ON p.id = i.program_id
+        "SELECT p.title FROM program_items i JOIN programs p ON p.id = i.program_id
          WHERE (i.kind = 'image' AND json_extract(i.payload, '$.media_id') = ?1)
             OR json_extract(i.payload, '$.background_media_id') = ?1
-         ORDER BY p.title",
+         UNION
+         SELECT 'the song ' || s.title FROM song_attachments a JOIN songs s ON s.id = a.song_id WHERE a.media_id = ?1
+         ORDER BY 1",
     )?;
     let rows = stmt.query_map(params![media_id], |r| r.get(0))?;
     Ok(rows.collect::<std::result::Result<_, _>>()?)

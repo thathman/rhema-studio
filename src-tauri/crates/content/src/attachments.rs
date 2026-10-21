@@ -95,7 +95,12 @@ mod tests {
         assert!(matches!(db.add_song_attachment("nope", &chart.id), Err(ContentError::NotFound(_))));
         assert!(matches!(db.add_song_attachment(&s.song.id, "nope"), Err(ContentError::NotFound(_))));
         assert_eq!(db.remove_song_attachment(&s.song.id, &sheet.id).unwrap().len(), 1);
-        // Deleting the file drops the link; deleting the song drops the rest.
+        // A file a song still uses is not deleted (the only copy); unlinked, it can be.
+        match db.delete_media(&chart.id).unwrap_err() {
+            ContentError::InUse { titles } => assert_eq!(titles, vec![format!("the song {}", s.song.title)]),
+            other => panic!("{other:?}"),
+        }
+        db.remove_song_attachment(&s.song.id, &chart.id).unwrap();
         db.delete_media(&chart.id).unwrap();
         assert_eq!(db.list_song_attachments(&s.song.id).unwrap().len(), 0);
         db.add_song_attachment(&s.song.id, &sheet.id).unwrap();

@@ -794,3 +794,14 @@ report), but launching it cannot.
 | 10ca.7 | Song on slide 2; Clear; look at the status chip at the top of Present. | It reads "Off air · Restore shows" and the song slide. | Unverified |
 | 10ca.6 | Rundown has John 3:1; put John 3:16 on air from the Bible panel. | The John 3:1 row is not marked LIVE. | Unverified |
 
+### 10cb. Data safety (eleventh audit)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cb.1 | Change a setting (say the operator name) and close Rhema straight away; reopen. | The change is kept. | Unverified |
+| 10cb.2 | Go live with something, then close Rhema normally; reopen and look under More → Library → Earlier logs. | The service log of that run is there. | Unverified |
+| 10cb.3 | Add a picture to the service on screen without saving; Prepare → Pictures → Remove it. Also a picture in a screen loop, and a file attached to a song. | Refused, naming where it is used; the file stays. | Unverified |
+| 10cb.4 | Add a song to the service on screen without saving; open it in the editor and Delete. | Refused: used in the service on screen. | Unverified |
+| 10cb.5 | Change a theme in the Designer; press Escape, Close, or pick another theme. Then close Rhema with a changed theme. | Rhema asks before discarding; the close question lists the theme. | Unverified |
+| 10cb.6 | Quit Rhema; damage `settings.json` in the app folder (cut it short); start Rhema. | It says the settings were put back as they were at the last start; they are. | Unverified |
+

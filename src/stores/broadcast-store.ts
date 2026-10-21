@@ -821,6 +821,25 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingSave: Promise<void> = Promise.resolve()
 const SAVE_DEBOUNCE_MS = 500
 
+/** Write a waiting (debounced) themes/outputs save now; closing the app awaits it. */
+export function flushThemeSave(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    pendingSave = pendingSave.then(() => persistBroadcastThemes(useBroadcastStore.getState()))
+  }
+  return pendingSave
+}
+
+/** The theme open in the Designer has changes that are not saved. */
+export function themeDraftChanged(): boolean {
+  const { draftTheme, themes, editingThemeId } = useBroadcastStore.getState()
+  if (!draftTheme) return false
+  const saved = themes.find((t) => t.id === editingThemeId)
+  if (!saved) return true
+  return JSON.stringify({ ...draftTheme, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 })
+}
+
 async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
   try {
     const store = await getThemeStore()

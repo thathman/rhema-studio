@@ -608,8 +608,20 @@ pub fn restore_from(path: &Path, source: &Path) -> Result<(ContentDb, Option<Pat
             let _ = std::fs::remove_file(PathBuf::from(p));
         }
     };
+    // Copy beside the database first, then rename over it: a copy that fails
+    // (disk full) leaves the current database untouched and usable.
+    let mut incoming = path.as_os_str().to_owned();
+    incoming.push(".restoring");
+    let incoming = PathBuf::from(incoming);
+    if let Err(e) = std::fs::copy(source, &incoming) {
+        let _ = std::fs::remove_file(&incoming);
+        return Err(ContentError::Invalid(format!("could not copy the backup into place: {e}")));
+    }
     remove_sidecars();
-    std::fs::copy(source, path).map_err(|e| ContentError::Invalid(format!("could not copy the backup into place: {e}")))?;
+    if let Err(e) = std::fs::rename(&incoming, path) {
+        let _ = std::fs::remove_file(&incoming);
+        return Err(ContentError::Invalid(format!("could not put the backup in place: {e}")));
+    }
     match ContentDb::open(path) {
         Ok(db) => {
             log::info!("[content] restored {} from {}", path.display(), source.display());

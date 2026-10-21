@@ -1,3 +1,4 @@
+import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { toast } from "sonner"
 import { useState, useMemo } from "react"
 import { useBroadcastStore } from "@/stores"
@@ -289,7 +290,7 @@ export function ThemeLibrary() {
                 const theme = await importTheme()
                 if (theme) {
                   useBroadcastStore.getState().saveTheme(theme)
-                  useBroadcastStore.getState().startEditing(theme.id)
+                  if (await mayLeaveThemeDraft()) useBroadcastStore.getState().startEditing(theme.id)
                 }
               } catch (err) {
                 console.error("[theme-library] import failed:", err)
@@ -340,9 +341,7 @@ export function ThemeLibrary() {
                   isActive={theme.id === activeThemeId}
                   isRenaming={theme.id === renamingThemeId}
                   isSelected={theme.id === editingThemeId}
-                  onSelect={() =>
-                    useBroadcastStore.getState().startEditing(theme.id)
-                  }
+                  onSelect={() => void mayLeaveThemeDraft().then((ok) => ok && useBroadcastStore.getState().startEditing(theme.id))}
                 />
               ))}
             </>
@@ -361,9 +360,7 @@ export function ThemeLibrary() {
                   isActive={theme.id === activeThemeId}
                   isRenaming={theme.id === renamingThemeId}
                   isSelected={theme.id === editingThemeId}
-                  onSelect={() =>
-                    useBroadcastStore.getState().startEditing(theme.id)
-                  }
+                  onSelect={() => void mayLeaveThemeDraft().then((ok) => ok && useBroadcastStore.getState().startEditing(theme.id))}
                 />
               ))}
             </>

@@ -224,8 +224,8 @@ pub fn run() {
                     // A damaged settings/themes file is set aside before the window reads it.
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
                     let moved = commands::store_check::set_aside_damaged(&dir, now);
-                    for (name, aside) in &moved {
-                        log::error!("{name} was damaged; set aside as {aside}");
+                    for (name, aside, recovered) in &moved {
+                        log::error!("{name} was damaged; set aside as {aside} (last good copy restored: {recovered})");
                     }
                     if let Ok(mut v) = app.state::<commands::store_check::DamagedStoreFiles>().0.lock() {
                         *v = moved;

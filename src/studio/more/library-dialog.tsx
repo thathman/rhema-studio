@@ -17,13 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSongStore } from "@/stores/song-store"
 import { useShellStore } from "@/studio/shell-store"
 import { backupDatabaseToFile, contentStatus, exportServicePackageToFile, exportSongsToFile, importServicePackageFromFile, importSongsFromFiles, restoreDatabaseFromFile, type ImportOutcome } from "@/lib/song-files"
-import { useJournalStore } from "@/stores/journal-store"
+import { journalText, keepJournal, useJournalStore } from "@/stores/journal-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { formatJournal } from "@/lib/journal"
-import { monotonicNow } from "@/stores/timer-store"
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
-import { plannedMs } from "@/lib/service-timing"
 import type { ContentStatus, ImportMode, ServiceLog, ServiceLogSummary } from "@/types"
 
 const MODE_LABEL: Record<ImportMode, string> = {
@@ -278,11 +275,8 @@ function PackageBlock({ onClose }: { onClose: () => void }) {
 /** Today's service log: what went live and for how long, against the plan. */
 function JournalBlock() {
   const entries = useJournalStore((s) => s.entries)
-  const current = useServiceStore((s) => s.current)
-  const items = useQueueStore((s) => s.items)
   const [busy, setBusy] = useState(false)
   const [archived, setArchived] = useState(0)
-  const operator = useSettingsStore((s) => s.operatorName.trim())
   const segments = useTranscriptStore((s) => s.segments)
   const finalCount = segments.filter((s) => s.is_final && s.text.trim()).length
   // AR-004: the transcript goes into a log only when ticked for that log; never by default.
@@ -291,8 +285,7 @@ function JournalBlock() {
   const keepLog = async () => {
     setBusy(true)
     try {
-      const title = `${current?.title ?? "Service"} — ${new Date().toLocaleDateString()}`
-      await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: text() })
+      await keepJournal(withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
       setArchived((n) => n + 1)
       toast.success("Log kept", { description: "Find it under Earlier logs, even after a restart." })
     } catch (e) {
@@ -301,19 +294,7 @@ function JournalBlock() {
       setBusy(false)
     }
   }
-  const text = () =>
-    formatJournal(
-      `${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`,
-      entries,
-      monotonicNow(),
-      new Map(items.map((i) => [i.id, plannedMs(i)])),
-      (() => {
-        // Added on the day: not in the rundown when the service first went on air (saving does not change that).
-        const start = useJournalStore.getState().startItemIds
-        return items.map((i) => ({ id: i.id, label: i.reference, inserted: start ? !start.includes(i.id) : false }))
-      })(),
-    ) +
-    (withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
+  const text = () => journalText() + (withTranscript ? transcriptSection(useTranscriptStore.getState().segments, provider) : "")
   const saveLog = async () => {
     setBusy(true)
     try {

@@ -3,12 +3,18 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow } from "@/stores/timer-store"
-import type { JournalEntry } from "@/lib/journal"
+import { invoke } from "@tauri-apps/api/core"
+import { formatJournal, type JournalEntry } from "@/lib/journal"
+import { plannedMs } from "@/lib/service-timing"
+import { useSettingsStore } from "@/stores/settings-store"
 
 interface JournalState {
   entries: JournalEntry[]
   /** The rundown's item ids when the service first went on air (this run, since the log was last started): the plan. */
   startItemIds: string[] | null
+  /** Entries ever added this run, and how many there were when the log was last kept. */
+  added: number
+  keptAt: number
   add: (entry: Omit<JournalEntry, "at" | "mono">) => void
   clear: () => void
 }
@@ -17,9 +23,39 @@ interface JournalState {
 export const useJournalStore = create<JournalState>((set) => ({
   entries: [],
   startItemIds: null,
-  add: (entry) => set((s) => ({ entries: [...s.entries, { ...entry, at: Date.now(), mono: monotonicNow() }].slice(-2000) })),
-  clear: () => set({ entries: [], startItemIds: null }),
+  added: 0,
+  keptAt: 0,
+  add: (entry) => set((s) => ({ entries: [...s.entries, { ...entry, at: Date.now(), mono: monotonicNow() }].slice(-2000), added: s.added + 1 })),
+  clear: () => set((s) => ({ entries: [], startItemIds: null, keptAt: s.added })),
 }))
+
+/** The log as text (no transcript): what Keep log and Save log write. */
+export function journalText(): string {
+  const current = useServiceStore.getState().current
+  const operator = useSettingsStore.getState().operatorName.trim()
+  const items = useQueueStore.getState().items
+  const { entries, startItemIds: start } = useJournalStore.getState()
+  return formatJournal(
+    `${current?.title ?? "Service"}${operator ? ` — operator: ${operator}` : ""}`,
+    entries,
+    monotonicNow(),
+    new Map(items.map((i) => [i.id, plannedMs(i)])),
+    // Added on the day: not in the rundown when the service first went on air (saving does not change that).
+    items.map((i) => ({ id: i.id, label: i.reference, inserted: start ? !start.includes(i.id) : false })),
+  )
+}
+
+/** Something was logged since the log was last kept. */
+export const journalUnkept = () => useJournalStore.getState().added > useJournalStore.getState().keptAt
+
+/** Keep the log in the library (Earlier logs); `extra` is appended (the transcript, when ticked). */
+export async function keepJournal(extra = ""): Promise<void> {
+  const current = useServiceStore.getState().current
+  const added = useJournalStore.getState().added
+  const title = `${current?.title ?? "Service"} — ${new Date().toLocaleDateString()}`
+  await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: journalText() + extra })
+  useJournalStore.setState({ keptAt: added })
+}
 
 /** What the congregation saw when rehearsal started: rehearsal ends by sending what is live now. */
 let seenBeforeRehearsal: { isLive: boolean; liveVerse: Aired["liveVerse"]; liveItemId: string | null } | null = null
