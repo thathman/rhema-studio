@@ -449,4 +449,23 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().removeOutput("stream")
     expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
   })
+
+  it("discarding or closing a theme draft puts the saved theme back on the outputs and their cards", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const theme = s.themes[0]
+    s.setOutputTheme("main", theme.id)
+    s.startEditing(theme.id)
+    useBroadcastStore.getState().updateDraft({ name: "Draft" })
+    expect(useBroadcastStore.getState().outputFrames.main.theme.name).toBe("Draft")
+    emitToMock.mockClear()
+    useBroadcastStore.getState().discardDraft()
+    expect(useBroadcastStore.getState().outputFrames.main.theme.name).toBe(theme.name)
+    expect(emitToMock.mock.calls.some((c) => c[0] === "broadcast-main")).toBe(true)
+    useBroadcastStore.getState().updateDraft({ name: "Draft again" })
+    useBroadcastStore.getState().setDesignerOpen(false)
+    expect(useBroadcastStore.getState().outputFrames.main.theme.name).toBe(theme.name)
+    useBroadcastStore.getState().resetOutputRuntime("main")
+    expect(useBroadcastStore.getState().outputFrames.main).toBeUndefined()
+  })
 })

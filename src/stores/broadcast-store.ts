@@ -73,6 +73,8 @@ interface BroadcastState {
    * Session state; written whenever an output is synced.
    */
   outputFrames: Record<string, OutputFrame>
+  /** Forget what an output was last sent (its window was closed or is being reopened), so the next sync sends everything again. */
+  resetOutputRuntime: (id: string) => void
   setLowerThird: (lt: LowerThird | null) => void
   /**
    * Rehearsal: everything works in the app (Preview, Live panel, rundown)
@@ -272,6 +274,13 @@ export interface OutputFrame {
 }
 
 /** Keep what an output was last sent, for the multiview. Skips the write when nothing changed. */
+/** After a theme draft ends (saved, discarded, closed, switched), outputs that were shown the draft get the saved theme again. */
+function resyncThemeOutputs(themeId: string | null): void {
+  if (!themeId) return
+  const s = useBroadcastStore.getState()
+  for (const o of s.outputs) if (o.themeId === themeId) s.syncBroadcastOutputFor(o.id)
+}
+
 function recordFrame(id: string, frame: OutputFrame): void {
   const prev = useBroadcastStore.getState().outputFrames[id]
   if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.stage === frame.stage) return
@@ -609,26 +618,43 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   // Designer
   setDesignerOpen: (isDesignerOpen) => {
     if (!isDesignerOpen) {
+      const was = get().editingThemeId
       set({ isDesignerOpen, editingThemeId: null, draftTheme: null, selectedElement: null })
+      resyncThemeOutputs(was)
     } else {
       set({ isDesignerOpen })
     }
   },
+  resetOutputRuntime: (id) => {
+    forgetSignage(id)
+    set((s) => {
+      if (!s.outputFrames[id]) return s
+      const outputFrames = { ...s.outputFrames }
+      delete outputFrames[id]
+      return { outputFrames }
+    })
+  },
   startEditing: (themeId) => {
     const theme = get().themes.find((t) => t.id === themeId)
     if (!theme) return
+    const was = get().editingThemeId
     set({
       editingThemeId: themeId,
       draftTheme: { ...theme, updatedAt: Date.now() },
       selectedElement: null,
     })
+    // Switching to another theme ends the previous draft: its outputs get their saved theme back.
+    if (was && was !== themeId) resyncThemeOutputs(was)
   },
   stopEditing: () => {
+    const was = get().editingThemeId
     set({
       editingThemeId: null,
       draftTheme: null,
       selectedElement: null,
     })
+    // Outputs may have been showing the draft; put the saved theme back.
+    resyncThemeOutputs(was)
   },
   updateDraft: (updates) => {
     set((s) => ({
@@ -683,6 +709,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const { editingThemeId } = get()
     if (editingThemeId) {
       get().startEditing(editingThemeId)
+      resyncThemeOutputs(editingThemeId)
     }
   },
   setSelectedElement: (selectedElement) => set({ selectedElement }),

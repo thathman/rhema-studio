@@ -83,9 +83,12 @@ export function OutputCard({
       <div className="relative overflow-hidden rounded-md border border-foreground/10">
         {frame?.stage && onAir ? (
           <div className="flex aspect-video w-full items-center justify-center bg-black text-xs text-white/70">Stage display: words, next, note, timer</div>
+        ) : onAir && !frame ? (
+          // On, but nothing sent yet (for example turned on during rehearsal): the window is black too.
+          <div className="aspect-video w-full bg-black" />
         ) : theme ? (
           <CanvasVerse
-            theme={frame?.theme ?? theme}
+            theme={onAir ? (frame?.theme ?? theme) : theme}
             verse={onAir ? (frame?.verse ?? null) : null}
             overlay={onAir ? (frame?.overlay ?? null) : null}
             className={cn("aspect-video w-full", !onAir && "opacity-45 saturate-50")}
