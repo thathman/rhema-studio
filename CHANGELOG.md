@@ -28,6 +28,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Song usage report for licence (CCLI) reporting: songs per date range with CCLI numbers and service counts, saved as CSV.
 
 ### Slides and media
+- Responsive readings: paste with L: and P: marks; one slide per exchange.
 - Custom slides, announcements, QR link slides (offline), long text as one slide per paragraph; pictures and videos from a hashed media library (videos streamed, sound from the main output only); background pictures with automatic contrast; brand kit and themes with logos.
 
 ### Timing
