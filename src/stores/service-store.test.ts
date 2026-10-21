@@ -439,4 +439,13 @@ describe("createFromRundown", () => {
     expect(reopened.items[0].end_by).toBe("12:15")
     expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, end_by: "12:30" }]))
   })
+
+  it("saves and reopens who prepares an item (CL-007), and it counts as an unsaved change", () => {
+    const v: VerseQueueItem = { id: "o1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, prepared_by: "  Tolu (music)  " }
+    const [input] = toItemInputs([v])
+    expect(JSON.parse(input.payload ?? "{}").prepared_by).toBe("Tolu (music)")
+    const reopened = toQueueItems({ program, items: [item("o1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
+    expect(reopened.items[0].prepared_by).toBe("Tolu (music)")
+    expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, prepared_by: "Ade" }]))
+  })
 })

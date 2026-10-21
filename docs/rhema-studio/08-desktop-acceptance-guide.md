@@ -596,3 +596,10 @@ report), but launching it cannot.
 | 10be.1 | Fresh settings, Deepgram key entered, provider Cloud (Deepgram). Start listening in the transcript panel. | A dialog "Send the microphone to Deepgram?" explains what is sent; nothing is sent until Agree (packet capture: no connection to api.deepgram.com before Agree). | Unverified |
 | 10be.2 | Agree. Then Present header. | Listening starts; the chip reads "Listening (Deepgram)"; Settings → Speech Recognition shows "Agreed on …" with Withdraw. | Unverified |
 | 10be.3 | Withdraw, start again, choose "Use local recognition instead". | Provider switches to Whisper and listening starts locally (if the model is installed); no dialog for local recognition. | Unverified |
+
+### 10bg. Who prepares, who saved (CL-007)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bg.1 | More → Your name = "Tolu". Prepare: set "prepared by" = "Ade (music)" on a song; Save; open History. | The rundown shows "· Ade (music)" on the song; History's newest version reads "… · Tolu". | Unverified |
+| 10bg.2 | Publish to the church folder and open it on another computer. | The song still shows "· Ade (music)". | Unverified |

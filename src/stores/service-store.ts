@@ -104,6 +104,7 @@ export function toItemInputs(
     ...(i.background ? { background_media_id: i.background.media_id } : {}),
     ...(typeof i.planned_minutes === "number" && i.planned_minutes > 0 ? { planned_minutes: i.planned_minutes } : {}),
     ...(i.end_by && isClockTime(i.end_by) ? { end_by: i.end_by } : {}),
+    ...(i.prepared_by?.trim() ? { prepared_by: i.prepared_by.trim().slice(0, 60) } : {}),
   })
   return items.map((i): ItemInput =>
     isImageItem(i)
@@ -167,6 +168,17 @@ export function toItemInputs(
 
 /** 24-hour "HH:MM". */
 export const isClockTime = (t: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)
+
+/** `prepared_by` from any item's payload (CL-007). */
+export function parsePreparedBy(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as { prepared_by?: unknown }
+    return typeof p.prepared_by === "string" && p.prepared_by.trim() ? p.prepared_by.trim().slice(0, 60) : null
+  } catch {
+    return null
+  }
+}
 
 /** `end_by` from any item's payload. */
 export function parseEndBy(raw: string | null | undefined): string | null {
@@ -279,7 +291,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload) })
       continue
     }
     if (it.kind === "slide") {
@@ -288,7 +300,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload) })
       continue
     }
     if (it.kind === "song") {
@@ -306,7 +318,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload),
       })
       continue
     }
@@ -337,7 +349,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload),
     })
   }
   return { items, unsupported, missingTranslations: [...missing] }
@@ -346,7 +358,7 @@ export function toQueueItems(
 /** What a save persists; verse text and timestamps are not part of it. */
 export function rundownSignature(items: QueueItem[]): string {
   return items
-    .map((i) => `${i.background?.media_id ?? ""}|${i.planned_minutes ?? ""}|${i.end_by ?? ""}|` + (
+    .map((i) => `${i.background?.media_id ?? ""}|${i.planned_minutes ?? ""}|${i.end_by ?? ""}|${i.prepared_by ?? ""}|` + (
       isVerseItem(i)
         ? `${i.id}|verse|${i.reference}|${i.verse.book_number}:${i.verse.chapter}:${i.verse.verse}|${i.translation ?? ""}|${i.secondary_translation ?? ""}|${i.notes ?? ""}`
         : isImageItem(i)
