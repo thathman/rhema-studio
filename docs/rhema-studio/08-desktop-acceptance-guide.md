@@ -432,3 +432,8 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ai.1 | A verse live on the projector (themed background) and the stream (transparent theme). Press Black, then Logo, then Technical issue, then Back. | Black: projector solid black, stream shows nothing over the camera. Logo: each output shows its own theme's logo large and centred (nothing on a theme without a logo; on the stream only if "Show on transparent" is on). Technical issue: the two lines (and Yorùbá when a Yorùbá Bible is in use). Back: the verse returns. | Unverified |
+### 10aj. Remote command rate limit (NFR-06)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10aj.1 | With HTTP remote on, run `for i in $(seq 40); do curl -s -o /dev/null -w "%{http_code} " -X POST -H 'Content-Type: application/json' -d '{"command":"next"}' http://<host>:<port>/api/v1/command; done` from another computer (add the key header if one is set). | Roughly the first 20 answer 200, the rest 429; the app log shows "too many from <address>"; a phone on another address still works at once; after a second's pause the first computer works again. | Unverified |

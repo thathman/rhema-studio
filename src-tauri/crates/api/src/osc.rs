@@ -6,6 +6,7 @@ use std::time::Duration;
 use rosc::{OscPacket, OscMessage};
 
 use crate::coerce::parse_osc;
+use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
 use crate::keys::{check_key, new_key_set, KeyEntry, KeySet};
@@ -95,6 +96,7 @@ where
     let active = Arc::new(AtomicBool::new(true));
     let thread_active = active.clone();
     let keys = config.keys.clone();
+    let rate = crate::rate::RateLimiter::default();
 
     let thread = std::thread::Builder::new()
         .name("osc-listener".into())
@@ -104,7 +106,7 @@ where
             let mut buf = [0u8; 4096];
 
             while thread_active.load(Ordering::SeqCst) {
-                let (size, _src) = match socket.recv_from(&mut buf) {
+                let (size, src) = match socket.recv_from(&mut buf) {
                     Ok(result) => result,
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock
                         || e.kind() == std::io::ErrorKind::TimedOut =>
@@ -126,7 +128,7 @@ where
                     }
                 };
 
-                handle_packet(&packet, &*sink, &keys);
+                handle_packet(&packet, &*sink, &keys, Some((&rate, src.ip())));
             }
 
             log::info!("OSC listener stopped");
@@ -143,21 +145,34 @@ where
 }
 
 /// Recursively handle an OSC packet (messages and bundles).
-fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, keys: &KeySet) {
+/// Rate limit and sender, when the message came off the network.
+type Limit<'a> = Option<(&'a crate::rate::RateLimiter, std::net::IpAddr)>;
+
+fn handle_packet(packet: &OscPacket, sink: &dyn CommandSink, keys: &KeySet, limit: Limit<'_>) {
     match packet {
-        OscPacket::Message(msg) => handle_message(msg, sink, keys),
+        OscPacket::Message(msg) => handle_message_from(msg, sink, keys, limit),
         OscPacket::Bundle(bundle) => {
             for content in &bundle.content {
-                handle_packet(content, sink, keys);
+                handle_packet(content, sink, keys, limit);
             }
         }
     }
 }
 
+#[cfg(test)]
+fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
+    handle_message_from(msg, sink, keys, None);
+}
+
 /// Parse a single OSC message and dispatch the resulting command. With a
 /// secret set, the first argument must be that string; it is stripped
 /// before parsing.
-fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
+///
+/// The rate limit is spent only after the key check, so packets spoofed
+/// from a controller's address without the key cannot use up its
+/// allowance; fader values (confidence, opacity) are exempt, since a fader
+/// sends dozens a second and the last one must land.
+fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, limit: Limit<'_>) {
     let presented = match msg.args.first() {
         Some(rosc::OscType::String(k)) => Some(k.as_str()),
         _ => None,
@@ -176,6 +191,13 @@ fn handle_message(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet) {
             if let Some(e) = entry {
                 if !e.role.allows(&cmd) {
                     log::warn!("OSC command refused for {}: {} may present but not change settings", msg.addr, e.name);
+                    return;
+                }
+            }
+            if let Some((rate, ip)) = limit {
+                let fader = matches!(cmd, RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_));
+                if !fader && !rate.allow(ip) {
+                    log::warn!("OSC command refused: too many from {ip}");
                     return;
                 }
             }
@@ -340,6 +362,28 @@ mod tests {
     }
 
     #[test]
+    fn the_limit_counts_only_keyed_commands_and_spares_faders() {
+        let sink = MockSink::new();
+        let keys = crate::keys::key_set_from(&[("k3y-123", "deck")]);
+        let rate = crate::rate::RateLimiter::new(1.0, 2.0);
+        let ip: std::net::IpAddr = "192.168.1.30".parse().unwrap();
+        let keyed = |addr: &str, extra: Vec<rosc::OscType>| OscMessage { addr: addr.into(), args: [vec![rosc::OscType::String("k3y-123".into())], extra].concat() };
+        // Spoofed packets without the key spend nothing.
+        for _ in 0..50 {
+            handle_message_from(&OscMessage { addr: "/rhema/next".into(), args: vec![] }, &sink, &keys, Some((&rate, ip)));
+        }
+        assert_eq!(sink.command_count(), 0);
+        handle_message_from(&keyed("/rhema/next", vec![]), &sink, &keys, Some((&rate, ip)));
+        handle_message_from(&keyed("/rhema/next", vec![]), &sink, &keys, Some((&rate, ip)));
+        handle_message_from(&keyed("/rhema/next", vec![]), &sink, &keys, Some((&rate, ip)));
+        assert_eq!(sink.command_count(), 2, "burst of 2, the third refused");
+        for i in 0..30u8 {
+            handle_message_from(&keyed("/rhema/confidence", vec![rosc::OscType::Float(f32::from(i) / 30.0)]), &sink, &keys, Some((&rate, ip)));
+        }
+        assert_eq!(sink.command_count(), 32, "fader values all land");
+    }
+
+    #[test]
     fn handle_message_ignores_unknown_address() {
         let sink = MockSink::new();
         let msg = OscMessage {
@@ -366,7 +410,7 @@ mod tests {
                 }),
             ],
         });
-        handle_packet(&bundle, &sink, &new_key_set());
+        handle_packet(&bundle, &sink, &new_key_set(), None);
         assert_eq!(sink.command_count(), 2);
     }
 }

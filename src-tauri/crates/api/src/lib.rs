@@ -6,6 +6,7 @@
 pub mod coerce;
 pub mod command;
 pub mod keys;
+pub mod rate;
 pub mod dispatch;
 pub mod error;
 pub mod http;

@@ -37,6 +37,11 @@ QA-006 first slice. What the two control surfaces expose today, verified from th
 
 Settings → Diagnostics → Save logs runs every line through a redaction pass first: the exact values of the configured API keys, remote key and OBS password (read from the settings file, 6+ characters) and anything after `X-Rhema-Key:`, `Authorization: Bearer `, `api_key=` or `token=` become `[redacted]`. The app does not log these; this is defence in depth for a file meant to be sent to someone else.
 
+## Rate limiting (NFR-06)
+
+- Every HTTP request to `/api/v1/command` and `/api/v1/pair`, and every OSC command that passed the key check, is counted per sender address (`crates/api/src/rate.rs`): a burst of 20, then 10 a second sustained. Beyond that HTTP answers 429 and OSC drops the packet; both log a warning. Buttons, Stream Deck pages and macros stay far below it; a stuck controller or a flood cannot hammer the live output, and pairing codes cannot be guessed quickly.
+- At most 256 senders are remembered (least recently seen dropped first), so spoofed UDP source addresses cannot grow memory. OSC counts a message only after its key is accepted, so packets spoofed from a Stream Deck's address without the key cannot use up its allowance. OSC fader values (confidence, opacity) are not counted: a fader sends dozens a second and the last value must land.
+
 ## Not done
 
-- Roles per device (present vs configure), rate limiting, TLS, QR pairing. (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)
+- TLS, QR pairing. (Roles per device: #78. Rate limiting: see below.) (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)
