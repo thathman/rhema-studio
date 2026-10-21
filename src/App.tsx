@@ -1,3 +1,4 @@
+import { CloudSpeechConsent } from "@/components/cloud-speech-consent"
 import { AppShell } from "@/studio/shell/app-shell"
 import { useBroadcastOutputs } from "@/hooks/use-broadcast-outputs"
 import { useRemoteControl } from "@/hooks/use-remote-control"
@@ -14,6 +15,7 @@ export function App() {
     <>
       <AppShell />
       <TutorialOverlay />
+      <CloudSpeechConsent />
       <UnsavedCloseDialog />
       <Toaster position="bottom-right" />
     </>

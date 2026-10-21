@@ -8,7 +8,7 @@ Rhema Studio presents with no internet connection. There is no telemetry, no ana
 
 | Connection | When | What is sent | Off by default? |
 |---|---|---|---|
-| Deepgram speech recognition (`api.deepgram.com`, upstream feature) | Only when the operator chooses Deepgram as the speech provider and enters their own API key, and starts listening | Microphone audio while listening | Yes (local Whisper is the default; speech itself is optional) |
+| Deepgram speech recognition (`api.deepgram.com`, upstream feature) | Only when the speech provider is Deepgram (the upstream default), a key is entered, listening is started, **and someone on this computer has agreed** in the consent dialog shown before the first cloud session (withdrawable in Settings → Speech Recognition) | Microphone audio while listening | Yes: speech is optional and nothing is sent before consent; the Present chip reads "Listening (Deepgram)" while it is sent |
 | OBS WebSocket (address the operator types, usually this computer) | Only after "Connect to OBS" is ticked | Recording start/stop, chapter marks; the password proof, never the password | Yes |
 | NDI (local network) | Only for outputs set to NDI | The output picture, to NDI receivers on the network | Yes |
 | Remote control (OSC and HTTP, incoming) | Only while the operator has started a listener | Nothing leaves; devices on the network send commands in | Yes |
@@ -20,4 +20,4 @@ Keys the settings file can hold for later providers (`openaiApiKey`, `claudeApiK
 ## Not yet done
 
 - An offline network capture on a real desktop (PRD release evidence for NFR-09): run the app through a service with a packet capture (Wireshark or `tcpdump`) and confirm that only the rows above appear. Acceptance row 10an.
-- Informed consent text before cloud transcription starts (PRD FR-10), which lands with the speech-provider decision (PR #4).
+- Consent before cloud transcription: done for Deepgram (asked once per computer before the first cloud session; says what is sent, to whom, and offers local recognition instead). Any provider added by PR #4 must go through the same gate.

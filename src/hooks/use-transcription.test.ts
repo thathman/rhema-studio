@@ -22,6 +22,8 @@ async function loadModules() {
   const transcriptMod = await import("@/stores/transcript-store")
   const settingsMod = await import("@/stores/settings-store")
   const hookMod = await import("./use-transcription")
+  // These tests are about starting and stopping; consent to cloud audio is given here and tested on its own below.
+  settingsMod.useSettingsStore.setState({ cloudSpeechConsentAt: "2026-10-21T00:00:00.000Z" })
   return {
     useTranscriptStore: transcriptMod.useTranscriptStore,
     useSettingsStore: settingsMod.useSettingsStore,
@@ -215,6 +217,28 @@ describe("use-transcription", () => {
       expect(mockToastError).toHaveBeenCalledWith("Transcription error", {
         description: "WebSocket closed unexpectedly",
       })
+    })
+  })
+
+  describe("consent to cloud audio (RG-08)", () => {
+    it("asks before the first cloud session and starts only after agreeing; local recognition needs no consent", async () => {
+      mockInvoke.mockResolvedValue(undefined)
+      const { useSettingsStore, transcriptionActions } = await loadModules()
+      const { useCloudConsentStore } = await import("@/stores/cloud-consent-store")
+      useSettingsStore.setState({ sttProvider: "deepgram", deepgramApiKey: "dg-1234567890", cloudSpeechConsentAt: "" })
+      await transcriptionActions.start()
+      expect(mockInvoke).not.toHaveBeenCalled()
+      expect(useCloudConsentStore.getState().open).toBe(true)
+
+      useSettingsStore.getState().setCloudSpeechConsent(true)
+      useCloudConsentStore.getState().onAgree?.()
+      await new Promise((r) => setTimeout(r, 0))
+      expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({ provider: "deepgram" }))
+
+      mockInvoke.mockClear()
+      useSettingsStore.setState({ sttProvider: "whisper", cloudSpeechConsentAt: "" })
+      await transcriptionActions.start()
+      expect(mockInvoke).toHaveBeenCalledWith("start_transcription", expect.objectContaining({ provider: "whisper" }))
     })
   })
 })
