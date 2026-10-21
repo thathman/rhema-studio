@@ -119,7 +119,7 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
       let monitorIndex = output.monitorIndex
       try {
         const names = (await availableMonitors()).map((m) => m.name ?? null)
-        monitorIndex = resolveMonitorIndex(output, names) ?? output.monitorIndex
+        monitorIndex = resolveMonitorIndex(output, names, store.outputs.filter((o) => o.type === "display")) ?? output.monitorIndex
         // Outputs set up before names were kept learn their monitor's name now.
         if (!output.monitorName && names[monitorIndex]) store.updateOutput(output.id, { monitorName: names[monitorIndex] })
       } catch {

@@ -1,3 +1,4 @@
+import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { useEffect, useState } from "react"
 import { MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
@@ -84,7 +85,9 @@ export function OutputEditorDialog({
   const outputs = useBroadcastStore((s) => s.outputs)
   const isEditing = Boolean(output)
 
-  const [form, setForm] = useState<BroadcastOutput>(output ?? draft)
+  // The monitor shown is where the output's screen is now (the OS may have renumbered since).
+  const withResolved = (o: BroadcastOutput): BroadcastOutput => ({ ...o, monitorIndex: resolveMonitorIndex(o, monitors.map((m) => m.name ?? null)) ?? o.monitorIndex })
+  const [form, setForm] = useState<BroadcastOutput>(() => withResolved(output ?? draft))
   const [error, setError] = useState<string | null>(null)
 
   // Reset the form whenever the dialog opens for a different output. Adjusting
@@ -95,7 +98,7 @@ export function OutputEditorDialog({
   if (lastFormKey !== formKey) {
     setLastFormKey(formKey)
     if (open) {
-      setForm(output ?? draft)
+      setForm(withResolved(output ?? draft))
       setError(null)
     }
   }

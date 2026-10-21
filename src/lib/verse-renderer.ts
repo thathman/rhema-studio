@@ -1059,7 +1059,8 @@ function calculateScaledFontSize(
   let low = minFontSize
   let high = originalFontSize
   // Nothing fits: the smallest size, never the full one (text that cannot fit is clipped least).
-  let bestFit = minFontSize
+  // (A small preview's theme can be below the floor: then its own size.)
+  let bestFit = Math.min(minFontSize, originalFontSize)
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2)

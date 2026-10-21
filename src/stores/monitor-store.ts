@@ -38,7 +38,7 @@ async function check(): Promise<void> {
   useMonitorStore.setState({ count, names })
   if (prev === null || count >= prev) return
   const b = useBroadcastStore.getState()
-  const lost = b.outputs.filter((o) => o.type === "display" && resolveMonitorIndex(o, names) === null && b.outputStatus[o.id]?.previewOpen)
+  const lost = b.outputs.filter((o) => o.type === "display" && resolveMonitorIndex(o, names, b.outputs.filter((x) => x.type === "display")) === null && b.outputStatus[o.id]?.previewOpen)
   for (const o of lost) toast.error(`${o.name}: its monitor was disconnected`, { description: "Check the cable or choose another monitor in Outputs." })
 }
 

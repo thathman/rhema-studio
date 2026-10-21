@@ -194,7 +194,7 @@ export function BroadcastOutputsDialog({
   }
 
   const monitorLabel = (output: BroadcastOutput) => {
-    const at = resolveMonitorIndex(output, monitors.map((m) => m.name ?? null))
+    const at = resolveMonitorIndex(output, monitors.map((m) => m.name ?? null), outputs.filter((o) => o.type === "display"))
     const monitor = at === null ? undefined : monitors[at]
     if (!monitor || at === null) return undefined
     return `${monitor.name ?? `Display ${at + 1}`} · ${monitor.size.width}×${monitor.size.height}`

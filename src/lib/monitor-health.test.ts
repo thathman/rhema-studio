@@ -27,6 +27,12 @@ describe("monitor health", () => {
     // No name kept (older settings): by position, as before.
     expect(resolveMonitorIndex({ monitorIndex: 1 }, ["a", "b"])).toBe(1)
     expect(resolveMonitorIndex({ monitorIndex: 2 }, ["a", "b"])).toBeNull()
+    // Two TVs with one name, B's unplugged: B is missing, not on A's TV.
+    const a = { name: "A", type: "display" as const, monitorIndex: 1, monitorName: "SONY TV" }
+    const b = { name: "B", type: "display" as const, monitorIndex: 2, monitorName: "SONY TV" }
+    expect(monitorProblems([a, b], ["Built-in", "SONY TV"])).toEqual({ missing: ["B"], shared: [] })
+    // Windows device names are positional: the index decides, as before.
+    expect(resolveMonitorIndex({ monitorIndex: 1, monitorName: "\\\\.\\DISPLAY2" }, ["\\\\.\\DISPLAY1", "\\\\.\\DISPLAY3"])).toBe(1)
   })
 })
 
