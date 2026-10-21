@@ -16,6 +16,8 @@ interface QueueItemBase {
   end_by?: string | null
   /** Who is preparing this item (CL-007): a short name. */
   prepared_by?: string | null
+  /** Team comments on this item (CL-007); saved with the service and carried in service files. Never on screen. */
+  comments?: ItemComment[] | null
 }
 
 export interface VerseQueueItem extends QueueItemBase {
@@ -98,4 +100,11 @@ export function isSlideItem(item: QueueItem): item is SlideQueueItem {
 
 export function isImageItem(item: QueueItem): item is ImageQueueItem {
   return item.kind === "image"
+}
+
+/** One team comment on a rundown item (CL-007). `at` is an ISO time. */
+export interface ItemComment {
+  by: string
+  at: string
+  text: string
 }

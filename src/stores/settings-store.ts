@@ -89,6 +89,9 @@ interface SettingsState {
   noteOpenedPackage: (sha256: string) => void
   /** Which folder file each service on this computer was opened from (by local service id), to spot newer versions. */
   openedFrom: Record<string, OpenedFrom>
+  /** When this computer last read each service's team comments (CL-007), by program id. */
+  commentsSeen: Record<string, string>
+  markCommentsSeen: (programId: string) => void
   noteOpenedFrom: (programId: string, from: OpenedFrom) => void
   /** The church's own cues (PT-003): named, ordered steps from the cue action registry. */
   customMacros: CustomMacro[]
@@ -141,6 +144,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   cloudSpeechConsentAt: "",
   openedPackages: [],
   openedFrom: {},
+  commentsSeen: {},
   remoteSecret: "",
   remoteDevices: [],
   remoteAuthRequired: false,
@@ -172,6 +176,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setRequireApproval: (requireApproval) => set({ requireApproval }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
   noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-200)) })),
+  markCommentsSeen: (programId) =>
+    set((s) => ({ commentsSeen: Object.fromEntries([...Object.entries(s.commentsSeen).filter(([k]) => k !== programId), [programId, new Date().toISOString()]].slice(-200)) })),
   noteOpenedPackage: (sha) => set((s) => ({ openedPackages: [...s.openedPackages.filter((x) => x !== sha), sha].slice(-200) })),
   setOperatorName: (operatorName) => {
     set({ operatorName })
@@ -219,6 +225,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
     case "openedFrom":
+    case "commentsSeen":
       return typeof value === "object" && value !== null && !Array.isArray(value)
     case "openedPackages":
       return Array.isArray(value) && value.every((x) => typeof x === "string")
@@ -240,6 +247,7 @@ const PERSISTED_KEYS = [
   "cloudSpeechConsentAt",
   "openedPackages",
   "openedFrom",
+  "commentsSeen",
   "remoteSecret",
   "remoteDevices",
   "remoteAuthRequired",
