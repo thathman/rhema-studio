@@ -7,7 +7,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 ## Integrated `main`
 
 - Head: see `git log fork/main` (2026-10-21 11:10 WAT; every PR through #128 merged)
-- Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
+- Contents: see CHANGELOG.md. `studio.db` is at migration 0010 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver).
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
 ## Issues
@@ -20,7 +20,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Active milestone
 
-All PRD milestones through 8 have first slices merged: 2B songs, 2C service builder, 3 media (pictures, backgrounds, pages; video/lower thirds desktop-gated), 4 outputs (roles, stage, language, health, signage), 5 production (timers, cues, rehearsal), 6 design (brand kit; Canva blocked on #34), 7 collaboration (approval, package, operator name, pairing; sync blocked on #72), 8 signage (loop, schedule, playlists, QR), 9 archive (logs). Open work is listed under "Next eligible tasks".
+All PRD milestones through 8 have first slices merged: 2B songs, 2C service builder, 3 media (pictures, backgrounds, pages; video/lower thirds desktop-gated), 4 outputs (roles, stage, language, health, signage), 5 production (timers, cues, rehearsal), 6 design (brand kit; Canva blocked on #34), 7 collaboration (approval, package, operator name, pairing, church folder per #72; hosted sync designed, hosting choice open), 8 signage (loop, schedule, playlists, QR), 9 archive (logs). Open work is listed under "Next eligible tasks".
 
 ## Latest test results
 
@@ -67,7 +67,7 @@ Found by reading PRD lines against the code (not by tests): no single-instance g
 | Row | What is left | Blocked by |
 |---|---|---|
 | ST-004 | Yorùbá speech, OpenAI provider (PR #4) | Owner: speech provider and model bundling |
-| ST-006 | Operator acceptance rows 1–10ba | Real Windows desktop and projector (#31) |
+| ST-006 | Operator acceptance rows 1–10be | Real Windows desktop and projector (#31) |
 | ST-009 | App identity rename with settings migration | Owner: product name / installer app ID (PRD open decision) |
 | MD-002 | Sound over NDI | Audio path to the NDI sender and real receivers to test |
 | OP-005 | OBS 720p30 smoke, NDI runtime drop | Real OBS/NDI hardware |
