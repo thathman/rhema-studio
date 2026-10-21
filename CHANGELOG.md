@@ -20,6 +20,15 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Bible
+- Quick find takes a numbered book on its own or with a chapter ("1 Samuel", "1 Kings 3"), and ordinals in words ("First Samuel 3:10", "Samuẹli Kínní 3:10").
+
+### Prepare
+- An item's minutes, prepared-by and end-by fields sit in labelled columns; nothing is cut off.
+
+### Screens
+- A song's footer line (title, copyright) never covers its last line.
+
 ### Slides
 - Long text added as pages keeps each page's "(2/4)" mark after saving, and each page is labelled by its own first line.
 
