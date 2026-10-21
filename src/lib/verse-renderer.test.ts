@@ -625,3 +625,14 @@ describe("computeVerseLayoutMetrics — background region", () => {
     )
   })
 })
+
+describe("computeVerseLayoutMetrics — a song's footer line", () => {
+  it("keeps a strip for the footer, so the words never run under it", () => {
+    const theme = BUILTIN_THEMES[0]
+    const plain = computeVerseLayoutMetrics(stubCtx(), theme, VERSE)
+    const withFooter = computeVerseLayoutMetrics(stubCtx(), theme, { ...VERSE, footer: "Come, O Thou all-victorious Lord" })
+    expect(withFooter.textRect.height).toBeLessThan(plain.textRect.height)
+    const bottom = withFooter.textRect.y + withFooter.textRect.height
+    expect(withFooter.verseRect!.y + withFooter.verseRect!.height).toBeLessThanOrEqual(bottom + 0.5)
+  })
+})
