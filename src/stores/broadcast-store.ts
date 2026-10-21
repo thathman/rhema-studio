@@ -357,7 +357,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   outputFrames: {},
   rehearsal: false,
   presentWarning: null,
-  autoLive: true,
+  // Off until the operator turns it on (PRD FR-01: speech suggestions are proposals unless an
+  // automation is explicitly enabled; AI-001 "no AI output auto-live"). A saved choice is kept.
+  autoLive: false,
   isDesignerOpen: false,
   editingThemeId: null,
   renamingThemeId: null,

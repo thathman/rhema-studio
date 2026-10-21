@@ -652,3 +652,11 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bl.1 | Put something on a projector output. More → Library → Back up now to a USB stick (or a network share); pull the stick (or unplug the network) while it is writing. | Present, the outputs and Save keep working; the backup reports that it could not be written; the stick holds no file named like a finished backup (at most nothing, never a half file under the backup's name). | Unverified |
 | 10bl.2 | Restore from a backup on a network share that is then disconnected mid-read. | The app keeps working; restore reports it could not read the backup; the current services are unchanged. | Unverified |
+
+### 10bn. Heard verses wait for the operator (FR-01, AI-001)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10bn.1 | New installation (no earlier settings). Put something on air, start listening, read "John 3:16" aloud. | The verse appears in the preview and the detections list; what is on screen does not change until Show live. Production view → Live display: Auto is off. | Unverified |
+| 10bn.2 | Turn Auto on; Standard view. | "Auto-live on" appears in the header while listening; a heard verse now replaces what is on screen. Clicking the chip turns Auto off. | Unverified |
+| 10bn.3 | Computer that had Auto on before this build. | Auto is still on (the saved choice is kept), and the chip shows while listening. | Unverified |

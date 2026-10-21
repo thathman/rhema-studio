@@ -278,13 +278,14 @@ describe("broadcast store sync", () => {
     expect(useBroadcastStore.getState().liveVerse).toEqual(sampleLiveVerse)
   })
 
-  it("autoLive defaults to on and can be toggled", async () => {
+  it("autoLive is off until the operator turns it on (FR-01, AI-001), and can be toggled", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
 
-    expect(useBroadcastStore.getState().autoLive).toBe(true)
-
-    useBroadcastStore.getState().setAutoLive(false)
     expect(useBroadcastStore.getState().autoLive).toBe(false)
+
+    useBroadcastStore.getState().setAutoLive(true)
+    expect(useBroadcastStore.getState().autoLive).toBe(true)
+    useBroadcastStore.getState().setAutoLive(false)
   })
 
   it("setLiveVerse records the source verse for re-presentation", async () => {
