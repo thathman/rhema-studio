@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-21 04:32 WAT)
+- Head: see `git log fork/main` (2026-10-21 04:40 WAT)
 - Contents: songs database (migration 0003, FTS search, JSON import/export), song rundown items, lyric slides and `presentSlide`, Quick find across verses/hymn numbers/songs; numbered-book search, Yoruba OYCB Bible (CC BY-SA 4.0), dual-language themes, CI; Home/Prepare/Present/More shell with Standard and Production present views; `studio.db` (migrations 0001, 0002) with saved services, optimistic concurrency, audit trail, backup-before-migrate; translation-resolution policy and atomic go-live.
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -24,7 +24,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 419 vitest tests in 58 files pass (420 on the multiview PR); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
+- Frontend: 424 vitest tests in 61 files pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 7 errors, all upstream React hook patterns in untouched components (was 68 before #81).
 - Rust: `rhema-content` 44 tests pass; `rhema-api` 115; app `cargo check` and clippy in CI.
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
 
@@ -55,6 +55,6 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Next eligible tasks
 
-1. OP-004 multiview — in PR (#93). Then AR-003 series reuse (add items from a past service), AR-002 OBS recording markers via obs-websocket (needs OBS to verify).
+1. AR-002 optional OBS connection — in PR (#95). After it, the buildable backlog is small: SG-003 action links (external giving/prayer systems need a product choice), PT-006 MIDI (needs a Rust MIDI crate; WebKit has no Web MIDI), ST-009 identity migration at release time.
 2. Blocked on owner decisions: #72 sync approach (CL-005/006 remote delivery), #34 Canva relay (CV-002…); PR #4 speech (ST-004; AR-004 and AI-001 follow it).
-3. Desktop or hardware only: video/NDI rates and codecs (10ab), lower-third keying (10ac), monitors (10ad), OBS 720p30 smoke (OP-005), PT-006 MIDI, QA-010 drill (#62), QA-007 benchmarks, acceptance rows 1–10ae (#31), Windows smoke (#32); ST-009 app identity migration at release time.
+3. Desktop or hardware only: rows 10ab (video), 10ac (lower thirds), 10ad (monitors), 10ae (multiview), 10ag (OBS), OP-005 OBS 720p30 smoke, QA-010 drill (#62), QA-007 benchmarks, acceptance rows 1–10ag (#31), Windows smoke (#32).
