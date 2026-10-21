@@ -54,6 +54,9 @@ jobs:
           bun run data/download-sources.ts
           bun run data/build-bible-db.ts
 
+      - name: Third-party notices (licence check + every package's licence text)
+        run: bun scripts/check-licenses.ts --notices data/THIRD-PARTY-NOTICES.md
+
       - name: Download bundled Whisper model
         run: bun run download:whisper
 

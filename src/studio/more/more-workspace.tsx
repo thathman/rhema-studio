@@ -145,7 +145,8 @@ export function MoreWorkspace() {
             <p className="mt-2">
               NDI® is a registered trademark of Vizrt NDI AB. The optional NDI runtime is used under the NDI SDK licence; it is not
               part of Rhema's MIT-licensed code. Fonts (Geist, Inter, Source Serif 4) are under the SIL Open Font License 1.1.
-              The full inventory is in docs/LICENSES.md.
+              Every open-source component and its licence text: licenses/THIRD-PARTY-NOTICES.md in the application resources;
+              the full inventory is in docs/LICENSES.md.
             </p>
           </section>
         </div>

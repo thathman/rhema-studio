@@ -4,7 +4,9 @@
     "resources": {
       "../data/rhema.db": "rhema.db",
       "../sdk/ndi/macos/libndi.dylib": "sdk/ndi/macos/libndi.dylib",
-      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md"
+      "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md",
+      "../LICENSE": "licenses/LICENSE.txt",
+      "../data/THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md"
     }
   }
 }
