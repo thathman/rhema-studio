@@ -129,13 +129,14 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 
 ## Artifacts
 
-The final clean build (no QA bridge: the binary has no bridge code), built from
-this branch, is on the owner's Desktop, not published anywhere:
+The current clean build (no QA bridge: the binary has no bridge code), built from
+`main` at `9ff09db` (includes the bilingual theme controls #165 and the Studio tour #166),
+is on the owner's Desktop, not published anywhere:
 
 | File | Size | SHA-256 |
 |---|---|---|
-| `~/Desktop/Rhema-Intel-QA/Rhema-0.3.2-intel-x86_64.dmg` | 841 MB | `30003811d8d7964850b0b93f54f61760544c201d7ed9e7aa46cfaea71c234d72` |
-| `~/Desktop/Rhema-Intel-QA/Rhema.app` (executable `Contents/MacOS/Rhema`) | 1.0 GB | `c1f98a1c252bcd328b94dccca7c126c470e22484773ece01ba3a18e55f93f0b6` |
+| `~/Desktop/Rhema-Intel-QA/Rhema-0.3.2-intel-x86_64.dmg` | 842 MB | `d7234fd716a5cd27281d76b061fdf919a6378c4d2cdafa3168a3e1d58029483b` |
+| `~/Desktop/Rhema-Intel-QA/Rhema.app` (executable `Contents/MacOS/Rhema`) | 1.0 GB | `1029226da1c544a1b7b9000dff738d791494d4b271a8aa21ff6f1180d5b07ddc` |
 
 - Mach-O x86_64 only; signature ad hoc, identifier `com.openbezal.rhema`;
   `spctl` rejects it (not notarised), as expected for a local build.
