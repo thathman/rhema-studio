@@ -29,6 +29,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - macOS: Cmd+Q asks about unsaved service changes, like closing the window.
 
 ### Services
+- Every saved detail counts as a change (video loop and sound, QR addresses); details from a newer version are kept when saving. Closing asks about an unsaved song and an unsaved rundown too. A song changed elsewhere can be kept as a new song. A theme an output uses cannot be deleted.
 - A song can carry its backing track; Present offers it under Sound while the song is up (plays only when you press Play).
 - Team comments on any item (never on screen); they travel with the service file, and "n new comments" shows what others wrote.
 - Optional: ask before the first go-live of a service that is not approved (More; off by default; never mid-service).
