@@ -495,5 +495,16 @@ describe("createFromRundown", () => {
     useQueueStore.getState().clearQueue()
     expect(unsavedScratch(useQueueStore.getState().items, current)).toBe(false) // nothing on screen, nothing to lose
   })
+
+  it("a verse added and saved is pinned on screen too, so a later translation change does not move it (RG-06)", async () => {
+    await openStored()
+    const fresh: VerseQueueItem = { id: "new-v", verse: { id: 0, translation_id: 1, book_number: 66, book_name: "Revelation", book_abbreviation: "", chapter: 22, verse: 20, text: "" }, reference: "Revelation 22:20", confidence: 1, source: "manual", added_at: 0 }
+    useQueueStore.getState().addItem(fresh)
+    mockInvoke.mockImplementation(async (cmd: string, a: { items?: unknown[] }) => (cmd === "content_replace_items" ? { program: { ...stored.program, revision: 2 }, items: a.items } : null))
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+    const onScreen = useQueueStore.getState().items.find((i) => i.id === "new-v") as VerseQueueItem
+    expect(onScreen.translation).toBe("KJV")
+    expect(useServiceStore.getState().dirty).toBe(false)
+  })
 })
 

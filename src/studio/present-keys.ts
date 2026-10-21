@@ -13,9 +13,18 @@ interface KeyLike {
 }
 
 /** Shortcuts must never fire while the operator is typing. */
-export function shouldIgnoreKeyboard(target: EventTarget | null): boolean {
+/** A modal dialog is open: no Present key acts behind it (RG-09). */
+const OPEN_MODAL = '[data-slot="dialog-content"][data-state="open"], [data-slot="sheet-content"][data-state="open"], [role="alertdialog"][data-state="open"]'
+/** Focus is in a popover, menu or list, whose own keys (arrows, Escape) must not also step or clear. */
+const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]'
+/** A presenter clicker's keys mean nothing in a popover, so they still work from one. */
+const CLICKER_KEYS = new Set(["PageDown", "PageUp"])
+
+export function shouldIgnoreKeyboard(target: EventTarget | null, key?: string): boolean {
+  if (typeof document !== "undefined" && document.querySelector?.(OPEN_MODAL)) return true
   if (!target || typeof (target as HTMLElement).tagName !== "string") return false
   const el = target as HTMLElement
+  if (el.closest?.(OVERLAY)) return !(key !== undefined && CLICKER_KEYS.has(key))
   const tag = el.tagName.toLowerCase()
   if (tag === "input" || tag === "textarea" || tag === "select") return true
   if (el.isContentEditable) return true

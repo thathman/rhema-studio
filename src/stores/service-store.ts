@@ -690,17 +690,32 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       return "unsupported"
     }
     const generation = ++saveGeneration
-    const snapshotItems = useQueueStore.getState().items
+    // Verses never saved take their translations now (the one they were added in, and the
+    // active second one): the save writes them, and the items on screen get the same pins,
+    // so presenting them follows the saved service, not a later change of translation (RG-06).
+    const active = activeTranslations()
+    const pins = new Map<string, { translation: string | null; secondary_translation: string | null }>()
+    const snapshotItems = useQueueStore.getState().items.map((i) => {
+      if (!isVerseItem(i) || i.translation !== undefined) return i
+      const pin = { translation: translationAbbrev(i.verse.translation_id), secondary_translation: i.secondary_translation === undefined ? active.secondary : i.secondary_translation }
+      pins.set(i.id, pin)
+      return { ...i, ...pin }
+    })
     const snapshot = rundownSignature(snapshotItems)
     set({ saving: true, conflict: null })
     try {
       const data = await invoke<ProgramWithItems>("content_replace_items", {
         programId: current.id,
         expectedRevision: current.revision,
-        items: toItemInputs(snapshotItems, translationAbbrev, activeTranslations()),
+        items: toItemInputs(snapshotItems, translationAbbrev, active),
       })
       if (generation !== saveGeneration) return "saved" // a newer save owns the state now
       if (get().current?.id !== current.id) return "saved" // discarded or another service opened meanwhile: do not link it back
+      if (pins.size > 0) {
+        useQueueStore.setState((q) => ({
+          items: q.items.map((i) => (isVerseItem(i) && i.translation === undefined && pins.has(i.id) ? { ...i, ...pins.get(i.id) } : i)),
+        }))
+      }
       // What was saved is the new baseline; edits made meanwhile stay dirty.
       baseline = snapshot
       set((s) => ({
