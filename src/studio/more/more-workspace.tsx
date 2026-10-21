@@ -89,7 +89,7 @@ export function MoreWorkspace() {
     <div className="flex h-full flex-col">
       <WorkspaceHeader title="More" />
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <div className="mx-auto flex max-w-3xl flex-col gap-6" data-tour="more-list">
           {groups.map((g) => (
             <section key={g.title} aria-label={g.title}>
               <h2 className="mb-2 px-1 text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">{g.title}</h2>

@@ -20,6 +20,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Getting started
+- The first-run tour now teaches Rhema Studio as it is: Home, Prepare, Present and More, opening each place as it goes.
+
 ### Themes
 - Bilingual screens: the Theme Designer styles both languages together or each one alone (tabs name the translations), and a "Space between languages" setting sets the gap on verses and songs.
 
