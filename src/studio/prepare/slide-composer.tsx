@@ -8,6 +8,7 @@ import type { SlideQueueItem } from "@/types"
 import { announcementBody } from "@/lib/announcement"
 import { safeLink } from "@/lib/qr-bulletin"
 import { slidePages } from "@/lib/slide-pages"
+import { hasReadingMarks, readingPages } from "@/lib/responsive-reading"
 
 const EXAMPLES = [
   { title: "Welcome", body: "We're glad you're here.\nPlease silence your phone." },
@@ -24,7 +25,7 @@ const EXAMPLES = [
 export function SlideComposer() {
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
-  const [mode, setMode] = useState<"free" | "announcement" | "qr">("free")
+  const [mode, setMode] = useState<"free" | "announcement" | "qr" | "reading">("free")
   const [when, setWhen] = useState("")
   const [where, setWhere] = useState("")
   const [link, setLink] = useState("")
@@ -43,12 +44,13 @@ export function SlideComposer() {
     added_at: 0,
   })
   const preview = (t = title, b = body, w = when, p = where, m = mode, l = link) => {
-    const full = m === "announcement" ? announcementBody(w, p, b) : b
+    const full = m === "announcement" ? announcementBody(w, p, b) : m === "reading" ? (readingPages(b)[0] ?? "") : b
     const safe = m === "qr" ? safeLink(l) : null
     if (!t.trim() && !full.trim() && !safe) return
     useBibleStore.getState().selectSlide({ item: { ...draft(), slide: { title: t, body: full, ...(safe ? { link: safe } : {}) } }, index: 0 })
   }
-  const pages = mode === "qr" ? [] : slidePages(composedBody)
+  // A responsive reading is always one slide per exchange (leader, then people).
+  const pages = mode === "qr" ? [] : mode === "reading" ? readingPages(body) : slidePages(composedBody)
   const appendToService = (item: SlideQueueItem) => {
     const queue = useQueueStore.getState()
     const before = queue.items.length
@@ -74,6 +76,13 @@ export function SlideComposer() {
   }
   const add = () => {
     if (empty) return
+    if (mode === "reading") {
+      if (pages.length === 1) {
+        appendToService({ ...draft(), id: crypto.randomUUID(), added_at: Date.now(), slide: { title, body: pages[0] } })
+        reset()
+      } else addPages()
+      return
+    }
     appendToService({ ...draft(), id: crypto.randomUUID(), added_at: Date.now() })
     setTitle("")
     setBody("")
@@ -85,7 +94,7 @@ export function SlideComposer() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div role="group" aria-label="Slide kind" className="flex w-fit rounded-md border border-border p-0.5">
-        {(["free", "announcement", "qr"] as const).map((m) => (
+        {(["free", "announcement", "qr", "reading"] as const).map((m) => (
           <button
             key={m}
             type="button"
@@ -93,7 +102,7 @@ export function SlideComposer() {
             onClick={() => { setMode(m); preview(title, body, when, where, m) }}
             className={`h-7 rounded px-2.5 text-xs font-medium ${mode === m ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
-            {m === "free" ? "Any text" : m === "announcement" ? "Announcement" : "QR link"}
+            {m === "free" ? "Any text" : m === "announcement" ? "Announcement" : m === "qr" ? "QR link" : "Responsive reading"}
           </button>
         ))}
       </div>
@@ -102,6 +111,11 @@ export function SlideComposer() {
           <Input aria-label="Link" placeholder="https://… (giving, sign-up, bulletin)" value={link} onChange={(e) => { setLink(e.target.value); preview(title, body, when, where, "qr", e.target.value) }} className="h-9" />
           <p className="text-[0.6875rem] text-muted-foreground">{link.trim() && !safeLink(link) ? "Only a full http(s) address can be shown as a code." : "The code and the address are shown together on a white panel, so people see where it goes. Works offline; nothing is tracked. The preview shows the words; the code itself appears on the output. A background picture is not used on this slide."}</p>
         </div>
+      )}
+      {mode === "reading" && (
+        <p className="text-[0.6875rem] text-muted-foreground">
+          {body.trim() && !hasReadingMarks(body) ? "No parts marked yet: start the leader's lines with L: and the congregation's with P: (or All:)." : "One slide per exchange; \"Leader:\" and \"All:\" show where each part starts. The preview shows the first slide."}
+        </p>
       )}
       {mode === "announcement" && (
         <div className="grid grid-cols-2 gap-2">
@@ -118,15 +132,15 @@ export function SlideComposer() {
       />
       <Textarea
         aria-label="Slide text"
-        placeholder={mode === "announcement" ? "Details, one line per line (what to bring, who to ask…)" : "What goes on screen. One line per line.\nPress Add when it looks right in the preview."}
+        placeholder={mode === "announcement" ? "Details, one line per line (what to bring, who to ask…)" : mode === "reading" ? "L: Give thanks to the Lord, for he is good.\nP: His love endures for ever.\n(L: / Leader:  and  P: / People: / All: / C:)" : "What goes on screen. One line per line.\nPress Add when it looks right in the preview."}
         value={body}
         onChange={(e) => { setBody(e.target.value); preview(title, e.target.value) }}
         rows={6}
         className="text-sm"
       />
       <div className="flex items-center gap-2">
-        <Button size="sm" disabled={empty} onClick={add}><PlusIcon /> Add to service</Button>
-        {pages.length > 1 && (
+        <Button size="sm" disabled={empty || (mode === "reading" && pages.length === 0)} onClick={add}><PlusIcon /> {mode === "reading" && pages.length > 1 ? `Add as ${pages.length} slides` : "Add to service"}</Button>
+        {mode !== "reading" && pages.length > 1 && (
           <Button size="sm" variant="outline" onClick={addPages} title="Split at blank lines, at most six lines a slide">
             Add as {pages.length} slides
           </Button>

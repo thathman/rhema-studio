@@ -544,3 +544,10 @@ report), but launching it cannot.
 | 10ax.2 | Pencil → Archive this service. | It disappears from the picker and Home; "Show archived (1)" brings it back into the picker; its history and logs are intact; pencil → Bring back restores it. | Unverified |
 | 10ax.4 | More → Your name = "Tolu"; Prepare → Approve. | The Approve button's tooltip and Home read "Approved by Tolu …". | Unverified |
 | 10ax.3 | Start an older build (before 0010) on this database. | It refuses with "used by a newer Rhema Studio" (downgrade guard) and leaves the file alone. | Unverified |
+
+### 10az. Responsive reading (FR-01, SV-005)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10az.1 | Prepare → Slides → Responsive reading; paste Psalm 136:1–3 with L: and P: marks; Add. | One slide per exchange, each reading "Leader: …" then "All: …"; Next steps through them in order. | Unverified |
+| 10az.2 | Paste the same text without marks. | The composer says no parts are marked and how to mark them. | Unverified |
