@@ -10,6 +10,9 @@ const CONTROL_EXCEPT_NEWLINE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g
 const cut = (s: string, n: number) => Array.from(s).slice(0, n).join("")
 
+/** A name as comments store it: control characters out, spaces collapsed, at most 60 characters. */
+export const commentAuthor = (raw: string) => cut(raw.replace(CONTROL, " ").replace(/\s+/g, " ").trim(), 60).trim()
+
 /** Comments as the crate accepts them: trimmed, control characters removed, cut to size, the newest 100. */
 export function cleanComments(list: unknown): ItemComment[] {
   if (!Array.isArray(list)) return []
@@ -20,7 +23,7 @@ export function cleanComments(list: unknown): ItemComment[] {
     if (typeof text !== "string" || typeof at !== "string" || Number.isNaN(Date.parse(at))) continue
     const body = cut(text.replace(CONTROL_EXCEPT_NEWLINE, " ").trim(), MAX_COMMENT_CHARS).trim()
     if (!body) continue
-    const name = cut((typeof by === "string" ? by : "").replace(CONTROL, " ").replace(/\s+/g, " ").trim(), 60).trim() || "Unnamed"
+    const name = commentAuthor(typeof by === "string" ? by : "") || "Unnamed"
     out.push({ by: name, at: cut(at, 40), text: body })
   }
   return out.slice(-MAX_COMMENTS)
@@ -49,7 +52,7 @@ export const commentKey = (c: ItemComment) => `${c.at}|${c.by}`
  * from another computer do not count either.
  */
 export function unreadComments(items: QueueItem[], seen: ReadonlySet<string>, me: string): Array<{ item: QueueItem; comment: ItemComment }> {
-  const mine = me.trim().toLowerCase()
+  const mine = commentAuthor(me).toLowerCase()
   return items.flatMap((item) =>
     (item.comments ?? [])
       .filter((c) => !seen.has(commentKey(c)) && !(mine && c.by.trim().toLowerCase() === mine))

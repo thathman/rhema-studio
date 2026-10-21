@@ -31,5 +31,6 @@ describe("team comments (CL-007)", () => {
     expect(unreadComments(items, new Set([commentKey(c("Pastor Ade", "2026-10-21T09:00:00Z", "old"))]), "Tolu").map((u) => u.comment.text)).toEqual(["new"])
     // No names set on either computer: the other computer's comments still count.
     expect(unreadComments([item([c("Unnamed", "2026-10-21T11:00:00Z", "from the pastor's laptop")])], new Set(), "")).toHaveLength(1)
+    expect(unreadComments([item([c("Tolu Ade", "2026-10-21T11:00:00Z", "mine, from my laptop")])], new Set(), "  Tolu   Ade ")).toEqual([])
   })
 })
