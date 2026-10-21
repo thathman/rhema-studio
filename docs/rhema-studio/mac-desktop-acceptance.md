@@ -116,6 +116,20 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10al.1 (one running copy) | V: launching again left one process (single instance) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
+## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
+
+Two profiles on this Mac as the home and church laptops, a local folder as the shared folder:
+
+| Guide row | Result |
+|---|---|
+| 10bc.1 | V: Publish wrote "QA Sunday 2026-10-25 v8 <checksum>"; after Approve, Publish wrote a second v8 file; Publish again: "already in the church folder" |
+| 10bc.2 | V: a change, Save, Publish wrote v9; the earlier files untouched |
+| 10bc.3 | V: church Home → Church folder: one row "v9 · 5 items · not approved · 2 older versions" (v8 was the approved one) |
+| 10bc.4 | V: Open brought it in as a new service with its items, not approved here; the row then says "opened here" |
+| 10bc.5 | U: needs a real sync client or NAS |
+| 10bd.1 | V: after home published v10 (approved): church Home "v10 · approved · newer than the copy opened here"; Prepare: "A newer version (v10, approved) is in the church folder. This one is v9." The open v9 copy unchanged |
+| 10bd.2 | V: "Open the newer one" opened v10 as its own service; v9 kept |
+
 ## Slide-change latency (QA-007, NFR-03)
 
 Measured by the output windows' own send-to-drawn log (#125), 20 changes per line, Next/Previous across slides, songs, verses and a picture, on this i7-8569U (not a low-end PC):
