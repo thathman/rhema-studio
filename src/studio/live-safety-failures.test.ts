@@ -21,6 +21,10 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSongStore } from "@/stores/song-store"
+import { useApprovalGateStore } from "@/stores/approval-gate-store"
+import { useServiceStore } from "@/stores/service-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import type { Program } from "@/types/content"
 
 const verse = (b: number, c: number, v: number): Verse => ({ id: 0, translation_id: 1, book_number: b, book_name: `Book${b}`, book_abbreviation: "", chapter: c, verse: v, text: "text" })
 const amazing: SongWithSections = {
@@ -151,3 +155,22 @@ describe("live output under injected failures", () => {
     expect(live().isLive).toBe(true)
   })
 })
+
+describe("approval gate (CL-002, opt-in) on every present that reaches the screen", () => {
+  it("holds a plain present while on air (Production rundown click after Welcome), and leaves the screen alone", async () => {
+    useSettingsStore.setState({ requireApproval: true })
+    useServiceStore.setState({ current: { id: "p9", title: "Sunday", revision: 2, approved_revision: null } as unknown as Program })
+    useApprovalGateStore.setState({ held: null, retry: null, acknowledged: [] })
+    useBroadcastStore.setState({ rehearsal: false, isLive: true, liveVerse: null })
+    expect(await presentVerse(verse(43, 3, 16))).toBe("held_for_approval")
+    expect(useBroadcastStore.getState().liveVerse).toBeNull()
+    expect(useApprovalGateStore.getState().held?.id).toBe("p9")
+    useApprovalGateStore.getState().dismiss()
+    // Off air, a plain present only previews and is never held.
+    useBroadcastStore.setState({ isLive: false })
+    expect(await presentVerse(verse(43, 3, 16))).not.toBe("held_for_approval")
+    useSettingsStore.setState({ requireApproval: false })
+    useServiceStore.setState({ current: null })
+  })
+})
+

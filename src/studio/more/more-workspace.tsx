@@ -40,6 +40,7 @@ export function MoreWorkspace() {
   const [brandOpen, setBrandOpen] = useState(false)
   const operatorName = useSettingsStore((s) => s.operatorName)
   const setOperatorName = useSettingsStore((s) => s.setOperatorName)
+  const requireApproval = useSettingsStore((s) => s.requireApproval)
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
@@ -122,6 +123,15 @@ export function MoreWorkspace() {
             <label htmlFor="operator-name" className="block text-sm font-medium">Your name</label>
             <p className="mb-2 text-xs text-muted-foreground">Goes on the service log and on approvals, so "who changed this?" has an answer. Optional; stays on this computer.</p>
             <Input id="operator-name" value={operatorName} onChange={(e) => setOperatorName(e.target.value)} placeholder="e.g. Tolu" className="h-9 max-w-xs" maxLength={60} />
+            <label className="mt-3 flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={requireApproval} onChange={(e) => useSettingsStore.getState().setRequireApproval(e.target.checked)} />
+              <span>
+                Ask before showing an unapproved service
+                <span className="block text-xs text-muted-foreground">
+                  When the open service is not approved, or changed after approval, the first Show live asks first. Quick screens and rehearsal are never held. Off by default.
+                </span>
+              </span>
+            </label>
           </section>
 
           <section aria-label="About" className="rounded-lg border border-border bg-card p-4 text-xs text-muted-foreground">

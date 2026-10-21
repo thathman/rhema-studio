@@ -6,6 +6,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
+import { approvalHolds } from "@/stores/approval-gate-store"
 
 /**
  * Find the queue index of the item currently on the live output.
@@ -30,6 +31,13 @@ function findLiveQueueIndex(): number | null {
 export async function presentQueueItem(index: number, slide: number | "last" = 0): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
+  // Before the active item moves: a held go-live must change nothing (CL-002).
+  const id = item.id
+  const again = () => {
+    const i = useQueueStore.getState().items.findIndex((x) => x.id === id)
+    if (i !== -1) void presentQueueItem(i, slide)
+  }
+  if (!isSoundItem(item) && approvalHolds(again)) return
   useQueueStore.getState().setActive(index)
   if (isSlideItem(item)) {
     await presentCustomSlide(item, { goLive: true }).catch((e) => console.warn("[remote-actions] presentQueueItem (slide) failed:", e))
@@ -169,6 +177,7 @@ export const remoteActions = {
    * saved secondary translation applies.
    */
   sendToLive: () => {
+    if (approvalHolds(() => remoteActions.sendToLive())) return
     const bible = useBibleStore.getState()
     const queue = useQueueStore.getState()
     if (bible.selectedSlide) {
@@ -224,6 +233,7 @@ export const remoteActions = {
 
   /** Off air also cancels any present still loading, so it cannot reappear later. */
   toggleOnAir: (active: boolean) => {
+    if (active && approvalHolds(() => remoteActions.toggleOnAir(true))) return
     if (!active) cancelPendingPresents()
     useBroadcastStore.getState().setLive(active)
   },

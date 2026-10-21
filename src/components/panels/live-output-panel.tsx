@@ -3,6 +3,7 @@ import { PanelHeader } from "@/components/ui/panel-header"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { approvalHolds } from "@/stores/approval-gate-store"
 import { useBroadcastStore, useBibleStore } from "@/stores"
 import {
   getTranslationLabel,
@@ -84,6 +85,7 @@ export function LiveOutputPanel() {
   }, [activeTranslationId, secondaryTranslationId])
 
   const handleGoLive = (checked: boolean) => {
+    if (checked && approvalHolds(() => handleGoLive(true))) return
     useBroadcastStore.getState().setLive(checked)
     // Going live with nothing presented yet: present the current preview
     // verse so the output isn't blank.
