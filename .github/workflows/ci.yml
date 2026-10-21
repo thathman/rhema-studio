@@ -35,6 +35,8 @@ jobs:
         run: bunx tsc -b --noEmit
       - name: Unit tests
         run: bunx vitest run
+      - name: Dependency licences (npm production tree)
+        run: bun scripts/check-licenses.ts --js
       - name: Production build (tsc -b && vite build)
         run: bun run build
 
@@ -105,6 +107,8 @@ jobs:
       - name: App crate check
         working-directory: src-tauri
         run: cargo check -p rhema
+      - name: Dependency licences (Rust crates)
+        run: bun scripts/check-licenses.ts --rust
       - name: App crate clippy (pre-existing warnings allowed, errors not)
         working-directory: src-tauri
         run: cargo clippy -p rhema
