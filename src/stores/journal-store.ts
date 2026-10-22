@@ -112,5 +112,7 @@ function labelOf(s: Aired): string {
   if (!s.liveVerse) return ""
   if (s.liveVerse.screen === "black") return "Black screen"
   if (s.liveVerse.screen === "logo") return "Logo"
-  return s.liveVerse.reference || s.liveVerse.lines?.[0] || "slide"
+  // A picture or a QR slide has no words of its own: the log names its rundown item.
+  const item = s.liveItemId ? useQueueStore.getState().items.find((i) => i.id === s.liveItemId)?.reference : undefined
+  return s.liveVerse.reference || s.liveVerse.lines?.[0] || item || "slide"
 }
