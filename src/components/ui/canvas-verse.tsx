@@ -3,6 +3,7 @@ import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-ren
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import type { BroadcastTheme, LowerThird, Ticker, VerseRenderData } from "@/types"
 import { drawTicker } from "@/lib/ticker-draw"
+import { tickerReserve } from "@/lib/ticker"
 import { cn } from "@/lib/utils"
 
 interface CanvasVerseProps {
@@ -64,7 +65,7 @@ export const CanvasVerse = memo(function CanvasVerse({
         scale,
         imageCache: themeImageCache(),
       })
-      if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily, { imageCache: themeImageCache() })
+      if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily, { imageCache: themeImageCache(), reserveBottom: tickerReserve(ticker, displayH) })
       // A preview shows the words well into the crawl (a fresh ticker's words are still off to the right).
       if (ticker && verse?.screen !== "black") drawTicker(ctx, displayW, displayH, ticker, theme.verseText?.fontFamily, { imageCache: themeImageCache(), now: ticker.startedAt + 4000 })
     } catch (e) {

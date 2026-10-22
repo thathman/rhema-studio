@@ -44,6 +44,11 @@ export function normalizeTickerStyle(raw: Partial<TickerStyle> | null | undefine
   }
 }
 
+/** The height a running ticker takes along the bottom of a `height` frame (0 at the top or when off), for the lower third to stay above. */
+export function tickerReserve(ticker: { style: TickerStyle } | null | undefined, height: number): number {
+  return ticker && ticker.style.position === "bottom" ? Math.round((height * ticker.style.height) / 100) : 0
+}
+
 /** The items as one line of words (blank items dropped). */
 export function tickerText(items: string[], separator: string): string {
   const sep = separator.trim() ? `   ${separator.trim()}   ` : "     "

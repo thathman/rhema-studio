@@ -68,7 +68,7 @@ export interface LowerThirdLayout {
  * weight)` gives a line's width at a font size (only needed for a band sized
  * to its words). Pure, so it is tested without a canvas.
  */
-export function layoutLowerThird(width: number, height: number, lt: Pick<LowerThird, "line1" | "line2">, style: LowerThirdStyle, measure: (text: string, size: number, weight: number) => number): LowerThirdLayout {
+export function layoutLowerThird(width: number, height: number, lt: Pick<LowerThird, "line1" | "line2">, style: LowerThirdStyle, measure: (text: string, size: number, weight: number) => number, reserveBottom = 0): LowerThirdLayout {
   const two = !!lt.line2 && !!lt.line1
   // One line: a shorter band, the same words size.
   const h = Math.round((height * style.height) / 100) * (two ? 1 : 0.68)
@@ -82,7 +82,9 @@ export function layoutLowerThird(width: number, height: number, lt: Pick<LowerTh
   const maxBand = width - marginX * 2
   const w = Math.min(maxBand, style.width > 0 ? Math.round((width * style.width) / 100) : Math.ceil(words + padX * 2 + (style.align === "center" ? 0 : accentW)))
   const x = style.align === "left" ? marginX : style.align === "right" ? width - marginX - w : Math.round((width - w) / 2)
-  const y = Math.round(height - (height * style.bottom) / 100 - h)
+  // Clear of anything kept along the bottom (a ticker), with a small gap.
+  const floor = Math.max((height * style.bottom) / 100, reserveBottom > 0 ? reserveBottom + height * 0.02 : 0)
+  const y = Math.round(height - floor - h)
   const accent = accentW
     ? style.align === "center"
       ? { x, y, w, h: accentW }

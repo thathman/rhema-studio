@@ -78,6 +78,10 @@ pub async fn ensure_broadcast_window(
     .title(title.unwrap_or_else(|| "Rhema Output".to_string()))
     .inner_size(1920.0, 1080.0)
     .visible(false)
+        // An output keeps drawing while hidden (NDI) or covered: without this,
+        // macOS throttles its timers to about once a second, so a ticker,
+        // a lower third's entrance or a video reach NDI at 1 fps.
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
     .skip_taskbar(true)
     .focused(false)
     .build()
@@ -209,6 +213,10 @@ pub async fn open_broadcast_window(
         )
         .title(title.unwrap_or_else(|| "Rhema Output".to_string()))
         .visible(false)
+        // An output keeps drawing while hidden (NDI) or covered: without this,
+        // macOS throttles its timers to about once a second, so a ticker,
+        // a lower third's entrance or a video reach NDI at 1 fps.
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .always_on_top(false)
         .skip_taskbar(false)
         .focused(false)

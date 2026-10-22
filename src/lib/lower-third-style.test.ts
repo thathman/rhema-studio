@@ -21,6 +21,13 @@ describe("lower third layout", () => {
     expect(r.band.x + r.band.w).toBe(1920 - Math.round(1920 * 0.06))
     expect(r.line1.align).toBe("right")
   })
+  it("stays above a ticker along the bottom", () => {
+    const l = layoutLowerThird(1920, 1080, { line1: "Pastor Tolu", line2: "x" }, DEFAULT_LOWER_THIRD_STYLE, measure, 76)
+    expect(l.band.y + l.band.h).toBeLessThanOrEqual(1080 - 76 - 20)
+    // A band placed high already is left where it is.
+    const high = layoutLowerThird(1920, 1080, { line1: "x", line2: "y" }, { ...DEFAULT_LOWER_THIRD_STYLE, bottom: 40 }, measure, 76)
+    expect(high.band.y + high.band.h).toBe(1080 - Math.round(1080 * 0.4))
+  })
   it("a saved style is completed and kept in bounds", () => {
     const s = normalizeLowerThirdStyle({ id: "x", name: "Mine", height: 999, background: { kind: "video", mediaId: "m" } as never })
     expect(s.height).toBe(50)

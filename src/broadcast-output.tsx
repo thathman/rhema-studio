@@ -18,6 +18,7 @@ import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, NdiConfigEventPayload, StagePayload, Ticker } from "@/types"
 import { drawTicker } from "@/lib/ticker-draw"
+import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
 import { drawStage } from "@/lib/stage-canvas"
@@ -130,6 +131,7 @@ function BroadcastCanvas() {
           imageCache: themeImageCache(),
           video: backingPlayer?.element() ?? null,
           progress: entranceProgress(data.overlay, Date.now()),
+          reserveBottom: tickerReserve(data.ticker, height),
         })
       }
       if (data.ticker && verse?.screen !== "black") {

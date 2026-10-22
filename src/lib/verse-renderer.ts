@@ -515,6 +515,8 @@ export interface LowerThirdDrawOptions {
   video?: HTMLVideoElement | null
   /** Its entrance, 0…1 (1 = fully on). */
   progress?: number
+  /** Pixels along the bottom to stay above (a ticker there). */
+  reserveBottom?: number
 }
 
 /** Words wrapped to `maxW` at the largest size (down to half) that fits `maxH`; at most three lines. */
@@ -554,7 +556,7 @@ export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, hei
     ctx.font = `${weight} ${size}px ${family}`
     return Math.max(...text.split("\n").map((t) => ctx.measureText(t).width))
   }
-  const layout = layoutLowerThird(width, height, lt, style, measure)
+  const layout = layoutLowerThird(width, height, lt, style, measure, opts.reserveBottom)
   const { band } = layout
   const progress = opts.progress ?? 1
   ctx.save()
