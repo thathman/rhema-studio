@@ -11,6 +11,7 @@ import { resetTimerLogged } from "@/lib/timer-reset"
 import { useQueueStore } from "@/stores"
 import { endByLeftMs, formatMinutes, projectedEnd, timingSummary } from "@/lib/service-timing"
 import { useServiceTiming } from "@/studio/use-service-timing"
+import { useHold } from "@/stores/hold-store"
 
 const PRESETS = [20, 30, 45, 60]
 /** Manual timing correction, with its line in the service log (FR-07 "with audit"). */
@@ -143,7 +144,28 @@ export function ServiceTimer() {
           <Button size="xs" variant="outline" disabled={idle} onClick={() => correct(1)}>+1 min</Button>
           <span className="text-muted-foreground">(noted in the service log)</span>
         </div>
+        <HoldControl />
       </PopoverContent>
     </Popover>
+  )
+}
+
+/** Hold the service with a reason (issue #196): logged, on the stage display; loops and timed moves wait until Resume. */
+function HoldControl() {
+  const hold = useHold((s) => s.hold)
+  const [reason, setReason] = useState("")
+  if (hold) {
+    return (
+      <div className="mt-3 flex items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2 py-1.5 text-xs" role="status">
+        <span className="min-w-0 flex-1"><b>On hold</b> since {clock(hold.since)}: {hold.reason}</span>
+        <Button size="xs" onClick={() => useHold.getState().resume()}>Resume</Button>
+      </div>
+    )
+  }
+  return (
+    <form className="mt-3 flex items-center gap-1.5 text-xs" onSubmit={(e) => { e.preventDefault(); useHold.getState().start(reason); setReason("") }}>
+      <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. waiting for the pastor" maxLength={80} aria-label="Reason for the hold" className="h-7 flex-1 text-xs" />
+      <Button size="xs" variant="outline" type="submit" title="Hold: noted in the service log and shown on the stage display; loops and timed moves wait until Resume">Hold</Button>
+    </form>
   )
 }
