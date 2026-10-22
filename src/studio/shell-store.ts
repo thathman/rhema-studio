@@ -63,6 +63,15 @@ interface ShellState extends ShellPrefs {
   /** Ask the shell to go to Design at this section (it runs the same guards as the sidebar). */
   designRequest: DesignTab | null
   openDesign: (tab: DesignTab) => void
+  /** Ask the shell to go to a workspace (it runs the same guards as the sidebar). */
+  goRequest: Workspace | null
+  goTo: (workspace: Workspace) => void
+  /** Find anything (Cmd/Ctrl+K). */
+  searchOpen: boolean
+  setSearchOpen: (open: boolean) => void
+  /** Words handed to Present's Quick find (it takes them once). */
+  pendingFind: string | null
+  findInPresent: (query: string) => void
   setWorkspace: (workspace: Workspace) => void
   setPresentView: (view: PresentView) => void
   openOutputs: () => void
@@ -82,6 +91,12 @@ export const useShellStore = create<ShellState>((set) => ({
   setDesignTab: (designTab) => set({ designTab }),
   designRequest: null,
   openDesign: (tab) => set({ designRequest: tab }),
+  goRequest: null,
+  goTo: (goRequest) => set({ goRequest }),
+  searchOpen: false,
+  setSearchOpen: (searchOpen) => set({ searchOpen }),
+  pendingFind: null,
+  findInPresent: (pendingFind) => set({ pendingFind, goRequest: "present" }),
   setWorkspace: (workspace) => set({ workspace }),
   setPresentView: (presentView) => set({ presentView }),
   openOutputs: () => set({ outputsDialogOpen: true }),

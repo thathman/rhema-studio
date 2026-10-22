@@ -12,6 +12,7 @@ import { bibleActions } from "@/hooks/use-bible"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { presentActions } from "@/studio/present-actions"
+import { useShellStore } from "@/studio/shell-store"
 import { isSongItem, type SongSummary, type Verse } from "@/types"
 
 type Hit = { kind: "verse"; verse: Verse } | { kind: "song"; song: SongSummary }
@@ -98,6 +99,22 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => void runSearch(value), 180)
   }
+
+  // Words from Find anything (Cmd/Ctrl+K) land here in Present, once: already waiting when Present
+  // opens, or handed over while it is open.
+  useEffect(() => {
+    if (mode !== "present") return
+    const take = () => {
+      const q = useShellStore.getState().pendingFind
+      if (q === null) return
+      useShellStore.setState({ pendingFind: null })
+      onChange(q)
+    }
+    const t = setTimeout(take, 0)
+    const unsubscribe = useShellStore.subscribe((s, prev) => { if (s.pendingFind !== null && s.pendingFind !== prev.pendingFind) take() })
+    return () => { clearTimeout(t); unsubscribe() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one subscription per Quick find
+  }, [mode])
 
   const preview = (hit: Hit) => {
     if (hit.kind === "verse") {

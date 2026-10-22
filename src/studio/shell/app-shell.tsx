@@ -24,6 +24,7 @@ import { Sidebar } from "@/studio/shell/sidebar"
 import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
 import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
+import { GlobalSearch } from "@/studio/shell/global-search"
 
 /** What the top bar calls each page. */
 const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", design: "Design studio", more: "More tools" }
@@ -68,6 +69,12 @@ export function AppShell() {
     useShellStore.setState({ designRequest: null, designTab: designRequest })
     void go("design")
   }, [designRequest, go])
+  const goRequest = useShellStore((s) => s.goRequest)
+  useEffect(() => {
+    if (!goRequest) return
+    useShellStore.setState({ goRequest: null })
+    void go(goRequest)
+  }, [goRequest, go])
 
   // The Bible catalogue used to load only when the search panel mounted.
   useEffect(() => {
@@ -88,6 +95,13 @@ export function AppShell() {
     const items: NavItem[] = [...WORKSPACE_ITEMS, ...church]
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return
+      // Find anything: from anywhere, but not over another dialog.
+      if (e.key.toLowerCase() === "k") {
+        if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
+        e.preventDefault()
+        useShellStore.getState().setSearchOpen(true)
+        return
+      }
       const item = items.find((n) => n.key === e.key)
       if (!item && e.key !== ",") return
       e.preventDefault()
@@ -130,6 +144,7 @@ export function AppShell() {
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
       <SettingsDialog />
       <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+      <GlobalSearch />
     </div>
   )
 }
