@@ -45,13 +45,13 @@ export const TUTORIAL_STEPS: Step[] = [
   at({ workspace: "prepare" }, {
     target: '[data-tour="prepare-add"]',
     title: "Add to the service",
-    content: "Add passages, songs (in one or two languages), slides, pictures, videos and sound. Nothing in Prepare goes live.",
-    placement: "left",
+    content: "Add item opens passages, songs (in one or two languages), hymns, slides, pictures, videos and sound. Nothing in Prepare goes live.",
+    placement: "bottom",
   }),
   at({ workspace: "prepare" }, {
     target: '[data-tour="prepare-rundown"]',
     title: "The running order",
-    content: "Drag to reorder. Each item can carry notes, planned minutes and a translation of its own.",
+    content: "Drag to reorder. Select an item to edit it beside the list: what it shows, notes for the team and its planned minutes.",
     placement: "right",
   }),
   at({ workspace: "present", presentView: "standard" }, {
