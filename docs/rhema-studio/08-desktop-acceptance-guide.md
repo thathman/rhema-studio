@@ -276,8 +276,8 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10m.1 | Two congregation outputs; set one to "First language only" and the other to "Second language only" (More → Outputs → edit). Go live with a verse that has a second translation, then a bilingual song. | The first output shows only English, the second only Yoruba, same passage and slide; the operator preview still shows both. | Unverified |
-| 10m.2 | Go live with a verse that has no second translation on the "Second language only" output. | The verse is shown in its first language; the output never goes blank. | Unverified |
+| 10m.1 | Two congregation outputs; set one to "First language only" and the other to "Second language only" (More → Outputs → edit). Go live with a verse that has a second translation, then a bilingual song. | The first output shows only English, the second only Yoruba, same passage and slide; the operator preview still shows both. | Verified on the Intel Mac |
+| 10m.2 | Go live with a verse that has no second translation on the "Second language only" output. | The verse is shown in its first language; the output never goes blank. | Verified on the Intel Mac |
 ### 10n. One service as a file (CL-003)
 
 | # | Steps | Expected | Result |
@@ -304,13 +304,13 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10q.1 | More → Your name "Tolu". Approve a service. Save the service log. Restart the app. | The log's first line ends "operator: Tolu"; the name is still there after restart; `audit_events.actor` for the approve row is "Tolu" (inspect the database with sqlite3). | Unverified |
+| 10q.1 | More → Your name "Tolu". Approve a service. Save the service log. Restart the app. | The log's first line ends "operator: Tolu"; the name is still there after restart; `audit_events.actor` for the approve row is "Tolu" (inspect the database with sqlite3). | Verified on the Intel Mac |
 
 ### 10r. Earlier logs (AR-003)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10r.1 | After showing a few items, Library → Keep this log. Restart the app. Library → Earlier logs, search a reference you showed. | The log is listed with today's date; the search finds it; its download button saves the same text. | Unverified |
+| 10r.1 | After showing a few items, Library → Keep this log. Restart the app. Library → Earlier logs, search a reference you showed. | The log is listed with today's date; the search finds it; its download button saves the same text. | Verified on the Intel Mac |
 
 ### 10s. Remote control key (OP-006)
 
@@ -328,16 +328,16 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10u.1 | Settings → Remote: start HTTP, press "Pair a device". From a phone on the LAN: `curl -X POST http://<laptop>:8080/api/v1/pair -d '{"code":"<code>","name":"Tolu phone"}'`. | The reply carries a 64-character token; the laptop toasts "Tolu phone paired"; the code disappears; the device is listed. | Unverified |
-| 10u.2 | Send `next` with `X-Rhema-Key: <token>`; then Revoke the device; send again. Restart the app; check the list. | First request works; after revoke 401 at once (no restart); the device list survives restart; the token is never shown again. | Unverified |
-| 10u.3 | Press "Pair a device", send three wrong codes. | 403 with tries left, then the window closes (404 "pairing is not open"); the on-screen code remains until cancelled or two minutes pass. | Unverified |
+| 10u.1 | Settings → Remote: start HTTP, press "Pair a device". From a phone on the LAN: `curl -X POST http://<laptop>:8080/api/v1/pair -d '{"code":"<code>","name":"Tolu phone"}'`. | The reply carries a 64-character token; the laptop toasts "Tolu phone paired"; the code disappears; the device is listed. | Verified on the Intel Mac |
+| 10u.2 | Send `next` with `X-Rhema-Key: <token>`; then Revoke the device; send again. Restart the app; check the list. | First request works; after revoke 401 at once (no restart); the device list survives restart; the token is never shown again. | Verified on the Intel Mac |
+| 10u.3 | Press "Pair a device", send three wrong codes. | 403 with tries left, then the window closes (404 "pairing is not open"); the on-screen code remains until cancelled or two minutes pass. | Verified on the Intel Mac |
 
 ### 10v. Device roles (OP-006)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10v.1 | With a paired device (10u) send `{"command":"theme","value":"Dark"}` and `{"command":"next"}` with its token. Change it to "Present and change settings" in Settings, send theme again. | First theme request: 403 "may present but not change settings"; next works; after the change, theme works at once. Restart the app: the role is kept. | Unverified |
-| 10v.2 | Revoke the last paired device with no shared key set. Send `next` with no key. Untick "Require a key or a paired device", send again. | 401 while the switch is on with no keys; accepted after unticking; the switch state survives restart. | Unverified |
+| 10v.1 | With a paired device (10u) send `{"command":"theme","value":"Dark"}` and `{"command":"next"}` with its token. Change it to "Present and change settings" in Settings, send theme again. | First theme request: 403 "may present but not change settings"; next works; after the change, theme works at once. Restart the app: the role is kept. | Verified on the Intel Mac |
+| 10v.2 | Revoke the last paired device with no shared key set. Send `next` with no key. Untick "Require a key or a paired device", send again. | 401 while the switch is on with no keys; accepted after unticking; the switch state survives restart. | Verified on the Intel Mac |
 
 ### 10w. Signage loop (SG-001)
 
@@ -351,7 +351,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10x.1 | Two services dated today, one approved. Close the open service, go Home. | A highlighted row names the approved one ("Today's service, approved") with Open; the saved list shows "· approved" on it. Open it, then Present. | Unverified |
+| 10x.1 | Two services dated today, one approved. Close the open service, go Home. | A highlighted row names the approved one ("Today's service, approved") with Open; the saved list shows "· approved" on it. Open it, then Present. | Verified on the Intel Mac |
 | 10w.4 | With a signage output whose loop has a picture whose file was deleted, go Home. | Readiness warns "<output>: 1 of n signage pictures is missing" with Open outputs; an empty loop warns "has no pictures". | Unverified |
 | 10w.5 | Two playlists on a signage output: "Sunday" (Sun 08:00–13:00, pictures A, B) and "Rest of the week" (no times, picture C). Set the clock to Sunday 10:00, then Monday 10:00. | A/B alternate on Sunday morning; C shows at other times; the switch happens within a second of the clock change. | Unverified |
 
@@ -359,13 +359,13 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10y.1 | Prepare → Slides → QR link; title "Give online", link `https://church.example/give`. Add, go live. Scan with a phone from the back of the room. Save, reopen the service, go live again. | A white panel with a large code on the left and the title and address on the right; the phone opens exactly that address; it survives save/reopen. `javascript:` or a bare domain is refused in the composer. | Unverified |
+| 10y.1 | Prepare → Slides → QR link; title "Give online", link `https://church.example/give`. Add, go live. Scan with a phone from the back of the room. Save, reopen the service, go live again. | A white panel with a large code on the left and the title and address on the right; the phone opens exactly that address; it survives save/reopen. `javascript:` or a bare domain is refused in the composer. | Verified on the Intel Mac |
 
 ### 10z. Long text as pages (MD-003)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10z.1 | Prepare → Slides: paste three paragraphs, one of them nine lines long. | "Add as 4 slides" appears; it adds four items labelled "(1/4)" … "(4/4)" in order; each shows at full size with no shrinking; Next steps through them. | Unverified |
+| 10z.1 | Prepare → Slides: paste three paragraphs, one of them nine lines long. | "Add as 4 slides" appears; it adds four items labelled "(1/4)" … "(4/4)" in order; each shows at full size with no shrinking; Next steps through them. | Verified on the Intel Mac |
 
 ### 10aa. NDI stream trouble (OP-005)
 
@@ -391,9 +391,9 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ac.1 | Outputs: turn on "Show lower thirds" for the NDI stream (transparent theme), leave it off for the projector. Present → Lower third: "Pastor Tolu" / "Senior Pastor" → Show. | The band appears on the stream (keyable in OBS over the camera), not on the projector or the stage screen. | Unverified |
+| 10ac.1 | Outputs: turn on "Show lower thirds" for the NDI stream (transparent theme), leave it off for the projector. Present → Lower third: "Pastor Tolu" / "Senior Pastor" → Show. | The band appears on the stream (keyable in OBS over the camera), not on the projector or the stage screen. | Verified on the Intel Mac |
 | 10ac.2 | With the band up: show a verse, Next, Clear, Restore, a video, a quick screen. | The band stays on the stream through all of it, above everything; the projector never shows it. | Unverified |
-| 10ac.3 | Hide. Then turn lower thirds off for the stream while a band is up. | Hide removes it at once; switching the output off removes it from that output at once. | Unverified |
+| 10ac.3 | Hide. Then turn lower thirds off for the stream while a band is up. | Hide removes it at once; switching the output off removes it from that output at once. | Verified on the Intel Mac |
 ### 10ad. Monitors (OP-004)
 
 | # | Steps | Expected | Result |
@@ -405,7 +405,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10af.1 | Open this Sunday's service. Prepare → Reuse → find last Sunday → tick the welcome slide, a song and a verse → Add. | The three items are appended in last Sunday's order; previews work (verse text filled in); last Sunday's service is unchanged; a verse already in the rundown is reported, not duplicated. Save and reopen: the copies are independent items. | Unverified |
+| 10af.1 | Open this Sunday's service. Prepare → Reuse → find last Sunday → tick the welcome slide, a song and a verse → Add. | The three items are appended in last Sunday's order; previews work (verse text filled in); last Sunday's service is unchanged; a verse already in the rundown is reported, not duplicated. Save and reopen: the copies are independent items. | Verified on the Intel Mac |
 
 ### 10ae. Multiview (OP-004)
 
@@ -431,12 +431,12 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ai.1 | A verse live on the projector (themed background) and the stream (transparent theme). Press Black, then Logo, then Technical issue, then Back. | Black: projector solid black, stream shows nothing over the camera. Logo: each output shows its own theme's logo large and centred (nothing on a theme without a logo; on the stream only if "Show on transparent" is on). Technical issue: the two lines (and Yorùbá when a Yorùbá Bible is in use). Back: the verse returns. | Unverified |
+| 10ai.1 | A verse live on the projector (themed background) and the stream (transparent theme). Press Black, then Logo, then Technical issue, then Back. | Black: projector solid black, stream shows nothing over the camera. Logo: each output shows its own theme's logo large and centred (nothing on a theme without a logo; on the stream only if "Show on transparent" is on). Technical issue: the two lines (and Yorùbá when a Yorùbá Bible is in use). Back: the verse returns. | Verified on the Intel Mac |
 ### 10aj. Remote command rate limit (NFR-06)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10aj.1 | With HTTP remote on, run `for i in $(seq 40); do curl -s -o /dev/null -w "%{http_code} " -X POST -H 'Content-Type: application/json' -d '{"command":"next"}' http://<host>:<port>/api/v1/command; done` from another computer (add the key header if one is set). | Roughly the first 20 answer 200, the rest 429; the app log shows "too many from <address>"; a phone on another address still works at once; after a second's pause the first computer works again. | Unverified |
+| 10aj.1 | With HTTP remote on, run `for i in $(seq 40); do curl -s -o /dev/null -w "%{http_code} " -X POST -H 'Content-Type: application/json' -d '{"command":"next"}' http://<host>:<port>/api/v1/command; done` from another computer (add the key header if one is set). | Roughly the first 20 answer 200, the rest 429; the app log shows "too many from <address>"; a phone on another address still works at once; after a second's pause the first computer works again. | Verified on the Intel Mac |
 
 ### 10ak. Phone remote with QR pairing (OP-006)
 
@@ -452,7 +452,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10al.1 | With Rhema running (minimise it, and start the HTTP API), launch Rhema again from the Start menu or desktop icon. | No second window or second tray icon appears; the running copy's main window comes forward (restored if minimised). The remote API keeps working; no "port in use" error. | Unverified |
+| 10al.1 | With Rhema running (minimise it, and start the HTTP API), launch Rhema again from the Start menu or desktop icon. | No second window or second tray icon appears; the running copy's main window comes forward (restored if minimised). The remote API keeps working; no "port in use" error. | Verified on the Intel Mac |
 
 ### 10am. Last good frame (FR-04)
 
@@ -464,14 +464,14 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10an.1 | Start a packet capture on the presentation computer (Wireshark). Open Rhema with speech off, OBS off, no NDI outputs and no remote listener; present a service with verses, songs, pictures and a video for ten minutes. | No connections to the internet at all from Rhema (local NDI/mDNS only if NDI is on). | Unverified |
+| 10an.1 | Start a packet capture on the presentation computer (Wireshark). Open Rhema with speech off, OBS off, no NDI outputs and no remote listener; present a service with verses, songs, pictures and a video for ten minutes. | No connections to the internet at all from Rhema (local NDI/mDNS only if NDI is on). | Verified on the Intel Mac |
 | 10an.2 | Unplug the network cable / turn Wi-Fi off and present the same service. | Everything works; no errors or waits. | Unverified |
 
 ### 10ao. Deletes ask first (FR-04)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ao.1 | More → Library → Earlier logs: press the bin next to a log. Then Prepare → Media: press the bin next to an unused picture. | Nothing is deleted on the first press; "Delete"/"Remove" and "Keep" appear in its place. Keep restores the bin; Delete/Remove deletes. | Unverified |
+| 10ao.1 | More → Library → Earlier logs: press the bin next to a log. Then Prepare → Media: press the bin next to an unused picture. | Nothing is deleted on the first press; "Delete"/"Remove" and "Keep" appear in its place. Keep restores the bin; Delete/Remove deletes. | Verified on the Intel Mac |
 
 ### 10ap. Songs as text (FR-02)
 
@@ -503,10 +503,10 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10as.1 | Service: Welcome slide, a sound (Prepare → Media → Sounds → Add), Announcements. Present the Welcome slide, then Next. | The sound starts; projector and NDI still show Welcome (still marked live in the rundown); the sound item shows "playing"; Preview reads "♪ name". | Unverified |
-| 10as.2 | Next (Announcements), Fade out, then Previous. | Announcements goes up while the sound keeps playing; after the fade, Previous goes straight back to Welcome without starting the sound again. | Unverified |
+| 10as.1 | Service: Welcome slide, a sound (Prepare → Media → Sounds → Add), Announcements. Present the Welcome slide, then Next. | The sound starts; projector and NDI still show Welcome (still marked live in the rundown); the sound item shows "playing"; Preview reads "♪ name". | Verified on the Intel Mac |
+| 10as.2 | Next (Announcements), Fade out, then Previous. | Announcements goes up while the sound keeps playing; after the fade, Previous goes straight back to Welcome without starting the sound again. | Verified on the Intel Mac |
 | 10as.4 | Make the sound the last item and step onto it; let it finish; press Next again. | Nothing restarts it. | Unverified |
-| 10as.3 | Rehearsal on; step onto the sound item. | No sound; Present says it was not played in rehearsal. | Unverified |
+| 10as.3 | Rehearsal on; step onto the sound item. | No sound; Present says it was not played in rehearsal. | Verified on the Intel Mac |
 
 ### 10at. Secrets in the system keychain (RG-08)
 
@@ -521,51 +521,51 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10au.1 | Give three items 10 planned minutes each; start the timer and present the first item; wait 12 minutes and present the second. | The timer popover shows "Planned end" 30 minutes after the start and "now about" 2 minutes later, in red; the chip says "2 min late". | Unverified |
-| 10au.2 | Press "+1 min" then "−1 min"; save the service log. | Elapsed time moves by a minute each way (never below zero); the log has two "timer" lines. | Unverified |
+| 10au.2 | Press "+1 min" then "−1 min"; save the service log. | Elapsed time moves by a minute each way (never below zero); the log has two "timer" lines. | Verified on the Intel Mac |
 
 ### 10av. Song usage report (FR-09)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10av.1 | Save three dated services that use some of the same songs (one song twice in one service) and one undated service. More → Library → Song usage → Show for a range covering them. | Each song once, most used first, with its CCLI number (or "public domain"); the song used twice in one service counts 1 for that service; the undated service is not counted. | Unverified |
+| 10av.1 | Save three dated services that use some of the same songs (one song twice in one service) and one undated service. More → Library → Song usage → Show for a range covering them. | Each song once, most used first, with its CCLI number (or "public domain"); the song used twice in one service counts 1 for that service; the undated service is not counted. | Verified on the Intel Mac |
 | 10av.2 | Save as CSV… and open it in a spreadsheet. | Columns Title, Authors, CCLI song number, Licence, Services, Last used; titles with commas stay in one cell. | Unverified |
 
 ### 10aw. Rename and re-date a service (FR-03)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10aw.1 | Prepare: open a saved service, add an item (do not save), press the pencil, change the title and date, Save title and date. | The service list shows the new title and date; the added item is still there and still unsaved; Save then works. | Unverified |
-| 10aw.2 | Rename an approved service. | Home shows it as changed since approval (the record changed); approve again to pin it. | Unverified |
+| 10aw.1 | Prepare: open a saved service, add an item (do not save), press the pencil, change the title and date, Save title and date. | The service list shows the new title and date; the added item is still there and still unsaved; Save then works. | Verified on the Intel Mac |
+| 10aw.2 | Rename an approved service. | Home shows it as changed since approval (the record changed); approve again to pin it. | Verified on the Intel Mac |
 
 ### 10ax. Templates and archive (FR-03)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ax.1 | Open a service with a few items; pencil → tick Template. New service → Start from → that template; title "Sunday 1 Nov", date; Create. | The new service opens with the same items; the template is unchanged (open it again: same items, still marked template); Home's list and "today's service" never offer the template. | Unverified |
-| 10ax.2 | Pencil → Archive this service. | It disappears from the picker and Home; "Show archived (1)" brings it back into the picker; its history and logs are intact; pencil → Bring back restores it. | Unverified |
-| 10ax.4 | More → Your name = "Tolu"; Prepare → Approve. | The Approve button's tooltip and Home read "Approved by Tolu …". | Unverified |
+| 10ax.1 | Open a service with a few items; pencil → tick Template. New service → Start from → that template; title "Sunday 1 Nov", date; Create. | The new service opens with the same items; the template is unchanged (open it again: same items, still marked template); Home's list and "today's service" never offer the template. | Verified on the Intel Mac |
+| 10ax.2 | Pencil → Archive this service. | It disappears from the picker and Home; "Show archived (1)" brings it back into the picker; its history and logs are intact; pencil → Bring back restores it. | Verified on the Intel Mac |
+| 10ax.4 | More → Your name = "Tolu"; Prepare → Approve. | The Approve button's tooltip and Home read "Approved by Tolu …". | Verified on the Intel Mac |
 | 10ax.3 | Start an older build (before 0010) on this database. | It refuses with "used by a newer Rhema Studio" (downgrade guard) and leaves the file alone. | Unverified |
 
 ### 10ay. Your own cues (PT-003)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ay.1 | Present → Cues → New cue…: name "Baptism", steps Rehearsal off, Quick screen: Black, Start the timer; Save cue. Run it. | Rehearsal goes off, the screens go black (Back returns), the timer runs; the cue shows "remote: /rhema/macro baptism". | Unverified |
-| 10ay.2 | Restart Rhema; send `/rhema/macro baptism` from a Stream Deck/OSC tool (with the key if one is set). | The cue is still there and runs from the controller. | Unverified |
-| 10ay.3 | Delete the cue (bin → Delete). | It is gone; the built-in cues cannot be deleted. | Unverified |
+| 10ay.1 | Present → Cues → New cue…: name "Baptism", steps Rehearsal off, Quick screen: Black, Start the timer; Save cue. Run it. | Rehearsal goes off, the screens go black (Back returns), the timer runs; the cue shows "remote: /rhema/macro baptism". | Verified on the Intel Mac |
+| 10ay.2 | Restart Rhema; send `/rhema/macro baptism` from a Stream Deck/OSC tool (with the key if one is set). | The cue is still there and runs from the controller. | Verified on the Intel Mac |
+| 10ay.3 | Delete the cue (bin → Delete). | It is gone; the built-in cues cannot be deleted. | Verified on the Intel Mac |
 
 ### 10az. Responsive reading (FR-01, SV-005)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10az.1 | Prepare → Slides → Responsive reading; paste Psalm 136:1–3 with L: and P: marks; Add. | One slide per exchange, each reading "Leader: …" then "All: …"; Next steps through them in order. | Unverified |
-| 10az.2 | Paste the same text without marks. | The composer says no parts are marked and how to mark them. | Unverified |
+| 10az.1 | Prepare → Slides → Responsive reading; paste Psalm 136:1–3 with L: and P: marks; Add. | One slide per exchange, each reading "Leader: …" then "All: …"; Next steps through them in order. | Verified on the Intel Mac |
+| 10az.2 | Paste the same text without marks. | The composer says no parts are marked and how to mark them. | Verified on the Intel Mac |
 
 ### 10ba. End-by time for an item (FR-07)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ba.1 | Prepare: give the sermon item "end by" 3 minutes from now; save, reopen. Present it. | The rundown shows "by HH:MM"; the time survives reopening; the timer chip shows "by HH:MM · 3 min", amber at 2 minutes, red "past HH:MM by 1 min" after. | Unverified |
+| 10ba.1 | Prepare: give the sermon item "end by" 3 minutes from now; save, reopen. Present it. | The rundown shows "by HH:MM"; the time survives reopening; the timer chip shows "by HH:MM · 3 min", amber at 2 minutes, red "past HH:MM by 1 min" after. | Verified on the Intel Mac |
 
 ### 10bb. Slide-change latency in the logs (QA-007)
 
@@ -577,18 +577,18 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bc.1 | Home laptop and church laptop both choose the same NAS share (or synced folder) in More → Library. At home: save and approve a service; Prepare → Publish; Publish again. | Before approving: one file "<title> <date> v<n> <checksum>.rhema-service.json". After approving and pressing Publish: a second file (the approval is new content). Pressing again: "already in the church folder". | Unverified |
-| 10bc.2 | At home: change the service, save, Publish. | A second file with the next version number; the first is untouched. | Unverified |
-| 10bc.3 | At church: Home → Church folder. | One row for the service: the newest version, "1 older version", "approved by …" for the approved one only if the newest is the approved revision. | Unverified |
-| 10bc.4 | Open it. | It opens in Prepare with its songs and pictures; it is not approved here until Approve is pressed; the row then says "opened here". Nothing happened before Open was pressed. | Unverified |
+| 10bc.1 | Home laptop and church laptop both choose the same NAS share (or synced folder) in More → Library. At home: save and approve a service; Prepare → Publish; Publish again. | Before approving: one file "<title> <date> v<n> <checksum>.rhema-service.json". After approving and pressing Publish: a second file (the approval is new content). Pressing again: "already in the church folder". | Verified on the Intel Mac |
+| 10bc.2 | At home: change the service, save, Publish. | A second file with the next version number; the first is untouched. | Verified on the Intel Mac |
+| 10bc.3 | At church: Home → Church folder. | One row for the service: the newest version, "1 older version", "approved by …" for the approved one only if the newest is the approved revision. | Verified on the Intel Mac |
+| 10bc.4 | Open it. | It opens in Prepare with its songs and pictures; it is not approved here until Approve is pressed; the row then says "opened here". Nothing happened before Open was pressed. | Verified on the Intel Mac |
 | 10bc.5 | Copy a large service into the synced folder and look at Home while it is still syncing; disconnect the NAS. | The syncing file is listed as damaged/may still be syncing and cannot be opened; with the NAS gone, the card says the folder is not available; the show is unaffected. | Unverified |
 
 ### 10bd. Newer version in the church folder (CL-005, FR-08)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bd.1 | At church: open v7 from the church folder. At home: change, save, approve, Publish (v8). At church: Home, then Prepare with v7 open. | Home's row shows v8 "newer than the copy opened here"; Prepare shows "A newer version (v8, approved) is in the church folder. This one is v7." Nothing changed by itself; v7 is still open and unchanged. | Unverified |
-| 10bd.2 | Press "Open the newer one". | v8 opens as its own service (v7 kept); the notice goes away; approve v8 here. | Unverified |
+| 10bd.1 | At church: open v7 from the church folder. At home: change, save, approve, Publish (v8). At church: Home, then Prepare with v7 open. | Home's row shows v8 "newer than the copy opened here"; Prepare shows "A newer version (v8, approved) is in the church folder. This one is v7." Nothing changed by itself; v7 is still open and unchanged. | Verified on the Intel Mac |
+| 10bd.2 | Press "Open the newer one". | v8 opens as its own service (v7 kept); the notice goes away; approve v8 here. | Verified on the Intel Mac |
 
 ### 10be. Consent before cloud speech (RG-08, NFR-09)
 
@@ -609,7 +609,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bg.1 | More → Your name = "Tolu". Prepare: set "prepared by" = "Ade (music)" on a song; Save; open History. | The rundown shows "· Ade (music)" on the song; History's newest version reads "… · Tolu". | Unverified |
+| 10bg.1 | More → Your name = "Tolu". Prepare: set "prepared by" = "Ade (music)" on a song; Save; open History. | The rundown shows "· Ade (music)" on the song; History's newest version reads "… · Tolu". | Verified on the Intel Mac |
 | 10bg.2 | Publish to the church folder and open it on another computer. | The song still shows "· Ade (music)". | Unverified |
 
 ### 10bh. Approval before go-live (CL-002, opt-in)
@@ -634,16 +634,16 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bj.1 | Present → Quick find: type "Jòhánù 3:16", then "Johanu 3 16", then "1 Ọba 3:9" and "Ise 2:38". | Each previews the right verse (John 3:16, 1 Kings 3:9, Acts 2:38) in the active translation. | Unverified |
+| 10bj.1 | Present → Quick find: type "Jòhánù 3:16", then "Johanu 3 16", then "1 Ọba 3:9" and "Ise 2:38". | Each previews the right verse (John 3:16, 1 Kings 3:9, Acts 2:38) in the active translation. | Verified on the Intel Mac |
 | 10bj.2 | A Yorùbá speaker types the book names they actually use for ten common books. | Each finds the right book; note any spelling that does not, for the alias list. | Unverified |
 
 ### 10bk. Team comments (CL-007)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bk.1 | Computer A, More → Your name = "Pastor Ade". Prepare: select an item, write a comment, press Enter; Save; Publish to the church folder. | The comment shows with name and time; the row shows a speech-bubble count; nothing appears on any output. | Unverified |
-| 10bk.2 | Computer B, More → Your name = "Tolu": open that service from the church folder. | "1 new comment" in the service bar; the list shows "Pastor Ade on …" and the text. Mark as read hides it until someone else comments again. | Unverified |
-| 10bk.3 | Computer B adds a reply, saves, publishes; computer A opens the newer version. | A sees "1 new comment" (Tolu's), not its own. | Unverified |
+| 10bk.1 | Computer A, More → Your name = "Pastor Ade". Prepare: select an item, write a comment, press Enter; Save; Publish to the church folder. | The comment shows with name and time; the row shows a speech-bubble count; nothing appears on any output. | Verified on the Intel Mac |
+| 10bk.2 | Computer B, More → Your name = "Tolu": open that service from the church folder. | "1 new comment" in the service bar; the list shows "Pastor Ade on …" and the text. Mark as read hides it until someone else comments again. | Verified on the Intel Mac |
+| 10bk.3 | Computer B adds a reply, saves, publishes; computer A opens the newer version. | A sees "1 new comment" (Tolu's), not its own. | Verified on the Intel Mac |
 | 10bk.4 | Computer B: Mark as read, then open the same service again from the church folder (a new copy); duplicate it. | No comment shows as new in either copy until someone writes a new one. | Unverified |
 
 ### 10bl. Backup to a drive that disappears (QA-002, NFR-01)
@@ -674,41 +674,41 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bo.1 | Present a service, go to item 4 with Next. From Quick find add a verse; then remove item 1 in Prepare; then drag item 2 below item 5. Press Next after each. | Next always shows the item after the one on screen. | Unverified |
+| 10bo.1 | Present a service, go to item 4 with Next. From Quick find add a verse; then remove item 1 in Prepare; then drag item 2 below item 5. Press Next after each. | Next always shows the item after the one on screen. | Verified on the Intel Mac |
 | 10bo.2 | Service open, listening, on item 6. Read aloud the verse that is item 2, then a verse that is not in the service. Press Next. | Item 2 flashes; nothing is added to the service, the service is not marked unsaved; Next shows item 7. | Unverified |
-| 10bo.4 | Present on item 6; delete item 6 in the rundown; press Next. | Item 7 (the one that followed) goes live, not item 1. | Unverified |
+| 10bo.4 | Present on item 6; delete item 6 in the rundown; press Next. | Item 7 (the one that followed) goes live, not item 1. | Verified on the Intel Mac |
 | 10bo.3 | No service open (Clear service), listening: read two verses aloud. | They collect in the rundown list as in the original Rhema. | Unverified |
 
 ### 10bp. Live safety audit fixes (RG-03, FR-01, PRD §2)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bp.1 | Present a verse item that has a background picture. Go to Prepare and back to Present; switch Standard/Production. | The picture stays on air; nothing on screen changes. | Unverified |
+| 10bp.1 | Present a verse item that has a background picture. Go to Prepare and back to Present; switch Standard/Production. | The picture stays on air; nothing on screen changes. | Verified on the Intel Mac |
 | 10bp.2 | A verse on air in KJV, Auto off, listening: say "read it in NIV". Then change the translation yourself. | The spoken change does not alter the screen (the preview may switch); your own change does, keeping the background. | Unverified |
-| 10bp.3 | A song live on its 2nd slide; in Prepare change its arrangement; press Next twice. | Next continues the arrangement that was live (slide 3, then 4); entering the song again uses the new arrangement. | Unverified |
+| 10bp.3 | A song live on its 2nd slide; in Prepare change its arrangement; press Next twice. | Next continues the arrangement that was live (slide 3, then 4); entering the song again uses the new arrangement. | Verified on the Intel Mac |
 | 10bp.4 | A song live from an unsaved rundown; delete the song in the library; press Next. | The next item goes live (no repeated "no longer in the library" warning). | Unverified |
-| 10bp.5 | Present item 5 (a verse); press Verse +; press Next. | Item 6 goes live (not item 1); a background on item 5 stays during Verse +. | Unverified |
+| 10bp.5 | Present item 5 (a verse); press Verse +; press Next. | Item 6 goes live (not item 1); a background on item 5 stays during Verse +. | Verified on the Intel Mac |
 
 ### 10bq. Data and output audit fixes (FR-03, RG-05, FR-06)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bq.1 | Saved service: tick Loop on a video item (or untick Sound, or change a QR slide's address). | The service shows unsaved; closing asks. | Unverified |
+| 10bq.1 | Saved service: tick Loop on a video item (or untick Sound, or change a QR slide's address). | The service shows unsaved; closing asks. | Verified on the Intel Mac |
 | 10bq.2 | Edit a song in the song editor without saving; close the Rhema window. Also: Clear service, add two items in Prepare, close the window. | Both times "Save changes before closing?" names what is unsaved. | Unverified |
 | 10bq.3 | Open a song on two computers sharing a church folder… or in two editors via a backup; save on one, then save on the other. | The second shows the conflict and "Save mine as a new song", which keeps the edits as "<title> (my version)". | Unverified |
-| 10bq.4 | Give the NDI/stream output a custom lower-third theme; delete that theme in the theme library. | Refused: "<theme> is used by <output>"; the output keeps its theme. | Unverified |
-| 10bq.5 | Rename the service and at once reorder an item; close the window. | Closing asks (the reorder was not lost). | Unverified |
-| 10bq.6 | Open a saved service, Close service (the rundown stays), quit Rhema. Then reopen, Close service, remove one item, quit. | First time: no question. Second time: "The service on screen has not been saved". | Unverified |
+| 10bq.4 | Give the NDI/stream output a custom lower-third theme; delete that theme in the theme library. | Refused: "<theme> is used by <output>"; the output keeps its theme. | Verified on the Intel Mac |
+| 10bq.5 | Rename the service and at once reorder an item; close the window. | Closing asks (the reorder was not lost). | Verified on the Intel Mac |
+| 10bq.6 | Open a saved service, Close service (the rundown stays), quit Rhema. Then reopen, Close service, remove one item, quit. | First time: no question. Second time: "The service on screen has not been saved". | Verified on the Intel Mac |
 
 ### 10br. Keyboard and language audit fixes (RG-09, RG-06)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10br.1 | Song editor open with unsaved changes; press Ctrl+3 (Cmd+3). | Stays in the editor with "Save or close the song you are editing first." | Unverified |
+| 10br.1 | Song editor open with unsaved changes; press Ctrl+3 (Cmd+3). | Stays in the editor with "Save or close the song you are editing first." | Verified on the Intel Mac |
 | 10br.2 | Present: open the Outputs dialog (or the Cues menu); press → / ← / Esc inside it; then PageDown. | The arrows and Esc do not change the screen behind it. PageDown and PageUp (a presenter clicker's keys) still step, by design (`present-keys.ts`). | Verified on the Intel Mac |
-| 10br.3 | Quick find: type "john 3 16" quickly and press Enter at once. | The preview shows John 3:16 (not 3:1). | Unverified |
-| 10br.4 | With KJV + Yorùbá active add John 3:16, save, switch to NIV, present the item. | KJV + Yorùbá (as saved), also before reopening the service. | Unverified |
-| 10br.5 | With more than 50 songs, add "Àánú" (typed normally). Open the song library. | It is listed among the A's. | Unverified |
+| 10br.3 | Quick find: type "john 3 16" quickly and press Enter at once. | The preview shows John 3:16 (not 3:1). | Verified on the Intel Mac |
+| 10br.4 | With KJV + Yorùbá active add John 3:16, save, switch to NIV, present the item. | KJV + Yorùbá (as saved), also before reopening the service. | Verified on the Intel Mac |
+| 10br.5 | With more than 50 songs, add "Àánú" (typed normally). Open the song library. | It is listed among the A's. | Verified on the Intel Mac |
 
 ### 10bs. Startup and performance audit fixes (RG-05, NFR-03)
 
@@ -717,7 +717,7 @@ report), but launching it cannot.
 | 10bs.1 | Quit Rhema; cut settings.json in the app folder in half; start Rhema. | A warning says settings were reset and names the kept file (settings.json.damaged-…); that file is still there. | Unverified |
 | 10bs.2 | Give the stage output a theme with a large photo; start the timer; watch the outputs and Activity Monitor/Task Manager. | No stutter; the stage screen shows as before. | Unverified |
 | 10bs.3 | Export a service file that contains a video, while something is on air. | The output and NDI keep moving while it saves. | Unverified |
-| 10bs.4 | Delete the service that was open last time (or restore an older backup); restart twice. | "That service no longer exists" at most once. | Unverified |
+| 10bs.4 | Delete the service that was open last time (or restore an older backup); restart twice. | "That service no longer exists" at most once. | Verified on the Intel Mac |
 
 ### 10bt. Remote control audit fixes (FR-04, OP-006)
 
@@ -725,24 +725,24 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bt.1 | Settings → Remote: untick "other devices", start HTTP on 9090; quit and start Rhema. Then tick "other devices" with no key and no paired device, start HTTP, restart; then pair a phone and restart. | Local only: running again on 9090, box still unticked. Network with no key: not restarted, with a message. With a paired phone: running again, the phone works without opening Settings. | Unverified |
 | 10bt.2 | Phone remote: walk to the edge of the Wi-Fi and press Next once. | The service steps once, even if the phone shows "Sending…" or "No answer…"; never twice for one press. | Unverified |
-| 10bt.3 | Turn rehearsal on; look at the phone. Then with the approval question showing, look again. | "Rehearsal: the screens are frozen" / "The computer is asking whether to show this service". After Clear, the phone says "Nothing on screen". | Unverified |
+| 10bt.3 | Turn rehearsal on; look at the phone. Then with the approval question showing, look again. | "Rehearsal: the screens are frozen" / "The computer is asking whether to show this service". After Clear, the phone says "Nothing on screen". | Verified on the Intel Mac |
 
 ### 10bu. Readiness and church-folder audit fixes (FR-08, CL-002, CL-005)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bu.1 | Open a service saved for a translation this computer lacks; look at Home. Delete the file of a song's background picture; look again. | "Some verses are saved for … not installed here" and the missing-file warning; not "Ready to present". | Unverified |
-| 10bu.2 | Open a never-approved service, change an item without saving; look at Home. | "Service not approved yet" (not "changed since it was approved"). | Unverified |
-| 10bu.3 | Approve a service, change it, save; History → restore the approved version; look at Home. | "Service approved as saved". | Unverified |
+| 10bu.2 | Open a never-approved service, change an item without saving; look at Home. | "Service not approved yet" (not "changed since it was approved"). | Verified on the Intel Mac |
+| 10bu.3 | Approve a service, change it, save; History → restore the approved version; look at Home. | "Service approved as saved". | Verified on the Intel Mac |
 | 10bu.4 | Computer A publishes v1 (with a song); computer B opens it. A fixes a lyric, publishes v2; B opens the newer one. | B is told its copy of that song was kept; the song on B is unchanged; Home shows no false missing pictures. | Unverified |
 
 ### 10bv. Timers, cues and video sound audit fixes (FR-07, PT-003, MD-002)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bv.1 | Start the timer; after 5 minutes run "Start the service" again (Cues or the phone). | The timer keeps running from where it was. | Unverified |
-| 10bv.2 | With the timer past 1 minute press Reset; then press it again. Look at the service log. | The first press asks "Reset 5:12?"; the second resets; the log has "timer reset (it had run 5:12)". | Unverified |
-| 10bv.3 | A cue "Next then Offering": run it, then press Back. | The next item went live, then the Offering screen; Back returns to that next item. | Unverified |
+| 10bv.1 | Start the timer; after 5 minutes run "Start the service" again (Cues or the phone). | The timer keeps running from where it was. | Verified on the Intel Mac |
+| 10bv.2 | With the timer past 1 minute press Reset; then press it again. Look at the service log. | The first press asks "Reset 5:12?"; the second resets; the log has "timer reset (it had run 5:12)". | Verified on the Intel Mac |
+| 10bv.3 | A cue "Next then Offering": run it, then press Back. | The next item went live, then the Offering screen; Back returns to that next item. | Verified on the Intel Mac |
 | 10bv.4 | Set an item's "end by" to a time 30 minutes away; close the laptop lid for 10 minutes; open it. | The countdown shows about 20 minutes left within seconds. | Unverified |
 | 10bv.5 | Make the main output a Stage output and a second output Congregation; present a video with sound. | Sound plays (from the congregation output). | Unverified |
 
@@ -751,14 +751,14 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bw.1 | Service open with 4 items; show items 1 and 3; add a verse from Quick find and show it; show a Bible-panel verse that is not in the service; Welcome with nothing live; Black. More → Library → Save the log. | Planned vs actual lists all 4 items in order (item 2 and 4 "not shown"), the added verse "[added during the service]", "Also shown" with the Bible-panel verse; the timeline has "quick screen Welcome" and "quick screen Black screen". | Unverified |
-| 10bw.2 | Item A live; rehearsal on; present B; rehearsal off. Save the log. | After "rehearsal off" the log has "LIVE B". | Unverified |
+| 10bw.2 | Item A live; rehearsal on; present B; rehearsal off. Save the log. | After "rehearsal off" the log has "LIVE B". | Verified on the Intel Mac |
 
 ### 10bx. Editors and outputs audit fixes (SO-003, CV-004, OP-001)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bx.1 | Song editor: paste "Ẹsẹ̀ 1 / line / blank / Ègbè / line". Export the song as text, paste it into a new song. | Two sections, verse and chorus; no "Ègbè" or "## …" line in the words. | Unverified |
-| 10bx.2 | A song live on its 2nd slide; in the song editor delete its first verse and save; press Next twice. | Next continues the song as it was live; the change shows when the song is next started. | Unverified |
+| 10bx.2 | A song live on its 2nd slide; in the song editor delete its first verse and save; press Next twice. | Next continues the song as it was live; the change shows when the song is next started. | Verified on the Intel Mac |
 | 10bx.3 | Church brand: add a look, set the stream output to its Announcements theme, remove the look, Apply. | The stream output keeps that theme (now your own); nothing goes opaque. | Unverified |
 | 10bx.4 | Rename a Church brand theme; Apply the brand again. | The new name stays. | Unverified |
 
@@ -768,7 +768,7 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10by.1 | Start listening in Production, switch to Standard and Home; speak for a minute; unplug the microphone. | The transcript keeps growing (Library → Service log offers it); the "Audio source disconnected" warning appears. | Unverified |
 | 10by.2 | First launch: finish (or skip) the tour. | Back where you were (Home), and Present opens in Standard with its keys. | Unverified |
-| 10by.3 | Bible panel: Genesis 50, press → (or Next chapter). | Exodus 1, not an empty Genesis 51. | Unverified |
+| 10by.3 | Bible panel: Genesis 50, press → (or Next chapter). | Exodus 1, not an empty Genesis 51. | Verified on the Intel Mac |
 | 10by.4 | While listening, open Settings → Audio or Speech. | "Rhema is listening now. Changes here apply when you stop and start listening again." | Unverified |
 | 10by.5 | Auto on; send /rhema/confidence 0.95; say a verse loosely. | It appears in the preview but does not replace the screen. | Unverified |
 
@@ -777,44 +777,44 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bz.1 | "Ask before showing" on, service not approved, Auto on: Welcome, then read a verse aloud. | No approval question appears by itself; the verse waits in the preview. Next then asks as usual. | Unverified |
-| 10bz.2 | Rundown A B C D with C live; delete C; press Previous; delete again and press Next. | Previous shows B (not A); Next shows the item after the deleted one. | Unverified |
-| 10bz.3 | A song live; edit and save its words; click a slide of it in Present and Show live. | Preview and the screen show the words as the song went live. | Unverified |
-| 10bz.4 | Present a new verse item, save the service, change the translation. | The verse on air keeps the translation it was saved with. | Unverified |
-| 10bz.5 | Black screen test at 8:30 with an empty rundown; build and run the service; save the log. | No item is marked "added during the service" unless it really was. | Unverified |
+| 10bz.2 | Rundown A B C D with C live; delete C; press Previous; delete again and press Next. | Previous shows B (not A); Next shows the item after the deleted one. | Verified on the Intel Mac |
+| 10bz.3 | A song live; edit and save its words; click a slide of it in Present and Show live. | Preview and the screen show the words as the song went live. | Verified on the Intel Mac |
+| 10bz.4 | Present a new verse item, save the service, change the translation. | The verse on air keeps the translation it was saved with. | Verified on the Intel Mac |
+| 10bz.5 | Black screen test at 8:30 with an empty rundown; build and run the service; save the log. | No item is marked "added during the service" unless it really was. | Verified on the Intel Mac |
 
 ### 10ca. Clear, Restore, Back and quick screens (tenth audit)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ca.1 | Song on slide 2; Clear; click any verse in the Bible panel; Restore. | Slide 2 of the song returns; Next then shows slide 3. | Unverified |
-| 10ca.2 | Song live; press Verse + (Shift+→). | The screen keeps the song; only the Bible panel moves. | Unverified |
-| 10ca.3 | Song on slide 2; Please stand; Next. | Slide 3 of the song. | Unverified |
-| 10ca.4 | Quick screen over a verse; Clear; Back. | The verse returns but stays off air until Restore. | Unverified |
-| 10ca.5 | "Ask before showing" on, unapproved service, rehearsal: verse, Black, rehearsal off, Back. | The approval question appears; nothing changes until answered. | Unverified |
-| 10ca.7 | Song on slide 2; Clear; look at the status chip at the top of Present. | It reads "Off air · Restore shows" and the song slide. | Unverified |
+| 10ca.1 | Song on slide 2; Clear; click any verse in the Bible panel; Restore. | Slide 2 of the song returns; Next then shows slide 3. | Verified on the Intel Mac |
+| 10ca.2 | Song live; press Verse + (Shift+→). | The screen keeps the song; only the Bible panel moves. | Verified on the Intel Mac |
+| 10ca.3 | Song on slide 2; Please stand; Next. | Slide 3 of the song. | Verified on the Intel Mac |
+| 10ca.4 | Quick screen over a verse; Clear; Back. | The verse returns but stays off air until Restore. | Verified on the Intel Mac |
+| 10ca.5 | "Ask before showing" on, unapproved service, rehearsal: verse, Black, rehearsal off, Back. | The approval question appears; nothing changes until answered. | Verified on the Intel Mac |
+| 10ca.7 | Song on slide 2; Clear; look at the status chip at the top of Present. | It reads "Off air · Restore shows" and the song slide. | Verified on the Intel Mac |
 | 10ca.6 | Rundown has John 3:1; put John 3:16 on air from the Bible panel. | The John 3:1 row is not marked LIVE. | Unverified |
 
 ### 10cb. Data safety (eleventh audit)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10cb.1 | Change a setting (say the operator name) and close Rhema straight away; reopen. | The change is kept. | Unverified |
-| 10cb.2 | Go live with something, then close Rhema normally; reopen and look under More → Library → Earlier logs. | The service log of that run is there. | Unverified |
-| 10cb.3 | Add a picture to the service on screen without saving; Prepare → Pictures → Remove it. Also a picture in a screen loop, and a file attached to a song. | Refused, naming where it is used; the file stays. | Unverified |
-| 10cb.4 | Add a song to the service on screen without saving; open it in the editor and Delete. | Refused: used in the service on screen. | Unverified |
-| 10cb.5 | Change a theme in the Designer; press Escape, Close, or pick another theme. Then close Rhema with a changed theme. | Rhema asks before discarding; the close question lists the theme. | Unverified |
-| 10cb.6 | Quit Rhema; damage `settings.json` in the app folder (cut it short); start Rhema. | It says the settings were put back as they were at the last start; they are. | Unverified |
+| 10cb.1 | Change a setting (say the operator name) and close Rhema straight away; reopen. | The change is kept. | Verified on the Intel Mac |
+| 10cb.2 | Go live with something, then close Rhema normally; reopen and look under More → Library → Earlier logs. | The service log of that run is there. | Verified on the Intel Mac |
+| 10cb.3 | Add a picture to the service on screen without saving; Prepare → Pictures → Remove it. Also a picture in a screen loop, and a file attached to a song. | Refused, naming where it is used; the file stays. | Verified on the Intel Mac |
+| 10cb.4 | Add a song to the service on screen without saving; open it in the editor and Delete. | Refused: used in the service on screen. | Verified on the Intel Mac |
+| 10cb.5 | Change a theme in the Designer; press Escape, Close, or pick another theme. Then close Rhema with a changed theme. | Rhema asks before discarding; the close question lists the theme. | Verified on the Intel Mac |
+| 10cb.6 | Quit Rhema; damage `settings.json` in the app folder (cut it short); start Rhema. | It says the settings were put back as they were at the last start; they are. | Verified on the Intel Mac |
 
 ### 10cc. Prepare fixes (twelfth audit)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10cc.1 | Open a saved service; close it with X (the rundown stays); New service → Create. | The new service is saved with those items; the old one is unchanged. | Unverified |
-| 10cc.2 | Prepare → Slides → QR link with only a web address; Add; Save. | Saved. | Unverified |
-| 10cc.3 | Add a slide whose text is one 250-character paragraph with no title; Save. | Saved; the rundown shows the start of the text, the screen shows all of it. | Unverified |
+| 10cc.1 | Open a saved service; close it with X (the rundown stays); New service → Create. | The new service is saved with those items; the old one is unchanged. | Verified on the Intel Mac |
+| 10cc.2 | Prepare → Slides → QR link with only a web address; Add; Save. | Saved. | Verified on the Intel Mac |
+| 10cc.3 | Add a slide whose text is one 250-character paragraph with no title; Save. | Saved; the rundown shows the start of the text, the screen shows all of it. | Verified on the Intel Mac |
 | 10cc.4 | On two computers enter the same hymn with the same hymnbook number; publish a service using it from one and open it on the other. | The service opens; the song arrives without the number. A library import of the same song says one hymn number was left off. | Unverified |
 | 10cc.5 | Export a Yorùbá-first song with a key and tempo as OpenLyrics; import it. | Yorùbá is still the main language; key and tempo kept. | Unverified |
-| 10cc.6 | Song editor: tempo 72.5. | "Tempo is whole beats per minute"; nothing is saved until fixed. | Unverified |
+| 10cc.6 | Song editor: tempo 72.5. | "Tempo is whole beats per minute"; nothing is saved until fixed. | Verified on the Intel Mac |
 
 ### 10cd. Outputs (thirteenth audit)
 
@@ -841,7 +841,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10cf.1 | Present → Production, output on air: type "John 3" in the Bible quick box and press the arrow keys. | The caret moves in the box; nothing goes on air. | Unverified |
+| 10cf.1 | Present → Production, output on air: type "John 3" in the Bible quick box and press the arrow keys. | The caret moves in the box; nothing goes on air. | Verified on the Intel Mac |
 | 10cf.2 | With a screen reader (NVDA or VoiceOver): Show live, then Clear; present a picture whose file is missing. | "On air: …", "Off air" and the warning are read out. | Unverified |
 | 10cf.3 | Production view with only the keyboard: Tab to a queue item and press Enter; Tab to its remove button. | Enter shows it live; the buttons appear and are named. | Unverified |
 | 10cf.4 | Screen reader on the Preview and Live panels. | Each reads what it shows (the reference and words). | Unverified |
@@ -851,27 +851,27 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10cg.1 | Give the main output's theme a font that is not installed (type a made-up name); open Home. | Home warns that the theme font is not installed. | Unverified |
-| 10cg.2 | More → turn on "Ask before showing"; open a service never approved; open Home. | A warning says the first go-live will stop and ask. | Unverified |
-| 10cg.3 | Open Home with a picture item; delete that file from the media folder; go to Present and back to Home. | "1 picture … missing its file". | Unverified |
+| 10cg.1 | Give the main output's theme a font that is not installed (type a made-up name); open Home. | Home warns that the theme font is not installed. | Verified on the Intel Mac |
+| 10cg.2 | More → turn on "Ask before showing"; open a service never approved; open Home. | A warning says the first go-live will stop and ask. | Verified on the Intel Mac |
+| 10cg.3 | Open Home with a picture item; delete that file from the media folder; go to Present and back to Home. | "1 picture … missing its file". | Verified on the Intel Mac |
 | 10cg.4 | Settings → Remote while the phone remote is running. | It shows running at once (Stop), never "Start" first. | Unverified |
 
 ### 10ch. Search (seventeenth audit)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ch.1 | Quick find: "the Lord's my shepherd", then "shepherd, I shall not want". | Psalm 23 verses are listed. | Unverified |
-| 10ch.2 | Bible quick box and Quick find: "John 3:16-18", "John 3:16, 18", "Jn. 3:16". | John 3:16 each time. | Unverified |
-| 10ch.3 | "Jude 5", "Phm 6", "3 John 4". | Jude 1:5, Philemon 1:6, 3 John 1:4. | Unverified |
-| 10ch.4 | Songs: a song titled "Psalm 23"; search "Psalm 23" in the library and Quick find. | The song is found. | Unverified |
-| 10ch.5 | Quick find: "5" with hymn 5 in a hymnbook. | Hymn 5 is listed. | Unverified |
+| 10ch.1 | Quick find: "the Lord's my shepherd", then "shepherd, I shall not want". | Psalm 23 verses are listed. | Verified on the Intel Mac |
+| 10ch.2 | Bible quick box and Quick find: "John 3:16-18", "John 3:16, 18", "Jn. 3:16". | John 3:16 each time. | Verified on the Intel Mac |
+| 10ch.3 | "Jude 5", "Phm 6", "3 John 4". | Jude 1:5, Philemon 1:6, 3 John 1:4. | Verified on the Intel Mac |
+| 10ch.4 | Songs: a song titled "Psalm 23"; search "Psalm 23" in the library and Quick find. | The song is found. | Verified on the Intel Mac |
+| 10ch.5 | Quick find: "5" with hymn 5 in a hymnbook. | Hymn 5 is listed. | Verified on the Intel Mac |
 
 ### 10ci. Cues and signage (eighteenth audit)
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ci.1 | Custom cue "Show live, Quick screen: Offering"; put a verse in Preview; run the cue; then Back. | The verse airs, Offering covers it, Back returns to the verse. | Unverified |
-| 10ci.2 | In rehearsal, cue "Show live, Rehearsal off" with "Ask before showing" on and the service unapproved. | The approval question appears before the congregation sees anything. | Unverified |
+| 10ci.1 | Custom cue "Show live, Quick screen: Offering"; put a verse in Preview; run the cue; then Back. | The verse airs, Offering covers it, Back returns to the verse. | Verified on the Intel Mac |
+| 10ci.2 | In rehearsal, cue "Show live, Rehearsal off" with "Ask before showing" on and the service unapproved. | The approval question appears before the congregation sees anything. | Verified on the Intel Mac |
 | 10ci.3 | Signage playlist: only Sunday, 00:00 to 00:00, plus a fallback playlist with no schedule. | Sunday loop on Sundays only; the fallback the rest of the week. | Unverified |
 
 ### 10cj. Styling each language of a bilingual screen
