@@ -1,15 +1,13 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useQueueStore } from "@/stores"
 import { presentActions } from "@/studio/present-actions"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { clockMinutes, clockText, phaseRange, planTimeline } from "@/lib/run-of-show"
-import { serviceTiming, type EventTiming } from "@/lib/timing-engine"
-import { useBroadcastStore } from "@/stores/broadcast-store"
-import { actualByItem, firstOnAir, mmss } from "@/lib/journal"
-import { useJournalStore } from "@/stores/journal-store"
-import { monotonicNow } from "@/stores/timer-store"
+import type { EventTiming } from "@/lib/timing-engine"
+import { mmss } from "@/lib/journal"
+import { useServiceTiming } from "@/studio/use-service-timing"
 import { cn } from "@/lib/utils"
 
 function Clock({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -42,24 +40,13 @@ export function TimingPanel() {
   const [delay, setDelay] = useState(0)
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
   const total = formatMinutes(plannedTotalMs(items))
-  const entries = useJournalStore((s) => s.entries)
-  const liveItemId = useBroadcastStore((s) => (s.isLive ? s.liveItemId : null))
-  const [now, setNow] = useState(() => monotonicNow())
-  const [wall, setWall] = useState(() => Date.now())
-  // Time moves on: the live item's time on air and what is expected are looked at again every 15 s.
-  useEffect(() => {
-    const t = setInterval(() => { setNow(monotonicNow()); setWall(Date.now()) }, 15_000)
-    return () => clearInterval(t)
-  }, [])
-  const first = firstOnAir(entries)
-  const onAir = actualByItem(entries, Math.max(now, entries.at(-1)?.mono ?? 0))
+  const { timing, first, onAir } = useServiceTiming(delay)
   const range = main ? phaseRange(items.length, headers, main.id) : null
   const began = range ? Math.min(...items.slice(range.start, range.end).map((i) => first.get(i.id) ?? Infinity)) : Infinity
   const plannedStart = clockMinutes(main?.starts_at)
   const late = Number.isFinite(began) && plannedStart !== null ? (() => { const d = new Date(began); return d.getHours() * 60 + d.getMinutes() - plannedStart })() : null
   // The plan as prepared; what is expected comes from the timing engine (what happened, the time now, ±5 min).
   const plan = planTimeline(items, headers)
-  const timing = serviceTiming({ items, headers, firstOnAir: first, onAirMs: onAir, liveItemId, now: Math.max(wall, entries.at(-1)?.at ?? 0), adjustMinutes: delay })
   const expected = new Map(timing?.events.map((e) => [e.index, e]) ?? [])
   const lateMinutes = timing ? Math.round(timing.lateMs / 60_000) : 0
   return (
