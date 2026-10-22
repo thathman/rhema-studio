@@ -20,7 +20,7 @@ export function TopBar({ title }: { title: string }) {
         >
           <SearchIcon aria-hidden className="size-4" />
           <span className="max-[1100px]:sr-only">Find anything…</span>
-          <kbd className="ml-auto rounded border border-border px-1.5 text-[0.625rem] max-[1100px]:hidden">⌘K</kbd>
+          <kbd className="ml-auto rounded border border-border px-1.5 text-[0.6875rem] max-[1100px]:hidden">⌘K</kbd>
         </button>
         <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-tone-green px-3 text-[0.6875rem] font-bold text-tone-green-foreground" title="Services, songs and Bibles are on this computer: no internet needed on Sunday">
           <WifiOffIcon aria-hidden className="size-3.5" /> Works offline

@@ -108,15 +108,15 @@ export function SongLibrary() {
                 <span className="flex items-center gap-1.5 text-xs font-semibold">
                   <MusicIcon className="size-3 text-muted-foreground" aria-hidden />
                   <span className="truncate">{song.title}</span>
-                  {isChoir(song.tags) && <span className="rounded bg-primary/10 px-1 text-[0.625rem] font-medium text-primary">Choir</span>}
+                  {isChoir(song.tags) && <span className="rounded bg-primary/10 px-1 text-[0.6875rem] font-medium text-primary">Choir</span>}
                   {song.numbers.map((n) => (
-                    <span key={n} className="rounded border border-border px-1 text-[0.625rem] font-normal text-muted-foreground">{n}</span>
+                    <span key={n} className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground">{n}</span>
                   ))}
                   {song.languages.map((l) => (
-                    <span key={l} className="rounded border border-border px-1 text-[0.625rem] font-normal text-muted-foreground uppercase">{l}</span>
+                    <span key={l} className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground uppercase">{l}</span>
                   ))}
                   <span
-                    className={cn("rounded px-1 text-[0.625rem] font-normal", song.licence === "unknown" ? "bg-confidence-mid/20 text-foreground" : "border border-border text-muted-foreground")}
+                    className={cn("rounded px-1 text-[0.6875rem] font-normal", song.licence === "unknown" ? "bg-confidence-mid/20 text-foreground" : "border border-border text-muted-foreground")}
                     title={song.licence === "unknown" ? "Licence not recorded yet" : undefined}
                   >
                     {LICENCE_BADGE[song.licence] ?? song.licence}

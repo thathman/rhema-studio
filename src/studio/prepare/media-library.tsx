@@ -102,8 +102,8 @@ export function MediaLibrary() {
               </button>
               <div className="flex items-center gap-1 px-2 py-1">
                 <span className="min-w-0 flex-1 truncate text-xs font-medium" title={a.name}>{a.name}</span>
-                {!a.present && <span className="text-[0.625rem] text-destructive">missing</span>}
-                {a.width && a.height ? <span className="text-[0.625rem] text-muted-foreground">{a.width}×{a.height}</span> : null}
+                {!a.present && <span className="text-[0.6875rem] text-destructive">missing</span>}
+                {a.width && a.height ? <span className="text-[0.6875rem] text-muted-foreground">{a.width}×{a.height}</span> : null}
                 <ConfirmDelete label={`Remove ${a.name}`} verb="Remove" onConfirm={() => void remove(a)} />
                 <Button variant="outline" size="xs" disabled={!a.present} onClick={() => add(a)}><PlusIcon /> Add</Button>
               </div>
@@ -119,8 +119,8 @@ export function MediaLibrary() {
               <li key={a.id} className="flex items-center gap-2 px-1 py-0.5 text-xs">
                 <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate" title={a.name}>{a.name}</span>
-                {soundType(a.mime) && <span className="shrink-0 rounded border border-border px-1 text-[0.625rem] text-muted-foreground">{soundType(a.mime)}</span>}
-                {!a.present && <span className="text-[0.625rem] text-destructive">missing</span>}
+                {soundType(a.mime) && <span className="shrink-0 rounded border border-border px-1 text-[0.6875rem] text-muted-foreground">{soundType(a.mime)}</span>}
+                {!a.present && <span className="text-[0.6875rem] text-destructive">missing</span>}
                 <ConfirmDelete label={`Remove ${a.name}`} verb="Remove" onConfirm={() => void remove(a)} />
                 <Button variant="outline" size="xs" disabled={!a.present} onClick={() => add(a)} title="Add to the service: it plays when reached, and the screens keep what they show"><PlusIcon /> Add</Button>
               </li>

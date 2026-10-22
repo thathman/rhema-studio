@@ -28,7 +28,7 @@ export function PropertiesPanel() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden border-l border-border bg-card">
       {/* Header */}
       <div className="flex h-14 flex-col gap-0.5 border-b border-border px-4 py-2">
-        <h3 className="truncate text-sm font-semibold">{draftTheme.name}</h3>
+        <h2 className="truncate text-sm font-semibold">{draftTheme.name}</h2>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
       </div>
 

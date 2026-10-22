@@ -45,7 +45,7 @@ export function BigButton({
       <span className={cn("flex flex-col items-start leading-tight", iconOnly && "sr-only")}>
         <span>{label}</span>
         {/* Hints give way on a small window (1200 px or less); the shortcut is in the tooltip too. */}
-        {hint && <span className="text-[0.625rem] font-normal opacity-70 max-[1200px]:hidden">{hint}</span>}
+        {hint && <span className="text-[0.6875rem] font-normal opacity-70 max-[1200px]:hidden">{hint}</span>}
       </span>
     </button>
   )

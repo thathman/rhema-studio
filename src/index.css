@@ -273,3 +273,19 @@
 #react-joyride-portal .react-joyride__spotlight {
   transition: left 0.3s ease, top 0.3s ease, width 0.3s ease, height 0.3s ease;
 }
+/* Everything clickable shows the pointer (Tailwind v4 buttons do not by default). */
+@layer base {
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="tab"], [role="switch"], [role="radio"], [role="menuitem"], [role="menuitemradio"], [role="option"], summary, select, label:has(> input[type="checkbox"]) {
+    cursor: pointer;
+  }
+}
+
+/* Asked for less motion: pulses, spinners and dialog animations stop (outputs draw on canvas, unaffected). */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -250,7 +250,7 @@ export function OutputEditorDialog({
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">
-            <span className="text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+            <span className="text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
               {form.type === "display" ? "Display settings" : "NDI settings"}
             </span>
 
@@ -268,7 +268,7 @@ export function OutputEditorDialog({
                     size="xs"
                     disabled={monitorsRefreshing}
                     onClick={onRefreshMonitors}
-                    className="h-5 gap-1 px-1.5 text-[0.625rem] text-muted-foreground"
+                    className="h-5 gap-1 px-1.5 text-[0.6875rem] text-muted-foreground"
                   >
                     <RefreshCwIcon
                       className={cn(
@@ -503,7 +503,7 @@ function SignagePlaylists({ value, onChange }: { value: SignageSettings; onChang
         </div>
       ))}
       <Button size="sm" variant="outline" className="w-fit text-xs" onClick={() => commit([...lists, { name: `Playlist ${lists.length + 1}`, mediaIds: [], seconds: 10 }])}>Add a playlist</Button>
-      <p className="text-[0.625rem] text-muted-foreground">The first playlist whose times match runs; one without set times is what shows the rest of the time.</p>
+      <p className="text-[0.6875rem] text-muted-foreground">The first playlist whose times match runs; one without set times is what shows the rest of the time.</p>
     </div>
   )
 }
@@ -539,7 +539,7 @@ function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: 
           ))}
         </ul>
       )}
-      <p className="text-[0.625rem] text-muted-foreground">{value.mediaIds.length} picture{value.mediaIds.length === 1 ? "" : "s"} in the loop. Going live, Clear and rehearsal never change this screen.</p>
+      <p className="text-[0.6875rem] text-muted-foreground">{value.mediaIds.length} picture{value.mediaIds.length === 1 ? "" : "s"} in the loop. Going live, Clear and rehearsal never change this screen.</p>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={!!value.schedule} onChange={(e) => onChange({ ...value, schedule: e.target.checked ? { days: [0], from: "08:00", to: "13:00" } : undefined })} />
         <span>Only at set times (otherwise the theme background shows)</span>
@@ -568,7 +568,7 @@ function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: 
             <span className="text-muted-foreground">to</span>
             <Input type="time" value={value.schedule.to} onChange={(e) => onChange({ ...value, schedule: { ...value.schedule!, to: e.target.value } })} className="h-7 w-28 text-xs" />
           </div>
-          <p className="text-[0.625rem] text-muted-foreground">No day ticked means every day. An end earlier than the start runs past midnight. A time that cannot be read keeps the loop on.</p>
+          <p className="text-[0.6875rem] text-muted-foreground">No day ticked means every day. An end earlier than the start runs past midnight. A time that cannot be read keeps the loop on.</p>
         </div>
       )}
     </div>

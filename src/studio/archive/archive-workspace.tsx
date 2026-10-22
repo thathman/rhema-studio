@@ -42,7 +42,7 @@ export function ArchiveWorkspace() {
               {services.length === 0 && <li className="py-3 text-xs text-muted-foreground">None yet. Create one in Prepare.</li>}
               {services.map((p) => (
                 <li key={p.id} className="flex items-center gap-3 py-2">
-                  <span className="flex w-14 shrink-0 flex-col items-center rounded-lg bg-surface-sunken py-1 text-[0.625rem] text-muted-foreground tabular-nums">{p.service_date ?? "undated"}</span>
+                  <span className="flex w-14 shrink-0 flex-col items-center rounded-lg bg-surface-sunken py-1 text-[0.6875rem] text-muted-foreground tabular-nums">{p.service_date ?? "undated"}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{p.title}</span>
                     <span className="block text-xs text-muted-foreground">{p.item_count} item{p.item_count === 1 ? "" : "s"}</span>

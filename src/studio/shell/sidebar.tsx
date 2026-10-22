@@ -26,7 +26,7 @@ function NavButton({ item, active, live, onSelect }: { item: NavItem; active: bo
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="px-3 pt-4 pb-1 text-[0.625rem] font-extrabold tracking-[0.15em] text-sidebar-label uppercase max-[1080px]:sr-only">{label}</span>
+      <span className="px-3 pt-4 pb-1 text-[0.6875rem] font-extrabold tracking-[0.15em] text-sidebar-label uppercase max-[1080px]:sr-only">{label}</span>
       {children}
     </div>
   )

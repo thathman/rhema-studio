@@ -98,7 +98,7 @@ export function SoundChip() {
                 const present = assets.find((x) => x.id === a.id)?.present ?? true // not listed yet: Play reports a missing file itself
                 return (
                   <li key={a.id} className="flex items-center gap-2 py-1">
-                    <span className={cn("min-w-0 flex-1 truncate", sound.assetId === a.id && "font-medium text-primary")} title={a.name}>{a.name}{sound.assetId === a.id && <span className="ml-1 text-[0.625rem] font-semibold uppercase">playing</span>}</span>
+                    <span className={cn("min-w-0 flex-1 truncate", sound.assetId === a.id && "font-medium text-primary")} title={a.name}>{a.name}{sound.assetId === a.id && <span className="ml-1 text-[0.6875rem] font-semibold uppercase">playing</span>}</span>
                     {!present && <span className="text-destructive">missing</span>}
                     <Button size="xs" disabled={!present} onClick={() => void sound.play({ id: a.id, name: a.name })}><PlayIcon /> Play</Button>
                   </li>
@@ -110,8 +110,8 @@ export function SoundChip() {
             {sounds.length === 0 && <li className="py-2 text-muted-foreground">No sounds yet. Import MP3, M4A, WAV or OGG files in Prepare → Media.</li>}
             {sounds.map((a) => (
               <li key={a.id} className="flex items-center gap-2 py-1">
-                <span className={cn("min-w-0 flex-1 truncate", sound.assetId === a.id && "font-medium text-primary")} title={a.name}>{a.name}{sound.assetId === a.id && <span className="ml-1 text-[0.625rem] font-semibold uppercase">playing</span>}</span>
-                {soundType(a.mime) && <span className="shrink-0 rounded border border-border px-1 text-[0.625rem] text-muted-foreground">{soundType(a.mime)}</span>}
+                <span className={cn("min-w-0 flex-1 truncate", sound.assetId === a.id && "font-medium text-primary")} title={a.name}>{a.name}{sound.assetId === a.id && <span className="ml-1 text-[0.6875rem] font-semibold uppercase">playing</span>}</span>
+                {soundType(a.mime) && <span className="shrink-0 rounded border border-border px-1 text-[0.6875rem] text-muted-foreground">{soundType(a.mime)}</span>}
                 {!a.present && <span className="text-destructive">missing</span>}
                 <Button size="xs" variant="outline" disabled={!a.present} onClick={() => void sound.play({ id: a.id, name: a.name })}><PlayIcon /> Play</Button>
               </li>

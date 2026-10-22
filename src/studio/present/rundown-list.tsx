@@ -88,7 +88,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             >
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
+                className="flex min-h-7 min-w-0 flex-1 items-center gap-2 self-stretch text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
                 aria-current={isSelected ? "true" : undefined}
                 onClick={() => preview(item)}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
@@ -101,23 +101,23 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
                 <span className="truncate text-sm font-medium">{item.reference}</span>
                 {song && <SongBadges item={item} />}
-                {item.planned_minutes ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
-                {item.end_by ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
-                {item.prepared_by ? <span className="ml-1 max-w-24 shrink-0 truncate text-[0.625rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
+                {item.planned_minutes ? <span className="ml-1 shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
+                {item.end_by ? <span className="ml-1 shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
+                {item.prepared_by ? <span className="ml-1 max-w-24 shrink-0 truncate text-[0.6875rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
                 {item.comments?.length ? (
-                  <span className="ml-1 inline-flex shrink-0 items-center gap-0.5 text-[0.625rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
+                  <span className="ml-1 inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
                     <MessageSquareIcon className="size-3" aria-hidden />
                     {item.comments.length}
                     <span className="sr-only"> comments</span>
                   </span>
                 ) : null}
                 {onAir && (
-                  <span className="ml-auto shrink-0 text-[0.625rem] font-bold tracking-wider text-destructive uppercase">
+                  <span className="ml-auto shrink-0 text-[0.6875rem] font-bold tracking-wider text-destructive uppercase">
                     Live
                   </span>
                 )}
                 {isNext && (
-                  <span className="ml-auto shrink-0 text-[0.625rem] font-semibold tracking-wider text-muted-foreground uppercase">
+                  <span className="ml-auto shrink-0 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
                     Next
                   </span>
                 )}
@@ -192,7 +192,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
 function Row({ id, index, sortable, children }: { id: string; index: number; sortable: boolean; children: React.ReactNode }) {
   const { ref, handleRef, isDragging } = useSortable({ id, index, disabled: !sortable })
   return (
-    <li ref={ref} className={cn("flex flex-col", isDragging && "opacity-60")}>
+    <li ref={sortable ? ref : undefined} className={cn("flex flex-col", isDragging && "opacity-60")}>
       {sortable ? (
         <div className="flex items-stretch">
           <button
@@ -200,7 +200,7 @@ function Row({ id, index, sortable, children }: { id: string; index: number; sor
             type="button"
             aria-label="Drag to reorder"
             title="Drag to reorder (or use the arrow buttons)"
-            className="flex w-5 shrink-0 cursor-grab items-center justify-center text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
+            className="flex w-6 shrink-0 cursor-grab items-center justify-center text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
           >
             <GripVerticalIcon className="size-3.5" />
           </button>
@@ -218,7 +218,7 @@ function SongBadges({ item }: { item: SongQueueItem }) {
   const song = useSongStore((s) => s.songs[item.song.song_id])
   const arrangement = song?.arrangements.find((a) => a.id === item.song.arrangement_id)
   return (
-    <span className="ml-1 flex shrink-0 items-center gap-1 text-[0.625rem] text-muted-foreground">
+    <span className="ml-1 flex shrink-0 items-center gap-1 text-[0.6875rem] text-muted-foreground">
       {item.song.languages.map((l) => (
         <span key={l} className="rounded border border-border px-1 uppercase">{l}</span>
       ))}
@@ -271,13 +271,13 @@ export function SlideList({ item, index, mode }: { item: SongQueueItem; index: n
                 live ? "bg-live-pulse/15 text-destructive" : sel ? "bg-primary/10" : "hover:bg-muted/50"
               )}
             >
-              <span className="w-7 shrink-0 font-mono text-[0.625rem] text-muted-foreground">
+              <span className="w-7 shrink-0 font-mono text-[0.6875rem] text-muted-foreground">
                 {section ? sectionShort(section.kind, section.label) : ""}
               </span>
               <span className="truncate text-muted-foreground">{slide.lines[0]}</span>
-              {live && <span className="ml-auto shrink-0 text-[0.625rem] font-bold tracking-wider uppercase">Live</span>}
+              {live && <span className="ml-auto shrink-0 text-[0.6875rem] font-bold tracking-wider uppercase">Live</span>}
               {slide.missing.length > 0 && (
-                <span className="ml-auto shrink-0 text-[0.625rem] text-confidence-mid uppercase" title={`No ${slide.missing.join(", ")} text for this section`}>
+                <span className="ml-auto shrink-0 text-[0.6875rem] text-confidence-mid uppercase" title={`No ${slide.missing.join(", ")} text for this section`}>
                   no {slide.missing.join("/")}
                 </span>
               )}

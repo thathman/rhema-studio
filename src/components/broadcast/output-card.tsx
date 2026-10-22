@@ -99,7 +99,7 @@ export function OutputCard({
         )}
         <span
           className={cn(
-            "absolute top-1.5 left-1.5 inline-flex items-center gap-1.5 rounded-4xl border px-2 py-0.5 text-[0.625rem] font-semibold tracking-wider uppercase backdrop-blur-sm",
+            "absolute top-1.5 left-1.5 inline-flex items-center gap-1.5 rounded-4xl border px-2 py-0.5 text-[0.6875rem] font-semibold tracking-wider uppercase backdrop-blur-sm",
             onAir && output.type === "display" && "border-destructive/40 bg-destructive/15 text-destructive",
             onAir && output.type === "ndi" && "border-emerald-500/40 bg-emerald-500/15 text-emerald-400",
             !onAir && "border-border bg-background/70 text-muted-foreground"
@@ -138,7 +138,7 @@ export function OutputCard({
             <div className="flex items-center gap-1.5">
               <span className="truncate text-sm font-semibold">{output.name}</span>
               {isDefault && (
-                <Badge variant="outline" className="h-4 px-1.5 text-[0.5625rem] tracking-wider uppercase">
+                <Badge variant="outline" className="h-4 px-1.5 text-[0.6875rem] tracking-wider uppercase">
                   Default
                 </Badge>
               )}

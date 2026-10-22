@@ -100,7 +100,7 @@ export function MoreWorkspace() {
                         <span className="block text-xs text-muted-foreground">{r.detail}</span>
                       </span>
                       {r.planned ? (
-                        <Badge variant="outline" className="text-[0.625rem]">Planned · {r.planned}</Badge>
+                        <Badge variant="outline" className="text-[0.6875rem]">Planned · {r.planned}</Badge>
                       ) : (
                         <ChevronRightIcon className="text-muted-foreground" />
                       )}

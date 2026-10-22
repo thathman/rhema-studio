@@ -23,11 +23,11 @@ export function SectionLabel({ header, summary }: { header: OutlineHeader; summa
   return (
     <li
       aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
-      className={cn("flex items-center gap-2 px-2 text-[0.625rem] font-extrabold tracking-[0.1em] uppercase", phase ? "mt-3 text-tone-accent-foreground first:mt-1" : "mt-1.5 pl-4 text-muted-foreground")}
+      className={cn("flex items-center gap-2 px-2 text-[0.6875rem] font-extrabold tracking-[0.1em] uppercase", phase ? "mt-3 text-tone-accent-foreground first:mt-1" : "mt-1.5 pl-4 text-muted-foreground")}
     >
       <span className="truncate">{header.name}</span>
-      {phase && header.rule && <span className="shrink-0 font-semibold tracking-normal normal-case opacity-80">· {RULE_LABEL[header.rule].chip}</span>}
-      {summary?.minutes ? <span className="ml-auto shrink-0 font-semibold tracking-normal normal-case opacity-70">{summary.minutes} min</span> : null}
+      {phase && header.rule && <span className="shrink-0 font-semibold tracking-normal normal-case">· {RULE_LABEL[header.rule].chip}</span>}
+      {summary?.minutes ? <span className="ml-auto shrink-0 font-semibold tracking-normal normal-case">{summary.minutes} min</span> : null}
     </li>
   )
 }
@@ -53,7 +53,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
         phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
       )}
     >
-      <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-5 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
+      <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
         {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
       </button>
       {renaming ? (
@@ -70,8 +70,8 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
       ) : (
         <span className={cn("min-w-0 flex-1 truncate", phase ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
       )}
-      {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.625rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
-      <span className="shrink-0 text-[0.6875rem] tabular-nums opacity-80">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+      {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
+      <span className="shrink-0 text-[0.6875rem] tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
       <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={() => useAddDialog.getState().openFor(header.id)}><PlusIcon /></Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

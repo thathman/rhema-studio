@@ -76,7 +76,7 @@ function ThemeCard({
 
         {/* Active badge */}
         {isActive && (
-          <Badge className="absolute top-1.5 left-1.5 bg-emerald-600 text-[0.5rem] text-white hover:bg-emerald-600">
+          <Badge className="absolute top-1.5 left-1.5 bg-primary text-[0.6875rem] text-primary-foreground hover:bg-primary">
             Active
           </Badge>
         )}
@@ -125,14 +125,14 @@ function ThemeCard({
           )}
 
           {isActive && (
-            <p className="text-[0.5rem] text-muted-foreground">Default</p>
+            <p className="text-[0.6875rem] text-muted-foreground">Default</p>
           )}
         </div>
 
         {/* Tags */}
         <div className="flex shrink-0 items-center gap-1">
           {theme.builtin && (
-            <Badge variant="outline" className="text-[0.5rem]">
+            <Badge variant="outline" className="text-[0.6875rem]">
               Built-in
             </Badge>
           )}
@@ -252,9 +252,10 @@ export function ThemeLibrary() {
       {/* Search */}
       <div className="px-3 pt-3 pb-4">
         <div className="relative">
-          <SearchIcon className="absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
+          <SearchIcon aria-hidden className="absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search themes..."
+            aria-label="Search themes"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-7"
@@ -333,7 +334,7 @@ export function ThemeLibrary() {
           {/* Built-in section */}
           {builtinThemes.length > 0 && (
             <>
-              <p className="px-1.5 pt-2 pb-1 text-[0.625rem] font-semibold tracking-widest text-muted-foreground uppercase">
+              <p className="px-1.5 pt-2 pb-1 text-[0.6875rem] font-semibold tracking-widest text-muted-foreground uppercase">
                 Built-in
               </p>
               {builtinThemes.map((theme) => (
@@ -352,7 +353,7 @@ export function ThemeLibrary() {
           {/* Custom section */}
           {customThemes.length > 0 && (
             <>
-              <p className="px-1.5 pt-3 pb-1 text-[0.625rem] font-semibold tracking-widest text-muted-foreground uppercase">
+              <p className="px-1.5 pt-3 pb-1 text-[0.6875rem] font-semibold tracking-widest text-muted-foreground uppercase">
                 Custom
               </p>
               {customThemes.map((theme) => (

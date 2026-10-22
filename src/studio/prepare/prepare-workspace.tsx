@@ -66,7 +66,7 @@ export function PrepareWorkspace() {
         <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-panel" data-tour="prepare-rundown">
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
+              <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
               <h2 className="text-sm font-semibold">{count} {count === 1 ? "item" : "items"}{planned ? ` · ${planned} planned` : ""}</h2>
             </div>
           </div>

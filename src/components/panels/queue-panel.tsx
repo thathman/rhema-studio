@@ -54,13 +54,13 @@ function QueueItemRow({
 
   const sourceBadge =
     item.source === "manual" ? (
-      <Badge variant="outline" className="shrink-0 text-[0.625rem] text-muted-foreground" title="Added by hand">
+      <Badge variant="outline" className="shrink-0 text-[0.6875rem] text-muted-foreground" title="Added by hand">
         Added
       </Badge>
     ) : (
       <Badge
         variant="default"
-        className="shrink-0 bg-ai-direct/15 text-[0.625rem] text-ai-direct hover:bg-ai-direct/15"
+        className="shrink-0 bg-ai-direct/15 text-[0.6875rem] text-ai-direct hover:bg-ai-direct/15"
         title="Heard while listening"
       >
         Heard
