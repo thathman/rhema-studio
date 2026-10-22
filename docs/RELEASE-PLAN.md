@@ -77,6 +77,16 @@ No release passes with unresolved P0 reliability/data-loss/security issues, miss
 - [ ] Record owner sign-off before merging and separate release sign-off before publishing.
 - [ ] Only then mark R0 accepted; otherwise retain **In PR** or **Merged — not accepted**.
 
+Evidence so far (2026-10-22, Intel Mac, details in `docs/rhema-studio/mac-desktop-acceptance.md`); boxes stay open until the owner signs off:
+
+- Language integration: Yorùbá (OYCB) and KJV side by side, Yorùbá diacritics drawn, one language per output, Yorùbá book names in Quick find; source notice in the installer data.
+- Preview/Live and workspaces: Preview, Live, Clear, Restore, Back, quick screens and Next verified on the real app; external screen not tested (no second monitor connected).
+- Save/reopen and data safety: save, quit, relaunch; bilingual items, notes, comments and prepared-by kept; stale-save conflicts; backup/restore drill R1–R5; damaged settings restored; nothing lost on a quick close.
+- CI on the exact merged commit: CI runs on every push to `main`; the Desktop build is from `4a8b4fb`, whose CI passed.
+- Windows: installer built from `main` earlier (run 39622759376); not launched on Windows: blocked on a Windows machine.
+- NDI and OSC/HTTP: NDI 720p/1080p stream received; HTTP remote, pairing, roles and OSC cues verified.
+- Owner sign-off: not yet recorded.
+
 ## 6. Evidence and ownership template
 
 The current candidate's filled-in sheet: [rhema-studio/19-release-candidate-evidence.md](rhema-studio/19-release-candidate-evidence.md).
