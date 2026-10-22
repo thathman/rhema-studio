@@ -181,6 +181,8 @@ export type Licence = (typeof LICENCES)[number]
 export interface Song {
   id: string
   title: string
+  /** Other names the song is known by (a hymn's Yorùbá title); searched with the title. */
+  alternate_titles?: string[]
   authors: string
   copyright: string
   ccli_number: string | null
@@ -230,6 +232,7 @@ export interface SongWithSections {
 export interface SongSummary {
   id: string
   title: string
+  alternate_titles?: string[]
   authors: string
   licence: Licence
   primary_language: string
@@ -271,6 +274,7 @@ export interface HymnNumberInput {
 
 export interface SongInput {
   title: string
+  alternate_titles?: string[]
   authors?: string
   copyright?: string
   ccli_number?: string | null

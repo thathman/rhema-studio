@@ -237,6 +237,9 @@ function EditorDialog({
             <Field label="Title">
               <Input value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="Amazing Grace" autoFocus={!songId} />
             </Field>
+            <Field label="Other titles" hint="One per line: a Yorùbá title, a first line people use as its name. Searched like the title.">
+              <Textarea value={form.alternate_titles} onChange={(e) => set({ alternate_titles: e.target.value })} rows={2} className="min-h-0 text-sm" aria-label="Other titles" />
+            </Field>
             <Field label="Authors" hint="Separate with semicolons">
               <Input value={form.authors} onChange={(e) => set({ authors: e.target.value })} placeholder="John Newton" />
             </Field>

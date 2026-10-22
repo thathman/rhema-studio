@@ -96,11 +96,12 @@ export function cacHymnbookFromJson(raw: unknown): { parts: Array<{ book: Hymnbo
       continue
     }
     part.seen.add(number)
-    const notes = [str(yo?.title) && `Yorùbá: ${str(yo?.title)}`, str(en?.tune) && `Tune: ${str(en?.tune)}`, str(en?.category)].filter(Boolean).join(" · ")
+    const notes = [str(en?.tune) && `Tune: ${str(en?.tune)}`, str(en?.category)].filter(Boolean).join(" · ")
+    const yoTitle = [...str(yo?.title)].slice(0, 200).join("")
     part.songs.push({
       number,
       // The screen's footer line then reads "<title> · CAC Gospel Hymn Book 245".
-      song: { title, primary_language: "yo", licence: "custom", licence_note: `CAC Gospel Hymn Book ${part.shown}${number}`, tags: CAC_TAG, notes: [...notes].slice(0, 2000).join(""), sections },
+      song: { title, alternate_titles: yoTitle && yoTitle !== title ? [yoTitle] : [], primary_language: "yo", licence: "custom", licence_note: `CAC Gospel Hymn Book ${part.shown}${number}`, tags: CAC_TAG, notes: [...notes].slice(0, 2000).join(""), sections },
     })
   }
   return { parts: parts.map(({ book, songs }) => ({ book, songs })), skipped }

@@ -41,7 +41,10 @@ export function parseOpenLyrics(xml: string, hymnbookIds: Record<string, string>
   const ignored: string[] = []
 
   const titles = q(doc, "title")
-  const title = (titles.find((t) => !t.getAttribute("lang")) ?? titles[0])?.textContent?.trim() ?? ""
+  const main = titles.find((t) => !t.getAttribute("lang")) ?? titles[0]
+  const title = main?.textContent?.trim() ?? ""
+  // Every other <title> (another language, an alternative name) is kept as an alternate title.
+  const alternateTitles = titles.filter((t) => t !== main).map((t) => t.textContent?.trim() ?? "").filter((t) => t && t !== title).slice(0, 20)
   const authors = q(doc, "author").map((a) => a.textContent?.trim() ?? "").filter(Boolean).join("; ")
   const ccli = first(doc, "ccliNo").replace(/\D/g, "")
   const copyright = first(doc, "copyright")
@@ -90,6 +93,7 @@ export function parseOpenLyrics(xml: string, hymnbookIds: Record<string, string>
   return {
     input: {
       title,
+      alternate_titles: alternateTitles,
       authors,
       copyright,
       ccli_number: ccli || null,
@@ -133,7 +137,7 @@ export function toOpenLyrics(song: SongWithSections): string {
     })
   )
   const props = [
-    `    <titles><title>${esc(song.song.title)}</title></titles>`,
+    `    <titles><title>${esc(song.song.title)}</title>${(song.song.alternate_titles ?? []).map((t) => `<title>${esc(t)}</title>`).join("")}</titles>`,
     song.song.authors ? `    <authors>${song.song.authors.split(";").map((a) => a.trim()).filter(Boolean).map((a) => `<author>${esc(a)}</author>`).join("")}</authors>` : "",
     song.song.copyright ? `    <copyright>${esc(song.song.copyright)}</copyright>` : song.song.licence === "public_domain" ? "    <copyright>Public domain</copyright>" : "",
     song.song.ccli_number ? `    <ccliNo>${esc(song.song.ccli_number)}</ccliNo>` : "",

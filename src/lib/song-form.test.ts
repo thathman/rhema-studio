@@ -114,3 +114,12 @@ function sampleSongForNew() {
   } as unknown as Parameters<typeof formFromSong>[0]
 }
 
+
+describe("other titles", () => {
+  it("one per line, blanks dropped; more than 20 cannot be saved", async () => {
+    const { emptyForm, otherTitles, validateForm } = await import("./song-form")
+    const f = { ...emptyForm(), title: "X", alternate_titles: " Olùṣọ́-àgùntàn \n\n  Great shepherd hear " }
+    expect(otherTitles(f)).toEqual(["Olùṣọ́-àgùntàn", "Great shepherd hear"])
+    expect(validateForm({ ...f, alternate_titles: Array.from({ length: 21 }, (_, i) => `t${i}`).join("\n") })).toContain("At most 20 other titles.")
+  })
+})
