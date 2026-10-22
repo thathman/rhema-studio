@@ -10,6 +10,7 @@ import { useBibleStore, useQueueStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
 import { isContentCommandError } from "@/types/content"
 import type { MediaAssetStatus } from "@/types"
+import { soundType } from "@/lib/sound-type"
 import { imageQueueItem } from "@/lib/media-items"
 
 /**
@@ -118,6 +119,7 @@ export function MediaLibrary() {
               <li key={a.id} className="flex items-center gap-2 px-1 py-0.5 text-xs">
                 <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate" title={a.name}>{a.name}</span>
+                {soundType(a.mime) && <span className="shrink-0 rounded border border-border px-1 text-[0.625rem] text-muted-foreground">{soundType(a.mime)}</span>}
                 {!a.present && <span className="text-[0.625rem] text-destructive">missing</span>}
                 <ConfirmDelete label={`Remove ${a.name}`} verb="Remove" onConfirm={() => void remove(a)} />
                 <Button variant="outline" size="xs" disabled={!a.present} onClick={() => add(a)} title="Add to the service: it plays when reached, and the screens keep what they show"><PlusIcon /> Add</Button>
