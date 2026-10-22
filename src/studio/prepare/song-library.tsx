@@ -19,7 +19,7 @@ const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI
  * to the service, or open it in the editor. "New song" opens the paste-first
  * editor.
  */
-export function SongLibrary() {
+export function SongLibrary({ layout = "list", newRequest = 0 }: { layout?: "list" | "cards"; newRequest?: number } = {}) {
   const [query, setQuery] = useState("")
   const results = useSongStore((s) => s.results)
   const searching = useSongStore((s) => s.searching)
@@ -41,6 +41,13 @@ export function SongLibrary() {
     search("")
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [search])
+  // The Library's "New song": open the editor (a render-time check, so no effect sets state).
+  const [seenRequest, setSeenRequest] = useState(newRequest)
+  if (newRequest !== seenRequest) {
+    setSeenRequest(newRequest)
+    setEditing({ open: true, id: null })
+  }
+  const cards = layout === "cards"
 
   const onChange = (value: string) => {
     setQuery(value)
@@ -58,7 +65,7 @@ export function SongLibrary() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2">
+      <div className={cn("flex items-center gap-2", cards && "rounded-lg border border-border bg-card p-2")}>
         <div className="relative flex-1">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -67,12 +74,15 @@ export function SongLibrary() {
             value={query}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") onChange("") }}
-            className="h-11 pl-9 text-sm"
+            className={cn("h-11 pl-9 text-sm", cards && "border-transparent shadow-none")}
           />
         </div>
-        <Button size="sm" className="h-11" onClick={() => setEditing({ open: true, id: null })}>
-          <PlusIcon /> New song
-        </Button>
+        {cards && <span className="shrink-0 rounded-[5px] bg-tone-green px-2 py-1 text-[0.625rem] font-bold text-tone-green-foreground max-[900px]:hidden">Fast local search</span>}
+        {!cards && (
+          <Button size="sm" className="h-11" onClick={() => setEditing({ open: true, id: null })}>
+            <PlusIcon /> New song
+          </Button>
+        )}
         <Button size="sm" variant="outline" className="h-11" onClick={() => setEditing({ open: true, id: null, choir: true })} title="Lyrics the choir sings to the church">
           <PlusIcon /> Choir ministration
         </Button>
@@ -84,7 +94,7 @@ export function SongLibrary() {
           </button>
         ))}
       </div>
-      <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
+      <ul className={cn("mt-2 min-h-0 flex-1 overflow-y-auto", cards ? "-mx-1 grid auto-rows-min grid-cols-3 gap-4 px-1 pt-2 pb-1 max-[1280px]:grid-cols-2 max-[640px]:grid-cols-1" : "flex flex-col gap-0.5")} aria-live="polite">
         {error && <li className="px-2 py-1 text-xs text-destructive">{error}</li>}
         {searching && results.length === 0 && <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>}
         {!searching && shown.length === 0 && !error && (
@@ -94,6 +104,7 @@ export function SongLibrary() {
         )}
         {shown.map((song) => {
           const isSel = !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === song.id
+          if (cards) return <SongCard key={song.id} song={song} selected={isSel} onEdit={() => setEditing({ open: true, id: song.id })} onAdd={() => add(song)} />
           return (
             <li key={song.id} className="flex items-stretch gap-1">
               <button
@@ -142,5 +153,39 @@ export function SongLibrary() {
         onSaved={() => search(query)}
       />
     </div>
+  )
+}
+
+/** A song as a card (the Library's approved design): a flat cover in the kind's colour, what it is, Edit and Add to service. */
+function SongCard({ song, selected, onEdit, onAdd }: { song: SongSummary; selected: boolean; onEdit: () => void; onAdd: () => void }) {
+  const choir = isChoir(song.tags)
+  const hymn = song.numbers.length > 0
+  const meta = [choir ? "Choir ministration" : hymn ? `Hymn ${song.numbers.join(", ")}` : "Song", song.languages.map((l) => l.toUpperCase()).join(" / "), song.authors].filter(Boolean).join(" · ")
+  return (
+    <li className={cn("flex min-w-0 flex-col overflow-hidden rounded-[15px] border bg-card transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_15px_32px_#26314914] motion-reduce:transition-none", selected ? "border-primary" : "border-border")}>
+      <button
+        type="button"
+        onClick={() => presentActions.previewSlide(songQueueItem(song, `library-${song.id}`), 0)}
+        title="Click to preview"
+        className={cn(
+          "flex aspect-[1.7] items-center justify-center px-6 text-center text-[1.4375rem] leading-tight font-medium text-white outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+          choir ? "bg-[linear-gradient(130deg,#152538,#324d76)]" : hymn ? "bg-[linear-gradient(135deg,#1d3f3b,#4f8073)]" : "bg-[linear-gradient(145deg,#294b46,#79a38b)]",
+        )}
+      >
+        <span className="line-clamp-3">{song.title}</span>
+      </button>
+      <div className="flex flex-1 flex-col gap-1 px-[15px] pt-3 pb-3">
+        <p className="truncate text-[0.8125rem] font-bold">{song.title}</p>
+        <p className="truncate text-[0.6875rem] text-muted-foreground">{meta || song.first_line || "—"}</p>
+        <div className="mt-auto flex items-center gap-1.5 pt-2">
+          <span className="rounded-[5px] bg-tone-neutral px-[7px] py-1 text-[0.625rem] font-semibold text-tone-neutral-foreground">{choir ? "choir" : hymn ? "hymn" : "song"}</span>
+          <span className={cn("rounded-[5px] px-[7px] py-1 text-[0.625rem] font-semibold", song.licence === "unknown" ? "bg-tone-amber text-tone-amber-foreground" : "bg-tone-neutral text-tone-neutral-foreground")} title={song.licence === "unknown" ? "Licence not recorded yet" : undefined}>
+            {LICENCE_BADGE[song.licence] ?? song.licence}
+          </span>
+          <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label={`Edit ${song.title}`} onClick={onEdit}><PencilIcon /></Button>
+          <Button variant="soft" size="sm" onClick={onAdd}><PlusIcon /> Add to service</Button>
+        </div>
+      </div>
+    </li>
   )
 }
