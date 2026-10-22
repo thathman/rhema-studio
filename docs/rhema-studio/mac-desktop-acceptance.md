@@ -299,6 +299,13 @@ is on the owner's Desktop, not published anywhere:
 
 The older copy in `~/Desktop/Rhema-Intel-QA/` (from `e343c52`) is the one the owner was running; it is left alone.
 
+Newer build from `main` at `9630e1e` (adds #178–#182: sound file types, log and phone names for pictures, the phone remote's status on change), in its own folder because the owner was running the one above:
+
+| File | Size | SHA-256 |
+|---|---|---|
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22b/Rhema-0.3.2-intel-x86_64.dmg` | 841 MB | `81ebff083a13e798c6dc89af3fafac919bb875b7c68ef17a95df848e9cae2206` |
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22b/Rhema.app` (executable) | 1.0 GB | `5b053b65813518eba3bc16deadc83da6856bdafd2d23c7d3f086f62405860eb4` |
+
 - Mach-O x86_64 only; signature ad hoc, identifier `com.openbezal.rhema`;
   `spctl` rejects it (not notarised), as expected for a local build.
 - The bundle carries the Bible library (8 translations), licences, the Whisper
