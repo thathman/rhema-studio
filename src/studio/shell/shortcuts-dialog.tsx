@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 const GROUPS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, string]>]> = [
-  ["Anywhere", [["⌘K / Ctrl+K", "Find anything"], ["⌘1 to ⌘7", "Home, Prepare, Present, Library, Design, Team, Archive"], ["⌘, / Ctrl+,", "Settings"]]],
+  ["Anywhere", [["⌘K / Ctrl+K", "Find anything"], ["⌘1 to ⌘8", "Home, Prepare, Present, Library, Design, Team, Archive, Production"], ["⌘, / Ctrl+,", "Settings"]]],
   ["Present", [["→ or Page Down", "Next (a song's next slide, then the next item)"], ["← or Page Up", "Previous"], ["Shift+→ / Shift+←", "The next or previous verse of the live passage"], ["Esc", "Clear (takes it off the screens; Restore brings it back)"], ["Shift+Esc", "Restore"]]],
 ]
 

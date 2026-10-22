@@ -20,6 +20,7 @@ import { SettingsPage } from "@/components/settings-dialog"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { LibraryWorkspace } from "@/studio/library/library-workspace"
 import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
+import { ProductionWorkspace } from "@/studio/production/production-workspace"
 import { TeamWorkspace } from "@/studio/team/team-workspace"
 import { openSettings } from "@/lib/settings-dialog"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -34,7 +35,7 @@ import "@/stores/stage-finish"
 import "@/lib/app-tick"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", library: "Library", design: "Design studio", team: "Team", archive: "Archive", settings: "Settings", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", production: "Production control", library: "Library", design: "Design studio", team: "Team", archive: "Archive", settings: "Settings", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -43,6 +44,7 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   design: () => <DesignWorkspace />,
   library: () => <LibraryWorkspace />,
   archive: () => <ArchiveWorkspace />,
+  production: () => <ProductionWorkspace />,
   team: () => <TeamWorkspace />,
   settings: () => <SettingsPage />,
   more: () => <MoreWorkspace />,
