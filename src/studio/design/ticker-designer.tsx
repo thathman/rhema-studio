@@ -47,6 +47,11 @@ export function TickerDesigner() {
           <Row label="Position">
             {(["bottom", "top"] as const).map((p) => <Button key={p} size="xs" variant={style.position === p ? "default" : "outline"} onClick={() => patch({ position: p })}>{p === "top" ? "Top" : "Bottom"}</Button>)}
           </Row>
+          <Row label="Motion">
+            <Button size="xs" variant={style.motion !== "pages" ? "default" : "outline"} onClick={() => patch({ motion: "crawl" })}>Crawl</Button>
+            <Button size="xs" variant={style.motion === "pages" ? "default" : "outline"} onClick={() => patch({ motion: "pages" })}>One at a time, still</Button>
+            {style.motion === "pages" && <NumberField label="Seconds each" value={style.pageSeconds} min={2} max={60} suffix="s" onChange={(pageSeconds) => patch({ pageSeconds })} />}
+          </Row>
           <Row label="Moves">
             {(["left", "right"] as const).map((d) => <Button key={d} size="xs" variant={style.direction === d ? "default" : "outline"} onClick={() => patch({ direction: d })}>{d === "left" ? "Toward the left" : "Toward the right"}</Button>)}
           </Row>

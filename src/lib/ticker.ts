@@ -14,6 +14,8 @@ export const DEFAULT_TICKER_STYLE: TickerStyle = {
   labelBackground: "#d4a656",
   separator: "•",
   direction: "left",
+  motion: "crawl",
+  pageSeconds: 6,
 }
 
 const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d)
@@ -43,6 +45,8 @@ export function normalizeTickerStyle(raw: Partial<TickerStyle> | null | undefine
     labelBackground: str(r.labelBackground, d.labelBackground),
     separator: typeof r.separator === "string" ? r.separator.slice(0, 8) : d.separator,
     direction: r.direction === "right" ? "right" : "left",
+    motion: r.motion === "pages" ? "pages" : "crawl",
+    pageSeconds: num(r.pageSeconds, d.pageSeconds, 2, 60),
   }
 }
 
@@ -79,4 +83,20 @@ export function crawlElapsed(ticker: { startedAt: number; pausedAt?: number }, n
 /** Copies moving toward the right: the same crawl mirrored in the lane. */
 export function mirrorPositions(positions: number[], laneX: number, laneW: number, textW: number): number[] {
   return positions.map((x) => 2 * laneX + laneW - x - textW)
+}
+
+/** Pages: which announcement shows after `elapsedMs` (blank ones skipped), or -1 with none. */
+export function pageIndex(items: string[], pageSeconds: number, elapsedMs: number): number {
+  const shown = items.map((i) => i.trim()).filter(Boolean)
+  if (shown.length === 0) return -1
+  return Math.floor(Math.max(0, elapsedMs) / (Math.max(1, pageSeconds) * 1000)) % shown.length
+}
+
+/** Saved announcement sets, cleaned (names and items trimmed, empty ones dropped). */
+export function normalizePresets(raw: unknown): Array<{ id: string; name: string; items: string[] }> {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((p): p is { id: unknown; name: unknown; items: unknown } => !!p && typeof p === "object")
+    .map((p) => ({ id: typeof p.id === "string" ? p.id : crypto.randomUUID(), name: typeof p.name === "string" ? p.name.trim().slice(0, 60) : "", items: Array.isArray(p.items) ? p.items.filter((i): i is string => typeof i === "string") : [] }))
+    .filter((p) => p.name && p.items.some((i) => i.trim()))
 }

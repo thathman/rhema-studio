@@ -48,6 +48,17 @@ export interface TickerStyle {
   separator: string
   /** Which way the words move: toward the left (the usual crawl) or toward the right. */
   direction: "left" | "right"
+  /** Crawl, or one announcement at a time without movement (for people who find motion hard). */
+  motion: "crawl" | "pages"
+  /** Pages: seconds each announcement stays. */
+  pageSeconds: number
+}
+
+/** A saved set of announcements to load into the ticker. */
+export interface TickerPreset {
+  id: string
+  name: string
+  items: string[]
 }
 
 /** The ticker on air: what crawls, since when, in which look. */

@@ -478,6 +478,20 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.stream.ticker).toBeNull()
   })
 
+  it("saved announcement sets: a set of the same name is replaced; nothing to save without words or a name", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    useBroadcastStore.getState().setTickerItems(["Prayer meeting Wednesday 6:30 PM", ""])
+    useBroadcastStore.getState().saveTickerPreset(" Weekday ")
+    useBroadcastStore.getState().setTickerItems(["Youth gathering Saturday 4 PM"])
+    useBroadcastStore.getState().saveTickerPreset("weekday")
+    useBroadcastStore.getState().saveTickerPreset("  ")
+    useBroadcastStore.getState().setTickerItems([" "])
+    useBroadcastStore.getState().saveTickerPreset("Empty")
+    expect(useBroadcastStore.getState().tickerPresets.map((p) => [p.name, p.items])).toEqual([["weekday", ["Youth gathering Saturday 4 PM"]]])
+    useBroadcastStore.getState().deleteTickerPreset(useBroadcastStore.getState().tickerPresets[0].id)
+    expect(useBroadcastStore.getState().tickerPresets).toEqual([])
+  })
+
   it("a signage output can show the ticker over its pictures; the stage never does", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()

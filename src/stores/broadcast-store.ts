@@ -7,7 +7,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, Ticker, TickerStyle } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -21,7 +21,7 @@ import { forOutputLanguage } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
-import { DEFAULT_TICKER_STYLE, normalizeTickerStyle } from "@/lib/ticker"
+import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -96,6 +96,11 @@ interface BroadcastState {
   tickerItems: string[]
   /** How the ticker looks. Saved. */
   tickerStyle: TickerStyle
+  /** Saved sets of announcements. Saved. */
+  tickerPresets: TickerPreset[]
+  /** Save the words now in the ticker as a set (replacing one of the same name). */
+  saveTickerPreset: (name: string) => void
+  deleteTickerPreset: (id: string) => void
   setTickerItems: (items: string[]) => void
   /** Start the ticker with the saved items and style (`backing` resolved from the style's media), or stop it (null). */
   setTicker: (on: { backing: Ticker["backing"] } | null) => void
@@ -411,6 +416,15 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   ticker: null,
   tickerItems: [],
   tickerStyle: DEFAULT_TICKER_STYLE,
+  tickerPresets: [],
+  saveTickerPreset: (name) => {
+    const n = name.trim().slice(0, 60)
+    const items = get().tickerItems.filter((i) => i.trim())
+    if (!n || items.length === 0) return
+    const others = get().tickerPresets.filter((p) => p.name.toLowerCase() !== n.toLowerCase())
+    set({ tickerPresets: [...others, { id: crypto.randomUUID(), name: n, items }] })
+  },
+  deleteTickerPreset: (id) => set({ tickerPresets: get().tickerPresets.filter((p) => p.id !== id) }),
   outputFrames: {},
   rehearsal: false,
   presentWarning: null,
@@ -893,6 +907,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
       patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
       const items = await store.get("tickerItems")
       if (Array.isArray(items)) patch.tickerItems = items.filter((i): i is string => typeof i === "string")
+      patch.tickerPresets = normalizePresets(await store.get("tickerPresets"))
 
       useBroadcastStore.setState(patch)
 
@@ -905,7 +920,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.autoLive !== prevState.autoLive ||
           state.lowerThirdStyles !== prevState.lowerThirdStyles ||
           state.tickerStyle !== prevState.tickerStyle ||
-          state.tickerItems !== prevState.tickerItems
+          state.tickerItems !== prevState.tickerItems ||
+          state.tickerPresets !== prevState.tickerPresets
         if (!changed) return
         if (saveTimer) clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
@@ -957,6 +973,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("lowerThirdStyles", state.lowerThirdStyles)
     await store.set("tickerStyle", state.tickerStyle)
     await store.set("tickerItems", state.tickerItems)
+    await store.set("tickerPresets", state.tickerPresets)
     await store.save()
   } catch {
     console.warn("[broadcast] Failed to persist themes")
