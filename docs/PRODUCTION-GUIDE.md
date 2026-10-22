@@ -37,7 +37,7 @@ OSC addresses and HTTP commands do exactly what the buttons do, with the same sa
 
 Macro ids: `service-start`, `offering`, `prayer`, `service-end`, plus your own: Present → Cues → New cue… builds one from the same actions (Next, Clear, quick screens, timer, stage message, rehearsal off) in the order you choose; it is saved on this computer and its id (from its name, e.g. `baptism`) is shown under it for a Stream Deck or OSC controller. Present → Cues shows each macro's steps.
 
-**Phone remote:** start the HTTP API with "Accept commands from other devices on this network" ticked, press "Pair a device", and scan the QR code with a phone on the same Wi-Fi. It opens a page with big Next, Previous, Back on air and Clear buttons and what is on air (or that rehearsal is on, or that the computer is waiting for an approval answer); press Pair once. If the Wi-Fi drops an answer the phone tries again by itself and the computer never does one press twice; "No answer…" means check the screen before pressing again. Without the camera, open the address shown under the code and type the six digits. The phone stays paired until it is revoked.
+**Phone remote:** start the HTTP API with "Accept commands from other devices on this network" ticked, press "Pair a device", and scan the QR code with a phone on the same Wi-Fi. It opens a page with big Next, Previous, Back on air and Clear buttons and what is on air (or that rehearsal is on, or that the computer is waiting for an approval answer); press Pair once. If the Wi-Fi drops an answer the phone tries again by itself and the computer never does one press twice; "No answer…" means check the screen before pressing again. Without the camera, open the address shown under the code and type the six digits. The phone stays paired until it is revoked. What the phone shows (on air, rehearsal, waiting for approval) follows the computer within a second, also when the Rhema window is minimised or behind another app.
 
 **Who can send these:** anyone on the network while a listener runs, unless you set a key or pair devices in Settings → Remote. Pairing: start the HTTP API, press "Pair a device", and on the phone or controller send the six-digit code once to `/api/v1/pair`; it receives its own token (HTTP header `X-Rhema-Key`, or first OSC argument) and can be revoked on its own later. Start a listener just before the service and stop it after (a listener left running starts again, the same way, the next time Rhema starts, unless it accepted other devices with no key or paired device: that one waits for you, with a message); if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
 
@@ -96,9 +96,19 @@ While Rhema listens, verses it hears in the sermon appear in the preview and the
 
 ## Translations
 
+Quick find takes a full reference, a book or chapter alone ("1 Samuel", "1 Kings 3", "Psalm 23": that chapter's first verse comes first, above any word matches), and ordinals in words ("First Samuel 3:10", and the Yorùbá order "Samuẹli Kínní 3:10", "Ọba Kejì 2:9").
+
 Quick find understands the Yorùbá Bible's own book names as well as the English ones, with or without accents: "Johanu 3:16", "Jòhánù 3 16", "1 Ọba 3:9", "Ìṣe àwọn Aposteli 2:38" (or just "Ise 2:38"). The names are the ones printed in the bundled Yorùbá edition; other Yorùbá Bibles may spell some books differently (for example "Johannu").
 
 - A saved item goes live in the translation it was saved with; spontaneous verses follow your active translations. The Present header chip switches to "Override" to show everything in the current translation. A missing translation is reported, never substituted.
+
+## Hymn book (CAC Gospel Hymn Book)
+
+Prepare → **Hymn book** lists the Christ Apostolic Church Gospel Hymn Book in English and Yorùbá, apart from the Songs library: **Part 1** (1–1000) and **Part 2 · Various** (V1–V50). Find a hymn by number (`245`; `V12` or `v012` for Part 2) or by words in either language; click to preview; **Add** puts it in the service. "First: Yorùbá / English" is remembered and sets the order of new items; each item's EN · YO chips still change it in the rundown.
+
+- **Import:** the first time, **Import the hymn book…** and choose `hymns_combined.json`. The hymns are kept in this computer's database only; they are not part of the app or its repository. **Import the file again…** updates them in place (by number), so services that use them keep working; a number already used by one of your own songs in a "CAC" hymnbook is left alone and reported.
+- **On screen** a hymn is a bilingual song: each verse with its chorus, both languages styled by the theme's first/second language settings, the footer "<title> · CAC Gospel Hymn Book 245". An output set to one language shows only that one. Quick find also finds `CAC 245`.
+- Hymns never appear in the Songs tab, its count or its export.
 
 ## Who did what
 
