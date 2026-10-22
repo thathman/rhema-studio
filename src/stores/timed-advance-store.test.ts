@@ -13,7 +13,7 @@ vi.mock("@/lib/remote-actions", () => ({
   }),
 }))
 
-const { useTimedAdvance } = await import("./timed-advance-store")
+const { useTimedAdvance, catchUpTimedAdvance } = await import("./timed-advance-store")
 const { usePhaseRun } = await import("./phase-run-store")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
@@ -67,6 +67,16 @@ describe("timed moves in the service", () => {
     expect(presented).toEqual([])
     usePhaseRun.setState({ run: { headerId: "main", itemId: "a", startsAt: null, nextAt: null } })
     live("a")
+    expect(useTimedAdvance.getState().dueAt).toBeNull()
+  })
+
+  it("a move held back while the window is hidden happens on the app's tick", async () => {
+    useTimedAdvance.getState().setOn(true)
+    live("a")
+    vi.setSystemTime(Date.now() + 2 * 60_000 + 500)
+    catchUpTimedAdvance()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(presented).toEqual(["b"])
     expect(useTimedAdvance.getState().dueAt).toBeNull()
   })
 })
