@@ -2,7 +2,7 @@ import { keepFocusInList } from "@/lib/keep-focus"
 import { useEffect, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
-import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon, BellRingIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon, BellRingIcon, TimerIcon } from "lucide-react"
 
 
 
@@ -111,6 +111,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                     aria-label={`When it goes live: ${[item.on_live.stage_message && `stage message "${item.on_live.stage_message}"`, item.on_live.cue && CUE_ACTIONS[item.on_live.cue].label.toLowerCase()].filter(Boolean).join(", ")}`}
                   />
                 )}
+                {item.auto_advance && <TimerIcon className="size-3 shrink-0 text-muted-foreground" role="img" aria-label={`Moves on by itself after ${item.planned_minutes ?? 0} min while timed moves are on`} />}
                 {item.end_by ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
                 {item.prepared_by ? <span className="ml-1 max-w-24 shrink-0 truncate text-[0.625rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
                 {item.comments?.length ? (

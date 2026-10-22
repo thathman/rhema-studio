@@ -85,4 +85,11 @@ describe("a service's phases and groups", () => {
     const back = toItemInputs(items, undefined, undefined, headers)
     expect(JSON.parse(back[0].payload!).on_live).toEqual({ stage_message: "Wrap up", cue: "timer.fresh" })
   })
+
+  it("an item that moves on by itself keeps the mark through a save", () => {
+    const saved = program([row("a", "verse", "John 3:16", JSON.stringify({ planned_minutes: 2, auto_advance: true })), row("b", "verse", "John 3:16", JSON.stringify({ auto_advance: "yes" }))])
+    const { items, headers } = toQueueItems(saved, 1, [])
+    expect(items.map((i) => i.auto_advance)).toEqual([true, null])
+    expect(JSON.parse(toItemInputs(items, undefined, undefined, headers)[0].payload!)).toMatchObject({ planned_minutes: 2, auto_advance: true })
+  })
 })

@@ -1,0 +1,66 @@
+import { create } from "zustand"
+import { presentQueueItem } from "@/lib/remote-actions"
+import { phaseAt } from "@/lib/run-of-show"
+import { useBroadcastStore } from "@/stores/broadcast-store"
+import { usePhaseRun } from "@/stores/phase-run-store"
+import { useQueueStore } from "@/stores/queue-store"
+
+/**
+ * Timed moves in the service (issue #193): an item marked to move on by itself goes to the next
+ * item of its phase after its planned minutes, but only while the operator has timed moves on in
+ * Present (off at every start). Never across a phase, never inside a phase that runs by itself,
+ * and anything the operator does to what is live cancels the pending move.
+ */
+interface TimedAdvanceState {
+  on: boolean
+  /** The pending move, epoch ms (null when none). */
+  dueAt: number | null
+  setOn: (on: boolean) => void
+}
+
+let timer: ReturnType<typeof setTimeout> | null = null
+
+/** Where the live item moves on to by itself, or null. */
+export function timedNext(): { index: number; ms: number; itemId: string } | null {
+  const b = useBroadcastStore.getState()
+  if (!b.isLive || !b.liveItemId || usePhaseRun.getState().run) return null
+  const { items, headers } = useQueueStore.getState()
+  const index = items.findIndex((i) => i.id === b.liveItemId)
+  const item = items[index]
+  if (!item?.auto_advance || !item.planned_minutes || index + 1 >= items.length) return null
+  const phase = phaseAt(headers, index)
+  if (phase && phase.rule && phase.rule !== "manual") return null
+  if (phaseAt(headers, index + 1) !== phase) return null
+  return { index: index + 1, ms: item.planned_minutes * 60_000, itemId: item.id }
+}
+
+function reconsider() {
+  if (timer) clearTimeout(timer)
+  timer = null
+  const next = useTimedAdvance.getState().on ? timedNext() : null
+  useTimedAdvance.setState({ dueAt: next ? Date.now() + next.ms : null })
+  if (!next) return
+  timer = setTimeout(() => {
+    timer = null
+    useTimedAdvance.setState({ dueAt: null })
+    const b = useBroadcastStore.getState()
+    if (useTimedAdvance.getState().on && b.isLive && b.liveItemId === next.itemId) void presentQueueItem(next.index)
+  }, next.ms)
+}
+
+export const useTimedAdvance = create<TimedAdvanceState>((set) => ({
+  on: false,
+  dueAt: null,
+  setOn: (on) => {
+    set({ on })
+    reconsider()
+  },
+}))
+
+// A new item on air, off air, or a phase starting or stopping: the pending move is looked at again.
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.liveItemId !== prev.liveItemId || s.isLive !== prev.isLive) reconsider()
+})
+usePhaseRun.subscribe((s, prev) => {
+  if (!!s.run !== !!prev.run) reconsider()
+})
