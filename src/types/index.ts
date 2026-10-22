@@ -24,6 +24,7 @@ export type {
   StagePayload,
   StageStyle,
   StageFinish,
+  StageAux,
   BroadcastOutputNdiSettings,
   BroadcastOutputStatus,
   BroadcastOutputType,
