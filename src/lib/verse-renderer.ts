@@ -1623,16 +1623,28 @@ function renderVerseImpl(
     return metrics
   }
 
-  // A video item covers the frame: its current frame where this canvas has the
+  // A video covers the frame: its current frame where this canvas has the
   // playing element (output windows), else "▶ name" (the main window's monitors).
+  // As a slide's background (words with it) the words are drawn over it, like a picture.
   if (verse?.video) {
     const frame = { x: 0, y: 0, width: scaledTheme.resolution.width, height: scaledTheme.resolution.height }
     const el = options?.video
-    if (el && options?.videoState !== "failed" && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0) drawVideoFrame(ctx, el, frame, verse.video.fit)
-    // Still loading on an output: the theme background only, never a label on the live screen.
-    else if (options?.videoState !== "loading") drawMediaLabel(ctx, frame, `▶ ${verse.video.name}`)
-    ctx.restore()
-    return metrics
+    const hasText = Boolean(verse.reference) || Boolean(verse.lines?.length) || verse.segments.some((s) => s.text.trim())
+    const playing = !!el && options?.videoState !== "failed" && el.readyState >= 2 && el.videoWidth > 0 && el.videoHeight > 0
+    if (playing && el) drawVideoFrame(ctx, el, frame, verse.video.fit)
+    // Still loading on an output: the theme background only, never a label on the live screen; never a label under words.
+    else if (options?.videoState !== "loading" && !hasText) drawMediaLabel(ctx, frame, `▶ ${verse.video.name}`)
+    if (!hasText) {
+      ctx.restore()
+      return metrics
+    }
+    const scrim = backgroundScrimAlpha(scaledTheme)
+    if (playing && scrim > 0) {
+      ctx.save()
+      ctx.fillStyle = `rgba(0,0,0,${scrim})`
+      ctx.fillRect(frame.x, frame.y, frame.width, frame.height)
+      ctx.restore()
+    }
   }
 
   // A picture item covers the frame; with no text at all, nothing else is drawn.

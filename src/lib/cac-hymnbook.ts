@@ -10,8 +10,8 @@ import type { HymnbookInput, ImportReport, SectionInput, SongInput, SongSummary 
 export const CAC_TAG = "cacghb"
 
 export const CAC_PARTS = [
-  { part: 1, series: "main", code: "CAC", name: "CAC Gospel Hymn Book", label: "Part 1" },
-  { part: 2, series: "V", code: "CACV", name: "CAC Gospel Hymn Book, Part 2 (various hymns)", label: "Part 2 · Various" },
+  { part: 1, series: "main", code: "CAC", name: "CAC Gospel Hymn Book", label: "Main" },
+  { part: 2, series: "V", code: "CACV", name: "CAC Gospel Hymn Book, Various", label: "Various" },
 ] as const
 export type CacPart = (typeof CAC_PARTS)[number]["part"]
 

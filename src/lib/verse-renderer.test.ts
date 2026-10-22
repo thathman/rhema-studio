@@ -636,3 +636,16 @@ describe("computeVerseLayoutMetrics — a song's footer line", () => {
     expect(withFooter.verseRect!.y + withFooter.verseRect!.height).toBeLessThanOrEqual(bottom + 0.5)
   })
 })
+
+describe("renderVerse — a video behind words", () => {
+  const video = { url: "asset://bg.mp4", fit: "cover" as const, loop: true, sound: false, name: "bg", token: 0 }
+  const plain = { ...BUILTIN_THEMES[0], background: { ...BUILTIN_THEMES[0].background, type: "solid" as const } }
+  it("draws the words over a video background (a video item alone still draws only the video)", () => {
+    const words = recordingCtx()
+    renderVerse(words.ctx, plain, { ...VERSE, video })
+    expect(words.calls.some((c) => c.method === "fillText")).toBe(true)
+    const alone = recordingCtx()
+    renderVerse(alone.ctx, plain, { reference: "", segments: [], video })
+    expect(alone.calls.filter((c) => c.method === "fillText").map((c) => c.args[0])).toEqual(["▶ bg"])
+  })
+})

@@ -19,6 +19,7 @@ import {
   addArrangement, addSection, applyPaste, emptyForm, formFromSong, formLanguages, inputFromForm, moveSection, newSongInputFromForm,
   removeArrangement, removeSection, updateArrangement, validateForm, type SongForm,
 } from "@/lib/song-form"
+import { isChoir, withChoir } from "@/lib/song-kind"
 import { ArrangementStrip } from "@/studio/prepare/arrangement-strip"
 
 const LANGUAGES: Array<[string, string]> = [["en", "English"], ["yo", "Yorùbá"]]
@@ -38,28 +39,34 @@ export function SongEditor({
   open,
   onClose,
   onSaved,
+  choir = false,
 }: {
   /** null = new song */
   songId: string | null
   open: boolean
   onClose: () => void
   onSaved?: (song: SongWithSections) => void
+  /** A new song starts as a choir ministration. */
+  choir?: boolean
 }) {
   // Remount per open so every field starts fresh for the song being edited.
-  return open ? <EditorDialog key={songId ?? "new"} songId={songId} onClose={onClose} onSaved={onSaved} /> : null
+  return open ? <EditorDialog key={songId ?? (choir ? "new-choir" : "new")} songId={songId} onClose={onClose} onSaved={onSaved} choir={choir} /> : null
 }
 
 function EditorDialog({
   songId,
   onClose,
   onSaved,
+  choir,
 }: {
   songId: string | null
   onClose: () => void
   onSaved?: (song: SongWithSections) => void
+  choir: boolean
 }) {
-  const [form, setForm] = useState<SongForm>(() => emptyForm())
-  const [initial, setInitial] = useState(() => JSON.stringify(emptyForm()))
+  const fresh = () => ({ ...emptyForm(), tags: choir ? withChoir("", true) : "" })
+  const [form, setForm] = useState<SongForm>(fresh)
+  const [initial, setInitial] = useState(() => JSON.stringify(fresh()))
   const [revision, setRevision] = useState<number | null>(null)
   const [loading, setLoading] = useState(!!songId)
   const [saving, setSaving] = useState(false)
@@ -237,6 +244,10 @@ function EditorDialog({
             <Field label="Title">
               <Input value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="Amazing Grace" autoFocus={!songId} />
             </Field>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={isChoir(form.tags)} onChange={(e) => set({ tags: withChoir(form.tags, e.target.checked) })} />
+              <span>Choir ministration<span className="block text-xs text-muted-foreground">Sung by the choir to the church. Listed under Choir ministrations in Songs; shown like any song.</span></span>
+            </label>
             <Field label="Other titles" hint="One per line: a Yorùbá title, a first line people use as its name. Searched like the title.">
               <Textarea value={form.alternate_titles} onChange={(e) => set({ alternate_titles: e.target.value })} rows={2} className="min-h-0 text-sm" aria-label="Other titles" />
             </Field>

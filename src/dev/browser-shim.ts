@@ -41,7 +41,7 @@ function summary(s: Song) {
   const languages = [...new Set(s.sections.flatMap((x) => Object.keys(x.texts)))].sort()
   const first = s.sections[0]?.texts[s.song.primary_language] ?? Object.values(s.sections[0]?.texts ?? {})[0] ?? ""
   return {
-    id: s.song.id, title: s.song.title, alternate_titles: (s.song.alternate_titles as string[] | undefined) ?? [], authors: s.song.authors, licence: s.song.licence, primary_language: s.song.primary_language,
+    id: s.song.id, title: s.song.title, alternate_titles: (s.song.alternate_titles as string[] | undefined) ?? [], tags: String(s.song.tags ?? ""), authors: s.song.authors, licence: s.song.licence, primary_language: s.song.primary_language,
     languages, numbers: s.numbers.map((n) => `${n.hymnbook_code} ${n.number}`), first_line: first.split("\n")[0] ?? "", revision: s.song.revision, updated_at: "",
   }
 }
