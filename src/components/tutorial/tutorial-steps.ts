@@ -21,7 +21,7 @@ export const TUTORIAL_STEPS: Step[] = [
   at({ workspace: "home" }, {
     target: 'nav[aria-label="Workspaces"]',
     title: "Your studio",
-    content: "Home checks you are ready. Prepare builds the service. Present runs it. Under Your church: the library, the design of your screens, your team and past services. Settings is at the bottom.",
+    content: "Home checks you are ready. Prepare builds the service. Present runs it. Production keeps time and watches the screens. Under Your church: the library, the design of your screens, your team and past services. Settings is at the bottom.",
     placement: "right",
   }),
   at({ workspace: "home" }, {
@@ -90,7 +90,13 @@ export const TUTORIAL_STEPS: Step[] = [
     content: "Production view adds listening: Rhema hears the preacher and proposes the verses mentioned. Standard is the simple view for running a service.",
     placement: "bottom",
   }),
-  at({ workspace: "present", presentView: "standard" }, {
+  at({ workspace: "production" }, {
+    target: '[role="tablist"][aria-label="Production"]',
+    title: "Production control",
+    content: "The service clock, holds and other timers; every screen and NDI sender and whether it is on; and the readiness checks before Sunday. Nothing here takes anything live.",
+    placement: "bottom",
+  }),
+  at({ workspace: "production" }, {
     target: 'nav[aria-label="Workspaces"]',
     title: "Library, Design, Team and Archive",
     content: "Songs, pictures and backups live in the Library. Design sets how everything looks (each language of a bilingual screen can be styled on its own). Settings, at the bottom, has Bible translations, audio and remotes, and can restart this tour.",
