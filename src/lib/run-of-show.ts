@@ -176,6 +176,22 @@ export function planTimeline(items: Array<{ reference: string; planned_minutes?:
   return { start: clockText(start), warmupStart: warm && warmMinutes > 0 ? clockText(start - warmMinutes) : null, finish: clockText(t + delay), rows }
 }
 
+/** Each item's planned clock time: the main service's from the timeline, the warm-up's from its own start. */
+export function plannedTimes(items: Array<{ reference: string; planned_minutes?: number | null }>, headers: OutlineHeader[]): Map<number, string> {
+  const plan = planTimeline(items, headers)
+  const at = new Map((plan?.rows ?? []).flatMap((r) => (r.index === undefined ? [] : [[r.index, r.time] as const])))
+  const warm = headers.find((h) => h.type === "phase" && h.role === "warmup")
+  const range = warm ? phaseRange(items.length, headers, warm.id) : null
+  let t = clockMinutes(plan?.warmupStart)
+  if (range && t !== null) {
+    for (let i = range.start; i < range.end; i++) {
+      at.set(i, clockText(t))
+      t += items[i].planned_minutes ?? 0
+    }
+  }
+  return at
+}
+
 /** A loop item with no seconds of its own and no planned minutes stays up this long. */
 export const DEFAULT_ADVANCE_SECONDS = 10
 

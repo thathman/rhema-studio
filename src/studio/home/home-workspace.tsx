@@ -10,7 +10,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { isImageItem, isSongItem } from "@/types"
-import { planTimeline } from "@/lib/run-of-show"
+import { plannedTimes } from "@/lib/run-of-show"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
 
@@ -43,7 +43,7 @@ export function HomeWorkspace() {
   const minutes = items.reduce((m, i) => m + (i.planned_minutes ?? 0), 0)
   const operatorName = useSettingsStore((s) => s.operatorName).trim()
   // Planned times from the run of show when the service has a start time (10:00, 10:02…), else the order.
-  const plannedAt = new Map((planTimeline(items, headers)?.rows ?? []).flatMap((r) => (r.index === undefined ? [] : [[r.index, r.time] as const])))
+  const plannedAt = plannedTimes(items, headers)
   const comingUp = current?.service_date ? new Date(`${current.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" }) : null
 
   return (
@@ -63,7 +63,7 @@ export function HomeWorkspace() {
 
         {/* The approved hero (issue #215): a flat, editorial welcome with Sunday's readiness on a note. */}
         <section aria-labelledby="quick" className="relative grid grid-cols-[minmax(0,1.25fr)_290px] overflow-hidden rounded-[22px] border border-border bg-[#eeede6] dark:bg-card max-[1100px]:grid-cols-1">
-          <span aria-hidden className="pointer-events-none absolute -right-40 -bottom-56 h-[420px] w-[620px] rotate-[-22deg] rounded-[120px] bg-[radial-gradient(circle_at_30%_30%,rgb(255_255_255/0.32),transparent_60%),linear-gradient(135deg,rgb(37_109_104/0.08),rgb(37_109_104/0.04))]" />
+          <span aria-hidden className="pointer-events-none absolute -right-40 -bottom-56 h-[420px] w-[620px] rotate-[-22deg] rounded-[120px] bg-[radial-gradient(circle_at_30%_30%,rgb(255_255_255/0.32),transparent_60%),linear-gradient(135deg,rgb(37_109_104/0.08),rgb(37_109_104/0.04))] dark:bg-[linear-gradient(135deg,rgb(127_196_184/0.10),rgb(127_196_184/0.03))]" />
           <div className="relative min-w-0 px-[34px] pt-[34px] pb-7">
             <p className="text-[0.625rem] font-bold tracking-[0.18em] text-muted-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? `This service · ${current.title}` : "No service open"}</p>
             <h2 id="quick" className="mt-2 text-2xl leading-[1.05] font-bold tracking-[-0.045em]">
