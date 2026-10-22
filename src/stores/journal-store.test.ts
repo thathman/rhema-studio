@@ -4,6 +4,7 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}) }))
 
 import { useJournalStore } from "./journal-store"
 import { useBroadcastStore } from "./broadcast-store"
+import { useQueueStore } from "./queue-store"
 import type { VerseRenderData } from "@/types"
 
 const slide = (reference: string, extra: Partial<VerseRenderData> = {}) => ({ kind: "slide", reference, segments: [], lines: [reference], ...extra }) as unknown as VerseRenderData
@@ -19,6 +20,12 @@ describe("service log entries (AR-001)", () => {
     useBroadcastStore.setState({ liveVerse: slide("", { screen: "black", quick: true }) })
     const entries = useJournalStore.getState().entries
     expect(entries.map((x) => [x.kind, x.label])).toEqual([["quick", "Welcome"], ["quick", "Black screen"]])
+  })
+
+  it("a picture or QR slide (no words of its own) is logged by its rundown name", () => {
+    useQueueStore.setState({ items: [{ id: "p1", kind: "image", image: { media_id: "m", name: "Harvest banner", fit: "contain" }, reference: "Harvest banner", confidence: 1, source: "manual", added_at: 0 }] as never })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "p1", liveVerse: { kind: "slide", reference: "", segments: [], lines: [] } as unknown as VerseRenderData })
+    expect(useJournalStore.getState().entries.map((x) => [x.kind, x.label])).toEqual([["live", "Harvest banner"]])
   })
 
   it("rehearsal off logs what the congregation then sees, only when it changed", () => {
