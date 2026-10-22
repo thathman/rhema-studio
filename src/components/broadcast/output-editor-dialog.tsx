@@ -1,5 +1,5 @@
 import { resolveMonitorIndex } from "@/lib/monitor-health"
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
 import {
@@ -27,6 +27,9 @@ import {
 } from "@/lib/broadcast-output-control"
 import { useBroadcastStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
+import { CONTENT_TYPES } from "@/types/broadcast"
+import { withThemeFor } from "@/lib/output-themes"
+import { CONTENT_NAMES } from "@/lib/content-names"
 import type {
   BroadcastOutput,
   BroadcastOutputType,
@@ -426,6 +429,25 @@ export function OutputEditorDialog({
                 </SelectContent>
               </Select>
             </div>
+            {(form.role ?? "congregation") !== "stage" && (form.role ?? "congregation") !== "signage" && (
+              <div className="flex flex-col gap-1.5" role="group" aria-label="A different look for some content">
+                <span className="text-xs text-muted-foreground">A different look for some content (the theme above for the rest)</span>
+                <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
+                  {CONTENT_TYPES.map((c) => (
+                    <Fragment key={c}>
+                      <span className="text-xs">{CONTENT_NAMES[c]}</span>
+                      <Select value={form.themeFor?.[c] || "__same"} onValueChange={(v) => patch({ themeFor: withThemeFor(form, c, v === "__same" ? null : v) })}>
+                        <SelectTrigger aria-label={`Theme for ${CONTENT_NAMES[c]}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__same">Same as above</SelectItem>
+                          {themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}

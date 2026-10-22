@@ -177,6 +177,7 @@ export function BroadcastOutputsDialog({
         name: next.name,
         type: next.type,
         themeId: next.themeId,
+        themeFor: next.themeFor ?? {},
         monitorIndex: next.monitorIndex,
         monitorName: next.monitorName ?? null,
         ndi: next.ndi,

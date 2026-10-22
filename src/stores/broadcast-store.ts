@@ -19,6 +19,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useSongStore } from "@/stores/song-store"
 import { forOutputLanguage } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
+import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -292,7 +293,7 @@ export interface OutputFrame {
 function resyncThemeOutputs(themeId: string | null): void {
   if (!themeId) return
   const s = useBroadcastStore.getState()
-  for (const o of s.outputs) if (o.themeId === themeId) s.syncBroadcastOutputFor(o.id)
+  for (const o of s.outputs) if (themeIdsOf(o).includes(themeId)) s.syncBroadcastOutputFor(o.id)
 }
 
 function recordFrame(id: string, frame: OutputFrame): void {
@@ -385,11 +386,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : [...s.themes, theme],
     })),
   /** Generate or refresh the Brand Kit's themes; hand-edited ones are left alone. */
-  applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes, new Set(s.outputs.map((o) => o.themeId))) })),
+  applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes, new Set(s.outputs.flatMap(themeIdsOf))) })),
   // An output using the theme would silently fall back to Classic Dark (an opaque frame over a
   // stream's camera, FR-06): refuse and say which outputs use it.
   deleteTheme: (id) => {
-    const users = get().outputs.filter((o) => o.themeId === id)
+    const users = get().outputs.filter((o) => themeIdsOf(o).includes(id))
     if (users.length > 0) return { inUse: users.map((o) => o.name) }
     set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin) }))
     return { inUse: [] }
@@ -454,11 +455,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     const output = s.outputs.find((o) => o.id === outputId)
     if (!output) return
-    const saved = s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
+    // The look for what is on air: this output's theme for that kind of content, else its main theme.
+    const themeId = themeIdFor(output, s.isLive ? s.liveVerse?.content : null)
+    const saved = s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
     if (!saved) return
     // A theme open in the Designer shows on its congregation outputs as edited, for presents too
     // (otherwise each present flipped the screen back to the saved theme).
-    const theme = s.draftTheme && s.editingThemeId === output.themeId && (output.role ?? "congregation") === "congregation" ? s.draftTheme : saved
+    const theme = s.draftTheme && s.editingThemeId === saved.id && (output.role ?? "congregation") === "congregation" ? s.draftTheme : saved
 
     // Signage runs its own loop; neither the live output nor rehearsal touches it.
     if (output.role === "signage") {
@@ -521,7 +524,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
-    if (patch.themeId || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -733,7 +736,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // Point every output that was on the builtin at the saved copy, so the
       // outputs and the in-app preview never disagree about what is showing.
       for (const output of get().outputs) {
-        if (output.themeId === draftTheme.id) {
+        if (themeIdsOf(output).includes(draftTheme.id)) {
           get().setOutputTheme(output.id, customTheme.id)
         }
       }

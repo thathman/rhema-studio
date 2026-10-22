@@ -451,6 +451,22 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
   })
 
+  it("an output can give a kind of content its own look (hymns in one theme, the rest in the main one)", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const [main, hymns] = [s.themes[0], s.themes[1]]
+    s.setOutputTheme("main", main.id)
+    s.updateOutput("main", { themeFor: { hymn: hymns.id } })
+    useBroadcastStore.setState({ isLive: true, liveVerse: { ...sampleLiveVerse, content: "hymn" } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(useBroadcastStore.getState().outputFrames.main.theme.id).toBe(hymns.id)
+    useBroadcastStore.setState({ liveVerse: { ...sampleLiveVerse, content: "bible" } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(useBroadcastStore.getState().outputFrames.main.theme.id).toBe(main.id)
+    // The hymn theme is in use: it cannot be deleted while the output names it.
+    expect(useBroadcastStore.getState().deleteTheme(hymns.id).inUse).toContain("Main Display")
+  })
+
   it("discarding or closing a theme draft puts the saved theme back on the outputs and their cards", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()
