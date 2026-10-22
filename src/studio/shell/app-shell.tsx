@@ -16,7 +16,8 @@ import { MoreWorkspace } from "@/studio/more/more-workspace"
 import { DesignWorkspace } from "@/studio/design/design-workspace"
 import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { BroadcastOutputsDialog } from "@/components/broadcast/broadcast-outputs-dialog"
-import { SettingsDialog } from "@/components/settings-dialog"
+import { SettingsPage } from "@/components/settings-dialog"
+import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { LibraryWorkspace } from "@/studio/library/library-workspace"
 import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
 import { TeamWorkspace } from "@/studio/team/team-workspace"
@@ -29,7 +30,7 @@ import { TopBar } from "@/studio/shell/top-bar"
 import { GlobalSearch } from "@/studio/shell/global-search"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", library: "Library", design: "Design studio", team: "Team", archive: "Archive", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", library: "Library", design: "Design studio", team: "Team", archive: "Archive", settings: "Settings", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -39,6 +40,7 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   library: () => <LibraryWorkspace />,
   archive: () => <ArchiveWorkspace />,
   team: () => <TeamWorkspace />,
+  settings: () => <SettingsPage />,
   more: () => <MoreWorkspace />,
 }
 
@@ -68,6 +70,13 @@ export function AppShell() {
     useShellStore.setState({ designRequest: null, designTab: designRequest })
     void go("design")
   }, [designRequest, go])
+  // openSettings(section) from anywhere: the Settings page, at that section.
+  const settingsAsked = useSettingsDialogStore((s) => s.isOpen)
+  useEffect(() => {
+    if (!settingsAsked) return
+    useSettingsDialogStore.setState({ isOpen: false })
+    void go("settings")
+  }, [settingsAsked, go])
   const goRequest = useShellStore((s) => s.goRequest)
   useEffect(() => {
     if (!goRequest) return
@@ -141,7 +150,6 @@ export function AppShell() {
 
       {/* Global dialogs: reachable from every workspace, mounted exactly once. */}
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
-      <SettingsDialog />
       <GlobalSearch />
     </div>
   )
