@@ -26,7 +26,9 @@ class FakeClient {
 vi.mock("@/lib/obs", () => ({ ObsClient: FakeClient, ObsRequestError: class extends Error { code = 0 } }))
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() } }))
 
-describe("OBS store", () => {
+// Each test imports the stores afresh (resetModules); the first cold import can take over 5 s on a
+// loaded machine, so the default timeout made this file flaky (as in #176, #180).
+describe("OBS store", { timeout: 30_000 }, () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.resetModules()

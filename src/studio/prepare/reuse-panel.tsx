@@ -52,7 +52,7 @@ export function ReusePanel() {
 
   const add = async () => {
     const copies = copyForReuse(items, chosen)
-    const added = appendInOrder(copies, (i) => useQueueStore.getState().addItem(i), () => useQueueStore.getState().items.length, (a, b) => useQueueStore.getState().reorderItems(a, b))
+    const added = appendInOrder(copies, (i) => useQueueStore.getState().addItem(i), () => useQueueStore.getState().items.length, (a, b) => { if (useQueueStore.getState().addTarget === null) useQueueStore.getState().reorderItems(a, b) })
     const skipped = copies.length - added
     toast.success(`${added} item${added === 1 ? "" : "s"} added${skipped ? `; ${skipped} verse${skipped === 1 ? " was" : "s were"} already in the service` : ""}`)
     setChosen(new Set())

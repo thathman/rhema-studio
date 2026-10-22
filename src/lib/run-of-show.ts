@@ -33,6 +33,31 @@ export function headersAfterInsert(headers: OutlineHeader[], index: number): Out
   return shift(headers, index, 1)
 }
 
+/** Where an item appended to a section goes: the end of that phase or group. */
+export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId: string): number {
+  const sorted = sortHeaders(headers)
+  const k = sorted.findIndex((h) => h.id === headerId)
+  if (k === -1) return 0
+  const h = sorted[k]
+  return sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? itemCount
+}
+
+/**
+ * An item appended at `index` to the section of `headerId`: headers after that section move down
+ * even when they sat at `index` (a plain insert would leave them above it, and the item in the
+ * next section).
+ */
+export function headersAfterAppend(headers: OutlineHeader[], index: number, headerId: string): OutlineHeader[] {
+  const sorted = sortHeaders(headers)
+  const k = sorted.findIndex((h) => h.id === headerId)
+  const after = new Set(sorted.slice(k + 1).filter((h) => h.at === index).map((h) => h.id))
+  return headers.map((h) => (h.at > index || after.has(h.id) ? { ...h, at: h.at + 1 } : h))
+}
+
+function sortHeaders(headers: OutlineHeader[]): OutlineHeader[] {
+  return [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
+}
+
 /** The item at `index` was removed: its section's header stays put, before the next item. */
 export function headersAfterRemove(headers: OutlineHeader[], index: number): OutlineHeader[] {
   return shift(headers, index, -1)

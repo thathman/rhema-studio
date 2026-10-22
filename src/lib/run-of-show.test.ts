@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { defaultPhases, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -45,5 +45,25 @@ describe("section summaries", () => {
     const phases = defaultPhases(3, () => ids.shift()!)
     expect(read(["a", "b", "c"], phases)).toBe("[p] [w] [m] a b c [o]")
     expect(phases.map((x) => x.rule)).toEqual(["loop", "auto_once", "manual", "loop"])
+  })
+})
+
+describe("adding to a section", () => {
+  it("an item added to a section goes at its end, above the next section", () => {
+    // [Pre] [Warm] [Main] a b [Post]: Pre and Warm are empty.
+    const hs = [h("Pre", 0), h("Warm", 0), h("Main", 0), h("Post", 2)]
+    const at = sectionEnd(2, hs, "Warm")
+    expect(at).toBe(0)
+    expect(read(["x", "a", "b"], headersAfterAppend(hs, at, "Warm"))).toBe("[Pre] [Warm] x [Main] a b [Post]")
+    // Two in a row keep their order.
+    const once = headersAfterAppend(hs, 0, "Warm")
+    expect(read(["x", "y", "a", "b"], headersAfterAppend(once, 1, "Warm"))).toBe("[Pre] [Warm] x y [Main] a b [Post]")
+    // The last section: after everything.
+    expect(sectionEnd(2, hs, "Post")).toBe(2)
+    expect(read(["a", "b", "z"], headersAfterAppend(hs, 2, "Post"))).toBe("[Pre] [Warm] [Main] a b [Post] z")
+    // A group inside Main ends at the next header.
+    const g = [...hs, h("Word", 1, "group")]
+    expect(sectionEnd(2, g, "Main")).toBe(2)
+    expect(sectionEnd(2, g, "Word")).toBe(2)
   })
 })
