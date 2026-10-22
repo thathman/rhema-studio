@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react"
+import { useAddDialog } from "@/studio/prepare/add-target"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -56,6 +57,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
       )}
       {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.625rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
       <span className="shrink-0 text-[0.6875rem] tabular-nums opacity-80">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+      <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={() => useAddDialog.getState().openFor(header.id)}><PlusIcon /></Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-xs" aria-label={`${header.name}: options`} className="shrink-0 hover:bg-black/5"><EllipsisIcon /></Button>

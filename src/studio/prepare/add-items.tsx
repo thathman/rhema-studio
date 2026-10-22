@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -9,21 +8,24 @@ import { HymnBook } from "@/studio/prepare/hymn-book"
 import { SlideComposer } from "@/studio/prepare/slide-composer"
 import { MediaLibrary } from "@/studio/prepare/media-library"
 import { ReusePanel } from "@/studio/prepare/reuse-panel"
+import { useAddDialog } from "@/studio/prepare/add-target"
+import { useQueueStore } from "@/stores"
 
 /**
  * Add to the service: scripture, songs, the hymn book, slides, pictures and
  * videos, or items from an earlier service. It stays open to add several.
  */
 export function AddItems({ className }: { className?: string }) {
-  const [open, setOpen] = useState(false)
+  const open = useAddDialog((s) => s.open)
+  const target = useQueueStore((s) => s.headers.find((h) => h.id === s.addTarget)?.name ?? null)
   return (
     <>
-      <Button onClick={() => setOpen(true)} className={className} data-tour="prepare-add"><PlusIcon /> Add item</Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Button onClick={() => useAddDialog.getState().openFor(null)} className={className} data-tour="prepare-add"><PlusIcon /> Add item</Button>
+      <Dialog open={open} onOpenChange={(o) => (o ? useAddDialog.setState({ open: true }) : useAddDialog.getState().close())}>
         <DialogContent className="flex h-[min(46rem,88vh)] flex-col gap-3 sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Add to the service</DialogTitle>
-            <DialogDescription>Passages, songs (in one or two languages), hymns, slides, pictures, videos and sound. Added items go to the top of the order; nothing here goes live.</DialogDescription>
+            <DialogTitle>{target ? `Add to ${target}` : "Add to the service"}</DialogTitle>
+            <DialogDescription>Passages, songs (in one or two languages), hymns, slides, pictures, videos and sound. {target ? `Added items go to the end of ${target}, in the order you add them` : "Added items go to the top of the order"}; nothing here goes live.</DialogDescription>
           </DialogHeader>
           <Tabs defaultValue="bible" className="flex min-h-0 flex-1 flex-col">
             <TabsList>

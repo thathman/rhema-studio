@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { isVerseItem, type QueueItem } from "@/types"
-import { headersAfterInsert, headersAfterMove, headersAfterRemove, type OutlineHeader } from "@/lib/run-of-show"
+import { headersAfterAppend, headersAfterInsert, headersAfterMove, headersAfterRemove, sectionEnd, type OutlineHeader } from "@/lib/run-of-show"
 
 interface QueueState {
   items: QueueItem[]
@@ -21,6 +21,9 @@ interface QueueState {
   clearQueue: () => void
   /** Phases and groups (the run of show). */
   setHeaders: (headers: OutlineHeader[]) => void
+  /** While set, added items go to the end of this phase or group (in the order added) instead of the top. */
+  addTarget: string | null
+  setAddTarget: (headerId: string | null) => void
   updateHeader: (id: string, patch: Partial<OutlineHeader>) => void
   /** Remove a phase or group; its items stay where they are. */
   removeHeader: (id: string) => void
@@ -48,6 +51,15 @@ function withActiveKept(state: { items: QueueItem[]; activeIndex: number | null 
   return { items, activeIndex: activeIndex === -1 ? null : activeIndex }
 }
 
+/** A new item into the rundown: at the top, or at the end of the section being added to. */
+function inserted(state: { items: QueueItem[]; headers: OutlineHeader[]; activeIndex: number | null; addTarget: string | null }, item: QueueItem) {
+  const target = state.addTarget && state.headers.some((h) => h.id === state.addTarget) ? state.addTarget : null
+  if (!target) return { ...withActiveKept(state, [item, ...state.items]), headers: headersAfterInsert(state.headers, 0) }
+  const at = sectionEnd(state.items.length, state.headers, target)
+  const items = [...state.items.slice(0, at), item, ...state.items.slice(at)]
+  return { ...withActiveKept(state, items), headers: headersAfterAppend(state.headers, at, target) }
+}
+
 export const useQueueStore = create<QueueState>((set, get) => ({
   items: [],
   headers: [],
@@ -58,7 +70,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   addItem: (item) =>
     set((state) => {
       // Songs may repeat in a service (opening and closing hymn); verses dedupe.
-      if (!isVerseItem(item)) return { ...withActiveKept(state, [item, ...state.items]), headers: headersAfterInsert(state.headers, 0) }
+      if (!isVerseItem(item)) return inserted(state, item)
       const idx = state.items.findIndex(
         (i) =>
           isVerseItem(i) &&
@@ -80,7 +92,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
         }
         return state
       }
-      return { ...withActiveKept(state, [item, ...state.items]), headers: headersAfterInsert(state.headers, 0) }
+      return inserted(state, item)
     }),
   removeItem: (id) =>
     set((state) => {
@@ -112,6 +124,8 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   setActive: (activeIndex) => set({ activeIndex, removedActive: null }),
   clearQueue: () => set({ items: [], headers: [], activeIndex: null, removedActive: null }),
   setHeaders: (headers) => set({ headers }),
+  addTarget: null,
+  setAddTarget: (addTarget) => set({ addTarget }),
   updateHeader: (id, patch) => set((state) => ({ headers: state.headers.map((h) => (h.id === id ? { ...h, ...patch, id } : h)) })),
   removeHeader: (id) => set((state) => ({ headers: state.headers.filter((h) => h.id !== id) })),
   flashItem: (id) => {

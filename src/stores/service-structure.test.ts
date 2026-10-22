@@ -65,4 +65,14 @@ describe("a service's phases and groups", () => {
     useQueueStore.getState().clearQueue()
     expect(useQueueStore.getState().headers).toEqual([])
   })
+
+  it("adding to a section puts items at its end, in order", () => {
+    const { items, headers } = toQueueItems(saved, 1, [])
+    useQueueStore.setState({ items, headers, activeIndex: null, addTarget: "h1" })
+    useQueueStore.getState().addItem({ ...verse("x"), verse: { ...verse("x").verse, verse: 18 } })
+    useQueueStore.getState().addItem({ ...verse("y"), verse: { ...verse("y").verse, verse: 19 } })
+    expect(useQueueStore.getState().items.map((i) => i.id)).toEqual(["a", "x", "y", "b"])
+    expect(useQueueStore.getState().headers.map((h) => h.at)).toEqual([0, 3, 3])
+    useQueueStore.getState().setAddTarget(null)
+  })
 })
