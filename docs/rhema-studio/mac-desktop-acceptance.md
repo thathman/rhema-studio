@@ -158,6 +158,13 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10ca.5 (approval on Back) | V: "Ask before showing" on, unapproved service, rehearsal: John 3:16, Black, rehearsal off, Back: the go-live was held with the question for "QA Reuse Target"; the screen stayed black until answered |
 | 10ar.1–3 (sound player), partly | V (app volume 5%, 3 a.m.; WAV and M4A, no MP3 encoder here): Play, then another Play replaced it; Pause/Resume kept the place; the volume carried to the next Play; no screen changed; a "sound" log line per Play. Not concluded: the 3-second fade and Repeat (the hidden test window throttles the timers that drive them). Noted: a WAV and an M4A with the same file name appear as two identical rows |
 | 10as.1–3 (sound as a service item) | V: Welcome, then Next onto the sound: it played, the screen kept Welcome (still the live item), the rundown marked the sound "PLAYING"; Next: Announcements while the sound played on; after Fade out, Previous went to Welcome without replaying; rehearsal: "Rehearsal: qa-tone-long was not played. Use the ♪ button to play it on purpose." |
+| 10cb.1 (setting kept on a quick close) | V: the name changed, then the close request sent at once: on disk at once ("Tolu Second Close") |
+| 10cb.2 (log kept on close) | V: something went live, then close: the run's log was kept ("QA Slides 2 — 22/10/2026" under Earlier logs) |
+| 10cb.3 (picture in the unsaved service on screen) | V: Remove refused: "in use: the service on screen"; the file stayed |
+| 10cb.4 (song in the unsaved service on screen) | V: Delete refused: "in use: the service on screen"; the song stayed |
+| 10cb.6 (damaged settings) | V: settings.json cut to 120 bytes: "Settings (…) could not be read; they were put back as they were when Rhema last started …"; the damaged file kept beside it |
+| 10cc.2 (QR link, address only) | F → V: saved, but listed as "Slide"; #177 names it by its address ("church.example/bulletin") |
+| 10cc.3 (long untitled slide) | V: a 238-character paragraph saved; the rundown shows its first 200 characters, the slide keeps all of it |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
