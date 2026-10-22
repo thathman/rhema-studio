@@ -127,6 +127,22 @@ export function clockMinutes(t: string | undefined | null): number | null {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null
 }
 
+/**
+ * The instant (wall ms) of a clock time nearest `ref`: yesterday's, today's or tomorrow's, so a
+ * service around midnight keeps its times on the right day. Calendar days, not 24 h, so the
+ * 23- and 25-hour days of a clock change land on the right local time.
+ */
+export function clockInstant(minutes: number, ref: number): number {
+  let best = NaN
+  for (const days of [-1, 0, 1]) {
+    const d = new Date(ref)
+    d.setDate(d.getDate() + days)
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
+    if (Number.isNaN(best) || Math.abs(d.getTime() - ref) < Math.abs(best - ref)) best = d.getTime()
+  }
+  return best
+}
+
 /** Minutes after midnight to "HH:MM" (wrapping past midnight). */
 export function clockText(minutes: number): string {
   const m = ((Math.round(minutes) % 1440) + 1440) % 1440

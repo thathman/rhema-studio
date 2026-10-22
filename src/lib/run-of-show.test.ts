@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { clockInstant, clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -118,5 +118,26 @@ describe("a phase running by itself", () => {
     expect(dwellSeconds(loop, null)).toBe(10)
     expect(dwellSeconds({ ...warm, advance_seconds: 8 }, 5)).toBe(300)
     expect(dwellSeconds(warm, null)).toBe(10)
+  })
+})
+
+describe("a clock time as an instant", () => {
+  it("is the nearest one: yesterday's, today's or tomorrow's", () => {
+    const at = (d: number, h: number, m: number) => new Date(2026, 9, d, h, m).getTime()
+    expect(clockInstant(10 * 60, at(25, 9, 0))).toBe(at(25, 10, 0))
+    expect(clockInstant(23 * 60 + 30, at(26, 0, 10))).toBe(at(25, 23, 30))
+    expect(clockInstant(30, at(25, 23, 0))).toBe(at(26, 0, 30))
+  })
+  it("keeps the local time across a clock change (calendar days, not 24 h)", () => {
+    const tz = process.env.TZ
+    process.env.TZ = "Europe/London"
+    try {
+      // The clocks went back at 02:00 on 25 October 2026: that day has 25 hours.
+      const t = clockInstant(23 * 60, new Date(2026, 9, 26, 0, 30).getTime())
+      expect(new Date(t).getHours()).toBe(23)
+      expect(new Date(t).getDate()).toBe(25)
+    } finally {
+      process.env.TZ = tz
+    }
   })
 })
