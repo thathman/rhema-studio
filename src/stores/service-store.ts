@@ -102,9 +102,11 @@ export interface ActiveTranslations {
  * characters; the slide keeps all its words), plus its page mark ("(2/4)")
  * when it is one page of a longer text, so the order survives saving.
  */
-export function slideLabel(slide: { title: string; body: string }, reference = ""): string {
+export function slideLabel(slide: { title: string; body: string; link?: string }, reference = ""): string {
   const page = reference.match(/ \(\d+\/\d+\)$/)?.[0] ?? ""
-  const name = slide.title.trim() || slide.body.split("\n")[0]?.trim() || "Slide"
+  // A QR slide with only an address is named by where it goes ("church.example/give").
+  const address = slide.link?.replace(/^https?:\/\//, "").replace(/\/$/, "")
+  const name = slide.title.trim() || slide.body.split("\n")[0]?.trim() || address || "Slide"
   return name.endsWith(page) ? [...name].slice(0, 200).join("") : [...name].slice(0, 200 - page.length).join("") + page
 }
 

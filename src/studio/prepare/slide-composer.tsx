@@ -39,7 +39,7 @@ export function SlideComposer() {
     id: "draft-slide",
     kind: "slide",
     slide: { title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) },
-    reference: title.trim() || body.split("\n")[0]?.trim() || "Slide",
+    reference: slideLabel({ title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) }),
     confidence: 1,
     source: "manual",
     added_at: 0,

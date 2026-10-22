@@ -560,6 +560,7 @@ describe("slideLabel", () => {
     expect(slideLabel({ title: "Notices", body: "x" }, "Notices (2/4)")).toBe("Notices (2/4)")
     expect(slideLabel({ title: "Plan (1/2)", body: "" }, "Plan (1/2)")).toBe("Plan (1/2)")
     expect(slideLabel({ title: "", body: "" })).toBe("Slide")
+    expect(slideLabel({ title: "", body: "", link: "https://church.example/give/" })).toBe("church.example/give")
     expect([...slideLabel({ title: "a".repeat(300), body: "" }, " (1/2)")].length).toBe(200)
     expect(slideLabel({ title: "a".repeat(300), body: "" }, " (1/2)").endsWith(" (1/2)")).toBe(true)
   })
