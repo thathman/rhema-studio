@@ -907,6 +907,17 @@ report), but launching it cannot.
 | 10cm.3 | First: English; Add hymn 245; preview; go live; set an output to "Second language only". | The item shows EN, YO; the screen shows English then Yorùbá with the footer "… · CAC Gospel Hymn Book 245" below the words; the second-only output shows only Yorùbá. | Verified on the Intel Mac |
 | 10cm.4 | Save the service; Import the file again; open the service; save. | "Hymn book updated: 1050 hymns"; the service opens and saves; a number already used by the church's own song in a "CAC" book is left alone. | Verified on the Intel Mac (own-song case: crate test) |
 
+### 10co. Design and outputs (DS-001 to DS-006)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10co.1 | Outputs → edit an output → give Hymns another theme; present a hymn, then a verse. | The hymn shows in its theme, the verse in the output's main theme; Theme Designer → Hymn preview and "Use this theme on … for Hymns" agree. | Unverified |
+| 10co.2 | An output with "Show lower thirds"; Present → Lower third → Scripture strip → Show; go live with a verse, then the next. | The strip shows the verse on air and its reference and follows the next verse; hidden while a picture is on screen. | Verified on the Intel Mac over NDI (OBS) |
+| 10co.3 | Lower third → Design… → a centred style with an accent, Slide up, a picture behind; Show a name. | The band is centred, the accent bar on top, the name in capitals, the picture shaded by the band colour; it slides up as it comes on. | Verified on the Intel Mac (frame grabs of the NDI output) |
+| 10co.4 | Make the Stage output NDI; open it in an NDI viewer. | The viewer shows the stage layout (live words, timer, next). | Verified on the Intel Mac (stage frame; receiver connected) |
+| 10co.5 | A Signage output with "In a window" on the laptop screen. | A movable 960×540 window in the middle of that screen plays the pictures; it is not full screen. | Verified on the Intel Mac |
+| 10co.6 | Ticker: type three items, Start; outputs Stream (NDI) and Main (projector). | The words crawl smoothly on both (30 fps on NDI measured with a receiver; 61 fps on the K3 projector); Clear and new presents leave it; Black hides it; Pause holds and Resume carries on; Stop removes it; never on the stage. | Verified on the Intel Mac (crawl and rates; Pause/Resume in tests) |
+
 ### 10cn. Numbered books and the item fields (owner reports)
 
 | # | Steps | Expected | Result |

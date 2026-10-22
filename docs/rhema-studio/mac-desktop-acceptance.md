@@ -260,6 +260,19 @@ The NDI time was mostly turning each frame (3.7 MB of pixels) into base64 text i
 
 Run the same day with two isolated profiles (production and standby) and a disk image as the USB stick: R1–R5 all pass; see `14-backup-restore-rehearsal.md`. Approval is not carried in a service file (only in a database backup).
 
+## Second monitor, NDI and OBS (2026-10-22 midday)
+
+The owner's rig: the K3 monitor as the congregation screen, an NDI viewer as the stage display, OBS on this Mac with a separate "Rhema QA" scene collection (the owner's own collection untouched), signage in a window on the laptop screen. Measured with an NDI receiver written for the purpose (frame counts) rather than by eye.
+
+| Check | Result |
+|---|---|
+| Stream (NDI) in OBS: verse, scripture strip, ticker | Received and shown in OBS (window capture saved in `qa-screenshots/`). |
+| Ticker frame rate over NDI | About 1 fps at first (hidden window timers throttled; 8 MB frames from the page took ~70 ms; the synchronous NDI send ~50 ms). After #192: 119–122 frames in 4 s, every frame moving (30 fps). The app uses about one core while NDI compresses 1080p30. |
+| Ticker on the K3 projector (screen, not NDI) | 61 fps, median frame gap 17 ms. |
+| Stage output over NDI | Stage frame drawn on the canvas (live words, title, next); one receiver connected. |
+| Signage "In a window" | A 960×540 point window centred on the laptop screen, playing the loop. |
+| Lower third styles | Centred band, accent, capitals, picture behind (shaded), slide-up entrance; it stays above the ticker. |
+
 ## Fixed on this branch
 
 1. **Intel macOS build failed.** Tauri passes `bundle.macOS.minimumSystemVersion`
