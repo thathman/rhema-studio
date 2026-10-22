@@ -87,6 +87,53 @@ pub async fn ensure_broadcast_window(
 
 /// Async on purpose — see [`ensure_broadcast_window`]: sync window creation
 /// deadlocks on Windows.
+/// Put the window over `monitor` (before it goes full screen on macOS).
+fn place_on_monitor(window: &tauri::WebviewWindow, monitor: &tauri::Monitor) -> Result<(), String> {
+    let pos = monitor.position();
+    let size = monitor.size();
+    #[cfg(target_os = "macos")]
+    {
+        // Leave full screen first (a reused window may be full screen on another
+        // screen), then place it in points: macOS mixes scales across screens
+        // (a Retina laptop at 2, a projector at 1), so physical pixels are
+        // converted with the wrong screen's factor.
+        let _ = window.set_fullscreen(false);
+        let scale = monitor.scale_factor();
+        let at: tauri::LogicalPosition<f64> = pos.to_logical(scale);
+        let fits: tauri::LogicalSize<f64> = size.to_logical(scale);
+        window.set_position(tauri::Position::Logical(at)).map_err(|e| {
+            log::error!("open_broadcast_window: set_position failed: {e}");
+            e.to_string()
+        })?;
+        window.set_size(tauri::Size::Logical(fits)).map_err(|e| {
+            log::error!("open_broadcast_window: set_size failed: {e}");
+            e.to_string()
+        })?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        window
+            .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+                x: pos.x,
+                y: pos.y,
+            }))
+            .map_err(|e| {
+                log::error!("open_broadcast_window: set_position failed: {e}");
+                e.to_string()
+            })?;
+        window
+            .set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                width: size.width,
+                height: size.height,
+            }))
+            .map_err(|e| {
+                log::error!("open_broadcast_window: set_size failed: {e}");
+                e.to_string()
+            })?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn open_broadcast_window(
     app: tauri::AppHandle,
@@ -143,7 +190,10 @@ pub async fn open_broadcast_window(
         .skip_taskbar(false)
         .focused(false)
         .decorations(false)
-        .fullscreen(true)
+        // macOS makes a window full screen on the screen it is created on (the
+        // operator's), and a full-screen window ignores later moves: there it
+        // goes full screen only after it is on the target monitor (below).
+        .fullscreen(!cfg!(target_os = "macos"))
         .minimizable(false)
         .build()
         .map_err(|e| {
@@ -152,24 +202,7 @@ pub async fn open_broadcast_window(
         })?
     };
 
-    window
-        .set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-            x: pos.x,
-            y: pos.y,
-        }))
-        .map_err(|e| {
-            log::error!("open_broadcast_window: set_position failed: {e}");
-            e.to_string()
-        })?;
-    window
-        .set_size(tauri::Size::Physical(tauri::PhysicalSize {
-            width: size.width,
-            height: size.height,
-        }))
-        .map_err(|e| {
-            log::error!("open_broadcast_window: set_size failed: {e}");
-            e.to_string()
-        })?;
+    place_on_monitor(&window, monitor)?;
     // A window created hidden for NDI has skip_taskbar(true); make sure the
     // visible projector is reachable from the taskbar either way.
     let _ = window.set_skip_taskbar(false);
@@ -177,7 +210,15 @@ pub async fn open_broadcast_window(
         log::error!("open_broadcast_window: show failed: {e}");
         e.to_string()
     })?;
+    // On the target monitor now: full screen there (macOS; elsewhere it was built full screen).
+    #[cfg(target_os = "macos")]
+    if let Err(e) = window.set_fullscreen(true) {
+        log::warn!("open_broadcast_window: set_fullscreen failed: {e}");
+    }
     let _ = window.set_focus();
+    if let (Ok(p), Some(m)) = (window.outer_position(), window.current_monitor().ok().flatten()) {
+        log::info!("open_broadcast_window: '{label}' is at ({},{}) on {:?}", p.x, p.y, m.name());
+    }
     log::info!("open_broadcast_window: '{label}' shown at ({},{}) {}x{}", pos.x, pos.y, size.width, size.height);
 
     Ok(())
