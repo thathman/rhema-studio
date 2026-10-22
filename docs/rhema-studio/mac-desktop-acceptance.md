@@ -196,6 +196,12 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10bp.4 (song deleted while live) | Not reachable any more: deleting a song the unsaved service on screen uses is refused ("in use: the service on screen", 10cb.4) |
 | 10cc.1 (new service from a closed rundown) | V: QA Usage 3 opened then closed (its two items stayed); New service "QA From Rundown" → Create: "created and saved" with those two items; QA Usage 3 unchanged |
 | 10bz.5 (black screen test before the service) | V: Black with an empty rundown, Clear; then QA Sunday run; the kept log has the test and the service, and no item marked "added during the service" |
+| 10br.1 (Cmd+3 with an unsaved song) | V: stayed in the editor: "Save or close the song you are editing first." |
+| 10br.2 (keys inside a menu) | V: in the open Cues menu → and ← did not step; PageDown did (a presenter clicker's key works from a popover by design; the guide row said otherwise and is corrected) |
+| 10br.3 (type and Enter at once) | V: "john 3 16" then Enter at once previewed John 3:16 |
+| 10br.4 (saved translations) | V: John 3:16 saved with KJV + OYCB; active switched to NIV only: presented in KJV and Yorùbá |
+| 10br.5 (Àánú among the A's) | V: more than 50 songs; "Àánú" listed first among the A's (before "Amazing Grace") |
+| 10cf.1 (arrows in the Bible box) | V: Production view, a song on air: "John 3" typed in the Bible quick box, arrows pressed: the screen did not change |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)

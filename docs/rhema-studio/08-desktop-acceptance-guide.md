@@ -705,7 +705,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10br.1 | Song editor open with unsaved changes; press Ctrl+3 (Cmd+3). | Stays in the editor with "Save or close the song you are editing first." | Unverified |
-| 10br.2 | Present: open the Outputs dialog (or the Cues menu); press → / PageDown / Esc inside it. | The screen does not change behind it. | Unverified |
+| 10br.2 | Present: open the Outputs dialog (or the Cues menu); press → / ← / Esc inside it; then PageDown. | The arrows and Esc do not change the screen behind it. PageDown and PageUp (a presenter clicker's keys) still step, by design (`present-keys.ts`). | Verified on the Intel Mac |
 | 10br.3 | Quick find: type "john 3 16" quickly and press Enter at once. | The preview shows John 3:16 (not 3:1). | Unverified |
 | 10br.4 | With KJV + Yorùbá active add John 3:16, save, switch to NIV, present the item. | KJV + Yorùbá (as saved), also before reopening the service. | Unverified |
 | 10br.5 | With more than 50 songs, add "Àánú" (typed normally). Open the song library. | It is listed among the A's. | Unverified |
