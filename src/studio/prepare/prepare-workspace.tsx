@@ -31,7 +31,7 @@ export function PrepareWorkspace() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-3 max-[1200px]:px-5">
+      <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-3 max-[1200px]:px-5 [@media(max-height:860px)]:pt-3 [@media(max-height:860px)]:pb-2">
         <div className="min-w-0">
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Plan the whole experience</p>
           <h1 className="mt-1 truncate text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">{weekday ? `${weekday} run of show.` : "Your run of show."}</h1>
@@ -100,19 +100,19 @@ function PhaseStrip() {
   if (phases.length === 0) return null
   const sums = sectionSummaries(items, headers)
   return (
-    <div role="list" aria-label="Phases" className="mx-8 mb-4 grid shrink-0 auto-cols-fr grid-flow-col gap-3 max-[1200px]:mx-5">
+    <div role="list" aria-label="Phases" className="mx-8 mb-4 [@media(max-height:860px)]:mb-2.5 grid shrink-0 auto-cols-fr grid-flow-col gap-3 max-[1200px]:mx-5">
       {phases.map((p) => (
         <button
           key={p.id}
           type="button"
           role="listitem"
           onClick={() => document.querySelector(`[aria-label="Phase: ${CSS.escape(p.name)}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" })}
-          className="flex min-h-[5.25rem] min-w-0 items-start gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-left outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-h-[5.25rem] min-w-0 items-start gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-left [@media(max-height:860px)]:min-h-0 [@media(max-height:860px)]:items-center [@media(max-height:860px)]:py-2 outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <span aria-hidden className={cn("mt-0.5 size-4 shrink-0 rounded-full", DOT[p.role ?? "custom"])} />
+          <span aria-hidden className={cn("mt-0.5 size-4 shrink-0 rounded-full [@media(max-height:860px)]:mt-0 [@media(max-height:860px)]:size-3", DOT[p.role ?? "custom"])} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[0.8125rem] font-bold">{p.name}</span>
-            <span className="mt-1.5 block text-[0.6875rem] text-muted-foreground">{p.rule ? RULE_LABEL[p.rule].says : "Its own rule not set"}</span>
+            <span className="mt-1.5 block text-[0.6875rem] text-muted-foreground [@media(max-height:860px)]:hidden">{p.rule ? RULE_LABEL[p.rule].says : "Its own rule not set"}</span>
           </span>
           <span className="shrink-0 text-xs font-extrabold text-muted-foreground tabular-nums">{p.rule === "loop" ? "↻" : `${sums[p.id]?.minutes ?? 0}m`}</span>
         </button>
@@ -163,8 +163,8 @@ function EventOverview() {
     ["Projected finish", timing ? hhmm(timing.expectedEnd) : "—"],
   ]
   return (
-    <section aria-label="The event" className="mx-8 mb-4 shrink-0 rounded-lg border border-border bg-card max-[1200px]:mx-5">
-      <div className="flex flex-wrap items-center gap-4 px-[15px] py-2.5">
+    <section aria-label="The event" className="mx-8 mb-4 [@media(max-height:860px)]:mb-2.5 shrink-0 rounded-lg border border-border bg-card max-[1200px]:mx-5">
+      <div className="flex flex-wrap items-center gap-4 px-[15px] py-2.5 [@media(max-height:860px)]:py-1.5">
         <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4"><CalendarDaysIcon /></span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-semibold">{service ? service.title : "Unsaved service"}</p>
@@ -179,7 +179,7 @@ function EventOverview() {
           ))}
         </dl>
       </div>
-      <div className="border-t border-border px-[15px] py-2.5">
+      <div className="border-t border-border px-[15px] py-2.5 [@media(max-height:860px)]:py-1.5">
         <ServiceBar />
       </div>
     </section>
