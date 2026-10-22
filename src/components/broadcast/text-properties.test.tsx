@@ -10,7 +10,8 @@ import { VerseProperties } from "./text-properties"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 
-describe("Theme Designer verse text (bilingual)", () => {
+// Renders the whole properties panel: slow on a busy machine (it timed out at the default 5 s).
+describe("Theme Designer verse text (bilingual)", { timeout: 30_000 }, () => {
   it("renders the language tabs named after the translations, and Both writes both styles", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as never
