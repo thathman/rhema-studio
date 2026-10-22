@@ -368,7 +368,14 @@ with no timer running), as designed.
 
 ## Artifacts
 
-Newest build (2026-10-22, night), from `main` at `aaf1fe8`: the owner's approved neutral design across every page (#218, #235-#241: shell, Home, Present, Prepare, a Production page, Library, Team, Archive, Settings, Design and Edit the look), the run of show running by itself (#219 loops and warm-up, #221 go-live cues, #222 timed moves, #223/#224 timers behind other windows, #233 holds), timing (#220 actual times, #227/#229/#230/#234 the timing engine, #232 other timers), the stage display's design (#226) and ticker cues (#225). Not notarised; open with right-click → Open.
+Newest build (2026-10-23, early morning), from `main` at `da63abb`: everything below plus the tour's Production step (#242), Present and Prepare on short windows (#244), dark-mode polish and the sidebar rail below 1180 px (#247), the licence notices in Settings → Help and Production restored on relaunch (#248), Visual direction palettes (#249) and run-of-show times around midnight and clock changes (#250). Not notarised; open with right-click → Open.
+
+| File | Size | SHA-256 |
+|---|---|---|
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-23a/Rhema-0.3.2-intel-x86_64.dmg` | 842 MB | `8e8f7b43a12de46a34cadbf8df10da0f3f30f39028d0bcd1670dfdcf3571fa5a` |
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-23a/Rhema.app` (executable) | 1.0 GB | `e48ed9c543ff1b39b6ed4d66bedd05fc0191b392a8cbb177d3c3c6bc67eff6e2` |
+
+Previous build (2026-10-22, night), from `main` at `aaf1fe8`: the owner's approved neutral design across every page (#218, #235-#241: shell, Home, Present, Prepare, a Production page, Library, Team, Archive, Settings, Design and Edit the look), the run of show running by itself (#219 loops and warm-up, #221 go-live cues, #222 timed moves, #223/#224 timers behind other windows, #233 holds), timing (#220 actual times, #227/#229/#230/#234 the timing engine, #232 other timers), the stage display's design (#226) and ticker cues (#225). Not notarised; open with right-click → Open.
 
 | File | Size | SHA-256 |
 |---|---|---|
