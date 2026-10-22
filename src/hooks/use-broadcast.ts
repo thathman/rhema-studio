@@ -12,6 +12,7 @@ import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/tra
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 import { useSongStore } from "@/stores/song-store"
 import { useSoundStore } from "@/stores/sound-store"
+import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { approvalHolds } from "@/stores/approval-gate-store"
 
 export function toVerseRenderData(
@@ -235,7 +236,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   useBroadcastStore
     .getState()
     .setLiveVerse(
-      { ...data, ...layer },
+      { ...data, ...layer, content: "bible" },
       verseToPresent,
       { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null, follow: opts.follow }
     )
@@ -281,7 +282,9 @@ export async function presentSlide(
   const layer = await backgroundLayer(item.background)
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: i })
-  useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...layer }, null, {
+  // A hymn of the hymn book has its own look where an output gives it one.
+  const content = song.song.tags.split(",").some((t) => t.trim().toLowerCase() === CAC_TAG) ? "hymn" : "song"
+  useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...layer, content }, null, {
     goLive: opts.goLive,
     slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song },
   })
@@ -329,7 +332,7 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
   }
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: 0 })
-  useBroadcastStore.getState().setLiveVerse(render, null, { goLive: opts.goLive, itemId: item.id })
+  useBroadcastStore.getState().setLiveVerse({ ...render, content: "slide" }, null, { goLive: opts.goLive, itemId: item.id })
   return "presented"
 }
 
@@ -386,7 +389,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
       return "empty"
     }
     useBibleStore.getState().selectSlide({ item, index: 0 })
-    useBroadcastStore.getState().setLiveVerse(toVideoRenderData(item, videoUrl, ticket), null, { goLive: opts.goLive, itemId: item.id })
+    useBroadcastStore.getState().setLiveVerse({ ...toVideoRenderData(item, videoUrl, ticket), content: "picture" }, null, { goLive: opts.goLive, itemId: item.id })
     return "presented"
   }
   let url: string | null = null
@@ -402,7 +405,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
     return "empty"
   }
   useBibleStore.getState().selectSlide({ item, index: 0 })
-  useBroadcastStore.getState().setLiveVerse(toImageRenderData(item, url), null, { goLive: opts.goLive, itemId: item.id })
+  useBroadcastStore.getState().setLiveVerse({ ...toImageRenderData(item, url), content: "picture" }, null, { goLive: opts.goLive, itemId: item.id })
   return "presented"
 }
 

@@ -1,3 +1,4 @@
+import type { ContentType } from "./broadcast"
 import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
 export type BroadcastOutputType = "display" | "ndi"
@@ -91,6 +92,11 @@ export interface BroadcastOutput {
   lowerThirds?: boolean
   signage?: SignageSettings
   themeId: string
+  /**
+   * A different theme for some kinds of content on this output (hymns in gold,
+   * the Bible in blue…); a kind not listed uses `themeId`.
+   */
+  themeFor?: Partial<Record<ContentType, string>>
   /** Kept even while type === "ndi" so switching types is lossless. */
   monitorIndex: number
   /**

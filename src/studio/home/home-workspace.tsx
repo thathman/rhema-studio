@@ -21,6 +21,7 @@ import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
+import { themeIdsOf } from "@/lib/output-themes"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
 
 function greeting(now = new Date()): string {
@@ -120,7 +121,7 @@ export function HomeWorkspace() {
     missingSongs,
     missingMedia: mediaLoaded || mediaIds.length === 0 ? missingMedia : 0,
     // Only the themes outputs actually use.
-    missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => o.themeId === t.id)), fontAvailable),
+    missingFonts: missingThemeFonts(themes.filter((t) => outputs.some((o) => themeIdsOf(o).includes(t.id))), fontAvailable),
     monitors: monitorCount === null ? undefined : monitorProblems(outputs, monitorNames.length === monitorCount ? monitorNames : monitorCount),
     contentError,
     // Unsaved edits change an approved service; a service never approved stays "not approved yet".
