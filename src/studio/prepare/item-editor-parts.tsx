@@ -218,7 +218,7 @@ export function NoteEditor({ item }: { item: QueueItem }) {
       <StickyNoteIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <Input
         aria-label={`Note for ${item.reference}`}
-        placeholder="Note for the operator (never on screen)"
+        placeholder="Note for the operator and the stage screen (never on the congregation's)"
         value={item.notes ?? ""}
         maxLength={4000}
         className="h-7 text-xs"
