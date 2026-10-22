@@ -1,10 +1,13 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useQueueStore } from "@/stores"
 import { presentActions } from "@/studio/present-actions"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
-import { planTimeline } from "@/lib/run-of-show"
+import { clockMinutes, clockText, phaseRange, planTimeline } from "@/lib/run-of-show"
+import { actualByItem, firstOnAir, mmss } from "@/lib/journal"
+import { useJournalStore } from "@/stores/journal-store"
+import { monotonicNow } from "@/stores/timer-store"
 import { cn } from "@/lib/utils"
 
 function Clock({ label, value }: { label: string; value: string }) {
@@ -16,18 +19,43 @@ function Clock({ label, value }: { label: string; value: string }) {
   )
 }
 
+const wallClock = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+
+/** "4 min late", "on time", "1 h 10 min early". */
+function lateness(minutes: number): string {
+  return minutes === 0 ? "on time" : `${formatMinutes(Math.abs(minutes) * 60_000)} ${minutes > 0 ? "late" : "early"}`
+}
+
 /**
  * Run of show timing: the main service's start, when the warm-up begins, the
  * projected finish and each item's planned time. ±5 min moves only the
- * projection (running late or early); the plan stays as prepared.
+ * projection (running late or early); the plan stays as prepared. Once the
+ * service has been on air, each item also shows when it actually went up and
+ * for how long (from the service log; rehearsal is not counted).
  */
 export function TimingPanel() {
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
   const [delay, setDelay] = useState(0)
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
-  const plan = planTimeline(items, headers, delay)
   const total = formatMinutes(plannedTotalMs(items))
+  const entries = useJournalStore((s) => s.entries)
+  const [now, setNow] = useState(() => monotonicNow())
+  // The live item's time on air grows: look again every 15 s while there is a log.
+  useEffect(() => {
+    if (entries.length === 0) return
+    const t = setInterval(() => setNow(monotonicNow()), 15_000)
+    return () => clearInterval(t)
+  }, [entries.length])
+  const first = firstOnAir(entries)
+  const onAir = actualByItem(entries, Math.max(now, entries.at(-1)?.mono ?? 0))
+  const range = main ? phaseRange(items.length, headers, main.id) : null
+  const began = range ? Math.min(...items.slice(range.start, range.end).map((i) => first.get(i.id) ?? Infinity)) : Infinity
+  const plannedStart = clockMinutes(main?.starts_at)
+  const late = Number.isFinite(began) && plannedStart !== null ? (() => { const d = new Date(began); return d.getHours() * 60 + d.getMinutes() - plannedStart })() : null
+  // Starting late moves the projected finish too; ±5 min adjusts from there.
+  const shift = delay + (late ?? 0)
+  const plan = planTimeline(items, headers, shift)
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[17px] border border-border bg-card shadow-panel">
       <div className="border-b border-border px-4 py-3">
@@ -55,9 +83,14 @@ export function TimingPanel() {
                 <Clock label="Warm-up" value={plan.warmupStart ?? "—"} />
                 <Clock label="Finish" value={plan.finish} />
               </div>
+              {late !== null && (
+                <p className={cn("text-xs", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")} role="status">
+                  Began at {wallClock(began)}, {lateness(late)}
+                </p>
+              )}
               <div className="flex items-center justify-between gap-2" role="group" aria-label="Running late or early">
                 <Button size="xs" variant="outline" onClick={() => setDelay((d) => d - 5)}>−5 min</Button>
-                <span className={cn("text-xs font-semibold", delay > 0 ? "text-confidence-mid" : "text-muted-foreground")}>{delay === 0 ? "On schedule" : delay > 0 ? `${delay} min late` : `${-delay} min early`}</span>
+                <span className={cn("text-xs font-semibold", shift > 0 ? "text-confidence-mid" : "text-muted-foreground")}>{shift === 0 ? "On schedule" : lateness(shift)}</span>
                 <Button size="xs" variant="outline" onClick={() => setDelay((d) => d + 5)}>+5 min</Button>
               </div>
               <ol className="min-h-0 overflow-y-auto border-t border-border pt-2" aria-label="Planned times">
@@ -74,6 +107,7 @@ export function TimingPanel() {
                       <span className="min-w-0">
                         <span className={cn("block truncate text-xs", r.kind === "milestone" && "font-semibold")}>{r.label}</span>
                         {r.kind === "item" && <span className="block text-[0.6875rem] text-muted-foreground">{r.minutes ? `${r.minutes} min` : "no minutes yet"}</span>}
+                        {r.index !== undefined && first.has(items[r.index].id) && <ActualLine started={first.get(items[r.index].id)!} ms={onAir.get(items[r.index].id) ?? 0} planned={r.minutes} />}
                       </span>
                     </button>
                   </li>
@@ -86,5 +120,16 @@ export function TimingPanel() {
         </div>
       )}
     </div>
+  )
+}
+
+/** When an item actually went on air and for how long, against its plan. */
+function ActualLine({ started, ms, planned }: { started: number; ms: number; planned?: number }) {
+  const over = planned ? ms - planned * 60_000 : 0
+  return (
+    <span className="block text-[0.6875rem] tabular-nums">
+      On air {wallClock(started)} for {mmss(ms)}
+      {planned ? <span className={cn(over > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}> ({over > 0 ? "+" : "−"}{mmss(Math.abs(over))})</span> : null}
+    </span>
   )
 }
