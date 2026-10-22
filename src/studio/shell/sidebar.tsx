@@ -74,7 +74,7 @@ export function Sidebar({
       </Group>
       <div className="mt-auto flex flex-col gap-0.5 px-[11px] pt-4 pb-[15px]">
         <div className="mb-2 rounded-[7px] border border-sidebar-tag-border bg-sidebar-tag px-[9px] py-[11px] text-[0.625rem] text-[#9eb1b7] max-[980px]:hidden">
-          <span className="flex items-center gap-1.5 font-semibold tracking-[0.03em] whitespace-nowrap uppercase"><ShieldCheckIcon aria-hidden className="size-[13px] shrink-0" /> Local-first workspace</span>
+          <span className="flex items-center gap-1.5 font-semibold whitespace-nowrap uppercase"><ShieldCheckIcon aria-hidden className="size-[13px] shrink-0" /> Local-first workspace</span>
           <span className="mt-1 block truncate text-[0.6875rem] font-semibold text-[#e9f1ed]">{churchName || "This computer"}</span>
           <span className="block">Works offline, on this computer</span>
         </div>
