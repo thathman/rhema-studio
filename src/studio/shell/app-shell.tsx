@@ -21,6 +21,7 @@ import { openSettings } from "@/lib/settings-dialog"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Sidebar } from "@/studio/shell/sidebar"
 import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
+import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
 
 /** What the top bar calls each page. */
@@ -97,7 +98,8 @@ export function AppShell() {
         onMore={() => setWorkspace("more")}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-col">
+      {/* The live console is always dark (its own deeper palette), top bar included. */}
+      <div className={cn("flex min-h-0 min-w-0 flex-col bg-background text-foreground", workspace === "present" && "dark present-surface")}>
         <TopBar title={TITLES[workspace]} />
         <main className="relative min-h-0 min-w-0 flex-1">
           {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}

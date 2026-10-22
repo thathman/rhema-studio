@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils"
 import { Dashboard } from "@/components/layout/dashboard"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
-import { PanelHeader } from "@/components/ui/panel-header"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
@@ -19,7 +18,7 @@ import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
 import { StageMessage } from "@/studio/present/stage-message"
 import { LowerThirdControl } from "@/studio/present/lower-third"
-import { TickerControl } from "@/studio/present/ticker"
+import { TickerRow } from "@/studio/present/ticker"
 import { ObsChip } from "@/studio/present/obs-chip"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
@@ -65,7 +64,7 @@ export function PresentWorkspace() {
 
   return (
     <div className="flex h-full flex-col">
-      <WorkspaceHeader title="Present" subtitle={service ? `${service.title}${service.service_date ? ` · ${service.service_date}` : ""}` : undefined}>
+      <WorkspaceHeader title="Live console" titleHidden>
         <StatusChip
           tone={isLive && liveRef ? (rehearsal ? "warn" : "live") : "off"}
           label={isLive && liveRef ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef}` : liveRef ? `Off air · Restore shows ${liveRef}` : rehearsal ? "Rehearsal · nothing live" : "Nothing live"}
@@ -95,7 +94,6 @@ export function PresentWorkspace() {
         <ServiceTimer />
         <ObsChip />
         <SoundChip />
-        <TickerControl />
         <LowerThirdControl />
         <StageMessage />
         <CueMenu />
@@ -132,7 +130,7 @@ export function PresentWorkspace() {
               )}
             >
               {v === "standard" ? <LayoutPanelLeftIcon /> : <LayoutGridIcon />}
-              {v}
+              <span className="max-[1200px]:sr-only">{v}</span>
             </button>
           ))}
         </div>
@@ -152,6 +150,7 @@ function StandardView() {
   const nextHint = useNextHint()
   const held = useBroadcastStore((s) => s.heldLive !== null)
   const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
+  const service = useServiceStore((s) => s.current)
 
   // Keyboard verbs, only in Standard view and never while typing.
   useEffect(() => {
@@ -167,47 +166,59 @@ function StandardView() {
   }, [])
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_minmax(0,14rem)] gap-3 p-3">
-      <div className="grid min-h-0 grid-cols-[18rem_minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:grid-cols-[16rem_minmax(0,1fr)]">
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card" data-tour="present-rundown">
-          <PanelHeader title="Service">
-            <span className="text-xs text-muted-foreground">{count}</span>
-          </PanelHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <RundownList mode="present" />
+    <div className="grid h-full min-h-0 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] gap-3 p-4 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2 max-[1200px]:p-3">
+      <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-[15px] border border-border bg-surface-sunken" data-tour="present-rundown">
+        <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold tracking-tight">Running order</h2>
+            <p className="truncate text-xs text-muted-foreground">{service ? `${service.title}${service.service_date ? ` · ${service.service_date}` : ""}` : "What is next in your service"}</p>
           </div>
+          <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{count} {count === 1 ? "item" : "items"}</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+          <RundownList mode="present" />
+        </div>
+      </section>
+      <div className="min-h-0 overflow-hidden rounded-[15px] max-[1200px]:hidden [&>div]:h-full">
+        <PreviewPanel />
+      </div>
+      <div className="min-h-0 overflow-hidden rounded-[15px] [&>div]:h-full" data-studio-live>
+        <LiveOutputPanel />
+      </div>
+
+      <div className="col-span-2 flex flex-wrap items-center gap-2.5 rounded-[15px] border border-border bg-surface-elevated p-2.5 max-[1200px]:col-span-1" role="toolbar" aria-label="Presentation controls">
+        <BigButton icon={<ChevronLeftIcon />} label="Previous" iconOnly title="Previous (← / PgUp)" onClick={presentActions.prev} disabled={count === 0} className="w-[var(--control-height)] min-w-0 px-0" />
+        <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-32 max-[1200px]:min-w-0" />
+        <span className="flex gap-2" role="group" aria-label="Continue the reading">
+          <BigButton icon={<ChevronsLeftIcon />} label="Verse −" iconOnly onClick={presentActions.versePrev} disabled={!hasLiveItem} title="Verse −: present the verse before the live one (Shift+←)" className="w-[var(--control-height)] min-w-0 px-0" />
+          <BigButton icon={<ChevronsRightIcon />} label="Verse +" iconOnly onClick={presentActions.verseNext} disabled={!hasLiveItem} title="Verse +: present the next verse of the live passage (Shift+→)" className="w-[var(--control-height)] min-w-0 px-0" />
+        </span>
+        <span className="ml-auto flex gap-2">
+          <BigButton icon={<MonitorIcon />} label="Show live" hint="present the preview" tone="take" onClick={presentActions.showLive} className="min-w-36 uppercase tracking-wide max-[1200px]:min-w-0" />
+          <BigButton icon={<SquareIcon />} label="Clear" hint="Esc" tone="danger" onClick={presentActions.clear} disabled={!isLive} className="min-w-0" />
+          <BigButton icon={<RotateCcwIcon />} label="Restore" hint="Shift+Esc" onClick={presentActions.restore} disabled={!canRestore} className="min-w-0" />
+        </span>
+      </div>
+
+      <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:col-span-1">
+        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-[15px] border border-border bg-card p-4" data-tour="quick-find">
+          <div>
+            <h2 className="text-sm font-semibold tracking-tight">Find &amp; cue anything</h2>
+            <p className="text-xs text-muted-foreground">A reference, a hymn number, or a few words</p>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
         </section>
-        <div className="min-h-0 overflow-hidden max-[1200px]:hidden [&>div]:h-full">
-          <PreviewPanel />
-        </div>
-        <div className="min-h-0 overflow-hidden [&>div]:h-full" data-studio-live>
-          <LiveOutputPanel />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3" role="toolbar" aria-label="Presentation controls">
-        <BigButton icon={<ChevronLeftIcon />} label="Previous" hint="← / PgUp" onClick={presentActions.prev} disabled={count === 0} />
-        <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-36" />
-        <BigButton icon={<MonitorIcon />} label="Show live" hint="present the preview" tone="live" onClick={presentActions.showLive} className="ml-4 min-w-40" />
-        <span className="ml-4 flex gap-2" role="group" aria-label="Continue the reading">
-          <BigButton icon={<ChevronsLeftIcon />} label="Verse −" hint="Shift+←" onClick={presentActions.versePrev} disabled={!hasLiveItem} title="Present the verse before the live one" />
-          <BigButton icon={<ChevronsRightIcon />} label="Verse +" hint="Shift+→" onClick={presentActions.verseNext} disabled={!hasLiveItem} title="Present the next verse of the live passage" />
-        </span>
-        <span className="ml-auto flex gap-3">
-          <BigButton icon={<SquareIcon />} label="Clear" hint="Esc" tone="danger" onClick={presentActions.clear} disabled={!isLive} />
-          <BigButton icon={<RotateCcwIcon />} label="Restore" hint="Shift+Esc" onClick={presentActions.restore} disabled={!canRestore} />
-        </span>
-      </div>
-
-      <section className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] gap-3 overflow-hidden rounded-lg border border-border bg-card p-3">
-        <div className="flex min-h-0 flex-col [&>*]:min-h-0 [&>*]:flex-1" data-tour="quick-find"><QuickFind mode="present" /></div>
-        <div className="flex min-h-0 flex-col gap-2 border-l border-border pl-3" role="group" aria-label="Quick screens">
+        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-[15px] border border-border bg-card p-4" role="group" aria-label="Quick screens">
           {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">Quick screens</p>
-            <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight">One-touch moments</h2>
+              <p className="text-xs text-muted-foreground">Temporary screens, with safe return</p>
+            </div>
+            <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-10 min-w-0" />
           </div>
-          <div className="-m-1 grid min-h-0 grid-cols-3 content-start gap-2 overflow-y-auto p-1">
+          {/* Four across, two rows: on a small window the icons give way so every screen stays in view. */}
+          <div className="-m-1 grid min-h-0 grid-cols-4 content-start gap-2 overflow-y-auto p-1 max-[1200px]:gap-1.5">
             {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
               // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
               const onAir = isLive && quickOnAir === s
@@ -218,14 +229,15 @@ function StandardView() {
                   label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]}
                   tone={onAir ? "live" : "neutral"}
                   aria-pressed={onAir}
-                  className="h-11 min-w-0 justify-start gap-2 px-3 [&_svg]:!size-4"
+                  className="h-10 min-w-0 justify-start gap-1.5 px-2.5 text-[0.8125rem] leading-tight max-[1200px]:justify-center max-[1200px]:px-1.5 max-[1200px]:text-xs max-[1200px]:[&>span:first-child]:hidden [@media(max-height:700px)]:h-9 [&_svg]:!size-4"
                   onClick={() => presentActions.quickScreen(s)}
                 />
               )
             })}
           </div>
-        </div>
-      </section>
+          <TickerRow />
+        </section>
+      </div>
     </div>
   )
 }
