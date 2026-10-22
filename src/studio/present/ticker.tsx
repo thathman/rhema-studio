@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useBroadcastStore } from "@/stores"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 import { TickerDesigner } from "@/studio/present/ticker-designer"
 
 /**
@@ -74,5 +75,35 @@ export function TickerControl() {
       </Popover>
       <TickerDesigner open={designing} onOpenChange={setDesigning} />
     </>
+  )
+}
+
+/** The ticker in the console: its state, its words (Edit) and Take / Stop in one row. */
+export function TickerRow() {
+  const ticker = useBroadcastStore((s) => s.ticker)
+  const hasWords = useBroadcastStore((s) => s.tickerItems.some((i) => i.trim()))
+  const label = useBroadcastStore((s) => s.tickerStyle.label.trim())
+  const take = async () => {
+    const backing = await lowerThirdBacking(useBroadcastStore.getState().tickerStyle)
+    useBroadcastStore.getState().setTicker({ backing })
+  }
+  return (
+    <div className="mt-auto flex items-center gap-2 border-t border-border pt-2.5">
+      <span className="flex min-w-0 flex-col">
+        <span className="flex items-center gap-2 text-sm font-semibold whitespace-nowrap">
+          <span className="max-[1200px]:sr-only">News ticker</span>
+          <Badge variant={ticker ? (ticker.pausedAt ? "amber" : "green") : "neutral"}>{ticker ? (ticker.pausedAt ? "Paused" : "On air") : "Standby"}</Badge>
+        </span>
+        {label && <span className="truncate text-[0.6875rem] text-muted-foreground uppercase">{label}</span>}
+      </span>
+      <span className="ml-auto flex shrink-0 items-center gap-2">
+        <TickerControl />
+        {ticker ? (
+          <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().setTicker(null)}><SquareIcon /> Stop<span className="max-[1200px]:sr-only"> ticker</span></Button>
+        ) : (
+          <Button size="sm" disabled={!hasWords} onClick={() => void take()} title={hasWords ? undefined : "Type the announcements first (Ticker)"}><PlayIcon /> Take<span className="max-[1200px]:sr-only"> ticker live</span></Button>
+        )}
+      </span>
+    </div>
   )
 }

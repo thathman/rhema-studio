@@ -56,7 +56,7 @@ export function Sidebar({
 }) {
   const initials = operatorName.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()
   return (
-    <nav aria-label="Workspaces" className="flex min-h-0 w-[232px] flex-col gap-1 overflow-y-auto bg-sidebar px-3.5 py-5 text-sidebar-foreground max-[1280px]:w-[190px] max-[1080px]:w-[78px] max-[1080px]:px-2.5">
+    <nav aria-label="Workspaces" className="flex min-h-0 w-[232px] flex-col gap-1 overflow-y-auto bg-sidebar px-3.5 py-5 text-sidebar-foreground max-[1440px]:w-[190px] max-[1080px]:w-[78px] max-[1080px]:px-2.5">
       <div className="mb-3 flex items-center gap-2.5 px-2 max-[1080px]:justify-center max-[1080px]:px-0" title="Rhema Studio">
         <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary font-serif text-lg font-bold text-sidebar-primary-foreground italic">R</span>
         <span className="flex flex-col leading-none max-[1080px]:sr-only">
