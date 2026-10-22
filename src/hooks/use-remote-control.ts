@@ -173,7 +173,8 @@ export function remoteStatusSnapshot() {
   return {
     onAir: broadcast.isLive,
     activeTheme: activeTheme?.name ?? null,
-    liveVerse: broadcast.liveVerse?.reference ?? null,
+    // A picture or QR slide has no words of its own: the phone names its rundown item.
+    liveVerse: broadcast.liveVerse ? broadcast.liveVerse.reference || broadcast.liveVerse.lines?.[0] || useQueueStore.getState().items.find((i) => i.id === broadcast.liveItemId)?.reference || null : null,
     queueLength: useQueueStore.getState().items.length,
     confidenceThreshold: useSettingsStore.getState().confidenceThreshold,
     rehearsal: broadcast.rehearsal,
