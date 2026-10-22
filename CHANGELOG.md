@@ -22,7 +22,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Settings is a page with its sections grouped (Bible and languages, Screens and NDI, Live behaviour, Microphone and speech, Studio connections, Appearance, Diagnostics and support) (#216).
 - The Team page: your name, approvals, comments and the ways to work together (church folder, phone remote; hosting on the network planned) (#214).
 - Library and Archive are pages: songs, the hymn book, pictures and videos, song files; services, the service log, songs sung, sharing and backups (#212).
-- Design → Stage: the stage display's background, words colour and size, and whether it shows the timer, what is next, the item's note and the song's key and tempo; previewed with the real stage renderer, the same on a screen and over NDI (DS-004).
+- Design → Stage: the stage display's background, words colour and size, and whether it shows the timer, what is next, the item's note and the song's key and tempo; previewed with the real stage renderer, the same on a screen and over NDI (#226, DS-004).
 - Design studio: every design edit on one page, with tabs for Themes (each kind of content previewed and assigned), Lower thirds, News ticker, Brand kit and Output looks (every output's theme per kind in one table); leaving with an unsaved theme asks first (#201).
 
 ### Design and outputs (owner requests, 2026-10-22)
