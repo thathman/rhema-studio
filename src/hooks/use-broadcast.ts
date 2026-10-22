@@ -3,6 +3,7 @@ import { mark } from "@/lib/latency-marks"
 import { composeQrSlide } from "@/lib/qr-bulletin"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
+import { useQueueStore } from "@/stores/queue-store"
 import type { VerseRenderData } from "@/types"
 import type { ImageQueueItem, SlideQueueItem, SongQueueItem, SongWithSections, Verse } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
@@ -404,10 +405,23 @@ export const QUICK_SCREENS = {
 /** Text screens above, plus two without text: a black frame and the church logo. */
 export type QuickScreen = keyof typeof QUICK_SCREENS | "black" | "logo"
 
-/** Is a Yorùbá Bible in use right now (active or secondary)? Then screens go bilingual. */
+/** Is a Yorùbá Bible in use right now? Then screens go bilingual. */
 export function yorubaInUse(): boolean {
   const b = useBibleStore.getState()
-  return b.translations.some((t) => t.language === "yo" && (t.id === b.activeTranslationId || t.id === b.secondaryTranslationId))
+  return yorubaBibleIn(b.translations, [b.activeTranslationId, b.secondaryTranslationId], useQueueStore.getState().items)
+}
+
+/**
+ * The operator's active or second Bible is Yorùbá, or a verse of the open
+ * service is saved in a Yorùbá Bible (a Yorùbá service on an English
+ * set-up). Decided by the service, not by what is on screen, so the quick
+ * screens never change language halfway through.
+ */
+export function yorubaBibleIn(translations: Array<{ id: number; abbreviation: string; language: string }>, ids: Array<number | null>, items: ReadonlyArray<{ kind?: string; translation?: string | null; secondary_translation?: string | null }>): boolean {
+  const yo = translations.filter((t) => t.language === "yo")
+  if (yo.some((t) => ids.includes(t.id))) return true
+  const abbrevs = new Set(yo.map((t) => t.abbreviation.toLowerCase()))
+  return items.some((i) => (i.kind ?? "verse") === "verse" && [i.translation, i.secondary_translation].some((a) => typeof a === "string" && abbrevs.has(a.toLowerCase())))
 }
 
 /**
