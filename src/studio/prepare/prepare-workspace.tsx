@@ -10,6 +10,7 @@ import { ServiceBar } from "@/studio/prepare/service-bar"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { ItemEditor } from "@/studio/prepare/item-editor"
 import { AddItems } from "@/studio/prepare/add-items"
+import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { RULE_LABEL, defaultPhases, sectionSummaries, type PhaseRole } from "@/lib/run-of-show"
 import { FolderPlusIcon, LayersIcon } from "lucide-react"
@@ -81,14 +82,10 @@ export function PrepareWorkspace() {
 
         {/* On a narrower window the preview gives way to the editor (Present shows it too). */}
         <aside className="flex min-h-0 flex-col gap-4 max-[1280px]:hidden">
-          <div className="h-64 overflow-hidden rounded-[17px] [&>div]:h-full">
+          <div className="h-56 shrink-0 overflow-hidden rounded-[17px] [&>div]:h-full">
             <PreviewPanel />
           </div>
-          <div className="rounded-[17px] border border-border bg-card p-4 text-sm shadow-panel">
-            <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Timing</p>
-            <p className="mt-2 text-2xl font-bold tracking-[-0.04em]">{planned || "—"}</p>
-            <p className="text-xs text-muted-foreground">{planned ? "planned in total" : "Give items planned minutes (Timing tab) to see the total."}</p>
-          </div>
+          <TimingPanel />
         </aside>
       </div>
     </div>

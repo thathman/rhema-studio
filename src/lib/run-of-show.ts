@@ -118,3 +118,58 @@ export const RULE_LABEL: Record<PhaseRule, { chip: string; says: string }> = {
   auto_once: { chip: "Auto · once", says: "Runs once, timed to finish at the start" },
   manual: { chip: "Manual", says: "You move on, item by item" },
 }
+
+/** "HH:MM" to minutes after midnight (null when not a time). */
+export function clockMinutes(t: string | undefined | null): number | null {
+  const m = t ? /^([01]\d|2[0-3]):([0-5]\d)$/.exec(t) : null
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+/** Minutes after midnight to "HH:MM" (wrapping past midnight). */
+export function clockText(minutes: number): string {
+  const m = ((Math.round(minutes) % 1440) + 1440) % 1440
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
+}
+
+export interface TimelineRow {
+  kind: "milestone" | "item"
+  label: string
+  time: string
+  minutes?: number
+  /** The item's index in the rundown. */
+  index?: number
+}
+
+export interface Timeline {
+  start: string
+  warmupStart: string | null
+  finish: string
+  rows: TimelineRow[]
+}
+
+/**
+ * The planned day from the main service's start time: when the warm-up begins (timed to end at the
+ * start), each main-service item's planned time, and the projected finish, `delay` minutes later
+ * than planned when running late (the plan itself does not change). Null without a start time.
+ */
+export function planTimeline(items: Array<{ reference: string; planned_minutes?: number | null }>, headers: OutlineHeader[], delay = 0): Timeline | null {
+  const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
+  const start = clockMinutes(main?.starts_at)
+  if (!main || start === null) return null
+  const sums = sectionSummaries(items, headers)
+  const warm = headers.find((h) => h.type === "phase" && h.role === "warmup")
+  const warmMinutes = warm ? sums[warm.id]?.minutes ?? 0 : 0
+  const phases = [...headers].filter((h) => h.type === "phase").sort((a, b) => a.at - b.at)
+  const end = phases.find((p) => p.at > main.at || (p.at === main.at && headers.indexOf(p) > headers.indexOf(main)))?.at ?? items.length
+  const rows: TimelineRow[] = []
+  if (warm && warmMinutes > 0) rows.push({ kind: "milestone", label: `${warm.name} begins`, time: clockText(start - warmMinutes) })
+  rows.push({ kind: "milestone", label: `${main.name} begins`, time: clockText(start) })
+  let t = start
+  for (let i = main.at; i < end; i++) {
+    const minutes = items[i].planned_minutes ?? 0
+    rows.push({ kind: "item", label: items[i].reference, time: clockText(t), minutes, index: i })
+    t += minutes
+  }
+  rows.push({ kind: "milestone", label: `${main.name} ends`, time: clockText(t + delay) })
+  return { start: clockText(start), warmupStart: warm && warmMinutes > 0 ? clockText(start - warmMinutes) : null, finish: clockText(t + delay), rows }
+}
