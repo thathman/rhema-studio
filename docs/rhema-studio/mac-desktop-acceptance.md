@@ -148,6 +148,11 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10cm.1 (hymn book import) | V: Prepare → Hymn book → the file through the tab's file input: "Hymn book imported: 1050 hymns"; "1000 hymns in Part 1 · 50 in Part 2" |
 | 10cm.3 (hymn on screen) | V: First: English, Add 245: item EN, YO. On the stream (both): four English lines, then the four Yorùbá in their own style, footer "Come, O Thou all-victorious Lord · CAC Gospel Hymn Book 245" under the words, nothing overlapping (screenshot 2026-10-22-hb-both). Stream set to "Second language only": only the Yorùbá |
 | 10cm.4 (import again) | V: "Hymn book updated: 1050 hymns"; the service using 245 reopened, saved after an edit and presented. (The church's own song in the book is left alone: crate test) |
+| 10bo.1 (Next after edits) | V: on the 4th item, Next showed the item after the one on screen after adding an item, after removing item 1, and after dragging item 2 below item 5 |
+| 10bo.4 (delete the live item) | V: deleting the item on screen, then Next, showed the one that followed ("Give online"), not item 1 |
+| 10ca.1, 10ca.7 (Clear and Restore) | V: hymn 245 on verse 2; Clear: the chip read "Off air · Restore shows Come, O Thou all-victorious Lord · Verse 2"; a Bible verse picked; Restore brought verse 2 back; Next showed verse 3 |
+| 10ca.3 (quick screen then Next) | V: Please stand over verse 3, then Next: verse 4 |
+| 10ca.4 (Back while off air) | V: Black over verse 4, Clear, Back: verse 4 returned off air; Restore put it on air |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
