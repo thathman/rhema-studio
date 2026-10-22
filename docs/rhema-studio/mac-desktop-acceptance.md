@@ -272,6 +272,20 @@ Run the same day with two isolated profiles (production and standby) and a disk 
 - The first-run walkthrough still points at the classic dashboard (owner
   request: rewrite it for the Studio workspaces; follow-up PR).
 
+## Still to verify (2026-10-22 07:40 WAT)
+
+131 guide rows remain Unverified after syncing the guide with this report (101 rows marked verified). Grouped roughly by what they need (keyword match, so approximate):
+
+| Needs | Rows |
+|---|---|
+| Projector, stage screen or a second monitor | 26 (outputs on real screens, unplugging, stage view) |
+| Microphone, listening or speech | 16 (detection, transcripts, cloud speech) |
+| OBS, NDI receiver or video files | 17 |
+| A phone or the network | 17 (QR pairing with a phone, LAN listeners; opening a network port raises the macOS firewall prompt on the owner's screen, so not done unattended) |
+| Windows or installing | 3 |
+| Signage on a screen | 3 |
+| App only | about 49; some end in the system Save dialog (service files, CSV, OpenLyrics, song text), which the test bridge cannot drive; the rest can be run when the owner's Rhema is closed (only one copy can run) |
+
 ## Artifacts
 
 The current clean build (no QA bridge: the binary has no bridge code), built from
