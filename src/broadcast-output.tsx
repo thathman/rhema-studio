@@ -19,6 +19,7 @@ import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, NdiConfigEventPayload, StagePayload } from "@/types"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
+import { drawStage } from "@/lib/stage-canvas"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
@@ -63,6 +64,8 @@ function BroadcastCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const latestData = useRef<BroadcastPayload | null>(null)
   const [stage, setStage] = useState<StagePayload | null>(null)
+  // The stage, also drawn on the canvas so a stage output can go out over NDI.
+  const stageRef = useRef<StagePayload | null>(null)
   const ndiConfigRef = useRef<NdiConfigEventPayload>({
     active: false,
     fps: 24,
@@ -89,6 +92,11 @@ function BroadcastCanvas() {
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
+    if (stageRef.current) {
+      const s = stageRef.current
+      paintFrame(canvas, scratchCanvas, 1920, 1080, (fctx) => drawStage(fctx, 1920, 1080, s))
+      return
+    }
     const data = latestData.current
     if (!data) {
       // Black screen when no data
@@ -249,9 +257,13 @@ function BroadcastCanvas() {
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
       if (event.payload.role === "stage") {
         videoPlayer?.sync(undefined)
-        setStage(event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null, band: null })
+        stageRef.current = event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null, band: null }
+        setStage(stageRef.current)
+        draw()
+        pushNdiBurst()
         return
       }
+      stageRef.current = null
       setStage(null)
       latestData.current = {
         ...event.payload,

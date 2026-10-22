@@ -134,13 +134,37 @@ fn place_on_monitor(window: &tauri::WebviewWindow, monitor: &tauri::Monitor) -> 
     Ok(())
 }
 
+/// A movable window (960×540 points) in the middle of `monitor`, out of full screen.
+fn place_windowed(window: &tauri::WebviewWindow, monitor: &tauri::Monitor) -> Result<(), String> {
+    let _ = window.set_fullscreen(false);
+    let scale = monitor.scale_factor();
+    let at: tauri::LogicalPosition<f64> = monitor.position().to_logical(scale);
+    let fits: tauri::LogicalSize<f64> = monitor.size().to_logical(scale);
+    let (w, h) = (960.0_f64.min(fits.width), 540.0_f64.min(fits.height));
+    window
+        .set_size(tauri::Size::Logical(tauri::LogicalSize::new(w, h)))
+        .and_then(|()| {
+            window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
+                at.x + (fits.width - w) / 2.0,
+                at.y + (fits.height - h) / 2.0,
+            )))
+        })
+        .map_err(|e| {
+            log::error!("open_broadcast_window: placing the window failed: {e}");
+            e.to_string()
+        })
+}
+
 #[tauri::command]
 pub async fn open_broadcast_window(
     app: tauri::AppHandle,
     output_id: String,
     monitor_index: usize,
     title: Option<String>,
+    windowed: Option<bool>,
 ) -> Result<(), String> {
+    // A window the operator can move and resize (signage on their own screen), not a full-screen projector.
+    let windowed = windowed.unwrap_or(false);
     log::info!("open_broadcast_window: output={output_id}, monitor_index={monitor_index}");
     let label = window_label(&output_id)?;
     let monitors = app.available_monitors().map_err(|e| {
@@ -185,16 +209,15 @@ pub async fn open_broadcast_window(
         )
         .title(title.unwrap_or_else(|| "Rhema Output".to_string()))
         .visible(false)
-        .decorations(true)
         .always_on_top(false)
         .skip_taskbar(false)
         .focused(false)
-        .decorations(false)
+        .decorations(windowed)
         // macOS makes a window full screen on the screen it is created on (the
         // operator's), and a full-screen window ignores later moves: there it
         // goes full screen only after it is on the target monitor (below).
-        .fullscreen(!cfg!(target_os = "macos"))
-        .minimizable(false)
+        .fullscreen(!windowed && !cfg!(target_os = "macos"))
+        .minimizable(windowed)
         .build()
         .map_err(|e| {
             log::error!("open_broadcast_window: window build failed: {e}");
@@ -202,7 +225,12 @@ pub async fn open_broadcast_window(
         })?
     };
 
-    place_on_monitor(&window, monitor)?;
+    if windowed {
+        place_windowed(&window, monitor)?;
+    } else {
+        place_on_monitor(&window, monitor)?;
+    }
+    let _ = window.set_decorations(windowed);
     // A window created hidden for NDI has skip_taskbar(true); make sure the
     // visible projector is reachable from the taskbar either way.
     let _ = window.set_skip_taskbar(false);
@@ -212,8 +240,10 @@ pub async fn open_broadcast_window(
     })?;
     // On the target monitor now: full screen there (macOS; elsewhere it was built full screen).
     #[cfg(target_os = "macos")]
-    if let Err(e) = window.set_fullscreen(true) {
-        log::warn!("open_broadcast_window: set_fullscreen failed: {e}");
+    if !windowed {
+        if let Err(e) = window.set_fullscreen(true) {
+            log::warn!("open_broadcast_window: set_fullscreen failed: {e}");
+        }
     }
     let _ = window.set_focus();
     if let (Ok(p), Some(m)) = (window.outer_position(), window.current_monitor().ok().flatten()) {

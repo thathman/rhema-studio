@@ -211,7 +211,7 @@ export function OutputEditorDialog({
 
           <div className="flex flex-col gap-1.5 border-t border-border pt-4">
             <span id="role-label" className="text-xs text-muted-foreground">Who sees it</span>
-            <Select value={form.role ?? "congregation"} onValueChange={(v) => patch({ role: v as BroadcastOutput["role"], ...(v === "stage" ? { type: "display" as const } : {}) })}>
+            <Select value={form.role ?? "congregation"} onValueChange={(v) => patch({ role: v as BroadcastOutput["role"] })}>
               <SelectTrigger aria-labelledby="role-label" className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="congregation">Congregation — the themed screen (projector, stream)</SelectItem>
@@ -297,6 +297,10 @@ export function OutputEditorDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                <label className="mt-1 flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={form.windowed === true} onChange={(e) => patch({ windowed: e.target.checked })} />
+                  In a window (move and resize it; for signage or a preview on this computer's screen)
+                </label>
               </div>
             ) : (
               <>

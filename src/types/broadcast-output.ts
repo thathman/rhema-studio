@@ -131,6 +131,8 @@ export interface BroadcastOutput {
    * the Bible in blue…); a kind not listed uses `themeId`.
    */
   themeFor?: Partial<Record<ContentType, string>>
+  /** A display output opens as a window the operator can move and resize, not full screen (signage on the operator's own screen). */
+  windowed?: boolean
   /** Kept even while type === "ndi" so switching types is lossless. */
   monitorIndex: number
   /**
