@@ -3,7 +3,7 @@ import { useTranscriptStore } from "@/stores/transcript-store"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { ArchiveIcon, BookOpenIcon, CheckIcon, DatabaseIcon, DownloadIcon, MusicIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { ArchiveIcon, BookOpenIcon, CheckIcon, DownloadIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -11,8 +11,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { Button } from "@/components/ui/button"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
-import { SongUsageBlock } from "@/studio/more/song-usage-block"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSongStore } from "@/stores/song-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -29,28 +28,84 @@ const MODE_LABEL: Record<ImportMode, string> = {
   duplicate: "Add the file's as separate copies",
 }
 
-/** More → Library: the song library as files. Nothing here can present. */
-export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Songs as files: export them all, or import a Rhema songs file or OpenLyrics .xml files. */
+export function SongFiles() {
   const [mode, setMode] = useState<ImportMode>("skip")
-  const [busy, setBusy] = useState<"export" | "import" | "backup" | "restore" | null>(null)
+  const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null)
   const [count, setCount] = useState<number | null>(null)
+  useEffect(() => {
+    useSongStore.getState().lookup("", 5000, true).then((r) => setCount(r.length)).catch(() => setCount(null))
+    void useSongStore.getState().loadHymnbooks().catch(() => {})
+  }, [])
+  const doExport = async () => {
+    setBusy(true)
+    try {
+      const path = await exportSongsToFile()
+      if (path) toast.success(`Songs saved to ${path}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const doImport = async () => {
+    setBusy(true)
+    try {
+      const r = await importSongsFromFiles(mode, useSongStore.getState().hymnbooks)
+      if (r) {
+        setOutcome(r)
+        setCount((await useSongStore.getState().lookup("", 5000, true)).length)
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p className="text-xs text-muted-foreground">{count === null ? "Songs and hymn books on this computer." : `${count} song${count === 1 ? "" : "s"} on this computer.`} Song words never leave it unless you export them.</p>
+      <div className="rounded-lg border border-border p-3">
+        <p className="mb-2 font-medium">Export</p>
+        <p className="mb-2 text-xs text-muted-foreground">One file with every song, its words in each language, orders and hymnbook numbers. Good for a backup or for another computer.</p>
+        <Button size="sm" disabled={busy} onClick={() => void doExport()}><DownloadIcon /> Save songs to a file…</Button>
+      </div>
+      <div className="rounded-lg border border-border p-3">
+        <p className="mb-2 font-medium">Import</p>
+        <p className="mb-2 text-xs text-muted-foreground">A Rhema songs file, or OpenLyrics .xml files from OpenLP (one song each). Nothing changes until the files read correctly.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={mode} onValueChange={(v) => setMode(v as ImportMode)}>
+            <SelectTrigger className="h-8 w-80 text-xs" aria-label="If a song is already here"><SelectValue /></SelectTrigger>
+            <SelectContent>{(Object.keys(MODE_LABEL) as ImportMode[]).map((m) => <SelectItem key={m} value={m}>{MODE_LABEL[m]}</SelectItem>)}</SelectContent>
+          </Select>
+          <Button size="sm" disabled={busy} onClick={() => void doImport()}><UploadIcon /> Choose files…</Button>
+        </div>
+        {outcome && (
+          <div className="mt-3 rounded-md bg-muted/50 p-2 text-xs" role="status">
+            <p>
+              {outcome.files} file{outcome.files === 1 ? "" : "s"} read: {outcome.added} added, {outcome.replaced} replaced, {outcome.skipped} skipped
+              {outcome.hymnbooks_added ? `, ${outcome.hymnbooks_added} hymnbook${outcome.hymnbooks_added === 1 ? "" : "s"} added` : ""}.
+            </p>
+            {outcome.notes.length > 0 && <ul className="mt-1 list-disc pl-4 text-confidence-mid">{outcome.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+          </div>
+        )}
+      </div>
+      <HymnbookList />
+    </div>
+  )
+}
+
+/**
+ * Back up everything (services and songs) or restore a backup. While a restore runs the whole
+ * app is covered: edits made meanwhile would be saved to the database being replaced.
+ */
+export function DatabaseBlock() {
+  const [busy, setBusy] = useState<"backup" | "restore" | null>(null)
   const [status, setStatus] = useState<ContentStatus | null>(null)
   const [confirmRestore, setConfirmRestore] = useState(false)
-  const setWorkspace = useShellStore((s) => s.setWorkspace)
   const dirty = useServiceStore((s) => s.dirty)
-
-  useEffect(() => {
-    if (!open) return
-    useSongStore
-      .getState()
-      .lookup("", 5000, true)
-      .then((r) => setCount(r.length))
-      .catch(() => setCount(null))
-    void useSongStore.getState().loadHymnbooks().catch(() => {})
-    contentStatus().then(setStatus).catch(() => setStatus(null))
-  }, [open])
-
+  useEffect(() => { contentStatus().then(setStatus).catch(() => setStatus(null)) }, [])
   const doBackup = async () => {
     setBusy("backup")
     try {
@@ -62,7 +117,6 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
       setBusy(null)
     }
   }
-
   const doRestore = async () => {
     setConfirmRestore(false)
     setBusy("restore")
@@ -74,8 +128,6 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
       useQueueStore.getState().clearQueue()
       useSongStore.setState({ songs: {}, results: [] })
       await useServiceStore.getState().loadPrograms()
-      const songs = await useSongStore.getState().lookup("", 5000, true)
-      setCount(songs.length)
       setStatus(await contentStatus())
       toast.success("Database restored", { description: r.snapshot ? `The previous database was kept at ${r.snapshot}` : undefined })
     } catch (e) {
@@ -84,119 +136,42 @@ export function LibraryDialog({ open, onClose }: { open: boolean; onClose: () =>
       setBusy(null)
     }
   }
-
-  const doExport = async () => {
-    setBusy("export")
-    try {
-      const path = await exportSongsToFile()
-      if (path) toast.success(`Songs saved to ${path}`)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const doImport = async () => {
-    setBusy("import")
-    try {
-      const r = await importSongsFromFiles(mode, useSongStore.getState().hymnbooks)
-      if (r) {
-        setOutcome(r)
-        const songs = await useSongStore.getState().lookup("", 5000, true)
-        setCount(songs.length)
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(null)
-    }
-  }
-
   return (
-    // While a restore runs the dialog stays open (and, being modal, keeps the
-    // rest of the app untouched): edits made meanwhile would be saved to the
-    // database being replaced, or discarded when the restore finishes.
-    <Dialog open={open} onOpenChange={(o) => { if (!o && busy !== "restore") onClose() }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Library</DialogTitle>
-          <DialogDescription>
-            {count === null ? "Songs and hymnbooks on this computer." : `${count} song${count === 1 ? "" : "s"} on this computer.`} Song words never leave it unless you export them.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-3 text-sm">
-          <Button variant="outline" className="justify-start" onClick={() => { onClose(); setWorkspace("prepare") }}>
-            <MusicIcon /> Open the song list in Prepare
-          </Button>
-          <div className="rounded-lg border border-border p-3">
-            <p className="mb-2 font-medium">Export</p>
-            <p className="mb-2 text-xs text-muted-foreground">One file with every song, its words in each language, orders and hymnbook numbers. Good for a backup or for another computer.</p>
-            <Button size="sm" disabled={busy !== null} onClick={() => void doExport()}><DownloadIcon /> Save songs to a file…</Button>
-          </div>
-          <div className="rounded-lg border border-border p-3">
-            <p className="mb-2 font-medium">Import</p>
-            <p className="mb-2 text-xs text-muted-foreground">A Rhema songs file, or OpenLyrics .xml files from OpenLP (one song each). Nothing changes until the files read correctly.</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={mode} onValueChange={(v) => setMode(v as ImportMode)}>
-                <SelectTrigger className="h-8 w-80 text-xs" aria-label="If a song is already here"><SelectValue /></SelectTrigger>
-                <SelectContent>{(Object.keys(MODE_LABEL) as ImportMode[]).map((m) => <SelectItem key={m} value={m}>{MODE_LABEL[m]}</SelectItem>)}</SelectContent>
-              </Select>
-              <Button size="sm" disabled={busy !== null} onClick={() => void doImport()}><UploadIcon /> Choose files…</Button>
-            </div>
-            {outcome && (
-              <div className="mt-3 rounded-md bg-muted/50 p-2 text-xs" role="status">
-                <p>
-                  {outcome.files} file{outcome.files === 1 ? "" : "s"} read: {outcome.added} added, {outcome.replaced} replaced, {outcome.skipped} skipped
-                  {outcome.hymnbooks_added ? `, ${outcome.hymnbooks_added} hymnbook${outcome.hymnbooks_added === 1 ? "" : "s"} added` : ""}.
-                </p>
-                {outcome.notes.length > 0 && (
-                  <ul className="mt-1 list-disc pl-4 text-confidence-mid">{outcome.notes.map((n) => <li key={n}>{n}</li>)}</ul>
-                )}
-              </div>
-            )}
-          </div>
-          <ChurchFolderBlock />
-          <PackageBlock onClose={onClose} />
-          <JournalBlock />
-          <SongUsageBlock />
-          <HymnbookList />
-          <div className="rounded-lg border border-border p-3">
-            <p className="mb-1 flex items-center gap-2 font-medium"><DatabaseIcon className="size-4" /> Everything: services and songs</p>
-            <p className="mb-2 text-xs text-muted-foreground">
-              {status?.available
-                ? `Stored at ${status.path}.${status.last_backup ? ` A copy from before the last upgrade is at ${status.last_backup}.` : ""}`
-                : status?.error ? `Services and songs are unavailable: ${status.error}.` : "The content database is not available right now."}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" disabled={busy !== null || !status?.available} onClick={() => void doBackup()}><DownloadIcon /> Back up now…</Button>
-              <Popover open={confirmRestore} onOpenChange={setConfirmRestore}>
-                <PopoverTrigger asChild>
-                  <Button size="sm" variant="outline" disabled={busy !== null || !status?.available || dirty} title={dirty ? "Save or close the open service first" : undefined}>
-                    <RotateCcwIcon /> Restore from a backup…
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-80">
-                  <p className="mb-3 text-sm">
-                    Replace all services and songs on this computer with a backup file? The current database is kept next to it as a snapshot, and nothing changes if the file is not a valid backup.
-                  </p>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setConfirmRestore(false)}>Keep current</Button>
-                    <Button variant="destructive" size="sm" onClick={() => void doRestore()}>Choose backup…</Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-            {dirty && <p className="mt-2 text-xs text-confidence-mid">The open service has unsaved changes; save or close it before restoring.</p>}
-          </div>
+    <div className="text-sm">
+      {busy === "restore" && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm" role="alert" aria-busy="true">
+          <p className="rounded-xl border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema open.</p>
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+      <p className="mb-2 text-xs text-muted-foreground">
+        {status?.available
+          ? `Stored at ${status.path}.${status.last_backup ? ` A copy from before the last upgrade is at ${status.last_backup}.` : ""}`
+          : status?.error ? `Services and songs are unavailable: ${status.error}.` : "The content database is not available right now."}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" disabled={busy !== null || !status?.available} onClick={() => void doBackup()}><DownloadIcon /> Back up now…</Button>
+        <Popover open={confirmRestore} onOpenChange={setConfirmRestore}>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant="outline" disabled={busy !== null || !status?.available || dirty} title={dirty ? "Save or close the open service first" : undefined}>
+              <RotateCcwIcon /> Restore from a backup…
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80">
+            <p className="mb-3 text-sm">Replace all services and songs on this computer with a backup file? The current database is kept next to it as a snapshot, and nothing changes if the file is not a valid backup.</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setConfirmRestore(false)}>Keep current</Button>
+              <Button variant="destructive" size="sm" onClick={() => void doRestore()}>Choose backup…</Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+      {dirty && <p className="mt-2 text-xs text-confidence-mid">The open service has unsaved changes; save or close it before restoring.</p>}
+    </div>
   )
 }
 
 /** Where services are published and opened (owner decision #72: a NAS share or synced folder). */
-function ChurchFolderBlock() {
+export function ChurchFolderBlock() {
   const folder = useSettingsStore((s) => s.churchFolder)
   const choose = async () => {
     const picked = await openDialog({ directory: true, multiple: false, title: "Choose the church folder" })
@@ -221,7 +196,7 @@ function ChurchFolderBlock() {
 }
 
 /** One service as a file: made at home, opened at church. */
-function PackageBlock({ onClose }: { onClose: () => void }) {
+export function PackageBlock({ onClose = () => {} }: { onClose?: () => void }) {
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
   const setWorkspace = useShellStore((s) => s.setWorkspace)
@@ -273,7 +248,7 @@ function PackageBlock({ onClose }: { onClose: () => void }) {
 }
 
 /** Today's service log: what went live and for how long, against the plan. */
-function JournalBlock() {
+export function JournalBlock() {
   const entries = useJournalStore((s) => s.entries)
   const [busy, setBusy] = useState(false)
   const [archived, setArchived] = useState(0)
@@ -391,7 +366,7 @@ function EarlierLogs({ refresh }: { refresh: number }) {
 }
 
 /** Rename or remove hymnbooks. Removing a book drops its numbers; the songs stay. */
-function HymnbookList() {
+export function HymnbookList() {
   const hymnbooks = useSongStore((s) => s.hymnbooks)
   const [editing, setEditing] = useState<{ id: string; code: string; name: string } | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
