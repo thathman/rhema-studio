@@ -925,3 +925,18 @@ report), but launching it cannot.
 | 10cn.1 | Quick find: "1 Samuel", "1 Samuel 3", "1 kings", "First Samuel 3:10", "Ọba Kejì 2:9". | Each puts the right book and chapter (verse 1, or the verse given) first, above any word matches. | Checked in the browser build |
 | 10cn.2 | Prepare: click an item to edit it. | Minutes, Prepared by and End by sit in labelled columns; nothing is cut off; the comment box's hint is a line under it. | Checked in the browser build |
 
+
+### 10cp. Run of show and timing (issues #193, #196)
+
+| # | Steps | Expected | Result |
+|---|---|---|---|
+| 10cp.1 | Prepare: phases Pre-service loop (two slides), Warm-up (a countdown, 5 min), Main service (starts at a time a few minutes ahead), Post-service loop. Pre-service loop → … → Each item shows for 10 seconds. Present: ▷ beside Pre-service loop. | Its slides go up in turn every 10 s and repeat; the section shows "1 of 2", "2 of 2"; ■ stops it and leaves the slide up. Taking anything else, Clear or Black stops it too. | Verified on the Intel Mac (QA bridge, main window hidden) |
+| 10cp.2 | Present: ▷ beside Warm-up before it is due. | "Starts 09:55" (5 min before the service start); at that time the countdown goes up, stays its planned minutes, and nothing moves into the main service. | Verified on the Intel Mac (started already due) |
+| 10cp.3 | Prepare → Opening prayer → Timing: Minutes 3, "Move on by itself", When it goes live: stage message "Wrap up", cue "Start the timer from zero". Present: Timed moves on; double-click Opening prayer. | The stage shows "Wrap up" at once; the timer starts; "Next in 2:59" counts down; after 3 min the next item goes up. Clear before then: nothing moves. | Verified on the Intel Mac (6 s planned) |
+| 10cp.4 | Rehearsal on, then the item with a go-live cue. Rehearsal off. | Nothing runs in rehearsal; turning it off with the item up runs the message and cue once. | Unit tested |
+| 10cp.5 | Put Rhema behind OBS (or minimise it) while a loop runs. | The loop keeps time. On Windows: the same, from the app's one-second tick. | Verified on the Intel Mac (hidden window); Windows not yet tried |
+| 10cp.6 | Run part of the service, then Prepare → Timing. | "Began at 10:04, 4 min late"; each item that ran shows when it went on air and for how long against its plan; Finish shows the expected time and "planned 10:37"; later items show "Expected 10:43" when they moved. | Verified on the Intel Mac (began line, on-air times) |
+| 10cp.7 | Give the sermon "End by" 11:00 and run late. | Timing shows "Cut short to end by 11:00" on the sermon; the items after it follow from 11:00. | Unit tested |
+| 10cp.8 | Design → Stage: background, words colour and size, hide "What is next"; open the stage in an NDI viewer. | The stage display changes at once on the viewer; Back to the built-in look restores it. | Verified on the Intel Mac (NDI receiver: background #102030, then #000000) |
+| 10cp.9 | With the service running late, look at the stage display. | Beside the timer: "Ends 10:42 · 5 min late" in amber; Design → Stage → When the service ends hides it. | Unit tested |
+| 10cp.10 | Present → Cues → make your own cue with "Take the ticker live"; run it twice from the phone remote. | The ticker starts once and does not restart on the second run; "Stop the ticker" ends it. | Unit tested |
