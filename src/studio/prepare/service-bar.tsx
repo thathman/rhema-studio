@@ -24,6 +24,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { useQueueStore } from "@/stores"
 import { isVerseItem } from "@/types"
 import { ServiceHistory } from "@/studio/prepare/service-history"
+import { useShellStore } from "@/studio/shell-store"
 import { useBibleStore } from "@/stores/bible-store"
 
 /**
@@ -70,7 +71,8 @@ export function ServiceBar() {
     ? [...new Set(items.filter(isVerseItem).map((i) => i.translation).filter((t): t is string => typeof t === "string" && t !== activeAbbrev && !missing.includes(t)))]
     : []
 
-  const [newOpen, setNewOpen] = useState(false)
+  const newOpen = useShellStore((s) => s.newServiceOpen)
+  const setNewOpen = useShellStore((s) => s.setNewServiceOpen)
   const [title, setTitle] = useState("")
   const [date, setDate] = useState("")
   const [deleteOpen, setDeleteOpen] = useState(false)

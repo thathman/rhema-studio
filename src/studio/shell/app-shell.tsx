@@ -141,7 +141,6 @@ export function AppShell() {
         operatorName={operatorName}
         onWorkspace={(w) => void go(w)}
         onSettings={() => openSettings()}
-        onMore={() => void go("more")}
       />
 
       {/* The live console is always dark (its own deeper palette), top bar included. */}

@@ -31,8 +31,8 @@ export function PrepareWorkspace() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-3 max-[1200px]:px-5">
         <div className="min-w-0">
-          <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Plan the whole service</p>
-          <h1 className="mt-1 truncate text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">{service ? service.title : "Your service."}</h1>
+          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Plan the whole service</p>
+          <h1 className="mt-1 truncate text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">{service ? service.title : "Your service."}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Order, content and timing in one place. Nothing here goes live.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -56,14 +56,14 @@ export function PrepareWorkspace() {
         </div>
       </header>
 
-      <div className="mx-8 mb-4 shrink-0 rounded-xl border border-border bg-card px-4 py-3 shadow-panel max-[1200px]:mx-5">
+      <div className="mx-8 mb-4 shrink-0 rounded-lg border border-border bg-card px-4 py-3 shadow-panel max-[1200px]:mx-5">
         <ServiceBar />
       </div>
 
       <PhaseStrip />
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-panel" data-tour="prepare-rundown">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel" data-tour="prepare-rundown">
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="min-w-0">
               <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
@@ -76,7 +76,7 @@ export function PrepareWorkspace() {
           <RundownFooter />
         </section>
 
-        <section className="min-h-0 overflow-hidden rounded-xl border border-border bg-card shadow-panel">
+        <section className="min-h-0 overflow-hidden rounded-lg border border-border bg-card shadow-panel">
           <ItemEditor />
         </section>
 
@@ -109,7 +109,7 @@ function PhaseStrip() {
           type="button"
           role="listitem"
           onClick={() => document.querySelector(`[aria-label="Phase: ${CSS.escape(p.name)}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" })}
-          className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-left shadow-panel outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border bg-card px-3.5 py-2.5 text-left shadow-panel outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", DOT[p.role ?? "custom"])} />
           <span className="min-w-0 flex-1">

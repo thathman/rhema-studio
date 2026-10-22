@@ -5,12 +5,17 @@
 @import "@fontsource-variable/source-serif-4";
 @import "@fontsource/geist-mono";
 @import "@fontsource-variable/inter";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-sans/400-italic.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-serif: 'Source Serif 4 Variable', Georgia, serif;
     --font-mono: 'Geist Mono', ui-monospace, monospace;
     --color-sidebar-ring: var(--sidebar-ring);
@@ -21,6 +26,10 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-sidebar-hover: var(--sidebar-hover);
+    --color-sidebar-tag: var(--sidebar-tag);
+    --color-sidebar-tag-border: var(--sidebar-tag-border);
+    --color-topbar: var(--topbar);
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
@@ -81,7 +90,8 @@
     --color-kind-slide-foreground: var(--kind-slide-foreground);
     --color-kind-other: var(--kind-other);
     --color-kind-other-foreground: var(--kind-other-foreground);
-    --shadow-panel: 0 14px 45px rgb(34 44 65 / 0.04);
+    /* The approved design is flat: panels carry a fine border, no shadow. */
+    --shadow-panel: none;
     --shadow-lift: 0 15px 32px rgb(38 49 73 / 0.08);
     --shadow-modal: 0 30px 100px rgb(7 10 27 / 0.27);
     --radius-sm: calc(var(--radius) * 0.6);
@@ -126,14 +136,18 @@
     --chart-5: #b38c58;
     --radius: 0.5rem;
     --sidebar: #17242b;
-    --sidebar-foreground: #b9c5cb;
-    --sidebar-primary: #7fc4b8;
+    --sidebar-foreground: #b1c0c5;
+    --sidebar-primary: #8dc3b2;
     --sidebar-primary-foreground: #17242b;
-    --sidebar-accent: #24363f;
-    --sidebar-accent-foreground: #ffffff;
+    --sidebar-accent: #284148;
+    --sidebar-accent-foreground: #f8fcfb;
     --sidebar-border: #24343c;
     --sidebar-ring: #7fc4b8;
-    --sidebar-label: #7f9199;
+    --sidebar-label: #80959d;
+    --sidebar-hover: #283a41;
+    --sidebar-tag: #1a2b31;
+    --sidebar-tag-border: #2c4047;
+    --topbar: #fcfcfa;
     --ai-direct: oklch(52.7% 0.154 150.069);
     --ai-semantic: oklch(55.5% 0.163 48.998);
     --ai-cloud: oklch(62.3% 0.214 259.815);
@@ -179,6 +193,7 @@
 
 /* Dark planning mode. */
 .dark {
+    --topbar: #1b2330;
     --background: #121c22;
     --foreground: #e6ecee;
     --card: #1a262e;
@@ -198,14 +213,17 @@
     --input: #3a4a53;
     --ring: #5fb3a8;
     --sidebar: #111b21;
-    --sidebar-foreground: #b9c5cb;
-    --sidebar-primary: #7fc4b8;
+    --sidebar-foreground: #b1c0c5;
+    --sidebar-primary: #8dc3b2;
     --sidebar-primary-foreground: #111b21;
     --sidebar-accent: #22333c;
-    --sidebar-accent-foreground: #ffffff;
+    --sidebar-accent-foreground: #f8fcfb;
     --sidebar-border: #1f2d34;
     --sidebar-ring: #7fc4b8;
-    --sidebar-label: #7f9199;
+    --sidebar-label: #80959d;
+    --sidebar-hover: #283a41;
+    --sidebar-tag: #1a2b31;
+    --sidebar-tag-border: #2c4047;
     --ai-direct: oklch(72.3% 0.219 149.579);
     --ai-semantic: oklch(76.9% 0.188 70.08);
     --ai-cloud: oklch(62.3% 0.214 259.815);
@@ -242,6 +260,7 @@
 
 /* The live console: always dark, deep ink (wrap it in .dark too). */
 .present-surface {
+    --topbar: #16242b;
     --background: #0f181d;
     --foreground: #eef2f3;
     --card: #17232a;

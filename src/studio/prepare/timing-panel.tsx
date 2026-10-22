@@ -50,7 +50,7 @@ export function TimingPanel() {
   const expected = new Map(timing?.events.map((e) => [e.index, e]) ?? [])
   const lateMinutes = timing ? Math.round(timing.lateMs / 60_000) : 0
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-panel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel">
       <div className="border-b border-border px-4 py-3">
         <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Run of show</p>
         <h2 className="text-sm font-semibold">Timing{total ? ` · ${total} planned` : ""}</h2>

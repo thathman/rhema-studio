@@ -210,14 +210,14 @@ function StandardView() {
       </div>
 
       <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:col-span-1">
-        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-card p-4" data-tour="quick-find">
+        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" data-tour="quick-find">
           <div>
             <h2 className="text-sm font-semibold tracking-tight">Find &amp; cue anything</h2>
             <p className="text-xs text-muted-foreground">A reference, a hymn number, or a few words</p>
           </div>
           <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
         </section>
-        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-card p-4" role="group" aria-label="Quick screens">
+        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" role="group" aria-label="Quick screens">
           {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
           <div className="flex items-start justify-between gap-2">
             <div>

@@ -140,7 +140,7 @@ export function DatabaseBlock() {
     <div className="text-sm">
       {busy === "restore" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm" role="alert" aria-busy="true">
-          <p className="rounded-xl border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema open.</p>
+          <p className="rounded-lg border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema open.</p>
         </div>
       )}
       <p className="mb-2 text-xs text-muted-foreground">

@@ -45,8 +45,8 @@ export function DesignWorkspace() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-4 max-[1200px]:px-5">
         <div className="min-w-0">
-          <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">The creative workspace</p>
-          <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Design once. Beautiful everywhere.</h1>
+          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">The creative workspace</p>
+          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Design once. Beautiful everywhere.</h1>
           <p className="mt-1 text-sm text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker, the stage display and your brand.</p>
         </div>
         {tab === "themes" && (
@@ -76,13 +76,13 @@ export function DesignWorkspace() {
       </div>
       <div role="tabpanel" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
         {tab === "themes" ? (
-          <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-xl border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">
+          <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-lg border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">
             <ThemeLibrary />
             <DesignCanvas />
             <PropertiesPanel />
           </div>
         ) : (
-          <div className="h-full overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-panel">
+          <div className="h-full overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-panel">
             {tab === "lower-thirds" && <LowerThirdDesigner />}
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}

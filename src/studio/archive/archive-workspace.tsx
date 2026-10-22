@@ -9,7 +9,7 @@ import { ChurchFolderBlock, DatabaseBlock, JournalBlock, PackageBlock } from "@/
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-panel">
+    <section className="rounded-lg border border-border bg-card p-5 shadow-panel">
       <h2 className="text-base font-bold tracking-[-0.03em]">{title}</h2>
       {sub && <p className="mb-3 text-xs text-muted-foreground">{sub}</p>}
       <div className={sub ? "" : "mt-3"}>{children}</div>
@@ -32,8 +32,8 @@ export function ArchiveWorkspace() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
         <header>
-          <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Your church</p>
-          <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Keep the good work.</h1>
+          <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Your church</p>
+          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Keep the good work.</h1>
           <p className="mt-1 text-sm text-muted-foreground">Every service, what actually went on screen, which songs you sing, and safe copies of it all.</p>
         </header>
         <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
