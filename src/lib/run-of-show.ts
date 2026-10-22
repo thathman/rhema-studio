@@ -56,3 +56,40 @@ export function interleave<T>(items: T[], headers: OutlineHeader[]): OutlineRow<
   }
   return rows
 }
+
+export interface SectionSummary {
+  /** Items under the header (for a phase: down to the next phase; a group: to the next header). */
+  count: number
+  /** Their planned minutes. */
+  minutes: number
+}
+
+/** Each header's item count and planned minutes, by header id. */
+export function sectionSummaries(items: Array<{ planned_minutes?: number | null }>, headers: OutlineHeader[]): Record<string, SectionSummary> {
+  const sorted = [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
+  const out: Record<string, SectionSummary> = {}
+  sorted.forEach((h, k) => {
+    // A phase runs to the next phase; a group to the next header of either kind.
+    const end = sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? items.length
+    const slice = items.slice(h.at, end)
+    out[h.id] = { count: slice.length, minutes: slice.reduce((m, i) => m + (i.planned_minutes ?? 0), 0) }
+  })
+  return out
+}
+
+/** The four phases of a church event, the main service holding what is there. */
+export function defaultPhases(itemCount: number, newId: () => string = () => crypto.randomUUID()): OutlineHeader[] {
+  return [
+    { id: newId(), type: "phase", name: "Pre-service loop", at: 0, rule: "loop", role: "pre" },
+    { id: newId(), type: "phase", name: "Warm-up", at: 0, rule: "auto_once", role: "warmup" },
+    { id: newId(), type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+    { id: newId(), type: "phase", name: "Post-service loop", at: itemCount, rule: "loop", role: "post" },
+  ]
+}
+
+/** How a phase runs, for its chip and strip. */
+export const RULE_LABEL: Record<PhaseRule, { chip: string; says: string }> = {
+  loop: { chip: "Loop", says: "Repeats until stopped" },
+  auto_once: { chip: "Auto · once", says: "Runs once, timed to finish at the start" },
+  manual: { chip: "Manual", says: "You move on, item by item" },
+}
