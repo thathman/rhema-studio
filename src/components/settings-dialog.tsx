@@ -1120,15 +1120,16 @@ export function SettingsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
-        <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Your Rhema Studio</p>
-        <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Settings that make sense.</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Everything stays on this computer. Changes apply at once.</p>
+        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Control, without complexity</p>
+        <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Settings, precisely organised.</h1>
+        <p className="mt-1 text-xs text-muted-foreground">No buried controls: every setting has a reason and a clear home. Everything stays on this computer and applies at once.</p>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)] gap-5 px-8 pb-6 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:px-5">
-        <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto">
+      <div className="grid min-h-0 flex-1 grid-cols-[255px_minmax(0,1fr)] gap-5 px-8 pb-6 max-[1200px]:grid-cols-[220px_minmax(0,1fr)] max-[1200px]:px-5">
+        <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto rounded-lg border border-border bg-card p-1.5">
+          <p className="px-4 pt-3.5 pb-2 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preferences</p>
           {GROUPS.map((g) => (
             <div key={g.title} className="mb-3">
-              <p className="px-2 pb-1 text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">{g.title}</p>
+              <p className="px-3 pt-1.5 pb-1 text-[0.625rem] font-semibold text-muted-foreground">{g.title}</p>
               {g.ids.map((id) => {
                 const item = navItems.find((n) => n.id === id)!
                 return (
@@ -1137,7 +1138,7 @@ export function SettingsPage() {
                     type="button"
                     aria-current={id === activeSection ? "page" : undefined}
                     onClick={() => setActiveSection(id)}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                    className={`flex w-full items-center gap-2.5 rounded-md px-[13px] py-2.5 text-left text-xs font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                   >
                     {item.icon}
                     <span className="truncate">{item.name}</span>
@@ -1147,9 +1148,9 @@ export function SettingsPage() {
             </div>
           ))}
         </nav>
-        <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-panel">
-          <h2 className="shrink-0 border-b border-border px-5 py-3.5 text-base font-bold tracking-[-0.03em]">{sectionTitles[activeSection]}</h2>
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+        <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+          <h2 className="shrink-0 px-[30px] pt-[26px] pb-2 text-[1.5625rem] font-bold tracking-[-0.035em]">{sectionTitles[activeSection]}</h2>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[30px] pt-2 pb-[30px]">
             <ActiveContent />
           </div>
         </section>
