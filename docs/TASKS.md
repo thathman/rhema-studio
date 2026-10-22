@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.44 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.45 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -38,6 +38,25 @@
 | DS-005 Stage screen over NDI (the owner's NDI viewer as the stage display) | P1 | BACKLOG | — | The stage view drawn on the output canvas so a stage output can be NDI; verified on the owner's NDI viewer |
 | DS-006 An output in a window (signage shown in a window on the operator's computer) | P2 | BACKLOG | — | A display output that opens as a movable window instead of full screen; signage in a window on this Mac |
 | DS-007 OBS check rig on the owner's Mac | P1 | BACKLOG | DS-002,DS-003 | A "Rhema QA" scene collection in OBS with Rhema's NDI sources; lower third, ticker and outputs checked there; K3 = congregation |
+
+## Owner redesign 2026-10-22 — Rhema_Studio_Interactive_Concept.html
+
+The owner's concept (a complete overhaul of the UI; kept out of the repo) is the design path. Copy no demo wording ("interactive concept", "simulated"); keep drag reorder, per-language styling and every current feature (mapping of each in the PR that moves it). Each row is one or more independently mergeable PRs; the app keeps working between them.
+
+| Task | P | State | Depends on | Evidence / next gate |
+|---|---|---|---|---|
+| UX-01 Design tokens: violet accent, light / dark planning / always-dark Present scopes, radii, shadows, chip and kind tones; shadcn variants restyled | P1 | BACKLOG | — | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-02 Shell: 232px sidebar (Workspace: Home, Prepare, Present · Your church: Library, Design, Team, Archive · Settings, user), sticky top bar with breadcrumb, Find anything, Offline-ready | P1 | BACKLOG | UX-01 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-03 Find anything (⌘K) across navigation, rundown, songs, hymns, Bible, settings; shortcuts guide | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-04 Settings as a page with eleven sections (old section ids mapped) | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-05 Present as the live console (always dark): running order, Preview / Program, transition row (TAKE LIVE, Clear, Restore), cue rail, one-touch moments, ticker row; behaviour unchanged | P1 | BACKLOG | UX-01 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-06 Home: hero, readiness note, stat cards, Sunday at a glance, Your attention | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-07 Prepare: service card, Order of service, Moment editor, Add a moment; then sections, per-item notes and cues | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-08 Library page (songs, hymns, scripture, slides, pictures and videos) | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-09 Archive page (past services, logs, song usage, reuse, recap) | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-10 Design page: the Theme Designer as a workspace; then kinds of content, Output looks, Brand kit, Lower thirds, Ticker, Stage (DS-004) | P1 | BACKLOG | UX-02,DS-001–DS-003 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-11 Team page from what exists (church folder, comments, pairing); co-editing marked planned | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-12 Responsive sidebar, dark planning polish, new first-run tour, More removed | P1 | BACKLOG | UX-01–UX-11 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
 
 ## Milestone 2B — Songs and Hymnbooks
 
