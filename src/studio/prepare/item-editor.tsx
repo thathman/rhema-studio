@@ -1,7 +1,10 @@
 import { BookOpenIcon, ImageIcon, MusicIcon, PresentationIcon } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { isImageItem, isSlideItem, isSongItem } from "@/types"
+import { useEffect, useRef } from "react"
+import { useQueueStore } from "@/stores"
+import { drawStage } from "@/lib/stage-canvas"
+import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
 import { SlideList } from "@/studio/present/rundown-list"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { BackgroundPicker, CommentsEditor, CustomSlideEditor, ImageItemControls, NoteEditor, PlannedMinutes, SongItemControls } from "@/studio/prepare/item-editor-parts"
@@ -41,6 +44,7 @@ export function ItemEditor() {
           <TabsList>
             <TabsTrigger value="content">Content</TabsTrigger>
             <TabsTrigger value="notes">Notes &amp; team</TabsTrigger>
+            <TabsTrigger value="stage">Stage</TabsTrigger>
             <TabsTrigger value="timing">Timing</TabsTrigger>
           </TabsList>
         </div>
@@ -60,10 +64,34 @@ export function ItemEditor() {
           <NoteEditor item={item} />
           <CommentsEditor item={item} />
         </TabsContent>
+        <TabsContent value="stage" className="min-h-0 flex-1 overflow-y-auto px-5 pt-3 pb-4">
+          <StagePreview item={item} index={index} />
+          <p className="mt-2 text-xs text-muted-foreground">What the stage screen shows while this item is live: its words, the note (Notes &amp; team) and what comes next. The timer and messages are added live from Present.</p>
+        </TabsContent>
         <TabsContent value="timing" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           <PlannedMinutes item={item} />
         </TabsContent>
       </Tabs>
     </div>
   )
+}
+
+/** The stage screen for this item, drawn as the stage output draws it. */
+function StagePreview({ item, index }: { item: QueueItem; index: number }) {
+  const next = useQueueStore((s) => s.items[index + 1]?.reference ?? null)
+  const ref = useRef<HTMLCanvasElement>(null)
+  const lines = isVerseItem(item)
+    ? [item.verse.text].filter(Boolean)
+    : isSlideItem(item)
+      ? [item.slide.title, item.slide.body].filter(Boolean)
+      : isSongItem(item)
+        ? ["The song's words, slide by slide"]
+        : []
+  const payload: StagePayload = { current: { title: item.reference, lines }, next, note: item.notes?.trim() || null, timer: null, message: null, band: null }
+  const key = JSON.stringify(payload)
+  useEffect(() => {
+    const g = ref.current?.getContext("2d")
+    if (g) drawStage(g, 1920, 1080, JSON.parse(key) as StagePayload)
+  }, [key])
+  return <canvas ref={ref} width={1920} height={1080} className="aspect-video w-full rounded-lg border border-border" role="img" aria-label={`The stage screen for ${item.reference}`} />
 }
