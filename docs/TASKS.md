@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.43 · **Updated:** 2026-10-21 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.44 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -26,6 +26,18 @@
 | ST-009 Migrate product identity and settings safely | P2 | BACKLOG | ST-003 | Existing configurations survive app-ID rename, migration/rollback tested |
 | ST-010 Correct typecheck coverage and control lint debt | P1 | MERGED (tsc; lint debt 68 → 7) / MERGED (7 → 0; whole-repo lint blocking, #123) | ST-001 | `tsc -b` in CI (merged); lint debt documented (13 upstream files), not reduced |
 | ST-011 Translation-resolution policy and atomic live activation | P0 | MERGED / MERGED (Next stays on the operator's item when items are added, removed or reordered; heard verses no longer move Next or edit an open service, #141) / MERGED (audit: opening Present or a spoken translation name no longer re-renders the screen; stepping keeps the live song's arrangement; a deleted live song lets Next move on; Verse +/− keeps the item, #142) / MERGED (regression audit of interacting fixes: heard verses never raise the approval question; deleting the live item keeps Next/Previous either side; Preview of a live song matches it; saved pins reach the live copy; plan captured per service, #152) / MERGED (tenth audit: Restore brings back exactly what Clear took off; Verse +/− never replaces a song on air; a quick screen keeps the song position; Back asks for approval; LIVE marker matches exact verses, #153) / MERGED (seventeenth audit, search: words with punctuation find verses; ranges, lists and dotted abbreviations find their first verse; "Jude 5" is a verse; "Psalm 23" finds a song titled so; hymns 1–9 by number, #160) | ST-003,ST-005 | PR #2 (`af950eb`): item's saved translations win unless overridden; missing translation reported, never substituted; Next/Prev/Show live/OSC/HTTP go on air only with the verse; Clear cancels in-flight presents. 26 tests. Manual steps 5.0a–5.0h open |
+
+## Owner requests 2026-10-22 — design and outputs
+
+| Task | P | State | Depends on | Evidence / next gate |
+|---|---|---|---|---|
+| DS-001 A look per kind of content (Bible, Songs, Hymns, Slides, Pictures) | P1 | IN PR (#189) | — | Each output picks a theme per kind (default: its main theme); Designer previews each kind and assigns the theme |
+| DS-002 Lower third designer: name and title, scripture strip, lyrics strip, picture or video backing | P1 | IN PR (#190) | DS-001 | Styles (position, size, fonts, colours, accent, entrance), strips follow what is live; check on OBS over NDI |
+| DS-003 News ticker: a scrolling crawl over chosen outputs | P1 | BACKLOG | DS-002 | Items typed in Present; own design (speed, colours, font, height, position, picture or video background); smooth over NDI |
+| DS-004 Theme Designer rework: every design edit in one place | P1 | BACKLOG | DS-001–DS-003 | Owner: "every design edit for all the features should happen here" — Bible, Songs, Hymns, Slides, Pictures, lower thirds, ticker, stage designed in the Designer (the lower third designer moves in from Present); a total rework, not a patch |
+| DS-005 Stage screen over NDI (the owner's NDI viewer as the stage display) | P1 | BACKLOG | — | The stage view drawn on the output canvas so a stage output can be NDI; verified on the owner's NDI viewer |
+| DS-006 An output in a window (signage shown in a window on the operator's computer) | P2 | BACKLOG | — | A display output that opens as a movable window instead of full screen; signage in a window on this Mac |
+| DS-007 OBS check rig on the owner's Mac | P1 | BACKLOG | DS-002,DS-003 | A "Rhema QA" scene collection in OBS with Rhema's NDI sources; lower third, ticker and outputs checked there; K3 = congregation |
 
 ## Milestone 2B — Songs and Hymnbooks
 
