@@ -2,7 +2,7 @@ import { keepFocusInList } from "@/lib/keep-focus"
 import { useEffect, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
-import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon, BellRingIcon } from "lucide-react"
 
 
 
@@ -19,6 +19,7 @@ import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-pa
 import { interleave, sectionSummaries } from "@/lib/run-of-show"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { PhaseRunButton } from "@/studio/present/phase-run-button"
+import { CUE_ACTIONS } from "@/lib/cues"
 import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 
 
@@ -103,6 +104,13 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 <span className="truncate text-sm font-medium">{item.reference}</span>
                 {song && <SongBadges item={item} />}
                 {item.planned_minutes ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
+                {item.on_live && (
+                  <BellRingIcon
+                    className="size-3 shrink-0 text-muted-foreground"
+                    role="img"
+                    aria-label={`When it goes live: ${[item.on_live.stage_message && `stage message "${item.on_live.stage_message}"`, item.on_live.cue && CUE_ACTIONS[item.on_live.cue].label.toLowerCase()].filter(Boolean).join(", ")}`}
+                  />
+                )}
                 {item.end_by ? <span className="ml-1 shrink-0 text-[0.625rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
                 {item.prepared_by ? <span className="ml-1 max-w-24 shrink-0 truncate text-[0.625rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
                 {item.comments?.length ? (
