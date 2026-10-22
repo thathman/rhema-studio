@@ -7,6 +7,7 @@ import { drawStage } from "@/lib/stage-canvas"
 import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
 import { SlideList } from "@/studio/present/rundown-list"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
+import { PreviewPanel } from "@/components/panels/preview-panel"
 import { BackgroundPicker, CommentsEditor, CustomSlideEditor, ImageItemControls, NoteEditor, GoLiveCues, PlannedMinutes, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
 
 const KIND: Record<string, [string, React.ReactNode]> = {
@@ -32,7 +33,7 @@ export function ItemEditor() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-border px-5 pt-4 pb-3">
-        <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Item editor · {index + 1}</p>
+        <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Event editor · {index + 1}</p>
         <div className="mt-1 flex items-center gap-2">
           <h2 className="truncate text-lg font-bold tracking-[-0.03em]">{item.reference}</h2>
           <Badge variant="accent" className="gap-1">{KIND[kind][1]}{KIND[kind][0]}</Badge>
@@ -42,13 +43,18 @@ export function ItemEditor() {
       <Tabs key={item.id} defaultValue="content" className="flex min-h-0 flex-1 flex-col">
         <div className="px-5 pt-3">
           <TabsList>
-            <TabsTrigger value="content">Content</TabsTrigger>
-            <TabsTrigger value="notes">Notes &amp; team</TabsTrigger>
-            <TabsTrigger value="stage">Stage</TabsTrigger>
+            <TabsTrigger value="content">Slides</TabsTrigger>
+            <TabsTrigger value="stage">Confidence</TabsTrigger>
+            <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="signals">Signals</TabsTrigger>
             <TabsTrigger value="timing">Timing</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="content" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          {/* The congregation's view of this item, as in the approved design's Slides tab. */}
+          <div className="mx-2 mt-3 mb-1 h-56 overflow-hidden rounded-lg [&>div]:h-full">
+            <PreviewPanel />
+          </div>
           {isSongItem(item) && (
             <>
               <SongItemControls item={item} />
@@ -66,12 +72,15 @@ export function ItemEditor() {
         </TabsContent>
         <TabsContent value="stage" className="min-h-0 flex-1 overflow-y-auto px-5 pt-3 pb-4">
           <StagePreview item={item} index={index} />
-          <p className="mt-2 text-xs text-muted-foreground">What the stage screen shows while this item is live: its words, the note (Notes &amp; team) and what comes next. The timer and messages are added live from Present.</p>
+          <p className="mt-2 text-xs text-muted-foreground">What the stage screen shows while this item is live: its words, the note (Notes) and what comes next. The timer and messages are added live from Present.</p>
+        </TabsContent>
+        <TabsContent value="signals" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          <p className="px-2 pt-3 text-xs text-muted-foreground">Signals belong to this item, not the whole service. They never take anything live by themselves.</p>
+          <GoLiveCues item={item} />
+          <TimedAdvance item={item} />
         </TabsContent>
         <TabsContent value="timing" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           <PlannedMinutes item={item} />
-          <TimedAdvance item={item} />
-          <GoLiveCues item={item} />
         </TabsContent>
       </Tabs>
     </div>
