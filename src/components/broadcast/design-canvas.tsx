@@ -637,7 +637,8 @@ function UseThemeFor({ themeId }: { themeId: string }) {
             disabled={isMain && !own}
             title={isMain && !own ? `This is ${output.name}'s main theme; ${CONTENT_NAMES[c]} use it unless given their own (Outputs)` : undefined}
             onClick={() => useBroadcastStore.getState().updateOutput(output.id, { themeFor: withThemeFor(output, c, on ? null : themeId) })}
-            className={`rounded-full border px-2 py-0.5 ${on ? "border-primary/60 bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"} disabled:opacity-60`}
+            // The canvas bar is always dark: light text in either app theme.
+            className={`rounded-full border px-2 py-0.5 ${on ? "border-[#a79fff] bg-[#6255e8]/40 text-white" : "border-white/25 text-zinc-300 hover:text-white"} disabled:opacity-60`}
           >
             {CONTENT_NAMES[c]}
           </button>

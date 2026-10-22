@@ -17,10 +17,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useSettingsStore } from "@/stores/settings-store"
 import { openSettings } from "@/lib/settings-dialog"
-import { useBroadcastStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
-import { BrandDialog } from "@/studio/more/brand-dialog"
 
 interface Row {
   icon: React.ReactNode
@@ -36,7 +34,6 @@ export function MoreWorkspace() {
   const openOutputs = useShellStore((s) => s.openOutputs)
   const [version, setVersion] = useState<string | null>(null)
   const setLibraryOpen = useShellStore((s) => s.setLibraryOpen)
-  const [brandOpen, setBrandOpen] = useState(false)
   const operatorName = useSettingsStore((s) => s.operatorName)
   const setOperatorName = useSettingsStore((s) => s.setOperatorName)
   const requireApproval = useSettingsStore((s) => s.requireApproval)
@@ -50,8 +47,8 @@ export function MoreWorkspace() {
       title: "Production",
       rows: [
         { icon: <MonitorIcon />, label: "Outputs", detail: "Screens and NDI senders, which theme each one shows", onClick: openOutputs },
-        { icon: <PaletteIcon />, label: "Themes", detail: "Design how scripture looks on screen", onClick: () => useBroadcastStore.getState().setDesignerOpen(true) },
-        { icon: <PaletteIcon />, label: "Church brand", detail: "Logo, colours and fonts once; three matching themes", onClick: () => setBrandOpen(true) },
+        { icon: <PaletteIcon />, label: "Themes", detail: "Design how scripture looks on screen", onClick: () => useShellStore.getState().openDesign("themes") },
+        { icon: <PaletteIcon />, label: "Church brand", detail: "Logo, colours and fonts once; three matching themes", onClick: () => useShellStore.getState().openDesign("brand") },
         {
           icon: <LayoutGridIcon />,
           label: "Classic layout",
@@ -160,7 +157,6 @@ export function MoreWorkspace() {
           </section>
         </div>
       </div>
-      {brandOpen && <BrandDialog open onClose={() => setBrandOpen(false)} />}
     </div>
   )
 }

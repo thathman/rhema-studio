@@ -1,4 +1,3 @@
-import { useState } from "react"
 import { NewspaperIcon, PaletteIcon, PauseIcon, PlayIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -7,7 +6,7 @@ import { useBroadcastStore } from "@/stores"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-import { TickerDesigner } from "@/studio/present/ticker-designer"
+import { useShellStore } from "@/studio/shell-store"
 
 /**
  * The news ticker: announcements, one per line, crawling along the outputs
@@ -18,7 +17,6 @@ export function TickerControl() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const ticker = useBroadcastStore((s) => s.ticker)
   const items = useBroadcastStore((s) => s.tickerItems)
-  const [designing, setDesigning] = useState(false)
   const targets = outputs.filter((o) => o.ticker && o.role !== "stage")
   const hasWords = items.some((i) => i.trim())
   const start = async () => {
@@ -69,11 +67,10 @@ export function TickerControl() {
             ) : (
               <Button size="sm" disabled={!hasWords} onClick={() => void start()}><PlayIcon /> Start</Button>
             )}
-            <Button size="sm" variant="outline" className="ml-auto" onClick={() => setDesigning(true)}><PaletteIcon /> Design…</Button>
+            <Button size="sm" variant="outline" className="ml-auto" onClick={() => useShellStore.getState().openDesign("ticker")} title="Design the ticker (Design page)"><PaletteIcon /> Design…</Button>
           </div>
         </PopoverContent>
       </Popover>
-      <TickerDesigner open={designing} onOpenChange={setDesigning} />
     </>
   )
 }

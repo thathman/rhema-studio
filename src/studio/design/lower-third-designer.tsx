@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CopyIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBroadcastStore } from "@/stores"
@@ -50,12 +49,12 @@ export function Colour({ value, onChange, label }: { value: string; onChange: (c
  * behind the band, an accent and how it comes on. Edits apply as you make
  * them, to the band on air too when it uses the style.
  */
-export function LowerThirdDesigner({ open, onOpenChange, initialId, onPick }: { open: boolean; onOpenChange: (o: boolean) => void; initialId: string; onPick: (id: string) => void }) {
+export function LowerThirdDesigner() {
   const styles = useBroadcastStore((s) => s.lowerThirdStyles)
   const outputs = useBroadcastStore((s) => s.outputs)
   const themes = useBroadcastStore((s) => s.themes)
   const assets = useMediaStore((s) => s.assets)
-  const [selectedId, setSelectedId] = useState(initialId)
+  const [selectedId, setSelectedId] = useState(() => useBroadcastStore.getState().lowerThirdStyles[0]?.id ?? "")
   const [sample, setSample] = useState<Sample>("name")
   const style = styles.find((x) => x.id === selectedId) ?? styles[0]
   const output = outputs.find((o) => o.lowerThirds) ?? outputs.find((o) => o.id === MAIN_OUTPUT_ID)
@@ -70,7 +69,6 @@ export function LowerThirdDesigner({ open, onOpenChange, initialId, onPick }: { 
   const patch = (p: Partial<LowerThirdStyle>) => save({ ...style, ...p })
   const pick = (id: string) => {
     setSelectedId(id)
-    onPick(id)
     const next = styles.find((x) => x.id === id)
     setBacking(null)
     if (next) void lowerThirdBacking(next).then(setBacking)
@@ -81,14 +79,13 @@ export function LowerThirdDesigner({ open, onOpenChange, initialId, onPick }: { 
     pick(copy.id)
   }
   const media = style.background.mediaId ? assets.find((a) => a.id === style.background.mediaId) : undefined
+  // The picture or video behind the style shown first.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the style the page opens on
+  useEffect(() => { if (style) void lowerThirdBacking(style).then(setBacking) }, [])
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (o) pick(style.id) }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>Lower third designer</DialogTitle>
-          <DialogDescription>Design the band for names, scripture and lyrics. Changes apply at once, also to a band on air in this style.</DialogDescription>
-        </DialogHeader>
+    <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">Design the band for names, scripture and lyrics. Changes apply at once, also to a band on air in this style.</p>
         <div className="grid gap-4 md:grid-cols-[11rem_minmax(0,1fr)]">
           <div className="flex flex-col gap-1" role="listbox" aria-label="Styles">
             {styles.map((x) => (
@@ -102,7 +99,9 @@ export function LowerThirdDesigner({ open, onOpenChange, initialId, onPick }: { 
               <Button size="xs" variant="ghost" disabled={styles.length < 2} onClick={() => { useBroadcastStore.getState().deleteLowerThirdStyle(style.id); pick(styles.find((x) => x.id !== style.id)?.id ?? "") }} aria-label="Delete style"><Trash2Icon /></Button>
             </div>
           </div>
-          <div className="flex min-w-0 flex-col gap-3">
+<div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)]">
+            {/* The preview stays in view beside the settings on a wide window. */}
+            <div className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-0">
             <div className="flex gap-1" role="radiogroup" aria-label="Preview">
               {(["name", "scripture", "lyrics"] as const).map((v) => (
                 <button key={v} type="button" role="radio" aria-checked={sample === v} onClick={() => setSample(v)} className={cn("rounded-full border px-2.5 py-0.5 text-xs", sample === v ? "border-primary/60 bg-primary/15" : "border-border text-muted-foreground")}>
@@ -112,6 +111,8 @@ export function LowerThirdDesigner({ open, onOpenChange, initialId, onPick }: { 
             </div>
             {theme && <CanvasVerse theme={theme} verse={SAMPLES[sample].verse ?? { reference: "", segments: [] }} overlay={preview} />}
             {style.background.kind === "video" && <p className="text-[0.6875rem] text-muted-foreground">The video plays behind the band on the outputs; this preview shows its shade only.</p>}
+            </div>
+            <div className="flex min-w-0 flex-col gap-3">
 
             <Row label="Name"><Input aria-label="Style name" value={style.name} onChange={(e) => patch({ name: e.target.value })} className="h-7 text-xs" /></Row>
             <Row label="Position">
@@ -165,9 +166,9 @@ export function LowerThirdDesigner({ open, onOpenChange, initialId, onPick }: { 
                 <Button key={a} size="xs" variant={style.animation === a ? "default" : "outline"} onClick={() => patch({ animation: a })}>{a === "none" ? "At once" : a === "fade" ? "Fade" : "Slide up"}</Button>
               ))}
             </Row>
+            </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+    </div>
   )
 }

@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useBroadcastStore } from "@/stores"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { cn } from "@/lib/utils"
-import { LowerThirdDesigner } from "@/studio/present/lower-third-designer"
+import { useShellStore } from "@/studio/shell-store"
 
 type Mode = "name" | "scripture" | "lyrics"
 const MODES: ReadonlyArray<readonly [Mode, string]> = [["name", "Name and title"], ["scripture", "Scripture strip"], ["lyrics", "Lyrics strip"]]
@@ -25,7 +25,6 @@ export function LowerThirdControl() {
   const [styleId, setStyleId] = useState<string | null>(null)
   const [line1, setLine1] = useState("")
   const [line2, setLine2] = useState("")
-  const [designing, setDesigning] = useState(false)
   const style = styles.find((x) => x.id === styleId) ?? styles[0]
   const targets = outputs.filter((o) => o.lowerThirds && (o.role ?? "congregation") === "congregation")
   const show = async () => {
@@ -85,7 +84,7 @@ export function LowerThirdControl() {
                 <SelectTrigger aria-label="Lower third style" className="h-8 flex-1 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>{styles.map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}</SelectContent>
               </Select>
-              <Button type="button" size="sm" variant="outline" onClick={() => setDesigning(true)}><PaletteIcon /> Design…</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => useShellStore.getState().openDesign("lower-thirds")} title="Design lower thirds (Design page)"><PaletteIcon /> Design…</Button>
             </div>
             <div className="flex items-center gap-2">
               <Button type="submit" size="sm" disabled={mode === "name" && !line1.trim() && !line2.trim()}><EyeIcon /> Show</Button>
@@ -97,7 +96,6 @@ export function LowerThirdControl() {
           </form>
         </PopoverContent>
       </Popover>
-      <LowerThirdDesigner open={designing} onOpenChange={setDesigning} initialId={style.id} onPick={setStyleId} />
     </>
   )
 }
