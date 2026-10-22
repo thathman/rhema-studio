@@ -187,6 +187,10 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10bz.2 (delete the live item) | V: rundown A B C D, C live; delete C, Previous: B; delete B, Next: D |
 | 10bu.2, 10bu.3 (approval state on Home) | V: never approved + unsaved change: "Service not approved yet"; approved, changed, saved, then the approved version restored from History: "Service approved as saved" |
 | 10bv.2 (timer reset) | V: first Reset turned into "Reset 4:29?"; the second reset it; the log: "timer reset (it had run 4:29)" |
+| 10bv.1 (Start the service twice) | V (cues run through the HTTP remote): the timer started (0:03); run again it kept running (0:14) |
+| 10bv.3 (cue Next then Offering) | V: Welcome went live, Offering covered it; Back returned to Welcome |
+| 10ci.1 (cue Show live then Offering) | V: Psalm 23:4 in the preview went live, Offering covered it; Back returned to Psalm 23:4 |
+| 10ci.2 (cue from rehearsal, approval on) | V: "Show live, Rehearsal off" in rehearsal on an unapproved service: the approval question for "QA Slides 2" appeared and rehearsal stayed on (the congregation saw nothing) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
