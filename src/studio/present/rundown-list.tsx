@@ -17,7 +17,7 @@ import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
 import { interleave, sectionSummaries } from "@/lib/run-of-show"
-import { SectionHeader } from "@/studio/prepare/section-header"
+import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 
 
@@ -151,7 +151,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
         )
   }
   // Prepare shows the run of show's phases and groups between the items; a collapsed one hides its items.
-  const rows = mode === "prepare" ? interleave(items, headers) : items.map((item, index) => ({ item, index }))
+  const rows = interleave(items, headers)
   // Which rows show: a collapsed phase hides its groups and items; a collapsed group its items.
   const visible: typeof rows = []
   let phaseId: string | null = null
@@ -167,7 +167,9 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
     <ol className="flex flex-col gap-0.5 p-1.5" aria-label="Service rundown">
       {visible.map((r) =>
         "header" in r
-          ? <SectionHeader key={r.header.id} header={r.header} summary={summaries[r.header.id]} collapsed={collapsed.has(r.header.id)} onToggle={() => toggle(r.header.id)} />
+          ? mode === "prepare"
+            ? <SectionHeader key={r.header.id} header={r.header} summary={summaries[r.header.id]} collapsed={collapsed.has(r.header.id)} onToggle={() => toggle(r.header.id)} />
+            : <SectionLabel key={r.header.id} header={r.header} summary={summaries[r.header.id]} />
           : renderItem(r.item, r.index),
       )}
     </ol>

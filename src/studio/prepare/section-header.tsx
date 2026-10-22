@@ -17,6 +17,21 @@ const TONE: Record<PhaseRole, string> = {
   custom: "bg-tone-violet text-tone-violet-foreground",
 }
 
+/** In Present's running order: where the phase or group starts and how it runs (nothing to change here). */
+export function SectionLabel({ header, summary }: { header: OutlineHeader; summary?: SectionSummary }) {
+  const phase = header.type === "phase"
+  return (
+    <li
+      aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
+      className={cn("flex items-center gap-2 px-2 text-[0.625rem] font-extrabold tracking-[0.1em] uppercase", phase ? "mt-3 text-tone-violet-foreground first:mt-1" : "mt-1.5 pl-4 text-muted-foreground")}
+    >
+      <span className="truncate">{header.name}</span>
+      {phase && header.rule && <span className="shrink-0 font-semibold tracking-normal normal-case opacity-80">· {RULE_LABEL[header.rule].chip}</span>}
+      {summary?.minutes ? <span className="ml-auto shrink-0 font-semibold tracking-normal normal-case opacity-70">{summary.minutes} min</span> : null}
+    </li>
+  )
+}
+
 /** A phase or group in the order of service: name, how it runs, its items and minutes; collapsible. */
 export function SectionHeader({ header, summary, collapsed, onToggle }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; onToggle: () => void }) {
   const [renaming, setRenaming] = useState(false)
