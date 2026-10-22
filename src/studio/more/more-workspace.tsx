@@ -33,7 +33,6 @@ export function MoreWorkspace() {
   const setPresentView = useShellStore((s) => s.setPresentView)
   const openOutputs = useShellStore((s) => s.openOutputs)
   const [version, setVersion] = useState<string | null>(null)
-  const setLibraryOpen = useShellStore((s) => s.setLibraryOpen)
   const operatorName = useSettingsStore((s) => s.operatorName)
   const setOperatorName = useSettingsStore((s) => s.setOperatorName)
   const requireApproval = useSettingsStore((s) => s.requireApproval)
@@ -62,14 +61,14 @@ export function MoreWorkspace() {
       title: "Content",
       rows: [
         { icon: <BookOpenIcon />, label: "Bible", detail: "Translations and the secondary language", onClick: () => openSettings("bible") },
-        { icon: <LibraryIcon />, label: "Library", detail: "Songs and hymnbooks: export, import (Rhema or OpenLyrics files)", onClick: () => setLibraryOpen(true) },
+        { icon: <LibraryIcon />, label: "Library", detail: "Songs and hymnbooks: export, import (Rhema or OpenLyrics files)", onClick: () => useShellStore.getState().goTo("library") },
       ],
     },
     {
       title: "Later",
       rows: [
         { icon: <TvIcon />, label: "Signage", detail: "Foyer screens and announcement playlists", planned: "Milestone 8" },
-        { icon: <ArchiveIcon />, label: "Archive", detail: "Earlier service logs: what actually went live, searchable (in Library)", onClick: () => setLibraryOpen(true) },
+        { icon: <ArchiveIcon />, label: "Archive", detail: "Earlier service logs: what actually went live, searchable (in Library)", onClick: () => useShellStore.getState().goTo("archive") },
         { icon: <UsersIcon />, label: "Team", detail: "Your name goes on the log and approvals (below). Roles and shared approvals later", planned: "Milestone 7" },
       ],
     },

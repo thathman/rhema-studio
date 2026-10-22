@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type Workspace = "home" | "prepare" | "present" | "design" | "more"
+export type Workspace = "home" | "prepare" | "present" | "library" | "design" | "archive" | "more"
 /** The Design page's sections: every design edit lives there. */
 export type DesignTab = "themes" | "lower-thirds" | "ticker" | "brand" | "outputs"
 export type PresentView = "standard" | "production"
@@ -14,7 +14,7 @@ export const SHELL_PREFS_KEY = "rhema-studio.shell"
 
 const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard" }
 
-const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "design", "more"]
+const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "library", "design", "archive", "more"]
 const VIEWS: readonly PresentView[] = ["standard", "production"]
 
 /** Minimal Storage surface so tests can pass a Map-backed fake. */
@@ -55,9 +55,6 @@ export function writeShellPrefs(storage: StorageLike | null, prefs: ShellPrefs):
 interface ShellState extends ShellPrefs {
   /** The outputs dialog is global so Home, Present and More can all open it. */
   outputsDialogOpen: boolean
-  /** The library (songs, hymn books, saved logs): opened from the sidebar and from More. */
-  libraryOpen: boolean
-  setLibraryOpen: (open: boolean) => void
   designTab: DesignTab
   setDesignTab: (tab: DesignTab) => void
   /** Ask the shell to go to Design at this section (it runs the same guards as the sidebar). */
@@ -85,8 +82,6 @@ const storage: StorageLike | null =
 export const useShellStore = create<ShellState>((set) => ({
   ...readShellPrefs(storage),
   outputsDialogOpen: false,
-  libraryOpen: false,
-  setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
   designTab: "themes",
   setDesignTab: (designTab) => set({ designTab }),
   designRequest: null,
