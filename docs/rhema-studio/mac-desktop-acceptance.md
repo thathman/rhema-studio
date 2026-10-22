@@ -145,6 +145,9 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10ba.1 (end by) | F → V: "by 01:29" in the rundown and after reopening; chip "by 01:29 · 3 min", amber at 2 min, red "past 01:29 by …" after. Past the time it rounded up ("by 2 min" at 1 min 21 s): fixed in #175 (whole minutes). In the hidden test window the chip refreshed up to ~20 s late (timers throttled) |
 | 10au.2 (timer correction) | V: +1 min moved elapsed 0:01 → 1:03, −1 min back, a second −1 stopped at zero; each press logged "timer corrected by ±1 min" |
 | 10ay.1–3 (own cues) | V: New cue "Baptism" (Rehearsal off, Quick screen: Black, Start the timer) saved with "remote: /rhema/macro baptism"; Run: rehearsal off, black screen, Back returned to the song. After a restart the cue was there and an OSC `/rhema/macro baptism` ran it (log: "remote: macro baptism", "rehearsal off", "quick: Black screen"). Bin → Delete removed it; the four built-in cues have no bin |
+| 10cm.1 (hymn book import) | V: Prepare → Hymn book → the file through the tab's file input: "Hymn book imported: 1050 hymns"; "1000 hymns in Part 1 · 50 in Part 2" |
+| 10cm.3 (hymn on screen) | V: First: English, Add 245: item EN, YO. On the stream (both): four English lines, then the four Yorùbá in their own style, footer "Come, O Thou all-victorious Lord · CAC Gospel Hymn Book 245" under the words, nothing overlapping (screenshot 2026-10-22-hb-both). Stream set to "Second language only": only the Yorùbá |
+| 10cm.4 (import again) | V: "Hymn book updated: 1050 hymns"; the service using 245 reopened, saved after an edit and presented. (The church's own song in the book is left alone: crate test) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)

@@ -902,10 +902,10 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10cm.1 | Prepare → Hymn book → Import the hymn book… → choose `hymns_combined.json`. | "Hymn book imported: 1050 hymns"; Part 1 lists 1–1000, Part 2 lists V1–V50, each with its English title and Yorùbá first line. The Songs tab does not list them. | Checked in the browser build |
+| 10cm.1 | Prepare → Hymn book → Import the hymn book… → choose `hymns_combined.json`. | "Hymn book imported: 1050 hymns"; Part 1 lists 1–1000, Part 2 lists V1–V50, each with its English title and Yorùbá first line. The Songs tab does not list them. | Verified on the Intel Mac |
 | 10cm.2 | Type 245, then V12, then 012, then words in Yorùbá. | 245 alone; V12 switches to Part 2; 012 finds 12; words find hymns in either language. | Checked in the browser build |
-| 10cm.3 | First: English; Add hymn 245; preview; go live; set an output to "Second language only". | The item shows EN, YO; the screen shows English then Yorùbá with the footer "… · CAC Gospel Hymn Book 245" below the words; the second-only output shows only Yorùbá. | Unverified |
-| 10cm.4 | Save the service; Import the file again; open the service; save. | "Hymn book updated: 1050 hymns"; the service opens and saves; a number already used by the church's own song in a "CAC" book is left alone. | Unverified |
+| 10cm.3 | First: English; Add hymn 245; preview; go live; set an output to "Second language only". | The item shows EN, YO; the screen shows English then Yorùbá with the footer "… · CAC Gospel Hymn Book 245" below the words; the second-only output shows only Yorùbá. | Verified on the Intel Mac |
+| 10cm.4 | Save the service; Import the file again; open the service; save. | "Hymn book updated: 1050 hymns"; the service opens and saves; a number already used by the church's own song in a "CAC" book is left alone. | Verified on the Intel Mac (own-song case: crate test) |
 
 ### 10cn. Numbered books and the item fields (owner reports)
 
