@@ -17,6 +17,7 @@ import { TimedMoves } from "@/studio/present/timed-moves"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
+import { AuxTimers } from "@/studio/present/aux-timers"
 import { StageMessage } from "@/studio/present/stage-message"
 import { LowerThirdControl } from "@/studio/present/lower-third"
 import { TickerRow } from "@/studio/present/ticker"
@@ -93,6 +94,7 @@ export function PresentWorkspace() {
           />
         )}
         <ServiceTimer />
+        <AuxTimers />
         <ObsChip />
         <SoundChip />
         <LowerThirdControl />

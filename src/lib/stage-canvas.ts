@@ -62,6 +62,24 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
   }
   y += 2 * vh
 
+  // Auxiliary timers, one line under the top row.
+  if (stage.aux?.length) {
+    y += 4 * vh
+    ctx.textAlign = "left"
+    let x = padX
+    for (const t of stage.aux) {
+      ctx.font = font(3.2 * vh)
+      ctx.fillStyle = t.tone === "over" ? "#ff5a5a" : t.tone === "warn" ? "#ffc547" : "#9aa0a6"
+      const label = `${t.label} `
+      ctx.fillText(label, x, y)
+      x += ctx.measureText(label).width
+      ctx.font = font(3.2 * vh, 700)
+      ctx.fillText(t.text, x, y)
+      x += ctx.measureText(t.text).width + 3 * vw
+    }
+    y += 2 * vh
+  }
+
   // The operator's message, boxed.
   if (stage.message) {
     ctx.font = font(5 * vh, 700)

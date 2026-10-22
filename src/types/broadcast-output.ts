@@ -150,8 +150,17 @@ export interface StagePayload {
   band: string | null
   /** When the service is now expected to end, from the run of show's timing (issue #196). */
   finish?: StageFinish | null
+  /** Auxiliary timers the operator shows on the stage ("Communion prep 3:12"). */
+  aux?: StageAux[]
   /** How the church designed the stage display (Design → Stage); built-in look when absent. */
   style?: StageStyle
+}
+
+export interface StageAux {
+  label: string
+  /** "3:12", "−0:45" once over. */
+  text: string
+  tone: "ok" | "warn" | "over"
 }
 
 export interface StageFinish {

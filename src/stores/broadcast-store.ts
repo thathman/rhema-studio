@@ -7,7 +7,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -103,6 +103,9 @@ interface BroadcastState {
   /** When the service is expected to end (kept by stage-finish.ts from the timing engine). */
   stageFinish: StageFinish | null
   setStageFinish: (finish: StageFinish | null) => void
+  /** Auxiliary timers shown on the stage (kept by aux-timers-store.ts). */
+  stageAux: StageAux[]
+  setStageAux: (aux: StageAux[]) => void
   /** Saved sets of announcements. Saved. */
   tickerPresets: TickerPreset[]
   /** Save the words now in the ticker as a set (replacing one of the same name). */
@@ -425,6 +428,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   tickerStyle: DEFAULT_TICKER_STYLE,
   stageStyle: DEFAULT_STAGE_STYLE,
   stageFinish: null,
+  stageAux: [],
+  setStageAux: (stageAux) => {
+    set({ stageAux })
+    for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
+  },
   setStageFinish: (stageFinish) => {
     set({ stageFinish })
     for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
@@ -561,7 +569,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         stage: applyStageStyle({ ...buildStagePayload({
           isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), finish: s.stageFinish }, s.stageStyle),
+        }), finish: s.stageFinish, aux: s.stageAux }, s.stageStyle),
       }).catch(() => {})
       return
     }
