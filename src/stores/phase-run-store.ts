@@ -53,6 +53,8 @@ async function step(run: PhaseRun) {
   const current = run.itemId ? items.findIndex((i) => i.id === run.itemId) : -1
   const index = run.itemId ? nextInPhase(header.rule, range.start, range.end, current) : range.end > range.start ? range.start : null
   if (index === null) return usePhaseRun.getState().stop()
+  // A loop of one item keeps it up (a video does not restart); it looks again later in case items were added.
+  if (index === current) return later(dwellSeconds(header, items[index].planned_minutes) * 1000, () => { if (usePhaseRun.getState().run === run) void step(run) })
   const item = items[index]
   presenting = true
   try {

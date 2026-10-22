@@ -81,6 +81,15 @@ describe("a phase running by itself in Present", () => {
     expect(usePhaseRun.getState().run).toBeNull()
   })
 
+  it("a loop of one item keeps it up instead of taking it again", async () => {
+    useQueueStore.setState({ items: [slide("a"), slide("w1", 2), slide("w2", 3), slide("m")], headers: useQueueStore.getState().headers.map((h) => (h.id === "pre" ? h : { ...h, at: h.at - 1 })) })
+    usePhaseRun.getState().start("pre")
+    await flush()
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(presented).toEqual(["a"])
+    expect(usePhaseRun.getState().run?.itemId).toBe("a")
+  })
+
   it("the main service cannot be run this way", () => {
     usePhaseRun.getState().start("main")
     expect(usePhaseRun.getState().run).toBeNull()
