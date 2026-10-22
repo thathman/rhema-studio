@@ -1,8 +1,11 @@
 import { create } from "zustand"
 import { isVerseItem, type QueueItem } from "@/types"
+import { headersAfterInsert, headersAfterMove, headersAfterRemove, type OutlineHeader } from "@/lib/run-of-show"
 
 interface QueueState {
   items: QueueItem[]
+  /** The run of show's phases and groups, each before an item (see run-of-show.ts). Kept in step with `items`. */
+  headers: OutlineHeader[]
   activeIndex: number | null
   /** ID of the queue item currently being flash-highlighted (null = none). */
   highlightedId: string | null
@@ -42,6 +45,7 @@ function withActiveKept(state: { items: QueueItem[]; activeIndex: number | null 
 
 export const useQueueStore = create<QueueState>((set, get) => ({
   items: [],
+  headers: [],
   activeIndex: null,
   highlightedId: null,
   removedActive: null,
@@ -49,7 +53,7 @@ export const useQueueStore = create<QueueState>((set, get) => ({
   addItem: (item) =>
     set((state) => {
       // Songs may repeat in a service (opening and closing hymn); verses dedupe.
-      if (!isVerseItem(item)) return withActiveKept(state, [item, ...state.items])
+      if (!isVerseItem(item)) return { ...withActiveKept(state, [item, ...state.items]), headers: headersAfterInsert(state.headers, 0) }
       const idx = state.items.findIndex(
         (i) =>
           isVerseItem(i) &&
@@ -71,23 +75,25 @@ export const useQueueStore = create<QueueState>((set, get) => ({
         }
         return state
       }
-      return withActiveKept(state, [item, ...state.items])
+      return { ...withActiveKept(state, [item, ...state.items]), headers: headersAfterInsert(state.headers, 0) }
     }),
   removeItem: (id) =>
     set((state) => {
       const removed = state.items.findIndex((i) => i.id === id)
       const items = state.items.filter((i) => i.id !== id)
+      const headers = removed === -1 ? state.headers : headersAfterRemove(state.headers, removed)
       // The active item itself removed: the position stays on the one before it (so "next"
       // on the stage and in the rundown is the item that followed), and stepping uses both
       // neighbours: Next goes to the one that followed, Previous to the one before (no skip).
       if (removed !== -1 && removed === state.activeIndex) {
         return {
           items,
+          headers,
           activeIndex: removed > 0 ? removed - 1 : null,
           removedActive: { prevId: state.items[removed - 1]?.id ?? null, nextId: state.items[removed + 1]?.id ?? null },
         }
       }
-      return withActiveKept(state, items)
+      return { ...withActiveKept(state, items), headers }
     }),
   updateItem: (id, patch) =>
     set((state) => ({ items: state.items.map((i) => (i.id === id ? patch(i) : i)) })),
@@ -96,10 +102,10 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       const items = [...state.items]
       const [moved] = items.splice(fromIndex, 1)
       items.splice(toIndex, 0, moved)
-      return withActiveKept(state, items)
+      return { ...withActiveKept(state, items), headers: headersAfterMove(state.headers, fromIndex, toIndex) }
     }),
   setActive: (activeIndex) => set({ activeIndex, removedActive: null }),
-  clearQueue: () => set({ items: [], activeIndex: null, removedActive: null }),
+  clearQueue: () => set({ items: [], headers: [], activeIndex: null, removedActive: null }),
   flashItem: (id) => {
     if (flashTimer) clearTimeout(flashTimer)
     set({ highlightedId: id })

@@ -58,7 +58,7 @@ pub(crate) fn snapshot(tx: &Transaction<'_>, program_id: &str) -> Result<()> {
     tx.execute(
         "INSERT OR REPLACE INTO program_revisions (id, program_id, revision, title, service_date, items, item_count)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![new_id(), program_id, program.revision, program.title, program.service_date, json, i64::try_from(items.len()).unwrap_or(i64::MAX)],
+        params![new_id(), program_id, program.revision, program.title, program.service_date, json, i64::try_from(items.iter().filter(|i| !crate::HEADER_KINDS.contains(&i.kind.trim())).count()).unwrap_or(i64::MAX)],
     )?;
     if has_saved_by(tx) {
         tx.execute("UPDATE program_revisions SET saved_by = ?3 WHERE program_id = ?1 AND revision = ?2", params![program_id, program.revision, crate::actor()])?;

@@ -86,7 +86,11 @@ pub const MIGRATIONS: &[Migration] = &[
 /// migration and a renderer; until then they are rejected on write and
 /// surfaced untouched on read. A `song` item carries a JSON `payload`
 /// (`SongItemPayload`); its `reference` is the title, for display only.
-pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image"];
+pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image", "phase", "group"];
+/// Rows that structure a service rather than show anything: a phase (pre-service loop, warm-up,
+/// main service, post-service loop or a named one) and a group inside it. An item belongs to the
+/// nearest header above it; the reference is the header's name.
+pub const HEADER_KINDS: &[&str] = &["phase", "group"];
 
 pub const MAX_TITLE: usize = 200;
 pub const MAX_REFERENCE: usize = 200;
@@ -339,7 +343,7 @@ impl ContentDb {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
             &format!("SELECT p.id, p.title, p.service_date, p.revision, p.created_at, p.updated_at,
-                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id){}
+                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id AND i.kind NOT IN ('phase', 'group')){}
              FROM programs p
              ORDER BY p.service_date IS NULL, p.service_date DESC, p.updated_at DESC", approval_cols(&conn)),
         )?;
@@ -662,7 +666,7 @@ fn load_program(conn: &Connection, id: &str) -> Result<Option<Program>> {
     Ok(conn
         .query_row(
             &format!("SELECT p.id, p.title, p.service_date, p.revision, p.created_at, p.updated_at,
-                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id){}
+                    (SELECT COUNT(*) FROM program_items i WHERE i.program_id = p.id AND i.kind NOT IN ('phase', 'group')){}
              FROM programs p WHERE p.id = ?1", approval_cols(conn)),
             params![id],
             row_to_program,
@@ -900,6 +904,34 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// Payload of a `kind = 'phase'` header: how it runs, which part of the event it is, when it
+/// starts. Other keys are kept (a newer build may add some).
+#[derive(Debug, Deserialize)]
+struct PhasePayload {
+    #[serde(default)]
+    rule: Option<String>,
+    #[serde(default)]
+    role: Option<String>,
+    /// The time the phase starts (the main service's start), 24-hour "HH:MM".
+    #[serde(default)]
+    starts_at: Option<String>,
+}
+
+fn validate_phase_payload(i: usize, payload: Option<&str>) -> Result<()> {
+    let Some(raw) = payload else { return Ok(()) };
+    let p: PhasePayload = serde_json::from_str(raw).map_err(|e| ContentError::Invalid(format!("item {i}: bad phase: {e}")))?;
+    if p.rule.as_deref().is_some_and(|r| !["loop", "auto_once", "manual"].contains(&r)) {
+        return Err(ContentError::Invalid(format!("item {i}: a phase runs as loop, auto_once or manual")));
+    }
+    if p.role.as_deref().is_some_and(|r| !["pre", "warmup", "main", "post", "custom"].contains(&r)) {
+        return Err(ContentError::Invalid(format!("item {i}: a phase is pre, warmup, main, post or custom")));
+    }
+    if p.starts_at.as_deref().is_some_and(|t| !is_clock_time(t)) {
+        return Err(ContentError::Invalid(format!("item {i}: a phase's start time must be HH:MM")));
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_items(items: &[ItemInput]) -> Result<()> {
     if items.len() > MAX_ITEMS {
         return Err(ContentError::Invalid(format!("more than {MAX_ITEMS} items")));
@@ -936,6 +968,9 @@ pub(crate) fn validate_items(items: &[ItemInput]) -> Result<()> {
         }
         if kind == "image" {
             media::validate_image_payload(i, it.payload.as_deref())?;
+        }
+        if kind == "phase" {
+            validate_phase_payload(i, it.payload.as_deref())?;
         }
         for t in [&it.translation, &it.secondary_translation].into_iter().flatten() {
             let t = t.trim();
@@ -1023,6 +1058,40 @@ mod tests {
         assert_eq!(events.iter().map(|e| e.action.as_str()).collect::<Vec<_>>(), vec!["create", "replace_items", "replace_items"]);
         assert!(events.iter().all(|e| e.actor.is_none()));
         assert!(events[2].payload.as_deref().unwrap().contains("\"removed\":2"));
+    }
+
+    fn header(kind: &str, name: &str, payload: Option<&str>) -> ItemInput {
+        ItemInput { kind: kind.into(), reference: name.into(), payload: payload.map(Into::into), ..ItemInput::default() }
+    }
+
+    #[test]
+    fn phases_and_groups_keep_their_place_and_are_not_counted_as_items() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let rows = [
+            header("phase", "Warm-up", Some(r#"{"rule":"auto_once","role":"warmup"}"#)),
+            verse("John 3:16", 43, 3, 16),
+            header("phase", "Main service", Some(r#"{"rule":"manual","role":"main","starts_at":"10:00"}"#)),
+            header("group", "Word", None),
+            verse("Psalms 23:1", 19, 23, 1),
+        ];
+        let saved = db.replace_items(&p.id, 1, &rows).unwrap();
+        assert_eq!(saved.items.iter().map(|i| i.kind.as_str()).collect::<Vec<_>>(), vec!["phase", "verse", "phase", "group", "verse"]);
+        assert_eq!(saved.program.item_count, 2);
+        assert_eq!(db.list_programs().unwrap()[0].item_count, 2);
+        // The approved snapshot is the structure too.
+        let revs = db.list_revisions(&p.id).unwrap();
+        assert_eq!(revs[0].item_count, 2);
+    }
+
+    #[test]
+    fn a_phase_says_how_it_runs_and_a_header_needs_a_name() {
+        for bad in [r#"{"rule":"forever"}"#, r#"{"role":"middle"}"#, r#"{"starts_at":"25:00"}"#, "not json"] {
+            assert!(validate_items(&[header("phase", "X", Some(bad))]).is_err(), "{bad}");
+        }
+        // Keys a newer build adds are kept, not refused.
+        assert!(validate_items(&[header("phase", "X", Some(r#"{"rule":"loop","later":1}"#))]).is_ok());
+        assert!(validate_items(&[header("group", "  ", None)]).is_err());
     }
 
     #[test]
