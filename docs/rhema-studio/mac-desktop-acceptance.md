@@ -301,6 +301,20 @@ fixed: the Timed moves countdown first showed the time since the switch appeared
 **Not covered:** Windows and Linux do not support that setting; loops and timed
 moves there need a tick from Rust (as NDI pacing has) before Windows acceptance.
 
+## Stage display design over NDI (2026-10-22 night, DS-004 #226)
+
+QA build of `main` at `785ea27`, isolated home, the stage output as NDI
+("Rhema Stage"), read with an NDI receiver (`ndirecv`, the last frame's
+top-left pixel).
+
+| Step | Result |
+| --- | --- |
+| Design → Stage: background #102030, words #ffd166, "what is next" off | NDI frame background `#0f1f2d` (NDI's colour conversion of #102030): pass |
+| Back to the built-in look | NDI frame background `#000000` at once: pass |
+
+The stage sends a frame only when something changes (2-3 frames in 4-5 s
+with no timer running), as designed.
+
 ## Fixed on this branch
 
 1. **Intel macOS build failed.** Tauri passes `bundle.macOS.minimumSystemVersion`
