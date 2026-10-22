@@ -451,6 +451,23 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
   })
 
+  it("the ticker crawls only on outputs that show it, takes word changes at once and stops", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stream", name: "Stream", type: "ndi", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults, ticker: true })
+    useBroadcastStore.setState({ isLive: true, liveVerse: sampleLiveVerse })
+    useBroadcastStore.getState().setTicker({ backing: null })
+    expect(useBroadcastStore.getState().ticker).toBeNull() // nothing to say yet
+    useBroadcastStore.getState().setTickerItems(["Youth meeting Friday", ""])
+    useBroadcastStore.getState().setTicker({ backing: null })
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker?.items[0]).toBe("Youth meeting Friday")
+    expect(useBroadcastStore.getState().outputFrames.main?.ticker ?? null).toBeNull()
+    useBroadcastStore.getState().setTickerItems(["Choir Saturday"])
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker?.items).toEqual(["Choir Saturday"])
+    useBroadcastStore.getState().setTicker(null)
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker).toBeNull()
+  })
+
   it("an output can give a kind of content its own look (hymns in one theme, the rest in the main one)", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()

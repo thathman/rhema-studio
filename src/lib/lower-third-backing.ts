@@ -2,7 +2,7 @@ import { useMediaStore } from "@/stores/media-store"
 import type { LowerThird, LowerThirdStyle } from "@/types"
 
 /** The style's picture or video as a URL the outputs can load (null without one, or when it cannot be read). */
-export async function lowerThirdBacking(style: LowerThirdStyle): Promise<LowerThird["backing"]> {
+export async function lowerThirdBacking(style: { background: Pick<LowerThirdStyle["background"], "kind" | "mediaId"> }): Promise<LowerThird["backing"]> {
   const bg = style.background
   if (!bg.mediaId || (bg.kind !== "picture" && bg.kind !== "video")) return null
   const media = useMediaStore.getState()

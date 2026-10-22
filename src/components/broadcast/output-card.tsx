@@ -91,6 +91,7 @@ export function OutputCard({
             theme={onAir ? (frame?.theme ?? theme) : theme}
             verse={onAir ? (frame?.verse ?? null) : null}
             overlay={onAir ? (frame?.overlay ?? null) : null}
+            ticker={onAir ? (frame?.ticker ?? null) : null}
             className={cn("aspect-video w-full", !onAir && "opacity-45 saturate-50")}
           />
         ) : (

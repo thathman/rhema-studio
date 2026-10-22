@@ -19,6 +19,7 @@ import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
 import { StageMessage } from "@/studio/present/stage-message"
 import { LowerThirdControl } from "@/studio/present/lower-third"
+import { TickerControl } from "@/studio/present/ticker"
 import { ObsChip } from "@/studio/present/obs-chip"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
@@ -94,6 +95,7 @@ export function PresentWorkspace() {
         <ServiceTimer />
         <ObsChip />
         <SoundChip />
+        <TickerControl />
         <LowerThirdControl />
         <StageMessage />
         <CueMenu />

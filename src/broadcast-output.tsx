@@ -16,7 +16,8 @@ import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
 import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
-import type { LowerThird, NdiConfigEventPayload, StagePayload } from "@/types"
+import type { LowerThird, NdiConfigEventPayload, StagePayload, Ticker } from "@/types"
+import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
 import { drawStage } from "@/lib/stage-canvas"
@@ -33,6 +34,9 @@ const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "
 let videoPlayer: VideoPlayer | null = null
 // The lower third's own looping video backing (silent), beside the screen's video.
 let backingPlayer: VideoPlayer | null = null
+// The ticker's video backing, and whether its frame loop is running.
+let tickerPlayer: VideoPlayer | null = null
+let tickerRunning = false
 const latencyLog = createLatencyLog(`output ${OUTPUT_ID}`)
 // Frames are drawn here first; see paintFrame.
 const scratchCanvas = document.createElement("canvas")
@@ -52,6 +56,8 @@ interface BroadcastPayload {
   verse: VerseRenderData | null
   /** Lower third for this output, drawn over everything; null when hidden or not enabled here. */
   overlay?: LowerThird | null
+  /** The news ticker for this output, crawling over everything; null when off or not shown here. */
+  ticker?: Ticker | null
   role?: "congregation" | "stage"
   stage?: StagePayload
   /** Wall-clock ms when the main window sent this screen (latency log). */
@@ -124,6 +130,13 @@ function BroadcastCanvas() {
           imageCache: themeImageCache(),
           video: backingPlayer?.element() ?? null,
           progress: entranceProgress(data.overlay, Date.now()),
+        })
+      }
+      if (data.ticker && verse?.screen !== "black") {
+        drawTicker(fctx, width, height, data.ticker, theme.verseText?.fontFamily, {
+          imageCache: themeImageCache(),
+          video: tickerPlayer?.element() ?? null,
+          now: Date.now(),
         })
       }
     })
@@ -247,6 +260,28 @@ function BroadcastCanvas() {
       fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
     })
     backingPlayer = backing
+    const tickerVideo = createVideoPlayer({
+      onFrame: () => {},
+      onEnded: () => {},
+      onError: (name) => console.warn("[broadcast-output] ticker video failed to play:", name),
+      allowSound: false,
+      fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
+    })
+    tickerPlayer = tickerVideo
+    // While the ticker runs, draw every frame: on the screen's refresh, or at the NDI rate (a hidden NDI window gets no animation frames).
+    const tickTicker = () => {
+      if (!tickerRunning) return
+      if (!latestData.current?.ticker || stageRef.current) {
+        tickerRunning = false
+        draw()
+        return
+      }
+      draw()
+      if (ndiConfigRef.current.active) {
+        void pushNdiFrame()
+        setTimeout(tickTicker, Math.round(1000 / Math.max(15, ndiConfigRef.current.fps || 30)))
+      } else requestAnimationFrame(tickTicker)
+    }
     // Draw the lower third's entrance frame by frame (and send each over NDI) until it is fully on.
     const animateOverlay = () => {
       draw()
@@ -276,6 +311,13 @@ function BroadcastCanvas() {
       backingPlayer?.sync(ov?.backing?.kind === "video" ? { url: ov.backing.url, fit: "cover", loop: true, sound: false, name: "lower third", token: 0 } : undefined)
       if (ov?.backing?.kind === "picture") void loadThemeImage(ov.backing.url).then(() => { draw(); pushNdiBurstRef.current?.() })
       if (ov && entranceProgress(ov, Date.now()) < 1) animateOverlay()
+      const tk = event.payload.ticker
+      tickerVideo.sync(tk?.backing?.kind === "video" ? { url: tk.backing.url, fit: "cover", loop: true, sound: false, name: "ticker", token: 0 } : undefined)
+      if (tk?.backing?.kind === "picture") void loadThemeImage(tk.backing.url)
+      if (tk && !tickerRunning) {
+        tickerRunning = true
+        tickTicker()
+      }
       preloadThemeAssets(event.payload.theme)
       const sentAt = event.payload.sentAt
       const logLatency = () => {
@@ -342,6 +384,9 @@ function BroadcastCanvas() {
       videoPlayer = null
       backing.dispose()
       backingPlayer = null
+      tickerVideo.dispose()
+      tickerPlayer = null
+      tickerRunning = false
       unsubscribeFonts()
       unlisten.then((fn) => fn())
       unlistenNdiConfig.then((fn) => fn())

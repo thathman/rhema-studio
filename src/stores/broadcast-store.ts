@@ -7,7 +7,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, Ticker, TickerStyle } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -21,6 +21,7 @@ import { forOutputLanguage } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
+import { DEFAULT_TICKER_STYLE, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -89,6 +90,17 @@ interface BroadcastState {
   saveLowerThirdStyle: (style: LowerThirdStyle, backing?: LowerThird["backing"]) => void
   /** Remove a style; the last one cannot go. */
   deleteLowerThirdStyle: (id: string) => void
+  /** The news ticker on air (outputs with ticker on), or null. Session state. */
+  ticker: Ticker | null
+  /** What the ticker says, one item per line as typed. Saved. */
+  tickerItems: string[]
+  /** How the ticker looks. Saved. */
+  tickerStyle: TickerStyle
+  setTickerItems: (items: string[]) => void
+  /** Start the ticker with the saved items and style (`backing` resolved from the style's media), or stop it (null). */
+  setTicker: (on: { backing: Ticker["backing"] } | null) => void
+  /** Change the look; a running ticker takes it at once (keeping its place in the crawl). */
+  saveTickerStyle: (style: TickerStyle, backing?: Ticker["backing"]) => void
   /**
    * What each output was last sent (multiview thumbnails show exactly this).
    * Session state; written whenever an output is synced.
@@ -291,11 +303,18 @@ export interface OutputFrame {
   theme: BroadcastTheme
   verse: VerseRenderData | null
   overlay: LowerThird | null
+  ticker?: Ticker | null
   /** Stage outputs: the thumbnail says "Stage display" instead of a frame. */
   stage?: boolean
 }
 
 /** Keep what an output was last sent, for the multiview. Skips the write when nothing changed. */
+/** Send the ticker (on, changed or off) to the outputs that show it. */
+function syncTickerOutputs(): void {
+  const s = useBroadcastStore.getState()
+  for (const o of s.outputs) if (o.ticker && (o.role ?? "congregation") === "congregation") s.syncBroadcastOutputFor(o.id)
+}
+
 /** After a theme draft ends (saved, discarded, closed, switched), outputs that were shown the draft get the saved theme again. */
 function resyncThemeOutputs(themeId: string | null): void {
   if (!themeId) return
@@ -305,7 +324,7 @@ function resyncThemeOutputs(themeId: string | null): void {
 
 function recordFrame(id: string, frame: OutputFrame): void {
   const prev = useBroadcastStore.getState().outputFrames[id]
-  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.stage === frame.stage) return
+  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.ticker === frame.ticker && prev.stage === frame.stage) return
   useBroadcastStore.setState((s) => ({ outputFrames: { ...s.outputFrames, [id]: frame } }))
 }
 
@@ -372,6 +391,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   stageMessage: "",
   lowerThird: null,
   lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE],
+  ticker: null,
+  tickerItems: [],
+  tickerStyle: DEFAULT_TICKER_STYLE,
   outputFrames: {},
   rehearsal: false,
   presentWarning: null,
@@ -499,11 +521,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const overlay = output.lowerThirds ? overlayFor(s.lowerThird, verse) : null
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
-    recordFrame(outputId, { theme, verse, overlay })
+    const ticker = output.ticker ? s.ticker : null
+    recordFrame(outputId, { theme, verse, overlay, ticker })
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
       verse,
       overlay,
+      ticker,
       sound: soundOutputId(get().outputs, get().outputStatus) === outputId,
       ...(changed ? { sentAt: Date.now() } : {}),
     }).catch(() => {})
@@ -643,6 +667,28 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (lt?.style?.id === style.id) {
       set({ lowerThird: { ...lt, style, ...(backing !== undefined ? { backing } : {}) } })
       for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+    }
+  },
+  setTickerItems: (tickerItems) => {
+    set({ tickerItems })
+    const t = get().ticker
+    if (t) {
+      set({ ticker: { ...t, items: tickerItems } })
+      syncTickerOutputs()
+    }
+  },
+  setTicker: (on) => {
+    const s = get()
+    const live = on && s.tickerItems.some((i) => i.trim()) ? { items: s.tickerItems, style: s.tickerStyle, startedAt: Date.now(), backing: on.backing } : null
+    set({ ticker: live })
+    syncTickerOutputs()
+  },
+  saveTickerStyle: (tickerStyle, backing) => {
+    set({ tickerStyle })
+    const t = get().ticker
+    if (t) {
+      set({ ticker: { ...t, style: tickerStyle, ...(backing !== undefined ? { backing } : {}) } })
+      syncTickerOutputs()
     }
   },
   deleteLowerThirdStyle: (id) => {
@@ -819,6 +865,9 @@ export function hydrateBroadcastThemes(): Promise<void> {
       if (typeof autoLive === "boolean") patch.autoLive = autoLive
       const ltStyles = (await store.get("lowerThirdStyles")) as LowerThirdStyle[] | undefined
       if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
+      patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
+      const items = await store.get("tickerItems")
+      if (Array.isArray(items)) patch.tickerItems = items.filter((i): i is string => typeof i === "string")
 
       useBroadcastStore.setState(patch)
 
@@ -829,7 +878,9 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.activeThemeId !== prevState.activeThemeId ||
           state.outputs !== prevState.outputs ||
           state.autoLive !== prevState.autoLive ||
-          state.lowerThirdStyles !== prevState.lowerThirdStyles
+          state.lowerThirdStyles !== prevState.lowerThirdStyles ||
+          state.tickerStyle !== prevState.tickerStyle ||
+          state.tickerItems !== prevState.tickerItems
         if (!changed) return
         if (saveTimer) clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
@@ -879,6 +930,8 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("activeThemeId", state.activeThemeId)
     await store.set("autoLiveOptIn", state.autoLive)
     await store.set("lowerThirdStyles", state.lowerThirdStyles)
+    await store.set("tickerStyle", state.tickerStyle)
+    await store.set("tickerItems", state.tickerItems)
     await store.save()
   } catch {
     console.warn("[broadcast] Failed to persist themes")
