@@ -18,6 +18,7 @@ import { buildSlides, sectionShort } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
 import { interleave, sectionSummaries } from "@/lib/run-of-show"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
+import { PhaseRunButton } from "@/studio/present/phase-run-button"
 import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 
 
@@ -169,7 +170,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
         "header" in r
           ? mode === "prepare"
             ? <SectionHeader key={r.header.id} header={r.header} summary={summaries[r.header.id]} collapsed={collapsed.has(r.header.id)} onToggle={() => toggle(r.header.id)} />
-            : <SectionLabel key={r.header.id} header={r.header} summary={summaries[r.header.id]} />
+            : <SectionLabel key={r.header.id} header={r.header} summary={summaries[r.header.id]} action={<PhaseRunButton header={r.header} />} />
           : renderItem(r.item, r.index),
       )}
     </ol>
