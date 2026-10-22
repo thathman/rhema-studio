@@ -1,14 +1,14 @@
 import { useRef, useEffect, useState, useCallback, memo } from "react"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
-import type { BroadcastTheme, VerseRenderData } from "@/types"
+import type { BroadcastTheme, LowerThird, VerseRenderData } from "@/types"
 import { cn } from "@/lib/utils"
 
 interface CanvasVerseProps {
   theme: BroadcastTheme
   verse: VerseRenderData | null
   /** A lower third drawn over the frame, as the output window does. */
-  overlay?: { line1: string; line2: string } | null
+  overlay?: LowerThird | null
   className?: string
 }
 
@@ -60,7 +60,7 @@ export const CanvasVerse = memo(function CanvasVerse({
         scale,
         imageCache: themeImageCache(),
       })
-      if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily)
+      if (overlay && verse?.screen !== "black") drawLowerThird(ctx, displayW, displayH, overlay, theme.verseText?.fontFamily, { imageCache: themeImageCache() })
     } catch (e) {
       console.error("[canvas-verse] preview failed to draw", e)
     }
@@ -73,6 +73,10 @@ export const CanvasVerse = memo(function CanvasVerse({
   useEffect(() => {
     if (verse?.image?.url) void loadThemeImage(verse.image.url).then(() => draw())
   }, [verse?.image?.url, draw])
+  const backingPicture = overlay?.backing?.kind === "picture" ? overlay.backing.url : null
+  useEffect(() => {
+    if (backingPicture) void loadThemeImage(backingPicture).then(() => draw())
+  }, [backingPicture, draw])
 
   // Redraw whenever theme, verse, or container size changes.
   useEffect(() => {

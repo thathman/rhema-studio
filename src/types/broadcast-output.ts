@@ -15,6 +15,40 @@ export type BroadcastOutputRole = "congregation" | "stage" | "signage"
 export interface LowerThird {
   line1: string
   line2: string
+  /** How it looks (resolved when shown, so an output draws it without looking anything up). */
+  style?: LowerThirdStyle
+  /** The style's picture or video behind the band, as a URL the output can load. */
+  backing?: { kind: "picture" | "video"; url: string } | null
+  /** A strip that follows what is live: the verse on screen (and its reference), or the lyric lines (and the song). */
+  follow?: "scripture" | "lyrics"
+  /** When it was shown (ms), for its entrance. */
+  shownAt?: number
+}
+
+/** A designed look for the lower third (name and title band), chosen when it is shown. */
+export interface LowerThirdStyle {
+  id: string
+  name: string
+  /** Where the band sits across the frame. */
+  align: "left" | "center" | "right"
+  /** Gap from the side (left/right) as a % of the frame width. */
+  margin: number
+  /** Gap from the bottom edge as a % of the frame height. */
+  bottom: number
+  /** Band width as a % of the frame width; 0 = as wide as the words. */
+  width: number
+  /** Band height as a % of the frame height. */
+  height: number
+  /** null = the theme's verse font. */
+  fontFamily: string | null
+  line1: { size: number; color: string; weight: number; uppercase: boolean }
+  line2: { size: number; color: string; weight: number }
+  background: { kind: "color" | "picture" | "video" | "none"; color: string; opacity: number; mediaId: string | null }
+  /** Corner radius as a % of the band height. */
+  radius: number
+  accent: { enabled: boolean; color: string; width: number }
+  /** How it comes on screen. */
+  animation: "none" | "fade" | "slide"
 }
 
 /** A `signage` output: pictures on a loop, independent of what is live in the sanctuary. */

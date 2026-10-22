@@ -393,7 +393,7 @@ describe("updateDraftNested deep paths", () => {
     s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, lowerThirds: true })
     emitToMock.mockClear()
     useBroadcastStore.getState().setLowerThird({ line1: "  Pastor Tolu  ", line2: "Senior Pastor" })
-    expect(useBroadcastStore.getState().lowerThird).toEqual({ line1: "Pastor Tolu", line2: "Senior Pastor" })
+    expect(useBroadcastStore.getState().lowerThird).toMatchObject({ line1: "Pastor Tolu", line2: "Senior Pastor" })
     const targets = emitToMock.mock.calls.map((c) => c[0])
     expect(targets).toEqual(["broadcast-stream"])
     expect(emitToMock.mock.calls[0][2]).toMatchObject({ overlay: { line1: "Pastor Tolu", line2: "Senior Pastor" } })
@@ -443,7 +443,7 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().syncBroadcastOutput()
     const frames = useBroadcastStore.getState().outputFrames
     expect(frames.stream.verse?.translationLines).toBeUndefined() // first language only
-    expect(frames.stream.overlay).toEqual({ line1: "Pastor Tolu", line2: "" })
+    expect(frames.stream.overlay).toMatchObject({ line1: "Pastor Tolu", line2: "" })
     expect(frames.main.verse?.translationLines).toHaveLength(2)
     expect(frames.main.overlay).toBeNull()
     expect(frames.stage.stage).toBe(true)
