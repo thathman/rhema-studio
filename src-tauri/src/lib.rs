@@ -221,6 +221,15 @@ pub fn run() {
             }
 
             memstats::spawn();
+
+            // A tick for the operator's window: loops and timed moves catch up on it when the
+            // window's own timers are held back behind other windows (WebView2 and WebKitGTK
+            // have no switch for that; on macOS the window's throttling is off as well).
+            let ticker = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let _ = tauri::Emitter::emit_to(&ticker, tauri::EventTarget::webview_window("main"), "app:tick", ());
+            });
             rhema_api::set_app_version(env!("CARGO_PKG_VERSION"));
 
             #[cfg(feature = "qa-bridge")]
