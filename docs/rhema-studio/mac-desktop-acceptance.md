@@ -178,6 +178,10 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10bs.4 (last-open service gone) | V: the remembered service deleted in the database; the next start forgot it (nothing to reopen), the start after said nothing: at most once |
 | 10bx.1 (Yorùbá headings), first half | V: pasted "Ẹsẹ̀ 1 / line / blank / Ègbè / line", Make sections: Verse and Chorus, no heading line in the words. (Export as text and paste back ends in the Save dialog: not run) |
 | 10cc.6 (tempo) | V: 72.5: Save disabled, "Tempo is whole beats per minute, 20 to 300."; 72: Save enabled |
+| 10bp.3 (arrangement changed while live) | V: a song live on verse 2 of its "All" order; the item switched to "Odd" (1, 3); Next, Next: verses 3 and 4 (the order that was live); started again: Next went to verse 3 (the new order) |
+| 10bq.5 (rename and reorder at once) | V: closing asked: "“QA Sunday (renamed)” has changes that are not saved" |
+| 10cb.5 (changed theme on close) | V: with a theme draft changed, the close question added: "The theme “Classic Dark (Custom)” has design changes that are not saved; Save and close saves the service, not the theme." |
+| 10bx.3, 10bx.4 (church brand) | Covered by unit tests (removing a look keeps an in-use theme, detached; a theme taken over by hand is never touched); not driven on the Mac |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
