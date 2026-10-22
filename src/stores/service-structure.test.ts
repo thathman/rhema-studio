@@ -76,4 +76,13 @@ describe("a service's phases and groups", () => {
     expect(useQueueStore.getState().headers.map((h) => h.at)).toEqual([0, 3, 3])
     useQueueStore.getState().setAddTarget(null)
   })
+
+  it("an item's go-live message and cue are saved cleaned and come back; an unknown cue is dropped", () => {
+    const saved = program([row("a", "verse", "John 3:16", JSON.stringify({ on_live: { stage_message: "  Wrap   up ", cue: "timer.fresh" } })), row("b", "verse", "John 3:16", JSON.stringify({ on_live: { cue: "quick.black" } }))])
+    const { items, headers } = toQueueItems(saved, 1, [])
+    expect(items[0].on_live).toEqual({ stage_message: "Wrap up", cue: "timer.fresh" })
+    expect(items[1].on_live).toBeNull()
+    const back = toItemInputs(items, undefined, undefined, headers)
+    expect(JSON.parse(back[0].payload!).on_live).toEqual({ stage_message: "Wrap up", cue: "timer.fresh" })
+  })
 })

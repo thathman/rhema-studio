@@ -18,6 +18,8 @@ interface QueueItemBase {
   prepared_by?: string | null
   /** Team comments on this item (CL-007); saved with the service and carried in service files. Never on screen. */
   comments?: ItemComment[] | null
+  /** What happens as it goes live (issue #193): a stage-only message, one cue that never changes the screen. */
+  on_live?: OnLive | null
   /** Payload fields this build does not edit (from a newer version or a service file), written back unchanged (FR-03). */
   payload_extra?: Record<string, unknown>
 }
@@ -109,4 +111,14 @@ export interface ItemComment {
   by: string
   at: string
   text: string
+}
+
+/** Cues an item may run as it goes live: none changes what the congregation sees. */
+export const GO_LIVE_CUES = ["timer.start", "timer.fresh", "timer.pause", "stage.clearMessage"] as const
+export type GoLiveCue = (typeof GO_LIVE_CUES)[number]
+
+export interface OnLive {
+  /** Shown on stage outputs only. One line, at most 120 characters. */
+  stage_message?: string
+  cue?: GoLiveCue
 }
