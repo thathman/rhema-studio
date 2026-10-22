@@ -21,6 +21,8 @@ export interface OutlineHeader {
   role?: PhaseRole
   /** Phases: when it starts, 24-hour "HH:MM" (the main service's start). */
   starts_at?: string
+  /** Loop phases: seconds each item stays up while the phase runs by itself (3–3600). */
+  advance_seconds?: number
   /** Keys this build does not edit, kept as they were. */
   payload_extra?: Record<string, unknown>
 }
@@ -172,4 +174,32 @@ export function planTimeline(items: Array<{ reference: string; planned_minutes?:
   }
   rows.push({ kind: "milestone", label: `${main.name} ends`, time: clockText(t + delay) })
   return { start: clockText(start), warmupStart: warm && warmMinutes > 0 ? clockText(start - warmMinutes) : null, finish: clockText(t + delay), rows }
+}
+
+/** A loop item with no seconds of its own and no planned minutes stays up this long. */
+export const DEFAULT_ADVANCE_SECONDS = 10
+
+/** The rundown indexes a phase covers: [start, end). */
+export function phaseRange(itemCount: number, headers: OutlineHeader[], headerId: string): { start: number; end: number } | null {
+  const h = headers.find((x) => x.id === headerId && x.type === "phase")
+  return h ? { start: h.at, end: sectionEnd(itemCount, headers, headerId) } : null
+}
+
+/**
+ * How long an item stays up while its phase runs by itself. A loop uses the phase's seconds;
+ * a run-once phase (the warm-up) uses each item's planned minutes, so it ends on time.
+ */
+export function dwellSeconds(header: OutlineHeader, plannedMinutes: number | null | undefined): number {
+  const planned = plannedMinutes ? plannedMinutes * 60 : null
+  return header.rule === "loop"
+    ? header.advance_seconds ?? planned ?? DEFAULT_ADVANCE_SECONDS
+    : planned ?? header.advance_seconds ?? DEFAULT_ADVANCE_SECONDS
+}
+
+/** The item after `current` in a running phase: a loop wraps to its first item, a run-once phase ends (null). */
+export function nextInPhase(rule: PhaseRule, start: number, end: number, current: number): number | null {
+  if (end <= start) return null
+  if (current < start || current >= end) return start
+  if (current + 1 < end) return current + 1
+  return rule === "loop" ? start : null
 }

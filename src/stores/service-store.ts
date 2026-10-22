@@ -127,7 +127,7 @@ export function toItemInputs(
 function headerInput(h: OutlineHeader): ItemInput {
   const payload = {
     ...(h.payload_extra ?? {}),
-    ...(h.type === "phase" ? { ...(h.rule ? { rule: h.rule } : {}), ...(h.role ? { role: h.role } : {}), ...(h.starts_at && isClockTime(h.starts_at) ? { starts_at: h.starts_at } : {}) } : {}),
+    ...(h.type === "phase" ? { ...(h.rule ? { rule: h.rule } : {}), ...(h.role ? { role: h.role } : {}), ...(h.starts_at && isClockTime(h.starts_at) ? { starts_at: h.starts_at } : {}), ...(isAdvanceSeconds(h.advance_seconds) ? { advance_seconds: h.advance_seconds } : {}) } : {}),
   }
   return {
     id: h.id,
@@ -219,6 +219,7 @@ function itemInputs(
 
 /** 24-hour "HH:MM". */
 export const isClockTime = (t: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)
+const isAdvanceSeconds = (s: unknown): s is number => typeof s === "number" && Number.isInteger(s) && s >= 3 && s <= 3600
 
 /**
  * A short name as the crate accepts it: control characters (a pasted tab)
@@ -457,7 +458,7 @@ function parseHeader(it: ProgramItem, at: number): OutlineHeader {
   } catch {
     // An unreadable payload: the header keeps its name and place.
   }
-  const { rule, role, starts_at, ...rest } = p
+  const { rule, role, starts_at, advance_seconds, ...rest } = p
   return {
     id: it.id,
     type: it.kind === "phase" ? "phase" : "group",
@@ -467,6 +468,7 @@ function parseHeader(it: ProgramItem, at: number): OutlineHeader {
     ...(it.kind === "phase" && RULES.includes(rule as PhaseRule) ? { rule: rule as PhaseRule } : {}),
     ...(it.kind === "phase" && ROLES.includes(role as PhaseRole) ? { role: role as PhaseRole } : {}),
     ...(it.kind === "phase" && typeof starts_at === "string" && isClockTime(starts_at) ? { starts_at } : {}),
+    ...(it.kind === "phase" && isAdvanceSeconds(advance_seconds) ? { advance_seconds } : {}),
     ...(Object.keys(rest).length ? { payload_extra: rest } : {}),
   }
 }

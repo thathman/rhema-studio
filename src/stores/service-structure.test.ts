@@ -20,7 +20,7 @@ const verse = (id: string): VerseQueueItem => ({
 
 describe("a service's phases and groups", () => {
   const saved = program([
-    row("h1", "phase", "Warm-up", JSON.stringify({ rule: "auto_once", role: "warmup", later: 1 })),
+    row("h1", "phase", "Warm-up", JSON.stringify({ rule: "auto_once", role: "warmup", later: 1, advance_seconds: 12 })),
     row("a", "verse", "John 3:16"),
     row("h2", "phase", "Main service", JSON.stringify({ rule: "manual", role: "main", starts_at: "10:00" })),
     row("h3", "group", "Word"),
@@ -33,10 +33,11 @@ describe("a service's phases and groups", () => {
     expect(items.map((i) => i.id)).toEqual(["a", "b"])
     expect(headers.map((h) => [h.id, h.type, h.name, h.at])).toEqual([["h1", "phase", "Warm-up", 0], ["h2", "phase", "Main service", 1], ["h3", "group", "Word", 1]])
     expect(headers[1]).toMatchObject({ rule: "manual", role: "main", starts_at: "10:00" })
+    expect(headers[0].advance_seconds).toBe(12)
     const back = toItemInputs(items, undefined, undefined, headers)
     expect(back.map((i) => [i.id, i.kind])).toEqual([["h1", "phase"], ["a", "verse"], ["h2", "phase"], ["h3", "group"], ["b", "verse"]])
     // A key from a newer build is kept.
-    expect(JSON.parse(back[0].payload!)).toEqual({ later: 1, rule: "auto_once", role: "warmup" })
+    expect(JSON.parse(back[0].payload!)).toEqual({ later: 1, rule: "auto_once", role: "warmup", advance_seconds: 12 })
   })
 
   it("a plain service has no headers and saves as before", () => {
