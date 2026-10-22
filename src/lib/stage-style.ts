@@ -8,6 +8,7 @@ export const DEFAULT_STAGE_STYLE: StageStyle = {
   showNext: true,
   showNote: true,
   showBand: true,
+  showFinish: true,
 }
 
 const hex = (v: unknown, fallback: string) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback)
@@ -26,6 +27,7 @@ export function normalizeStageStyle(raw: Partial<StageStyle> | null | undefined)
     showNext: flag(r.showNext, d.showNext),
     showNote: flag(r.showNote, d.showNote),
     showBand: flag(r.showBand, d.showBand),
+    showFinish: flag(r.showFinish, d.showFinish),
   }
 }
 
@@ -36,6 +38,7 @@ export function applyStageStyle(stage: StagePayload, style: StageStyle): StagePa
     timer: style.showTimer ? stage.timer : null,
     note: style.showNote ? stage.note : null,
     band: style.showBand ? stage.band : null,
+    finish: style.showFinish ? stage.finish ?? null : null,
     style,
   }
 }

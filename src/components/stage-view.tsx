@@ -1,5 +1,6 @@
 import type { StagePayload } from "@/types"
 import { stageFontVh } from "@/lib/stage"
+import { stageFinishText } from "@/lib/stage-finish-text"
 
 /**
  * Stage display: plain DOM, high contrast, no theme. What the team needs at
@@ -14,6 +15,7 @@ export function StageView({ stage }: { stage: StagePayload }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: "3.2vh", color: "#9aa0a6" }}>
         <span>{stage.current?.title ?? "Nothing live"}</span>
         {stage.band && <span style={{ color: "#9be37a", fontWeight: 700 }}>{stage.band}</span>}
+        {stage.finish && <span style={{ color: stage.finish.lateMin > 0 ? "#ffc547" : "#9aa0a6", marginLeft: "auto", marginRight: "2vw", fontVariantNumeric: "tabular-nums" }}>{stageFinishText(stage.finish)}</span>}
         {stage.timer && <span style={{ color: timerColor, fontVariantNumeric: "tabular-nums", fontSize: "5vh", fontWeight: 700 }}>{stage.timer.label}{stage.timer.tone === "over" ? " OVER" : ""}</span>}
       </div>
       {stage.message && (

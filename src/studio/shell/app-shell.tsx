@@ -30,6 +30,7 @@ import { TopBar } from "@/studio/shell/top-bar"
 import { GlobalSearch } from "@/studio/shell/global-search"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
+import "@/stores/stage-finish"
 import "@/lib/app-tick"
 
 /** What the top bar calls each page. */
