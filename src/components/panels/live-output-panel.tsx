@@ -76,11 +76,18 @@ export function LiveOutputPanel() {
       <div
         className={cn(
           "flex min-h-0 flex-1 items-center justify-center p-3 transition-opacity [container-type:size]",
-          !isLive && "opacity-40"
+          !isLive && liveVerse && "opacity-40"
         )}
       >
-        <div style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
+        <div className="relative" style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
           <CanvasVerse theme={activeTheme} verse={verseData} />
+          {/* The approved design's empty Program: says so in words rather than a blank screen. */}
+          {!isLive && !liveVerse && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-md bg-[#16262b] text-center">
+              <p className="text-lg font-semibold tracking-[-0.02em] text-[#d6e2df]">Nothing on air</p>
+              <p className="text-xs text-[#9fb2b0]">Select an item, then take it live.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

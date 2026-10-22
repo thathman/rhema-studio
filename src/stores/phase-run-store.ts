@@ -3,6 +3,7 @@ import { presentQueueItem } from "@/lib/remote-actions"
 import { clockMinutes, dwellSeconds, nextInPhase, phaseRange, planTimeline } from "@/lib/run-of-show"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useHold } from "@/stores/hold-store"
 
 /**
  * A loop or run-once phase running by itself in Present (issue #193). Nothing runs until the
@@ -36,12 +37,18 @@ function later(ms: number, fn: () => void) {
   if (timer) clearTimeout(timer)
   const step = { at: Date.now() + Math.max(0, ms), fn }
   pending = step
-  timer = setTimeout(() => { timer = null; if (pending === step) pending = null; fn() }, Math.max(0, ms))
+  timer = setTimeout(() => {
+    timer = null
+    // On hold: the step waits (still pending) and runs at Resume.
+    if (useHold.getState().hold) return
+    if (pending === step) pending = null
+    fn()
+  }, Math.max(0, ms))
 }
 
 /** On the app's tick: run a step whose timer is late (held back while the window is hidden). */
 export function catchUpPhaseRun(now = Date.now()) {
-  if (!pending || now < pending.at) return
+  if (!pending || now < pending.at || useHold.getState().hold) return
   const { fn } = pending
   pending = null
   if (timer) clearTimeout(timer)
@@ -113,3 +120,6 @@ useBroadcastStore.subscribe((s, prev) => {
   if (!run?.itemId || presenting) return
   if ((prev.isLive && !s.isLive) || s.liveItemId !== run.itemId) usePhaseRun.getState().stop()
 })
+
+// Resume after a hold: a step that came due meanwhile runs now.
+useHold.subscribe((s, prev) => { if (prev.hold && !s.hold) catchUpPhaseRun() })

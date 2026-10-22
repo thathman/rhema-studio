@@ -4,6 +4,7 @@ import { phaseAt } from "@/lib/run-of-show"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { usePhaseRun } from "@/stores/phase-run-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useHold } from "@/stores/hold-store"
 
 /**
  * Timed moves in the service (issue #193): an item marked to move on by itself goes to the next
@@ -45,6 +46,8 @@ function reconsider() {
   if (!next) return
   const go = () => {
     timer = null
+    // On hold: the move waits and is made at Resume.
+    if (useHold.getState().hold) return
     move = null
     useTimedAdvance.setState({ dueAt: null })
     const b = useBroadcastStore.getState()
@@ -57,7 +60,7 @@ function reconsider() {
 /** On the app's tick: make a move whose timer is late (held back while the window is hidden). */
 export function catchUpTimedAdvance(now = Date.now()) {
   const due = useTimedAdvance.getState().dueAt
-  if (!move || due === null || now < due) return
+  if (!move || due === null || now < due || useHold.getState().hold) return
   if (timer) clearTimeout(timer)
   move()
 }
@@ -78,3 +81,6 @@ useBroadcastStore.subscribe((s, prev) => {
 usePhaseRun.subscribe((s, prev) => {
   if (!!s.run !== !!prev.run) reconsider()
 })
+
+// Resume after a hold: a move that came due meanwhile is made now.
+useHold.subscribe((s, prev) => { if (prev.hold && !s.hold) catchUpTimedAdvance() })
