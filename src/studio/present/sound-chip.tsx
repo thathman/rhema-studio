@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useMediaStore } from "@/stores/media-store"
 import { FADE_MS, useSoundStore } from "@/stores/sound-store"
+import { soundType } from "@/lib/sound-type"
 import { cn } from "@/lib/utils"
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`
@@ -110,6 +111,7 @@ export function SoundChip() {
             {sounds.map((a) => (
               <li key={a.id} className="flex items-center gap-2 py-1">
                 <span className={cn("min-w-0 flex-1 truncate", sound.assetId === a.id && "font-medium text-primary")} title={a.name}>{a.name}{sound.assetId === a.id && <span className="ml-1 text-[0.625rem] font-semibold uppercase">playing</span>}</span>
+                {soundType(a.mime) && <span className="shrink-0 rounded border border-border px-1 text-[0.625rem] text-muted-foreground">{soundType(a.mime)}</span>}
                 {!a.present && <span className="text-destructive">missing</span>}
                 <Button size="xs" variant="outline" disabled={!a.present} onClick={() => void sound.play({ id: a.id, name: a.name })}><PlayIcon /> Play</Button>
               </li>
