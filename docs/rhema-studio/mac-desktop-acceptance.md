@@ -203,6 +203,14 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10br.5 (Àánú among the A's) | V: more than 50 songs; "Àánú" listed first among the A's (before "Amazing Grace") |
 | 10cf.1 (arrows in the Bible box) | V: Production view, a song on air: "John 3" typed in the Bible quick box, arrows pressed: the screen did not change |
 | 10bt.3 (phone status: rehearsal, approval) | F → V: with the window hidden the phone status lagged (approval question not reported, nothing on air) because it was pushed by a timer the hidden window slows; #181 pushes it on change: rehearsal, the approval question, on air and Clear reached `GET /api/v1/status` within a second. A QR slide on air had an empty name: #182 names it by its rundown item |
+| 10cd.5 (Designer while live) | V: the main output's theme edited (verse colour) with a verse on air: the frame used it at once, kept it through the next verse (no flipping), took a second edit; closed without saving: the saved colour returned |
+| 10bt.1 (remote restart), local part | V: HTTP local only on 9090: running again on 9090 after a restart, "other devices" still off. (The network part opens a port and raises the macOS firewall prompt on the owner's screen: not run unattended) |
+| 10p.1 (approve) | V: "Approved" (disabled); Home "Service approved as saved" |
+| 10p.2 (changed after approval) | V: "Approve again"; Home "Service changed since it was approved"; History has the approved version |
+| 10p.3 (history keeps the approved version) | V: 55 more saves: 51 versions kept, the approved one among them |
+| 10p.4 (approve with a missing file) | V: "Not approved · A media file is missing from the media folder: qa-pic3. Fix that first, or remove the item." |
+| 10bh.2, 10bh.4 (approval gate) | V: unapproved service: the first item was held with the question; three Next presses did not move the rundown; Present anyway put it live; after an edit and save, Next was not held |
+| 10aq.1, 10aq.2 (unsaved on close) | V: an unsaved addition: Keep working kept it; Save and close saved it; after a restart it was in the service |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)

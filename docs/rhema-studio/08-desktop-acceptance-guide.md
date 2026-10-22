@@ -295,10 +295,10 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10p.1 | Save a service, press Approve. Home. | Approve shows "Approved" (disabled); Home readiness: "Service approved as saved". | Unverified |
-| 10p.2 | Change an item, save. Home, then History. | Prepare: "Approve again"; Home: "Service changed since it was approved" (warn); History lists the approved version with "· approved". | Unverified |
-| 10p.3 | Save 55 more times (or script it), then open History. | The approved version is still listed; the oldest unapproved ones are gone. | Unverified |
-| 10p.4 | Add a picture item, delete its file from the media folder on disk, press Approve. | "Not approved … missing from the media folder: <name>"; the service stays unapproved until the file is back or the item removed. | Unverified |
+| 10p.1 | Save a service, press Approve. Home. | Approve shows "Approved" (disabled); Home readiness: "Service approved as saved". | Verified on the Intel Mac |
+| 10p.2 | Change an item, save. Home, then History. | Prepare: "Approve again"; Home: "Service changed since it was approved" (warn); History lists the approved version with "· approved". | Verified on the Intel Mac |
+| 10p.3 | Save 55 more times (or script it), then open History. | The approved version is still listed; the oldest unapproved ones are gone. | Verified on the Intel Mac |
+| 10p.4 | Add a picture item, delete its file from the media folder on disk, press Approve. | "Not approved … missing from the media folder: <name>"; the service stays unapproved until the file is back or the item removed. | Verified on the Intel Mac |
 
 ### 10q. Operator name on audit rows (CL-001)
 
@@ -484,8 +484,8 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10aq.1 | Open a saved service, add an item (do not save), close the Rhema window. | "Save changes before closing?" with Keep working, Close without saving, Save and close. Keep working leaves everything as it was; closing again asks again. | Unverified |
-| 10aq.2 | Close again and choose Save and close; reopen Rhema and the service. | The added item is there. | Unverified |
+| 10aq.1 | Open a saved service, add an item (do not save), close the Rhema window. | "Save changes before closing?" with Keep working, Close without saving, Save and close. Keep working leaves everything as it was; closing again asks again. | Verified on the Intel Mac |
+| 10aq.2 | Close again and choose Save and close; reopen Rhema and the service. | The added item is there. | Verified on the Intel Mac |
 | 10aq.3 | With unsaved changes, close the window, and while the question shows, close it again (or the page has frozen). | The second close quits without asking (never trapped). | Unverified |
 | 10aq.4 | With a projector output and an NDI-only output on, close the Rhema window (nothing unsaved). Then start Rhema again. | Every output window closes and Rhema exits (nothing left in Task Manager / Activity Monitor); the new start opens normally. | Unverified |
 | 10aq.5 | macOS: with unsaved changes press Cmd+Q (and separately choose Rhema → Quit Rhema). | The same "Save changes before closing?" question as closing the window. Quitting from the Dock icon still quits without asking (known issue). | Unverified (the menu item is installed: startup log line seen on a Mac debug build 2026-10-21; the keystroke was not sent) |
@@ -617,8 +617,8 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bh.1 | More → tick "Ask before showing an unapproved service". Open a service that is not approved; Show live (also try the on-air switch and a Stream Deck/OSC go-live). | "This service is not approved" appears; nothing reaches the screen. Not now leaves the output as it was. | Unverified |
-| 10bh.2 | Show live again → Present anyway. Then edit an item, save, and press Next. | The held item goes live at once. Next after the edit is never held. | Unverified |
-| 10bh.4 | Gate on, unapproved service: Start the service (Welcome), then Next; press the clicker three times while the question shows, then Present anyway. | The question appears at the first item, the rundown does not move while it shows, and the first item (not the third) goes live. Later Clear then Next is never held. | Unverified |
+| 10bh.2 | Show live again → Present anyway. Then edit an item, save, and press Next. | The held item goes live at once. Next after the edit is never held. | Verified on the Intel Mac |
+| 10bh.4 | Gate on, unapproved service: Start the service (Welcome), then Next; press the clicker three times while the question shows, then Present anyway. | The question appears at the first item, the rundown does not move while it shows, and the first item (not the third) goes live. Later Clear then Next is never held. | Verified on the Intel Mac |
 | 10bh.5 | Gate on, unapproved service in rehearsal with a song slide up: turn rehearsal off. | The question appears and the congregation screens stay as they were until Present anyway. | Unverified |
 | 10bh.3 | Approve the service, restart, Show live. Turn rehearsal on with another unapproved service; Show live; use Black. | No question for the approved service, in rehearsal, or for quick screens. | Unverified |
 
@@ -824,7 +824,7 @@ report), but launching it cannot.
 | 10cd.2 | Three monitors: operator, projector, stage. Unplug the projector. | The warning names the projector output, not the stage one; reopening the stage output opens it on the stage screen. | Unverified |
 | 10cd.3 | Present a very long passage (several verses) in Classic Dark. | Text at the smallest size; never jumps back to full size and runs off. | Unverified |
 | 10cd.4 | Stage output on air; present a long verse or a three-verse passage. | The singers see every line from the first; smaller text for long lines. | Unverified |
-| 10cd.5 | Open the Designer on the main output's theme and change a colour; present the next verse; change the colour again. | The screen keeps showing the edited theme; no flipping. Close without saving: the saved theme returns. | Unverified |
+| 10cd.5 | Open the Designer on the main output's theme and change a colour; present the next verse; change the colour again. | The screen keeps showing the edited theme; no flipping. Close without saving: the saved theme returns. | Verified on the Intel Mac |
 | 10cd.6 | Main output set to stage; play a video with sound on another congregation output; edit that output's theme. | The sound continues. | Unverified |
 
 ### 10ce. Failures (fourteenth audit)
