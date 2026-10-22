@@ -7,13 +7,14 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import type { ItemTranslations } from "@/lib/translation-policy"
 import { applyBrandKit, type BrandKit } from "@/lib/brand-kit"
 import { buildStagePayload } from "@/lib/stage"
+import { applyStageStyle, DEFAULT_STAGE_STYLE, normalizeStageStyle } from "@/lib/stage-style"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useSongStore } from "@/stores/song-store"
@@ -96,6 +97,12 @@ interface BroadcastState {
   tickerItems: string[]
   /** How the ticker looks. Saved. */
   tickerStyle: TickerStyle
+  /** The stage display's design (Design → Stage). */
+  stageStyle: StageStyle
+  saveStageStyle: (style: StageStyle) => void
+  /** When the service is expected to end (kept by stage-finish.ts from the timing engine). */
+  stageFinish: StageFinish | null
+  setStageFinish: (finish: StageFinish | null) => void
   /** Saved sets of announcements. Saved. */
   tickerPresets: TickerPreset[]
   /** Save the words now in the ticker as a set (replacing one of the same name). */
@@ -416,6 +423,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   ticker: null,
   tickerItems: [],
   tickerStyle: DEFAULT_TICKER_STYLE,
+  stageStyle: DEFAULT_STAGE_STYLE,
+  stageFinish: null,
+  setStageFinish: (stageFinish) => {
+    set({ stageFinish })
+    for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
+  },
+  saveStageStyle: (stageStyle) => {
+    set({ stageStyle: normalizeStageStyle(stageStyle) })
+    get().syncBroadcastOutput()
+  },
   tickerPresets: [],
   saveTickerPreset: (name) => {
     const n = name.trim().slice(0, 60)
@@ -541,10 +558,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         theme: CLASSIC_DARK,
         verse: null,
         role: "stage",
-        stage: buildStagePayload({
+        stage: applyStageStyle({ ...buildStagePayload({
           isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }),
+        }), finish: s.stageFinish }, s.stageStyle),
       }).catch(() => {})
       return
     }
@@ -905,6 +922,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
       const ltStyles = (await store.get("lowerThirdStyles")) as LowerThirdStyle[] | undefined
       if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
       patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
+      patch.stageStyle = normalizeStageStyle((await store.get("stageStyle")) as Partial<StageStyle> | undefined)
       const items = await store.get("tickerItems")
       if (Array.isArray(items)) patch.tickerItems = items.filter((i): i is string => typeof i === "string")
       patch.tickerPresets = normalizePresets(await store.get("tickerPresets"))
@@ -920,6 +938,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.autoLive !== prevState.autoLive ||
           state.lowerThirdStyles !== prevState.lowerThirdStyles ||
           state.tickerStyle !== prevState.tickerStyle ||
+          state.stageStyle !== prevState.stageStyle ||
           state.tickerItems !== prevState.tickerItems ||
           state.tickerPresets !== prevState.tickerPresets
         if (!changed) return
@@ -972,6 +991,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("autoLiveOptIn", state.autoLive)
     await store.set("lowerThirdStyles", state.lowerThirdStyles)
     await store.set("tickerStyle", state.tickerStyle)
+    await store.set("stageStyle", state.stageStyle)
     await store.set("tickerItems", state.tickerItems)
     await store.set("tickerPresets", state.tickerPresets)
     await store.save()

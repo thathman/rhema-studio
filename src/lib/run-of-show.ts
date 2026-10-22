@@ -203,3 +203,10 @@ export function nextInPhase(rule: PhaseRule, start: number, end: number, current
   if (current + 1 < end) return current + 1
   return rule === "loop" ? start : null
 }
+
+/** The phase an item sits in: the last phase header at or above it (null outside any phase). */
+export function phaseAt(headers: OutlineHeader[], index: number): OutlineHeader | null {
+  let found: OutlineHeader | null = null
+  for (const h of sortHeaders(headers)) if (h.type === "phase" && h.at <= index) found = h
+  return found
+}

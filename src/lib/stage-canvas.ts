@@ -1,4 +1,5 @@
 import type { StagePayload } from "@/types"
+import { stageFinishText } from "@/lib/stage-finish-text"
 import { stageFontVh } from "@/lib/stage"
 
 /** Words wrapped to `maxW` (the stage view's lines, as the browser would wrap them). */
@@ -26,8 +27,9 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
   const vw = width / 100
   const padX = 4 * vw
   const font = (px: number, weight = 400) => `${weight} ${Math.round(px)}px system-ui, sans-serif`
+  const style = stage.style
   ctx.save()
-  ctx.fillStyle = "#000"
+  ctx.fillStyle = style?.background ?? "#000"
   ctx.fillRect(0, 0, width, height)
   ctx.textBaseline = "alphabetic"
 
@@ -37,11 +39,20 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
   ctx.fillStyle = "#9aa0a6"
   ctx.textAlign = "left"
   ctx.fillText(stage.current?.title ?? "Nothing live", padX, y, width * 0.45)
+  let right = width - padX
   if (stage.timer) {
     ctx.font = font(5 * vh, 700)
     ctx.fillStyle = stage.timer.tone === "over" ? "#ff5a5a" : stage.timer.tone === "warn" ? "#ffc547" : "#9be37a"
     ctx.textAlign = "right"
-    ctx.fillText(`${stage.timer.label}${stage.timer.tone === "over" ? " OVER" : ""}`, width - padX, y)
+    const label = `${stage.timer.label}${stage.timer.tone === "over" ? " OVER" : ""}`
+    ctx.fillText(label, right, y)
+    right -= ctx.measureText(label).width + 2 * vw
+  }
+  if (stage.finish) {
+    ctx.font = font(3.2 * vh)
+    ctx.fillStyle = stage.finish.lateMin > 0 ? "#ffc547" : "#9aa0a6"
+    ctx.textAlign = "right"
+    ctx.fillText(stageFinishText(stage.finish), right, y, width * 0.3)
   }
   if (stage.band) {
     ctx.font = font(3.2 * vh, 700)
@@ -77,7 +88,7 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
   if (stage.note) ctx.fillText(`Note: ${stage.note}`, padX, bottom, width * 0.55)
   ctx.textAlign = "right"
   ctx.fillStyle = "#9aa0a6"
-  ctx.fillText(stage.next ? `NEXT: ${stage.next}` : "End of service", width - padX, bottom, width * 0.4)
+  if (style?.showNext !== false) ctx.fillText(stage.next ? `NEXT: ${stage.next}` : "End of service", width - padX, bottom, width * 0.4)
 
   // The live words, centred in what is left (the first line stays visible if they overflow).
   const top = y
@@ -88,9 +99,9 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
     ctx.fillStyle = "#555"
     ctx.fillText("—", padX, top + room / 2)
   } else {
-    const px = stageFontVh(stage.current.lines) * vh
+    const px = stageFontVh(stage.current.lines) * (style?.wordsScale ?? 1) * vh
     ctx.font = font(px, 600)
-    ctx.fillStyle = "#fff"
+    ctx.fillStyle = style?.words ?? "#fff"
     const lines = stage.current.lines.flatMap((l) => wrap(ctx, l, width - padX * 2))
     const lh = px * 1.25
     const blockH = lines.length * lh

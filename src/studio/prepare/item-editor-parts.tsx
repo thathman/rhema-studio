@@ -11,7 +11,8 @@ import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
 
-import { isImageItem, isSlideItem, isSongItem, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
+import { GO_LIVE_CUES, isImageItem, isSlideItem, isSongItem, type GoLiveCue, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
+import { CUE_ACTIONS } from "@/lib/cues"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSoundStore } from "@/stores/sound-store"
 
@@ -302,3 +303,69 @@ export function SongItemControls({ item }: { item: SongQueueItem }) {
  * The slides of one song item. Loads the song when it is not cached. In
  * prepare mode each slide previews; in present mode double-click presents.
  */
+
+/**
+ * What happens as the item goes on air (issue #193): a message on the stage screen only and one
+ * cue that never changes what the congregation sees. Runs once per go-live, not in rehearsal.
+ */
+export function GoLiveCues({ item }: { item: QueueItem }) {
+  const on = item.on_live ?? {}
+  const set = (patch: Partial<NonNullable<QueueItem["on_live"]>>) =>
+    useQueueStore.getState().updateItem(item.id, (i) => {
+      // Kept as typed (cleaned when saved), so a space can be typed.
+      const next = { ...(i.on_live ?? {}), ...patch }
+      return { ...i, on_live: next.stage_message?.trim() || next.cue ? next : null }
+    })
+  const label = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
+  return (
+    <section className="mt-4 ml-7 flex flex-col gap-2 border-t border-border pt-3 pl-2 text-xs" aria-labelledby={`golive-${item.id}`}>
+      <h3 id={`golive-${item.id}`} className="text-sm font-semibold">When it goes live</h3>
+      <p className="text-muted-foreground">Runs once as this item goes on air for the congregation (not in rehearsal). Nothing here changes what the congregation sees.</p>
+      <label className="min-w-0">
+        <span className={label}>Stage message</span>
+        <Input
+          aria-label={`Stage message when ${item.reference} goes live`}
+          value={on.stage_message ?? ""}
+          placeholder="Shown on the stage screen only, e.g. Wrap up in 2 minutes"
+          maxLength={120}
+          className="h-7 text-xs"
+          onChange={(e) => set({ stage_message: e.target.value })}
+        />
+      </label>
+      <label className="min-w-0">
+        <span className={label}>Cue</span>
+        <select
+          aria-label={`Cue when ${item.reference} goes live`}
+          value={on.cue ?? ""}
+          onChange={(e) => set({ cue: (e.target.value || undefined) as GoLiveCue | undefined })}
+          className="h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs"
+        >
+          <option value="">None</option>
+          {GO_LIVE_CUES.map((c) => <option key={c} value={c}>{CUE_ACTIONS[c].label}</option>)}
+        </select>
+      </label>
+    </section>
+  )
+}
+
+/** Prepare: let this item move on by itself after its planned minutes (only while timed moves are on in Present). */
+export function TimedAdvance({ item }: { item: QueueItem }) {
+  const minutes = item.planned_minutes ?? 0
+  return (
+    <label className="mt-3 ml-7 flex items-start gap-2 pl-2 text-xs">
+      <input
+        type="checkbox"
+        className="mt-0.5 size-4"
+        checked={!!item.auto_advance}
+        disabled={!minutes && !item.auto_advance}
+        onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, auto_advance: e.target.checked || null }))}
+      />
+      <span>
+        <span className="font-medium">Move on by itself{minutes ? ` after ${minutes} min` : ""}</span>
+        <span className="block text-muted-foreground">
+          {minutes ? "Goes to the next item in its phase, only while Timed moves is on in Present. Anything you do to what is live cancels it." : "Give it planned minutes first."}
+        </span>
+      </span>
+    </label>
+  )
+}

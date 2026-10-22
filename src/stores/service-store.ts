@@ -16,7 +16,7 @@ import type {
   Translation,
   Verse,
 } from "@/types"
-import { isImageItem, isSlideItem, isVerseItem } from "@/types"
+import { GO_LIVE_CUES, isImageItem, isSlideItem, isVerseItem, type OnLive } from "@/types"
 import { safeLink } from "@/lib/qr-bulletin"
 import { cleanComments, parseComments } from "@/lib/comments"
 import { interleave, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
@@ -156,6 +156,8 @@ function itemInputs(
     ...(i.end_by && isClockTime(i.end_by) ? { end_by: i.end_by } : {}),
     ...(cleanName(i.prepared_by) ? { prepared_by: cleanName(i.prepared_by) } : {}),
     ...(cleanComments(i.comments).length ? { comments: cleanComments(i.comments) } : {}),
+    ...(cleanOnLive(i.on_live) ? { on_live: cleanOnLive(i.on_live) } : {}),
+    ...(i.auto_advance ? { auto_advance: true } : {}),
   })
   return items.map((i): ItemInput =>
     isImageItem(i)
@@ -233,7 +235,7 @@ export function cleanName(raw: string | null | undefined): string {
 }
 
 /** The payload keys this build reads and writes, per item kind; anything else is kept untouched (FR-03). */
-const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "prepared_by", "comments"]
+const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "prepared_by", "comments", "on_live", "auto_advance"]
 const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
@@ -256,6 +258,36 @@ export function parsePayloadExtra(raw: string | null | undefined, kind: string):
 }
 
 /** `prepared_by` from any item's payload (CL-007). */
+/** A go-live message and cue worth saving: one clean line, a known cue; null when neither. */
+export function cleanOnLive(on: OnLive | null | undefined): OnLive | null {
+  if (!on) return null
+  // eslint-disable-next-line no-control-regex
+  const message = Array.from((on.stage_message ?? "").replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim()).slice(0, 120).join("").trim()
+  const cue = on.cue && (GO_LIVE_CUES as readonly string[]).includes(on.cue) ? on.cue : undefined
+  return message || cue ? { ...(message ? { stage_message: message } : {}), ...(cue ? { cue } : {}) } : null
+}
+
+/** `auto_advance` from any item's payload: true or nothing. */
+export function parseAutoAdvance(raw: string | null | undefined): true | null {
+  if (!raw) return null
+  try {
+    return (JSON.parse(raw) as { auto_advance?: unknown }).auto_advance === true ? true : null
+  } catch {
+    return null
+  }
+}
+
+/** `on_live` from any item's payload. */
+export function parseOnLive(raw: string | null | undefined): OnLive | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as { on_live?: unknown }
+    return p.on_live && typeof p.on_live === "object" ? cleanOnLive(p.on_live as OnLive) : null
+  } catch {
+    return null
+  }
+}
+
 export function parsePreparedBy(raw: string | null | undefined): string | null {
   if (!raw) return null
   try {
@@ -382,7 +414,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "slide") {
@@ -391,7 +423,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
@@ -409,7 +441,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
       })
       continue
     }
@@ -440,7 +472,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
   return { items, headers, unsupported, missingTranslations: [...missing] }

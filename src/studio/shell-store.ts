@@ -2,7 +2,7 @@ import { create } from "zustand"
 
 export type Workspace = "home" | "prepare" | "present" | "library" | "design" | "team" | "archive" | "settings" | "more"
 /** The Design page's sections: every design edit lives there. */
-export type DesignTab = "themes" | "lower-thirds" | "ticker" | "brand" | "outputs"
+export type DesignTab = "themes" | "lower-thirds" | "ticker" | "stage" | "brand" | "outputs"
 export type PresentView = "standard" | "production"
 
 export interface ShellPrefs {

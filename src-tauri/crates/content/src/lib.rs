@@ -863,7 +863,26 @@ struct ExtrasPayload {
     /// Team comments on this item (CL-007).
     #[serde(default)]
     comments: Option<Vec<CommentPayload>>,
+    /// What happens when the item goes live (issue #193): a stage-only message, one non-visual cue.
+    #[serde(default)]
+    on_live: Option<OnLivePayload>,
+    /// Move on to the next item after the planned minutes, while timed moves are on in Present.
+    /// Only its type is checked here (a boolean), so it is never read.
+    #[serde(default)]
+    #[allow(dead_code)]
+    auto_advance: Option<bool>,
 }
+
+#[derive(Debug, Deserialize)]
+struct OnLivePayload {
+    #[serde(default)]
+    stage_message: Option<String>,
+    #[serde(default)]
+    cue: Option<String>,
+}
+
+/// Cues an item may run as it goes live: none of them changes what the congregation sees.
+const GO_LIVE_CUES: [&str; 4] = ["timer.start", "timer.fresh", "timer.pause", "stage.clearMessage"];
 
 #[derive(Debug, Deserialize)]
 struct CommentPayload {
@@ -900,6 +919,14 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     }
     if p.comments.as_ref().is_some_and(|cs| cs.len() > 100 || !cs.iter().all(valid_comment)) {
         return Err(ContentError::Invalid(format!("item {i}: comments must be at most 100, each 1-1000 characters with a short name")));
+    }
+    if let Some(on) = &p.on_live {
+        if on.stage_message.as_deref().is_some_and(|m| m.chars().count() > 120 || m.chars().any(char::is_control)) {
+            return Err(ContentError::Invalid(format!("item {i}: a go-live stage message is one line of at most 120 characters")));
+        }
+        if on.cue.as_deref().is_some_and(|c| !GO_LIVE_CUES.contains(&c)) {
+            return Err(ContentError::Invalid(format!("item {i}: a go-live cue may only start, pause or reset the timer or clear the stage message")));
+        }
     }
     Ok(())
 }
@@ -1214,6 +1241,22 @@ mod tests {
             assert_eq!(validate_items(&[item]).is_ok(), ok, "{end_by}");
         }
         assert!(db.replace_items(&p.id, 2, &[timed]).is_ok());
+    }
+
+    #[test]
+    fn a_go_live_cue_never_changes_the_screen() {
+        let with = |payload: &str| ItemInput { payload: Some(payload.into()), ..verse("John 3:16", 43, 3, 16) };
+        for (payload, ok) in [
+            (r#"{"on_live":{"stage_message":"Wrap up in 2 minutes","cue":"timer.fresh"}}"#, true),
+            (r#"{"on_live":{"cue":"stage.clearMessage"}}"#, true),
+            (r#"{"auto_advance":true,"planned_minutes":3}"#, true),
+            (r#"{"auto_advance":"yes"}"#, false),
+            (r#"{"on_live":{"cue":"quick.black"}}"#, false),
+            (r#"{"on_live":{"cue":"next"}}"#, false),
+            (r#"{"on_live":{"stage_message":"two\nlines"}}"#, false),
+        ] {
+            assert_eq!(validate_items(&[with(payload)]).is_ok(), ok, "{payload}");
+        }
     }
 
     #[test]

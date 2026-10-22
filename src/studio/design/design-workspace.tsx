@@ -9,6 +9,7 @@ import { DesignCanvas } from "@/components/broadcast/design-canvas"
 import { PropertiesPanel } from "@/components/broadcast/properties-panel"
 import { LowerThirdDesigner } from "@/studio/design/lower-third-designer"
 import { TickerDesigner } from "@/studio/design/ticker-designer"
+import { StageDesigner } from "@/studio/design/stage-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import { CONTENT_NAMES } from "@/lib/content-names"
@@ -19,6 +20,7 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
   ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
   ["ticker", "News ticker", "The crawl along the screen"],
+  ["stage", "Stage", "What the team on the platform sees"],
   ["brand", "Brand kit", "Logo, colours and fonts once"],
   ["outputs", "Output looks", "Which theme each screen uses"],
 ]
@@ -45,7 +47,7 @@ export function DesignWorkspace() {
         <div className="min-w-0">
           <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">The creative workspace</p>
           <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Design once. Beautiful everywhere.</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker and your brand.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker, the stage display and your brand.</p>
         </div>
         {tab === "themes" && (
           <div className="flex gap-2">
@@ -83,6 +85,7 @@ export function DesignWorkspace() {
           <div className="h-full overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-panel">
             {tab === "lower-thirds" && <LowerThirdDesigner />}
             {tab === "ticker" && <TickerDesigner />}
+            {tab === "stage" && <StageDesigner />}
             {tab === "brand" && <BrandDesigner />}
             {tab === "outputs" && <OutputLooks />}
           </div>

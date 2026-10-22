@@ -5,8 +5,8 @@ export type {
   TranscriptEventPayload,
 } from "./transcript"
 export type { Translation, Book, Verse, CrossReference } from "./bible"
-export type { QueueItem, VerseQueueItem, SongQueueItem, SongQueueRef, SlideQueueItem, CustomSlide, ImageQueueItem, ImageQueueRef, ItemComment } from "./queue"
-export { isVerseItem, isSongItem, isSlideItem, isImageItem } from "./queue"
+export type { QueueItem, VerseQueueItem, SongQueueItem, SongQueueRef, SlideQueueItem, CustomSlide, ImageQueueItem, ImageQueueRef, ItemComment, OnLive, GoLiveCue } from "./queue"
+export { isVerseItem, isSongItem, isSlideItem, isImageItem, GO_LIVE_CUES } from "./queue"
 export type { DetectionResult, DetectionStatus, ReadingAdvance, SemanticSearchResult } from "./detection"
 export type { BroadcastTheme, VerseRenderData, VerseSegment, RenderOptions, ThemeLogo } from "./broadcast"
 export type {
@@ -22,6 +22,8 @@ export type {
   SignageSchedule,
   SignagePlaylist,
   StagePayload,
+  StageStyle,
+  StageFinish,
   BroadcastOutputNdiSettings,
   BroadcastOutputStatus,
   BroadcastOutputType,

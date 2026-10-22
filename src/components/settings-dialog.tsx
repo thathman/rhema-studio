@@ -1137,7 +1137,7 @@ export function SettingsPage() {
                     type="button"
                     aria-current={id === activeSection ? "page" : undefined}
                     onClick={() => setActiveSection(id)}
-                    className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                   >
                     {item.icon}
                     <span className="truncate">{item.name}</span>
@@ -1147,7 +1147,7 @@ export function SettingsPage() {
             </div>
           ))}
         </nav>
-        <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-[17px] border border-border bg-card shadow-panel">
+        <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-panel">
           <h2 className="shrink-0 border-b border-border px-5 py-3.5 text-base font-bold tracking-[-0.03em]">{sectionTitles[activeSection]}</h2>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
             <ActiveContent />

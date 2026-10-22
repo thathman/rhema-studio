@@ -41,8 +41,15 @@ export function actualByItem(entries: JournalEntry[], nowMono: number): Map<stri
   return out
 }
 
+/** When each rundown item first went on air (wall clock ms), for the run of show's actual times. */
+export function firstOnAir(entries: JournalEntry[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const e of entries) if ((e.kind === "live" || e.kind === "restore") && e.itemId && !out.has(e.itemId)) out.set(e.itemId, e.at)
+  return out
+}
+
 const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-const mmss = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`
+export const mmss = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}`
 
 /** A plain-text log a person can read or paste into a report. */
 /** The service as planned, in order, for the planned-versus-actual section (FR-09). */

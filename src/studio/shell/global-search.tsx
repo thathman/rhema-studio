@@ -19,6 +19,7 @@ const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["themes", "Themes", "bible songs hymns slides pictures fonts colours background"],
   ["lower-thirds", "Lower thirds", "name title scripture strip lyrics strip band"],
   ["ticker", "News ticker", "crawl announcements scrolling"],
+  ["stage", "Stage display", "confidence monitor platform team timer next note band"],
   ["brand", "Brand kit", "logo colours fonts church"],
   ["outputs", "Output looks", "which theme each screen output"],
 ]

@@ -273,6 +273,48 @@ The owner's rig: the K3 monitor as the congregation screen, an NDI viewer as the
 | Signage "In a window" | A 960×540 point window centred on the laptop screen, playing the loop. |
 | Lower third styles | Centred band, accent, capitals, picture behind (shaded), slide-up entrance; it stays above the ticker. |
 
+## Run of show on the Intel Mac (2026-10-22 evening, issue #193)
+
+QA build of `main` at `e1f3759` (#219-#222) with the QA bridge, isolated home,
+main window hidden behind other windows (`document.visibilityState = hidden`),
+as when the operator works in OBS on the same Mac. A sample service: pre-service
+loop (2 slides, 5 s each), warm-up (one countdown item, planned 6 s, start an
+hour ago so it was due), main service (opening prayer marked "move on by itself"
+with a go-live stage message and "start the timer from zero", then a sermon),
+post-service loop.
+
+| Step | Result |
+| --- | --- |
+| Pre-service loop, started from its ▷ | pre1, pre2, pre1, pre2 at 5 s steps: pass |
+| Warm-up "Run once" | showed its item, stopped after its planned time, stayed on it (no move into the service): pass |
+| Opening prayer live with Timed moves on | stage message "Wrap up in 2 minutes" at once; moved to the sermon on time: pass |
+| Sermon (not marked) | stayed: pass |
+| Clear, then the post-service loop | off air, then its item on air by the deliberate start: pass |
+| Prepare timing | "Began at 19:38, 1 h 1 min late"; each item's on-air time against its plan: pass |
+
+**Found and fixed:** with the main window hidden, the first run stalled after the
+loop's second slide: WebKit suspends timers in a hidden window, and only the
+output windows had background throttling off. The main window now has it off too
+(`backgroundThrottling: "disabled"`, macOS; the rerun above passed hidden). Also
+fixed: the Timed moves countdown first showed the time since the switch appeared
+("Next in 0:54" for a 6 s move); it now counts from when the move is set.
+**Not covered:** Windows and Linux do not support that setting; loops and timed
+moves there need a tick from Rust (as NDI pacing has) before Windows acceptance.
+
+## Stage display design over NDI (2026-10-22 night, DS-004 #226)
+
+QA build of `main` at `785ea27`, isolated home, the stage output as NDI
+("Rhema Stage"), read with an NDI receiver (`ndirecv`, the last frame's
+top-left pixel).
+
+| Step | Result |
+| --- | --- |
+| Design → Stage: background #102030, words #ffd166, "what is next" off | NDI frame background `#0f1f2d` (NDI's colour conversion of #102030): pass |
+| Back to the built-in look | NDI frame background `#000000` at once: pass |
+
+The stage sends a frame only when something changes (2-3 frames in 4-5 s
+with no timer running), as designed.
+
 ## Fixed on this branch
 
 1. **Intel macOS build failed.** Tauri passes `bundle.macOS.minimumSystemVersion`
