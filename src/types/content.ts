@@ -20,7 +20,7 @@ export interface Program {
 }
 
 /** Kinds this build can show in the rundown. Anything else is preserved, not edited. */
-export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide", "image"] as const
+export const SUPPORTED_ITEM_KINDS = ["verse", "song", "slide", "image", "phase", "group"] as const
 export type ProgramItemKind = (typeof SUPPORTED_ITEM_KINDS)[number]
 
 export interface ProgramItem {

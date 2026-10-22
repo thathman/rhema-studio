@@ -19,6 +19,7 @@ import type {
 import { isImageItem, isSlideItem, isVerseItem } from "@/types"
 import { safeLink } from "@/lib/qr-bulletin"
 import { cleanComments, parseComments } from "@/lib/comments"
+import { interleave, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
@@ -113,7 +114,39 @@ export function slideLabel(slide: { title: string; body: string; link?: string }
 export function toItemInputs(
   items: QueueItem[],
   translationOf: (id: number) => string | null = () => null,
-  active: ActiveTranslations = { primary: null, secondary: null }
+  active: ActiveTranslations = { primary: null, secondary: null },
+  headers: OutlineHeader[] = [],
+): ItemInput[] {
+  const inputs = itemInputs(items, translationOf, active)
+  if (headers.length === 0) return inputs
+  // Phases and groups go between the items, where they sit.
+  return interleave(inputs, headers).map((r) => ("header" in r ? headerInput(r.header) : r.item))
+}
+
+/** A phase or group as its saved row: the name is the reference; how a phase runs is in the payload. */
+function headerInput(h: OutlineHeader): ItemInput {
+  const payload = {
+    ...(h.payload_extra ?? {}),
+    ...(h.type === "phase" ? { ...(h.rule ? { rule: h.rule } : {}), ...(h.role ? { role: h.role } : {}), ...(h.starts_at && isClockTime(h.starts_at) ? { starts_at: h.starts_at } : {}) } : {}),
+  }
+  return {
+    id: h.id,
+    kind: h.type,
+    reference: h.name.trim() || (h.type === "phase" ? "Phase" : "Group"),
+    book_number: null,
+    chapter: null,
+    verse: null,
+    translation: null,
+    secondary_translation: null,
+    notes: h.notes ?? null,
+    ...(Object.keys(payload).length ? { payload: JSON.stringify(payload) } : {}),
+  }
+}
+
+function itemInputs(
+  items: QueueItem[],
+  translationOf: (id: number) => string | null,
+  active: ActiveTranslations,
 ): ItemInput[] {
   const bg = (i: QueueItem) => ({
     // Fields from a newer version or a service file that this build does not edit: kept as they were.
@@ -332,11 +365,16 @@ export function toQueueItems(
   data: ProgramWithItems,
   translationId: number,
   translations: Translation[] = []
-): { items: QueueItem[]; unsupported: ProgramItem[]; missingTranslations: string[] } {
+): { items: QueueItem[]; headers: OutlineHeader[]; unsupported: ProgramItem[]; missingTranslations: string[] } {
   const items: QueueItem[] = []
+  const headers: OutlineHeader[] = []
   const unsupported: ProgramItem[] = []
   const missing = new Set<string>()
   for (const it of data.items) {
+    if (it.kind === "phase" || it.kind === "group") {
+      headers.push(parseHeader(it, items.length))
+      continue
+    }
     if (it.kind === "image") {
       const image = parseImagePayload(it.payload)
       if (!image) {
@@ -404,15 +442,41 @@ export function toQueueItems(
       background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
-  return { items, unsupported, missingTranslations: [...missing] }
+  return { items, headers, unsupported, missingTranslations: [...missing] }
+}
+
+const RULES: readonly PhaseRule[] = ["loop", "auto_once", "manual"]
+const ROLES: readonly PhaseRole[] = ["pre", "warmup", "main", "post", "custom"]
+
+/** A saved phase or group row, before the item at `at`; keys this build does not edit are kept. */
+function parseHeader(it: ProgramItem, at: number): OutlineHeader {
+  let p: Record<string, unknown> = {}
+  try {
+    const v: unknown = it.payload ? JSON.parse(it.payload) : {}
+    if (v && typeof v === "object" && !Array.isArray(v)) p = v as Record<string, unknown>
+  } catch {
+    // An unreadable payload: the header keeps its name and place.
+  }
+  const { rule, role, starts_at, ...rest } = p
+  return {
+    id: it.id,
+    type: it.kind === "phase" ? "phase" : "group",
+    name: it.reference,
+    at,
+    notes: it.notes,
+    ...(it.kind === "phase" && RULES.includes(rule as PhaseRule) ? { rule: rule as PhaseRule } : {}),
+    ...(it.kind === "phase" && ROLES.includes(role as PhaseRole) ? { role: role as PhaseRole } : {}),
+    ...(it.kind === "phase" && typeof starts_at === "string" && isClockTime(starts_at) ? { starts_at } : {}),
+    ...(Object.keys(rest).length ? { payload_extra: rest } : {}),
+  }
 }
 
 /**
  * What a save persists (exactly the items a save writes), so every saved
  * field counts as a change; verse text and timestamps are not part of it.
  */
-export function rundownSignature(items: QueueItem[]): string {
-  return JSON.stringify(toItemInputs(items))
+export function rundownSignature(items: QueueItem[], headers: OutlineHeader[] = []): string {
+  return JSON.stringify(toItemInputs(items, undefined, undefined, headers))
 }
 
 function remember(id: string | null) {
@@ -490,6 +554,8 @@ function renewItemIds(h: Awaited<ReturnType<typeof idHolders>>): void {
   const reSlide = <T extends { itemId: string }>(s: T | null): T | null => (s ? { ...s, itemId: re(s.itemId) ?? s.itemId } : null)
   useQueueStore.setState((q) => ({
     items: q.items.map((i) => ({ ...i, id: ids.get(i.id) ?? i.id })),
+    // Phases and groups are rows too: a copy gets its own.
+    headers: q.headers.map((h) => ({ ...h, id: crypto.randomUUID() })),
     highlightedId: re(q.highlightedId),
     removedActive: q.removedActive ? { prevId: re(q.removedActive.prevId), nextId: re(q.removedActive.nextId) } : null,
   }))
@@ -659,16 +725,17 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       return "failed"
     }
     const bible = useBibleStore.getState()
-    const { items, unsupported } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+    const { items, headers, unsupported } = toQueueItems(data, bible.activeTranslationId, bible.translations)
     if (unsupported.length > 0) {
       set({ error: `The template has ${unsupported.length} item${unsupported.length === 1 ? "" : "s"} this version cannot copy. Open it in a newer Rhema Studio, or remove them there.` })
       return "failed"
     }
     const before = useQueueStore.getState().items
-    useQueueStore.setState({ items: items.map((i) => ({ ...i, id: crypto.randomUUID() })), activeIndex: null })
+    const headersBefore = useQueueStore.getState().headers
+    useQueueStore.setState({ items: items.map((i) => ({ ...i, id: crypto.randomUUID() })), headers: headers.map((h) => ({ ...h, id: crypto.randomUUID() })), activeIndex: null })
     const r = await get().createFromRundown(title, serviceDate, { discard: true })
     if (r === "failed") {
-      useQueueStore.setState({ items: before, activeIndex: null }) // nothing was created: the screen goes back as it was
+      useQueueStore.setState({ items: before, headers: headersBefore, activeIndex: null }) // nothing was created: the screen goes back as it was
       return r
     }
     // Reload the new service so verse text is filled in for Preview.
@@ -705,9 +772,9 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         return "missing"
       }
       const bible = useBibleStore.getState()
-      const { items, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
-      baseline = rundownSignature(items)
-      useQueueStore.setState({ items, activeIndex: null })
+      const { items, headers, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+      baseline = rundownSignature(items, headers)
+      useQueueStore.setState({ items, headers, activeIndex: null })
       set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported, missingTranslations })
       remember(data.program.id)
       // Fill in verse text so preview works before anything is presented.
@@ -758,13 +825,14 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       pins.set(i.id, pin)
       return { ...i, ...pin }
     })
-    const snapshot = rundownSignature(snapshotItems)
+    const snapshotHeaders = useQueueStore.getState().headers
+    const snapshot = rundownSignature(snapshotItems, snapshotHeaders)
     set({ saving: true, conflict: null })
     try {
       const data = await invoke<ProgramWithItems>("content_replace_items", {
         programId: current.id,
         expectedRevision: current.revision,
-        items: toItemInputs(snapshotItems, translationAbbrev, active),
+        items: toItemInputs(snapshotItems, translationAbbrev, active, snapshotHeaders),
       })
       if (generation !== saveGeneration) return "saved" // a newer save owns the state now
       if (get().current?.id !== current.id) return "saved" // discarded or another service opened meanwhile: do not link it back
@@ -781,7 +849,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       baseline = snapshot
       set((s) => ({
         current: data.program,
-        dirty: rundownSignature(useQueueStore.getState().items) !== snapshot,
+        dirty: rundownSignature(useQueueStore.getState().items, useQueueStore.getState().headers) !== snapshot,
         error: null,
         programs: s.programs.map((p) => (p.id === data.program.id ? data.program : p)),
       }))
@@ -837,7 +905,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 function recheckDirty() {
   const svc = useServiceStore.getState()
   if (!svc.current || svc.loading) return
-  const dirty = rundownSignature(useQueueStore.getState().items) !== baseline
+  const dirty = rundownSignature(useQueueStore.getState().items, useQueueStore.getState().headers) !== baseline
   if (dirty !== svc.dirty) useServiceStore.setState({ dirty })
 }
 useQueueStore.subscribe(recheckDirty)

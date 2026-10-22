@@ -37,7 +37,7 @@ export function ServiceHistory() {
     try {
       const revision = await invoke<Revision | null>("content_get_revision", { id: r.id })
       if (!revision) return
-      setPicked({ revision, diff: diffRevision(items, revision.items) })
+      setPicked({ revision, diff: diffRevision(items, revision.items, useQueueStore.getState().headers) })
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }

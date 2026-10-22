@@ -90,7 +90,7 @@ fn read_package(path: &Path) -> std::result::Result<(ServicePackage, PackagePayl
     }
     let raw = std::fs::read(path).map_err(|e| e.to_string())?;
     let pkg: ServicePackage = serde_json::from_slice(&raw).map_err(|_| "not a Rhema service file".to_string())?;
-    if pkg.version != crate::PACKAGE_VERSION {
+    if !(1..=crate::PACKAGE_VERSION).contains(&pkg.version) {
         return Err(format!("made by a different version (package v{})", pkg.version));
     }
     if crate::package_sha256(pkg.payload.as_bytes()) != pkg.sha256 {
@@ -171,7 +171,7 @@ fn read_entry(path: &Path, modified: i64) -> FolderEntry {
                     revision: p.revision,
                     approved_revision: p.approved_revision,
                     approved_by: p.approved_by,
-                    item_count: p.items.len(),
+                    item_count: p.items.iter().filter(|i| !crate::HEADER_KINDS.contains(&i.kind.trim())).count(),
                     ..base
                 },
                 Err(error) => FolderEntry { error: Some(error), ..base },

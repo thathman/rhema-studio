@@ -125,7 +125,8 @@ export async function exportServicePackageToFile(programId: string, title: strin
 
 function isServicePackage(x: unknown): x is ServicePackage {
   const p = x as ServicePackage
-  return typeof x === "object" && x !== null && p.version === 1 && typeof p.payload === "string" && typeof p.sha256 === "string"
+  // Any version: the backend says which it reads (1, and 2 for a service with phases).
+  return typeof x === "object" && x !== null && Number.isInteger(p.version) && p.version >= 1 && typeof p.payload === "string" && typeof p.sha256 === "string"
 }
 
 /** Open a package as a new service. The backend checks the checksum before writing anything. Null when cancelled. */

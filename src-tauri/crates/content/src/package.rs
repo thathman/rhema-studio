@@ -12,7 +12,14 @@ use sha2::{Digest, Sha256};
 use crate::{ContentDb, ContentError, ImportMode, ItemInput, MediaInput, ProgramWithItems, Result, SongExport, SongWithSections};
 use std::collections::HashSet;
 
-pub const PACKAGE_VERSION: u32 = 1;
+/// The newest service-file version this app reads (and writes when a service has phases or groups).
+/// Version 1 files (no headers) are still written for plain services so older apps can open them.
+pub const PACKAGE_VERSION: u32 = 2;
+
+/// The version a service file is written as: 2 only when it has phase or group headers.
+pub fn package_version_for(items: &[ItemInput]) -> u32 {
+    if items.iter().any(|i| crate::HEADER_KINDS.contains(&i.kind.trim())) { 2 } else { 1 }
+}
 
 /// The file on disk. `payload` is the JSON of [`PackagePayload`] as a string
 /// so the checksum is over exact bytes.
@@ -189,6 +196,7 @@ impl ContentDb {
                 width: a.width, height: a.height, duration_ms: a.duration_ms, data: B64.encode(bytes),
             });
         }
+        let version = package_version_for(&items);
         let payload = serde_json::to_string(&PackagePayload {
             title: p.program.title,
             service_date: p.program.service_date,
@@ -202,7 +210,7 @@ impl ContentDb {
         })
             .map_err(|e| ContentError::Invalid(e.to_string()))?;
         let sha256 = sha256_hex(payload.as_bytes());
-        Ok(ServicePackage { version: PACKAGE_VERSION, payload, sha256 })
+        Ok(ServicePackage { version, payload, sha256 })
     }
 
     /// Creates a new service from a package. Songs already here (same id)
@@ -235,8 +243,8 @@ impl ContentDb {
     }
 
     pub fn import_service_package(&self, pkg: &ServicePackage, media_dir: &Path) -> Result<PackageReport> {
-        if pkg.version != PACKAGE_VERSION {
-            return Err(ContentError::Invalid(format!("this file is a version {} package; this app reads version {PACKAGE_VERSION}", pkg.version)));
+        if !(1..=PACKAGE_VERSION).contains(&pkg.version) {
+            return Err(ContentError::Invalid(format!("this file is a version {} package; this app reads versions 1 to {PACKAGE_VERSION}", pkg.version)));
         }
         if sha256_hex(pkg.payload.as_bytes()) != pkg.sha256 {
             return Err(ContentError::Invalid("the file is damaged (checksum does not match)".into()));
@@ -427,7 +435,7 @@ mod tests {
         let good = db.export_service_package(&p.id, &media).unwrap();
         let tampered = ServicePackage { payload: good.payload.replace("Sunday", "Monday"), ..good.clone() };
         assert!(matches!(db.import_service_package(&tampered, &media), Err(ContentError::Invalid(m)) if m.contains("checksum")));
-        let future = ServicePackage { version: 2, ..good.clone() };
+        let future = ServicePackage { version: PACKAGE_VERSION + 1, ..good.clone() };
         assert!(matches!(db.import_service_package(&future, &media), Err(ContentError::Invalid(_))));
         assert_eq!(db.list_programs().unwrap().len(), 1);
         // A picture whose bytes do not match its hash is refused before anything is written.
@@ -438,6 +446,30 @@ mod tests {
         assert!(matches!(db.import_service_package(&bad_pic, &media), Err(ContentError::Invalid(m)) if m.contains("damaged")));
         assert_eq!(db.list_programs().unwrap().len(), 1);
         assert_eq!(db.list_media().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn a_service_with_phases_goes_as_version_2_and_comes_back_with_them() {
+        let home = ContentDb::open_in_memory().unwrap();
+        let media = temp_dir("phases");
+        let p = home.create_program("Sunday", None).unwrap();
+        let rows = vec![
+            ItemInput { kind: "phase".into(), reference: "Main service".into(), payload: Some(r#"{"rule":"manual","role":"main","starts_at":"10:00"}"#.into()), ..Default::default() },
+            ItemInput { kind: "group".into(), reference: "Word".into(), ..Default::default() },
+            ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), ..Default::default() },
+        ];
+        home.replace_items(&p.id, p.revision, &rows).unwrap();
+        let pkg = home.export_service_package(&p.id, &media).unwrap();
+        assert_eq!(pkg.version, 2);
+        let away = ContentDb::open_in_memory().unwrap();
+        let report = away.import_service_package(&pkg, &temp_dir("phases-away")).unwrap();
+        let opened = away.get_program(&report.program.program.id).unwrap().unwrap();
+        assert_eq!(opened.items.iter().map(|i| (i.kind.as_str(), i.reference.as_str())).collect::<Vec<_>>(), vec![("phase", "Main service"), ("group", "Word"), ("verse", "John 3:16")]);
+        assert_eq!(opened.program.item_count, 1);
+        // A plain service still goes as version 1, for older apps.
+        let plain = home.create_program("Plain", None).unwrap();
+        home.replace_items(&plain.id, plain.revision, &rows[2..]).unwrap();
+        assert_eq!(home.export_service_package(&plain.id, &media).unwrap().version, 1);
     }
 
     /// A file whose checksum is valid but whose content breaks the rules must change nothing at all.
