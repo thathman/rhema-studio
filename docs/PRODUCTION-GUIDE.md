@@ -2,7 +2,7 @@
 
 For the person running outputs, OBS and the stage screen. The volunteer guide (`docs/QUICK-START.md`) covers the Standard view; this page covers everything behind it.
 
-## Outputs (More → Outputs)
+## Outputs (Production → Screens → Open outputs, or Settings → Outputs)
 
 - Each output is a window on a monitor or an NDI sender, with its own theme and a role:
   - **Congregation**: the themed frame (verses, lyrics, slides, pictures, quick screens).
@@ -16,7 +16,7 @@ For the person running outputs, OBS and the stage screen. The volunteer guide (`
 - **OBS connection (optional):** Settings → Remote control → "Connect to OBS" with OBS's address, port (4455) and WebSocket password (OBS → Tools → WebSocket Server Settings). The Present header then shows OBS's own recording state and time ("OBS ● REC 00:12:31" or "not recording"; never guessed). From its menu: start or stop recording (each asks twice), and mark "Sermon start", "Sermon end" or anything else: the mark goes into the service log with the recording time, and into the recording as a chapter on OBS 30.2+ recording to Hybrid MP4. If OBS is closed, Rhema retries every 15 seconds; nothing else depends on it.
 
 - Use a transparent theme (for example the Lower Thirds builtin) on an NDI output for keying. Pictures and quick screens key like verses; background pictures fill the frame, so use them only on the congregation output.
-- NDI frames come from the output window's canvas; a stage output does not send NDI.
+- NDI frames come from the output window's canvas. A stage output sends NDI too (the stage view is drawn on the canvas, #191), so an NDI viewer on the platform can be the stage display.
 - Health: Home → outputs line (for an NDI output it also says how many receivers are connected, so "nobody receiving yet" means OBS has not picked the source up), Present header "n/m outputs on". If NDI frames stop reaching the network, a warning names the output, readiness shows "not sending", and the app restarts the sender once a minute at most; after that turn the output off and on yourself.
 
 ## Remote control (Settings → Remote)
@@ -75,20 +75,20 @@ An item can also have an **end by** time (Prepare, beside its planned minutes: "
 ## Data safety
 
 - Every save of a service is a version (Prepare → History): compare and restore; a restore is itself a new version. **Approve** (Prepare, next to Save) pins the saved version as the one for the day: History marks it, it is never pruned, and Home warns when the service has changed since.
-- More → Library: **Save this service as a file** carries one service with its songs and pictures to another computer (checksummed; a damaged file is refused). Export/import songs (Rhema JSON, OpenLyrics), and **Back up now / Restore** for the whole database. A restore refuses files that are not a Rhema Studio database and keeps the previous database as a snapshot next to it.
+- Archive: **Save this service as a file** carries one service with its songs and pictures to another computer (checksummed; a damaged file is refused), and **Back up now / Restore** for the whole database. A restore refuses files that are not a Rhema Studio database and keeps the previous database as a snapshot next to it. Library: export/import songs (Rhema JSON, OpenLyrics).
 - Before any upgrade the app copies the database to `studio.db.before-<migration>.bak`.
 
 ## Church folder (prepare at home, present at church)
 
-More → Library → Church folder → Choose folder…: a NAS share, or a folder kept in step by Google Drive, OneDrive, Dropbox or Syncthing, chosen on every computer. In Prepare, **Publish** puts the saved service there as a new file named with its date, version and a short checksum (`Sunday 2026-10-25 v7 3f9a0c21b7d4.rhema-service.json`); older versions stay. Approving and publishing again makes a new file that says so. On Home, **Church folder** lists the newest version of each service (approved at home or not, opened here or not); **Open** adds it on this computer with its songs and pictures. Approve it again here before Sunday. If someone publishes a newer version later, Prepare says "A newer version (v8) is in the church folder" above the service you opened, and Home marks the row "newer than the copy opened here"; **Open the newer one** adds it as its own service and keeps yours. Nothing is replaced by itself. A file still syncing shows as "damaged … may still be syncing" and cannot be opened until it is complete.
+Archive → Church folder → Choose folder…: a NAS share, or a folder kept in step by Google Drive, OneDrive, Dropbox or Syncthing, chosen on every computer. In Prepare, **Publish** puts the saved service there as a new file named with its date, version and a short checksum (`Sunday 2026-10-25 v7 3f9a0c21b7d4.rhema-service.json`); older versions stay. Approving and publishing again makes a new file that says so. On Home, **Church folder** lists the newest version of each service (approved at home or not, opened here or not); **Open** adds it on this computer with its songs and pictures. Approve it again here before Sunday. If someone publishes a newer version later, Prepare says "A newer version (v8) is in the church folder" above the service you opened, and Home marks the row "newer than the copy opened here"; **Open the newer one** adds it as its own service and keeps yours. Nothing is replaced by itself. A file still syncing shows as "damaged … may still be syncing" and cannot be opened until it is complete.
 
 ## Keeping what was said (optional)
 
-When speech recognition ran during the service, More → Library → Service log offers "Include what was said". Ticked, the recognised passages (with times) are added to the log you keep or save; Earlier logs can then find a service by a phrase from the sermon. It is machine output, not checked; keep it only if the speakers know it is recorded. Off by default, every time.
+When speech recognition ran during the service, Archive → Service log offers "Include what was said". Ticked, the recognised passages (with times) are added to the log you keep or save; Earlier logs can then find a service by a phrase from the sermon. It is machine output, not checked; keep it only if the speakers know it is recorded. Off by default, every time.
 
 ## Song usage (licence reports)
 
-More → Library → Song usage: choose a date range (default: the last six months), Show, then Save as CSV… The report counts saved services dated in the range (a song sung twice in one service counts once), with each song's CCLI number, licence and last use, ready to copy into a CCLI (or other licensing body) report. Services without a date are not counted, so give each service its date.
+Archive → Song usage: choose a date range (default: the last six months), Show, then Save as CSV… The report counts saved services dated in the range (a song sung twice in one service counts once), with each song's CCLI number, licence and last use, ready to copy into a CCLI (or other licensing body) report. Services without a date are not counted, so give each service its date.
 
 ## Speech recognition and Auto
 
@@ -112,7 +112,7 @@ Prepare → **Hymn book** lists the Christ Apostolic Church Gospel Hymn Book in 
 
 ## Who did what
 
-More → Your name is optional and local. When set it is written on every change (saves, approvals, imports) in the content database's audit table and at the top of the saved service log.
+Team → Your name is optional and local. When set it is written on every change (saves, approvals, imports) in the content database's audit table and at the top of the saved service log.
 
 ## Diagnostics
 
