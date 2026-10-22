@@ -1074,7 +1074,7 @@ function StatusDot({ running }: { running: boolean }) {
     <div className="flex items-center gap-1.5">
       <div
         className={`size-2 rounded-full ${
-          running ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/30"
+          running ? "bg-confidence-high animate-pulse" : "bg-muted-foreground/30"
         }`}
       />
       <span className="text-[0.6875rem] text-muted-foreground">

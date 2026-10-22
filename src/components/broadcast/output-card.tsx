@@ -101,7 +101,7 @@ export function OutputCard({
           className={cn(
             "absolute top-1.5 left-1.5 inline-flex items-center gap-1.5 rounded-4xl border px-2 py-0.5 text-[0.6875rem] font-semibold tracking-wider uppercase backdrop-blur-sm",
             onAir && output.type === "display" && "border-destructive/40 bg-destructive/15 text-destructive",
-            onAir && output.type === "ndi" && "border-emerald-500/40 bg-emerald-500/15 text-emerald-400",
+            onAir && output.type === "ndi" && "border-confidence-high/40 bg-confidence-high/15 text-confidence-high",
             !onAir && "border-border bg-background/70 text-muted-foreground"
           )}
         >
@@ -109,7 +109,7 @@ export function OutputCard({
             className={cn(
               "size-1.5 rounded-full",
               onAir && output.type === "display" && "animate-pulse bg-destructive",
-              onAir && output.type === "ndi" && "bg-emerald-400",
+              onAir && output.type === "ndi" && "bg-confidence-high",
               !onAir && "bg-muted-foreground"
             )}
           />
