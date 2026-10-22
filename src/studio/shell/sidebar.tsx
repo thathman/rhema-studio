@@ -78,7 +78,7 @@ export function Sidebar({
           <span className="mt-1 block text-sidebar-foreground">Your services and songs stay on this computer.</span>
         </div>
         <NavButton item={{ id: "more", label: "More tools", icon: <EllipsisIcon /> }} active={workspace === "more"} onSelect={onMore} />
-        <NavButton item={{ id: "settings", label: "Settings", icon: <SettingsIcon />, key: "," }} active={false} onSelect={onSettings} />
+        <NavButton item={{ id: "settings", label: "Settings", icon: <SettingsIcon />, key: "," }} active={workspace === "settings"} onSelect={onSettings} />
         <button type="button" onClick={onSettings} title="Your name goes on the service log and approvals (Settings)" className="mt-1 flex items-center gap-2.5 rounded-[11px] px-2 py-1.5 text-left outline-none hover:bg-white/[0.07] focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1080px]:justify-center">
           <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[0.6875rem] font-bold text-white">{initials || "?"}</span>
           <span className="flex min-w-0 flex-col max-[1080px]:sr-only">

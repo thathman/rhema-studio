@@ -18,22 +18,6 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Slider } from "@/components/ui/slider"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-} from "@/components/ui/sidebar"
-import {
   MicIcon,
   TvIcon,
   KeyIcon,
@@ -54,6 +38,9 @@ import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { qrDataUrl } from "@/lib/qr-bulletin"
+import { MonitorIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react"
+import { useTheme } from "@/components/theme-provider"
+import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
 
 /* -------------------------------------------------------------------------- */
@@ -61,6 +48,8 @@ import type { DeviceInfo } from "@/types/audio"
 /* -------------------------------------------------------------------------- */
 
 type NavSection =
+  | "screens"
+  | "appearance"
   | "audio"
   | "speech"
   | "bible"
@@ -71,6 +60,8 @@ type NavSection =
   | "help"
 
 const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
+  { name: "Outputs", id: "screens", icon: <MonitorIcon strokeWidth={2} /> },
+  { name: "Light or dark", id: "appearance", icon: <SunIcon strokeWidth={2} /> },
   {
     name: "Audio",
     id: "audio",
@@ -87,7 +78,7 @@ const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
     icon: <BookOpenIcon strokeWidth={2} />,
   },
   {
-    name: "Display Mode",
+    name: "Heard verses",
     id: "display",
     icon: <TvIcon strokeWidth={2} />,
   },
@@ -97,7 +88,7 @@ const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
     icon: <RadioIcon strokeWidth={2} />,
   },
   {
-    name: "API Keys",
+    name: "Cloud keys",
     id: "api-keys",
     icon: <KeyIcon strokeWidth={2} />,
   },
@@ -469,12 +460,14 @@ function ApiKeysSection() {
 /* -------------------------------------------------------------------------- */
 
 const sectionTitles: Record<NavSection, string> = {
+  screens: "Screens and NDI",
+  appearance: "Appearance",
   audio: "Audio",
   speech: "Speech Recognition",
   bible: "Bible Translation",
-  display: "Display Mode",
+  display: "Heard verses",
   remote: "Remote Control",
-  "api-keys": "API Keys",
+  "api-keys": "Cloud keys",
   diagnostics: "Diagnostics",
   help: "Help",
 }
@@ -1092,6 +1085,8 @@ function StatusDot({ running }: { running: boolean }) {
 }
 
 const sectionComponents: Record<NavSection, React.FC> = {
+  screens: ScreensSection,
+  appearance: AppearanceSection,
   audio: AudioSection,
   speech: SpeechSection,
   bible: BibleSection,
@@ -1102,72 +1097,92 @@ const sectionComponents: Record<NavSection, React.FC> = {
   help: HelpSection,
 }
 
-/*  Main dialog                                                               */
+/* -------------------------------------------------------------------------- */
+/*  Settings page                                                             */
 /* -------------------------------------------------------------------------- */
 
-export function SettingsDialog() {
-  const open = useSettingsDialogStore((s) => s.isOpen)
+/** The sections under the redesign's headings (ids unchanged, so openSettings("remote") still lands right). */
+const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
+  { title: "Bible and languages", ids: ["bible"] },
+  { title: "Screens and NDI", ids: ["screens"] },
+  { title: "Live behaviour", ids: ["display"] },
+  { title: "Microphone and speech", ids: ["audio", "speech", "api-keys"] },
+  { title: "Studio connections", ids: ["remote"] },
+  { title: "Appearance", ids: ["appearance"] },
+  { title: "Diagnostics and support", ids: ["diagnostics", "help"] },
+]
+
+/** Settings as a page: the sections down the side, the chosen one beside them. */
+export function SettingsPage() {
   const activeSection = useSettingsDialogStore((s) => s.activeSection)
   const setActiveSection = useSettingsDialogStore((s) => s.setActiveSection)
-  const openSettingsFn = useSettingsDialogStore((s) => s.openSettings)
-  const closeSettings = useSettingsDialogStore((s) => s.closeSettings)
-
   const ActiveContent = sectionComponents[activeSection]
-
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen) {
-          openSettingsFn()
-        } else {
-          closeSettings()
-        }
-      }}
-    >
-      <DialogContent className="overflow-hidden p-0 md:max-h-[600px] md:max-w-[800px] lg:max-w-[900px]">
-        <DialogTitle className="sr-only">Settings</DialogTitle>
-        <DialogDescription className="sr-only">
-          Configure audio, display mode, and API keys.
-        </DialogDescription>
-        <SidebarProvider className="items-start">
-          <Sidebar collapsible="none" className="hidden md:flex">
-            <div className="h-14 border-b border-border border-r px-4 flex items-center" >
-              Settings
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
+        <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">Your Rhema Studio</p>
+        <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Settings that make sense.</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Everything stays on this computer. Changes apply at once.</p>
+      </header>
+      <div className="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)] gap-5 px-8 pb-6 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:px-5">
+        <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto">
+          {GROUPS.map((g) => (
+            <div key={g.title} className="mb-3">
+              <p className="px-2 pb-1 text-[0.625rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">{g.title}</p>
+              {g.ids.map((id) => {
+                const item = navItems.find((n) => n.id === id)!
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-current={id === activeSection ? "page" : undefined}
+                    onClick={() => setActiveSection(id)}
+                    className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                  >
+                    {item.icon}
+                    <span className="truncate">{item.name}</span>
+                  </button>
+                )
+              })}
             </div>
-            <SidebarContent className="border-r border-border">
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {navItems.map((item) => (
-                      <SidebarMenuItem key={item.id}>
-                        <SidebarMenuButton
-                          isActive={item.id === activeSection}
-                          onClick={() => setActiveSection(item.id)}
-                        >
-                          {item.icon}
-                          <span>{item.name}</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </SidebarContent>
-          </Sidebar>
-          <main className="flex h-[580px] flex-1 flex-col overflow-hidden">
-            <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border">
-              <div className="flex items-center gap-2 px-4">
-                {sectionTitles[activeSection]}
-              </div>
-            </header>
-            <div className="flex flex-1 flex-col overflow-y-auto p-4">
-              <ActiveContent />
-            </div>
-          </main>
-        </SidebarProvider>
-      </DialogContent>
-    </Dialog>
+          ))}
+        </nav>
+        <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-[17px] border border-border bg-card shadow-panel">
+          <h2 className="shrink-0 border-b border-border px-5 py-3.5 text-base font-bold tracking-[-0.03em]">{sectionTitles[activeSection]}</h2>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+            <ActiveContent />
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+/** Screens and NDI: where outputs are set up and which look each shows. */
+function ScreensSection() {
+  return (
+    <div className="flex max-w-xl flex-col gap-4 text-sm">
+      <p className="text-muted-foreground">Projectors, stage screens, signage windows and NDI streams are outputs. Each one shows the congregation, stage or signage view, in its own languages and look.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => useShellStore.getState().openOutputs()}><MonitorIcon /> Open outputs</Button>
+        <Button variant="outline" onClick={() => useShellStore.getState().openDesign("outputs")}><PaletteIcon /> Which look each shows (Design)</Button>
+      </div>
+    </div>
+  )
+}
+
+/** Appearance: light or dark for planning (Present is always dark). */
+function AppearanceSection() {
+  const { theme, setTheme } = useTheme()
+  return (
+    <div className="flex max-w-xl flex-col gap-3 text-sm">
+      <p className="text-muted-foreground">How Rhema looks while you plan. The live console in Present is always dark, so it stays calm in a dim room.</p>
+      <div role="radiogroup" aria-label="Appearance" className="flex gap-2">
+        {(["light", "dark"] as const).map((t) => (
+          <Button key={t} role="radio" aria-checked={theme === t} variant={theme === t ? "default" : "outline"} onClick={() => setTheme(t)}>{t === "light" ? <SunIcon /> : <MoonIcon />} {t === "light" ? "Light" : "Dark"}</Button>
+        ))}
+      </div>
+    </div>
   )
 }
 
