@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-22 13:10 WAT; every PR through #192 merged)
+- Head: see `git log fork/main` (2026-10-22 14:30 WAT; every PR through #200 merged)
 - Contents: see CHANGELOG.md. `studio.db` is at migration 0012 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -16,7 +16,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- #194 (UX-01 design tokens) and #195 (UX-02 sidebar and top bar, stacked): the owner's redesign, phases in TASKS.md UX-01..UX-12.
+- The owner's redesign continues: UX-03, UX-04 and UX-07 to UX-12 in TASKS.md (UX-01, 02, 05, 06 merged).
 
 - PR #4 `feature/speech-language-openai` (retargeted to `main`): Yoruba speech language and OpenAI Whisper provider. Kept independent until provider/bundling decisions are made (ST-004).
 

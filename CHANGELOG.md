@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The owner's redesign (in progress, 2026-10-22)
+- New look: warm off-white canvas, white panels, violet accent, a navy sidebar; a dark planning mode; WCAG AA kept (#194).
+- Navigation: the sidebar (Home, Prepare, Present; Library, Design, Team, Archive; More tools, Settings, who is at the desk) and a top bar (where you are, works offline, light/dark); Cmd/Ctrl+1-7 and Cmd/Ctrl+, (#195). Library, Design, Team and Archive open the existing library, Theme Designer and More tools until they become pages.
+- Present is the live console: always dark; running order, Preview and Program, one transition row, Find & cue, One-touch moments and the ticker row; fits down to 1024x600 (#199).
+- Home: hero with a readiness note, stat cards, Sunday at a glance, Your attention (#200).
+
 ### Design and outputs (owner requests, 2026-10-22)
 - A look per kind of content: each output can show Bible, songs, hymns, slides and pictures in their own theme (its main theme otherwise); the Theme Designer previews each kind and assigns the theme (#189).
 - Lower third designer: styles with position, size, fonts, colours, an accent bar, an entrance (at once, fade, slide up) and a picture or video behind the band; Name and title, a Scripture strip and a Lyrics strip that follow what is live (#190).
