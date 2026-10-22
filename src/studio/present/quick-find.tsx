@@ -162,6 +162,20 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
         />
       </div>
       <ul className="mt-2 flex min-h-0 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
+        {!query.trim() && (
+          // Nothing typed yet: what can go in the box, one press away.
+          <li className="px-1 py-2">
+            <p className="mb-2 text-xs text-muted-foreground">{bibleOnly ? "Type a reference or a few words of a verse. For example:" : "Type a reference, a hymn number or a few words. For example:"}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {(bibleOnly ? ["john 3 16", "1 Samuel 3", "Psalm 23", "the Lord is my shepherd"] : ["john 3 16", "1 Samuel 3", "CAC 245", "amazing grace", "the Lord is my shepherd"]).map((ex) => (
+                <button key={ex} type="button" onClick={() => onChange(ex)} className="h-7 rounded-full border border-border bg-background px-2.5 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+                  {ex}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[0.6875rem] text-muted-foreground">Enter previews the first result; Show live puts it on screen.</p>
+          </li>
+        )}
         {busy && results.length === 0 && (
           <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>
         )}

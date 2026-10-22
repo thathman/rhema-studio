@@ -1,18 +1,7 @@
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal } from "@/stores/approval-gate-store"
 import { useEffect } from "react"
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ChevronsLeftIcon,
-  ChevronsRightIcon,
-  MonitorIcon,
-  RotateCcwIcon,
-  UndoIcon,
-  SquareIcon,
-  LayoutGridIcon,
-  LayoutPanelLeftIcon,
-} from "lucide-react"
+import { ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, LayoutGridIcon, LayoutPanelLeftIcon, MonitorIcon, RotateCcwIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dashboard } from "@/components/layout/dashboard"
 import { PreviewPanel } from "@/components/panels/preview-panel"
@@ -160,6 +149,7 @@ function StandardView() {
   const canRestore = !isLive && hasLiveItem
   const nextHint = useNextHint()
   const held = useBroadcastStore((s) => s.heldLive !== null)
+  const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
 
   // Keyboard verbs, only in Standard view and never while typing.
   useEffect(() => {
@@ -216,12 +206,35 @@ function StandardView() {
             <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
           </div>
           <div className="-m-1 grid min-h-0 grid-cols-3 content-start gap-2 overflow-y-auto p-1">
-            {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => (
-              <BigButton key={s} icon={null} label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]} tone="live" className="h-11 min-w-0 gap-0 px-2 text-center" onClick={() => presentActions.quickScreen(s)} />
-            ))}
+            {(["welcome", "stand", "pray", "offering", "technical", "logo", "black"] as const).map((s) => {
+              // Calm until pressed: only the screen that is on air turns red, so the row also says what is showing.
+              const onAir = isLive && quickOnAir === s
+              return (
+                <BigButton
+                  key={s}
+                  icon={QUICK_ICONS[s]}
+                  label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]}
+                  tone={onAir ? "live" : "neutral"}
+                  aria-pressed={onAir}
+                  className="h-11 min-w-0 justify-start gap-2 px-3 [&_svg]:!size-4"
+                  onClick={() => presentActions.quickScreen(s)}
+                />
+              )
+            })}
           </div>
         </div>
       </section>
     </div>
   )
 }
+
+const QUICK_ICONS = {
+  welcome: <HandIcon />,
+  stand: <ArrowUpIcon />,
+  pray: <HeartIcon />,
+  offering: <GiftIcon />,
+  technical: <TriangleAlertIcon />,
+  logo: <ImageIcon />,
+  black: <SquareIcon className="fill-current" />,
+} as const
+
