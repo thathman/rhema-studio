@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBroadcastStore } from "@/stores"
@@ -10,12 +9,12 @@ import { MAIN_OUTPUT_ID } from "@/types"
 import { BUNDLED_FONTS } from "@/lib/fonts"
 import { SlideBackground } from "@/studio/prepare/slide-composer"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
-import { Colour, NumberField, Row } from "@/studio/present/lower-third-designer"
+import { Colour, NumberField, Row } from "@/studio/design/lower-third-designer"
 
 const SAMPLE_ITEMS = ["Youth meeting, Friday 6 pm", "Choir practice, Saturday 4 pm", "Harvest thanksgiving next Sunday"]
 
 /** How the news ticker looks and moves. Edits apply at once, to a running ticker too. */
-export function TickerDesigner({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+export function TickerDesigner() {
   const style = useBroadcastStore((s) => s.tickerStyle)
   const items = useBroadcastStore((s) => s.tickerItems)
   const outputs = useBroadcastStore((s) => s.outputs)
@@ -33,16 +32,18 @@ export function TickerDesigner({ open, onOpenChange }: { open: boolean; onOpenCh
   }
   const patch = (p: Partial<TickerStyle>) => save({ ...style, ...p })
   const media = style.background.mediaId ? assets.find((a) => a.id === style.background.mediaId) : undefined
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the picture or video behind the band
+  useEffect(() => { void lowerThirdBacking(style).then(setBacking) }, [])
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (o) void lowerThirdBacking(style).then(setBacking) }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Ticker designer</DialogTitle>
-          <DialogDescription>How the news ticker looks and moves. Changes apply at once, also to a running ticker.</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">How the news ticker looks and moves. Changes apply at once, also to a running ticker. The words are typed in Present (Ticker).</p>
+<div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)]">
+            {/* The preview stays in view beside the settings on a wide window. */}
+            <div className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-0">
           {theme && <CanvasVerse theme={theme} verse={{ reference: "", segments: [] }} ticker={preview} />}
           {style.background.kind === "video" && <p className="text-[0.6875rem] text-muted-foreground">The video plays behind the band on the outputs; this preview shows its shade only.</p>}
+            </div>
+            <div className="flex min-w-0 flex-col gap-3">
           <Row label="Position">
             {(["bottom", "top"] as const).map((p) => <Button key={p} size="xs" variant={style.position === p ? "default" : "outline"} onClick={() => patch({ position: p })}>{p === "top" ? "Top" : "Bottom"}</Button>)}
           </Row>
@@ -79,8 +80,8 @@ export function TickerDesigner({ open, onOpenChange }: { open: boolean; onOpenCh
             value={style.background.mediaId ? { media_id: style.background.mediaId, name: media?.name ?? "" } : null}
             onChange={(v) => save({ ...style, background: { ...style.background, kind: v ? (v.kind === "video" ? "video" : "picture") : "color", mediaId: v?.media_id ?? null } }, true)}
           />
+            </div>
         </div>
-      </DialogContent>
-    </Dialog>
+    </div>
   )
 }

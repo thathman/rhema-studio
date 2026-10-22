@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import "@/stores/journal-store"
 import "@/stores/monitor-store"
 import "@/stores/obs-store"
-import { useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
 import { bibleActions } from "@/hooks/use-bible"
 import { rememberedServiceId, useServiceStore } from "@/stores/service-store"
@@ -13,7 +13,8 @@ import { HomeWorkspace } from "@/studio/home/home-workspace"
 import { PrepareWorkspace } from "@/studio/prepare/prepare-workspace"
 import { PresentWorkspace } from "@/studio/present/present-workspace"
 import { MoreWorkspace } from "@/studio/more/more-workspace"
-import { ThemeDesigner } from "@/components/broadcast/theme-designer"
+import { DesignWorkspace } from "@/studio/design/design-workspace"
+import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { BroadcastOutputsDialog } from "@/components/broadcast/broadcast-outputs-dialog"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { LibraryDialog } from "@/studio/more/library-dialog"
@@ -25,12 +26,13 @@ import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", design: "Design studio", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
   prepare: () => <PrepareWorkspace />,
   present: () => <PresentWorkspace />,
+  design: () => <DesignWorkspace />,
   more: () => <MoreWorkspace />,
 }
 
@@ -45,10 +47,27 @@ export function AppShell() {
   const operatorName = useSettingsStore((s) => s.operatorName)
   const church = useMemo(() => churchItems({
     library: () => setLibraryOpen(true),
-    design: () => useBroadcastStore.getState().setDesignerOpen(true),
     team: () => setWorkspace("more"),
     archive: () => setLibraryOpen(true),
   }), [setLibraryOpen, setWorkspace])
+
+  // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
+  const go = useCallback(async (next: Workspace) => {
+    const from = useShellStore.getState().workspace
+    if (from === next) return
+    if (from === "design") {
+      if (!(await mayLeaveThemeDraft())) return
+      useBroadcastStore.getState().setDesignerOpen(false)
+    }
+    setWorkspace(next)
+  }, [setWorkspace])
+  // A request to open Design at a section (Present's Design… buttons, More tools).
+  const designRequest = useShellStore((s) => s.designRequest)
+  useEffect(() => {
+    if (!designRequest) return
+    useShellStore.setState({ designRequest: null, designTab: designRequest })
+    void go("design")
+  }, [designRequest, go])
 
   // The Bible catalogue used to load only when the search panel mounted.
   useEffect(() => {
@@ -79,12 +98,12 @@ export function AppShell() {
       }
       if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
       if (!item) openSettings()
-      else if (item.workspace) setWorkspace(item.workspace)
+      else if (item.workspace) void go(item.workspace)
       else item.onSelect?.()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [setWorkspace, church])
+  }, [go, church])
 
   return (
     <div className="fixed inset-0 grid grid-cols-[auto_minmax(0,1fr)] bg-background text-foreground">
@@ -93,9 +112,9 @@ export function AppShell() {
         isLive={isLive}
         church={church}
         operatorName={operatorName}
-        onWorkspace={setWorkspace}
+        onWorkspace={(w) => void go(w)}
         onSettings={() => openSettings()}
-        onMore={() => setWorkspace("more")}
+        onMore={() => void go("more")}
       />
 
       {/* The live console is always dark (its own deeper palette), top bar included. */}
@@ -108,7 +127,6 @@ export function AppShell() {
       </div>
 
       {/* Global dialogs: reachable from every workspace, mounted exactly once. */}
-      <ThemeDesigner />
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
       <SettingsDialog />
       <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} />

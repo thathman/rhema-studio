@@ -1,0 +1,140 @@
+import { useEffect } from "react"
+import { SaveIcon, TrashIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useBroadcastStore } from "@/stores"
+import { useShellStore, type DesignTab } from "@/studio/shell-store"
+import { ThemeLibrary } from "@/components/broadcast/theme-library"
+import { DesignCanvas } from "@/components/broadcast/design-canvas"
+import { PropertiesPanel } from "@/components/broadcast/properties-panel"
+import { LowerThirdDesigner } from "@/studio/design/lower-third-designer"
+import { TickerDesigner } from "@/studio/design/ticker-designer"
+import { BrandDesigner } from "@/studio/design/brand-designer"
+import { CONTENT_TYPES } from "@/types/broadcast"
+import { CONTENT_NAMES } from "@/lib/content-names"
+import { withThemeFor } from "@/lib/output-themes"
+import { cn } from "@/lib/utils"
+
+const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
+  ["themes", "Themes", "How Bible, songs, hymns, slides and pictures look"],
+  ["lower-thirds", "Lower thirds", "Names, scripture and lyrics strips"],
+  ["ticker", "News ticker", "The crawl along the screen"],
+  ["brand", "Brand kit", "Logo, colours and fonts once"],
+  ["outputs", "Output looks", "Which theme each screen uses"],
+]
+
+/**
+ * Design studio: every design edit in one place — themes for each kind of
+ * content, lower thirds, the news ticker, the church brand and which look
+ * each output uses.
+ */
+export function DesignWorkspace() {
+  const tab = useShellStore((s) => s.designTab)
+  const setTab = useShellStore((s) => s.setDesignTab)
+
+  // Editing starts on the first theme, as the designer always did (leaving the page settles it: see the shell).
+  useEffect(() => {
+    const s = useBroadcastStore.getState()
+    s.setDesignerOpen(true)
+    if (!s.draftTheme && s.themes.length > 0) s.startEditing(s.themes[0].id)
+  }, [])
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-4 max-[1200px]:px-5">
+        <div className="min-w-0">
+          <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">The creative workspace</p>
+          <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Design once. Beautiful everywhere.</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker and your brand.</p>
+        </div>
+        {tab === "themes" && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => useBroadcastStore.getState().discardDraft()}><TrashIcon /> Discard changes</Button>
+            <Button onClick={() => useBroadcastStore.getState().saveDraft()}><SaveIcon /> Save theme</Button>
+          </div>
+        )}
+      </header>
+      <div role="tablist" aria-label="What you are designing" className="flex shrink-0 gap-1 overflow-x-auto px-8 pb-3 max-[1200px]:px-5">
+        {TABS.map(([id, label, hint]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            title={hint}
+            onClick={() => setTab(id)}
+            className={cn(
+              "h-9 shrink-0 rounded-[10px] px-3.5 text-[0.8125rem] font-semibold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
+        {tab === "themes" ? (
+          <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-[17px] border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">
+            <ThemeLibrary />
+            <DesignCanvas />
+            <PropertiesPanel />
+          </div>
+        ) : (
+          <div className="h-full overflow-y-auto rounded-[17px] border border-border bg-card p-6 shadow-panel">
+            {tab === "lower-thirds" && <LowerThirdDesigner />}
+            {tab === "ticker" && <TickerDesigner />}
+            {tab === "brand" && <BrandDesigner />}
+            {tab === "outputs" && <OutputLooks />}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Each output's main theme and, if wanted, a theme of its own for each kind of content. */
+function OutputLooks() {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const themes = useBroadcastStore((s) => s.themes)
+  const shown = outputs.filter((o) => o.role !== "stage")
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Each screen shows everything in its main theme unless a kind of content has its own here (hymns in gold, the Bible in blue…). The stage display has no theme.</p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[56rem] border-separate border-spacing-y-1 text-sm">
+          <thead>
+            <tr className="text-left text-xs text-muted-foreground">
+              <th className="px-2 py-1 font-semibold">Output</th>
+              <th className="px-2 py-1 font-semibold">Main theme</th>
+              {CONTENT_TYPES.map((c) => <th key={c} className="px-2 py-1 font-semibold">{CONTENT_NAMES[c]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((o) => (
+              <tr key={o.id} className="bg-surface-sunken/60">
+                <td className="rounded-l-lg px-2 py-2 font-medium">{o.name}<span className="block text-xs font-normal text-muted-foreground">{o.role === "signage" ? "Signage" : o.type === "ndi" ? "NDI" : "Screen"}</span></td>
+                <td className="px-2 py-2">
+                  <Select value={o.themeId} onValueChange={(v) => useBroadcastStore.getState().setOutputTheme(o.id, v)}>
+                    <SelectTrigger aria-label={`Main theme for ${o.name}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>{themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </td>
+                {CONTENT_TYPES.map((c, i) => (
+                  <td key={c} className={cn("px-2 py-2", i === CONTENT_TYPES.length - 1 && "rounded-r-lg")}>
+                    <Select value={o.themeFor?.[c] || "__same"} onValueChange={(v) => useBroadcastStore.getState().updateOutput(o.id, { themeFor: withThemeFor(o, c, v === "__same" ? null : v) })}>
+                      <SelectTrigger aria-label={`${CONTENT_NAMES[c]} on ${o.name}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__same">Main theme</SelectItem>
+                        {themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

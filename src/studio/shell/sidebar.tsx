@@ -70,7 +70,7 @@ export function Sidebar({
         ))}
       </Group>
       <Group label="Your church">
-        {church.map((item) => <NavButton key={item.id} item={item} active={false} onSelect={() => item.onSelect?.()} />)}
+        {church.map((item) => <NavButton key={item.id} item={item} active={item.workspace === workspace} onSelect={() => (item.workspace ? onWorkspace(item.workspace) : item.onSelect?.())} />)}
       </Group>
       <div className="mt-auto flex flex-col gap-1 pt-4">
         <div className="mb-2 rounded-xl border border-sidebar-border px-3 py-2.5 text-[0.6875rem] max-[1080px]:hidden">

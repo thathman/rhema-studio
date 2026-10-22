@@ -3,7 +3,6 @@ import { toast } from "sonner"
 import { PaletteIcon, WandSparklesIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
 import { pickThemeBackgroundImage } from "@/lib/theme-designer-files"
@@ -17,7 +16,7 @@ const CORNERS = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-
  * three themes — Scripture, Lyrics, Announcements — that outputs can use.
  * Themes the church edits by hand afterwards are never overwritten.
  */
-export function BrandDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function BrandDesigner() {
   const saved = useSettingsStore((s) => s.brandKit)
   const themes = useBroadcastStore((s) => s.themes)
   const [kit, setKit] = useState<BrandKit>(saved)
@@ -34,12 +33,8 @@ export function BrandDialog({ open, onClose }: { open: boolean; onClose: () => v
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Church brand</DialogTitle>
-          <DialogDescription>Logo, colours and fonts once. Apply makes three matching themes you can pick for any output.</DialogDescription>
-        </DialogHeader>
+    <div className="flex max-w-2xl flex-col gap-4">
+        <p className="text-sm text-muted-foreground">Logo, colours and fonts once. Apply makes three matching themes you can pick for any output.</p>
         <div className="grid grid-cols-[1fr_1fr] gap-4 text-sm">
           <label className="col-span-2 flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Church name (used in the theme names)</span>
@@ -107,7 +102,6 @@ export function BrandDialog({ open, onClose }: { open: boolean; onClose: () => v
             </ul>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+    </div>
   )
 }
