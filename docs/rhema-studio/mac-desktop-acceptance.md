@@ -168,6 +168,11 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10cg.1 (theme font not installed) | V: main output on a theme using "Zzq Made Up Font": Home "1 theme font is not installed · QA Missing Font: Zzq Made Up Font. The screen will use a fallback font." |
 | 10cg.2 (approval warning) | V: "Ask before showing" on, a never-approved service: Home "Service not approved yet" |
 | 10cg.3 (missing picture file) | V: a saved picture item's file deleted from the media folder; Present, then Home: "1 picture, video or sound in the service is missing its file" |
+| 10bp.1 (background stays) | V: John 3:16 with a background picture on the stream; Prepare and back: the frame and its picture unchanged |
+| 10bp.5 (Verse + then Next) | V: Verse + → John 3:17 (background kept); Next → Psalm 23:1, the item after John 3:16 |
+| 10bq.1 (QR address marks unsaved) | V: changing a saved QR slide's address marked the service unsaved |
+| 10bq.4 (theme used by an output) | V: deleting the stream's theme refused ("used by Stream"); the output kept it |
+| 10bw.2 (log after rehearsal) | F → V: after "rehearsal off" the log had "LIVE Welcome" (B). A picture item on air was logged as "slide": #179 logs it by its rundown name |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
