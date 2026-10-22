@@ -47,7 +47,7 @@ export function DesignWorkspace() {
         <div className="min-w-0">
           <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">The creative workspace</p>
           <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Design once. Beautiful everywhere.</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker, the stage display and your brand.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker, the stage display and your brand.</p>
         </div>
         {tab === "themes" && (
           <div className="flex gap-2">
@@ -56,7 +56,7 @@ export function DesignWorkspace() {
           </div>
         )}
       </header>
-      <div role="tablist" aria-label="What you are designing" className="flex shrink-0 gap-1 overflow-x-auto px-8 pb-3 max-[1200px]:px-5">
+      <div role="tablist" aria-label="What you are designing" className="mx-8 mb-3 flex shrink-0 gap-1 overflow-x-auto border-b border-border max-[1200px]:mx-5">
         {TABS.map(([id, label, hint]) => (
           <button
             key={id}
@@ -66,14 +66,24 @@ export function DesignWorkspace() {
             title={hint}
             onClick={() => setTab(id)}
             className={cn(
-              "h-9 shrink-0 rounded-lg px-3.5 text-[0.8125rem] font-semibold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              tab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              "-mb-px shrink-0 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
             {label}
           </button>
         ))}
       </div>
+      {tab === "themes" && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-8 pb-3 text-xs max-[1200px]:px-5" aria-label="More ways to use this look">
+          <span className="font-semibold">More ways to use this look</span>
+          {(["lower-thirds", "ticker", "stage", "brand"] as const).map((id) => (
+            <button key={id} type="button" onClick={() => setTab(id)} className="rounded-[5px] bg-accent px-2 py-1 text-[0.6875rem] font-bold text-accent-foreground outline-none hover:bg-accent/80 focus-visible:ring-3 focus-visible:ring-ring/50">
+              {TABS.find((t) => t[0] === id)?.[1]}
+            </button>
+          ))}
+        </div>
+      )}
       <div role="tabpanel" aria-label={TABS.find((t) => t[0] === tab)?.[1]} className="min-h-0 flex-1 px-8 pb-6 max-[1200px]:px-5">
         {tab === "themes" ? (
           <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)_300px] overflow-hidden rounded-lg border border-border bg-card shadow-panel max-[1200px]:grid-cols-[200px_minmax(0,1fr)_280px]">

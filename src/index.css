@@ -148,6 +148,8 @@
     --sidebar-tag: #1a2b31;
     --sidebar-tag-border: #2c4047;
     --topbar: #fcfcfa;
+    /* The theme editor's stage around the slide (approved design: sage in light). */
+    --canvas-stage: #e7efeb;
     --ai-direct: oklch(52.7% 0.154 150.069);
     --ai-semantic: oklch(55.5% 0.163 48.998);
     --ai-cloud: oklch(62.3% 0.214 259.815);
@@ -193,6 +195,7 @@
 
 /* Dark planning mode. */
 .dark {
+    --canvas-stage: #18181b;
     --topbar: #1b2330;
     --background: #121c22;
     --foreground: #e6ecee;

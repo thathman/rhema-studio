@@ -62,6 +62,12 @@ import { CONTENT_TYPES } from "@/types/broadcast"
 import { MAIN_OUTPUT_ID } from "@/types"
 import { themeIdFor, withThemeFor } from "@/lib/output-themes"
 import { CONTENT_NAMES } from "@/lib/content-names"
+
+/** The stage colour around the slide, from the theme (sage in light, near-black in dark). */
+function stageColor(): string {
+  if (typeof document === "undefined") return "#e7efeb"
+  return getComputedStyle(document.documentElement).getPropertyValue("--canvas-stage").trim() || "#e7efeb"
+}
 import type { BroadcastTheme } from "@/types"
 
 const WS_WIDTH = 1920
@@ -137,7 +143,7 @@ export function DesignCanvas() {
     if (!canvasElRef.current || !containerRef.current || !editingThemeId) return
 
     const canvas = new fabric.Canvas(canvasElRef.current, {
-      backgroundColor: "#18181b",
+      backgroundColor: stageColor(),
       controlsAboveOverlay: true,
     })
 
@@ -384,7 +390,7 @@ export function DesignCanvas() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="present-surface flex h-14 shrink-0 items-center gap-2 border-b border-border/40 bg-background px-3 text-foreground">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-foreground">
         {/* ponytail: was a button with no action; kept as a decorative mark */}
         <MousePointer2Icon aria-hidden className="size-3.5 text-muted-foreground" />
         <div className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
@@ -406,7 +412,7 @@ export function DesignCanvas() {
                 // The stand-in picture loads once; draw again when it is ready.
                 if (value === "picture") void loadThemeImage(SAMPLE_PICTURE_URL).then(() => resyncLatestTheme())
               }}
-              className={`rounded px-2 py-0.5 text-[0.6875rem] font-medium ${sample === value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded px-2 py-0.5 text-[0.6875rem] font-medium whitespace-nowrap ${sample === value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               {label}
             </button>
@@ -432,7 +438,7 @@ export function DesignCanvas() {
       <div ref={containerRef} className="relative min-h-0 flex-1">
         <canvas ref={canvasElRef} />
         {!draftTheme && (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "#18181b" }}>
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "var(--canvas-stage)" }}>
             <p className="text-xs text-muted-foreground">Select a theme to begin editing</p>
           </div>
         )}
@@ -441,7 +447,7 @@ export function DesignCanvas() {
       {editingThemeId && <UseThemeFor themeId={editingThemeId} />}
 
       {/* Status bar */}
-      <div className="flex h-8 shrink-0 items-center border-t border-border/40 px-3 text-[0.6875rem] text-muted-foreground present-surface bg-background">
+      <div className="flex h-8 shrink-0 items-center border-t border-border/40 px-3 text-[0.6875rem] text-muted-foreground bg-card">
         <span>Output: {WS_WIDTH} × {WS_HEIGHT}px</span>
         <span className="mx-2">·</span>
         <span>Zoom: {zoomLevel}%</span>
@@ -619,7 +625,7 @@ function UseThemeFor({ themeId }: { themeId: string }) {
   if (!output) return null
   const isMain = output.themeId === themeId
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/40 px-3 py-2 text-[0.6875rem] present-surface bg-background text-foreground" role="group" aria-label="Use this theme for">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/40 px-3 py-2 text-[0.6875rem] bg-card text-foreground" role="group" aria-label="Use this theme for">
       <span className="text-muted-foreground">Use this theme on</span>
       <select value={output.id} onChange={(e) => setOutputId(e.target.value)} aria-label="Output" className="h-6 rounded border border-border bg-background px-1.5 text-[0.6875rem]">
         {outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
@@ -638,7 +644,7 @@ function UseThemeFor({ themeId }: { themeId: string }) {
             title={isMain && !own ? `This is ${output.name}'s main theme; ${CONTENT_NAMES[c]} use it unless given their own (Outputs)` : undefined}
             onClick={() => useBroadcastStore.getState().updateOutput(output.id, { themeFor: withThemeFor(output, c, on ? null : themeId) })}
             // The canvas bar is always dark: light text in either app theme.
-            className={`inline-flex min-h-6 items-center rounded-full border px-2.5 ${on ? "border-primary bg-primary/60 text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"} disabled:opacity-60`}
+            className={`inline-flex min-h-6 items-center rounded-full border px-2.5 ${on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"} disabled:opacity-60`}
           >
             {CONTENT_NAMES[c]}
           </button>
