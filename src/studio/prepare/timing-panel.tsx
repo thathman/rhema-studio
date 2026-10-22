@@ -5,16 +5,19 @@ import { useQueueStore } from "@/stores"
 import { presentActions } from "@/studio/present-actions"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { clockMinutes, clockText, phaseRange, planTimeline } from "@/lib/run-of-show"
+import { serviceTiming, type EventTiming } from "@/lib/timing-engine"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { actualByItem, firstOnAir, mmss } from "@/lib/journal"
 import { useJournalStore } from "@/stores/journal-store"
 import { monotonicNow } from "@/stores/timer-store"
 import { cn } from "@/lib/utils"
 
-function Clock({ label, value }: { label: string; value: string }) {
+function Clock({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="rounded-xl bg-surface-sunken px-2.5 py-2">
       <p className="text-[0.625rem] text-muted-foreground">{label}</p>
       <p className="text-lg font-bold tracking-[-0.03em] tabular-nums">{value}</p>
+      {note && <p className="text-[0.6875rem] text-muted-foreground tabular-nums">{note}</p>}
     </div>
   )
 }
@@ -40,22 +43,25 @@ export function TimingPanel() {
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
   const total = formatMinutes(plannedTotalMs(items))
   const entries = useJournalStore((s) => s.entries)
+  const liveItemId = useBroadcastStore((s) => (s.isLive ? s.liveItemId : null))
   const [now, setNow] = useState(() => monotonicNow())
-  // The live item's time on air grows: look again every 15 s while there is a log.
+  const [wall, setWall] = useState(() => Date.now())
+  // Time moves on: the live item's time on air and what is expected are looked at again every 15 s.
   useEffect(() => {
-    if (entries.length === 0) return
-    const t = setInterval(() => setNow(monotonicNow()), 15_000)
+    const t = setInterval(() => { setNow(monotonicNow()); setWall(Date.now()) }, 15_000)
     return () => clearInterval(t)
-  }, [entries.length])
+  }, [])
   const first = firstOnAir(entries)
   const onAir = actualByItem(entries, Math.max(now, entries.at(-1)?.mono ?? 0))
   const range = main ? phaseRange(items.length, headers, main.id) : null
   const began = range ? Math.min(...items.slice(range.start, range.end).map((i) => first.get(i.id) ?? Infinity)) : Infinity
   const plannedStart = clockMinutes(main?.starts_at)
   const late = Number.isFinite(began) && plannedStart !== null ? (() => { const d = new Date(began); return d.getHours() * 60 + d.getMinutes() - plannedStart })() : null
-  // Starting late moves the projected finish too; ±5 min adjusts from there.
-  const shift = delay + (late ?? 0)
-  const plan = planTimeline(items, headers, shift)
+  // The plan as prepared; what is expected comes from the timing engine (what happened, the time now, ±5 min).
+  const plan = planTimeline(items, headers)
+  const timing = serviceTiming({ items, headers, firstOnAir: first, onAirMs: onAir, liveItemId, now: Math.max(wall, entries.at(-1)?.at ?? 0), adjustMinutes: delay })
+  const expected = new Map(timing?.events.map((e) => [e.index, e]) ?? [])
+  const lateMinutes = timing ? Math.round(timing.lateMs / 60_000) : 0
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[17px] border border-border bg-card shadow-panel">
       <div className="border-b border-border px-4 py-3">
@@ -81,7 +87,7 @@ export function TimingPanel() {
               <div className="grid grid-cols-3 gap-2">
                 <Clock label="Start" value={plan.start} />
                 <Clock label="Warm-up" value={plan.warmupStart ?? "—"} />
-                <Clock label="Finish" value={plan.finish} />
+                <Clock label="Finish" value={timing ? wallClock(timing.expectedEnd) : plan.finish} note={timing && lateMinutes !== 0 ? `planned ${plan.finish}` : undefined} />
               </div>
               {late !== null && (
                 <p className={cn("text-xs", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")} role="status">
@@ -90,7 +96,7 @@ export function TimingPanel() {
               )}
               <div className="flex items-center justify-between gap-2" role="group" aria-label="Running late or early">
                 <Button size="xs" variant="outline" onClick={() => setDelay((d) => d - 5)}>−5 min</Button>
-                <span className={cn("text-xs font-semibold", shift > 0 ? "text-confidence-mid" : "text-muted-foreground")}>{shift === 0 ? "On schedule" : lateness(shift)}</span>
+                <span className={cn("text-xs font-semibold", lateMinutes > 0 ? "text-confidence-mid" : "text-muted-foreground")} role="status">{lateMinutes === 0 ? "On schedule" : lateness(lateMinutes)}</span>
                 <Button size="xs" variant="outline" onClick={() => setDelay((d) => d + 5)}>+5 min</Button>
               </div>
               <ol className="min-h-0 overflow-y-auto border-t border-border pt-2" aria-label="Planned times">
@@ -107,6 +113,7 @@ export function TimingPanel() {
                       <span className="min-w-0">
                         <span className={cn("block truncate text-xs", r.kind === "milestone" && "font-semibold")}>{r.label}</span>
                         {r.kind === "item" && <span className="block text-[0.6875rem] text-muted-foreground">{r.minutes ? `${r.minutes} min` : "no minutes yet"}</span>}
+                        {r.index !== undefined && <ExpectedLine event={expected.get(r.index)} />}
                         {r.index !== undefined && first.has(items[r.index].id) && <ActualLine started={first.get(items[r.index].id)!} ms={onAir.get(items[r.index].id) ?? 0} planned={r.minutes} />}
                       </span>
                     </button>
@@ -131,5 +138,21 @@ function ActualLine({ started, ms, planned }: { started: number; ms: number; pla
       On air {wallClock(started)} for {mmss(ms)}
       {planned ? <span className={cn(over > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}> ({over > 0 ? "+" : "−"}{mmss(Math.abs(over))})</span> : null}
     </span>
+  )
+}
+
+/** When an item that has not run yet is now expected, when that is a minute or more off the plan, and a hard stop cutting it short. */
+function ExpectedLine({ event }: { event?: EventTiming }) {
+  if (!event || event.state === "done") return null
+  const off = Math.round((event.expectedStart - event.plannedStart) / 60_000)
+  return (
+    <>
+      {event.state === "upcoming" && off !== 0 && (
+        <span className={cn("block text-[0.6875rem] tabular-nums", off > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>Expected {wallClock(event.expectedStart)}</span>
+      )}
+      {event.squeezed && event.hardStop !== null && (
+        <span className="block text-[0.6875rem] font-semibold text-destructive" role="status">Cut short to end by {wallClock(event.hardStop)}</span>
+      )}
+    </>
   )
 }
