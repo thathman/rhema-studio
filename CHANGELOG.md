@@ -20,6 +20,14 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Prepare and Present (owner requests)
+- Bible tab: finds Bible references only, with the Bible version and second language chosen there.
+- Songs tab: choir ministrations (a Choir ministration button, a switch in the song editor, a filter).
+- Slides: a background picture or video, imported right there; a video plays silently and loops behind the words.
+- Hymn book: the two parts are named Main and Various.
+- Production view: the Studio look (the old header and its "FREE" badge are gone).
+- Quick screens: calm buttons; the one on air is red. Quick find shows examples when nothing is typed.
+
 ### Songs
 - Songs can have other titles (one per line in the song editor), found by search like the title; OpenLyrics files keep them; each CAC hymn's Yorùbá title is one.
 
