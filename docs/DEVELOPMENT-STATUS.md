@@ -2,7 +2,7 @@
 
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-21
+**Updated:** 2026-10-22
 
 ## Integrated `main`
 
@@ -24,8 +24,8 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 564 vitest tests pass; `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
-- Rust: `rhema-content` 51 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
+- Frontend: 577 vitest tests pass (two render-heavy tests can time out on a heavily loaded machine; given 30 s, #176, #180); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
+- Rust: `rhema-content` 55 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
 - Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
 - CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
 
@@ -34,7 +34,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-candidate-evidence.md` (decision: NO-GO until desktop rows and owner sign-off).
 
 
-- Every manual row of `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10cn). A browser-shim walkthrough of the song editor and Present flow was done (guide §10a note); it is not desktop verification.
+- The desktop rows that need hardware in `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10cn): projector and stage screens, a second monitor, microphone and speech, OBS, video, signage, Windows. Most app-only rows were verified on the owner's Intel Mac on 2026-10-21/22 (`docs/rhema-studio/mac-desktop-acceptance.md`, driven through a test bridge in a separate profile; owner sign-off not yet recorded).
 - Windows installer: workflow run 39622759376 built `main` at `4e70783` (artifact 99,722,311 bytes, digest sha256:491068266b73881be3ca3a819f261ff822387564aa68ee2471f58663be9ea224; CI run 39622722135 green on the same commit; #156–#163 came after). Not installed or launched; not a release.
 - Yoruba speech recognition and the OpenAI provider (PR #4).
 
