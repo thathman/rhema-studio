@@ -25,6 +25,8 @@ export interface ArrangementForm {
 
 export interface SongForm {
   title: string
+  /** Other titles, one per line. */
+  alternate_titles: string
   authors: string
   copyright: string
   ccli_number: string
@@ -46,7 +48,7 @@ const isLocal = (id: string) => id.startsWith("new-")
 
 export function emptyForm(language = "en"): SongForm {
   return {
-    title: "", authors: "", copyright: "", ccli_number: "", licence: "unknown", licence_note: "",
+    title: "", alternate_titles: "", authors: "", copyright: "", ccli_number: "", licence: "unknown", licence_note: "",
     primary_language: language, tags: "", notes: "", key: "", tempo: "", sections: [], arrangements: [], numbers: [],
   }
 }
@@ -54,6 +56,7 @@ export function emptyForm(language = "en"): SongForm {
 export function formFromSong(s: SongWithSections): SongForm {
   return {
     title: s.song.title,
+    alternate_titles: (s.song.alternate_titles ?? []).join("\n"),
     authors: s.song.authors,
     copyright: s.song.copyright,
     ccli_number: s.song.ccli_number ?? "",
@@ -96,6 +99,7 @@ export function inputFromForm(f: SongForm): SongInput {
   }))
   return {
     title: f.title.trim(),
+    alternate_titles: otherTitles(f),
     authors: f.authors.trim(),
     copyright: f.copyright.trim(),
     ccli_number: f.ccli_number.trim() || null,
@@ -233,10 +237,14 @@ export function moveStep(steps: Step[], from: number, to: number): Step[] {
   return next
 }
 
+/** The other-titles box as a list: one per line, blanks dropped. */
+export const otherTitles = (f: Pick<SongForm, "alternate_titles">): string[] => f.alternate_titles.split("\n").map((t) => t.trim()).filter(Boolean)
+
 /** Problems a volunteer must fix before saving; empty when the form is valid. */
 export function validateForm(f: SongForm): string[] {
   const problems: string[] = []
   if (!f.title.trim()) problems.push("Give the song a title.")
+  if (otherTitles(f).length > 20) problems.push("At most 20 other titles.")
   if (f.sections.length === 0) problems.push("Add at least one section of words.")
   if (f.sections.some((s) => !Object.values(s.texts).some((t) => t.trim()))) problems.push("Every section needs some words, or remove the empty one.")
   if (f.ccli_number.trim() && !/^\d{1,12}$/.test(f.ccli_number.trim())) problems.push("The CCLI number is digits only.")

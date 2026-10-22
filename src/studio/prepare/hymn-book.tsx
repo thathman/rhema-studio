@@ -102,7 +102,7 @@ export function HymnBook() {
       return hymns.filter((h) => h.part === wantPart && String(h.number).startsWith(digits)).sort((a, b) => Number(String(b.number) === digits) - Number(String(a.number) === digits) || a.number - b.number)
     }
     const f = fold(q)
-    return hymns.filter((h) => fold(h.song.title).includes(f) || fold(h.song.first_line).includes(f) || wordHits?.has(h.song.id))
+    return hymns.filter((h) => fold(h.song.title).includes(f) || (h.song.alternate_titles ?? []).some((t) => fold(t).includes(f)) || fold(h.song.first_line).includes(f) || wordHits?.has(h.song.id))
   }, [hymns, part, q, isNumber, wordHits])
 
   const add = (song: SongSummary) => {
@@ -218,7 +218,7 @@ export function HymnBook() {
                 <span className="mt-0.5 w-10 shrink-0 text-right text-xs font-semibold tabular-nums text-muted-foreground">{shownNumber(h)}</span>
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium">{h.song.title}</span>
-                  <span className="truncate text-xs text-muted-foreground">{h.song.first_line}</span>
+                  <span className="truncate text-xs text-muted-foreground">{h.song.alternate_titles?.[0] || h.song.first_line}</span>
                 </span>
               </button>
               <Button variant="outline" size="sm" className="self-center" onClick={() => add(h.song)} aria-label={`Add hymn ${shownNumber(h)} to the service`}>

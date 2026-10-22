@@ -79,6 +79,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0009_song_attachments", include_str!("../migrations/0009_song_attachments.sql")),
     ("0010_archive_templates", include_str!("../migrations/0010_archive_templates.sql")),
     ("0011_revision_saved_by", include_str!("../migrations/0011_revision_saved_by.sql")),
+    ("0012_song_alternate_titles", include_str!("../migrations/0012_song_alternate_titles.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -996,7 +997,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles"]);
     }
 
     #[test]
@@ -1219,7 +1220,7 @@ mod tests {
         let older = &MIGRATIONS[..5];
         let err = ContentDb::open_with_migrations(&tmp.db(), older).unwrap_err();
         match &err {
-            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by"]),
+            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles"]),
             other => panic!("{other:?}"),
         }
         assert!(err.to_string().contains("newer Rhema Studio"));
@@ -1240,7 +1241,7 @@ mod tests {
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));

@@ -95,3 +95,14 @@ describe("OpenLyrics import", () => {
   })
 })
 
+
+describe("OpenLyrics alternate titles", () => {
+  it("keeps every other <title> as an alternate title, and writes them back", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><song xmlns="http://openlyrics.info/namespace/2009/song" version="0.9"><properties><titles><title>Great shepherd</title><title lang="yo">Olùṣọ́-àgùntàn ẹni Rẹ</title></titles></properties><lyrics><verse name="v1"><lines>Great shepherd of thy people</lines></verse></lyrics></song>`
+    const { input } = parseOpenLyrics(xml)
+    expect(input.title).toBe("Great shepherd")
+    expect(input.alternate_titles).toEqual(["Olùṣọ́-àgùntàn ẹni Rẹ"])
+    const song = { song: { id: "s", title: "Great shepherd", alternate_titles: ["Olùṣọ́-àgùntàn ẹni Rẹ"], authors: "", copyright: "", ccli_number: null, licence: "unknown", licence_note: "", primary_language: "en", tags: "", notes: "", key: "", tempo: null, revision: 1, created_at: "", updated_at: "" }, sections: [{ id: "a", kind: "verse", label: "Verse 1", texts: { en: "Great shepherd of thy people" } }], arrangements: [], numbers: [] } as unknown as SongWithSections
+    expect(parseOpenLyrics(toOpenLyrics(song)).input.alternate_titles).toEqual(["Olùṣọ́-àgùntàn ẹni Rẹ"])
+  })
+})

@@ -22,6 +22,9 @@ pub const MAX_ARRANGEMENT_STEPS: usize = 200;
 pub struct Song {
     pub id: String,
     pub title: String,
+    /// Other names the song is known by (a hymn's Yorùbá title); searched with the title.
+    #[serde(default)]
+    pub alternate_titles: Vec<String>,
     pub authors: String,
     pub copyright: String,
     pub ccli_number: Option<String>,
@@ -76,6 +79,8 @@ pub struct SongWithSections {
 pub struct SongSummary {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub alternate_titles: Vec<String>,
     pub authors: String,
     pub licence: String,
     pub primary_language: String,
@@ -127,6 +132,9 @@ pub struct HymnNumberInput {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SongInput {
     pub title: String,
+    /// Other names, one per entry; blanks and repeats of the title are dropped.
+    #[serde(default)]
+    pub alternate_titles: Vec<String>,
     #[serde(default)]
     pub authors: String,
     #[serde(default)]
@@ -167,6 +175,7 @@ impl Default for SongInput {
     fn default() -> Self {
         Self {
             title: String::new(),
+            alternate_titles: vec![],
             authors: String::new(),
             copyright: String::new(),
             ccli_number: None,
@@ -586,6 +595,7 @@ fn remap_arrangements(input: &SongInput) -> Vec<ArrangementInput> {
 fn to_input(s: &SongWithSections, book_ids: &BTreeMap<String, String>) -> SongInput {
     SongInput {
         title: s.song.title.clone(),
+        alternate_titles: s.song.alternate_titles.clone(),
         authors: s.song.authors.clone(),
         copyright: s.song.copyright.clone(),
         ccli_number: s.song.ccli_number.clone(),
@@ -632,8 +642,8 @@ fn check_song_revision(tx: &Transaction<'_>, id: &str, expected: i64) -> Result<
 fn insert_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> {
     tx.execute(
         "INSERT INTO songs (id, title, title_sort, authors, copyright, ccli_number, licence, licence_note,
-                            primary_language, tags, notes, key, tempo)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                            primary_language, tags, notes, key, tempo, alternate_titles)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         params![
             id,
             s.title.trim(),
@@ -648,6 +658,7 @@ fn insert_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> 
             s.notes.trim(),
             s.key.trim(),
             s.tempo,
+            join_titles(&s.title, &s.alternate_titles),
         ],
     )?;
     Ok(())
@@ -657,7 +668,7 @@ fn update_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> 
     tx.execute(
         "UPDATE songs SET title = ?2, title_sort = ?3, authors = ?4, copyright = ?5, ccli_number = ?6,
                           licence = ?7, licence_note = ?8, primary_language = ?9, tags = ?10, notes = ?11,
-                          key = ?12, tempo = ?13,
+                          key = ?12, tempo = ?13, alternate_titles = ?14,
                           revision = revision + 1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
          WHERE id = ?1",
         params![
@@ -674,9 +685,27 @@ fn update_song_row(tx: &Transaction<'_>, id: &str, s: &SongInput) -> Result<()> 
             s.notes.trim(),
             s.key.trim(),
             s.tempo,
+            join_titles(&s.title, &s.alternate_titles),
         ],
     )?;
     Ok(())
+}
+
+/// Alternate titles as stored: trimmed, one per line, without blanks or repeats (of each other or of the title).
+fn join_titles(title: &str, alternates: &[String]) -> String {
+    let mut seen = vec![title.trim().to_lowercase()];
+    let mut out = Vec::new();
+    for t in alternates.iter().map(|t| t.trim()).filter(|t| !t.is_empty()) {
+        if !seen.contains(&t.to_lowercase()) {
+            seen.push(t.to_lowercase());
+            out.push(t.to_string());
+        }
+    }
+    out.join("\n")
+}
+
+fn split_titles(stored: &str) -> Vec<String> {
+    stored.lines().map(str::trim).filter(|t| !t.is_empty()).map(str::to_string).collect()
 }
 
 fn existing_child_ids(tx: &Transaction<'_>, song_id: &str) -> Result<HashSet<String>> {
@@ -926,7 +955,7 @@ fn load_song_row(conn: &Connection, id: &str) -> Result<Option<Song>> {
     Ok(conn
         .query_row(
             "SELECT id, title, authors, copyright, ccli_number, licence, licence_note, primary_language, tags, notes,
-                    revision, created_at, updated_at, key, tempo FROM songs WHERE id = ?1",
+                    revision, created_at, updated_at, key, tempo, alternate_titles FROM songs WHERE id = ?1",
             params![id],
             |r| {
                 Ok(Song {
@@ -945,6 +974,7 @@ fn load_song_row(conn: &Connection, id: &str) -> Result<Option<Song>> {
                     updated_at: r.get(12)?,
                     key: r.get(13)?,
                     tempo: r.get(14)?,
+                    alternate_titles: split_titles(&r.get::<_, String>(15)?),
                 })
             },
         )
@@ -1016,6 +1046,7 @@ fn load_summary(conn: &Connection, id: &str) -> Result<SongSummary> {
     Ok(SongSummary {
         id: song.id,
         title: song.title,
+        alternate_titles: song.alternate_titles,
         authors: song.authors,
         licence: song.licence,
         primary_language: song.primary_language,
@@ -1042,7 +1073,7 @@ fn reindex(tx: &Transaction<'_>, song_id: &str) -> Result<()> {
         .join(" ");
     tx.execute(
         "INSERT INTO song_search (song_id, title, authors, lyrics, numbers) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![song_id, fold(&song.title), fold(&song.authors), lyrics, numbers],
+        params![song_id, fold(&[song.title.as_str()].into_iter().chain(song.alternate_titles.iter().map(String::as_str)).collect::<Vec<_>>().join("\n")), fold(&song.authors), lyrics, numbers],
     )?;
     Ok(())
 }
@@ -1167,6 +1198,16 @@ pub fn is_language_tag(tag: &str) -> bool {
     parts.all(|p| (2..=8).contains(&p.len()) && p.chars().all(|c| c.is_ascii_alphanumeric()))
 }
 
+fn validate_alternate_titles(titles: &[String]) -> Result<()> {
+    if titles.len() > 20 {
+        return Err(ContentError::Invalid("more than 20 alternate titles".into()));
+    }
+    if let Some(t) = titles.iter().find(|t| t.chars().count() > crate::MAX_TITLE || t.contains('\n')) {
+        return Err(ContentError::Invalid(format!("alternate title too long or on several lines: {:?}", t.chars().take(40).collect::<String>())));
+    }
+    Ok(())
+}
+
 fn validate_song(s: &SongInput) -> Result<()> {
     let bad = |m: String| Err(ContentError::Invalid(m));
     let title = s.title.trim();
@@ -1176,6 +1217,7 @@ fn validate_song(s: &SongInput) -> Result<()> {
     if title.chars().count() > crate::MAX_TITLE {
         return bad(format!("title longer than {} characters", crate::MAX_TITLE));
     }
+    validate_alternate_titles(&s.alternate_titles)?;
     if !LICENCES.contains(&s.licence.trim()) {
         return bad(format!("unknown licence {:?}", s.licence));
     }
@@ -1767,6 +1809,30 @@ mod tests {
         assert_eq!(db.list_songs_tagged(Some("shepherd"), 10, Some(("cacghb", false))).unwrap().len(), 0);
         assert_eq!(db.list_songs_tagged(Some("shepherd"), 10, Some(("cacghb", true))).unwrap().len(), 1);
         assert_eq!(db.list_songs_tagged(Some("CAC 1"), 10, Some(("cacghb", true))).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn alternate_titles_are_kept_cleaned_and_searched() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let verse = SectionInput { id: None, kind: "verse".into(), label: String::new(), texts: [("en".to_string(), "Great shepherd of thy people hear".to_string())].into() };
+        let song = db
+            .create_song(&SongInput {
+                title: "Great shepherd".into(),
+                alternate_titles: vec!["  Olùṣọ́-àgùntàn ẹni Rẹ ".into(), String::new(), "great shepherd".into(), "Olùṣọ́-àgùntàn ẹni Rẹ".into()],
+                sections: vec![verse.clone()],
+                ..SongInput::default()
+            })
+            .unwrap();
+        assert_eq!(song.song.alternate_titles, vec!["Olùṣọ́-àgùntàn ẹni Rẹ".to_string()], "trimmed; blanks and repeats (also of the title) dropped");
+        assert_eq!(db.list_songs(Some("olusoaguntan"), 5).unwrap().len(), 0, "word search is by whole words");
+        let found = db.list_songs(Some("aguntan"), 5).unwrap();
+        assert_eq!(found.len(), 1, "an alternate title is searched, accents folded");
+        assert_eq!(found[0].alternate_titles, song.song.alternate_titles);
+        let updated = db.update_song(&song.song.id, song.song.revision, &SongInput { title: "Great shepherd".into(), alternate_titles: vec![], sections: vec![verse], ..SongInput::default() }).unwrap();
+        assert_eq!(updated.song.alternate_titles.len(), 0);
+        assert_eq!(db.list_songs(Some("aguntan"), 5).unwrap().len(), 0, "the index follows the change");
+        let too_many = SongInput { title: "X".into(), alternate_titles: (0..21).map(|i| format!("t{i}")).collect(), sections: vec![], ..SongInput::default() };
+        assert!(db.create_song(&too_many).is_err());
     }
 
 }
