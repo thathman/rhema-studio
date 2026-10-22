@@ -355,6 +355,13 @@ with no timer running), as designed.
 
 ## Artifacts
 
+Newest build (2026-10-22, night), from `main` at `aaf1fe8`: the owner's approved neutral design across every page (#218, #235-#241: shell, Home, Present, Prepare, a Production page, Library, Team, Archive, Settings, Design and Edit the look), the run of show running by itself (#219 loops and warm-up, #221 go-live cues, #222 timed moves, #223/#224 timers behind other windows, #233 holds), timing (#220 actual times, #227/#229/#230/#234 the timing engine, #232 other timers), the stage display's design (#226) and ticker cues (#225). Not notarised; open with right-click → Open.
+
+| File | Size | SHA-256 |
+|---|---|---|
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22e/Rhema-0.3.2-intel-x86_64.dmg` | 883 MB | `14e5f3ee84b9143151ec5b31d5f98a2c905b74ac12559c672fb851ce2fca424f` |
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22e/Rhema.app` (executable) | 1.0 GB | `25eadac852c172b86a7b1589353b795f2347020f8da789a43c5a0523bc5c6bb1` |
+
 Newest build (2026-10-22, late afternoon), from `main` at `604be9a` (everything through #212: the redesign's Design page, Find anything, the run-of-show Prepare with phases, groups and timing, phases in Present, ticker sets and still mode, the Library and Archive pages), no QA bridge:
 
 | File | Size | SHA-256 |
