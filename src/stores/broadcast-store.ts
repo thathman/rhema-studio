@@ -7,7 +7,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, StageStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -100,6 +100,9 @@ interface BroadcastState {
   /** The stage display's design (Design → Stage). */
   stageStyle: StageStyle
   saveStageStyle: (style: StageStyle) => void
+  /** When the service is expected to end (kept by stage-finish.ts from the timing engine). */
+  stageFinish: StageFinish | null
+  setStageFinish: (finish: StageFinish | null) => void
   /** Saved sets of announcements. Saved. */
   tickerPresets: TickerPreset[]
   /** Save the words now in the ticker as a set (replacing one of the same name). */
@@ -421,6 +424,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   tickerItems: [],
   tickerStyle: DEFAULT_TICKER_STYLE,
   stageStyle: DEFAULT_STAGE_STYLE,
+  stageFinish: null,
+  setStageFinish: (stageFinish) => {
+    set({ stageFinish })
+    for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
+  },
   saveStageStyle: (stageStyle) => {
     set({ stageStyle: normalizeStageStyle(stageStyle) })
     get().syncBroadcastOutput()
@@ -550,10 +558,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         theme: CLASSIC_DARK,
         verse: null,
         role: "stage",
-        stage: applyStageStyle(buildStagePayload({
+        stage: applyStageStyle({ ...buildStagePayload({
           isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), s.stageStyle),
+        }), finish: s.stageFinish }, s.stageStyle),
       }).catch(() => {})
       return
     }
