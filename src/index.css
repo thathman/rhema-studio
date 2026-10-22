@@ -54,6 +54,35 @@
     --color-surface-elevated: var(--surface-elevated);
     --color-surface-sunken: var(--surface-sunken);
     --color-studio-rail: var(--studio-rail);
+    --color-sidebar-label: var(--sidebar-label);
+    --color-on-air: var(--on-air);
+    --color-gold: var(--gold);
+    --color-teal: var(--teal);
+    --color-tone-neutral: var(--tone-neutral);
+    --color-tone-neutral-foreground: var(--tone-neutral-foreground);
+    --color-tone-violet: var(--tone-violet);
+    --color-tone-violet-foreground: var(--tone-violet-foreground);
+    --color-tone-green: var(--tone-green);
+    --color-tone-green-foreground: var(--tone-green-foreground);
+    --color-tone-amber: var(--tone-amber);
+    --color-tone-amber-foreground: var(--tone-amber-foreground);
+    --color-tone-rose: var(--tone-rose);
+    --color-tone-rose-foreground: var(--tone-rose-foreground);
+    --color-tone-blue: var(--tone-blue);
+    --color-tone-blue-foreground: var(--tone-blue-foreground);
+    --color-kind-scripture: var(--kind-scripture);
+    --color-kind-scripture-foreground: var(--kind-scripture-foreground);
+    --color-kind-song: var(--kind-song);
+    --color-kind-song-foreground: var(--kind-song-foreground);
+    --color-kind-media: var(--kind-media);
+    --color-kind-media-foreground: var(--kind-media-foreground);
+    --color-kind-slide: var(--kind-slide);
+    --color-kind-slide-foreground: var(--kind-slide-foreground);
+    --color-kind-other: var(--kind-other);
+    --color-kind-other-foreground: var(--kind-other-foreground);
+    --shadow-panel: 0 14px 45px rgb(34 44 65 / 0.04);
+    --shadow-lift: 0 15px 32px rgb(38 49 73 / 0.08);
+    --shadow-modal: 0 30px 100px rgb(7 10 27 / 0.27);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -63,95 +92,164 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Rhema Studio design tokens (the owner's redesign, 2026-10-22): a warm off-white canvas,
+ * white panels, ink text, violet accent; a dark planning mode; an always-dark live console
+ * (.present-surface). Hues follow the concept; greys and chip text are darkened where the
+ * concept fell below WCAG AA (4.5:1 for text, 3:1 for the focus ring).
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.141 0.005 285.823);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.141 0.005 285.823);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.141 0.005 285.823);
-    --primary: oklch(0.532 0.157 131.589);
-    --primary-foreground: oklch(0.986 0.031 120.757);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.967 0.001 286.375);
-    --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.967 0.001 286.375);
-    --accent-foreground: oklch(0.21 0.006 285.885);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.92 0.004 286.32);
-    --input: oklch(0.92 0.004 286.32);
-    --ring: oklch(0.705 0.015 286.067);
-    --chart-1: oklch(0.897 0.196 126.665);
-    --chart-2: oklch(0.768 0.233 130.85);
-    --chart-3: oklch(0.648 0.2 131.684);
-    --chart-4: oklch(0.532 0.157 131.589);
-    --chart-5: oklch(0.453 0.124 130.933);
-    --radius: 0.875rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.141 0.005 285.823);
-    --sidebar-primary: oklch(0.648 0.2 131.684);
-    --sidebar-primary-foreground: oklch(0.986 0.031 120.757);
-    --sidebar-accent: oklch(0.967 0.001 286.375);
-    --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-    --sidebar-border: oklch(0.92 0.004 286.32);
-    --sidebar-ring: oklch(0.705 0.015 286.067);
+    --background: #f6f6f3;
+    --foreground: #1e2532;
+    --card: #ffffff;
+    --card-foreground: #1e2532;
+    --popover: #ffffff;
+    --popover-foreground: #1e2532;
+    --primary: #6255e8;
+    --primary-foreground: #ffffff;
+    --secondary: #f0f2f4;
+    --secondary-foreground: #1e2532;
+    --muted: #f0f2f4;
+    --muted-foreground: #656d80;
+    --accent: #eeebff;
+    --accent-foreground: #5141c6;
+    --destructive: #c34353;
+    --border: #e6e8e9;
+    --input: #dfe2e9;
+    --ring: #7a6ff0;
+    --chart-1: #a79fff;
+    --chart-2: #8a7ff5;
+    --chart-3: #6255e8;
+    --chart-4: #4d40d4;
+    --chart-5: #3a2fae;
+    --radius: 0.625rem;
+    --sidebar: #171d2a;
+    --sidebar-foreground: #b8c0d2;
+    --sidebar-primary: #a79fff;
+    --sidebar-primary-foreground: #171d2a;
+    --sidebar-accent: #35365e;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #252d3d;
+    --sidebar-ring: #a79fff;
+    --sidebar-label: #8592ad;
     --ai-direct: oklch(52.7% 0.154 150.069);
     --ai-semantic: oklch(55.5% 0.163 48.998);
     --ai-cloud: oklch(62.3% 0.214 259.815);
-    /* Light mode: darker than the dark-mode values so text on white meets WCAG AA (about 5:1; the bright ones were 2.1-2.2:1). */
+    /* Light mode: darker than the dark-mode values so text on white meets WCAG AA. */
     --confidence-high: oklch(52.7% 0.154 150.069);
     --confidence-mid: oklch(55.5% 0.163 48.998);
     --confidence-low: oklch(50.5% 0.213 27.518);
-    --live-pulse: oklch(0.65 0.25 25);
-    --surface-elevated: oklch(0.96 0 0);
-    --surface-sunken: oklch(0.92 0 0);
-    --studio-rail: oklch(0.975 0 0);
+    --live-pulse: #ed5364;
+    --on-air: #ed5364;
+    --gold: #d2943c;
+    --teal: #199d8c;
+    --surface-elevated: #fafaf8;
+    --surface-sunken: #eef0f2;
+    /* The current rail keeps a light ground until the navy sidebar replaces it (UX-02). */
+    --studio-rail: #ffffff;
     --control-height: 3.25rem;
+    /* Chips and status (background / text). */
+    --tone-neutral: #f0f2f4;
+    --tone-neutral-foreground: #5d6879;
+    --tone-violet: #eeebff;
+    --tone-violet-foreground: #6656c2;
+    --tone-green: #e7f7f0;
+    --tone-green-foreground: #237a5b;
+    --tone-amber: #fff4e2;
+    --tone-amber-foreground: #8a5f26;
+    --tone-rose: #fff0f1;
+    --tone-rose-foreground: #b13f59;
+    --tone-blue: #e7f1ff;
+    --tone-blue-foreground: #46699a;
+    /* What kind of item a row is (icon tile background / icon). */
+    --kind-scripture: #f4eefe;
+    --kind-scripture-foreground: #8a67bf;
+    --kind-song: #eef4fa;
+    --kind-song-foreground: #527ba7;
+    --kind-media: #fdf4e5;
+    --kind-media-foreground: #b58645;
+    --kind-slide: #ecf8f1;
+    --kind-slide-foreground: #479878;
+    --kind-other: #f3f1ff;
+    --kind-other-foreground: #6655bf;
 }
 
+/* Dark planning mode. */
 .dark {
-    --background: oklch(0.141 0.005 285.823);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.21 0.006 285.885);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.21 0.006 285.885);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.453 0.124 130.933);
-    --primary-foreground: oklch(0.986 0.031 120.757);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.274 0.006 286.033);
-    --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.274 0.006 286.033);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.552 0.016 285.938);
-    --chart-1: oklch(0.897 0.196 126.665);
-    --chart-2: oklch(0.768 0.233 130.85);
-    --chart-3: oklch(0.648 0.2 131.684);
-    --chart-4: oklch(0.532 0.157 131.589);
-    --chart-5: oklch(0.453 0.124 130.933);
-    --sidebar: oklch(0.21 0.006 285.885);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.768 0.233 130.85);
-    --sidebar-primary-foreground: oklch(0.274 0.072 132.109);
-    --sidebar-accent: oklch(0.274 0.006 286.033);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.552 0.016 285.938);
+    --background: #151b27;
+    --foreground: #eff3fb;
+    --card: #202738;
+    --card-foreground: #eff3fb;
+    --popover: #232c3b;
+    --popover-foreground: #eff3fb;
+    --primary: #6255e8;
+    --primary-foreground: #ffffff;
+    --secondary: #273246;
+    --secondary-foreground: #eff3fb;
+    --muted: #273246;
+    --muted-foreground: #a5b0c0;
+    --accent: #302c4a;
+    --accent-foreground: #bbb0f1;
+    --destructive: #ff8f9a;
+    --border: #363e50;
+    --input: #46516a;
+    --ring: #978efa;
+    --sidebar: #10151f;
+    --sidebar-foreground: #b8c0d2;
+    --sidebar-primary: #a79fff;
+    --sidebar-primary-foreground: #10151f;
+    --sidebar-accent: #35365e;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #232b3b;
+    --sidebar-ring: #a79fff;
+    --sidebar-label: #8592ad;
     --ai-direct: oklch(72.3% 0.219 149.579);
     --ai-semantic: oklch(76.9% 0.188 70.08);
     --ai-cloud: oklch(62.3% 0.214 259.815);
     --confidence-high: oklch(72.3% 0.219 149.579);
     --confidence-mid: oklch(76.9% 0.188 70.08);
     --confidence-low: oklch(63.7% 0.237 25.331);
-    --live-pulse: oklch(0.65 0.25 25);
-    --surface-elevated: oklch(0.22 0 0);
-    --surface-sunken: oklch(0.12 0 0);
-    --studio-rail: oklch(0.17 0.005 285.823);
+    --surface-elevated: #273246;
+    --surface-sunken: #182132;
+    --studio-rail: #10151f;
+    --tone-neutral: #2a3446;
+    --tone-neutral-foreground: #c3cad6;
+    --tone-violet: #302c4a;
+    --tone-violet-foreground: #bbb0f1;
+    --tone-green: #1c3431;
+    --tone-green-foreground: #88d8bf;
+    --tone-amber: #3a2f1e;
+    --tone-amber-foreground: #f2c87e;
+    --tone-rose: #3b252e;
+    --tone-rose-foreground: #f8b4b6;
+    --tone-blue: #1e2c42;
+    --tone-blue-foreground: #9fc0ec;
+    --kind-scripture: #2e2843;
+    --kind-scripture-foreground: #c6aef0;
+    --kind-song: #22314a;
+    --kind-song-foreground: #9fc0ec;
+    --kind-media: #3a2f1e;
+    --kind-media-foreground: #e6b877;
+    --kind-slide: #1c3431;
+    --kind-slide-foreground: #88d8bf;
+    --kind-other: #302c4a;
+    --kind-other-foreground: #bbb0f1;
+}
+
+/* The live console: always dark, a deeper navy than planning mode (wrap it in .dark too). */
+.present-surface {
+    --background: #101522;
+    --foreground: #f0f2fa;
+    --card: #1c2434;
+    --card-foreground: #f0f2fa;
+    --popover: #1c2434;
+    --muted: #242c3e;
+    --muted-foreground: #9aa3b5;
+    --secondary: #293448;
+    --border: #343d50;
+    --input: #414c5f;
+    --surface-elevated: #1a2332;
+    --surface-sunken: #191f2e;
 }
 
 @layer base {
@@ -160,6 +258,7 @@
     }
   body {
     @apply bg-background text-foreground;
+    letter-spacing: -0.012em;
     }
   html {
     @apply font-sans;
