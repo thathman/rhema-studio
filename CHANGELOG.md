@@ -20,6 +20,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Icon buttons and sliders have names for screen readers; theme cards work from the keyboard; the red live buttons meet WCAG AA contrast.
 - Status colours (ready, needs attention, confidence) are readable in light mode.
 
+### Songs
+- Songs can have other titles (one per line in the song editor), found by search like the title; OpenLyrics files keep them; each CAC hymn's Yorùbá title is one.
+
 ### Phone remote
 - The phone shows rehearsal, the approval question and what is on air at once, also when the Rhema window is minimised or behind another app.
 
