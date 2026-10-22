@@ -4,18 +4,8 @@ import { toast } from "sonner"
 import "@/stores/journal-store"
 import "@/stores/monitor-store"
 import "@/stores/obs-store"
-import { useEffect } from "react"
-import {
-  HouseIcon,
-  PencilRulerIcon,
-  PlayIcon,
-  EllipsisIcon,
-  SunIcon,
-  MoonIcon,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useEffect, useMemo } from "react"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
-import { useTheme } from "@/components/theme-provider"
 import { bibleActions } from "@/hooks/use-bible"
 import { rememberedServiceId, useServiceStore } from "@/stores/service-store"
 import { useBroadcastStore, useQueueStore } from "@/stores"
@@ -26,13 +16,15 @@ import { MoreWorkspace } from "@/studio/more/more-workspace"
 import { ThemeDesigner } from "@/components/broadcast/theme-designer"
 import { BroadcastOutputsDialog } from "@/components/broadcast/broadcast-outputs-dialog"
 import { SettingsDialog } from "@/components/settings-dialog"
+import { LibraryDialog } from "@/studio/more/library-dialog"
+import { openSettings } from "@/lib/settings-dialog"
+import { useSettingsStore } from "@/stores/settings-store"
+import { Sidebar } from "@/studio/shell/sidebar"
+import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
+import { TopBar } from "@/studio/shell/top-bar"
 
-const NAV: Array<{ id: Workspace; label: string; icon: React.ReactNode; key: string }> = [
-  { id: "home", label: "Home", icon: <HouseIcon />, key: "1" },
-  { id: "prepare", label: "Prepare", icon: <PencilRulerIcon />, key: "2" },
-  { id: "present", label: "Present", icon: <PlayIcon />, key: "3" },
-  { id: "more", label: "More", icon: <EllipsisIcon />, key: "4" },
-]
+/** What the top bar calls each page. */
+const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -46,8 +38,16 @@ export function AppShell() {
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const outputsOpen = useShellStore((s) => s.outputsDialogOpen)
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
+  const libraryOpen = useShellStore((s) => s.libraryOpen)
+  const setLibraryOpen = useShellStore((s) => s.setLibraryOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
-  const { theme, setTheme } = useTheme()
+  const operatorName = useSettingsStore((s) => s.operatorName)
+  const church = useMemo(() => churchItems({
+    library: () => setLibraryOpen(true),
+    design: () => useBroadcastStore.getState().setDesignerOpen(true),
+    team: () => setWorkspace("more"),
+    archive: () => setLibraryOpen(true),
+  }), [setLibraryOpen, setWorkspace])
 
   // The Bible catalogue used to load only when the search panel mounted.
   useEffect(() => {
@@ -63,12 +63,13 @@ export function AppShell() {
     })
   }, [])
 
-  // Cmd/Ctrl+1..4 switch workspaces from anywhere.
+  // Cmd/Ctrl+1..7 go to a place from anywhere; Cmd/Ctrl+, opens Settings.
   useEffect(() => {
+    const items: NavItem[] = [...WORKSPACE_ITEMS, ...church]
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return
-      const item = NAV.find((n) => n.key === e.key)
-      if (!item) return
+      const item = items.find((n) => n.key === e.key)
+      if (!item && e.key !== ",") return
       e.preventDefault()
       // Never switch away from an unsaved song or under an open dialog: that would discard it unasked.
       if (useUnsavedStore.getState().songEditor !== null) {
@@ -76,72 +77,39 @@ export function AppShell() {
         return
       }
       if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) return
-      setWorkspace(item.id)
+      if (!item) openSettings()
+      else if (item.workspace) setWorkspace(item.workspace)
+      else item.onSelect?.()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [setWorkspace])
+  }, [setWorkspace, church])
 
   return (
-    <div className="fixed inset-0 grid grid-cols-[4.5rem_minmax(0,1fr)] bg-background text-foreground">
-      <nav
-        aria-label="Workspaces"
-        className="flex flex-col items-stretch border-r border-border bg-[var(--studio-rail)] py-3"
-      >
-        <div className="mb-3 flex flex-col items-center gap-0.5 px-1" title="Rhema Studio">
-          <span className="text-sm font-bold tracking-tight">Rhema</span>
-          <span className="text-[0.5625rem] font-medium tracking-[0.2em] text-muted-foreground uppercase">
-            Studio
-          </span>
-        </div>
-        {NAV.map((item) => {
-          const active = item.id === workspace
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={active ? "page" : undefined}
-              title={`${item.label} (⌘${item.key} / Ctrl+${item.key})`}
-              onClick={() => setWorkspace(item.id)}
-              className={cn(
-                "relative mx-2 my-0.5 flex h-14 flex-col items-center justify-center gap-1 rounded-lg text-[0.6875rem] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-5",
-                active
-                  ? "bg-primary/15 text-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-              {item.id === "present" && isLive && (
-                <span
-                  aria-label="Live"
-                  className="absolute top-1.5 right-2 size-2 animate-pulse rounded-full bg-live-pulse shadow-[0_0_6px] shadow-live-pulse"
-                />
-              )}
-            </button>
-          )
-        })}
-        <div className="mt-auto flex flex-col items-center gap-1">
-          <button
-            type="button"
-            title="Toggle light / dark"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground [&_svg]:size-4"
-          >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          </button>
-        </div>
-      </nav>
+    <div className="fixed inset-0 grid grid-cols-[auto_minmax(0,1fr)] bg-background text-foreground">
+      <Sidebar
+        workspace={workspace}
+        isLive={isLive}
+        church={church}
+        operatorName={operatorName}
+        onWorkspace={setWorkspace}
+        onSettings={() => openSettings()}
+        onMore={() => setWorkspace("more")}
+      />
 
-      <main className="relative min-h-0 min-w-0">
-        {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
-        <ErrorBoundary key={workspace} name={`the ${NAV.find((n) => n.id === workspace)?.label ?? workspace} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>
-      </main>
+      <div className="flex min-h-0 min-w-0 flex-col">
+        <TopBar title={TITLES[workspace]} />
+        <main className="relative min-h-0 min-w-0 flex-1">
+          {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
+          <ErrorBoundary key={workspace} name={`the ${TITLES[workspace]} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>
+        </main>
+      </div>
 
       {/* Global dialogs: reachable from every workspace, mounted exactly once. */}
       <ThemeDesigner />
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
       <SettingsDialog />
+      <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </div>
   )
 }
