@@ -174,6 +174,7 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10bq.4 (theme used by an output) | V: deleting the stream's theme refused ("used by Stream"); the output kept it |
 | 10bw.2 (log after rehearsal) | F → V: after "rehearsal off" the log had "LIVE Welcome" (B). A picture item on air was logged as "slide": #179 logs it by its rundown name |
 | 10bx.2 (song edited while live) | V: a four-verse song live on verse 2; verse 1 deleted in the library and saved; Next, Next: verses 3 and 4 as they were live; starting the song again used the edited song |
+| 10bq.6 (closing with a closed service's rundown) | V: saved service opened, Close service, close: quit without a question. Again, then one item removed, close: "Save changes before closing? The service on screen has not been saved …" with Keep working / Close without saving; the latter quit |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
