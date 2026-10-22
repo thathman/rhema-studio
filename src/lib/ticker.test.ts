@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { crawlElapsed, crawlPositions, mirrorPositions, normalizeTickerStyle, tickerText } from "./ticker"
+import { crawlElapsed, crawlPositions, mirrorPositions, normalizePresets, normalizeTickerStyle, pageIndex, tickerText } from "./ticker"
 
 describe("news ticker", () => {
   it("joins items with the separator, dropping blanks", () => {
@@ -39,5 +39,20 @@ describe("pause and direction", () => {
     expect(mirrorPositions(crawlPositions(200, 800, 300, 100, 100, 1000), 200, 800, 300)).toEqual([0])
     expect(normalizeTickerStyle({ direction: "right" }).direction).toBe("right")
     expect(normalizeTickerStyle({}).direction).toBe("left")
+  })
+})
+
+describe("still pages and presets", () => {
+  it("pages show one announcement at a time, blanks skipped, round and round", () => {
+    const items = ["Prayer meeting", " ", "Youth Saturday"]
+    expect(pageIndex(items, 6, 0)).toBe(0)
+    expect(pageIndex(items, 6, 6500)).toBe(1)
+    expect(pageIndex(items, 6, 12_500)).toBe(0)
+    expect(pageIndex([" "], 6, 0)).toBe(-1)
+    expect(normalizeTickerStyle({ motion: "pages", pageSeconds: 1 })).toMatchObject({ motion: "pages", pageSeconds: 2 })
+  })
+  it("saved sets keep a name and words; broken ones are dropped", () => {
+    expect(normalizePresets([{ id: "a", name: " Sunday ", items: ["Welcome", 3] }, { name: "", items: ["x"] }, { name: "Empty", items: [" "] }, null])).toEqual([{ id: "a", name: "Sunday", items: ["Welcome"] }])
+    expect(normalizePresets("nope")).toEqual([])
   })
 })

@@ -1,5 +1,5 @@
 import type { Ticker } from "@/types/broadcast-output"
-import { crawlElapsed, crawlPositions, mirrorPositions, tickerText } from "@/lib/ticker"
+import { crawlElapsed, crawlPositions, mirrorPositions, pageIndex, tickerText } from "@/lib/ticker"
 
 export interface TickerDrawOptions {
   imageCache?: Map<string, HTMLImageElement>
@@ -62,6 +62,14 @@ export function drawTicker(ctx: CanvasRenderingContext2D, width: number, height:
   ctx.font = `${st.weight} ${size}px ${family}`
   ctx.fillStyle = st.color
   ctx.textAlign = "left"
+  if (st.motion === "pages") {
+    // One announcement at a time, still: no movement for people who find motion hard.
+    const shown = ticker.items.map((i) => i.trim()).filter(Boolean)
+    const k = pageIndex(ticker.items, st.pageSeconds, crawlElapsed(ticker, opts.now))
+    if (k >= 0) ctx.fillText(shown[k], laneX + h * 0.6, y + h / 2, width - laneX - h * 1.2)
+    ctx.restore()
+    return
+  }
   const textW = ctx.measureText(text).width
   const speed = (st.speed * height) / 1080
   const laneW = width - laneX

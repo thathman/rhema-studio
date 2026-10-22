@@ -1,5 +1,10 @@
 import { NewspaperIcon, PaletteIcon, PauseIcon, PlayIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CanvasVerse } from "@/components/ui/canvas-verse"
+import type { Ticker } from "@/types"
+import { useMemo, useState } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useBroadcastStore } from "@/stores"
@@ -54,6 +59,8 @@ export function TickerControl() {
             className="text-xs"
           />
           <p className="mt-1 text-[0.6875rem] text-muted-foreground">One announcement per line.</p>
+          <TickerPresets />
+          <TickerPreview />
           <div className="mt-2 flex items-center gap-2">
             {ticker ? (
               <>
@@ -101,6 +108,39 @@ export function TickerRow() {
           <Button size="sm" disabled={!hasWords} onClick={() => void take()} title={hasWords ? undefined : "Type the announcements first (Ticker)"}><PlayIcon /> Take<span className="max-[1200px]:sr-only"> ticker live</span></Button>
         )}
       </span>
+    </div>
+  )
+}
+
+/** Load a saved set of announcements, or save these words as one. */
+function TickerPresets() {
+  const presets = useBroadcastStore((s) => s.tickerPresets)
+  const [name, setName] = useState("")
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      {presets.length > 0 && (
+        <Select value="" onValueChange={(id) => { const p = presets.find((x) => x.id === id); if (p) useBroadcastStore.getState().setTickerItems(p.items) }}>
+          <SelectTrigger aria-label="Load a saved set" className="h-8 flex-1 text-xs"><SelectValue placeholder="Load a saved set…" /></SelectTrigger>
+          <SelectContent>{presets.map((p) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.items.length})</SelectItem>)}</SelectContent>
+        </Select>
+      )}
+      <Input aria-label="Name for this set" placeholder="Save as… (e.g. Sunday notices)" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} className="h-8 flex-1 text-xs" />
+      <Button size="sm" variant="outline" disabled={!name.trim()} onClick={() => { useBroadcastStore.getState().saveTickerPreset(name); setName("") }}>Save</Button>
+    </div>
+  )
+}
+
+/** The ticker as it will look with these words (over the main output's theme), before taking it live. */
+function TickerPreview() {
+  const items = useBroadcastStore((s) => s.tickerItems)
+  const style = useBroadcastStore((s) => s.tickerStyle)
+  const theme = useBroadcastStore((s) => s.themes.find((t) => t.id === s.outputs.find((o) => o.ticker)?.themeId) ?? s.themes[0])
+  const ticker = useMemo<Ticker>(() => ({ items, style, startedAt: 0 }), [items, style])
+  if (!theme || !items.some((i) => i.trim())) return null
+  return (
+    <div className="mt-2">
+      <p className="mb-1 text-[0.6875rem] text-muted-foreground">Preview (only you see this)</p>
+      <CanvasVerse theme={theme} verse={{ reference: "", segments: [] }} ticker={ticker} />
     </div>
   )
 }
