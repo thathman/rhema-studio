@@ -191,6 +191,9 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10bv.3 (cue Next then Offering) | V: Welcome went live, Offering covered it; Back returned to Welcome |
 | 10ci.1 (cue Show live then Offering) | V: Psalm 23:4 in the preview went live, Offering covered it; Back returned to Psalm 23:4 |
 | 10ci.2 (cue from rehearsal, approval on) | V: "Show live, Rehearsal off" in rehearsal on an unapproved service: the approval question for "QA Slides 2" appeared and rehearsal stayed on (the congregation saw nothing) |
+| 10bz.3 (song edited while live) | V: a song live on verse 1; its words edited and saved in the library; Next showed verse 2 with the words as it went live ("Original words two") |
+| 10bz.4 (saved translation kept) | V: Psalm 23:1 saved in KJV on air; the active Bible switched to AMP: the screen kept "Psalms 23:1 (KJV)" |
+| 10bp.4 (song deleted while live) | Not reachable any more: deleting a song the unsaved service on screen uses is refused ("in use: the service on screen", 10cb.4) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
