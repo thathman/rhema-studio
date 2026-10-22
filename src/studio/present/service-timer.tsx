@@ -151,7 +151,7 @@ export function ServiceTimer() {
 }
 
 /** Hold the service with a reason (issue #196): logged, on the stage display; loops and timed moves wait until Resume. */
-function HoldControl() {
+export function HoldControl() {
   const hold = useHold((s) => s.hold)
   const [reason, setReason] = useState("")
   if (hold) {

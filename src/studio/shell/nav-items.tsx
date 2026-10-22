@@ -1,4 +1,4 @@
-import { ArchiveIcon, HouseIcon, LibraryBigIcon, PaletteIcon, PencilRulerIcon, PlayIcon, UsersIcon } from "lucide-react"
+import { ArchiveIcon, HouseIcon, LibraryBigIcon, MonitorCogIcon, PaletteIcon, PencilRulerIcon, PlayIcon, UsersIcon } from "lucide-react"
 import type { Workspace } from "@/studio/shell-store"
 
 export interface NavItem {
@@ -16,6 +16,7 @@ export const WORKSPACE_ITEMS: NavItem[] = [
   { id: "home", label: "Home", icon: <HouseIcon />, key: "1", workspace: "home" },
   { id: "prepare", label: "Prepare", icon: <PencilRulerIcon />, key: "2", workspace: "prepare" },
   { id: "present", label: "Present", icon: <PlayIcon />, key: "3", workspace: "present" },
+  { id: "production", label: "Production", icon: <MonitorCogIcon />, key: "8", workspace: "production" },
 ]
 
 /** Your church: until each becomes a page (UX-08 to UX-11) they open what exists today. */

@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, EllipsisIcon } from "lucide-react"
+import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon } from "lucide-react"
 import { useState } from "react"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useQueueStore } from "@/stores"
@@ -12,7 +12,8 @@ const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string
   ["prepare", "Prepare", <PencilRulerIcon key="i" />, "service builder rundown plan"],
   ["present", "Present", <PlayIcon key="i" />, "live console show go live"],
   ["design", "Design", <PaletteIcon key="i" />, "themes looks studio"],
-  ["more", "More tools", <EllipsisIcon key="i" />, "team remote classic layout signage"],
+  ["production", "Production", <MonitorCogIcon key="i" />, "production control timekeeper timers hold screens outputs ndi health preflight"],
+  ["team", "Team", <UsersIcon key="i" />, "team approvals comments church folder remote"],
 ]
 
 const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
