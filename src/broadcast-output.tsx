@@ -16,7 +16,8 @@ import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
 import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
-import type { NdiConfigEventPayload, StagePayload } from "@/types"
+import type { LowerThird, NdiConfigEventPayload, StagePayload } from "@/types"
+import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
 
 
@@ -29,6 +30,8 @@ const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "
 // One output window is one page, so its video player lives at module level
 // (created and disposed with the window's listeners).
 let videoPlayer: VideoPlayer | null = null
+// The lower third's own looping video backing (silent), beside the screen's video.
+let backingPlayer: VideoPlayer | null = null
 const latencyLog = createLatencyLog(`output ${OUTPUT_ID}`)
 // Frames are drawn here first; see paintFrame.
 const scratchCanvas = document.createElement("canvas")
@@ -47,7 +50,7 @@ interface BroadcastPayload {
   theme: BroadcastTheme
   verse: VerseRenderData | null
   /** Lower third for this output, drawn over everything; null when hidden or not enabled here. */
-  overlay?: { line1: string; line2: string } | null
+  overlay?: LowerThird | null
   role?: "congregation" | "stage"
   stage?: StagePayload
   /** Wall-clock ms when the main window sent this screen (latency log). */
@@ -108,7 +111,13 @@ function BroadcastCanvas() {
         fctx.fillRect(0, 0, width, height)
         logDebug("renderVerse returned null; drew fallback frame")
       }
-      if (data.overlay && verse?.screen !== "black") drawLowerThird(fctx, width, height, data.overlay, theme.verseText?.fontFamily)
+      if (data.overlay && verse?.screen !== "black") {
+        drawLowerThird(fctx, width, height, data.overlay, theme.verseText?.fontFamily, {
+          imageCache: themeImageCache(),
+          video: backingPlayer?.element() ?? null,
+          progress: entranceProgress(data.overlay, Date.now()),
+        })
+      }
     })
     if (ok !== !frameFailing) void getCurrentWebviewWindow().emitTo("main", ok ? "broadcast:render-recovered" : "broadcast:render-error", { outputId: OUTPUT_ID }).catch(() => {})
     frameFailing = !ok
@@ -219,6 +228,24 @@ function BroadcastCanvas() {
       fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
     })
     videoPlayer = player
+    const backing = createVideoPlayer({
+      onFrame: () => {
+        draw()
+        if (ndiConfigRef.current.active) void pushNdiFrame()
+      },
+      onEnded: () => draw(),
+      onError: (name) => console.warn("[broadcast-output] lower third video failed to play:", name),
+      allowSound: false,
+      fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
+    })
+    backingPlayer = backing
+    // Draw the lower third's entrance frame by frame (and send each over NDI) until it is fully on.
+    const animateOverlay = () => {
+      draw()
+      if (ndiConfigRef.current.active) void pushNdiFrame()
+      const ov = latestData.current?.overlay
+      if (ov && entranceProgress(ov, Date.now()) < 1) setTimeout(animateOverlay, 33)
+    }
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
       if (event.payload.role === "stage") {
         videoPlayer?.sync(undefined)
@@ -233,6 +260,10 @@ function BroadcastCanvas() {
       // A new screen clears the operator's warning, so a failure to draw it must be reported again.
       frameFailing = false
       videoPlayer?.sync(event.payload.verse?.video)
+      const ov = event.payload.overlay
+      backingPlayer?.sync(ov?.backing?.kind === "video" ? { url: ov.backing.url, fit: "cover", loop: true, sound: false, name: "lower third", token: 0 } : undefined)
+      if (ov?.backing?.kind === "picture") void loadThemeImage(ov.backing.url).then(() => { draw(); pushNdiBurstRef.current?.() })
+      if (ov && entranceProgress(ov, Date.now()) < 1) animateOverlay()
       preloadThemeAssets(event.payload.theme)
       const sentAt = event.payload.sentAt
       const logLatency = () => {
@@ -297,6 +328,8 @@ function BroadcastCanvas() {
     return () => {
       player.dispose()
       videoPlayer = null
+      backing.dispose()
+      backingPlayer = null
       unsubscribeFonts()
       unlisten.then((fn) => fn())
       unlistenNdiConfig.then((fn) => fn())

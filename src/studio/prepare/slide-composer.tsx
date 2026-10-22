@@ -177,7 +177,8 @@ export function SlideComposer() {
 const PICTURES_AND_VIDEOS = [{ name: "Pictures and videos", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm"] }]
 
 /** A picture or a video behind the slide's words: one from the media library, or import one here. */
-function SlideBackground({ value, onChange }: { value: { media_id: string; name: string } | null; onChange: (v: { media_id: string; name: string } | null) => void }) {
+/** A picture or video from the media library (or one imported here), or none. */
+export function SlideBackground({ value, onChange, label = "Background", noneLabel = "None (the theme's)", hint = "A video plays silently and loops behind the words." }: { value: { media_id: string; name: string } | null; onChange: (v: { media_id: string; name: string; kind?: "image" | "video" } | null) => void; label?: string; noneLabel?: string; hint?: string }) {
   const assets = useMediaStore((s) => s.assets)
   const loaded = useMediaStore((s) => s.loaded)
   const loading = useMediaStore((s) => s.loading)
@@ -191,7 +192,7 @@ function SlideBackground({ value, onChange }: { value: { media_id: string; name:
     try {
       const results = await useMediaStore.getState().importFiles(PICTURES_AND_VIDEOS)
       const first = results?.find((r) => r.status === "imported")
-      if (first && first.status === "imported") onChange({ media_id: first.asset.id, name: first.asset.name })
+      if (first && first.status === "imported") onChange({ media_id: first.asset.id, name: first.asset.name, kind: first.asset.kind === "video" ? "video" : "image" })
       const failed = results?.find((r) => r.status === "failed")
       if (failed && failed.status === "failed") toast.error(`Could not import ${failed.path}`, { description: failed.message })
     } finally {
@@ -201,16 +202,16 @@ function SlideBackground({ value, onChange }: { value: { media_id: string; name:
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="text-muted-foreground">Background</span>
-      <Select value={value?.media_id ?? "__none"} onValueChange={(v) => onChange(v === "__none" ? null : { media_id: v, name: choices.find((c) => c.id === v)?.name ?? "" })}>
-        <SelectTrigger className="h-7 w-56 text-xs" aria-label="Slide background"><SelectValue placeholder="None" /></SelectTrigger>
+      <span className="text-muted-foreground">{label}</span>
+      <Select value={value?.media_id ?? "__none"} onValueChange={(v) => { const c = choices.find((x) => x.id === v); onChange(v === "__none" ? null : { media_id: v, name: c?.name ?? "", kind: c?.kind === "video" ? "video" : "image" }) }}>
+        <SelectTrigger className="h-7 w-56 text-xs" aria-label={label}><SelectValue placeholder="None" /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="__none">None (the theme's)</SelectItem>
+          <SelectItem value="__none">{noneLabel}</SelectItem>
           {choices.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}{c.kind === "video" ? " · video" : ""}</SelectItem>)}
         </SelectContent>
       </Select>
       <Button size="xs" variant="outline" disabled={busy} onClick={() => void importOne()}><UploadIcon /> {busy ? "Importing…" : "Import a picture or video…"}</Button>
-      <span className="text-[0.6875rem] text-muted-foreground">A video plays silently and loops behind the words.</span>
+      {hint && <span className="text-[0.6875rem] text-muted-foreground">{hint}</span>}
     </div>
   )
 }

@@ -7,7 +7,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -20,6 +20,7 @@ import { useSongStore } from "@/stores/song-store"
 import { forOutputLanguage } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
+import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
 import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -82,6 +83,12 @@ interface BroadcastState {
   stageMessage: string
   /** The lower third on air (outputs with lowerThirds on), or null. Session state; not saved. */
   lowerThird: LowerThird | null
+  /** Designed looks for the lower third (the first is the default). Saved with the themes. */
+  lowerThirdStyles: LowerThirdStyle[]
+  /** Add or replace a style (by id); `backing` (resolved) replaces the on-air band's when it uses this style. */
+  saveLowerThirdStyle: (style: LowerThirdStyle, backing?: LowerThird["backing"]) => void
+  /** Remove a style; the last one cannot go. */
+  deleteLowerThirdStyle: (id: string) => void
   /**
    * What each output was last sent (multiview thumbnails show exactly this).
    * Session state; written whenever an output is synced.
@@ -364,6 +371,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   cleared: false,
   stageMessage: "",
   lowerThird: null,
+  lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE],
   outputFrames: {},
   rehearsal: false,
   presentWarning: null,
@@ -488,7 +496,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       return
     }
     const verse = s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null
-    const overlay = output.lowerThirds ? s.lowerThird : null
+    const overlay = output.lowerThirds ? overlayFor(s.lowerThird, verse) : null
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
     recordFrame(outputId, { theme, verse, overlay })
@@ -621,9 +629,25 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (!rehearsal) get().syncBroadcastOutput()
   },
   setLowerThird: (lt) => {
-    const clean = lt && (lt.line1.trim() || lt.line2.trim()) ? { line1: lt.line1.trim(), line2: lt.line2.trim() } : null
+    // A strip that follows what is live has no words of its own.
+    const clean = lt && (lt.follow || lt.line1.trim() || lt.line2.trim()) ? { ...lt, line1: lt.line1.trim(), line2: lt.line2.trim(), shownAt: Date.now() } : null
     set({ lowerThird: clean })
     for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+  },
+  saveLowerThirdStyle: (style, backing) => {
+    const styles = get().lowerThirdStyles
+    const at = styles.findIndex((x) => x.id === style.id)
+    set({ lowerThirdStyles: at < 0 ? [...styles, style] : styles.map((x, i) => (i === at ? style : x)) })
+    // The band on air in this style redraws as designed (without coming on again).
+    const lt = get().lowerThird
+    if (lt?.style?.id === style.id) {
+      set({ lowerThird: { ...lt, style, ...(backing !== undefined ? { backing } : {}) } })
+      for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+    }
+  },
+  deleteLowerThirdStyle: (id) => {
+    const styles = get().lowerThirdStyles
+    if (styles.length > 1) set({ lowerThirdStyles: styles.filter((x) => x.id !== id) })
   },
   setStageMessage: (stageMessage) => {
     set({ stageMessage })
@@ -793,6 +817,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
       const main = patch.outputs.find((o) => o.id === MAIN_OUTPUT_ID)
       if (main) patch.activeThemeId = main.themeId
       if (typeof autoLive === "boolean") patch.autoLive = autoLive
+      const ltStyles = (await store.get("lowerThirdStyles")) as LowerThirdStyle[] | undefined
+      if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
 
       useBroadcastStore.setState(patch)
 
@@ -802,7 +828,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.themes !== prevState.themes ||
           state.activeThemeId !== prevState.activeThemeId ||
           state.outputs !== prevState.outputs ||
-          state.autoLive !== prevState.autoLive
+          state.autoLive !== prevState.autoLive ||
+          state.lowerThirdStyles !== prevState.lowerThirdStyles
         if (!changed) return
         if (saveTimer) clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
@@ -851,6 +878,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     // Legacy mirror of the main output's theme; older builds still read it.
     await store.set("activeThemeId", state.activeThemeId)
     await store.set("autoLiveOptIn", state.autoLive)
+    await store.set("lowerThirdStyles", state.lowerThirdStyles)
     await store.save()
   } catch {
     console.warn("[broadcast] Failed to persist themes")
