@@ -393,7 +393,7 @@ describe("updateDraftNested deep paths", () => {
     s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, lowerThirds: true })
     emitToMock.mockClear()
     useBroadcastStore.getState().setLowerThird({ line1: "  Pastor Tolu  ", line2: "Senior Pastor" })
-    expect(useBroadcastStore.getState().lowerThird).toEqual({ line1: "Pastor Tolu", line2: "Senior Pastor" })
+    expect(useBroadcastStore.getState().lowerThird).toMatchObject({ line1: "Pastor Tolu", line2: "Senior Pastor" })
     const targets = emitToMock.mock.calls.map((c) => c[0])
     expect(targets).toEqual(["broadcast-stream"])
     expect(emitToMock.mock.calls[0][2]).toMatchObject({ overlay: { line1: "Pastor Tolu", line2: "Senior Pastor" } })
@@ -443,12 +443,66 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().syncBroadcastOutput()
     const frames = useBroadcastStore.getState().outputFrames
     expect(frames.stream.verse?.translationLines).toBeUndefined() // first language only
-    expect(frames.stream.overlay).toEqual({ line1: "Pastor Tolu", line2: "" })
+    expect(frames.stream.overlay).toMatchObject({ line1: "Pastor Tolu", line2: "" })
     expect(frames.main.verse?.translationLines).toHaveLength(2)
     expect(frames.main.overlay).toBeNull()
     expect(frames.stage.stage).toBe(true)
     useBroadcastStore.getState().removeOutput("stream")
     expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
+  })
+
+  it("the ticker crawls only on outputs that show it, takes word changes at once and stops", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stream", name: "Stream", type: "ndi", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults, ticker: true })
+    useBroadcastStore.setState({ isLive: true, liveVerse: sampleLiveVerse })
+    useBroadcastStore.getState().setTicker({ backing: null })
+    expect(useBroadcastStore.getState().ticker).toBeNull() // nothing to say yet
+    useBroadcastStore.getState().setTickerItems(["Youth meeting Friday", ""])
+    useBroadcastStore.getState().setTicker({ backing: null })
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker?.items[0]).toBe("Youth meeting Friday")
+    expect(useBroadcastStore.getState().outputFrames.main?.ticker ?? null).toBeNull()
+    useBroadcastStore.getState().setTickerItems(["Choir Saturday"])
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker?.items).toEqual(["Choir Saturday"])
+    useBroadcastStore.getState().setTicker({ backing: null })
+    const started = useBroadcastStore.getState().ticker!.startedAt
+    vi.spyOn(Date, "now").mockReturnValue(started + 5000)
+    useBroadcastStore.getState().pauseTicker(true)
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker?.pausedAt).toBe(started + 5000)
+    // Resumed 3 s later: it carries on from where it stopped (the start moves on by the pause).
+    vi.spyOn(Date, "now").mockReturnValue(started + 8000)
+    useBroadcastStore.getState().pauseTicker(false)
+    expect(useBroadcastStore.getState().ticker).toMatchObject({ startedAt: started + 3000, pausedAt: undefined })
+    vi.restoreAllMocks()
+    useBroadcastStore.getState().setTicker(null)
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker).toBeNull()
+  })
+
+  it("a signage output can show the ticker over its pictures; the stage never does", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "foyer", name: "Foyer", type: "display", role: "signage", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults, signage: { mediaIds: [], seconds: 5 }, ticker: true })
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, ticker: true })
+    useBroadcastStore.getState().setTickerItems(["Prayer meeting Wednesday 6:30 PM"])
+    useBroadcastStore.getState().setTicker({ backing: null })
+    await vi.waitFor(() => expect(useBroadcastStore.getState().outputFrames.foyer?.ticker?.items[0]).toBe("Prayer meeting Wednesday 6:30 PM"))
+    expect(useBroadcastStore.getState().outputFrames.stage?.ticker ?? null).toBeNull()
+  })
+
+  it("an output can give a kind of content its own look (hymns in one theme, the rest in the main one)", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    const [main, hymns] = [s.themes[0], s.themes[1]]
+    s.setOutputTheme("main", main.id)
+    s.updateOutput("main", { themeFor: { hymn: hymns.id } })
+    useBroadcastStore.setState({ isLive: true, liveVerse: { ...sampleLiveVerse, content: "hymn" } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(useBroadcastStore.getState().outputFrames.main.theme.id).toBe(hymns.id)
+    useBroadcastStore.setState({ liveVerse: { ...sampleLiveVerse, content: "bible" } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    expect(useBroadcastStore.getState().outputFrames.main.theme.id).toBe(main.id)
+    // The hymn theme is in use: it cannot be deleted while the output names it.
+    expect(useBroadcastStore.getState().deleteTheme(hymns.id).inUse).toContain("Main Display")
   })
 
   it("discarding or closing a theme draft puts the saved theme back on the outputs and their cards", async () => {

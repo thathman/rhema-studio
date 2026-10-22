@@ -7,7 +7,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, Ticker, TickerStyle } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -19,6 +19,9 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useSongStore } from "@/stores/song-store"
 import { forOutputLanguage } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
+import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
+import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
+import { DEFAULT_TICKER_STYLE, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -81,6 +84,25 @@ interface BroadcastState {
   stageMessage: string
   /** The lower third on air (outputs with lowerThirds on), or null. Session state; not saved. */
   lowerThird: LowerThird | null
+  /** Designed looks for the lower third (the first is the default). Saved with the themes. */
+  lowerThirdStyles: LowerThirdStyle[]
+  /** Add or replace a style (by id); `backing` (resolved) replaces the on-air band's when it uses this style. */
+  saveLowerThirdStyle: (style: LowerThirdStyle, backing?: LowerThird["backing"]) => void
+  /** Remove a style; the last one cannot go. */
+  deleteLowerThirdStyle: (id: string) => void
+  /** The news ticker on air (outputs with ticker on), or null. Session state. */
+  ticker: Ticker | null
+  /** What the ticker says, one item per line as typed. Saved. */
+  tickerItems: string[]
+  /** How the ticker looks. Saved. */
+  tickerStyle: TickerStyle
+  setTickerItems: (items: string[]) => void
+  /** Start the ticker with the saved items and style (`backing` resolved from the style's media), or stop it (null). */
+  setTicker: (on: { backing: Ticker["backing"] } | null) => void
+  /** Change the look; a running ticker takes it at once (keeping its place in the crawl). */
+  saveTickerStyle: (style: TickerStyle, backing?: Ticker["backing"]) => void
+  /** Hold the ticker's words still, or let them move on from where they stopped. */
+  pauseTicker: (paused: boolean) => void
   /**
    * What each output was last sent (multiview thumbnails show exactly this).
    * Session state; written whenever an output is synced.
@@ -229,7 +251,8 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   signageLast.set(output.id, index)
   signageLastList.set(output.id, listKey)
   // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
-  const stamp = `${listKey}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
+  const ticker = output.ticker ? useBroadcastStore.getState().ticker : null
+  const stamp = `${listKey}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}:${tickerKey(ticker)}`
   if (signageEmitted.get(output.id) === stamp) {
     ensureSignageTicker()
     return
@@ -247,8 +270,8 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   if (signageSeq.get(output.id) !== ticket) return
   if (useBroadcastStore.getState().outputs.find((o) => o.id === output.id)?.role !== "signage") return
   signageEmitted.set(output.id, stamp)
-  recordFrame(output.id, { theme, verse, overlay: null })
-  void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse }).catch(() => {})
+  recordFrame(output.id, { theme, verse, overlay: null, ticker })
+  void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse, ticker }).catch(() => {})
   // Warm the next picture so the swap is instant (the data URL is cached by the media store).
   if (ids.length > 1) void useMediaStore.getState().dataUrl(ids[(index + 1) % ids.length]).catch(() => {})
   ensureSignageTicker()
@@ -283,21 +306,42 @@ export interface OutputFrame {
   theme: BroadcastTheme
   verse: VerseRenderData | null
   overlay: LowerThird | null
+  ticker?: Ticker | null
   /** Stage outputs: the thumbnail says "Stage display" instead of a frame. */
   stage?: boolean
 }
 
 /** Keep what an output was last sent, for the multiview. Skips the write when nothing changed. */
+/** Send the ticker (on, changed or off) to the outputs that show it. */
+function syncTickerOutputs(): void {
+  const s = useBroadcastStore.getState()
+  // Never the stage; signage (the foyer) when it is turned on there.
+  for (const o of s.outputs) if (o.ticker && o.role !== "stage") s.syncBroadcastOutputFor(o.id)
+}
+
+// Which ticker a signage output last showed, by identity (a ticker can carry a picture as a large data URL).
+const tickerIds = new WeakMap<Ticker, number>()
+let nextTickerId = 1
+function tickerKey(t: Ticker | null): number {
+  if (!t) return 0
+  let id = tickerIds.get(t)
+  if (!id) {
+    id = nextTickerId++
+    tickerIds.set(t, id)
+  }
+  return id
+}
+
 /** After a theme draft ends (saved, discarded, closed, switched), outputs that were shown the draft get the saved theme again. */
 function resyncThemeOutputs(themeId: string | null): void {
   if (!themeId) return
   const s = useBroadcastStore.getState()
-  for (const o of s.outputs) if (o.themeId === themeId) s.syncBroadcastOutputFor(o.id)
+  for (const o of s.outputs) if (themeIdsOf(o).includes(themeId)) s.syncBroadcastOutputFor(o.id)
 }
 
 function recordFrame(id: string, frame: OutputFrame): void {
   const prev = useBroadcastStore.getState().outputFrames[id]
-  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.stage === frame.stage) return
+  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.ticker === frame.ticker && prev.stage === frame.stage) return
   useBroadcastStore.setState((s) => ({ outputFrames: { ...s.outputFrames, [id]: frame } }))
 }
 
@@ -363,6 +407,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   cleared: false,
   stageMessage: "",
   lowerThird: null,
+  lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE],
+  ticker: null,
+  tickerItems: [],
+  tickerStyle: DEFAULT_TICKER_STYLE,
   outputFrames: {},
   rehearsal: false,
   presentWarning: null,
@@ -385,11 +433,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : [...s.themes, theme],
     })),
   /** Generate or refresh the Brand Kit's themes; hand-edited ones are left alone. */
-  applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes, new Set(s.outputs.map((o) => o.themeId))) })),
+  applyBrandKit: (kit) => set((s) => ({ themes: applyBrandKit(kit, s.themes, new Set(s.outputs.flatMap(themeIdsOf))) })),
   // An output using the theme would silently fall back to Classic Dark (an opaque frame over a
   // stream's camera, FR-06): refuse and say which outputs use it.
   deleteTheme: (id) => {
-    const users = get().outputs.filter((o) => o.themeId === id)
+    const users = get().outputs.filter((o) => themeIdsOf(o).includes(id))
     if (users.length > 0) return { inUse: users.map((o) => o.name) }
     set((s) => ({ themes: s.themes.filter((t) => t.id !== id || t.builtin) }))
     return { inUse: [] }
@@ -454,11 +502,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     const output = s.outputs.find((o) => o.id === outputId)
     if (!output) return
-    const saved = s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
+    // The look for what is on air: this output's theme for that kind of content, else its main theme.
+    const themeId = themeIdFor(output, s.isLive ? s.liveVerse?.content : null)
+    const saved = s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
     if (!saved) return
     // A theme open in the Designer shows on its congregation outputs as edited, for presents too
     // (otherwise each present flipped the screen back to the saved theme).
-    const theme = s.draftTheme && s.editingThemeId === output.themeId && (output.role ?? "congregation") === "congregation" ? s.draftTheme : saved
+    const theme = s.draftTheme && s.editingThemeId === saved.id && (output.role ?? "congregation") === "congregation" ? s.draftTheme : saved
 
     // Signage runs its own loop; neither the live output nor rehearsal touches it.
     if (output.role === "signage") {
@@ -485,14 +535,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       return
     }
     const verse = s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null
-    const overlay = output.lowerThirds ? s.lowerThird : null
+    const overlay = output.lowerThirds ? overlayFor(s.lowerThird, verse) : null
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
-    recordFrame(outputId, { theme, verse, overlay })
+    const ticker = output.ticker ? s.ticker : null
+    recordFrame(outputId, { theme, verse, overlay, ticker })
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
       verse,
       overlay,
+      ticker,
       sound: soundOutputId(get().outputs, get().outputStatus) === outputId,
       ...(changed ? { sentAt: Date.now() } : {}),
     }).catch(() => {})
@@ -521,7 +573,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
-    if (patch.themeId || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -618,9 +670,55 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (!rehearsal) get().syncBroadcastOutput()
   },
   setLowerThird: (lt) => {
-    const clean = lt && (lt.line1.trim() || lt.line2.trim()) ? { line1: lt.line1.trim(), line2: lt.line2.trim() } : null
+    // A strip that follows what is live has no words of its own.
+    const clean = lt && (lt.follow || lt.line1.trim() || lt.line2.trim()) ? { ...lt, line1: lt.line1.trim(), line2: lt.line2.trim(), shownAt: Date.now() } : null
     set({ lowerThird: clean })
     for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+  },
+  saveLowerThirdStyle: (style, backing) => {
+    const styles = get().lowerThirdStyles
+    const at = styles.findIndex((x) => x.id === style.id)
+    set({ lowerThirdStyles: at < 0 ? [...styles, style] : styles.map((x, i) => (i === at ? style : x)) })
+    // The band on air in this style redraws as designed (without coming on again).
+    const lt = get().lowerThird
+    if (lt?.style?.id === style.id) {
+      set({ lowerThird: { ...lt, style, ...(backing !== undefined ? { backing } : {}) } })
+      for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+    }
+  },
+  setTickerItems: (tickerItems) => {
+    set({ tickerItems })
+    const t = get().ticker
+    if (t) {
+      set({ ticker: { ...t, items: tickerItems } })
+      syncTickerOutputs()
+    }
+  },
+  setTicker: (on) => {
+    const s = get()
+    const live = on && s.tickerItems.some((i) => i.trim()) ? { items: s.tickerItems, style: s.tickerStyle, startedAt: Date.now(), backing: on.backing } : null
+    set({ ticker: live })
+    syncTickerOutputs()
+  },
+  pauseTicker: (paused) => {
+    const t = get().ticker
+    if (!t || !!t.pausedAt === paused) return
+    const now = Date.now()
+    // Resuming moves the start on by the pause, so the words carry on from where they stopped.
+    set({ ticker: paused ? { ...t, pausedAt: now } : { ...t, startedAt: t.startedAt + (now - (t.pausedAt ?? now)), pausedAt: undefined } })
+    syncTickerOutputs()
+  },
+  saveTickerStyle: (tickerStyle, backing) => {
+    set({ tickerStyle })
+    const t = get().ticker
+    if (t) {
+      set({ ticker: { ...t, style: tickerStyle, ...(backing !== undefined ? { backing } : {}) } })
+      syncTickerOutputs()
+    }
+  },
+  deleteLowerThirdStyle: (id) => {
+    const styles = get().lowerThirdStyles
+    if (styles.length > 1) set({ lowerThirdStyles: styles.filter((x) => x.id !== id) })
   },
   setStageMessage: (stageMessage) => {
     set({ stageMessage })
@@ -733,7 +831,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // Point every output that was on the builtin at the saved copy, so the
       // outputs and the in-app preview never disagree about what is showing.
       for (const output of get().outputs) {
-        if (output.themeId === draftTheme.id) {
+        if (themeIdsOf(output).includes(draftTheme.id)) {
           get().setOutputTheme(output.id, customTheme.id)
         }
       }
@@ -790,6 +888,11 @@ export function hydrateBroadcastThemes(): Promise<void> {
       const main = patch.outputs.find((o) => o.id === MAIN_OUTPUT_ID)
       if (main) patch.activeThemeId = main.themeId
       if (typeof autoLive === "boolean") patch.autoLive = autoLive
+      const ltStyles = (await store.get("lowerThirdStyles")) as LowerThirdStyle[] | undefined
+      if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
+      patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
+      const items = await store.get("tickerItems")
+      if (Array.isArray(items)) patch.tickerItems = items.filter((i): i is string => typeof i === "string")
 
       useBroadcastStore.setState(patch)
 
@@ -799,7 +902,10 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.themes !== prevState.themes ||
           state.activeThemeId !== prevState.activeThemeId ||
           state.outputs !== prevState.outputs ||
-          state.autoLive !== prevState.autoLive
+          state.autoLive !== prevState.autoLive ||
+          state.lowerThirdStyles !== prevState.lowerThirdStyles ||
+          state.tickerStyle !== prevState.tickerStyle ||
+          state.tickerItems !== prevState.tickerItems
         if (!changed) return
         if (saveTimer) clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
@@ -848,6 +954,9 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     // Legacy mirror of the main output's theme; older builds still read it.
     await store.set("activeThemeId", state.activeThemeId)
     await store.set("autoLiveOptIn", state.autoLive)
+    await store.set("lowerThirdStyles", state.lowerThirdStyles)
+    await store.set("tickerStyle", state.tickerStyle)
+    await store.set("tickerItems", state.tickerItems)
     await store.save()
   } catch {
     console.warn("[broadcast] Failed to persist themes")

@@ -31,13 +31,13 @@
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
-| DS-001 A look per kind of content (Bible, Songs, Hymns, Slides, Pictures) | P1 | IN PR (#189) | — | Each output picks a theme per kind (default: its main theme); Designer previews each kind and assigns the theme |
-| DS-002 Lower third designer: name and title, scripture strip, lyrics strip, picture or video backing | P1 | IN PR (#190) | DS-001 | Styles (position, size, fonts, colours, accent, entrance), strips follow what is live; check on OBS over NDI |
-| DS-003 News ticker: a scrolling crawl over chosen outputs | P1 | BACKLOG | DS-002 | Items typed in Present; own design (speed, colours, font, height, position, picture or video background); smooth over NDI |
+| DS-001 A look per kind of content (Bible, Songs, Hymns, Slides, Pictures) | P1 | MERGED (#189) | — | Each output picks a theme per kind (default: its main theme); Designer previews each kind and assigns the theme |
+| DS-002 Lower third designer: name and title, scripture strip, lyrics strip, picture or video backing | P1 | MERGED (#190) | DS-001 | Styles (position, size, fonts, colours, accent, entrance), strips follow what is live; check on OBS over NDI |
+| DS-003 News ticker: a scrolling crawl over chosen outputs | P1 | MERGED (#192; issue #187: scheduling, presets and reduced-motion still open) | DS-002 | Items typed in Present; own design (speed, colours, font, height, position, picture or video background); smooth over NDI |
 | DS-004 Theme Designer rework: every design edit in one place | P1 | BACKLOG | DS-001–DS-003 | Owner: "every design edit for all the features should happen here" — Bible, Songs, Hymns, Slides, Pictures, lower thirds, ticker, stage designed in the Designer (the lower third designer moves in from Present); a total rework, not a patch |
-| DS-005 Stage screen over NDI (the owner's NDI viewer as the stage display) | P1 | BACKLOG | — | The stage view drawn on the output canvas so a stage output can be NDI; verified on the owner's NDI viewer |
-| DS-006 An output in a window (signage shown in a window on the operator's computer) | P2 | BACKLOG | — | A display output that opens as a movable window instead of full screen; signage in a window on this Mac |
-| DS-007 OBS check rig on the owner's Mac | P1 | BACKLOG | DS-002,DS-003 | A "Rhema QA" scene collection in OBS with Rhema's NDI sources; lower third, ticker and outputs checked there; K3 = congregation |
+| DS-005 Stage screen over NDI (the owner's NDI viewer as the stage display) | P1 | MERGED (#191; stage frame verified over NDI) | — | The stage view drawn on the output canvas so a stage output can be NDI; verified on the owner's NDI viewer |
+| DS-006 An output in a window (signage shown in a window on the operator's computer) | P2 | MERGED (#191; signage window verified on the Intel Mac) | — | A display output that opens as a movable window instead of full screen; signage in a window on this Mac |
+| DS-007 OBS check rig on the owner's Mac | P1 | IN PROGRESS (OBS collection "Rhema QA" made; NDI 30 fps measured with a receiver; OBS check of the final build pending) | DS-002,DS-003 | A "Rhema QA" scene collection in OBS with Rhema's NDI sources; lower third, ticker and outputs checked there; K3 = congregation |
 
 ## Owner redesign 2026-10-22 — Rhema_Studio_Interactive_Concept.html
 

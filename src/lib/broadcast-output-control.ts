@@ -129,6 +129,7 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
         outputId: output.id,
         monitorIndex,
         title: output.name,
+        windowed: output.windowed === true,
       })
       const opened = await isPreviewWindowVisible(output.id)
       void logInfo(`[broadcast-ui] open_broadcast_window '${output.id}' ok, visible=${opened}`)

@@ -9,6 +9,8 @@ import {
   type RichInlineLine,
 } from "@chenglou/pretext/rich-inline"
 import { imageContentBox } from "@/lib/theme-image-cache"
+import type { LowerThird } from "@/types/broadcast-output"
+import { DEFAULT_LOWER_THIRD_STYLE, layoutLowerThird } from "@/lib/lower-third-style"
 import type {
   BroadcastTheme,
   SurfaceFill,
@@ -507,42 +509,102 @@ function drawBackground(
  * background and every surface fill, so a picture behaves the same wherever it
  * is used. While the image is still loading a deterministic flat fill stands in.
  */
+export interface LowerThirdDrawOptions {
+  imageCache?: Map<string, HTMLImageElement>
+  /** The style's looping video, where the canvas has one playing. */
+  video?: HTMLVideoElement | null
+  /** Its entrance, 0…1 (1 = fully on). */
+  progress?: number
+  /** Pixels along the bottom to stay above (a ticker there). */
+  reserveBottom?: number
+}
+
+/** Words wrapped to `maxW` at the largest size (down to half) that fits `maxH`; at most three lines. */
+function fitLines(ctx: CanvasRenderingContext2D, text: string, size: number, maxW: number, maxH: number, font: (px: number) => string): { lines: string[]; size: number } {
+  let best = { lines: [text], size }
+  for (let px = size; px >= size * 0.5; px = Math.floor(px * 0.9)) {
+    ctx.font = font(px)
+    const lines: string[] = []
+    for (const para of text.split("\n")) {
+      let line = ""
+      for (const word of para.split(/\s+/).filter(Boolean)) {
+        const next = line ? `${line} ${word}` : word
+        if (line && ctx.measureText(next).width > maxW) {
+          lines.push(line)
+          line = word
+        } else line = next
+      }
+      if (line) lines.push(line)
+    }
+    best = { lines, size: px }
+    if (lines.length <= 3 && lines.length * px * 1.15 <= maxH) return best
+  }
+  return { lines: best.lines.slice(0, 3), size: best.size }
+}
+
 /**
- * The lower third: a dark band near the bottom with a bold first line and a
- * lighter second line, in the theme's font. Drawn last, over anything,
- * including a transparent (OBS-keyed) frame.
+ * The lower third: a band near the bottom with a bold first line and a lighter
+ * second, laid out by its style (the classic dark band without one). Drawn
+ * last, over anything, including a transparent (OBS-keyed) frame.
  */
-export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, height: number, lt: { line1: string; line2: string }, fontFamily?: string): void {
+export function drawLowerThird(ctx: CanvasRenderingContext2D, width: number, height: number, lt: LowerThird, fontFamily?: string, opts: LowerThirdDrawOptions = {}): void {
+  const style = lt.style ?? DEFAULT_LOWER_THIRD_STYLE
+  const fam = style.fontFamily ?? fontFamily
   // Quoted: a family like "Source Serif 4 Variable" makes an unquoted font shorthand invalid, and the canvas ignores it.
-  const family = fontFamily ? `"${fontFamily.replace(/"/g, "")}", system-ui, sans-serif` : "system-ui, sans-serif"
-  const marginX = Math.round(width * 0.06)
-  const bandH = Math.round(height * (lt.line2 ? 0.15 : 0.1))
-  const y = Math.round(height * 0.92) - bandH
-  const size1 = Math.round(bandH * (lt.line2 ? 0.36 : 0.5))
-  const size2 = Math.round(bandH * 0.24)
+  const family = fam ? `"${fam.replace(/"/g, "")}", system-ui, sans-serif` : "system-ui, sans-serif"
+  const measure = (text: string, size: number, weight: number) => {
+    ctx.font = `${weight} ${size}px ${family}`
+    return Math.max(...text.split("\n").map((t) => ctx.measureText(t).width))
+  }
+  const layout = layoutLowerThird(width, height, lt, style, measure, opts.reserveBottom)
+  const { band } = layout
+  const progress = opts.progress ?? 1
   ctx.save()
-  ctx.font = `700 ${size1}px ${family}`
-  const w1 = ctx.measureText(lt.line1).width
-  ctx.font = `400 ${size2}px ${family}`
-  const w2 = ctx.measureText(lt.line2).width
-  const padX = Math.round(bandH * 0.35)
-  const bandW = Math.min(width - marginX * 2, Math.max(w1, w2) + padX * 2)
-  ctx.fillStyle = "rgba(0,0,0,0.78)"
-  roundRect(ctx, marginX, y, bandW, bandH, Math.round(bandH * 0.12))
-  ctx.fill()
-  ctx.fillStyle = "#ffffff"
+  // Its entrance: fading in, or rising from below as it fades.
+  ctx.globalAlpha = progress
+  if (style.animation === "slide") ctx.translate(0, (1 - progress) * (band.h * 0.6))
+  const radius = Math.round((band.h * style.radius) / 100)
+  const bg = style.background
+  roundRect(ctx, band.x, band.y, band.w, band.h, Math.min(radius, band.h / 2, band.w / 2))
+  ctx.save()
+  ctx.clip()
+  const img = lt.backing?.kind === "picture" ? opts.imageCache?.get(lt.backing.url) : undefined
+  const video = lt.backing?.kind === "video" && opts.video && opts.video.readyState >= 2 ? opts.video : null
+  const rect = { x: band.x, y: band.y, width: band.w, height: band.h }
+  if (video) drawVideoFrame(ctx, video, rect, "cover")
+  else if (img) {
+    const scale = Math.max(band.w / img.naturalWidth, band.h / img.naturalHeight)
+    ctx.drawImage(img, band.x + (band.w - img.naturalWidth * scale) / 2, band.y + (band.h - img.naturalHeight * scale) / 2, img.naturalWidth * scale, img.naturalHeight * scale)
+  }
+  // The colour lies over a picture or video as a shade (its opacity), or is the band itself.
+  if (bg.kind !== "none" && (bg.kind === "color" || video || img || lt.backing)) {
+    ctx.globalAlpha = progress * bg.opacity
+    ctx.fillStyle = bg.color
+    ctx.fillRect(band.x, band.y, band.w, band.h)
+    ctx.globalAlpha = progress
+  }
+  ctx.restore()
+  if (layout.accent) {
+    ctx.fillStyle = style.accent.color
+    ctx.fillRect(layout.accent.x, layout.accent.y, layout.accent.w, layout.accent.h)
+  }
   ctx.textBaseline = "middle"
-  ctx.textAlign = "left"
-  const maxW = bandW - padX * 2
-  if (lt.line2) {
-    ctx.font = `700 ${size1}px ${family}`
-    ctx.fillText(lt.line1, marginX + padX, y + bandH * 0.36, maxW)
-    ctx.font = `400 ${size2}px ${family}`
-    ctx.fillStyle = "rgba(255,255,255,0.85)"
-    ctx.fillText(lt.line2, marginX + padX, y + bandH * 0.72, maxW)
-  } else {
-    ctx.font = `700 ${size1}px ${family}`
-    ctx.fillText(lt.line1, marginX + padX, y + bandH / 2, maxW)
+  const l1 = layout.line1
+  const t1 = style.line1.uppercase ? lt.line1.toUpperCase() : lt.line1
+  const font1 = (px: number) => `${style.line1.weight} ${px}px ${family}`
+  const room = band.h * (layout.line2 ? 0.58 : 0.82)
+  const fit = fitLines(ctx, t1, l1.size, l1.maxW, room, font1)
+  ctx.font = font1(fit.size)
+  ctx.textAlign = l1.align
+  ctx.fillStyle = style.line1.color
+  const lh = fit.size * 1.15
+  // A wrapped first line stays centred on its place (and above the second line).
+  const top = layout.line2 ? Math.min(l1.y - ((fit.lines.length - 1) * lh) / 2, layout.line2.y - layout.line2.size * 0.7 - (fit.lines.length - 0.5) * lh) : l1.y - ((fit.lines.length - 1) * lh) / 2
+  fit.lines.forEach((line, i) => ctx.fillText(line, l1.x, Math.max(band.y + lh / 2, top + i * lh), l1.maxW))
+  if (layout.line2) {
+    ctx.font = `${style.line2.weight} ${layout.line2.size}px ${family}`
+    ctx.fillStyle = style.line2.color
+    ctx.fillText(lt.line2, layout.line2.x, layout.line2.y, layout.line2.maxW)
   }
   ctx.restore()
 }
