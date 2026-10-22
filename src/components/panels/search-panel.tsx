@@ -36,15 +36,16 @@ import { presentVerse } from "@/hooks/use-broadcast"
 import { useBibleStore, useQueueStore } from "@/stores"
 import type { Book, Verse, SemanticSearchResult } from "@/types"
 import { Input } from "@/components/ui/input"
+import { PanelHeader } from "@/components/ui/panel-header"
 import { searchContextWithFuse } from "@/lib/context-search"
 import { mark } from "@/lib/latency-marks"
 
 type SearchTab = "book" | "context"
 
 const RESULT_SOURCE_STYLES: Record<string, { text: string; label: string }> = {
-  reference: { text: "text-amber-700 dark:text-amber-500", label: "Reference" },
-  keyword: { text: "text-green-600", label: "Keyword" },
-  semantic: { text: "text-indigo-300", label: "Semantic" },
+  reference: { text: "text-ai-cloud", label: "Reference" },
+  keyword: { text: "text-ai-direct", label: "Words" },
+  semantic: { text: "text-ai-semantic", label: "Meaning" },
 }
 
 /**
@@ -97,7 +98,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
         const cleaned = part.toLowerCase().replace(/[^a-z']/g, "")
         if (cleaned.length >= 2 && queryWords.has(cleaned)) {
           return (
-            <mark key={i} className="rounded-[2px] bg-emerald-800/90 px-0.5 text-foreground">
+            <mark key={i} className="rounded-[2px] bg-confidence-high/25 px-0.5 text-foreground">
               {part}
             </mark>
           )
@@ -521,55 +522,50 @@ export function SearchPanel() {
     <div
       ref={panelRef}
       data-slot="search-panel"
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card outline-none"
+      className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card outline-none"
       onKeyDown={activeTab === "book" ? handleKeyDown : undefined}
       tabIndex={-1}
     >
-      {/* STICKY: Tab row + search input */}
-      <div className="flex shrink-0 items-center gap-0 border-b border-border min-h-11">
-        <div className="flex items-center gap-1 px-3 py-1.5">
-          
-          <button
-            data-tour="book-search"
-            onClick={() => setActiveTab("book")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
-              activeTab === "book"
-                ? "border-lime-500/50 bg-lime-500/15 "
-                : "border-border text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <BookOpenIcon className={cn("size-3.5", activeTab === "book" ? "text-lime-400" : "text-muted-foreground")} />
-            Book search
-          </button>
-          <button
-            data-tour="context-search"
-            onClick={() => {
-              setActiveTab("context")
-              setContextQuery("")
-            }}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
-              activeTab === "context"
-                ? "border-lime-500/50 bg-lime-500/15"
-                : "border-border bg-background  text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <SparklesIcon className={cn("size-3.5", activeTab === "context" ? "text-lime-400" : "text-muted-foreground")} />
-            Context search
-          </button>
+      <PanelHeader title="Bible">
+        <div role="group" aria-label="Search the Bible by" className="flex rounded-md border border-border p-0.5">
+          {([
+            { tab: "book", label: "Reference", icon: <BookOpenIcon />, tour: "book-search", title: "Type a reference; the chapter opens below" },
+            { tab: "context", label: "Meaning", icon: <SparklesIcon />, tour: "context-search", title: "Find verses by their words or what they are about" },
+          ] as const).map((t) => (
+            <button
+              key={t.tab}
+              type="button"
+              data-tour={t.tour}
+              title={t.title}
+              aria-pressed={activeTab === t.tab}
+              onClick={() => {
+                setActiveTab(t.tab)
+                if (t.tab === "context") setContextQuery("")
+              }}
+              className={cn(
+                "flex h-6 items-center gap-1.5 rounded px-2 text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5",
+                activeTab === t.tab ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
         </div>
+      </PanelHeader>
 
+      {/* STICKY: search input + translation */}
+      <div className="flex shrink-0 items-center border-b border-border py-2">
         {activeTab === "book" ? (
-          <div className="flex flex-1 items-center gap-2 pr-3">
+          <div className="flex flex-1 items-center gap-2 px-3">
             {/* EasyWorship-style autocomplete */}
             <div className="relative flex-1">
               {/* Suggestion overlay */}
               {quickSuggestion && quickSuggestion !== quickInput && (
                 <div className="absolute inset-0 flex items-center px-3 pointer-events-none z-10">
-                  <span className="text-xs font-normal">
+                  <span className="text-sm font-normal">
                     <span className="text-foreground">{quickInput}</span>
-                    <span className="text-gray-500 dark:text-gray-400">
+                    <span className="text-muted-foreground">
                       {/* A short form or Yorùbá name is not a prefix of the suggestion: show where it goes instead of cutting it. */}
                       {foldMarks(quickSuggestion).toLowerCase().startsWith(foldMarks(quickInput).toLowerCase())
                         ? quickSuggestion.slice(foldMarks(quickInput).length)
@@ -591,9 +587,11 @@ export function SearchPanel() {
                   if (e.key.startsWith("Arrow") && !e.metaKey && !e.ctrlKey && !e.altKey) e.stopPropagation()
                   handleQuickKeyDown(e)
                 }}
-                placeholder="Type: J → John 3:16"
+                aria-label="Go to a reference"
+                placeholder="Type a reference, e.g. jn 3 16"
+                title="Tab or → completes the book; Enter shows the verse live"
                 className={cn(
-                  "h-7 text-xs relative bg-background",
+                  "h-8 text-sm relative bg-background",
                   quickSuggestion && quickSuggestion !== quickInput ? "text-transparent" : ""
                 )}
                 style={quickSuggestion && quickSuggestion !== quickInput ? {
@@ -634,7 +632,7 @@ export function SearchPanel() {
                 } catch (err) { console.error(err) }
               }}
             >
-              <SelectTrigger size="sm" aria-label="Bible translation" className="h-7 w-[72px] shrink-0 text-xs">
+              <SelectTrigger size="sm" aria-label="Bible translation" className="h-8 w-20 shrink-0 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -647,12 +645,13 @@ export function SearchPanel() {
             </Select>
           </div>
         ) : (
-          <div className="flex flex-1 items-center gap-2 pr-3">
+          <div className="flex flex-1 items-center gap-2 px-3">
             <Input
-              placeholder="Search verse text..."
+              aria-label="Search by meaning"
+              placeholder="Words, a phrase or a topic"
               value={contextQuery}
               onChange={(e) => handleContextSearch(e.target.value)}
-              className="h-7 flex-1 text-xs"
+              className="h-8 flex-1 text-sm"
             />
               <Select
                 value={String(activeTranslationId)}
@@ -664,7 +663,7 @@ export function SearchPanel() {
                   } catch (err) { console.error(err) }
                 }}
               >
-                <SelectTrigger size="sm" aria-label="Bible translation" className="h-7 w-[72px] shrink-0 text-xs">
+                <SelectTrigger size="sm" aria-label="Bible translation" className="h-8 w-20 shrink-0 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -679,20 +678,16 @@ export function SearchPanel() {
         )}
       </div>
 
-      {/* Quick nav tab */}
-      
-
       {/* Book search tab */}
       {activeTab === "book" && (
         <>
-          {/* STICKY: Chapter header */}
-
-          <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2 min-h-9">
-            {selectedBook ?
-              <h3 className="text-sm font-semibold text-foreground">
-                {selectedBook.name} {chapter}
-              </h3> : null}
-            {selectedBook ? <div className="flex items-center gap-1">
+          {/* STICKY: Chapter header (only once a book is open) */}
+          {selectedBook && (
+          <div className="flex min-h-9 shrink-0 items-center justify-between border-b border-border px-3 py-1.5">
+            <h3 className="text-sm font-semibold text-foreground">
+              {selectedBook.name} {chapter}
+            </h3>
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon-xs"
@@ -714,13 +709,18 @@ export function SearchPanel() {
               >
                 <ArrowRightIcon className="size-3" />
               </Button>
-            </div> : null}
+            </div>
           </div>
-
+          )}
 
           {/* SCROLLABLE: Verse list only */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="relative min-h-0 flex-1 overflow-y-auto">
             <div className="flex flex-col gap-0 p-2">
+              {currentChapter.length === 0 && (
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  Type a reference to open its chapter here.
+                </p>
+              )}
               {currentChapter.map((verse) => (
                 <div
                   key={verse.id}
@@ -739,7 +739,7 @@ export function SearchPanel() {
                   className={cn(
                     "group flex cursor-pointer items-center gap-3 rounded-lg p-3 transition-colors",
                     verse.id === effectiveSelectedVerseId
-                      ? "border border-lime-500/50 bg-lime-500/10"
+                      ? "border border-primary/40 bg-primary/10"
                       : "border border-transparent hover:bg-muted/50"
                   )}
                 >
@@ -783,7 +783,7 @@ export function SearchPanel() {
                             className={cn(
                               "shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity",
                               verse.id === effectiveSelectedVerseId
-                                ? "hover:bg-lime-500/20 hover:text-lime-500"
+                                ? "hover:bg-primary/20 hover:text-foreground"
                                 : "bg-primary/40! text-primary-foreground hover:bg-primary!"
                             )}
                             onClick={(e) => {
@@ -815,16 +815,16 @@ export function SearchPanel() {
 
       {/* Context search tab — semantic AI search */}
       {activeTab === "context" && (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-0 p-2">
             {contextQuery.length < 5 && (
-              <p className="p-4 text-center text-xs text-muted-foreground">
-                Search by meaning — type a phrase, paraphrase, or topic...
+              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                Type a few words to find verses that say or mean them.
               </p>
             )}
             {contextQuery.length >= 5 && semanticResults.length === 0 && (
-              <p className="p-4 text-center text-xs text-muted-foreground">
-                No results found
+              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                No verses match. Try other words.
               </p>
             )}
             {semanticResults.map((result, idx) => (
@@ -855,12 +855,12 @@ export function SearchPanel() {
                 className="group flex flex-col cursor-pointer gap-1 rounded-lg p-3 transition-colors hover:bg-muted/50 relative"
               >
                 <div className="flex shrink-0 flex-row items-start gap-2">
-                  <span className="text-xs font-semibold ">
-                    {result.book_name}   {result.chapter}:{result.verse}
+                  <span className="text-sm font-semibold">
+                    {result.book_name} {result.chapter}:{result.verse}
                   </span>
                   <ResultSourceBadges result={result} />
                 </div>
-                <p className="flex-1 text-xs leading-relaxed text-muted-foreground">
+                <p className="flex-1 pr-8 text-sm leading-relaxed text-muted-foreground">
                   <HighlightedText text={result.verse_text} query={contextQuery} />
                 </p>
                 {queuedVerseKeys.has(`${result.book_number}:${result.chapter}:${result.verse}`) ? (

@@ -378,7 +378,7 @@ function SpeechSection() {
 /* -------------------------------------------------------------------------- */
 
 function DisplayModeSection() {
-  // The same switch as Auto on the Live display panel in Present (FR-01: off until turned on).
+  // The same switch as Auto on the Live panel in Present → Production (FR-01: off until turned on).
   const autoLive = useBroadcastStore((s) => s.autoLive)
   const setAutoLive = useBroadcastStore((s) => s.setAutoLive)
 
@@ -418,7 +418,7 @@ function DisplayModeSection() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Show live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live display panel.
+                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Show live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live panel in Present → Production.
               </p>
             </div>
           </label>

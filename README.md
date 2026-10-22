@@ -174,13 +174,13 @@ This runs the required phases idempotently, skipping any whose output artifacts 
 
 #### Optional: embedding re-ranking (`--with-embedding`)
 
-Everything above gives you the full search experience: live verse detection, exact/partial quote search, and typed references ("John 3:16") — benchmarked at recall@1 **0.836** across 152 queries. The embedding model adds semantic *paraphrase* matching in the Context search tab on top of that.
+Everything above gives you the full search experience: live verse detection, exact/partial quote search, and typed references ("John 3:16") — benchmarked at recall@1 **0.836** across 152 queries. The embedding model adds semantic *paraphrase* matching in the Bible panel's Meaning search (Present → Production) on top of that.
 
 ```bash
 bun run setup:all --with-embedding
 ```
 
-**What you gain:** better paraphrase queries in Context search — e.g. "God will never abandon you" finds Hebrews 13:5. Benchmark: paraphrase recall@5 goes from 0.800 to **1.000**; results gain Semantic badges with a real similarity %. Nothing else changes — exact quotes, verse fragments, typed references, and live detection are identical with or without it (overall recall@1 is 0.836 without vs 0.829 with).
+**What you gain:** better paraphrase queries in Meaning search — e.g. "God will never abandon you" finds Hebrews 13:5. Benchmark: paraphrase recall@5 goes from 0.800 to **1.000**; results gain Semantic badges with a real similarity %. Nothing else changes — exact quotes, verse fragments, typed references, and live detection are identical with or without it (overall recall@1 is 0.836 without vs 0.829 with).
 
 **What it costs:** a one-time ~2.5 hour build (Hugging Face model export, INT8 quantization, embedding all 31k verses with the same ONNX model the app runs), ~3.3 GB of disk (`models/` + `embeddings/`), the Python toolchain, and roughly 600–900 MB of extra memory while the app is running.
 

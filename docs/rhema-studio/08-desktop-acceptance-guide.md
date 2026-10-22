@@ -380,7 +380,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10ab.1 | Prepare → Pictures → "Import pictures or videos…" an MP4 (H.264/AAC). Add it to the service; the library tile shows its first frame with ▶. | Imported once (same hash = no copy); Program preview shows "▶ name" (video plays only on outputs). | Unverified |
+| 10ab.1 | Prepare → Pictures → "Import pictures or videos…" an MP4 (H.264/AAC). Add it to the service; the library tile shows its first frame with ▶. | Imported once (same hash = no copy); the preview shows "▶ name" (video plays only on outputs). | Unverified |
 | 10ab.2 | Main projector output and a second display output on. Show the video live. | It plays on both screens, smoothly, filling as the Fit says; sound comes from the main output only; Next moves on and the video stops; Clear stops it; Restore starts it again from the beginning. | Unverified |
 | 10ab.3 | Loop on → it repeats; Loop off → it holds the last frame. Sound off → silent everywhere. Save, reopen the service: both settings kept. | As described. | Unverified |
 | 10ab.4 | NDI output on, received in OBS, video live. Repeat with an NDI-only (hidden window) output that is not the main output. | OBS shows the video moving at the NDI rate; no audio over NDI (not implemented). **Known risk:** WebView2/WebKit may throttle timers in a hidden window to about 1 Hz, so an NDI-only output could send roughly one frame a second; record the rate seen. | Unverified |
@@ -665,10 +665,10 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bn.1 | New installation (no earlier settings). Put something on air, start listening, read "John 3:16" aloud. | The verse appears in the preview and the detections list; what is on screen does not change until Show live. Production view → Live display: Auto is off. | Unverified |
+| 10bn.1 | New installation (no earlier settings). Put something on air, start listening, read "John 3:16" aloud. | The verse appears in the preview and the detections list; what is on screen does not change until Show live. Production view → Live panel: Auto is off. | Unverified |
 | 10bn.2 | Turn Auto on; Standard view. | "Auto-live on" appears in the header while listening; a heard verse now replaces what is on screen. Clicking the chip turns Auto off. | Unverified |
-| 10bn.3 | Computer that used an earlier build (Auto was on by default). Update; start listening. | Auto is off until turned on again (Live display panel or Settings → Display Mode → Heard verses); after turning it on and restarting, it stays on. | Unverified |
-| 10bn.4 | Settings → Display Mode → Heard verses: choose Auto, then look at the Live display panel; switch it off there and look at Settings. | Both show the same setting. | Unverified |
+| 10bn.3 | Computer that used an earlier build (Auto was on by default). Update; start listening. | Auto is off until turned on again (Live panel in Production view, or Settings → Display Mode → Heard verses); after turning it on and restarting, it stays on. | Unverified |
+| 10bn.4 | Settings → Display Mode → Heard verses: choose Auto, then look at the Live panel in Production view; switch it off there and look at Settings. | Both show the same setting. | Unverified |
 
 ### 10bo. Next stays where the operator is (RG-03)
 

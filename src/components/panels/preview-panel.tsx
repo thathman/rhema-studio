@@ -79,9 +79,14 @@ export function PreviewPanel() {
       data-slot="preview-panel"
       className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
-      <PanelHeader title="Program preview" />
-      <div className="flex min-h-0 flex-1 items-center justify-center p-3">
-        <CanvasVerse theme={activeTheme} verse={verseData} />
+      <PanelHeader title="Preview">
+        <span className="text-xs text-muted-foreground">Only you see this</span>
+      </PanelHeader>
+      {/* The picture fits the panel both ways, so a short panel never crops it. */}
+      <div className="flex min-h-0 flex-1 items-center justify-center p-3 [container-type:size]">
+        <div style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
+          <CanvasVerse theme={activeTheme} verse={verseData} />
+        </div>
       </div>
     </div>
   )
