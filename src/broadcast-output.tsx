@@ -333,7 +333,7 @@ function BroadcastCanvas() {
       const d = latestData.current
       if (!d || stageRef.current) return null
       if ((d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
-      return d.ticker ? "ticker" : null
+      return d.ticker && !d.ticker.pausedAt ? "ticker" : null
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
     // something moves, a pacer in Rust sends `broadcast:pace` at the NDI rate and each one draws a frame.
@@ -356,7 +356,7 @@ function BroadcastCanvas() {
     // On a screen (not NDI): the ticker moves on the display's refresh.
     const tickTicker = () => {
       if (!tickerRunning) return
-      if (!latestData.current?.ticker || stageRef.current || ndiConfigRef.current.active) {
+      if (!latestData.current?.ticker || latestData.current.ticker.pausedAt || stageRef.current || ndiConfigRef.current.active) {
         tickerRunning = false
         draw()
         return
@@ -396,7 +396,7 @@ function BroadcastCanvas() {
       const tk = event.payload.ticker
       tickerVideo.sync(tk?.backing?.kind === "video" ? { url: tk.backing.url, fit: "cover", loop: true, sound: false, name: "ticker", token: 0 } : undefined)
       if (tk?.backing?.kind === "picture") void loadThemeImage(tk.backing.url)
-      if (tk && !tickerRunning && !ndiConfigRef.current.active) {
+      if (tk && !tk.pausedAt && !tickerRunning && !ndiConfigRef.current.active) {
         tickerRunning = true
         tickTicker()
       }

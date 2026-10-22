@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { crawlPositions, normalizeTickerStyle, tickerText } from "./ticker"
+import { crawlElapsed, crawlPositions, mirrorPositions, normalizeTickerStyle, tickerText } from "./ticker"
 
 describe("news ticker", () => {
   it("joins items with the separator, dropping blanks", () => {
@@ -25,5 +25,19 @@ describe("news ticker", () => {
     expect(s.position).toBe("top")
     expect(s.background.mediaId).toBe("m")
     expect(normalizeTickerStyle(null).label).toBe("NEWS")
+  })
+})
+
+describe("pause and direction", () => {
+  it("a paused ticker holds where it stopped", () => {
+    expect(crawlElapsed({ startedAt: 1000 }, 5000)).toBe(4000)
+    expect(crawlElapsed({ startedAt: 1000, pausedAt: 3000 }, 9000)).toBe(2000)
+  })
+  it("moving right mirrors the crawl: it enters at the left edge", () => {
+    expect(mirrorPositions([900], 0, 1000, 300)).toEqual([-200])
+    // 1 s in at 100 px/s: the right end is 100 px into the lane (x 300), so 300 px of words start at 0.
+    expect(mirrorPositions(crawlPositions(200, 800, 300, 100, 100, 1000), 200, 800, 300)).toEqual([0])
+    expect(normalizeTickerStyle({ direction: "right" }).direction).toBe("right")
+    expect(normalizeTickerStyle({}).direction).toBe("left")
   })
 })

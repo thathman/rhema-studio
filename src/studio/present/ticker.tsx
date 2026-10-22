@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { NewspaperIcon, PaletteIcon, PlayIcon, SquareIcon } from "lucide-react"
+import { NewspaperIcon, PaletteIcon, PauseIcon, PlayIcon, SquareIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -18,7 +18,7 @@ export function TickerControl() {
   const ticker = useBroadcastStore((s) => s.ticker)
   const items = useBroadcastStore((s) => s.tickerItems)
   const [designing, setDesigning] = useState(false)
-  const targets = outputs.filter((o) => o.ticker && (o.role ?? "congregation") === "congregation")
+  const targets = outputs.filter((o) => o.ticker && o.role !== "stage")
   const hasWords = items.some((i) => i.trim())
   const start = async () => {
     const backing = await lowerThirdBacking(useBroadcastStore.getState().tickerStyle)
@@ -37,7 +37,7 @@ export function TickerControl() {
             title="News ticker: announcements crawling along the screen"
           >
             <NewspaperIcon className="size-3.5 shrink-0" />
-            <span>{ticker ? "Ticker on" : "Ticker"}</span>
+            <span>{ticker ? (ticker.pausedAt ? "Ticker paused" : "Ticker on") : "Ticker"}</span>
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-96">
@@ -57,7 +57,14 @@ export function TickerControl() {
           <p className="mt-1 text-[0.6875rem] text-muted-foreground">One announcement per line.</p>
           <div className="mt-2 flex items-center gap-2">
             {ticker ? (
-              <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().setTicker(null)}><SquareIcon /> Stop</Button>
+              <>
+                {ticker.pausedAt ? (
+                  <Button size="sm" onClick={() => useBroadcastStore.getState().pauseTicker(false)}><PlayIcon /> Resume</Button>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().pauseTicker(true)}><PauseIcon /> Pause</Button>
+                )}
+                <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().setTicker(null)}><SquareIcon /> Stop</Button>
+              </>
             ) : (
               <Button size="sm" disabled={!hasWords} onClick={() => void start()}><PlayIcon /> Start</Button>
             )}

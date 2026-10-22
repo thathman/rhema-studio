@@ -101,6 +101,8 @@ interface BroadcastState {
   setTicker: (on: { backing: Ticker["backing"] } | null) => void
   /** Change the look; a running ticker takes it at once (keeping its place in the crawl). */
   saveTickerStyle: (style: TickerStyle, backing?: Ticker["backing"]) => void
+  /** Hold the ticker's words still, or let them move on from where they stopped. */
+  pauseTicker: (paused: boolean) => void
   /**
    * What each output was last sent (multiview thumbnails show exactly this).
    * Session state; written whenever an output is synced.
@@ -249,7 +251,8 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   signageLast.set(output.id, index)
   signageLastList.set(output.id, listKey)
   // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
-  const stamp = `${listKey}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}`
+  const ticker = output.ticker ? useBroadcastStore.getState().ticker : null
+  const stamp = `${listKey}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}:${tickerKey(ticker)}`
   if (signageEmitted.get(output.id) === stamp) {
     ensureSignageTicker()
     return
@@ -267,8 +270,8 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   if (signageSeq.get(output.id) !== ticket) return
   if (useBroadcastStore.getState().outputs.find((o) => o.id === output.id)?.role !== "signage") return
   signageEmitted.set(output.id, stamp)
-  recordFrame(output.id, { theme, verse, overlay: null })
-  void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse }).catch(() => {})
+  recordFrame(output.id, { theme, verse, overlay: null, ticker })
+  void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse, ticker }).catch(() => {})
   // Warm the next picture so the swap is instant (the data URL is cached by the media store).
   if (ids.length > 1) void useMediaStore.getState().dataUrl(ids[(index + 1) % ids.length]).catch(() => {})
   ensureSignageTicker()
@@ -312,7 +315,21 @@ export interface OutputFrame {
 /** Send the ticker (on, changed or off) to the outputs that show it. */
 function syncTickerOutputs(): void {
   const s = useBroadcastStore.getState()
-  for (const o of s.outputs) if (o.ticker && (o.role ?? "congregation") === "congregation") s.syncBroadcastOutputFor(o.id)
+  // Never the stage; signage (the foyer) when it is turned on there.
+  for (const o of s.outputs) if (o.ticker && o.role !== "stage") s.syncBroadcastOutputFor(o.id)
+}
+
+// Which ticker a signage output last showed, by identity (a ticker can carry a picture as a large data URL).
+const tickerIds = new WeakMap<Ticker, number>()
+let nextTickerId = 1
+function tickerKey(t: Ticker | null): number {
+  if (!t) return 0
+  let id = tickerIds.get(t)
+  if (!id) {
+    id = nextTickerId++
+    tickerIds.set(t, id)
+  }
+  return id
 }
 
 /** After a theme draft ends (saved, discarded, closed, switched), outputs that were shown the draft get the saved theme again. */
@@ -681,6 +698,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     const live = on && s.tickerItems.some((i) => i.trim()) ? { items: s.tickerItems, style: s.tickerStyle, startedAt: Date.now(), backing: on.backing } : null
     set({ ticker: live })
+    syncTickerOutputs()
+  },
+  pauseTicker: (paused) => {
+    const t = get().ticker
+    if (!t || !!t.pausedAt === paused) return
+    const now = Date.now()
+    // Resuming moves the start on by the pause, so the words carry on from where they stopped.
+    set({ ticker: paused ? { ...t, pausedAt: now } : { ...t, startedAt: t.startedAt + (now - (t.pausedAt ?? now)), pausedAt: undefined } })
     syncTickerOutputs()
   },
   saveTickerStyle: (tickerStyle, backing) => {

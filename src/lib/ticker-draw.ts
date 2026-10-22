@@ -1,5 +1,5 @@
 import type { Ticker } from "@/types/broadcast-output"
-import { crawlPositions, tickerText } from "@/lib/ticker"
+import { crawlElapsed, crawlPositions, mirrorPositions, tickerText } from "@/lib/ticker"
 
 export interface TickerDrawOptions {
   imageCache?: Map<string, HTMLImageElement>
@@ -64,6 +64,8 @@ export function drawTicker(ctx: CanvasRenderingContext2D, width: number, height:
   ctx.textAlign = "left"
   const textW = ctx.measureText(text).width
   const speed = (st.speed * height) / 1080
-  for (const x of crawlPositions(laneX, width - laneX, textW, h * 3, speed, opts.now - ticker.startedAt)) ctx.fillText(text, x, y + h / 2)
+  const laneW = width - laneX
+  const xs = crawlPositions(laneX, laneW, textW, h * 3, speed, crawlElapsed(ticker, opts.now))
+  for (const x of st.direction === "right" ? mirrorPositions(xs, laneX, laneW, textW) : xs) ctx.fillText(text, x, y + h / 2)
   ctx.restore()
 }

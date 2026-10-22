@@ -13,6 +13,7 @@ export const DEFAULT_TICKER_STYLE: TickerStyle = {
   labelColor: "#0b1a33",
   labelBackground: "#d4a656",
   separator: "•",
+  direction: "left",
 }
 
 const num = (v: unknown, d: number, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d)
@@ -41,6 +42,7 @@ export function normalizeTickerStyle(raw: Partial<TickerStyle> | null | undefine
     labelColor: str(r.labelColor, d.labelColor),
     labelBackground: str(r.labelBackground, d.labelBackground),
     separator: typeof r.separator === "string" ? r.separator.slice(0, 8) : d.separator,
+    direction: r.direction === "right" ? "right" : "left",
   }
 }
 
@@ -67,4 +69,14 @@ export function crawlPositions(laneX: number, laneW: number, textW: number, gap:
   const out: number[] = []
   for (let k = first, x = x0 + first * cycle; x < laneX + laneW && out.length < 50; k++, x = x0 + k * cycle) out.push(x)
   return out
+}
+
+/** How long the crawl has run at `now`: a paused ticker holds where it stopped. */
+export function crawlElapsed(ticker: { startedAt: number; pausedAt?: number }, now: number): number {
+  return (ticker.pausedAt ?? now) - ticker.startedAt
+}
+
+/** Copies moving toward the right: the same crawl mirrored in the lane. */
+export function mirrorPositions(positions: number[], laneX: number, laneW: number, textW: number): number[] {
+  return positions.map((x) => 2 * laneX + laneW - x - textW)
 }

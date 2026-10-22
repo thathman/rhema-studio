@@ -46,6 +46,8 @@ export interface TickerStyle {
   labelBackground: string
   /** Between items. */
   separator: string
+  /** Which way the words move: toward the left (the usual crawl) or toward the right. */
+  direction: "left" | "right"
 }
 
 /** The ticker on air: what crawls, since when, in which look. */
@@ -54,6 +56,8 @@ export interface Ticker {
   style: TickerStyle
   /** When it started (ms); the crawl's position comes from the time since. */
   startedAt: number
+  /** Paused at this time (ms): the words hold still until resumed. */
+  pausedAt?: number
   backing?: { kind: "picture" | "video"; url: string } | null
 }
 

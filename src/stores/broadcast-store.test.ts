@@ -464,8 +464,29 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.main?.ticker ?? null).toBeNull()
     useBroadcastStore.getState().setTickerItems(["Choir Saturday"])
     expect(useBroadcastStore.getState().outputFrames.stream.ticker?.items).toEqual(["Choir Saturday"])
+    useBroadcastStore.getState().setTicker({ backing: null })
+    const started = useBroadcastStore.getState().ticker!.startedAt
+    vi.spyOn(Date, "now").mockReturnValue(started + 5000)
+    useBroadcastStore.getState().pauseTicker(true)
+    expect(useBroadcastStore.getState().outputFrames.stream.ticker?.pausedAt).toBe(started + 5000)
+    // Resumed 3 s later: it carries on from where it stopped (the start moves on by the pause).
+    vi.spyOn(Date, "now").mockReturnValue(started + 8000)
+    useBroadcastStore.getState().pauseTicker(false)
+    expect(useBroadcastStore.getState().ticker).toMatchObject({ startedAt: started + 3000, pausedAt: undefined })
+    vi.restoreAllMocks()
     useBroadcastStore.getState().setTicker(null)
     expect(useBroadcastStore.getState().outputFrames.stream.ticker).toBeNull()
+  })
+
+  it("a signage output can show the ticker over its pictures; the stage never does", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "foyer", name: "Foyer", type: "display", role: "signage", themeId: s.themes[0].id, monitorIndex: 0, ndi: ndiDefaults, signage: { mediaIds: [], seconds: 5 }, ticker: true })
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, ticker: true })
+    useBroadcastStore.getState().setTickerItems(["Prayer meeting Wednesday 6:30 PM"])
+    useBroadcastStore.getState().setTicker({ backing: null })
+    await vi.waitFor(() => expect(useBroadcastStore.getState().outputFrames.foyer?.ticker?.items[0]).toBe("Prayer meeting Wednesday 6:30 PM"))
+    expect(useBroadcastStore.getState().outputFrames.stage?.ticker ?? null).toBeNull()
   })
 
   it("an output can give a kind of content its own look (hymns in one theme, the rest in the main one)", async () => {
