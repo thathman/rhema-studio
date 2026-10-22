@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { actualByItem, actualDurations, formatJournal, type JournalEntry } from "./journal"
+import { actualByItem, actualDurations, firstOnAir, formatJournal, type JournalEntry } from "./journal"
 
 const e = (mono: number, kind: JournalEntry["kind"], label: string, itemId: string | null = null): JournalEntry => ({ at: 1_700_000_000_000 + mono, mono, kind, label, itemId })
 
@@ -41,3 +41,10 @@ describe("service journal", () => {
   })
 })
 
+
+describe("actual times for the run of show", () => {
+  it("keeps the first time each item went on air, not later returns or quick screens", () => {
+    const entries = [e(0, "live", "John 3:16", "a"), e(60_000, "quick", "Welcome"), e(90_000, "live", "Psalm 23", "b"), e(120_000, "live", "John 3:16", "a"), e(150_000, "clear", "")]
+    expect(Object.fromEntries(firstOnAir(entries))).toEqual({ a: 1_700_000_000_000, b: 1_700_000_090_000 })
+  })
+})
