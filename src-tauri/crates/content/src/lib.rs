@@ -866,6 +866,9 @@ struct ExtrasPayload {
     /// What happens when the item goes live (issue #193): a stage-only message, one non-visual cue.
     #[serde(default)]
     on_live: Option<OnLivePayload>,
+    /// Move on to the next item after the planned minutes, while timed moves are on in Present.
+    #[serde(default)]
+    auto_advance: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1244,6 +1247,8 @@ mod tests {
         for (payload, ok) in [
             (r#"{"on_live":{"stage_message":"Wrap up in 2 minutes","cue":"timer.fresh"}}"#, true),
             (r#"{"on_live":{"cue":"stage.clearMessage"}}"#, true),
+            (r#"{"auto_advance":true,"planned_minutes":3}"#, true),
+            (r#"{"auto_advance":"yes"}"#, false),
             (r#"{"on_live":{"cue":"quick.black"}}"#, false),
             (r#"{"on_live":{"cue":"next"}}"#, false),
             (r#"{"on_live":{"stage_message":"two\nlines"}}"#, false),

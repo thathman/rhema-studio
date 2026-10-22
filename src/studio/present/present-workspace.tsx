@@ -13,6 +13,7 @@ import { presentActions } from "@/studio/present-actions"
 import { keyToPresentAction, shouldIgnoreKeyboard } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
 import { StatusChip, WorkspaceHeader } from "@/studio/ui/status-chip"
+import { TimedMoves } from "@/studio/present/timed-moves"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
@@ -146,6 +147,7 @@ function StandardView() {
   const isLive = useBroadcastStore((s) => s.isLive)
   const hasLiveItem = useBroadcastStore((s) => s.liveVerse !== null)
   const count = useQueueStore((s) => s.items.length)
+  const hasTimedItems = useQueueStore((s) => s.items.some((i) => i.auto_advance))
   const canRestore = !isLive && hasLiveItem
   const nextHint = useNextHint()
   const held = useBroadcastStore((s) => s.heldLive !== null)
@@ -175,6 +177,11 @@ function StandardView() {
           </div>
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{count} {count === 1 ? "item" : "items"}</span>
         </div>
+        {hasTimedItems && (
+          <div className="flex justify-end border-b border-border px-4 py-1.5">
+            <TimedMoves />
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
           <RundownList mode="present" />
         </div>

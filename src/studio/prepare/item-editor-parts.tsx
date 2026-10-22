@@ -347,3 +347,25 @@ export function GoLiveCues({ item }: { item: QueueItem }) {
     </section>
   )
 }
+
+/** Prepare: let this item move on by itself after its planned minutes (only while timed moves are on in Present). */
+export function TimedAdvance({ item }: { item: QueueItem }) {
+  const minutes = item.planned_minutes ?? 0
+  return (
+    <label className="mt-3 ml-7 flex items-start gap-2 pl-2 text-xs">
+      <input
+        type="checkbox"
+        className="mt-0.5 size-4"
+        checked={!!item.auto_advance}
+        disabled={!minutes && !item.auto_advance}
+        onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, auto_advance: e.target.checked || null }))}
+      />
+      <span>
+        <span className="font-medium">Move on by itself{minutes ? ` after ${minutes} min` : ""}</span>
+        <span className="block text-muted-foreground">
+          {minutes ? "Goes to the next item in its phase, only while Timed moves is on in Present. Anything you do to what is live cancels it." : "Give it planned minutes first."}
+        </span>
+      </span>
+    </label>
+  )
+}

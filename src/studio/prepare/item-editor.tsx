@@ -7,7 +7,7 @@ import { drawStage } from "@/lib/stage-canvas"
 import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
 import { SlideList } from "@/studio/present/rundown-list"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { BackgroundPicker, CommentsEditor, CustomSlideEditor, ImageItemControls, NoteEditor, GoLiveCues, PlannedMinutes, SongItemControls } from "@/studio/prepare/item-editor-parts"
+import { BackgroundPicker, CommentsEditor, CustomSlideEditor, ImageItemControls, NoteEditor, GoLiveCues, PlannedMinutes, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
 
 const KIND: Record<string, [string, React.ReactNode]> = {
   song: ["Song", <MusicIcon key="i" />],
@@ -70,6 +70,7 @@ export function ItemEditor() {
         </TabsContent>
         <TabsContent value="timing" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           <PlannedMinutes item={item} />
+          <TimedAdvance item={item} />
           <GoLiveCues item={item} />
         </TabsContent>
       </Tabs>

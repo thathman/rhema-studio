@@ -20,6 +20,8 @@ interface QueueItemBase {
   comments?: ItemComment[] | null
   /** What happens as it goes live (issue #193): a stage-only message, one cue that never changes the screen. */
   on_live?: OnLive | null
+  /** Moves on to the next item of its phase after its planned minutes, while timed moves are on in Present (issue #193). */
+  auto_advance?: boolean | null
   /** Payload fields this build does not edit (from a newer version or a service file), written back unchanged (FR-03). */
   payload_extra?: Record<string, unknown>
 }
