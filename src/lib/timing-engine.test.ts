@@ -73,6 +73,27 @@ describe("timing engine (issue #196)", () => {
     expect(times(t)[0]).toBe("a 10:00-10:05 upcoming")
   })
 
+  it("a watchnight across midnight: begun at 23:31, at 00:10 the start is last night's, and an end by 00:15 is that night's", () => {
+    const night = (d: number, h: number, m: number) => new Date(2026, 11, d, h, m).getTime()
+    const late = headers.map((h) => (h.id === "main" ? { ...h, starts_at: "23:30" } : h))
+    const t = serviceTiming(input({
+      headers: late,
+      items: items.map((i) => (i.id === "c" ? { ...i, end_by: "00:15" } : i)),
+      firstOnAir: new Map([["a", night(31, 23, 31)], ["b", night(31, 23, 36)]]),
+      onAirMs: new Map([["a", 5 * 60_000], ["b", 34 * 60_000]]),
+      liveItemId: "b",
+      now: night(32, 0, 10),
+    }))!
+    expect(t.start).toBe(night(31, 23, 30))
+    expect(times(t)).toEqual(["a 23:31-23:36 done", "b 23:36-00:10 live", "c 00:10-00:15 upcoming squeezed", "d 00:15-00:20 upcoming"])
+    expect(Math.round(t.lateMs / 60_000)).toBe(-10)
+  })
+
+  it("before a watchnight: at 23:00 a 00:30 start is tonight's, not this morning's", () => {
+    const late = headers.map((h) => (h.id === "main" ? { ...h, starts_at: "00:30" } : h))
+    expect(serviceTiming(input({ headers: late, now: at(23, 0) }))!.start).toBe(new Date(2026, 9, 26, 0, 30).getTime())
+  })
+
   it("no start time, no timing", () => {
     expect(serviceTiming(input({ headers: headers.map((h) => ({ ...h, starts_at: undefined })) }))).toBeNull()
   })

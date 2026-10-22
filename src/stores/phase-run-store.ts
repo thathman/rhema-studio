@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { presentQueueItem } from "@/lib/remote-actions"
-import { clockMinutes, dwellSeconds, nextInPhase, phaseRange, planTimeline } from "@/lib/run-of-show"
+import { clockInstant, clockMinutes, dwellSeconds, nextInPhase, phaseRange, planTimeline } from "@/lib/run-of-show"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useHold } from "@/stores/hold-store"
@@ -56,14 +56,13 @@ export function catchUpPhaseRun(now = Date.now()) {
   fn()
 }
 
-/** Epoch ms when the warm-up should begin today (timed to end at the service start), if still ahead. */
+/** Epoch ms when the warm-up should begin (timed to end at the service start), if still ahead: the nearest such time, so a watchnight's 23:55 or 00:30 arms. */
 function warmupDue(now: number): number | null {
   const { items, headers } = useQueueStore.getState()
   const at = clockMinutes(planTimeline(items, headers)?.warmupStart)
   if (at === null) return null
-  const d = new Date(now)
-  d.setHours(Math.floor(at / 60), at % 60, 0, 0)
-  return d.getTime() > now ? d.getTime() : null
+  const due = clockInstant(at, now)
+  return due > now ? due : null
 }
 
 async function step(run: PhaseRun) {

@@ -4,6 +4,8 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+- The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (PT-006, #196).
+
 ### The owner's redesign (in progress, 2026-10-22)
 - Design → Themes → Look opens with Visual direction: four one-click palettes from the approved design (Midnight & gold, Forest & linen, Warm editorial, Modern cobalt) that set the background, the words in both languages and the reference accent together; the chosen one shows as pressed (#249, DS-004).
 - New look (#194), then the owner's approved neutral design (issue #215, #218): warm stone canvas, white flat panels with a fine border, ink sidebar and live console, one deep-teal accent, brass sparingly, red only for live; IBM Plex Sans (bundled); the approved Home hero; a 194 px sidebar with the church's workspace tag (More tools removed); a top bar with Find anything, keyboard shortcuts and team activity. Accessibility pass against UI/UX Pro Max: AA contrast, 24 px targets, a skip link, reduced motion respected.

@@ -1,3 +1,4 @@
+import { clockInstant } from "@/lib/run-of-show"
 import type { QueueItem } from "@/types"
 
 export const plannedMs = (item: QueueItem): number => (item.planned_minutes ?? 0) * 60_000
@@ -41,13 +42,7 @@ export function projectedEnd(summary: TimingSummary, elapsedMs: number, nowWallM
 export function endByLeftMs(endBy: string | null | undefined, nowWallMs: number): number | null {
   const m = endBy ? /^([01]\d|2[0-3]):([0-5]\d)$/.exec(endBy) : null
   if (!m) return null
-  const target = new Date(nowWallMs)
-  target.setHours(Number(m[1]), Number(m[2]), 0, 0)
-  const half = 12 * 60 * 60_000
-  let left = target.getTime() - nowWallMs
-  if (left < -half) left += 2 * half
-  else if (left > half) left -= 2 * half
-  return left
+  return clockInstant(Number(m[1]) * 60 + Number(m[2]), nowWallMs) - nowWallMs
 }
 
 /** "1 h 10 min", "45 min", "" for zero. */
