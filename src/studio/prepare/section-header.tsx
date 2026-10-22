@@ -25,7 +25,7 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
   return (
     <li
       aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
-      className={cn("flex items-center gap-2 px-2 text-[0.6875rem] font-extrabold tracking-[0.1em] uppercase", phase ? "mt-3 text-tone-accent-foreground first:mt-1" : "mt-1.5 pl-4 text-muted-foreground")}
+      className={cn("flex items-center gap-2 text-[0.625rem] font-bold tracking-[0.1em] uppercase", phase ? "mt-2 border-t border-[#334056] bg-[#1d3335] px-3 py-2 text-[#d6e8e1] first:mt-0" : "mt-1.5 px-2 pl-4 text-muted-foreground")}
     >
       <span className="truncate">{header.name}</span>
       {phase && header.rule && <span className="shrink-0 font-semibold tracking-normal normal-case">· {RULE_LABEL[header.rule].chip}</span>}

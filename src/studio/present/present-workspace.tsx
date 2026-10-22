@@ -12,8 +12,9 @@ import { useServiceStore } from "@/stores/service-store"
 import { presentActions } from "@/studio/present-actions"
 import { keyToPresentAction, shouldIgnoreKeyboard } from "@/studio/present-keys"
 import { BigButton } from "@/studio/ui/big-button"
-import { StatusChip, WorkspaceHeader } from "@/studio/ui/status-chip"
+import { StatusChip } from "@/studio/ui/status-chip"
 import { TimedMoves } from "@/studio/present/timed-moves"
+import { PhaseStrip } from "@/studio/present/phase-strip"
 import { RundownList } from "@/studio/present/rundown-list"
 import { QuickFind } from "@/studio/present/quick-find"
 import { ServiceTimer } from "@/studio/present/service-timer"
@@ -62,82 +63,94 @@ export function PresentWorkspace() {
   const override = useBibleStore((s) => s.overrideServiceTranslations)
   const setOverride = useBibleStore((s) => s.setOverrideServiceTranslations)
   const activeAbbrev = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? "active")
+  const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
   const onAir = outputs.filter((o) => outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive).length
 
   return (
     <div className="flex h-full flex-col">
-      <WorkspaceHeader title="Live console" titleHidden>
-        <StatusChip
-          tone={isLive && liveRef ? (rehearsal ? "warn" : "live") : "off"}
-          label={isLive && liveRef ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef}` : liveRef ? `Off air · Restore shows ${liveRef}` : rehearsal ? "Rehearsal · nothing live" : "Nothing live"}
-          className="max-w-80"
-        />
-        <StatusChip
-          tone={rehearsal ? "warn" : "off"}
-          label={rehearsal ? "Rehearsal on" : "Rehearsal off"}
-          onClick={() => (rehearsal ? leaveRehearsal() : useBroadcastStore.getState().setRehearsal(true))}
-          title={rehearsal ? "Outputs, NDI and the stage screen are frozen. Click to go back to normal; they will show the current content." : "Practise without touching any screen: outputs, NDI and the stage screen keep what they show now."}
-        />
-        <StatusChip
-          tone={onAir > 0 ? "ok" : "warn"}
-          label={onAir > 0 ? `${onAir}/${outputs.length} outputs on` : "No output on a screen"}
-          onClick={openOutputs}
-          title="Open outputs"
-        />
-        <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeech ? "Listening (Deepgram)" : "Listening") : "Listening off"} title={listening && cloudSpeech ? "Microphone sound is being sent to Deepgram" : undefined} />
-        {listening && autoLive && (
-          <StatusChip
-            tone="warn"
-            label="Auto-live on"
-            title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (also the Auto switch on the Live panel in Production view)."
-            onClick={() => useBroadcastStore.getState().setAutoLive(false)}
-          />
-        )}
-        <ServiceTimer />
-        <AuxTimers />
-        <ObsChip />
-        <SoundChip />
-        <LowerThirdControl />
-        <StageMessage />
-        <CueMenu />
-        {service && (
-          <StatusChip
-            tone={override ? "warn" : "info"}
-            label={override ? `Override: ${activeAbbrev}` : "Saved translations"}
-            onClick={() => setOverride(!override)}
-            title={
-              override
-                ? `Service items are shown in ${activeAbbrev} instead of the translation they were saved with. Click to use the saved translations.`
-                : `Service items are shown in the translation they were saved with. Click to override and use ${activeAbbrev} for everything.`
-            }
-          />
-        )}
-        {warning && (
-          <StatusChip tone="warn" label={warning} className="max-w-96" title={warning} onClick={() => useBroadcastStore.getState().setPresentWarning(null)} />
-        )}
+      {/* The approved design: "Live console" with what is on air and the view on one row, the live tools on the next. */}
+      <header className="flex shrink-0 flex-col gap-2.5 border-b border-border px-[22px] pt-3.5 pb-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[1.4375rem] leading-tight font-bold tracking-[-0.04em]">Live console</h1>
+            <p className="truncate text-[0.6875rem] text-muted-foreground">{service ? `${service.title}${startsAt ? ` · starts ${startsAt}` : ""}` : "What is next in your service"}</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <StatusChip
+              tone={isLive && liveRef ? (rehearsal ? "warn" : "live") : "off"}
+              label={isLive && liveRef ? `${rehearsal ? "REHEARSAL" : "LIVE"} · ${liveRef}` : liveRef ? `Off air · Restore shows ${liveRef}` : rehearsal ? "Rehearsal · nothing live" : "Nothing live"}
+              className="max-w-80"
+            />
+            <StatusChip
+              tone={rehearsal ? "warn" : "off"}
+              label={rehearsal ? "Rehearsal on" : "Rehearsal off"}
+              onClick={() => (rehearsal ? leaveRehearsal() : useBroadcastStore.getState().setRehearsal(true))}
+              title={rehearsal ? "Outputs, NDI and the stage screen are frozen. Click to go back to normal; they will show the current content." : "Practise without touching any screen: outputs, NDI and the stage screen keep what they show now."}
+            />
+            <StatusChip
+              tone={onAir > 0 ? "ok" : "warn"}
+              label={onAir > 0 ? `${onAir}/${outputs.length} outputs on` : "No output on a screen"}
+              onClick={openOutputs}
+              title="Open outputs"
+            />
+            <div role="group" aria-label="Present view" className="ml-2 flex rounded-md border border-border p-0.5">
+              {(["standard", "production"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={view === v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium capitalize [&_svg]:size-3.5",
+                    view === v ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {v === "standard" ? <LayoutPanelLeftIcon /> : <LayoutGridIcon />}
+                  <span className="max-[1200px]:sr-only">{v}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div role="toolbar" aria-label="Live tools" className="flex flex-wrap items-center gap-2">
+          <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeech ? "Listening (Deepgram)" : "Listening") : "Listening off"} title={listening && cloudSpeech ? "Microphone sound is being sent to Deepgram" : undefined} />
+          {listening && autoLive && (
+            <StatusChip
+              tone="warn"
+              label="Auto-live on"
+              title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (also the Auto switch on the Live panel in Production view)."
+              onClick={() => useBroadcastStore.getState().setAutoLive(false)}
+            />
+          )}
+          <ServiceTimer />
+          <AuxTimers />
+          <ObsChip />
+          <SoundChip />
+          <LowerThirdControl />
+          <StageMessage />
+          <CueMenu />
+          {service && (
+            <StatusChip
+              tone={override ? "warn" : "info"}
+              label={override ? `Override: ${activeAbbrev}` : "Saved translations"}
+              onClick={() => setOverride(!override)}
+              title={
+                override
+                  ? `Service items are shown in ${activeAbbrev} instead of the translation they were saved with. Click to use the saved translations.`
+                  : `Service items are shown in the translation they were saved with. Click to override and use ${activeAbbrev} for everything.`
+              }
+            />
+          )}
+          {warning && (
+            <StatusChip tone="warn" label={warning} className="max-w-96" title={warning} onClick={() => useBroadcastStore.getState().setPresentWarning(null)} />
+          )}
+        </div>
         {/* Always present, so screen readers announce changes: what is on air, and warnings about it. */}
         <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
           {isLive && liveRef ? `${rehearsal ? "Rehearsal" : "On air"}: ${liveRef}` : "Off air"}
         </span>
         <span role="alert" aria-atomic="true" className="sr-only">{warning ?? ""}</span>
-        <div role="group" aria-label="Present view" className="ml-2 flex rounded-md border border-border p-0.5">
-          {(["standard", "production"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={view === v}
-              onClick={() => setView(v)}
-              className={cn(
-                "flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium capitalize [&_svg]:size-3.5",
-                view === v ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {v === "standard" ? <LayoutPanelLeftIcon /> : <LayoutGridIcon />}
-              <span className="max-[1200px]:sr-only">{v}</span>
-            </button>
-          ))}
-        </div>
-      </WorkspaceHeader>
+      </header>
       <div className="relative min-h-0 flex-1">
         {view === "standard" ? <StandardView /> : <Dashboard />}
       </div>
@@ -170,7 +183,9 @@ function StandardView() {
   }, [])
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] gap-3 p-4 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2 max-[1200px]:p-3">
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3">
+    <PhaseStrip />
+    <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
       <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken" data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
@@ -247,6 +262,7 @@ function StandardView() {
           <TickerRow />
         </section>
       </div>
+    </div>
     </div>
   )
 }
