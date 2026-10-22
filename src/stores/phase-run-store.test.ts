@@ -14,7 +14,7 @@ vi.mock("@/lib/remote-actions", () => ({
   }),
 }))
 
-const { usePhaseRun } = await import("./phase-run-store")
+const { usePhaseRun, catchUpPhaseRun } = await import("./phase-run-store")
 const { useQueueStore } = await import("@/stores/queue-store")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 
@@ -88,6 +88,20 @@ describe("a phase running by itself in Present", () => {
     await vi.advanceTimersByTimeAsync(30_000)
     expect(presented).toEqual(["a"])
     expect(usePhaseRun.getState().run?.itemId).toBe("a")
+  })
+
+  it("catches up on the app's tick when its timer was held back (window hidden)", async () => {
+    usePhaseRun.getState().start("pre")
+    await vi.advanceTimersByTimeAsync(0)
+    expect(presented).toEqual(["a"])
+    // The clock moves on but the timer does not fire, as in a hidden window.
+    vi.setSystemTime(Date.now() + 9_000)
+    catchUpPhaseRun()
+    expect(presented).toEqual(["a"])
+    vi.setSystemTime(Date.now() + 2_000)
+    catchUpPhaseRun()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(presented).toEqual(["a", "b"])
   })
 
   it("the main service cannot be run this way", () => {
