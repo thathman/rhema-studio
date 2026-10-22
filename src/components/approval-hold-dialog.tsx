@@ -17,7 +17,7 @@ export function ApprovalHoldDialog() {
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           Present anyway goes live now, and this service is not asked about again in this session. To stop asking, approve the service in Prepare or turn off
-          "Ask before showing an unapproved service" in More.
+          "Ask before showing an unapproved service" in Team.
         </p>
         <DialogFooter>
           <Button variant="ghost" onClick={dismiss}>Not now</Button>

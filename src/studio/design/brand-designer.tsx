@@ -12,7 +12,7 @@ import { PlusIcon, XIcon } from "lucide-react"
 const CORNERS = [["top-left", "Top left"], ["top-right", "Top right"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]] as const
 
 /**
- * More → Church brand: logo, colours and fonts once; Apply makes (or refreshes)
+ * Design → Brand kit: logo, colours and fonts once; Apply makes (or refreshes)
  * three themes — Scripture, Lyrics, Announcements — that outputs can use.
  * Themes the church edits by hand afterwards are never overwritten.
  */

@@ -19,6 +19,7 @@ import { BroadcastOutputsDialog } from "@/components/broadcast/broadcast-outputs
 import { SettingsDialog } from "@/components/settings-dialog"
 import { LibraryWorkspace } from "@/studio/library/library-workspace"
 import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
+import { TeamWorkspace } from "@/studio/team/team-workspace"
 import { openSettings } from "@/lib/settings-dialog"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Sidebar } from "@/studio/shell/sidebar"
@@ -28,7 +29,7 @@ import { TopBar } from "@/studio/shell/top-bar"
 import { GlobalSearch } from "@/studio/shell/global-search"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", library: "Library", design: "Design studio", archive: "Archive", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", library: "Library", design: "Design studio", team: "Team", archive: "Archive", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
@@ -37,6 +38,7 @@ const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   design: () => <DesignWorkspace />,
   library: () => <LibraryWorkspace />,
   archive: () => <ArchiveWorkspace />,
+  team: () => <TeamWorkspace />,
   more: () => <MoreWorkspace />,
 }
 
@@ -47,9 +49,7 @@ export function AppShell() {
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
   const operatorName = useSettingsStore((s) => s.operatorName)
-  const church = useMemo(() => churchItems({
-    team: () => setWorkspace("more"),
-  }), [setWorkspace])
+  const church = useMemo(() => churchItems(), [])
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
