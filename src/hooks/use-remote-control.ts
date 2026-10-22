@@ -147,15 +147,19 @@ export function useRemoteControl() {
 
     setup()
 
-    // Sync status snapshot to Rust backend periodically for HTTP GET /api/v1/status
+    // The phone reads GET /api/v1/status: send the snapshot as soon as it changes (store
+    // changes, not a timer: a hidden or covered window slows timers to about once a minute),
+    // and every few seconds anyway in case the server restarted.
+    const unsubscribe = [useBroadcastStore, useQueueStore, useApprovalGateStore, useSettingsStore].map((store) => store.subscribe(() => syncStatusSnapshot()))
     const statusInterval = setInterval(() => {
-      syncStatusSnapshot()
-    }, 1000)
+      syncStatusSnapshot(true)
+    }, 5000)
 
     return () => {
       cancelled = true
       unlisteners.forEach((fn) => fn())
       clearInterval(statusInterval)
+      unsubscribe.forEach((u) => u())
     }
   }, [])
 }
@@ -163,24 +167,28 @@ export function useRemoteControl() {
 /**
  * Push current frontend state to the Rust-managed StatusSnapshot.
  */
-function syncStatusSnapshot() {
+export function remoteStatusSnapshot() {
   const broadcast = useBroadcastStore.getState()
-  const queue = useQueueStore.getState()
-  const settings = useSettingsStore.getState()
-
-  const activeTheme = broadcast.themes.find(
-    (t) => t.id === broadcast.activeThemeId
-  )
-
-  invoke("update_remote_status", {
+  const activeTheme = broadcast.themes.find((t) => t.id === broadcast.activeThemeId)
+  return {
     onAir: broadcast.isLive,
     activeTheme: activeTheme?.name ?? null,
     liveVerse: broadcast.liveVerse?.reference ?? null,
-    queueLength: queue.items.length,
-    confidenceThreshold: settings.confidenceThreshold,
+    queueLength: useQueueStore.getState().items.length,
+    confidenceThreshold: useSettingsStore.getState().confidenceThreshold,
     rehearsal: broadcast.rehearsal,
     waitingForApproval: useApprovalGateStore.getState().held !== null,
-  }).catch(() => {
+  }
+}
+
+let lastSent = ""
+/** Send the snapshot when it differs from the last one sent (`force`: send anyway). */
+function syncStatusSnapshot(force = false) {
+  const snapshot = remoteStatusSnapshot()
+  const key = JSON.stringify(snapshot)
+  if (!force && key === lastSent) return
+  lastSent = key
+  invoke("update_remote_status", snapshot).catch(() => {
     // Silently ignore — HTTP server may not be running
   })
 }
