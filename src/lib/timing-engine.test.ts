@@ -67,6 +67,12 @@ describe("timing engine (issue #196)", () => {
     expect(t.events[0].plannedStart).toBe(at(10, 0))
   })
 
+  it("planning in the evening before: nothing has begun, so the plan stands (not hours late)", () => {
+    const t = serviceTiming(input({ now: at(22, 41) }))!
+    expect(t.lateMs).toBe(0)
+    expect(times(t)[0]).toBe("a 10:00-10:05 upcoming")
+  })
+
   it("no start time, no timing", () => {
     expect(serviceTiming(input({ headers: headers.map((h) => ({ ...h, starts_at: undefined })) }))).toBeNull()
   })

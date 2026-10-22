@@ -5,7 +5,8 @@ import { clockMinutes, phaseRange, type OutlineHeader } from "@/lib/run-of-show"
  * snapshot and the time now. Three schedules stay apart and the plan is never rewritten:
  * - planned: from the main service's start time and each item's planned minutes;
  * - actual: when items really went on air and for how long (the service log);
- * - expected: what happened so far, the live item's remaining time, then the plan for the rest.
+ * - expected: what happened so far, the live item's remaining time, then the plan for the rest;
+ *   until the service has begun it is the plan itself, whatever the time now.
  * An item's "end by" is a hard stop: the time it may take is cut to fit, and flagged.
  */
 export interface TimingItem {
@@ -74,6 +75,9 @@ export function serviceTiming(input: TimingInput): ServiceTiming | null {
   const start = onDay(now, startMinutes)
   const list = items.slice(range.start, range.end)
   const liveAt = list.findIndex((i) => i.id === liveItemId)
+  // The time now matters once the service has begun. Before that (planning on Thursday for Sunday,
+  // or rehearsing in the evening) what is expected is the plan, not "12 h late".
+  const begun = liveAt !== -1 || list.some((i) => firstOnAir.has(i.id))
   const events: EventTiming[] = []
   let planned = start
   // Before anything has gone on air the service starts at its time, or now if that has passed.
@@ -98,7 +102,7 @@ export function serviceTiming(input: TimingInput): ServiceTiming | null {
         cursor += (input.adjustMinutes ?? 0) * MINUTE
         adjusted = true
       }
-      expectedStart = Math.max(cursor, now)
+      expectedStart = begun ? Math.max(cursor, now) : cursor
       expectedEnd = expectedStart + ms
     }
     let squeezed = false
