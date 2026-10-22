@@ -30,6 +30,8 @@ export interface VerseRenderData {
   screen?: "black" | "logo"
   /** A quick screen (Welcome, Offering…, Black, Logo): for the service log only; outputs ignore it. */
   quick?: boolean
+  /** Which quick screen this is ("welcome", "black"…), so Present can mark the one on air. */
+  quickScreen?: string
   /**
    * A video over the whole frame. Output windows play it in a <video> element
    * and draw its frames; anywhere without that element (the main window's

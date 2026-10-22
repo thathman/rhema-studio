@@ -451,13 +451,13 @@ export function presentQuickScreen(screen: QuickScreen): void {
   const store = useBroadcastStore.getState()
   store.holdLive()
   if (screen === "black" || screen === "logo") {
-    store.setLiveVerse({ kind: "slide", reference: "", segments: [], lines: [], screen, quick: true }, null, { goLive: true, keepHeld: true })
+    store.setLiveVerse({ kind: "slide", reference: "", segments: [], lines: [], screen, quick: true, quickScreen: screen }, null, { goLive: true, keepHeld: true })
     return
   }
   const { title, lines, yo } = QUICK_SCREENS[screen]
   const bilingual = yorubaInUse()
   store.setLiveVerse(
-    { kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines], ...(bilingual ? { secondaryLines: [...yo] } : {}), quick: true },
+    { kind: "slide", reference: title, segments: [{ text: lines.join(" ") }], lines: [...lines], ...(bilingual ? { secondaryLines: [...yo] } : {}), quick: true, quickScreen: screen },
     null,
     { goLive: true, keepHeld: true }
   )
