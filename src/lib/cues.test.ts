@@ -104,5 +104,15 @@ describe("cues and macros", () => {
     expect(s.liveVerse?.quick).toBe(true)
     expect(s.heldLive?.liveVerse.reference).toContain("John 3:16")
   })
-})
 
+  it("ticker cues: take is idempotent (a repeated command does not restart the crawl); stop ends it", async () => {
+    useBroadcastStore.setState({ ticker: null, tickerItems: ["Harvest on Sunday"] })
+    await runSteps(["ticker.take"])
+    const first = useBroadcastStore.getState().ticker
+    expect(first?.items).toEqual(["Harvest on Sunday"])
+    await runSteps(["ticker.take"])
+    expect(useBroadcastStore.getState().ticker).toBe(first)
+    await runSteps(["ticker.stop"])
+    expect(useBroadcastStore.getState().ticker).toBeNull()
+  })
+})
