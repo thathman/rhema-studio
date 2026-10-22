@@ -4,6 +4,13 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Design and outputs (owner requests, 2026-10-22)
+- A look per kind of content: each output can show Bible, songs, hymns, slides and pictures in their own theme (its main theme otherwise); the Theme Designer previews each kind and assigns the theme (#189).
+- Lower third designer: styles with position, size, fonts, colours, an accent bar, an entrance (at once, fade, slide up) and a picture or video behind the band; Name and title, a Scripture strip and a Lyrics strip that follow what is live (#190).
+- The stage display can go out over NDI (to an NDI viewer); any screen output can open in a movable window instead of full screen, for signage on the operator's computer (#191).
+- News ticker: announcements crawl along the outputs that show it (also signage, never the stage), with a tag, colours, speed, direction, a picture or video behind, Pause/Resume and its own designer; a lower third stays above it (#192, issue #187).
+- NDI keeps full speed when the output window is hidden: frames are paced from Rust, only the ticker's band crosses from the page while it alone moves, and NDI compresses on its own thread (30 fps measured with an NDI receiver on the Intel Mac; it was about 1 fps) (#192).
+
 ### Workspaces and safety
 - Home, Prepare, Present and More; Standard and Production Present views; clear Preview vs Live; Quick Find across verses, hymn numbers and songs.
 - Live safety: one writer per content kind, nothing goes on air before it has loaded, a slow lookup can never overtake a newer command, Clear/Restore, quick screens with Back, rehearsal freeze.

@@ -1,3 +1,7 @@
+/** The kinds of content an output can give its own look (theme). */
+export const CONTENT_TYPES = ["bible", "song", "hymn", "slide", "picture"] as const
+export type ContentType = (typeof CONTENT_TYPES)[number]
+
 export interface VerseSegment {
   verseNumber?: number
   text: string
@@ -6,6 +10,8 @@ export interface VerseSegment {
 export interface VerseRenderData {
   /** Absent means a Bible verse. `lyric` is a song slide, `slide` a custom slide (both use `lines`), `image` a picture. */
   kind?: "verse" | "lyric" | "slide" | "image"
+  /** What this is, for an output that has its own look per kind of content (themeFor). Quick screens have none. */
+  content?: ContentType
   reference: string
   segments: VerseSegment[]
   /** Separate unlabeled translation lines rendered with a blank line between them. */

@@ -1,5 +1,5 @@
 import { resolveMonitorIndex } from "@/lib/monitor-health"
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
 import {
@@ -27,6 +27,9 @@ import {
 } from "@/lib/broadcast-output-control"
 import { useBroadcastStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
+import { CONTENT_TYPES } from "@/types/broadcast"
+import { withThemeFor } from "@/lib/output-themes"
+import { CONTENT_NAMES } from "@/lib/content-names"
 import type {
   BroadcastOutput,
   BroadcastOutputType,
@@ -208,7 +211,7 @@ export function OutputEditorDialog({
 
           <div className="flex flex-col gap-1.5 border-t border-border pt-4">
             <span id="role-label" className="text-xs text-muted-foreground">Who sees it</span>
-            <Select value={form.role ?? "congregation"} onValueChange={(v) => patch({ role: v as BroadcastOutput["role"], ...(v === "stage" ? { type: "display" as const } : {}) })}>
+            <Select value={form.role ?? "congregation"} onValueChange={(v) => patch({ role: v as BroadcastOutput["role"] })}>
               <SelectTrigger aria-labelledby="role-label" className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="congregation">Congregation — the themed screen (projector, stream)</SelectItem>
@@ -217,6 +220,12 @@ export function OutputEditorDialog({
               </SelectContent>
             </Select>
             {form.role === "signage" && <SignagePlaylists value={form.signage ?? { mediaIds: [], seconds: 10 }} onChange={(signage) => patch({ signage })} />}
+            {form.role === "signage" && (
+              <label className="mt-2 flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={form.ticker === true} onChange={(e) => patch({ ticker: e.target.checked })} />
+                <span>Show the news ticker over the pictures <span className="text-muted-foreground">(announcements from Present)</span></span>
+              </label>
+            )}
             {form.role !== "stage" && form.role !== "signage" && (
               <>
                 <span id="language-label" className="mt-2 text-xs text-muted-foreground">Languages on this output</span>
@@ -230,7 +239,11 @@ export function OutputEditorDialog({
                 </Select>
                 <label className="mt-2 flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={form.lowerThirds === true} onChange={(e) => patch({ lowerThirds: e.target.checked })} />
-                  <span>Show lower thirds on this output <span className="text-muted-foreground">(names and titles from Present; usually the stream)</span></span>
+                  <span>Show lower thirds on this output <span className="text-muted-foreground">(names, scripture and lyrics strips from Present; usually the stream)</span></span>
+                </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={form.ticker === true} onChange={(e) => patch({ ticker: e.target.checked })} />
+                  <span>Show the news ticker on this output <span className="text-muted-foreground">(announcements crawling along the screen, from Present)</span></span>
                 </label>
               </>
             )}
@@ -294,6 +307,10 @@ export function OutputEditorDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                <label className="mt-1 flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={form.windowed === true} onChange={(e) => patch({ windowed: e.target.checked })} />
+                  In a window (move and resize it; for signage or a preview on this computer's screen)
+                </label>
               </div>
             ) : (
               <>
@@ -426,6 +443,25 @@ export function OutputEditorDialog({
                 </SelectContent>
               </Select>
             </div>
+            {(form.role ?? "congregation") !== "stage" && (form.role ?? "congregation") !== "signage" && (
+              <div className="flex flex-col gap-1.5" role="group" aria-label="A different look for some content">
+                <span className="text-xs text-muted-foreground">A different look for some content (the theme above for the rest)</span>
+                <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
+                  {CONTENT_TYPES.map((c) => (
+                    <Fragment key={c}>
+                      <span className="text-xs">{CONTENT_NAMES[c]}</span>
+                      <Select value={form.themeFor?.[c] || "__same"} onValueChange={(v) => patch({ themeFor: withThemeFor(form, c, v === "__same" ? null : v) })}>
+                        <SelectTrigger aria-label={`Theme for ${CONTENT_NAMES[c]}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__same">Same as above</SelectItem>
+                          {themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}

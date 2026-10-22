@@ -15,8 +15,15 @@ export function paintFrame(
   const tctx = target.getContext("2d")
   if (!sctx || !tctx) return false
   try {
-    scratch.width = width // also clears it
-    scratch.height = height
+    // Resizing reallocates the canvas (8 MB at 1080p); at the same size, clearing is enough.
+    if (scratch.width !== width || scratch.height !== height) {
+      scratch.width = width
+      scratch.height = height
+    } else {
+      sctx.setTransform(1, 0, 0, 1, 0, 0)
+      sctx.globalAlpha = 1
+      sctx.clearRect(0, 0, width, height)
+    }
     render(sctx)
   } catch (e) {
     console.error("[broadcast-output] frame failed to draw; keeping the last good frame", e)

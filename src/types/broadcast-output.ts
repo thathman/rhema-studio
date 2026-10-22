@@ -1,3 +1,4 @@
+import type { ContentType } from "./broadcast"
 import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
 export type BroadcastOutputType = "display" | "ndi"
@@ -14,6 +15,76 @@ export type BroadcastOutputRole = "congregation" | "stage" | "signage"
 export interface LowerThird {
   line1: string
   line2: string
+  /** How it looks (resolved when shown, so an output draws it without looking anything up). */
+  style?: LowerThirdStyle
+  /** The style's picture or video behind the band, as a URL the output can load. */
+  backing?: { kind: "picture" | "video"; url: string } | null
+  /** A strip that follows what is live: the verse on screen (and its reference), or the lyric lines (and the song). */
+  follow?: "scripture" | "lyrics"
+  /** When it was shown (ms), for its entrance. */
+  shownAt?: number
+}
+
+/** How the news ticker looks and moves. One for the church, saved with the themes. */
+export interface TickerStyle {
+  /** Along the top or the bottom of the frame. */
+  position: "top" | "bottom"
+  /** Band height as a % of the frame height. */
+  height: number
+  /** How fast the words move, in pixels a second on a 1080-line frame. */
+  speed: number
+  /** null = the theme's verse font. */
+  fontFamily: string | null
+  /** Words size as a % of the band height. */
+  size: number
+  color: string
+  weight: number
+  background: { kind: "color" | "picture" | "video"; color: string; opacity: number; mediaId: string | null }
+  /** A fixed tag at the start of the band ("NEWS"); empty for none. */
+  label: string
+  labelColor: string
+  labelBackground: string
+  /** Between items. */
+  separator: string
+  /** Which way the words move: toward the left (the usual crawl) or toward the right. */
+  direction: "left" | "right"
+}
+
+/** The ticker on air: what crawls, since when, in which look. */
+export interface Ticker {
+  items: string[]
+  style: TickerStyle
+  /** When it started (ms); the crawl's position comes from the time since. */
+  startedAt: number
+  /** Paused at this time (ms): the words hold still until resumed. */
+  pausedAt?: number
+  backing?: { kind: "picture" | "video"; url: string } | null
+}
+
+/** A designed look for the lower third (name and title band), chosen when it is shown. */
+export interface LowerThirdStyle {
+  id: string
+  name: string
+  /** Where the band sits across the frame. */
+  align: "left" | "center" | "right"
+  /** Gap from the side (left/right) as a % of the frame width. */
+  margin: number
+  /** Gap from the bottom edge as a % of the frame height. */
+  bottom: number
+  /** Band width as a % of the frame width; 0 = as wide as the words. */
+  width: number
+  /** Band height as a % of the frame height. */
+  height: number
+  /** null = the theme's verse font. */
+  fontFamily: string | null
+  line1: { size: number; color: string; weight: number; uppercase: boolean }
+  line2: { size: number; color: string; weight: number }
+  background: { kind: "color" | "picture" | "video" | "none"; color: string; opacity: number; mediaId: string | null }
+  /** Corner radius as a % of the band height. */
+  radius: number
+  accent: { enabled: boolean; color: string; width: number }
+  /** How it comes on screen. */
+  animation: "none" | "fade" | "slide"
 }
 
 /** A `signage` output: pictures on a loop, independent of what is live in the sanctuary. */
@@ -91,6 +162,15 @@ export interface BroadcastOutput {
   lowerThirds?: boolean
   signage?: SignageSettings
   themeId: string
+  /**
+   * A different theme for some kinds of content on this output (hymns in gold,
+   * the Bible in blue…); a kind not listed uses `themeId`.
+   */
+  themeFor?: Partial<Record<ContentType, string>>
+  /** Shows the news ticker when one is running. */
+  ticker?: boolean
+  /** A display output opens as a window the operator can move and resize, not full screen (signage on the operator's own screen). */
+  windowed?: boolean
   /** Kept even while type === "ndi" so switching types is lossless. */
   monitorIndex: number
   /**

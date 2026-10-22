@@ -165,6 +165,7 @@ export function BroadcastOutputsDialog({
     const transportChanged =
       existing.type !== next.type ||
       existing.monitorIndex !== next.monitorIndex ||
+      (existing.windowed === true) !== (next.windowed === true) ||
       existing.monitorName !== next.monitorName ||
       existing.ndi.sourceName !== next.ndi.sourceName ||
       existing.ndi.resolution !== next.ndi.resolution ||
@@ -177,13 +178,16 @@ export function BroadcastOutputsDialog({
         name: next.name,
         type: next.type,
         themeId: next.themeId,
+        themeFor: next.themeFor ?? {},
         monitorIndex: next.monitorIndex,
+        windowed: next.windowed === true,
         monitorName: next.monitorName ?? null,
         ndi: next.ndi,
         role: next.role,
         language: next.language,
         signage: next.signage,
         lowerThirds: next.lowerThirds,
+        ticker: next.ticker === true,
       })
       if (wasOnAir && transportChanged) {
         const updated = useBroadcastStore.getState().outputs.find((o) => o.id === next.id)
