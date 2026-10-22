@@ -153,6 +153,7 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10ca.1, 10ca.7 (Clear and Restore) | V: hymn 245 on verse 2; Clear: the chip read "Off air · Restore shows Come, O Thou all-victorious Lord · Verse 2"; a Bible verse picked; Restore brought verse 2 back; Next showed verse 3 |
 | 10ca.3 (quick screen then Next) | V: Please stand over verse 3, then Next: verse 4 |
 | 10ca.4 (Back while off air) | V: Black over verse 4, Clear, Back: verse 4 returned off air; Restore put it on air |
+| 10ai.1 (Black, Logo, Technical issue, Back) | F → V on the stream (projector needs a display): Black solid black (opaque stream theme); Logo the theme background only (theme without a logo); Back returned John 3:16. Technical issue showed English only although the service's verse was in the Yorùbá Bible (operator set-up KJV only): fixed in #176, Yorùbá also counts when the open service's verses are saved in a Yorùbá Bible (unit test; not re-run on the Mac) |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)

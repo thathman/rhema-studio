@@ -30,6 +30,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - An item's minutes, prepared-by and end-by fields sit in labelled columns; nothing is cut off.
 
 ### Screens
+- Quick screens (Welcome, Please stand, Technical issue…) add the Yorùbá line also when the open service's verses are in the Yorùbá Bible, not only when it is your active or second Bible.
 - A song's footer line (title, copyright) never covers its last line.
 
 ### Slides
