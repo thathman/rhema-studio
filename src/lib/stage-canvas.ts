@@ -26,8 +26,9 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
   const vw = width / 100
   const padX = 4 * vw
   const font = (px: number, weight = 400) => `${weight} ${Math.round(px)}px system-ui, sans-serif`
+  const style = stage.style
   ctx.save()
-  ctx.fillStyle = "#000"
+  ctx.fillStyle = style?.background ?? "#000"
   ctx.fillRect(0, 0, width, height)
   ctx.textBaseline = "alphabetic"
 
@@ -77,7 +78,7 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
   if (stage.note) ctx.fillText(`Note: ${stage.note}`, padX, bottom, width * 0.55)
   ctx.textAlign = "right"
   ctx.fillStyle = "#9aa0a6"
-  ctx.fillText(stage.next ? `NEXT: ${stage.next}` : "End of service", width - padX, bottom, width * 0.4)
+  if (style?.showNext !== false) ctx.fillText(stage.next ? `NEXT: ${stage.next}` : "End of service", width - padX, bottom, width * 0.4)
 
   // The live words, centred in what is left (the first line stays visible if they overflow).
   const top = y
@@ -88,9 +89,9 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
     ctx.fillStyle = "#555"
     ctx.fillText("—", padX, top + room / 2)
   } else {
-    const px = stageFontVh(stage.current.lines) * vh
+    const px = stageFontVh(stage.current.lines) * (style?.wordsScale ?? 1) * vh
     ctx.font = font(px, 600)
-    ctx.fillStyle = "#fff"
+    ctx.fillStyle = style?.words ?? "#fff"
     const lines = stage.current.lines.flatMap((l) => wrap(ctx, l, width - padX * 2))
     const lh = px * 1.25
     const blockH = lines.length * lh
