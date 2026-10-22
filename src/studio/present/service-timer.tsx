@@ -70,7 +70,7 @@ export function ServiceTimer() {
               className={cn("text-[0.625rem] font-semibold", endByLeft < 0 ? "text-destructive" : endByLeft <= 120_000 ? "text-confidence-mid" : "text-muted-foreground")}
               title={`This item should finish by ${endBy}`}
             >
-              {endByLeft < 0 ? `past ${endBy} by ${Math.ceil(-endByLeft / 60_000)} min` : `by ${endBy} · ${Math.ceil(endByLeft / 60_000)} min`}
+              {endByLeft < 0 ? `past ${endBy} by ${Math.max(1, Math.floor(-endByLeft / 60_000))} min` : `by ${endBy} · ${Math.ceil(endByLeft / 60_000)} min`}
             </span>
           )}
           {behind !== null && behind !== 0 && (
