@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client"
 import { useRemoteControl } from "./use-remote-control"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
+import { useQueueStore } from "@/stores/queue-store"
 
 function Host() {
   useRemoteControl()
@@ -32,6 +33,11 @@ describe("phone remote status (OP-006)", () => {
     act(() => useBroadcastStore.setState({ rehearsal: true })) // nothing new: not sent again
     expect(sent().length).toBe(n)
     expect(n).toBeGreaterThan(before)
+    act(() => {
+      useQueueStore.setState({ items: [{ id: "p1", kind: "image", image: { media_id: "m", name: "Harvest banner", fit: "contain" }, reference: "Harvest banner", confidence: 1, source: "manual", added_at: 0 }] as never })
+      useBroadcastStore.setState({ liveItemId: "p1", liveVerse: { kind: "slide", reference: "", segments: [], lines: [] } as never })
+    })
+    expect(sent().at(-1)?.liveVerse).toBe("Harvest banner")
     act(() => root.unmount())
     vi.useRealTimers()
   })
