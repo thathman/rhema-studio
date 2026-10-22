@@ -1,5 +1,6 @@
-import { EllipsisIcon, SettingsIcon, ShieldCheckIcon } from "lucide-react"
+import { SettingsIcon, ShieldCheckIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useSettingsStore } from "@/stores/settings-store"
 import type { Workspace } from "@/studio/shell-store"
 import { WORKSPACE_ITEMS, type NavItem } from "@/studio/shell/nav-items"
 
@@ -11,31 +12,31 @@ function NavButton({ item, active, live, onSelect }: { item: NavItem; active: bo
       title={item.key ? `${item.label} (⌘${item.key} / Ctrl+${item.key})` : item.label}
       onClick={onSelect}
       className={cn(
-        "relative flex h-10 w-full items-center gap-3 rounded-[11px] px-3 text-[0.8125rem] font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1080px]:justify-center max-[1080px]:px-0 [&_svg]:size-[1.125rem] [&_svg]:shrink-0",
-        active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-white/[0.07] hover:text-white",
+        "relative flex min-h-[2.3125rem] w-full items-center gap-3 rounded-md px-[11px] text-xs font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[980px]:justify-center max-[980px]:px-0 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:opacity-90",
+        active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-hover",
       )}
     >
-      {active && <span aria-hidden className="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-sidebar-primary" />}
+      {active && <span aria-hidden className="absolute top-[7px] bottom-[7px] left-0 w-0.5 rounded-r bg-sidebar-primary" />}
       {item.icon}
-      <span className="truncate max-[1080px]:sr-only">{item.label}</span>
-      {live && <span aria-label="Live" className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-on-air shadow-[0_0_6px] shadow-on-air max-[1080px]:absolute max-[1080px]:top-2 max-[1080px]:right-2" />}
+      <span className="truncate max-[980px]:sr-only">{item.label}</span>
+      {live && <span aria-label="Live" className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-on-air max-[980px]:absolute max-[980px]:top-2 max-[980px]:right-2" />}
     </button>
   )
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+function Group({ label, children, first }: { label: string; children: React.ReactNode; first?: boolean }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="px-3 pt-4 pb-1 text-[0.625rem] font-extrabold tracking-[0.15em] text-sidebar-label uppercase max-[1080px]:sr-only">{label}</span>
+    <div className={cn("flex flex-col gap-0.5 px-2.5", !first && "mt-5")}>
+      <span className="px-3 pt-2.5 pb-1.5 text-[0.625rem] font-semibold tracking-[0.12em] text-sidebar-label uppercase max-[980px]:sr-only">{label}</span>
       {children}
     </div>
   )
 }
 
 /**
- * The studio's navigation: what you do on a Sunday (Home, Prepare, Present),
- * your church's things (Library, Design, Team, Archive), and Settings with
- * who is at the desk.
+ * The studio's navigation (approved design, issue #215): what you do on a Sunday (Home,
+ * Prepare, Present), your church's things (Library, Design, Team, Archive), then the
+ * workspace this is, Settings and who is at the desk.
  */
 export function Sidebar({
   workspace,
@@ -44,7 +45,6 @@ export function Sidebar({
   operatorName,
   onWorkspace,
   onSettings,
-  onMore,
 }: {
   workspace: Workspace
   isLive: boolean
@@ -52,19 +52,19 @@ export function Sidebar({
   operatorName: string
   onWorkspace: (w: Workspace) => void
   onSettings: () => void
-  onMore: () => void
 }) {
+  const churchName = useSettingsStore((s) => s.brandKit.churchName.trim())
   const initials = operatorName.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()
   return (
-    <nav aria-label="Workspaces" className="flex min-h-0 w-[232px] flex-col gap-1 overflow-y-auto bg-sidebar px-3.5 py-5 text-sidebar-foreground max-[1440px]:w-[190px] max-[1080px]:w-[78px] max-[1080px]:px-2.5">
-      <div className="mb-3 flex items-center gap-2.5 px-2 max-[1080px]:justify-center max-[1080px]:px-0" title="Rhema Studio">
-        <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary font-serif text-lg font-bold text-sidebar-primary-foreground italic">R</span>
-        <span className="flex flex-col leading-none max-[1080px]:sr-only">
-          <span className="font-serif text-[1.375rem] font-semibold text-white">rhema<span className="text-sidebar-primary">.</span></span>
-          <span className="mt-1 text-[0.5625rem] font-extrabold tracking-[0.32em] text-sidebar-label uppercase">Studio</span>
+    <nav aria-label="Workspaces" className="sticky top-0 flex h-full min-h-0 w-[194px] flex-col overflow-y-auto bg-sidebar text-sidebar-foreground max-[980px]:w-[72px]">
+      <div className="flex items-center gap-2 px-4 pt-[23px] pb-6 max-[980px]:justify-center max-[980px]:px-0" title="Rhema Studio">
+        <span aria-hidden className="flex size-[34px] shrink-0 items-center justify-center rounded-[7px] bg-[#2d766f] font-[Georgia,serif] text-[1.4375rem] font-bold text-[#f7fbf8]">R</span>
+        <span className="flex flex-col leading-none max-[980px]:sr-only">
+          <span className="text-[1.1875rem] font-bold tracking-[-0.045em] text-[#f2f6f3]">rhema<span className="text-[#a7c9ba]">.</span></span>
+          <span className="mt-0.5 font-mono text-[0.5625rem] font-semibold tracking-[0.19em] text-[#93a5a9] uppercase">Studio</span>
         </span>
       </div>
-      <Group label="Workspace">
+      <Group label="Workspace" first>
         {WORKSPACE_ITEMS.map((item) => (
           <NavButton key={item.id} item={item} active={item.workspace === workspace} live={item.id === "present" && isLive} onSelect={() => item.workspace && onWorkspace(item.workspace)} />
         ))}
@@ -72,18 +72,18 @@ export function Sidebar({
       <Group label="Your church">
         {church.map((item) => <NavButton key={item.id} item={item} active={item.workspace === workspace} onSelect={() => (item.workspace ? onWorkspace(item.workspace) : item.onSelect?.())} />)}
       </Group>
-      <div className="mt-auto flex flex-col gap-1 pt-4">
-        <div className="mb-2 rounded-xl border border-sidebar-border px-3 py-2.5 text-[0.6875rem] max-[1080px]:hidden">
-          <span className="flex items-center gap-1.5 font-semibold text-sidebar-label uppercase"><ShieldCheckIcon className="size-3.5" /> Local-first</span>
-          <span className="mt-1 block text-sidebar-foreground">Your services and songs stay on this computer.</span>
+      <div className="mt-auto flex flex-col gap-0.5 px-[11px] pt-4 pb-[15px]">
+        <div className="mb-2 rounded-[7px] border border-sidebar-tag-border bg-sidebar-tag px-[9px] py-[11px] text-[0.625rem] text-[#9eb1b7] max-[980px]:hidden">
+          <span className="flex items-center gap-1.5 font-semibold tracking-[0.03em] whitespace-nowrap uppercase"><ShieldCheckIcon aria-hidden className="size-[13px] shrink-0" /> Local-first workspace</span>
+          <span className="mt-1 block truncate text-[0.6875rem] font-semibold text-[#e9f1ed]">{churchName || "This computer"}</span>
+          <span className="block">Works offline, on this computer</span>
         </div>
-        <NavButton item={{ id: "more", label: "More tools", icon: <EllipsisIcon /> }} active={workspace === "more"} onSelect={onMore} />
         <NavButton item={{ id: "settings", label: "Settings", icon: <SettingsIcon />, key: "," }} active={workspace === "settings"} onSelect={onSettings} />
-        <button type="button" onClick={onSettings} title="Your name goes on the service log and approvals (Settings)" className="mt-1 flex items-center gap-2.5 rounded-[11px] px-2 py-1.5 text-left outline-none hover:bg-white/[0.07] focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1080px]:justify-center">
-          <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[0.6875rem] font-bold text-white">{initials || "?"}</span>
-          <span className="flex min-w-0 flex-col max-[1080px]:sr-only">
-            <span className="truncate text-[0.8125rem] font-semibold text-white">{operatorName.trim() || "Add your name"}</span>
-            <span className="truncate text-[0.6875rem] text-sidebar-label">At the desk</span>
+        <button type="button" onClick={onSettings} title="Your name goes on the service log and approvals (Settings)" className="mt-1.5 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left outline-none hover:bg-sidebar-hover focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[980px]:justify-center">
+          <span aria-hidden className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#e6f0eb] text-xs font-bold text-[#28685f]">{initials || "?"}</span>
+          <span className="flex min-w-0 flex-col max-[980px]:sr-only">
+            <span className="truncate text-xs font-semibold text-[#f2f6f3]">{operatorName.trim() || "Add your name"}</span>
+            <span className="truncate text-[0.6875rem] text-[#8d9ab2]">At the desk</span>
           </span>
         </button>
       </div>

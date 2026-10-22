@@ -32,10 +32,10 @@ export function ItemEditor() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-border px-5 pt-4 pb-3">
-        <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Item editor · {index + 1}</p>
+        <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Item editor · {index + 1}</p>
         <div className="mt-1 flex items-center gap-2">
           <h2 className="truncate text-lg font-bold tracking-[-0.03em]">{item.reference}</h2>
-          <Badge variant="violet" className="gap-1">{KIND[kind][1]}{KIND[kind][0]}</Badge>
+          <Badge variant="accent" className="gap-1">{KIND[kind][1]}{KIND[kind][0]}</Badge>
         </div>
       </div>
       {/* Keyed by item: a newly selected item opens on what it shows. */}

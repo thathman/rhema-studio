@@ -13,7 +13,7 @@ export function PhaseRunButton({ header }: { header: OutlineHeader }) {
   if (header.type !== "phase" || (header.rule !== "loop" && header.rule !== "auto_once")) return null
   const range = phaseRange(items.length, headers, header.id)
   const count = range ? range.end - range.start : 0
-  const button = "inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-current/30 hover:bg-current/10 disabled:opacity-40"
+  const button = "inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-current/30 hover:bg-current/10 disabled:opacity-40"
   if (!run) {
     const verb = header.rule === "loop" ? "Start loop" : "Run once"
     return (

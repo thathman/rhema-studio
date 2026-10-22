@@ -384,10 +384,10 @@ export function DesignCanvas() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/40 px-3" style={{ background: "#18181b" }}>
+      <div className="present-surface flex h-14 shrink-0 items-center gap-2 border-b border-border/40 bg-background px-3 text-foreground">
         {/* ponytail: was a button with no action; kept as a decorative mark */}
         <MousePointer2Icon aria-hidden className="size-3.5 text-muted-foreground" />
-        <div className="flex items-center gap-1.5 text-[0.625rem] text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
           <Grid3X3Icon className="size-3" />
           <span>Grid</span>
         </div>
@@ -406,7 +406,7 @@ export function DesignCanvas() {
                 // The stand-in picture loads once; draw again when it is ready.
                 if (value === "picture") void loadThemeImage(SAMPLE_PICTURE_URL).then(() => resyncLatestTheme())
               }}
-              className={`rounded px-2 py-0.5 text-[0.625rem] font-medium ${sample === value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded px-2 py-0.5 text-[0.6875rem] font-medium ${sample === value ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               {label}
             </button>
@@ -414,7 +414,7 @@ export function DesignCanvas() {
         </div>
         <div className="flex-1" />
         <SearchIcon aria-hidden className="size-3.5 text-muted-foreground" />
-        <span className="min-w-12 text-center text-[0.625rem] font-medium tabular-nums text-muted-foreground">
+        <span className="min-w-12 text-center text-[0.6875rem] font-medium tabular-nums text-muted-foreground">
           {zoomLevel}%
         </span>
         <Button variant="ghost" size="icon-xs" onClick={zoomOut} aria-label="Zoom out" title="Zoom out" className="text-muted-foreground">
@@ -441,7 +441,7 @@ export function DesignCanvas() {
       {editingThemeId && <UseThemeFor themeId={editingThemeId} />}
 
       {/* Status bar */}
-      <div className="flex h-8 shrink-0 items-center border-t border-border/40 px-3 text-[0.5625rem] text-muted-foreground/70" style={{ background: "#18181b" }}>
+      <div className="flex h-8 shrink-0 items-center border-t border-border/40 px-3 text-[0.6875rem] text-muted-foreground present-surface bg-background">
         <span>Output: {WS_WIDTH} × {WS_HEIGHT}px</span>
         <span className="mx-2">·</span>
         <span>Zoom: {zoomLevel}%</span>
@@ -619,7 +619,7 @@ function UseThemeFor({ themeId }: { themeId: string }) {
   if (!output) return null
   const isMain = output.themeId === themeId
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/40 px-3 py-2 text-[0.6875rem]" style={{ background: "#18181b" }} role="group" aria-label="Use this theme for">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/40 px-3 py-2 text-[0.6875rem] present-surface bg-background text-foreground" role="group" aria-label="Use this theme for">
       <span className="text-muted-foreground">Use this theme on</span>
       <select value={output.id} onChange={(e) => setOutputId(e.target.value)} aria-label="Output" className="h-6 rounded border border-border bg-background px-1.5 text-[0.6875rem]">
         {outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
@@ -638,7 +638,7 @@ function UseThemeFor({ themeId }: { themeId: string }) {
             title={isMain && !own ? `This is ${output.name}'s main theme; ${CONTENT_NAMES[c]} use it unless given their own (Outputs)` : undefined}
             onClick={() => useBroadcastStore.getState().updateOutput(output.id, { themeFor: withThemeFor(output, c, on ? null : themeId) })}
             // The canvas bar is always dark: light text in either app theme.
-            className={`rounded-full border px-2 py-0.5 ${on ? "border-[#a79fff] bg-[#6255e8]/40 text-white" : "border-white/25 text-zinc-300 hover:text-white"} disabled:opacity-60`}
+            className={`inline-flex min-h-6 items-center rounded-full border px-2.5 ${on ? "border-primary bg-primary/60 text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"} disabled:opacity-60`}
           >
             {CONTENT_NAMES[c]}
           </button>

@@ -133,7 +133,7 @@ function AudioTestRow() {
           {isTesting ? "Stop" : "Test"}
         </Button>
       </div>
-      <p className="text-[0.625rem] text-muted-foreground">
+      <p className="text-[0.6875rem] text-muted-foreground">
         {isTranscribing
           ? "Testing is unavailable while transcription is running."
           : "Captures from the selected device to verify it works. Gain changes apply on the next test. Stops automatically after 60 seconds."}
@@ -200,7 +200,7 @@ function AudioSection() {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-[0.625rem] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           Selected device persists across sessions. Leave as system default to
           follow OS audio routing.
         </p>
@@ -227,7 +227,7 @@ function AudioSection() {
           value={[gainPercent]}
           onValueChange={([v]) => setGain((v / 100) * 2.0)}
         />
-        <p className="text-[0.625rem] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           Amplifies the incoming audio signal before transcription. 50% is unity
           gain.
         </p>
@@ -292,7 +292,7 @@ function SpeechSection() {
               <span className="text-xs font-medium text-foreground">
                 Cloud (Deepgram)
               </span>
-              <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
+              <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
                 Uses Deepgram Nova-3 for real-time streaming transcription.
                 Requires an API key and internet connection. Best accuracy with
                 keyword boosting for Bible terms. While listening, the microphone
@@ -313,7 +313,7 @@ function SpeechSection() {
               <span className="text-xs font-medium text-foreground">
                 Local (Whisper)
               </span>
-              <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
+              <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
                 Runs Whisper large-v3-turbo locally on your device. Fully
                 offline, no API key needed. Audio never leaves your machine.
               </p>
@@ -330,7 +330,7 @@ function SpeechSection() {
               Deepgram API Key
             </label>
             {deepgramApiKey && (
-              <Badge variant="outline" className="text-[0.5rem]">
+              <Badge variant="outline" className="text-[0.6875rem]">
                 Key configured
               </Badge>
             )}
@@ -354,7 +354,7 @@ function SpeechSection() {
               )}
             </Button>
           </div>
-          <p className="text-[0.625rem] text-muted-foreground">
+          <p className="text-[0.6875rem] text-muted-foreground">
             Required for live transcription. Get a key at{" "}
             <span className="text-primary">deepgram.com</span>
           </p>
@@ -394,7 +394,7 @@ function DisplayModeSection() {
             <RadioGroupItem value="manual" className="mt-0.5" />
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Wait for me (recommended)</span>
-              <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
+              <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
                 A verse heard while listening goes to the preview and the detections list. It reaches the screen only when you press Show live.
               </p>
             </div>
@@ -408,7 +408,7 @@ function DisplayModeSection() {
             <RadioGroupItem value="auto" className="mt-0.5" />
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
-              <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
+              <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
                 While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Show live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live panel in Present → Production.
               </p>
             </div>
@@ -435,16 +435,16 @@ function ApiKeysSection() {
             Deepgram API Key
           </label>
           {deepgramApiKey ? (
-            <Badge variant="outline" className="text-[0.5rem]">
+            <Badge variant="outline" className="text-[0.6875rem]">
               Key configured
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[0.5rem] text-muted-foreground">
+            <Badge variant="outline" className="text-[0.6875rem] text-muted-foreground">
               Not set
             </Badge>
           )}
         </div>
-        <p className="text-[0.625rem] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           {sttProvider === "whisper"
             ? "Not required when using local Whisper. "
             : "Required for cloud transcription. "}
@@ -545,7 +545,7 @@ function BibleSection() {
           <SelectContent>
             {englishTranslations.length > 0 && (
               <>
-                <div className="px-2 py-1 text-[0.5625rem] font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="px-2 py-1 text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
                   English
                 </div>
                 {englishTranslations.map((t) => (
@@ -557,7 +557,7 @@ function BibleSection() {
             )}
             {otherTranslations.length > 0 && (
               <>
-                <div className="mt-1 px-2 py-1 text-[0.5625rem] font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="mt-1 px-2 py-1 text-[0.6875rem] font-medium uppercase tracking-wider text-muted-foreground">
                   Other Languages
                 </div>
                 {otherTranslations.map((t) => (
@@ -569,7 +569,7 @@ function BibleSection() {
             )}
           </SelectContent>
         </Select>
-        <p className="text-[0.625rem] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           Detected verses will display in this translation.
           {translations.length > 0 && ` ${translations.length} translations available.`}
         </p>
@@ -598,7 +598,7 @@ function BibleSection() {
               ))}
           </SelectContent>
         </Select>
-        <p className="text-[0.625rem] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           When selected, the live output shows both translations for every
           detected reference.
         </p>
@@ -786,7 +786,7 @@ function RemoteControlSection() {
         <input type="checkbox" className="mt-0.5" checked={remoteLan} onChange={(e) => setRemoteLan(e.target.checked)} disabled={oscStatus.running || httpStatus.running} />
         <span>
           Accept commands from other devices on this network
-          <span className="block text-[0.625rem] text-muted-foreground">
+          <span className="block text-[0.6875rem] text-muted-foreground">
             Anyone on the network can then send commands, unless a key is set or devices are paired below. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
           </span>
         </span>
@@ -795,7 +795,7 @@ function RemoteControlSection() {
         <input type="checkbox" className="mt-0.5" checked={remoteAuthRequired || anyKey} disabled={anyKey} onChange={(e) => setRemoteAuthRequired(e.target.checked)} />
         <span>
           Require a key or a paired device
-          <span className="block text-[0.625rem] text-muted-foreground">
+          <span className="block text-[0.6875rem] text-muted-foreground">
             {anyKey ? "On while a key is set or a device is paired. Removing the last one keeps it on: nothing is accepted until you untick this." : remoteAuthRequired ? "On with no key and no device: every command is refused. Set a key or pair a device, or untick to accept anything." : "Off: anything on the network is accepted (as the app shipped)."}
           </span>
         </span>
@@ -810,7 +810,7 @@ function RemoteControlSection() {
           className="h-7 max-w-xs text-xs"
           autoComplete="off"
         />
-        <span className="text-[0.625rem] text-muted-foreground">
+        <span className="text-[0.6875rem] text-muted-foreground">
           HTTP: header <code>X-Rhema-Key: &lt;key&gt;</code>. OSC: the key as the first argument, e.g. <code>/rhema/next "&lt;key&gt;"</code>. Leave blank (and pair nothing) to accept anything, as before. Changes apply at once.
         </span>
       </label>
@@ -828,7 +828,7 @@ function RemoteControlSection() {
             {pairQr && (
               <div className="mb-2 flex items-center gap-3">
                 {pairQr.host ? <img src={pairQr.image} alt="Pairing code for a phone" className="size-32 rounded bg-white p-1" /> : null}
-                <div className="flex min-w-0 flex-col gap-1 text-[0.625rem] text-muted-foreground">
+                <div className="flex min-w-0 flex-col gap-1 text-[0.6875rem] text-muted-foreground">
                   <p>{pairQr.host ? <>Scan with the phone's camera (same Wi-Fi) and press Pair. Or open <code className="break-all">{pairQr.url.split("#")[0]}</code> and type the code.</> : "This computer's network address could not be found. Type it below (Wi-Fi settings show it) to get a code to scan."}</p>
                   <label className="flex items-center gap-1">
                     This computer's address
@@ -836,7 +836,7 @@ function RemoteControlSection() {
                       aria-label="This computer's address for the phone"
                       defaultValue={pairQr.host}
                       placeholder="192.168.1.20"
-                      className="h-6 w-32 text-[0.625rem]"
+                      className="h-6 w-32 text-[0.6875rem]"
                       onBlur={(e) => { const h = e.target.value.trim(); if (pairCode && httpStatus.port && /^[\w.:-]+$/.test(h) && h !== pairQr.host) void showPairQr(h, pairCode, httpStatus.port) }}
                     />
                   </label>
@@ -844,15 +844,15 @@ function RemoteControlSection() {
                 </div>
               </div>
             )}
-            <p className="text-[0.625rem] text-muted-foreground">On the device, within two minutes, send this code once:</p>
+            <p className="text-[0.6875rem] text-muted-foreground">On the device, within two minutes, send this code once:</p>
             <p className="my-1 font-mono text-2xl tracking-[0.3em]">{pairCode}</p>
-            <p className="text-[0.625rem] text-muted-foreground">
+            <p className="text-[0.6875rem] text-muted-foreground">
               <code>POST http://&lt;this laptop&gt;:{httpStatus.port ?? httpPort}/api/v1/pair</code> with <code>{`{"code":"${pairCode}","name":"Tolu's phone"}`}</code>. The reply holds the device's token; it is shown once. Three wrong codes close the window.
             </p>
           </div>
         )}
         {remoteDevices.length === 0 ? (
-          <p className="text-[0.625rem] text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, can be revoked on its own, and starts as "Present only" (next, previous, show, hide, macros; not theme, opacity, confidence or the on-air switch).</p>
+          <p className="text-[0.6875rem] text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, can be revoked on its own, and starts as "Present only" (next, previous, show, hide, macros; not theme, opacity, confidence or the on-air switch).</p>
         ) : (
           <ul className="divide-y divide-border rounded-md border border-border">
             {remoteDevices.map((d) => (
@@ -862,12 +862,12 @@ function RemoteControlSection() {
                   aria-label={`What ${d.name} may do`}
                   value={d.role ?? "configure"}
                   onChange={(e) => setRemoteDeviceRole(d.hash, e.target.value === "present" ? "present" : "configure")}
-                  className="h-6 rounded border border-border bg-background px-1 text-[0.625rem]"
+                  className="h-6 rounded border border-border bg-background px-1 text-[0.6875rem]"
                 >
                   <option value="present">Present only</option>
                   <option value="configure">Present and change settings</option>
                 </select>
-                <span className="shrink-0 text-[0.625rem] text-muted-foreground">paired {new Date(d.paired_at).toLocaleDateString()}</span>
+                <span className="shrink-0 text-[0.6875rem] text-muted-foreground">paired {new Date(d.paired_at).toLocaleDateString()}</span>
                 <Button size="sm" variant="ghost" className="text-xs text-destructive" aria-label={`Revoke ${d.name}`} onClick={() => revokeRemoteDevice(d.hash)}>Revoke</Button>
               </li>
             ))}
@@ -902,14 +902,14 @@ function RemoteControlSection() {
           </Button>
         </div>
         {oscError && (
-          <p className="text-[0.625rem] text-red-500">{oscError}</p>
+          <p className="text-[0.6875rem] text-red-500">{oscError}</p>
         )}
         {oscStatus.running && oscStatus.port && (
-          <p className="text-[0.625rem] text-muted-foreground">
+          <p className="text-[0.6875rem] text-muted-foreground">
             Listening on UDP port {oscStatus.port}
           </p>
         )}
-        <p className="text-[0.625rem] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           Receives commands from hardware controllers (Stream Deck, TouchOSC, Companion)
           via OSC over UDP.
         </p>
@@ -942,14 +942,14 @@ function RemoteControlSection() {
           </Button>
         </div>
         {httpError && (
-          <p className="text-[0.625rem] text-red-500">{httpError}</p>
+          <p className="text-[0.6875rem] text-red-500">{httpError}</p>
         )}
         {httpStatus.running && httpStatus.port && (
-          <p className="text-[0.625rem] text-muted-foreground">
+          <p className="text-[0.6875rem] text-muted-foreground">
             Serving on http://localhost:{httpStatus.port}/api/v1/
           </p>
         )}
-        <p className="text-[0.625rem] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           REST API for status queries and control commands. Use with custom dashboards,
           automation scripts, or HTTP-capable controllers.
         </p>
@@ -957,8 +957,8 @@ function RemoteControlSection() {
 
       {/* Firewall guidance */}
       <div className="rounded-lg border border-border bg-muted/30 p-3">
-        <p className="text-[0.625rem] font-medium text-muted-foreground mb-1">Firewall Note</p>
-        <p className="text-[0.625rem] text-muted-foreground leading-relaxed">
+        <p className="text-[0.6875rem] font-medium text-muted-foreground mb-1">Firewall Note</p>
+        <p className="text-[0.6875rem] text-muted-foreground leading-relaxed">
           Your OS may block incoming connections. On macOS, allow Rhema through
           System Settings → Network → Firewall. On Windows, allow through
           Windows Security → Firewall → Allow an app.
@@ -975,7 +975,7 @@ function RemoteControlSection() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-5 text-[0.5rem] px-1.5"
+              className="h-5 text-[0.6875rem] px-1.5"
               onClick={() => setCommandLog([])}
             >
               Clear
@@ -984,17 +984,17 @@ function RemoteControlSection() {
         </div>
         <div className="h-32 overflow-y-auto rounded-lg border border-border bg-background p-2">
           {commandLog.length === 0 ? (
-            <p className="text-[0.625rem] text-muted-foreground text-center mt-8">
+            <p className="text-[0.6875rem] text-muted-foreground text-center mt-8">
               No commands received yet
             </p>
           ) : (
             <div className="flex flex-col gap-0.5">
               {commandLog.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-2 text-[0.625rem]">
+                <div key={entry.id} className="flex items-center gap-2 text-[0.6875rem]">
                   <span className="text-muted-foreground tabular-nums shrink-0">
                     {entry.timestamp}
                   </span>
-                  <Badge variant="outline" className="text-[0.5rem] h-3.5 px-1">
+                  <Badge variant="outline" className="text-[0.6875rem] h-4 px-1">
                     {entry.source}
                   </Badge>
                   <span className="text-foreground font-mono">{entry.command}</span>
@@ -1074,10 +1074,10 @@ function StatusDot({ running }: { running: boolean }) {
     <div className="flex items-center gap-1.5">
       <div
         className={`size-2 rounded-full ${
-          running ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/30"
+          running ? "bg-confidence-high animate-pulse" : "bg-muted-foreground/30"
         }`}
       />
-      <span className="text-[0.625rem] text-muted-foreground">
+      <span className="text-[0.6875rem] text-muted-foreground">
         {running ? "Listening" : "Stopped"}
       </span>
     </div>
@@ -1120,7 +1120,7 @@ export function SettingsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
-        <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">Your Rhema Studio</p>
+        <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Your Rhema Studio</p>
         <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Settings that make sense.</h1>
         <p className="mt-1 text-sm text-muted-foreground">Everything stays on this computer. Changes apply at once.</p>
       </header>
@@ -1128,7 +1128,7 @@ export function SettingsPage() {
         <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto">
           {GROUPS.map((g) => (
             <div key={g.title} className="mb-3">
-              <p className="px-2 pb-1 text-[0.625rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">{g.title}</p>
+              <p className="px-2 pb-1 text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">{g.title}</p>
               {g.ids.map((id) => {
                 const item = navItems.find((n) => n.id === id)!
                 return (
@@ -1137,7 +1137,7 @@ export function SettingsPage() {
                     type="button"
                     aria-current={id === activeSection ? "page" : undefined}
                     onClick={() => setActiveSection(id)}
-                    className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                   >
                     {item.icon}
                     <span className="truncate">{item.name}</span>
@@ -1147,7 +1147,7 @@ export function SettingsPage() {
             </div>
           ))}
         </nav>
-        <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-[17px] border border-border bg-card shadow-panel">
+        <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-panel">
           <h2 className="shrink-0 border-b border-border px-5 py-3.5 text-base font-bold tracking-[-0.03em]">{sectionTitles[activeSection]}</h2>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
             <ActiveContent />
@@ -1218,7 +1218,7 @@ function ObsSettingsBlock() {
         <Input aria-label="OBS WebSocket password" type="password" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} placeholder="password (if set in OBS)" className="h-7 w-48 text-xs" autoComplete="off" />
         <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!changed || !portOk || !draft.host.trim()} onClick={() => setObs({ host: draft.host.trim(), port, password: draft.password })}>Save</Button>
       </div>
-      <p className="text-[0.625rem] text-muted-foreground">
+      <p className="text-[0.6875rem] text-muted-foreground">
         {obs.enabled ? (status === "connected" ? "Connected." : status === "connecting" ? "Connecting…" : `Not connected${error ? `: ${error}` : ""}. Retrying every 15 seconds.`) : "Off. In OBS: Tools → WebSocket Server Settings → Enable, then copy the port and password here."} The password is kept in the system keychain (or this computer's settings file where there is none). Use a staff-only network: the login answer travels unencrypted.
       </p>
     </div>
@@ -1228,9 +1228,9 @@ function ObsSettingsBlock() {
 /** Whether this computer agreed to send microphone audio to the cloud provider, with a way to take it back. */
 function CloudConsentLine() {
   const at = useSettingsStore((s) => s.cloudSpeechConsentAt)
-  if (!at) return <p className="text-[0.625rem] text-muted-foreground">Not agreed yet on this computer.</p>
+  if (!at) return <p className="text-[0.6875rem] text-muted-foreground">Not agreed yet on this computer.</p>
   return (
-    <p className="flex items-center gap-2 text-[0.625rem] text-muted-foreground">
+    <p className="flex items-center gap-2 text-[0.6875rem] text-muted-foreground">
       Agreed on {new Date(at).toLocaleDateString()}.
       <button
         type="button"

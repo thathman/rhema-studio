@@ -7,7 +7,7 @@ import { contentStatus } from "@/lib/song-files"
 import { useMonitorStore } from "@/stores/monitor-store"
 import { allSignageIds } from "@/lib/signage"
 import { useEffect, useRef, useState } from "react"
-import { ArrowRightIcon, BookOpenIcon, CalendarDaysIcon, CheckIcon, ChevronRightIcon, ImageIcon, InfoIcon, MonitorIcon, MusicIcon, PencilRulerIcon, PlayIcon, PresentationIcon, SettingsIcon, TriangleAlertIcon } from "lucide-react"
+import { ArrowRightIcon, BookOpenIcon, CalendarDaysIcon, CheckIcon, ChevronRightIcon, ImageIcon, InfoIcon, MonitorIcon, MusicIcon, PlayIcon, PlusIcon, PresentationIcon, TriangleAlertIcon } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -21,6 +21,7 @@ import { isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
 import { themeIdsOf } from "@/lib/output-themes"
+import { planTimeline } from "@/lib/run-of-show"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
 
 function greeting(now = new Date()): string {
@@ -41,6 +42,7 @@ export function HomeWorkspace() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const items = useQueueStore((s) => s.items)
+  const headers = useQueueStore((s) => s.headers)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const listening = useTranscriptStore((s) => s.isTranscribing)
   const programs = useServiceStore((s) => s.programs)
@@ -151,46 +153,56 @@ export function HomeWorkspace() {
   const counted = okCount + warnings.length
   const minutes = items.reduce((m, i) => m + (i.planned_minutes ?? 0), 0)
   const operatorName = useSettingsStore((s) => s.operatorName).trim()
+  // Planned times from the run of show when the service has a start time (10:00, 10:02…), else the order.
+  const plannedAt = new Map((planTimeline(items, headers)?.rows ?? []).flatMap((r) => (r.index === undefined ? [] : [[r.index, r.time] as const])))
   const comingUp = current?.service_date ? new Date(`${current.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" }) : null
 
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-7 pb-16 max-[1200px]:px-5">
-        <header className="flex flex-wrap items-end justify-between gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">Your Sunday workspace</p>
-            <h1 className="mt-1.5 text-[2rem] leading-tight font-bold tracking-[-0.04em]">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ""}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })} · everything for this Sunday's service, right where you need it.</p>
+            <p className="text-[0.625rem] font-extrabold tracking-[0.16em] text-muted-foreground uppercase">Your Sunday workspace</p>
+            <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ", team"} <span aria-hidden className="font-semibold text-muted-foreground">✳</span></h1>
+            <p className="mt-1 max-w-[540px] text-xs text-muted-foreground">Everything for this Sunday's service, right where you need it.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setWorkspace("archive")}><CalendarDaysIcon /> View services</Button>
+            <Button onClick={() => { useShellStore.getState().setNewServiceOpen(true); setWorkspace("prepare") }}><PlusIcon /> New service</Button>
           </div>
         </header>
 
-        <section aria-labelledby="quick" className="relative overflow-hidden rounded-[23px] bg-tone-violet px-9 py-8 max-[1200px]:px-6">
-          <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-tone-violet-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? "This service" : "Sunday"}</p>
-          <h2 id="quick" className="mt-2 text-[2.25rem] leading-[1.05] font-bold tracking-[-0.045em]">
-            Beautiful worship.<br /><span className="font-serif text-primary italic">Without the chaos.</span>
-          </h2>
-          <p className="mt-3 max-w-xl text-[0.9375rem] text-muted-foreground">
-            {items.length === 0
-              ? "Start the service in Prepare: passages, songs, hymns, slides and pictures, in order. Nothing goes on a screen until you show it live."
-              : ready
-                ? "Your service is ready. Turn the screens on and take it to the live console with confidence."
-                : "Your service is taking shape. Finish the details below, then take it to the live console with confidence."}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button onClick={() => setWorkspace("prepare")} className="h-10 px-4"><PencilRulerIcon /> {items.length ? "Continue preparing" : "Prepare a service"}</Button>
-            <Button variant="outline" onClick={() => setWorkspace("present")} className="h-10 bg-card px-4"><PlayIcon /> Open live console</Button>
-            <Button variant="ghost" onClick={openOutputs} className="h-10 px-3"><MonitorIcon /> Outputs</Button>
-            <Button variant="ghost" onClick={() => openSettings()} className="h-10 px-3"><SettingsIcon /> Settings</Button>
-          </div>
-          <div aria-hidden className="pointer-events-none absolute -right-16 -bottom-24 size-80 rounded-full border-[44px] border-primary/10" />
-          <div className="absolute top-7 right-8 w-60 rotate-2 rounded-2xl bg-card p-4 shadow-lift max-[1100px]:hidden">
-            <p className="text-xs text-muted-foreground">Sunday readiness</p>
-            <p className="mt-1 text-2xl font-bold tracking-[-0.04em]">{ready ? "Ready." : warnings.length <= 2 ? "Almost ready." : "Not ready yet."}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{ready ? "Everything checks out." : `${warnings.length} ${warnings.length === 1 ? "thing" : "things"} to check`}</p>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Readiness checks" aria-valuemin={0} aria-valuemax={counted} aria-valuenow={okCount}>
-              <div className="h-full rounded-full bg-primary" style={{ width: `${counted ? (okCount / counted) * 100 : 0}%` }} />
+        {/* The approved hero (issue #215): a flat, editorial welcome with Sunday's readiness on a note. */}
+        <section aria-labelledby="quick" className="relative grid grid-cols-[minmax(0,1.25fr)_290px] overflow-hidden rounded-[22px] border border-border bg-[#eeede6] dark:bg-card max-[1100px]:grid-cols-1">
+          <span aria-hidden className="pointer-events-none absolute -right-40 -bottom-56 h-[420px] w-[620px] rotate-[-22deg] rounded-[120px] bg-[radial-gradient(circle_at_30%_30%,rgb(255_255_255/0.32),transparent_60%),linear-gradient(135deg,rgb(37_109_104/0.08),rgb(37_109_104/0.04))]" />
+          <div className="relative min-w-0 px-[34px] pt-[34px] pb-7">
+            <p className="text-[0.625rem] font-bold tracking-[0.18em] text-muted-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? `This service · ${current.title}` : "No service open"}</p>
+            <h2 id="quick" className="mt-2 text-2xl leading-[1.05] font-bold tracking-[-0.045em]">
+              Beautiful worship.
+              <span className="block font-[Georgia,serif] font-bold text-primary italic">Without the chaos.</span>
+            </h2>
+            <p className="mt-3 max-w-[590px] text-[0.8125rem] text-muted-foreground">
+              {items.length === 0
+                ? "Start the service in Prepare: passages, songs, hymns, slides and pictures, in order. Nothing goes on a screen until you show it live."
+                : ready
+                  ? "Your service is ready. Turn the screens on and take it to the live console with confidence."
+                  : "Your service is taking shape. Finish the final details, then take it to the live console with confidence."}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button onClick={() => setWorkspace("prepare")}>{items.length ? "Continue preparing" : "Prepare a service"} <ArrowRightIcon /></Button>
+              <Button variant="outline" onClick={() => setWorkspace("present")}>Open live console <PlayIcon /></Button>
             </div>
-            <p className="mt-1.5 text-[0.6875rem] text-muted-foreground">{okCount} of {counted} checks complete</p>
+          </div>
+          <div className="relative flex items-center justify-center p-6 max-[1100px]:justify-start max-[1100px]:pt-0">
+            <div className="w-full max-w-[235px] rotate-[-2deg] rounded-2xl border border-[#e3e4df] bg-[#fafaf8] px-[18px] py-5 shadow-[0_18px_40px_rgba(40,55,60,0.05)] dark:border-border dark:bg-background">
+              <p className="text-xs text-muted-foreground">Sunday readiness</p>
+              <p className="mt-1 text-[1.5625rem] leading-tight font-bold tracking-[-0.04em]">{ready ? "Ready." : warnings.length <= 2 ? "Almost ready." : "Not ready yet."}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{ready ? "Everything checks out" : `${warnings.length === 1 ? "One thing" : `${warnings.length} things`} to check before service`}</p>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#d7dbd8] dark:bg-muted" role="progressbar" aria-label="Readiness checks" aria-valuemin={0} aria-valuemax={counted} aria-valuenow={okCount}>
+                <div className="h-full rounded-full bg-primary" style={{ width: `${counted ? (okCount / counted) * 100 : 0}%` }} />
+              </div>
+              <p className="mt-2 text-[0.6875rem] text-muted-foreground">{okCount} of {counted} checks complete</p>
+            </div>
           </div>
         </section>
 
@@ -206,7 +218,7 @@ export function HomeWorkspace() {
               <h2 id="glance" className="text-[1.1875rem] font-bold tracking-[-0.035em]">Sunday at a glance</h2>
               <Button variant="ghost" size="sm" onClick={() => setWorkspace("prepare")}>Full rundown <ArrowRightIcon /></Button>
             </div>
-            <div className="rounded-[17px] border border-border bg-card p-3 shadow-panel">
+            <div className="rounded-lg border border-border bg-card p-3 shadow-panel">
               {items.length === 0 ? (
                 <p className="px-2 py-6 text-center text-sm text-muted-foreground">Nothing in the service yet. Open Prepare to add passages, songs and slides.</p>
               ) : (
@@ -214,7 +226,7 @@ export function HomeWorkspace() {
                   {items.slice(0, 6).map((it, i) => (
                     <li key={it.id}>
                       <button type="button" onClick={() => setWorkspace("prepare")} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left outline-none hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50">
-                        <span className="flex h-8 w-11 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground tabular-nums">{String(i + 1).padStart(2, "0")}</span>
+                        <span className="flex h-8 w-[53px] shrink-0 items-center justify-center rounded-md bg-[#edf1ec] text-[0.6875rem] font-extrabold text-[#536d67] tabular-nums dark:bg-muted dark:text-muted-foreground" title={plannedAt.get(i) ? "Planned time" : undefined}>{plannedAt.get(i) ?? String(i + 1).padStart(2, "0")}</span>
                         <KindTile item={it} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold">{it.reference}</span>
@@ -236,7 +248,7 @@ export function HomeWorkspace() {
                 <h2 id="readiness" className="text-[1.1875rem] font-bold tracking-[-0.035em]">Your attention</h2>
                 <span className={cn("text-xs font-semibold", ready ? "text-confidence-high" : "text-confidence-mid")}>{ready ? "Ready to present" : "Needs attention"}</span>
               </div>
-              <ul className="divide-y divide-border rounded-[17px] border border-border bg-card px-4 shadow-panel">
+              <ul className="divide-y divide-border rounded-lg border border-border bg-card px-4 shadow-panel">
                 {(attention.length ? attention : checks).map((c) => (
                   <li key={c.id} className="flex items-start gap-3 py-3">
                     <span className="mt-0.5">{ICON[c.status]}</span>
@@ -256,7 +268,7 @@ export function HomeWorkspace() {
             </section>
 
             <ChurchFolderCard />
-            <section aria-labelledby="services" className="rounded-[17px] border border-border bg-card p-4 shadow-panel">
+            <section aria-labelledby="services" className="rounded-lg border border-border bg-card p-4 shadow-panel">
             <h2 id="services" className="mb-2 text-sm font-semibold">Saved services</h2>
             {!current && suggested && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
@@ -303,9 +315,9 @@ export function HomeWorkspace() {
 
 function Stat({ icon, label, value, unit, detail }: { icon: React.ReactNode; label: string; value: string; unit: string; detail: string }) {
   return (
-    <div className="rounded-[15px] border border-border bg-card p-5 shadow-panel">
+    <div className="rounded-lg border border-border bg-card p-5 shadow-panel">
       <p className="flex items-center gap-2 text-xs text-muted-foreground [&_svg]:size-4">{icon}{label}</p>
-      <p className="mt-3 text-[1.75rem] leading-none font-bold tracking-[-0.04em]">{value}<span className="ml-1 text-sm font-semibold tracking-normal text-muted-foreground">{unit}</span></p>
+      <p className="mt-3 text-[1.625rem] leading-none font-bold tracking-[-0.035em]">{value}<span className="ml-1 text-sm font-semibold tracking-normal text-muted-foreground">{unit}</span></p>
       <p className="mt-2 truncate text-xs text-muted-foreground">{detail}</p>
     </div>
   )
@@ -329,5 +341,5 @@ function KindTile({ item }: { item: Item }) {
       : isImageItem(item)
         ? ["bg-kind-media text-kind-media-foreground", <ImageIcon key="i" />]
         : ["bg-kind-scripture text-kind-scripture-foreground", <BookOpenIcon key="i" />]
-  return <span aria-hidden className={cn("flex size-9 shrink-0 items-center justify-center rounded-[10px] [&_svg]:size-4", tone)}>{icon}</span>
+  return <span aria-hidden className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4", tone)}>{icon}</span>
 }

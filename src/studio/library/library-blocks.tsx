@@ -140,7 +140,7 @@ export function DatabaseBlock() {
     <div className="text-sm">
       {busy === "restore" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm" role="alert" aria-busy="true">
-          <p className="rounded-xl border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema open.</p>
+          <p className="rounded-lg border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema open.</p>
         </div>
       )}
       <p className="mb-2 text-xs text-muted-foreground">
@@ -293,7 +293,7 @@ export function JournalBlock() {
           <input type="checkbox" className="mt-0.5" checked={withTranscript} onChange={(e) => setWithTranscript(e.target.checked)} />
           <span>
             Include what was said ({finalCount} recognised passage{finalCount === 1 ? "" : "s"})
-            <span className="block text-[0.625rem] text-muted-foreground">
+            <span className="block text-[0.6875rem] text-muted-foreground">
               Machine-recognised speech, not checked. It then stays in the kept log (searchable under Earlier logs) until the log is deleted. Keep it only if the people speaking know it is recorded.
             </span>
           </span>

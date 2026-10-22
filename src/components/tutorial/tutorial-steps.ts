@@ -90,10 +90,10 @@ export const TUTORIAL_STEPS: Step[] = [
     content: "Production view adds listening: Rhema hears the preacher and proposes the verses mentioned. Standard is the simple view for running a service.",
     placement: "bottom",
   }),
-  at({ workspace: "more" }, {
-    target: '[data-tour="more-list"]',
-    title: "Library, themes and settings",
-    content: "Songs, pictures and backups live in the Library. Themes sets how text looks (each language of a bilingual screen can be styled on its own). Settings has Bible translations, audio and remotes, and can restart this tour.",
-    placement: "left",
+  at({ workspace: "present", presentView: "standard" }, {
+    target: 'nav[aria-label="Workspaces"]',
+    title: "Library, Design, Team and Archive",
+    content: "Songs, pictures and backups live in the Library. Design sets how everything looks (each language of a bilingual screen can be styled on its own). Settings, at the bottom, has Bible translations, audio and remotes, and can restart this tour.",
+    placement: "right",
   }),
 ]

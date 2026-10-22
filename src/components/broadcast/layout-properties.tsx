@@ -51,7 +51,7 @@ function ElementBoxControls({
             <div key={field.key} className="flex flex-col gap-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-medium text-muted-foreground">{field.label}</label>
-                <span className="text-[10px] tabular-nums text-muted-foreground">{px}px</span>
+                <span className="text-[0.6875rem] tabular-nums text-muted-foreground">{px}px</span>
               </div>
               <Input
                 type="number"

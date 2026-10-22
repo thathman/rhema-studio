@@ -64,7 +64,7 @@ function ResultSourceBadges({ result }: { result: SemanticSearchResult }) {
           <span
             key={source}
             className={cn(
-              "text-[0.5rem] font-medium uppercase tracking-wider",
+              "text-[0.6875rem] font-medium uppercase tracking-wider",
               style.text
             )}
           >
@@ -73,7 +73,7 @@ function ResultSourceBadges({ result }: { result: SemanticSearchResult }) {
         )
       })}
       {result.sources?.includes("semantic") && (
-        <span className="text-[0.5rem] text-muted-foreground">
+        <span className="text-[0.6875rem] text-muted-foreground">
           {Math.round(result.similarity * 100)}%
         </span>
       )}

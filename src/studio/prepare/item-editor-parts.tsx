@@ -53,7 +53,7 @@ export function MediaKindIcon({ mediaId }: { mediaId: string }) {
   const playing = useSoundStore((s) => s.playing && s.assetId === mediaId)
   if (kind === "audio") {
     return playing
-      ? <span className="flex shrink-0 items-center gap-1 text-[0.625rem] font-semibold text-primary uppercase"><Volume2Icon className="size-3.5" aria-hidden /> playing</span>
+      ? <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-primary uppercase"><Volume2Icon className="size-3.5" aria-hidden /> playing</span>
       : <Volume2Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Sound" />
   }
   return <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={kind === "video" ? "Video" : "Picture"} />
@@ -97,11 +97,11 @@ export function MissingMediaMark({ mediaId }: { mediaId: string }) {
   const asset = useMediaStore((s) => s.assets.find((a) => a.id === mediaId))
   const loaded = useMediaStore((s) => s.assets.length > 0)
   if (!loaded || asset?.present) return null
-  return <span className="shrink-0 rounded bg-destructive/15 px-1 text-[0.625rem] font-semibold text-destructive uppercase" title="The file is missing from the media folder">missing</span>
+  return <span className="shrink-0 rounded bg-destructive/15 px-1 text-[0.6875rem] font-semibold text-destructive uppercase" title="The file is missing from the media folder">missing</span>
 }
 
 export function PlannedMinutes({ item }: { item: QueueItem }) {
-  const label = "mb-0.5 block text-[0.625rem] font-medium tracking-wide text-muted-foreground uppercase"
+  const label = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
   return (
     <div className="ml-7 grid grid-cols-[5rem_minmax(0,1fr)_6.5rem] gap-2 py-1 pl-2 text-xs">
       <label className="min-w-0">
@@ -206,7 +206,7 @@ export function CommentsEditor({ item }: { item: QueueItem }) {
           Comment
         </Button>
       </div>
-      {!me && <p className="text-[0.625rem] text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
+      {!me && <p className="text-[0.6875rem] text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
     </div>
   )
 }

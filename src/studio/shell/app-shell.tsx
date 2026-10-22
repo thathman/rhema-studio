@@ -133,6 +133,7 @@ export function AppShell() {
 
   return (
     <div className="fixed inset-0 grid grid-cols-[auto_minmax(0,1fr)] bg-background text-foreground">
+      <a href="#main" className="fixed top-3 left-3 z-50 -translate-y-24 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground focus:translate-y-0">Skip to the page</a>
       <Sidebar
         workspace={workspace}
         isLive={isLive}
@@ -140,13 +141,12 @@ export function AppShell() {
         operatorName={operatorName}
         onWorkspace={(w) => void go(w)}
         onSettings={() => openSettings()}
-        onMore={() => void go("more")}
       />
 
       {/* The live console is always dark (its own deeper palette), top bar included. */}
       <div className={cn("flex min-h-0 min-w-0 flex-col bg-background text-foreground", workspace === "present" && "dark present-surface")}>
         <TopBar title={TITLES[workspace]} />
-        <main className="relative min-h-0 min-w-0 flex-1">
+        <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
           {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
           <ErrorBoundary key={workspace} name={`the ${TITLES[workspace]} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>
         </main>

@@ -13,7 +13,7 @@ import { UnreadComments } from "@/studio/prepare/unread-comments"
 function Way({ icon, title, detail, action, planned }: { icon: React.ReactNode; title: string; detail: string; action?: { label: string; run: () => void }; planned?: string }) {
   return (
     <li className="flex items-start gap-3 py-3">
-      <span aria-hidden className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-kind-other text-kind-other-foreground [&_svg]:size-4">{icon}</span>
+      <span aria-hidden className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-kind-other text-kind-other-foreground [&_svg]:size-4">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold">{title}</span>
         <span className="block text-xs text-muted-foreground">{detail}</span>
@@ -33,9 +33,9 @@ export function TeamWorkspace() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
-        <section className="dark rounded-[21px] bg-sidebar px-8 py-7 text-sidebar-foreground">
+        <section className="dark rounded-xl bg-sidebar px-8 py-7 text-sidebar-foreground">
           <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-sidebar-primary uppercase">Your team</p>
-          <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em] text-white">Your studio. Your people.</h1>
+          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em] text-white">Your studio. Your people.</h1>
           <p className="mt-1 max-w-2xl text-sm">One church, one plan: services are shared through the church folder, approved before Sunday, and the team leaves comments on items. Everything stays on your computers.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button onClick={() => useShellStore.getState().goTo("archive")}><FolderSyncIcon /> Share through the church folder</Button>
@@ -44,14 +44,14 @@ export function TeamWorkspace() {
         </section>
 
         <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
-          <section aria-label="Operator" className="rounded-[17px] border border-border bg-card p-5 shadow-panel">
+          <section aria-label="Operator" className="rounded-lg border border-border bg-card p-5 shadow-panel">
             <h2 className="flex items-center gap-2 text-base font-bold tracking-[-0.03em]"><UsersIcon className="size-4" /> At the desk</h2>
             <label htmlFor="operator-name" className="mt-3 block text-sm font-medium">Your name</label>
             <p className="mb-2 text-xs text-muted-foreground">Goes on the service log, on approvals and on your comments, so "who changed this?" has an answer. Stays on this computer.</p>
             <Input id="operator-name" value={operatorName} onChange={(e) => useSettingsStore.getState().setOperatorName(e.target.value)} placeholder="e.g. Tolu" className="h-9 max-w-xs" maxLength={60} />
           </section>
 
-          <section aria-label="Approvals" className="rounded-[17px] border border-border bg-card p-5 shadow-panel">
+          <section aria-label="Approvals" className="rounded-lg border border-border bg-card p-5 shadow-panel">
             <h2 className="flex items-center gap-2 text-base font-bold tracking-[-0.03em]"><ShieldCheckIcon className="size-4" /> Approvals</h2>
             <p className="mt-2 text-sm">
               {!current ? "No saved service is open." : state === "approved" ? <>“{current.title}” is <Badge variant="green">approved</Badge>{current.approved_by ? ` by ${current.approved_by}` : ""}.</> : state === "changed" ? <>“{current.title}” <Badge variant="amber">changed since approval</Badge>.</> : <>“{current.title}” is not approved yet (Prepare → Approve).</>}
@@ -65,13 +65,13 @@ export function TeamWorkspace() {
             </label>
           </section>
 
-          <section aria-label="Comments" className="rounded-[17px] border border-border bg-card p-5 shadow-panel">
+          <section aria-label="Comments" className="rounded-lg border border-border bg-card p-5 shadow-panel">
             <h2 className="flex items-center gap-2 text-base font-bold tracking-[-0.03em]"><MessageSquareIcon className="size-4" /> Comments</h2>
             <p className="mt-2 mb-3 text-xs text-muted-foreground">{comments ? `${comments} comment${comments === 1 ? "" : "s"} on this service's items (Prepare → an item → Notes & team).` : "No comments on this service's items yet. They are added in Prepare → an item → Notes & team."}</p>
             <UnreadComments />
           </section>
 
-          <section aria-label="Ways to work together" className="rounded-[17px] border border-border bg-card px-5 pt-5 pb-2 shadow-panel">
+          <section aria-label="Ways to work together" className="rounded-lg border border-border bg-card px-5 pt-5 pb-2 shadow-panel">
             <h2 className="text-base font-bold tracking-[-0.03em]">Ways to work together</h2>
             <ul className="divide-y divide-border">
               <Way icon={<FolderSyncIcon />} title="Church folder" detail="A shared folder (a NAS, or one kept in step by Drive, OneDrive, Dropbox or Syncthing): publish a service, open it on another computer." action={{ label: "Set up", run: () => useShellStore.getState().goTo("archive") }} />

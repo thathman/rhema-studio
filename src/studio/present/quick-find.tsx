@@ -229,10 +229,10 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
                       <MusicIcon className="size-3 text-muted-foreground" aria-label="Song" />
                       {hit.song.title}
                       {hit.song.numbers.map((n) => (
-                        <span key={n} className="rounded border border-border px-1 text-[0.625rem] font-normal text-muted-foreground">{n}</span>
+                        <span key={n} className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground">{n}</span>
                       ))}
                       {hit.song.languages.map((l) => (
-                        <span key={l} className="rounded border border-border px-1 text-[0.625rem] font-normal text-muted-foreground uppercase">{l}</span>
+                        <span key={l} className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground uppercase">{l}</span>
                       ))}
                     </span>
                     <span className="line-clamp-1 text-sm text-muted-foreground">{hit.song.first_line || hit.song.authors}</span>

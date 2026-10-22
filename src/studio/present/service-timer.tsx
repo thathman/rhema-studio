@@ -67,17 +67,17 @@ export function ServiceTimer() {
         >
           <TimerIcon className="size-3.5" />
           {idle ? "Timer" : label}
-          {tone === "over" && <span className="text-[0.625rem] font-bold uppercase">over</span>}
+          {tone === "over" && <span className="text-[0.6875rem] font-bold uppercase">over</span>}
           {endBy && endByLeft !== null && (
             <span
-              className={cn("text-[0.625rem] font-semibold", endByLeft < 0 ? "text-destructive" : endByLeft <= 120_000 ? "text-confidence-mid" : "text-muted-foreground")}
+              className={cn("text-[0.6875rem] font-semibold", endByLeft < 0 ? "text-destructive" : endByLeft <= 120_000 ? "text-confidence-mid" : "text-muted-foreground")}
               title={`This item should finish by ${endBy}`}
             >
               {endByLeft < 0 ? `past ${endBy} by ${Math.max(1, Math.floor(-endByLeft / 60_000))} min` : `by ${endBy} · ${Math.ceil(endByLeft / 60_000)} min`}
             </span>
           )}
           {behind !== null && behind !== 0 && (
-            <span className={cn("text-[0.625rem] font-semibold", behind > 0 ? "text-destructive" : "text-confidence-high")} title="Against the planned minutes of the items so far">
+            <span className={cn("text-[0.6875rem] font-semibold", behind > 0 ? "text-destructive" : "text-confidence-high")} title="Against the planned minutes of the items so far">
               {behind > 0 ? `${behind} min late` : `${-behind} min early`}
             </span>
           )}

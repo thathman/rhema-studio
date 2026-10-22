@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 function Clock({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="rounded-xl bg-surface-sunken px-2.5 py-2">
-      <p className="text-[0.625rem] text-muted-foreground">{label}</p>
+      <p className="text-[0.6875rem] text-muted-foreground">{label}</p>
       <p className="text-lg font-bold tracking-[-0.03em] tabular-nums">{value}</p>
       {note && <p className="text-[0.6875rem] text-muted-foreground tabular-nums">{note}</p>}
     </div>
@@ -50,9 +50,9 @@ export function TimingPanel() {
   const expected = new Map(timing?.events.map((e) => [e.index, e]) ?? [])
   const lateMinutes = timing ? Math.round(timing.lateMs / 60_000) : 0
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[17px] border border-border bg-card shadow-panel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel">
       <div className="border-b border-border px-4 py-3">
-        <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Run of show</p>
+        <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Run of show</p>
         <h2 className="text-sm font-semibold">Timing{total ? ` · ${total} planned` : ""}</h2>
       </div>
       {!main ? (

@@ -5,7 +5,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 ## Unreleased
 
 ### The owner's redesign (in progress, 2026-10-22)
-- New look: warm off-white canvas, white panels, violet accent, a navy sidebar; a dark planning mode; WCAG AA kept (#194).
+- New look (#194), then the owner's approved neutral design (issue #215, #218): warm stone canvas, white flat panels with a fine border, ink sidebar and live console, one deep-teal accent, brass sparingly, red only for live; IBM Plex Sans (bundled); the approved Home hero; a 194 px sidebar with the church's workspace tag (More tools removed); a top bar with Find anything, keyboard shortcuts and team activity. Accessibility pass against UI/UX Pro Max: AA contrast, 24 px targets, a skip link, reduced motion respected.
 - Navigation: the sidebar (Home, Prepare, Present; Library, Design, Team, Archive; More tools, Settings, who is at the desk) and a top bar (where you are, works offline, light/dark); Cmd/Ctrl+1-7 and Cmd/Ctrl+, (#195). Library, Design, Team and Archive open the existing library, Theme Designer and More tools until they become pages.
 - Present is the live console: always dark; running order, Preview and Program, one transition row, Find & cue, One-touch moments and the ticker row; fits down to 1024x600 (#199).
 - Home: hero with a readiness note, stat cards, Sunday at a glance, Your attention (#200).
