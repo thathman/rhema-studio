@@ -19,6 +19,11 @@ interface QueueState {
   reorderItems: (fromIndex: number, toIndex: number) => void
   setActive: (index: number | null) => void
   clearQueue: () => void
+  /** Phases and groups (the run of show). */
+  setHeaders: (headers: OutlineHeader[]) => void
+  updateHeader: (id: string, patch: Partial<OutlineHeader>) => void
+  /** Remove a phase or group; its items stay where they are. */
+  removeHeader: (id: string) => void
   /** Flash-highlight a queue item briefly (1.5 s). */
   flashItem: (id: string) => void
   /** Find an existing item by book+chapter+verse. Returns its index or -1. */
@@ -106,6 +111,9 @@ export const useQueueStore = create<QueueState>((set, get) => ({
     }),
   setActive: (activeIndex) => set({ activeIndex, removedActive: null }),
   clearQueue: () => set({ items: [], headers: [], activeIndex: null, removedActive: null }),
+  setHeaders: (headers) => set({ headers }),
+  updateHeader: (id, patch) => set((state) => ({ headers: state.headers.map((h) => (h.id === id ? { ...h, ...patch, id } : h)) })),
+  removeHeader: (id) => set((state) => ({ headers: state.headers.filter((h) => h.id !== id) })),
   flashItem: (id) => {
     if (flashTimer) clearTimeout(flashTimer)
     set({ highlightedId: id })

@@ -1,5 +1,5 @@
 import { keepFocusInList } from "@/lib/keep-focus"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon } from "lucide-react"
@@ -16,6 +16,8 @@ import { presentActions } from "@/studio/present-actions"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
+import { interleave, sectionSummaries } from "@/lib/run-of-show"
+import { SectionHeader } from "@/studio/prepare/section-header"
 import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 
 
@@ -41,6 +43,10 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const liveRef = useBroadcastStore((s) => s.liveVerse?.reference ?? null)
   const liveSlide = useBroadcastStore((s) => s.liveSlide)
   const liveItemId = useBroadcastStore((s) => s.liveItemId)
+  const headers = useQueueStore((s) => s.headers)
+  const summaries = sectionSummaries(items, headers)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const toggle = (id: string) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
   const preview = (item: QueueItem) => presentActions.previewItem(item)
   const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
@@ -55,9 +61,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
     )
   }
 
-  const list = (
-    <ol className="flex flex-col gap-0.5 p-1.5" aria-label="Service rundown">
-      {items.map((item, index) => {
+  const renderItem = (item: QueueItem, index: number) => {
         const song = isSongItem(item)
         const custom = isSlideItem(item)
         const picture = isImageItem(item)
@@ -145,7 +149,27 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             {expanded && mode === "present" && <SlideList item={item} index={index} mode={mode} />}
           </Row>
         )
-      })}
+  }
+  // Prepare shows the run of show's phases and groups between the items; a collapsed one hides its items.
+  const rows = mode === "prepare" ? interleave(items, headers) : items.map((item, index) => ({ item, index }))
+  // Which rows show: a collapsed phase hides its groups and items; a collapsed group its items.
+  const visible: typeof rows = []
+  let phaseId: string | null = null
+  let groupId: string | null = null
+  for (const r of rows) {
+    if ("header" in r) {
+      if (r.header.type === "phase") { phaseId = r.header.id; groupId = null } else groupId = r.header.id
+      if (r.header.type === "group" && phaseId && collapsed.has(phaseId)) continue
+    } else if ((phaseId && collapsed.has(phaseId)) || (groupId && collapsed.has(groupId))) continue
+    visible.push(r)
+  }
+  const list = (
+    <ol className="flex flex-col gap-0.5 p-1.5" aria-label="Service rundown">
+      {visible.map((r) =>
+        "header" in r
+          ? <SectionHeader key={r.header.id} header={r.header} summary={summaries[r.header.id]} collapsed={collapsed.has(r.header.id)} onToggle={() => toggle(r.header.id)} />
+          : renderItem(r.item, r.index),
+      )}
     </ol>
   )
   if (mode !== "prepare") return list
