@@ -17,7 +17,8 @@ import { DesignWorkspace } from "@/studio/design/design-workspace"
 import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { BroadcastOutputsDialog } from "@/components/broadcast/broadcast-outputs-dialog"
 import { SettingsDialog } from "@/components/settings-dialog"
-import { LibraryDialog } from "@/studio/more/library-dialog"
+import { LibraryWorkspace } from "@/studio/library/library-workspace"
+import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
 import { openSettings } from "@/lib/settings-dialog"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Sidebar } from "@/studio/shell/sidebar"
@@ -27,13 +28,15 @@ import { TopBar } from "@/studio/shell/top-bar"
 import { GlobalSearch } from "@/studio/shell/global-search"
 
 /** What the top bar calls each page. */
-const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", design: "Design studio", more: "More tools" }
+const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", library: "Library", design: "Design studio", archive: "Archive", more: "More tools" }
 
 const WORKSPACE: Record<Workspace, () => React.ReactNode> = {
   home: () => <HomeWorkspace />,
   prepare: () => <PrepareWorkspace />,
   present: () => <PresentWorkspace />,
   design: () => <DesignWorkspace />,
+  library: () => <LibraryWorkspace />,
+  archive: () => <ArchiveWorkspace />,
   more: () => <MoreWorkspace />,
 }
 
@@ -42,15 +45,11 @@ export function AppShell() {
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const outputsOpen = useShellStore((s) => s.outputsDialogOpen)
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
-  const libraryOpen = useShellStore((s) => s.libraryOpen)
-  const setLibraryOpen = useShellStore((s) => s.setLibraryOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
   const operatorName = useSettingsStore((s) => s.operatorName)
   const church = useMemo(() => churchItems({
-    library: () => setLibraryOpen(true),
     team: () => setWorkspace("more"),
-    archive: () => setLibraryOpen(true),
-  }), [setLibraryOpen, setWorkspace])
+  }), [setWorkspace])
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
@@ -143,7 +142,6 @@ export function AppShell() {
       {/* Global dialogs: reachable from every workspace, mounted exactly once. */}
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
       <SettingsDialog />
-      <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} />
       <GlobalSearch />
     </div>
   )

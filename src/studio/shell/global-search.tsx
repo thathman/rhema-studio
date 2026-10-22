@@ -87,8 +87,8 @@ export function GlobalSearch() {
           {PLACES.map(([w, label, icon, words]) => (
             <CommandItem key={w} value={`${label} ${words}`} onSelect={() => run(() => useShellStore.getState().goTo(w))}>{icon} {label}</CommandItem>
           ))}
-          <CommandItem value="library songs hymn book import export backup" onSelect={() => run(() => useShellStore.getState().setLibraryOpen(true))}><LibraryBigIcon /> Library</CommandItem>
-          <CommandItem value="archive past services logs" onSelect={() => run(() => useShellStore.getState().setLibraryOpen(true))}><ArchiveIcon /> Archive</CommandItem>
+          <CommandItem value="library songs hymn book import export backup" onSelect={() => run(() => useShellStore.getState().goTo("library"))}><LibraryBigIcon /> Library</CommandItem>
+          <CommandItem value="archive past services logs" onSelect={() => run(() => useShellStore.getState().goTo("archive"))}><ArchiveIcon /> Archive</CommandItem>
           <CommandItem value="outputs screens projector ndi stage signage monitor" onSelect={() => run(() => useShellStore.getState().openOutputs())}><MonitorIcon /> Outputs</CommandItem>
         </CommandGroup>
         <CommandGroup heading="Design">

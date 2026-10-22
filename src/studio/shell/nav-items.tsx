@@ -19,11 +19,11 @@ export const WORKSPACE_ITEMS: NavItem[] = [
 ]
 
 /** Your church: until each becomes a page (UX-08 to UX-11) they open what exists today. */
-export function churchItems(actions: { library: () => void; team: () => void; archive: () => void }): NavItem[] {
+export function churchItems(actions: { team: () => void }): NavItem[] {
   return [
-    { id: "library", label: "Library", icon: <LibraryBigIcon />, key: "4", onSelect: actions.library },
+    { id: "library", label: "Library", icon: <LibraryBigIcon />, key: "4", workspace: "library" },
     { id: "design", label: "Design", icon: <PaletteIcon />, key: "5", workspace: "design" },
     { id: "team", label: "Team", icon: <UsersIcon />, key: "6", onSelect: actions.team },
-    { id: "archive", label: "Archive", icon: <ArchiveIcon />, key: "7", onSelect: actions.archive },
+    { id: "archive", label: "Archive", icon: <ArchiveIcon />, key: "7", workspace: "archive" },
   ]
 }
