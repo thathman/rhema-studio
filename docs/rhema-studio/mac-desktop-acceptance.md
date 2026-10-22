@@ -202,6 +202,7 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10br.4 (saved translations) | V: John 3:16 saved with KJV + OYCB; active switched to NIV only: presented in KJV and Yorùbá |
 | 10br.5 (Àánú among the A's) | V: more than 50 songs; "Àánú" listed first among the A's (before "Amazing Grace") |
 | 10cf.1 (arrows in the Bible box) | V: Production view, a song on air: "John 3" typed in the Bible quick box, arrows pressed: the screen did not change |
+| 10bt.3 (phone status: rehearsal, approval) | F → V: with the window hidden the phone status lagged (approval question not reported, nothing on air) because it was pushed by a timer the hidden window slows; #181 pushes it on change: rehearsal, the approval question, on air and Clear reached `GET /api/v1/status` within a second. A QR slide on air had an empty name: #182 names it by its rundown item |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
