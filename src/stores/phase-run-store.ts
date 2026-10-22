@@ -27,12 +27,26 @@ interface PhaseRunState {
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null
+// The pending step and when it is due, so a late timer can be caught up (see catchUpPhaseRun).
+let pending: { at: number; fn: () => void } | null = null
 // While the run itself is going live, the live item changing is not the operator's doing.
 let presenting = false
 
 function later(ms: number, fn: () => void) {
   if (timer) clearTimeout(timer)
-  timer = setTimeout(() => { timer = null; fn() }, Math.max(0, ms))
+  const step = { at: Date.now() + Math.max(0, ms), fn }
+  pending = step
+  timer = setTimeout(() => { timer = null; if (pending === step) pending = null; fn() }, Math.max(0, ms))
+}
+
+/** On the app's tick: run a step whose timer is late (held back while the window is hidden). */
+export function catchUpPhaseRun(now = Date.now()) {
+  if (!pending || now < pending.at) return
+  const { fn } = pending
+  pending = null
+  if (timer) clearTimeout(timer)
+  timer = null
+  fn()
 }
 
 /** Epoch ms when the warm-up should begin today (timed to end at the service start), if still ahead. */
@@ -88,6 +102,7 @@ export const usePhaseRun = create<PhaseRunState>((set, get) => ({
   stop: () => {
     if (timer) clearTimeout(timer)
     timer = null
+    pending = null
     if (get().run) set({ run: null })
   },
 }))

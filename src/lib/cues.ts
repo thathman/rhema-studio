@@ -5,6 +5,7 @@ import { leaveRehearsal } from "@/stores/approval-gate-store"
 import { presentActions } from "@/studio/present-actions"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useTimerStore } from "@/stores/timer-store"
+import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { useSettingsStore, type CustomMacro } from "@/stores/settings-store"
 
 /**
@@ -36,6 +37,14 @@ export const CUE_ACTIONS = {
   } },
   "stage.clearMessage": { label: "Clear the stage message", run: () => useBroadcastStore.getState().setStageMessage("") },
   "rehearsal.off": { label: "Rehearsal off", run: () => leaveRehearsal() },
+  // Issue #187: a running ticker is left alone, so a repeated command does not restart the crawl.
+  "ticker.take": { label: "Take the ticker live (unless it is running)", run: async () => {
+    const s = useBroadcastStore.getState()
+    if (s.ticker) return
+    const backing = await lowerThirdBacking(s.tickerStyle)
+    if (!useBroadcastStore.getState().ticker) useBroadcastStore.getState().setTicker({ backing })
+  } },
+  "ticker.stop": { label: "Stop the ticker", run: () => useBroadcastStore.getState().setTicker(null) },
 } as const satisfies Record<string, { label: string; run: () => unknown }>
 
 export type CueId = keyof typeof CUE_ACTIONS

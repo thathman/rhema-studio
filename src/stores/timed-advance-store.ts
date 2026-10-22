@@ -19,6 +19,8 @@ interface TimedAdvanceState {
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null
+// The pending move, so a late timer can be caught up (see catchUpTimedAdvance).
+let move: (() => void) | null = null
 
 /** Where the live item moves on to by itself, or null. */
 export function timedNext(): { index: number; ms: number; itemId: string } | null {
@@ -37,15 +39,27 @@ export function timedNext(): { index: number; ms: number; itemId: string } | nul
 function reconsider() {
   if (timer) clearTimeout(timer)
   timer = null
+  move = null
   const next = useTimedAdvance.getState().on ? timedNext() : null
   useTimedAdvance.setState({ dueAt: next ? Date.now() + next.ms : null })
   if (!next) return
-  timer = setTimeout(() => {
+  const go = () => {
     timer = null
+    move = null
     useTimedAdvance.setState({ dueAt: null })
     const b = useBroadcastStore.getState()
     if (useTimedAdvance.getState().on && b.isLive && b.liveItemId === next.itemId) void presentQueueItem(next.index)
-  }, next.ms)
+  }
+  move = go
+  timer = setTimeout(go, next.ms)
+}
+
+/** On the app's tick: make a move whose timer is late (held back while the window is hidden). */
+export function catchUpTimedAdvance(now = Date.now()) {
+  const due = useTimedAdvance.getState().dueAt
+  if (!move || due === null || now < due) return
+  if (timer) clearTimeout(timer)
+  move()
 }
 
 export const useTimedAdvance = create<TimedAdvanceState>((set) => ({
