@@ -405,7 +405,8 @@ pub fn set_output_pace(app: tauri::AppHandle, pacers: State<'_, OutputPacers>, o
         let mut next = Instant::now();
         // Stops when told to, or when the window is gone.
         while !stop.load(Ordering::Relaxed) && app.get_webview_window(&label).is_some() {
-            let _ = app.emit_to(label.as_str(), "broadcast:pace", ());
+            // The webview window itself: a bare label also reaches it as a window and as a webview (each frame two or three times).
+            let _ = app.emit_to(tauri::EventTarget::webview_window(label.as_str()), "broadcast:pace", ());
             next += period;
             let now = Instant::now();
             if next > now {
