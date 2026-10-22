@@ -300,7 +300,11 @@ function BroadcastCanvas() {
       const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : 0
       if (fps === paceFps) return
       paceFps = fps
-      void invoke("set_output_pace", { outputId: OUTPUT_ID, fps }).catch(() => {})
+      void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})
+      void invoke("set_output_pace", { outputId: OUTPUT_ID, fps }).catch((e) => {
+        console.warn("[broadcast-output] set_output_pace failed", e)
+        paceFps = 0
+      })
     }
     const unlistenPace = currentWindow.listen("broadcast:pace", () => {
       const m = motion()
@@ -404,6 +408,8 @@ function BroadcastCanvas() {
             height: status.height,
           }
           logDebug("Fetched NDI status on mount", status)
+          // NDI started before this window was ready: anything already moving needs the pacer.
+          syncPace()
         }
       })
       .catch(() => {

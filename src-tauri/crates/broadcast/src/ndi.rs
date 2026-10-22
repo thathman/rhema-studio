@@ -144,6 +144,8 @@ struct NdiLibrary {
     send_create: NdiSendCreateFn,
     send_destroy: NdiSendDestroyFn,
     send_video: NdiSendVideoV2Fn,
+    /// Compresses on NDI's thread and returns at once (the frame must stay untouched until the next call).
+    send_video_async: Option<NdiSendVideoV2Fn>,
     ndi_destroy: NdiDestroyFn,
     /// Optional: older runtimes without it just report "unknown".
     send_get_no_connections: Option<NdiSendGetNoConnectionsFn>,
@@ -163,6 +165,8 @@ impl NdiLibrary {
         let send_destroy_fn = *load_symbol::<NdiSendDestroyFn>(&library, b"NDIlib_send_destroy\0", "NDIlib_send_destroy")?;
         let send_video_fn =
             *load_symbol::<NdiSendVideoV2Fn>(&library, b"NDIlib_send_send_video_v2\0", "NDIlib_send_send_video_v2")?;
+        let send_video_async_fn =
+            load_symbol::<NdiSendVideoV2Fn>(&library, b"NDIlib_send_send_video_async_v2\0", "NDIlib_send_send_video_async_v2").ok().map(|s| *s);
         let send_get_no_connections_fn = load_symbol::<NdiSendGetNoConnectionsFn>(&library, b"NDIlib_send_get_no_connections\0", "NDIlib_send_get_no_connections")
             .ok()
             .map(|s| *s);
@@ -180,6 +184,7 @@ impl NdiLibrary {
             send_create: send_create_fn,
             send_destroy: send_destroy_fn,
             send_video: send_video_fn,
+            send_video_async: send_video_async_fn,
             ndi_destroy: ndi_destroy_fn,
             send_get_no_connections: send_get_no_connections_fn,
         })
@@ -348,7 +353,10 @@ struct ActiveNdiSession {
     sender: NdiSendInstance,
     info: NdiSessionInfo,
     frame_count: u64,
+    /// The frame being written (BGRA); always holds the last frame sent, so a region can patch it.
     frame_buffer: Vec<u8>,
+    /// The frame NDI may still be compressing (async send); swapped with `frame_buffer` on each send.
+    sent_buffer: Vec<u8>,
 }
 
 // SAFETY: ActiveNdiSession is only accessed behind a Mutex in app state.
@@ -407,6 +415,7 @@ impl ActiveNdiSession {
                 fps,
             },
             frame_buffer: vec![0; (width * height * 4) as usize],
+            sent_buffer: vec![0; (width * height * 4) as usize],
             frame_count: 0,
         })
     }
@@ -431,6 +440,7 @@ impl ActiveNdiSession {
 
         if self.frame_buffer.len() != expected {
             self.frame_buffer.resize(expected, 0);
+            self.sent_buffer.resize(expected, 0);
         }
 
         rgba_into_bgra(&mut self.frame_buffer, rgba_data, self.info.alpha_mode);
@@ -491,8 +501,18 @@ impl ActiveNdiSession {
         // is correctly sized and will outlive this call.
         let sender = self.sender;
         let frame_ptr = std::ptr::from_ref(&frame);
-        unsafe {
-            (self.library.send_video)(sender, frame_ptr);
+        if let Some(send_async) = self.library.send_video_async {
+            // SAFETY: as below; NDI reads frame_buffer until the next send, so it moves to
+            // sent_buffer (left untouched until then) and the next frame is written into the
+            // other buffer, which NDI released when this call was made.
+            unsafe { send_async(sender, frame_ptr) };
+            std::mem::swap(&mut self.frame_buffer, &mut self.sent_buffer);
+            // The next region patches this frame: start from a copy of it.
+            self.frame_buffer.copy_from_slice(&self.sent_buffer);
+        } else {
+            unsafe {
+                (self.library.send_video)(sender, frame_ptr);
+            }
         }
         self.frame_count += 1;
         if self.frame_count == 1 {
@@ -510,6 +530,10 @@ impl Drop for ActiveNdiSession {
         // after this struct's fields — running NDIlib_destroy only once the last session is gone.
         let sender = self.sender;
         unsafe {
+            // An async send may still read sent_buffer: a null frame waits for it to finish.
+            if let Some(send_async) = self.library.send_video_async {
+                send_async(sender, std::ptr::null());
+            }
             (self.library.send_destroy)(sender);
         }
     }
