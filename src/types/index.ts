@@ -16,6 +16,8 @@ export type {
   SignageSettings,
   LowerThird,
   LowerThirdStyle,
+  Ticker,
+  TickerStyle,
   SignageSchedule,
   SignagePlaylist,
   StagePayload,

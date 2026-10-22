@@ -25,6 +25,42 @@ export interface LowerThird {
   shownAt?: number
 }
 
+/** How the news ticker looks and moves. One for the church, saved with the themes. */
+export interface TickerStyle {
+  /** Along the top or the bottom of the frame. */
+  position: "top" | "bottom"
+  /** Band height as a % of the frame height. */
+  height: number
+  /** How fast the words move, in pixels a second on a 1080-line frame. */
+  speed: number
+  /** null = the theme's verse font. */
+  fontFamily: string | null
+  /** Words size as a % of the band height. */
+  size: number
+  color: string
+  weight: number
+  background: { kind: "color" | "picture" | "video"; color: string; opacity: number; mediaId: string | null }
+  /** A fixed tag at the start of the band ("NEWS"); empty for none. */
+  label: string
+  labelColor: string
+  labelBackground: string
+  /** Between items. */
+  separator: string
+  /** Which way the words move: toward the left (the usual crawl) or toward the right. */
+  direction: "left" | "right"
+}
+
+/** The ticker on air: what crawls, since when, in which look. */
+export interface Ticker {
+  items: string[]
+  style: TickerStyle
+  /** When it started (ms); the crawl's position comes from the time since. */
+  startedAt: number
+  /** Paused at this time (ms): the words hold still until resumed. */
+  pausedAt?: number
+  backing?: { kind: "picture" | "video"; url: string } | null
+}
+
 /** A designed look for the lower third (name and title band), chosen when it is shown. */
 export interface LowerThirdStyle {
   id: string
@@ -131,6 +167,8 @@ export interface BroadcastOutput {
    * the Bible in blue…); a kind not listed uses `themeId`.
    */
   themeFor?: Partial<Record<ContentType, string>>
+  /** Shows the news ticker when one is running. */
+  ticker?: boolean
   /** A display output opens as a window the operator can move and resize, not full screen (signage on the operator's own screen). */
   windowed?: boolean
   /** Kept even while type === "ndi" so switching types is lossless. */

@@ -22,7 +22,7 @@ const SAMPLES: Record<Sample, { lt: LowerThird; verse: VerseRenderData | null }>
 }
 
 /** A labelled row of the form. */
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+export function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-xs">
       <span className="text-muted-foreground">{label}</span>
@@ -31,7 +31,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-function NumberField({ value, onChange, min, max, suffix, label }: { value: number; onChange: (n: number) => void; min: number; max: number; suffix: string; label: string }) {
+export function NumberField({ value, onChange, min, max, suffix, label }: { value: number; onChange: (n: number) => void; min: number; max: number; suffix: string; label: string }) {
   return (
     <span className="flex items-center gap-1.5">
       <input type="range" aria-label={label} min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-28 accent-primary" />
@@ -40,7 +40,7 @@ function NumberField({ value, onChange, min, max, suffix, label }: { value: numb
   )
 }
 
-function Colour({ value, onChange, label }: { value: string; onChange: (c: string) => void; label: string }) {
+export function Colour({ value, onChange, label }: { value: string; onChange: (c: string) => void; label: string }) {
   // The picker takes #rrggbb only; a saved #rrggbbaa keeps its alpha out of reach (set opacity instead).
   return <input type="color" aria-label={label} value={value.slice(0, 7)} onChange={(e) => onChange(e.target.value)} className="h-7 w-10 cursor-pointer rounded border border-border bg-transparent" />
 }

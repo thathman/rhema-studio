@@ -220,6 +220,12 @@ export function OutputEditorDialog({
               </SelectContent>
             </Select>
             {form.role === "signage" && <SignagePlaylists value={form.signage ?? { mediaIds: [], seconds: 10 }} onChange={(signage) => patch({ signage })} />}
+            {form.role === "signage" && (
+              <label className="mt-2 flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={form.ticker === true} onChange={(e) => patch({ ticker: e.target.checked })} />
+                <span>Show the news ticker over the pictures <span className="text-muted-foreground">(announcements from Present)</span></span>
+              </label>
+            )}
             {form.role !== "stage" && form.role !== "signage" && (
               <>
                 <span id="language-label" className="mt-2 text-xs text-muted-foreground">Languages on this output</span>
@@ -233,7 +239,11 @@ export function OutputEditorDialog({
                 </Select>
                 <label className="mt-2 flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={form.lowerThirds === true} onChange={(e) => patch({ lowerThirds: e.target.checked })} />
-                  <span>Show lower thirds on this output <span className="text-muted-foreground">(names and titles from Present; usually the stream)</span></span>
+                  <span>Show lower thirds on this output <span className="text-muted-foreground">(names, scripture and lyrics strips from Present; usually the stream)</span></span>
+                </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={form.ticker === true} onChange={(e) => patch({ ticker: e.target.checked })} />
+                  <span>Show the news ticker on this output <span className="text-muted-foreground">(announcements crawling along the screen, from Present)</span></span>
                 </label>
               </>
             )}
