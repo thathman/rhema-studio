@@ -301,6 +301,19 @@ fixed: the Timed moves countdown first showed the time since the switch appeared
 **Not covered:** Windows and Linux do not support that setting; loops and timed
 moves there need a tick from Rust (as NDI pacing has) before Windows acceptance.
 
+## The approved design in the desktop app (2026-10-22 late night, UX-14)
+
+QA build of `main` at `aaf1fe8` (the approved design, #218 and #235-#241), isolated home, window
+1280×790, a sample service seeded through the QA bridge; window-only captures of every page in
+dark planning mode and in light.
+
+| Page | Result |
+| --- | --- |
+| Home, Library, Design, Team, Archive, Settings | Render as in the browser build: Plex type, flat panels, the sidebar with the church's name from the brand kit, the top bar: pass |
+| Prepare | Event panel 37 min / 5 min / projected 10:37, phase cards, scheduler: pass; at 790 px tall the order of service showed only two items, fixed in #244 |
+| Present | Title and tools rows, Automated phases strip, phase bands, "Nothing on air": pass; the monitors were small at 790 px tall, fixed in #244 |
+| Production | Clock, planned 10:37 / projected 10:37 / on time, hold, run of show, other timers: pass |
+
 ## Stage display design over NDI (2026-10-22 night, DS-004 #226)
 
 QA build of `main` at `785ea27`, isolated home, the stage output as NDI
