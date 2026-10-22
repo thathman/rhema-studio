@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useQueueStore } from "@/stores"
-import { RULE_LABEL, type OutlineHeader, type PhaseRole, type PhaseRule, type SectionSummary } from "@/lib/run-of-show"
+import { DEFAULT_ADVANCE_SECONDS, RULE_LABEL, type OutlineHeader, type PhaseRole, type PhaseRule, type SectionSummary } from "@/lib/run-of-show"
 import { cn } from "@/lib/utils"
+
+const ADVANCE_CHOICES = [5, 8, 10, 15, 20, 30, 60]
 
 const TONE: Record<PhaseRole, string> = {
   pre: "bg-tone-blue text-tone-blue-foreground",
@@ -18,7 +20,7 @@ const TONE: Record<PhaseRole, string> = {
 }
 
 /** In Present's running order: where the phase or group starts and how it runs (nothing to change here). */
-export function SectionLabel({ header, summary }: { header: OutlineHeader; summary?: SectionSummary }) {
+export function SectionLabel({ header, summary, action }: { header: OutlineHeader; summary?: SectionSummary; action?: React.ReactNode }) {
   const phase = header.type === "phase"
   return (
     <li
@@ -28,6 +30,7 @@ export function SectionLabel({ header, summary }: { header: OutlineHeader; summa
       <span className="truncate">{header.name}</span>
       {phase && header.rule && <span className="shrink-0 font-semibold tracking-normal normal-case">· {RULE_LABEL[header.rule].chip}</span>}
       {summary?.minutes ? <span className="ml-auto shrink-0 font-semibold tracking-normal normal-case">{summary.minutes} min</span> : null}
+      {action && <span className={cn("shrink-0", !summary?.minutes && "ml-auto")}>{action}</span>}
     </li>
   )
 }
@@ -91,6 +94,19 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
+              {header.rule === "loop" && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Each item shows for</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={String(header.advance_seconds ?? "plan")}
+                    onValueChange={(v) => useQueueStore.getState().updateHeader(header.id, { advance_seconds: v === "plan" ? undefined : Number(v) })}
+                  >
+                    {ADVANCE_CHOICES.map((s) => <DropdownMenuRadioItem key={s} value={String(s)}>{s} seconds</DropdownMenuRadioItem>)}
+                    <DropdownMenuRadioItem value="plan" title={`Its planned minutes, or ${DEFAULT_ADVANCE_SECONDS} seconds when it has none`}>Its planned length</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </>
+              )}
             </>
           )}
           <DropdownMenuSeparator />

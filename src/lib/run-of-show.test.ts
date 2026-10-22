@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clockText, planTimeline, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -86,5 +86,33 @@ describe("the planned day", () => {
     expect(planTimeline(items, phases())).toBeNull()
     expect(planTimeline(items, phases("23:50"))!.finish).toBe("00:24")
     expect(clockText(-5)).toBe("23:55")
+  })
+})
+
+describe("a phase running by itself", () => {
+  const loop: OutlineHeader = { id: "pre", type: "phase", name: "Pre-service loop", at: 0, rule: "loop" }
+  const warm: OutlineHeader = { id: "warm", type: "phase", name: "Warm-up", at: 2, rule: "auto_once", role: "warmup" }
+
+  it("covers its own items, groups included, up to the next phase", () => {
+    const headers = [loop, { ...h("g", 1, "group") }, warm]
+    expect(phaseRange(4, headers, "pre")).toEqual({ start: 0, end: 2 })
+    expect(phaseRange(4, headers, "warm")).toEqual({ start: 2, end: 4 })
+    expect(phaseRange(4, headers, "g")).toBeNull()
+  })
+
+  it("loops wrap; run-once phases end; outside the phase starts at its first item", () => {
+    expect(nextInPhase("loop", 0, 3, 0)).toBe(1)
+    expect(nextInPhase("loop", 0, 3, 2)).toBe(0)
+    expect(nextInPhase("auto_once", 2, 4, 3)).toBeNull()
+    expect(nextInPhase("auto_once", 2, 4, 7)).toBe(2)
+    expect(nextInPhase("loop", 2, 2, 2)).toBeNull()
+  })
+
+  it("a loop uses its seconds; a run-once phase its planned minutes, so the warm-up ends on time", () => {
+    expect(dwellSeconds({ ...loop, advance_seconds: 8 }, 3)).toBe(8)
+    expect(dwellSeconds(loop, 3)).toBe(180)
+    expect(dwellSeconds(loop, null)).toBe(10)
+    expect(dwellSeconds({ ...warm, advance_seconds: 8 }, 5)).toBe(300)
+    expect(dwellSeconds(warm, null)).toBe(10)
   })
 })

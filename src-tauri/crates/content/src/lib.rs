@@ -915,6 +915,9 @@ struct PhasePayload {
     /// The time the phase starts (the main service's start), 24-hour "HH:MM".
     #[serde(default)]
     starts_at: Option<String>,
+    /// Loop phases: how long each item stays up when the phase runs by itself, in seconds.
+    #[serde(default)]
+    advance_seconds: Option<u32>,
 }
 
 fn validate_phase_payload(i: usize, payload: Option<&str>) -> Result<()> {
@@ -928,6 +931,9 @@ fn validate_phase_payload(i: usize, payload: Option<&str>) -> Result<()> {
     }
     if p.starts_at.as_deref().is_some_and(|t| !is_clock_time(t)) {
         return Err(ContentError::Invalid(format!("item {i}: a phase's start time must be HH:MM")));
+    }
+    if p.advance_seconds.is_some_and(|s| !(3..=3600).contains(&s)) {
+        return Err(ContentError::Invalid(format!("item {i}: a phase shows each item for 3 to 3600 seconds")));
     }
     Ok(())
 }
@@ -1086,11 +1092,12 @@ mod tests {
 
     #[test]
     fn a_phase_says_how_it_runs_and_a_header_needs_a_name() {
-        for bad in [r#"{"rule":"forever"}"#, r#"{"role":"middle"}"#, r#"{"starts_at":"25:00"}"#, "not json"] {
+        for bad in [r#"{"rule":"forever"}"#, r#"{"role":"middle"}"#, r#"{"starts_at":"25:00"}"#, r#"{"advance_seconds":2}"#, r#"{"advance_seconds":-5}"#, "not json"] {
             assert!(validate_items(&[header("phase", "X", Some(bad))]).is_err(), "{bad}");
         }
         // Keys a newer build adds are kept, not refused.
         assert!(validate_items(&[header("phase", "X", Some(r#"{"rule":"loop","later":1}"#))]).is_ok());
+        assert!(validate_items(&[header("phase", "X", Some(r#"{"rule":"loop","advance_seconds":10}"#))]).is_ok());
         assert!(validate_items(&[header("group", "  ", None)]).is_err());
     }
 
