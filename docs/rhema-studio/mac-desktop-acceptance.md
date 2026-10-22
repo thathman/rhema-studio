@@ -182,6 +182,11 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10bq.5 (rename and reorder at once) | V: closing asked: "“QA Sunday (renamed)” has changes that are not saved" |
 | 10cb.5 (changed theme on close) | V: with a theme draft changed, the close question added: "The theme “Classic Dark (Custom)” has design changes that are not saved; Save and close saves the service, not the theme." |
 | 10bx.3, 10bx.4 (church brand) | Covered by unit tests (removing a look keeps an in-use theme, detached; a theme taken over by hand is never touched); not driven on the Mac |
+| 10ch.1–5 (search) | V (Quick find; the Bible quick box not driven): "the Lord's my shepherd" and "shepherd, I shall not want" list Psalm 23:1 (and CAC 707); "John 3:16-18", "John 3:16, 18", "Jn. 3:16" → John 3:16; "Jude 5", "Phm 6", "3 John 4" → Jude 1:5, Philemon 1:6, III John 1:4; a song titled "Psalm 23" is found; "5" lists CAC 5 and CACV 5. In the hidden test window a result can take seconds to replace "No matching verses or songs." |
+| 10by.3 (next chapter) | V: Production view Bible panel on Genesis 50, Next chapter: Exodus 1 |
+| 10bz.2 (delete the live item) | V: rundown A B C D, C live; delete C, Previous: B; delete B, Next: D |
+| 10bu.2, 10bu.3 (approval state on Home) | V: never approved + unsaved change: "Service not approved yet"; approved, changed, saved, then the approved version restored from History: "Service approved as saved" |
+| 10bv.2 (timer reset) | V: first Reset turned into "Reset 4:29?"; the second reset it; the log: "timer reset (it had run 4:29)" |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
