@@ -148,8 +148,17 @@ export interface StagePayload {
   message: string | null
   /** "Key G · 72 bpm" for the live song, when known. */
   band: string | null
+  /** When the service is now expected to end, from the run of show's timing (issue #196). */
+  finish?: StageFinish | null
   /** How the church designed the stage display (Design → Stage); built-in look when absent. */
   style?: StageStyle
+}
+
+export interface StageFinish {
+  /** "10:42" */
+  time: string
+  /** Expected minus planned end, whole minutes: positive when late. */
+  lateMin: number
 }
 
 /** The stage display's design (DS-004): colours, the live words' size, which parts show. */
@@ -163,6 +172,8 @@ export interface StageStyle {
   showNext: boolean
   showNote: boolean
   showBand: boolean
+  /** When the service is expected to end. */
+  showFinish: boolean
 }
 
 export interface BroadcastOutputNdiSettings {

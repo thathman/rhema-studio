@@ -23,6 +23,7 @@ export type {
   SignagePlaylist,
   StagePayload,
   StageStyle,
+  StageFinish,
   BroadcastOutputNdiSettings,
   BroadcastOutputStatus,
   BroadcastOutputType,

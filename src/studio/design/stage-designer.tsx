@@ -14,6 +14,7 @@ const SAMPLE: StagePayload = {
   timer: { label: "12:40", tone: "ok" },
   message: null,
   band: "Key G · 72 bpm",
+  finish: { time: "11:42", lateMin: 5 },
 }
 
 const PARTS: ReadonlyArray<readonly [keyof StageStyle, string]> = [
@@ -21,6 +22,7 @@ const PARTS: ReadonlyArray<readonly [keyof StageStyle, string]> = [
   ["showNext", "What is next"],
   ["showNote", "The item's note"],
   ["showBand", "Song key and tempo"],
+  ["showFinish", "When the service ends"],
 ]
 
 /** The stage display (DS-004): what the team on the platform sees. Changes apply at once, also on air. */

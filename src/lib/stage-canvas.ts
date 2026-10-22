@@ -1,4 +1,5 @@
 import type { StagePayload } from "@/types"
+import { stageFinishText } from "@/lib/stage-finish-text"
 import { stageFontVh } from "@/lib/stage"
 
 /** Words wrapped to `maxW` (the stage view's lines, as the browser would wrap them). */
@@ -38,11 +39,20 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
   ctx.fillStyle = "#9aa0a6"
   ctx.textAlign = "left"
   ctx.fillText(stage.current?.title ?? "Nothing live", padX, y, width * 0.45)
+  let right = width - padX
   if (stage.timer) {
     ctx.font = font(5 * vh, 700)
     ctx.fillStyle = stage.timer.tone === "over" ? "#ff5a5a" : stage.timer.tone === "warn" ? "#ffc547" : "#9be37a"
     ctx.textAlign = "right"
-    ctx.fillText(`${stage.timer.label}${stage.timer.tone === "over" ? " OVER" : ""}`, width - padX, y)
+    const label = `${stage.timer.label}${stage.timer.tone === "over" ? " OVER" : ""}`
+    ctx.fillText(label, right, y)
+    right -= ctx.measureText(label).width + 2 * vw
+  }
+  if (stage.finish) {
+    ctx.font = font(3.2 * vh)
+    ctx.fillStyle = stage.finish.lateMin > 0 ? "#ffc547" : "#9aa0a6"
+    ctx.textAlign = "right"
+    ctx.fillText(stageFinishText(stage.finish), right, y, width * 0.3)
   }
   if (stage.band) {
     ctx.font = font(3.2 * vh, 700)
