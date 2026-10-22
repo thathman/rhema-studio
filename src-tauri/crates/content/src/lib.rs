@@ -867,7 +867,9 @@ struct ExtrasPayload {
     #[serde(default)]
     on_live: Option<OnLivePayload>,
     /// Move on to the next item after the planned minutes, while timed moves are on in Present.
+    /// Only its type is checked here (a boolean), so it is never read.
     #[serde(default)]
+    #[allow(dead_code)]
     auto_advance: Option<bool>,
 }
 
