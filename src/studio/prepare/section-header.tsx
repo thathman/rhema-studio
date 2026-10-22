@@ -71,10 +71,10 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
           className="h-7 flex-1 text-sm"
         />
       ) : (
-        <span className={cn("min-w-0 flex-1 truncate", phase ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
+        <span className={cn("min-w-0 flex-1 truncate", phase ? "min-w-[5.5rem] text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
       )}
       {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
-      <span className="shrink-0 text-[0.6875rem] tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+      <span className="min-w-0 truncate text-[0.6875rem] tabular-nums" title={`${count} ${count === 1 ? "item" : "items"}${minutes ? ` · ${minutes} min` : ""}`}>{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
       <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={() => useAddDialog.getState().openFor(header.id)}><PlusIcon /></Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

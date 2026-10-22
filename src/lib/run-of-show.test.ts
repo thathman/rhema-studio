@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { clockText, dwellSeconds, nextInPhase, phaseRange, planTimeline, plannedTimes, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -86,6 +86,10 @@ describe("the planned day", () => {
     expect(planTimeline(items, phases())).toBeNull()
     expect(planTimeline(items, phases("23:50"))!.finish).toBe("00:24")
     expect(clockText(-5)).toBe("23:55")
+  })
+  it("gives warm-up items their times from the warm-up's start, main items from the plan", () => {
+    expect([...plannedTimes(items, phases("10:00"))]).toEqual([[1, "10:00"], [2, "10:04"], [0, "09:55"]])
+    expect(plannedTimes(items, phases()).size).toBe(0)
   })
 })
 
