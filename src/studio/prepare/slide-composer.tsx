@@ -1,5 +1,8 @@
-import { useState } from "react"
-import { PlusIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ImageIcon, PlusIcon, UploadIcon } from "lucide-react"
+import { toast } from "sonner"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useMediaStore } from "@/stores/media-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -30,6 +33,8 @@ export function SlideComposer() {
   const [when, setWhen] = useState("")
   const [where, setWhere] = useState("")
   const [link, setLink] = useState("")
+  // Kept from slide to slide (a set of announcements usually shares one).
+  const [background, setBackground] = useState<{ media_id: string; name: string } | null>(null)
   const linkOk = mode !== "qr" || safeLink(link) !== null
   const empty = (!title.trim() && !body.trim() && mode !== "qr") || !linkOk
   /** An announcement is a plain slide whose first line is "when · where", so it needs nothing new to store or render. */
@@ -40,6 +45,7 @@ export function SlideComposer() {
     kind: "slide",
     slide: { title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) },
     reference: slideLabel({ title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) }),
+    ...(background && mode !== "qr" ? { background } : {}),
     confidence: 1,
     source: "manual",
     added_at: 0,
@@ -140,6 +146,7 @@ export function SlideComposer() {
         rows={6}
         className="text-sm"
       />
+      {mode !== "qr" && <SlideBackground value={background} onChange={setBackground} />}
       <div className="flex items-center gap-2">
         <Button size="sm" disabled={empty || (mode === "reading" && (pages.length === 0 || !hasReadingMarks(body)))} onClick={add}><PlusIcon /> {mode === "reading" && pages.length > 1 ? `Add as ${pages.length} slides` : "Add to service"}</Button>
         {mode !== "reading" && pages.length > 1 && (
@@ -166,3 +173,45 @@ export function SlideComposer() {
     </div>
   )
 }
+
+const PICTURES_AND_VIDEOS = [{ name: "Pictures and videos", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "m4v", "mov", "webm"] }]
+
+/** A picture or a video behind the slide's words: one from the media library, or import one here. */
+function SlideBackground({ value, onChange }: { value: { media_id: string; name: string } | null; onChange: (v: { media_id: string; name: string } | null) => void }) {
+  const assets = useMediaStore((s) => s.assets)
+  const loaded = useMediaStore((s) => s.loaded)
+  const loading = useMediaStore((s) => s.loading)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (!loaded && !loading) void useMediaStore.getState().list()
+  }, [loaded, loading])
+  const choices = assets.filter((a) => (a.kind === "image" || a.kind === "video") && a.present)
+  const importOne = async () => {
+    setBusy(true)
+    try {
+      const results = await useMediaStore.getState().importFiles(PICTURES_AND_VIDEOS)
+      const first = results?.find((r) => r.status === "imported")
+      if (first && first.status === "imported") onChange({ media_id: first.asset.id, name: first.asset.name })
+      const failed = results?.find((r) => r.status === "failed")
+      if (failed && failed.status === "failed") toast.error(`Could not import ${failed.path}`, { description: failed.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="text-muted-foreground">Background</span>
+      <Select value={value?.media_id ?? "__none"} onValueChange={(v) => onChange(v === "__none" ? null : { media_id: v, name: choices.find((c) => c.id === v)?.name ?? "" })}>
+        <SelectTrigger className="h-7 w-56 text-xs" aria-label="Slide background"><SelectValue placeholder="None" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none">None (the theme's)</SelectItem>
+          {choices.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}{c.kind === "video" ? " · video" : ""}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Button size="xs" variant="outline" disabled={busy} onClick={() => void importOne()}><UploadIcon /> {busy ? "Importing…" : "Import a picture or video…"}</Button>
+      <span className="text-[0.6875rem] text-muted-foreground">A video plays silently and loops behind the words.</span>
+    </div>
+  )
+}
+

@@ -3,6 +3,7 @@ import { MusicIcon, PlusIcon, SearchIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { parseBookChapter } from "@/lib/quick-search"
 import { resolveQuickFind } from "@/lib/quick-find-resolver"
 import { songQueueItem } from "@/lib/lyrics"
@@ -21,7 +22,8 @@ type Hit = { kind: "verse"; verse: Verse } | { kind: "song"; song: SongSummary }
  * presented — Show live is a separate action. In `prepare` mode each result
  * can be added to the service.
  */
-export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; autoFocus?: boolean }) {
+export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" | "present"; autoFocus?: boolean; scope?: "all" | "bible" }) {
+  const bibleOnly = scope === "bible"
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<Hit[]>([])
   const [busy, setBusy] = useState(false)
@@ -51,25 +53,26 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
     }
     setBusy(true)
     try {
-      const resolved = resolveQuickFind(q, books, hymnbooks.map((b) => b.code))
+      // The Bible tab searches the Bible only: no songs, and a bare number is not a hymn.
+      const resolved = resolveQuickFind(q, books, bibleOnly ? [] : hymnbooks.map((b) => b.code))
       const songs = useSongStore.getState()
       let found: Hit[] = []
       if (resolved.kind === "reference") {
         const { book, chapter, verse } = resolved.reference
         const v = await bibleActions.fetchVerse(book.book_number, chapter, verse)
         found = v?.text?.trim() ? [{ kind: "verse", verse: v }] : []
-      } else if (resolved.kind === "hymn") {
+      } else if (resolved.kind === "hymn" && !bibleOnly) {
         found = (await songs.lookup(q, 8)).map((song) => ({ kind: "song", song }))
       } else if (q.length >= 3) {
         // "1 Samuel", "1 Kings 3", "Psalm 23": that chapter's first verse comes first, then the word search.
         const bookChapter = parseBookChapter(q, books)
         const [verses, exact, start] = await Promise.all([
           bibleActions.searchVerses(q, 8).catch(() => [] as Verse[]),
-          songs.lookup(q, 6).catch(() => [] as SongSummary[]),
+          bibleOnly ? Promise.resolve([] as SongSummary[]) : songs.lookup(q, 6).catch(() => [] as SongSummary[]),
           bookChapter ? bibleActions.fetchVerse(bookChapter.book.book_number, bookChapter.chapter, 1).catch(() => null) : Promise.resolve(null),
         ])
         // Nothing exact: forgive a typo or two against every title and first line.
-        const hits = exact.length > 0 ? exact : fuzzySongs(q, await songs.all().catch(() => [] as SongSummary[]))
+        const hits = bibleOnly ? [] : exact.length > 0 ? exact : fuzzySongs(q, await songs.all().catch(() => [] as SongSummary[]))
         const others = verses.filter((v) => !start || v.book_number !== start.book_number || v.chapter !== start.chapter || v.verse !== start.verse)
         found = [...(start?.text?.trim() ? [{ kind: "verse", verse: start } as Hit] : []), ...hits.map((song): Hit => ({ kind: "song", song })), ...others.map((verse): Hit => ({ kind: "verse", verse }))]
       }
@@ -87,7 +90,7 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
     } finally {
       if (ticket === seq.current) setBusy(false)
     }
-  }, [books, hymnbooks])
+  }, [books, hymnbooks, bibleOnly])
 
   const onChange = (value: string) => {
     enterPending.current = null // an Enter belongs to the text it was pressed on
@@ -132,12 +135,13 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
 
   return (
     <div className="flex min-h-0 flex-col">
+      {bibleOnly && <BibleVersions />}
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           autoFocus={autoFocus}
           aria-label="Quick find"
-          placeholder='A reference ("john 3 16"), a hymn number ("245") or a few words'
+          placeholder={bibleOnly ? 'A reference ("john 3 16", "1 Samuel 3") or a few words' : 'A reference ("john 3 16"), a hymn number ("245") or a few words'}
           value={query}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
@@ -162,7 +166,7 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
           <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>
         )}
         {!busy && query.trim().length >= 3 && results.length === 0 && (
-          <li className="px-2 py-1 text-xs text-muted-foreground">No matching verses or songs.</li>
+          <li className="px-2 py-1 text-xs text-muted-foreground">{bibleOnly ? "No matching verses." : "No matching verses or songs."}</li>
         )}
         {results.map((hit) => {
           const key = hit.kind === "verse" ? `v-${hit.verse.book_number}-${hit.verse.chapter}-${hit.verse.verse}` : `s-${hit.song.id}`
@@ -216,3 +220,36 @@ export function QuickFind({ mode, autoFocus }: { mode: "prepare" | "present"; au
     </div>
   )
 }
+
+/**
+ * The Bible tab's own choice of version: the Bible verses are found and added
+ * in, and the second language beside it. These are the operator's active
+ * versions (the same as in Settings and the Production view); a verse already
+ * saved in a service keeps the version it was saved with.
+ */
+function BibleVersions() {
+  const translations = useBibleStore((s) => s.translations)
+  const active = useBibleStore((s) => s.activeTranslationId)
+  const secondary = useBibleStore((s) => s.secondaryTranslationId)
+  if (translations.length === 0) return null
+  const name = (t: { abbreviation: string; title?: string }) => (t.title ? `${t.abbreviation} · ${t.title}` : t.abbreviation)
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-muted-foreground">Bible</span>
+      <Select value={String(active)} onValueChange={(v) => useBibleStore.getState().setActiveTranslation(Number(v))}>
+        <SelectTrigger className="h-7 w-48 text-xs" aria-label="Bible version"><SelectValue /></SelectTrigger>
+        <SelectContent>{translations.map((t) => <SelectItem key={t.id} value={String(t.id)}>{name(t)}</SelectItem>)}</SelectContent>
+      </Select>
+      <span className="text-muted-foreground">with</span>
+      <Select value={secondary === null ? "__none" : String(secondary)} onValueChange={(v) => useBibleStore.getState().setSecondaryTranslation(v === "__none" ? null : Number(v))}>
+        <SelectTrigger className="h-7 w-48 text-xs" aria-label="Second language"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none">No second language</SelectItem>
+          {translations.filter((t) => t.id !== active).map((t) => <SelectItem key={t.id} value={String(t.id)}>{name(t)}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <span className="text-[0.6875rem] text-muted-foreground">New verses use these; saved ones keep theirs.</span>
+    </div>
+  )
+}
+

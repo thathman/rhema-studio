@@ -253,7 +253,7 @@ function ImageItemControls({ item }: { item: ImageQueueItem }) {
   )
 }
 
-/** Prepare-only: a library picture behind this item's text. */
+/** Prepare-only: a library picture or video behind this item's text (a video plays silently and loops). */
 function BackgroundPicker({ item }: { item: QueueItem }) {
   const assets = useMediaStore((s) => s.assets)
   const loaded = useMediaStore((s) => s.loaded)
@@ -261,7 +261,7 @@ function BackgroundPicker({ item }: { item: QueueItem }) {
   useEffect(() => {
     if (!loaded && !loading) void useMediaStore.getState().list()
   }, [loaded, loading])
-  const pictures = assets.filter((a) => a.kind === "image" && a.present)
+  const pictures = assets.filter((a) => (a.kind === "image" || a.kind === "video") && a.present)
   if (pictures.length === 0 && !item.background) return null
   return (
     <div className="ml-7 flex items-center gap-2 py-1 pl-2 text-xs">
@@ -275,10 +275,10 @@ function BackgroundPicker({ item }: { item: QueueItem }) {
           }))
         }
       >
-        <SelectTrigger className="h-6 w-56 text-xs" aria-label="Background picture"><SelectValue placeholder="No background" /></SelectTrigger>
+        <SelectTrigger className="h-6 w-56 text-xs" aria-label="Background picture or video"><SelectValue placeholder="No background" /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="__none">No background picture</SelectItem>
-          {pictures.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+          <SelectItem value="__none">No background</SelectItem>
+          {pictures.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}{p.kind === "video" ? " · video" : ""}</SelectItem>)}
         </SelectContent>
       </Select>
     </div>

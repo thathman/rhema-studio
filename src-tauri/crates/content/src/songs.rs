@@ -81,6 +81,9 @@ pub struct SongSummary {
     pub title: String,
     #[serde(default)]
     pub alternate_titles: Vec<String>,
+    /// Comma-separated ("choir" marks a choir ministration).
+    #[serde(default)]
+    pub tags: String,
     pub authors: String,
     pub licence: String,
     pub primary_language: String,
@@ -1047,6 +1050,7 @@ fn load_summary(conn: &Connection, id: &str) -> Result<SongSummary> {
         id: song.id,
         title: song.title,
         alternate_titles: song.alternate_titles,
+        tags: song.tags,
         authors: song.authors,
         licence: song.licence,
         primary_language: song.primary_language,

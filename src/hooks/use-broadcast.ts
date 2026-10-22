@@ -107,6 +107,24 @@ export async function backgroundFill(background: { media_id: string } | null | u
   }
 }
 
+/**
+ * A background as a render layer: a picture (drawn under the words) or a
+ * video (played muted and looping under the words on the outputs). The same
+ * video keeps playing from slide to slide of an item (a fixed token).
+ * Missing or unreadable: no layer, the words still show.
+ */
+export async function backgroundLayer(background: { media_id: string } | null | undefined): Promise<Pick<VerseRenderData, "image" | "video">> {
+  if (!background) return {}
+  const media = useMediaStore.getState()
+  const asset = media.assets.find((a) => a.id === background.media_id) ?? (await media.list().catch(() => [])).find((a) => a.id === background.media_id)
+  if (asset?.kind === "video") {
+    const url = asset.present ? await media.fileUrl(asset.id).catch(() => null) : null
+    return url ? { video: { url, fit: "cover", loop: true, sound: false, name: asset.name, token: 0 } } : {}
+  }
+  const image = await backgroundFill(background)
+  return image ? { image } : {}
+}
+
 /** A present reaches the congregation when it asks to go live or the output is already on air (CL-002 gate). */
 const reachesScreen = (opts: { goLive?: boolean }) => !!opts.goLive || useBroadcastStore.getState().isLive
 
@@ -145,8 +163,8 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   }
   const translationIds = [choice.primary, ...(choice.secondary !== null ? [choice.secondary] : [])]
 
-  const [image, fetchedVerses] = await Promise.all([
-    backgroundFill(opts.background),
+  const [layer, fetchedVerses] = await Promise.all([
+    backgroundLayer(opts.background),
     Promise.all(
     translationIds.map(async (translationId) => {
       try {
@@ -217,7 +235,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   useBroadcastStore
     .getState()
     .setLiveVerse(
-      image ? { ...data, image } : data,
+      { ...data, ...layer },
       verseToPresent,
       { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null, follow: opts.follow }
     )
@@ -260,10 +278,10 @@ export async function presentSlide(
   }
   const i = index === "last" ? slides.length - 1 : Math.min(Math.max(index, 0), slides.length - 1)
   const slide = slides[i]
-  const image = await backgroundFill(item.background)
+  const layer = await backgroundLayer(item.background)
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: i })
-  useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...(image ? { image } : {}) }, null, {
+  useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...layer }, null, {
     goLive: opts.goLive,
     slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song },
   })
@@ -307,8 +325,7 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
       useBroadcastStore.getState().setPresentWarning("The QR code could not be drawn; showing the words and the address only.")
     }
   } else if (item.background) {
-    const image = await backgroundFill(item.background)
-    if (image) render = { ...data, image }
+    render = { ...data, ...(await backgroundLayer(item.background)) }
   }
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: 0 })

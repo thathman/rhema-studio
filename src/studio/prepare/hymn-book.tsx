@@ -40,7 +40,7 @@ function hymnItem(song: SongSummary, first: "en" | "yo", id?: string) {
 
 /**
  * Prepare → Hymn book: the CAC Gospel Hymn Book in English and Yorùbá, apart
- * from the song library. Part 1 (1–1000) and Part 2 (various hymns). Find by
+ * from the song library: Main (1–1000) and Various (V1–V50). Find by
  * number or by words in either language; click to preview, Add to put it in
  * the service. The book is imported once from its file and stays on this
  * computer.
@@ -149,7 +149,7 @@ export function HymnBook() {
         <BookOpenIcon className="size-8 text-muted-foreground" aria-hidden />
         <div>
           <p className="text-sm font-medium">CAC Gospel Hymn Book</p>
-          <p className="mt-1 text-xs text-muted-foreground">English and Yorùbá, Part 1 and Part 2. Import the hymn book file once (hymns_combined.json); it stays on this computer.</p>
+          <p className="mt-1 text-xs text-muted-foreground">English and Yorùbá, Main and Various. Import the hymn book file once (hymns_combined.json); it stays on this computer.</p>
         </div>
         <Button size="sm" disabled={busy} onClick={() => file.current?.click()}><UploadIcon /> {busy ? "Importing…" : "Import the hymn book…"}</Button>
         {picker}
@@ -192,7 +192,7 @@ export function HymnBook() {
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           aria-label="Find a hymn"
-          placeholder="A number (245, V12) or words in English or Yorùbá"
+          placeholder="A number (245, or V12 in Various) or words in English or Yorùbá"
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -229,7 +229,7 @@ export function HymnBook() {
         })}
       </ul>
       <div className="flex items-center justify-between text-[0.6875rem] text-muted-foreground">
-        <span aria-live="polite">{!hymns ? "" : q ? `${shown.length} found` : `${hymns.filter((h) => h.part === 1).length} hymns in Part 1 · ${hymns.filter((h) => h.part === 2).length} in Part 2`}</span>
+        <span aria-live="polite">{!hymns ? "" : q ? `${shown.length} found` : `${hymns.filter((h) => h.part === 1).length} hymns in Main · ${hymns.filter((h) => h.part === 2).length} in Various`}</span>
         <button type="button" className="underline-offset-2 hover:underline" disabled={busy} onClick={() => file.current?.click()}>{busy ? "Importing…" : "Import the file again…"}</button>
         {picker}
       </div>

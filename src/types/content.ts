@@ -233,6 +233,8 @@ export interface SongSummary {
   id: string
   title: string
   alternate_titles?: string[]
+  /** Comma-separated; "choir" marks a choir ministration. */
+  tags?: string
   authors: string
   licence: Licence
   primary_language: string

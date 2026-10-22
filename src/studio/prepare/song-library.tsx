@@ -9,6 +9,7 @@ import { songQueueItem } from "@/lib/lyrics"
 import { fuzzySongs } from "@/lib/fuzzy"
 import { presentActions } from "@/studio/present-actions"
 import { SongEditor } from "@/studio/prepare/song-editor"
+import { isChoir } from "@/lib/song-kind"
 import { isSongItem, type SongSummary } from "@/types"
 
 const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI", custom: "Custom", unknown: "Licence?" }
@@ -24,7 +25,9 @@ export function SongLibrary() {
   const searching = useSongStore((s) => s.searching)
   const error = useSongStore((s) => s.error)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
-  const [editing, setEditing] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
+  const [editing, setEditing] = useState<{ open: boolean; id: string | null; choir?: boolean }>({ open: false, id: null })
+  const [kind, setKind] = useState<"all" | "songs" | "choir">("all")
+  const shown = results.filter((s) => kind === "all" || (kind === "choir") === isChoir(s.tags))
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const search = useCallback((q: string) => {
@@ -70,16 +73,26 @@ export function SongLibrary() {
         <Button size="sm" className="h-11" onClick={() => setEditing({ open: true, id: null })}>
           <PlusIcon /> New song
         </Button>
+        <Button size="sm" variant="outline" className="h-11" onClick={() => setEditing({ open: true, id: null, choir: true })} title="Lyrics the choir sings to the church">
+          <PlusIcon /> Choir ministration
+        </Button>
+      </div>
+      <div role="group" aria-label="Show" className="mt-2 flex w-fit rounded-md border border-border p-0.5 text-xs">
+        {(["all", "songs", "choir"] as const).map((k) => (
+          <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={cn("rounded px-2.5 py-1", kind === k ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            {k === "all" ? "All" : k === "songs" ? "Songs" : "Choir ministrations"}
+          </button>
+        ))}
       </div>
       <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-live="polite">
         {error && <li className="px-2 py-1 text-xs text-destructive">{error}</li>}
         {searching && results.length === 0 && <li className="px-2 py-1 text-xs text-muted-foreground">Searching…</li>}
-        {!searching && results.length === 0 && !error && (
+        {!searching && shown.length === 0 && !error && (
           <li className="px-2 py-4 text-center text-xs text-muted-foreground">
-            {query.trim() ? "No songs match." : "No songs yet. Click New song and paste the words of your first hymn."}
+            {query.trim() ? "No songs match." : kind === "choir" ? "No choir ministrations yet. Click Choir ministration and paste the words." : "No songs yet. Click New song and paste the words of your first hymn."}
           </li>
         )}
-        {results.map((song) => {
+        {shown.map((song) => {
           const isSel = !!selectedSlide && isSongItem(selectedSlide.item) && selectedSlide.item.song.song_id === song.id
           return (
             <li key={song.id} className="flex items-stretch gap-1">
@@ -95,6 +108,7 @@ export function SongLibrary() {
                 <span className="flex items-center gap-1.5 text-xs font-semibold">
                   <MusicIcon className="size-3 text-muted-foreground" aria-hidden />
                   <span className="truncate">{song.title}</span>
+                  {isChoir(song.tags) && <span className="rounded bg-primary/10 px-1 text-[0.625rem] font-medium text-primary">Choir</span>}
                   {song.numbers.map((n) => (
                     <span key={n} className="rounded border border-border px-1 text-[0.625rem] font-normal text-muted-foreground">{n}</span>
                   ))}
@@ -122,6 +136,7 @@ export function SongLibrary() {
       </ul>
       <SongEditor
         songId={editing.id}
+        choir={editing.choir}
         open={editing.open}
         onClose={() => setEditing((e) => ({ ...e, open: false }))}
         onSaved={() => search(query)}

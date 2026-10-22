@@ -72,7 +72,7 @@ export function PrepareWorkspace() {
                 </TabsList>
               </div>
               <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden p-3">
-                <QuickFind mode="prepare" autoFocus />
+                <QuickFind mode="prepare" scope="bible" autoFocus />
               </TabsContent>
               <TabsContent value="songs" className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
                 <SongLibrary />
