@@ -10,6 +10,7 @@ import { useJournalStore } from "@/stores/journal-store"
 import { resetTimerLogged } from "@/lib/timer-reset"
 import { useQueueStore } from "@/stores"
 import { endByLeftMs, formatMinutes, projectedEnd, timingSummary } from "@/lib/service-timing"
+import { useServiceTiming } from "@/studio/use-service-timing"
 
 const PRESETS = [20, 30, 45, 60]
 /** Manual timing correction, with its line in the service log (FR-07 "with audit"). */
@@ -37,7 +38,9 @@ export function ServiceTimer() {
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const plan = timingSummary(items, idle ? null : activeIndex, elapsedMs(timer, now))
   const behind = plan.behindMs === null ? null : Math.round(plan.behindMs / 60_000)
-  const ends = projectedEnd(plan, elapsedMs(timer, now), wallAt(now))
+  // With phases and a start time, the run of show's timing engine; otherwise from when the timer started.
+  const { timing } = useServiceTiming()
+  const ends = timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd } : projectedEnd(plan, elapsedMs(timer, now), wallAt(now))
   // The item in hand may have to finish by a clock time ("sermon ends by 12:15").
   const endBy = activeIndex !== null ? items[activeIndex]?.end_by ?? null : null
   const endByLeft = endByLeftMs(endBy, wallAt(now))
