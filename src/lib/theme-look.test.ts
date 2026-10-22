@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { BUILTIN_THEMES } from "./builtin-themes"
-import { applyLook, lookOf } from "./theme-look"
+import { applyDirection, applyLook, LOOK_DIRECTIONS, lookOf } from "./theme-look"
 
 const theme = BUILTIN_THEMES[0]
 
@@ -34,5 +34,10 @@ describe("Edit the look (DS-004)", () => {
     const t = [{ align: "left" as const }, { background: "#204238" }, { words: "#f5f0e6" }, { accent: "#eecb8d" }, { ratio: "4:3" as const }, { languageGap: 64 }].reduce((acc, c) => applyLook(acc, c), theme)
     expect(lookOf(t)).toMatchObject({ align: "left", background: "#204238", words: "#f5f0e6", accent: "#eecb8d", ratio: "4:3", languageGap: 64 })
     expect(t.verseText.horizontalAlign).toBe("left")
+  })
+  it("a visual direction sets background, words and accent in one change; nothing else moves", () => {
+    const d = LOOK_DIRECTIONS[2]
+    const t = applyDirection(theme, d)
+    expect(lookOf(t)).toMatchObject({ background: d.background, words: d.words, accent: d.accent, size: lookOf(theme).size, font: lookOf(theme).font, align: lookOf(theme).align })
   })
 })
