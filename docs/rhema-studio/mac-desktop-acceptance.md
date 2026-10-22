@@ -240,13 +240,15 @@ Run the same day with two isolated profiles (production and standby) and a disk 
 ## Artifacts
 
 The current clean build (no QA bridge: the binary has no bridge code), built from
-`main` at `e343c52` (includes the bilingual theme controls #165, the Studio tour #166, faster NDI #167 and the church-folder fix #168),
+`main` at `4a8b4fb` (everything through #177: hymn book, numbered books in Quick find, the item fields, the song footer, end-by rounding, Yorùbá quick screens, QR slide names),
 is on the owner's Desktop, not published anywhere:
 
 | File | Size | SHA-256 |
 |---|---|---|
-| `~/Desktop/Rhema-Intel-QA/Rhema-0.3.2-intel-x86_64.dmg` | 841 MB | `e2ea2a36301fcde59c9a3dac3dfa19cbd7ede483589ee902187c9aa6454e7fd8` |
-| `~/Desktop/Rhema-Intel-QA/Rhema.app` (executable `Contents/MacOS/Rhema`) | 1.0 GB | `65182d0f2d834817a9e90cddb7ac35bc026ff518cb6df7d997bf0c002c82d443` |
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22/Rhema-0.3.2-intel-x86_64.dmg` | 841 MB | `3a7b604f02dd4f85c023049edd53b29e210bd0a5b77545a815d3a6515f78def1` |
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22/Rhema.app` (executable `Contents/MacOS/Rhema`) | 1.0 GB | `4cc1904f881a50fa3b5cdbcc0c3721d94377cd836dfa0822faa79a16a0a4fdc1` |
+
+The older copy in `~/Desktop/Rhema-Intel-QA/` (from `e343c52`) is the one the owner was running; it is left alone.
 
 - Mach-O x86_64 only; signature ad hoc, identifier `com.openbezal.rhema`;
   `spctl` rejects it (not notarised), as expected for a local build.
