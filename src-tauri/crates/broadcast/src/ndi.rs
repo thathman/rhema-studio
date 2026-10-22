@@ -311,6 +311,35 @@ impl NdiRuntime {
             .ok_or(NdiError::SessionNotActive)?;
         session.send_frame_rgba(width, height, rgba_data)
     }
+
+    /// Send the last full frame with one region replaced (only what moved
+    /// crosses from the page: a ticker's band instead of the whole frame).
+    pub fn send_region_rgba(&mut self, session_id: &str, region: FrameRegion, rgba_data: &[u8]) -> Result<(), NdiError> {
+        let session = self.sessions.get_mut(session_id).ok_or(NdiError::SessionNotActive)?;
+        session.send_region_rgba(region, rgba_data)
+    }
+}
+
+/// A rectangle of a frame, in pixels.
+#[derive(Debug, Clone, Copy)]
+pub struct FrameRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// RGBA pixels into BGRA (`NDIlib_FourCC_type_BGRA`), alpha per the session's mode.
+fn rgba_into_bgra(dst: &mut [u8], src: &[u8], alpha_mode: NdiAlphaMode) {
+    for (d, s) in dst.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
+        d[0] = s[2];
+        d[1] = s[1];
+        d[2] = s[0];
+        d[3] = match alpha_mode {
+            NdiAlphaMode::NoneOpaque => 255,
+            NdiAlphaMode::StraightAlpha | NdiAlphaMode::PremultipliedAlpha => s[3],
+        };
+    }
 }
 
 struct ActiveNdiSession {
@@ -404,17 +433,36 @@ impl ActiveNdiSession {
             self.frame_buffer.resize(expected, 0);
         }
 
-        // Convert RGBA -> BGRA for NDIlib_FourCC_type_BGRA.
-        for (idx, px) in rgba_data.chunks_exact(4).enumerate() {
-            let offset = idx * 4;
-            self.frame_buffer[offset] = px[2];
-            self.frame_buffer[offset + 1] = px[1];
-            self.frame_buffer[offset + 2] = px[0];
-            self.frame_buffer[offset + 3] = match self.info.alpha_mode {
-                NdiAlphaMode::NoneOpaque => 255,
-                NdiAlphaMode::StraightAlpha | NdiAlphaMode::PremultipliedAlpha => px[3],
-            };
+        rgba_into_bgra(&mut self.frame_buffer, rgba_data, self.info.alpha_mode);
+        self.send_buffer();
+        Ok(())
+    }
+
+    fn send_region_rgba(&mut self, region: FrameRegion, rgba_data: &[u8]) -> Result<(), NdiError> {
+        let FrameRegion { x, y, width, height } = region;
+        // A region patches the last full frame; without one there is nothing to patch.
+        let fits = self.frame_count > 0
+            && x.checked_add(width).is_some_and(|r| r <= self.info.width)
+            && y.checked_add(height).is_some_and(|b| b <= self.info.height);
+        if !fits {
+            return Err(NdiError::FrameDimensionsMismatch { expected_width: self.info.width, expected_height: self.info.height });
         }
+        let row = (width * 4) as usize;
+        if rgba_data.len() != row * height as usize {
+            return Err(NdiError::InvalidFrameBufferSize { width, height });
+        }
+        let stride = (self.info.width * 4) as usize;
+        for (r, src) in rgba_data.chunks_exact(row).enumerate() {
+            let at = (y as usize + r) * stride + x as usize * 4;
+            rgba_into_bgra(&mut self.frame_buffer[at..at + row], src, self.info.alpha_mode);
+        }
+        self.send_buffer();
+        Ok(())
+    }
+
+    /// Send `frame_buffer` (BGRA, the session's size).
+    fn send_buffer(&mut self) {
+        let (width, height) = (self.info.width, self.info.height);
 
         #[expect(
             clippy::cast_possible_wrap,
@@ -452,7 +500,6 @@ impl ActiveNdiSession {
         } else if self.frame_count.is_multiple_of(300) {
             log::info!("NDI: {} frames sent", self.frame_count);
         }
-        Ok(())
     }
 }
 
@@ -521,6 +568,16 @@ fn load_symbol<'a, T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rgba_becomes_bgra_with_alpha_by_mode() {
+        let src = [10, 20, 30, 40, 1, 2, 3, 4];
+        let mut dst = [0u8; 8];
+        rgba_into_bgra(&mut dst, &src, NdiAlphaMode::StraightAlpha);
+        assert_eq!(dst, [30, 20, 10, 40, 3, 2, 1, 4]);
+        rgba_into_bgra(&mut dst, &src, NdiAlphaMode::NoneOpaque);
+        assert_eq!(dst, [30, 20, 10, 255, 3, 2, 1, 255]);
+    }
 
     #[test]
     fn receivers_is_unknown_without_a_session() {

@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::State;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-use rhema_broadcast::ndi::{NdiRuntime, NdiSessionInfo, NdiStartRequest};
+use rhema_broadcast::ndi::{FrameRegion, NdiRuntime, NdiSessionInfo, NdiStartRequest};
 
 /// Map `output_id` to its Tauri window label (`broadcast-{id}`).
 ///
@@ -360,6 +360,62 @@ pub fn push_ndi_frame(runtime: State<'_, Mutex<NdiRuntime>>, request: tauri::ipc
     check_frame_len(rgba.len(), width, height)?;
     let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
     runtime.send_frame_rgba(&output_id, width, height, rgba).map_err(|e| e.to_string())
+}
+
+/// Like [`push_ndi_frame`] for one region of the frame (headers `x-ndi-x`,
+/// `x-ndi-y`, `x-ndi-width`, `x-ndi-height`): the rest stays as last sent.
+#[tauri::command]
+pub fn push_ndi_region(runtime: State<'_, Mutex<NdiRuntime>>, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let header = |name: &str| -> Result<u32, String> {
+        request.headers().get(name).and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok()).ok_or_else(|| format!("missing or bad {name}"))
+    };
+    let output_id = request.headers().get("x-ndi-output").and_then(|v| v.to_str().ok()).ok_or("missing x-ndi-output")?.to_owned();
+    let region = FrameRegion { x: header("x-ndi-x")?, y: header("x-ndi-y")?, width: header("x-ndi-width")?, height: header("x-ndi-height")? };
+    let tauri::ipc::InvokeBody::Raw(rgba) = request.body() else {
+        return Err("expected the region as raw bytes".into());
+    };
+    let mut runtime = runtime.lock().map_err(|e| e.to_string())?;
+    runtime.send_region_rgba(&output_id, region, rgba).map_err(|e| e.to_string())
+}
+
+/// Running frame pacers, by output id (each a flag that stops its thread).
+#[derive(Default)]
+pub struct OutputPacers(Mutex<std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>);
+
+/// Send `broadcast:pace` to an output's window `fps` times a second (0 stops).
+/// The window draws a frame on each: a hidden (NDI) window's own timers are
+/// throttled by `WebKit` to about one a second, events from here are not.
+#[tauri::command]
+pub fn set_output_pace(app: tauri::AppHandle, pacers: State<'_, OutputPacers>, output_id: String, fps: u32) -> Result<(), String> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::{Duration, Instant};
+    use tauri::Emitter;
+    let label = window_label(&output_id)?;
+    let mut running = pacers.0.lock().map_err(|e| e.to_string())?;
+    if let Some(stop) = running.remove(&output_id) {
+        stop.store(true, Ordering::Relaxed);
+    }
+    if fps == 0 {
+        return Ok(());
+    }
+    let stop = std::sync::Arc::new(AtomicBool::new(false));
+    running.insert(output_id, stop.clone());
+    let period = Duration::from_secs_f64(1.0 / f64::from(fps.clamp(1, 60)));
+    std::thread::spawn(move || {
+        let mut next = Instant::now();
+        // Stops when told to, or when the window is gone.
+        while !stop.load(Ordering::Relaxed) && app.get_webview_window(&label).is_some() {
+            let _ = app.emit_to(label.as_str(), "broadcast:pace", ());
+            next += period;
+            let now = Instant::now();
+            if next > now {
+                std::thread::sleep(next - now);
+            } else {
+                next = now;
+            }
+        }
+    });
+    Ok(())
 }
 
 /// A frame is exactly width × height RGBA pixels.

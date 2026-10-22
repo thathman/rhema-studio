@@ -38,6 +38,12 @@ let backingPlayer: VideoPlayer | null = null
 // The ticker's video backing, and whether its frame loop is running.
 let tickerPlayer: VideoPlayer | null = null
 let tickerRunning = false
+// The frame rate the Rust pacer drives this window at (0 = off); see set_output_pace.
+let paceFps = 0
+const playing = (p: VideoPlayer | null) => {
+  const el = p?.element()
+  return !!el && !el.paused && !el.ended
+}
 const latencyLog = createLatencyLog(`output ${OUTPUT_ID}`)
 // Frames are drawn here first; see paintFrame.
 const scratchCanvas = document.createElement("canvas")
@@ -156,7 +162,7 @@ function BroadcastCanvas() {
     })
   }, [draw, logDebug])
 
-  const pushNdiFrame = useCallback(async () => {
+  const pushNdiFrame = useCallback(async (region?: { y: number; height: number }) => {
     if (!ndiConfigRef.current.active) return
     if (pushingRef.current) return // back-pressure: skip if already pushing
     pushingRef.current = true
@@ -187,11 +193,20 @@ function BroadcastCanvas() {
         sourceHeight = targetHeight
       }
 
-      const imageData = sourceCtx.getImageData(0, 0, sourceWidth, sourceHeight)
-      // The pixels go as the raw request body (no base64/JSON); output and size ride in headers.
-      await invoke("push_ndi_frame", new Uint8Array(imageData.data.buffer), {
-        headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-width": String(sourceWidth), "x-ndi-height": String(sourceHeight) },
-      })
+      if (region && sourceCtx === ctx && lastPushRef.current > 0) {
+        // Only the rows that moved (a ticker's band): the whole frame is ~8 MB, and moving it
+        // from the page takes ~70 ms on an Intel Mac, too slow for 30 frames a second.
+        const band = sourceCtx.getImageData(0, region.y, sourceWidth, region.height)
+        await invoke("push_ndi_region", new Uint8Array(band.data.buffer), {
+          headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-x": "0", "x-ndi-y": String(region.y), "x-ndi-width": String(sourceWidth), "x-ndi-height": String(region.height) },
+        })
+      } else {
+        const imageData = sourceCtx.getImageData(0, 0, sourceWidth, sourceHeight)
+        // The pixels go as the raw request body (no base64/JSON); output and size ride in headers.
+        await invoke("push_ndi_frame", new Uint8Array(imageData.data.buffer), {
+          headers: { "x-ndi-output": OUTPUT_ID, "x-ndi-width": String(sourceWidth), "x-ndi-height": String(sourceHeight) },
+        })
+      }
       lastPushRef.current = Date.now()
       reportNdi(true, "")
     } catch (error) {
@@ -234,7 +249,8 @@ function BroadcastCanvas() {
     const player = createVideoPlayer({
       onFrame: () => {
         draw()
-        if (ndiConfigRef.current.active) void pushNdiFrame()
+        // While the pacer runs it sends the frames.
+        if (ndiConfigRef.current.active && !paceFps) void pushNdiFrame()
       },
       onEnded: () => {
         draw()
@@ -254,7 +270,8 @@ function BroadcastCanvas() {
     const backing = createVideoPlayer({
       onFrame: () => {
         draw()
-        if (ndiConfigRef.current.active) void pushNdiFrame()
+        // While the pacer runs it sends the frames.
+        if (ndiConfigRef.current.active && !paceFps) void pushNdiFrame()
       },
       onEnded: () => draw(),
       onError: (name) => console.warn("[broadcast-output] lower third video failed to play:", name),
@@ -270,26 +287,49 @@ function BroadcastCanvas() {
       fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
     })
     tickerPlayer = tickerVideo
-    // While the ticker runs, draw every frame: on the screen's refresh, or at the NDI rate (a hidden NDI window gets no animation frames).
+    // What is moving: only the ticker (its band is all that changes), or more (an entrance, a video).
+    const motion = (): "ticker" | "full" | null => {
+      const d = latestData.current
+      if (!d || stageRef.current) return null
+      if ((d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
+      return d.ticker ? "ticker" : null
+    }
+    // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
+    // something moves, a pacer in Rust sends `broadcast:pace` at the NDI rate and each one draws a frame.
+    const syncPace = () => {
+      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : 0
+      if (fps === paceFps) return
+      paceFps = fps
+      void invoke("set_output_pace", { outputId: OUTPUT_ID, fps }).catch(() => {})
+    }
+    const unlistenPace = currentWindow.listen("broadcast:pace", () => {
+      const m = motion()
+      draw()
+      const d = latestData.current
+      if (m === "ticker" && d?.ticker && d.verse?.screen !== "black") {
+        const h = d.theme.resolution.height
+        const band = tickerReserve(d.ticker, h) || Math.round((h * d.ticker.style.height) / 100)
+        void pushNdiFrame({ y: d.ticker.style.position === "top" ? 0 : h - band, height: band })
+      } else void pushNdiFrame()
+      syncPace()
+    })
+    // On a screen (not NDI): the ticker moves on the display's refresh.
     const tickTicker = () => {
       if (!tickerRunning) return
-      if (!latestData.current?.ticker || stageRef.current) {
+      if (!latestData.current?.ticker || stageRef.current || ndiConfigRef.current.active) {
         tickerRunning = false
         draw()
         return
       }
       draw()
-      if (ndiConfigRef.current.active) {
-        void pushNdiFrame()
-        setTimeout(tickTicker, Math.round(1000 / Math.max(15, ndiConfigRef.current.fps || 30)))
-      } else requestAnimationFrame(tickTicker)
+      requestAnimationFrame(tickTicker)
     }
-    // Draw the lower third's entrance frame by frame (and send each over NDI) until it is fully on.
+    // A lower third's entrance on a screen; over NDI the pacer draws it.
     const animateOverlay = () => {
+      if (ndiConfigRef.current.active) return
       draw()
-      if (ndiConfigRef.current.active) void pushNdiFrame()
       const ov = latestData.current?.overlay
-      if (ov && entranceProgress(ov, Date.now()) < 1) setTimeout(animateOverlay, 33)
+      if (ov && entranceProgress(ov, Date.now()) < 1) requestAnimationFrame(animateOverlay)
     }
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
       if (event.payload.role === "stage") {
@@ -316,10 +356,11 @@ function BroadcastCanvas() {
       const tk = event.payload.ticker
       tickerVideo.sync(tk?.backing?.kind === "video" ? { url: tk.backing.url, fit: "cover", loop: true, sound: false, name: "ticker", token: 0 } : undefined)
       if (tk?.backing?.kind === "picture") void loadThemeImage(tk.backing.url)
-      if (tk && !tickerRunning) {
+      if (tk && !tickerRunning && !ndiConfigRef.current.active) {
         tickerRunning = true
         tickTicker()
       }
+      syncPace()
       preloadThemeAssets(event.payload.theme)
       const sentAt = event.payload.sentAt
       const logLatency = () => {
@@ -348,6 +389,7 @@ function BroadcastCanvas() {
       logDebug("Received broadcast:ndi-config", event.payload)
       // Push burst when NDI becomes active
       if (event.payload.active) pushNdiBurst()
+      syncPace()
     })
 
     // Request current NDI status on mount (fixes race condition
@@ -389,6 +431,9 @@ function BroadcastCanvas() {
       tickerVideo.dispose()
       tickerPlayer = null
       tickerRunning = false
+      if (paceFps) void invoke("set_output_pace", { outputId: OUTPUT_ID, fps: 0 }).catch(() => {})
+      paceFps = 0
+      unlistenPace.then((fn) => fn())
       unsubscribeFonts()
       unlisten.then((fn) => fn())
       unlistenNdiConfig.then((fn) => fn())
