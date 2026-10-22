@@ -141,6 +141,10 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10y.1 (QR link) | V: `javascript:alert(1)` and `church.example/give` refused ("Only a full http(s) address…", Add disabled); "Give online" with `https://church.example/give` added; on air, a white panel with the code left and the title and address right; the stream frame's code decodes to exactly that address; it survived save and reopen |
 | 10bg.1 (prepared by) | V: "Ade (music)" on a song showed "· Ade (music)" in the rundown; History's newest version was saved by "Tolu" |
 | 10r.1 (earlier logs) | V: a kept log was listed after a restart with today's date; searching "Psalm 23" found it; "Revelation 22" found none. (Its download button ends in the system Save dialog: not run) |
+| 10az.1–2 (responsive reading) | V: L:/P: marks gave "Add as 3 slides", each "Leader: … / All: …", Next in order; unmarked text: "No parts marked yet: start the leader's lines with L: …" and Add disabled |
+| 10ba.1 (end by) | F → V: "by 01:29" in the rundown and after reopening; chip "by 01:29 · 3 min", amber at 2 min, red "past 01:29 by …" after. Past the time it rounded up ("by 2 min" at 1 min 21 s): fixed in #175 (whole minutes). In the hidden test window the chip refreshed up to ~20 s late (timers throttled) |
+| 10au.2 (timer correction) | V: +1 min moved elapsed 0:01 → 1:03, −1 min back, a second −1 stopped at zero; each press logged "timer corrected by ±1 min" |
+| 10ay.1–3 (own cues) | V: New cue "Baptism" (Rehearsal off, Quick screen: Black, Start the timer) saved with "remote: /rhema/macro baptism"; Run: rehearsal off, black screen, Back returned to the song. After a restart the cue was there and an OSC `/rhema/macro baptism` ran it (log: "remote: macro baptism", "rehearsal off", "quick: Black screen"). Bin → Delete removed it; the four built-in cues have no bin |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)
