@@ -211,6 +211,10 @@ V = verified on this Mac. U = unverified (not possible here; reason given). F = 
 | 10p.4 (approve with a missing file) | V: "Not approved · A media file is missing from the media folder: qa-pic3. Fix that first, or remove the item." |
 | 10bh.2, 10bh.4 (approval gate) | V: unapproved service: the first item was held with the question; three Next presses did not move the rundown; Present anyway put it live; after an edit and save, Next was not held |
 | 10aq.1, 10aq.2 (unsaved on close) | V: an unsaved addition: Keep working kept it; Save and close saved it; after a restart it was in the service |
+| 10as.4 (sound as the last item) | V: stepped onto it, it played once; after it ended, Next twice did not start it again |
+| 10bm.3 (no backing tracks for a verse) | V: a verse live: the ♪ menu lists the library's sounds and no "Backing tracks for …" list |
+| 10by.2 (tour skipped) | V: the tour shown again, Skip: back on Home, not shown again |
+| 10bs.1 (settings cut short) | V (same run as 10cb.6): the warning names the kept file (settings.json.damaged-…), which is still there |
 | 10an.1 (no hidden traffic) | V: `lsof` on the running app showed one socket, the remote listener on 127.0.0.1, and no outgoing connections (speech, OBS and NDI off). 10an.2 (network off): U |
 
 ## Church folder between two computers (CL-005, CL-006: 10bc, 10bd)

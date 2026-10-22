@@ -505,7 +505,7 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10as.1 | Service: Welcome slide, a sound (Prepare → Media → Sounds → Add), Announcements. Present the Welcome slide, then Next. | The sound starts; projector and NDI still show Welcome (still marked live in the rundown); the sound item shows "playing"; Preview reads "♪ name". | Verified on the Intel Mac |
 | 10as.2 | Next (Announcements), Fade out, then Previous. | Announcements goes up while the sound keeps playing; after the fade, Previous goes straight back to Welcome without starting the sound again. | Verified on the Intel Mac |
-| 10as.4 | Make the sound the last item and step onto it; let it finish; press Next again. | Nothing restarts it. | Unverified |
+| 10as.4 | Make the sound the last item and step onto it; let it finish; press Next again. | Nothing restarts it. | Verified on the Intel Mac |
 | 10as.3 | Rehearsal on; step onto the sound item. | No sound; Present says it was not played in rehearsal. | Verified on the Intel Mac |
 
 ### 10at. Secrets in the system keychain (RG-08)
@@ -659,7 +659,7 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10bm.1 | Song editor: add an MP3 under "Chord charts, sheets and backing tracks"; save. Put the song in the service. | The file is listed with the song. | Unverified |
 | 10bm.2 | Present: go to the song (Next or Show live), open the Sound button. | "Backing track for <song>" lists the file; Play starts it on this computer's sound output; the screens do not change; Fade out and Stop work. Nothing plays until Play is pressed. | Unverified |
-| 10bm.3 | Go to a verse item; open the Sound button. | No backing-track list (only the library's sounds). | Unverified |
+| 10bm.3 | Go to a verse item; open the Sound button. | No backing-track list (only the library's sounds). | Verified on the Intel Mac |
 
 ### 10bn. Heard verses wait for the operator (FR-01, AI-001)
 
@@ -714,7 +714,7 @@ report), but launching it cannot.
 
 | # | Steps | Expected | Result |
 |---|---|---|---|
-| 10bs.1 | Quit Rhema; cut settings.json in the app folder in half; start Rhema. | A warning says settings were reset and names the kept file (settings.json.damaged-…); that file is still there. | Unverified |
+| 10bs.1 | Quit Rhema; cut settings.json in the app folder in half; start Rhema. | A warning says settings were reset and names the kept file (settings.json.damaged-…); that file is still there. | Verified on the Intel Mac |
 | 10bs.2 | Give the stage output a theme with a large photo; start the timer; watch the outputs and Activity Monitor/Task Manager. | No stutter; the stage screen shows as before. | Unverified |
 | 10bs.3 | Export a service file that contains a video, while something is on air. | The output and NDI keep moving while it saves. | Unverified |
 | 10bs.4 | Delete the service that was open last time (or restore an older backup); restart twice. | "That service no longer exists" at most once. | Verified on the Intel Mac |
@@ -767,7 +767,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10by.1 | Start listening in Production, switch to Standard and Home; speak for a minute; unplug the microphone. | The transcript keeps growing (Library → Service log offers it); the "Audio source disconnected" warning appears. | Unverified |
-| 10by.2 | First launch: finish (or skip) the tour. | Back where you were (Home), and Present opens in Standard with its keys. | Unverified |
+| 10by.2 | First launch: finish (or skip) the tour. | Back where you were (Home), and Present opens in Standard with its keys. | Verified on the Intel Mac |
 | 10by.3 | Bible panel: Genesis 50, press → (or Next chapter). | Exodus 1, not an empty Genesis 51. | Verified on the Intel Mac |
 | 10by.4 | While listening, open Settings → Audio or Speech. | "Rhema is listening now. Changes here apply when you stop and start listening again." | Unverified |
 | 10by.5 | Auto on; send /rhema/confidence 0.95; say a verse loosely. | It appears in the preview but does not replace the screen. | Unverified |
