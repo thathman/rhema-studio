@@ -1,6 +1,6 @@
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { Button } from "@/components/ui/button"
-import { applyLook, LOOK_FONTS, LOOK_RATIOS, LOOK_SIZES, lookOf, type LookChange } from "@/lib/theme-look"
+import { applyDirection, applyLook, LOOK_DIRECTIONS, LOOK_FONTS, LOOK_RATIOS, LOOK_SIZES, lookOf, type LookChange } from "@/lib/theme-look"
 import { cn } from "@/lib/utils"
 
 const LABEL = "text-[0.6875rem] font-semibold text-muted-foreground"
@@ -36,7 +36,24 @@ export function LookProperties() {
   const change = (c: LookChange) => useBroadcastStore.getState().updateDraft(applyLook(theme, c))
   return (
     <div className="flex flex-col gap-5">
-      <section aria-label="Typography" className="flex flex-col gap-3">
+      <section aria-label="Visual direction" className="flex flex-col gap-3">
+        <h3 className="text-[1.0625rem] font-bold tracking-[-0.03em]">Visual direction</h3>
+        <div className="grid grid-cols-2 gap-2">
+          {LOOK_DIRECTIONS.map(({ name, ...colours }) => {
+            const on = look.background === colours.background && look.words === colours.words && look.accent === colours.accent
+            return (
+              <button key={name} type="button" aria-pressed={on} onClick={() => useBroadcastStore.getState().updateDraft(applyDirection(theme, colours))} className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", on ? "border-primary bg-primary/10" : "border-border hover:bg-muted")}>
+                <span aria-hidden className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border font-serif text-sm font-bold" style={{ background: colours.background, color: colours.words }}>
+                  A<span style={{ color: colours.accent }}>.</span>
+                </span>
+                {name}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      <section aria-label="Typography" className="flex flex-col gap-3 border-t border-border pt-4">
         <h3 className="text-[1.0625rem] font-bold tracking-[-0.03em]">Typography</h3>
         <Field label="Scripture and lyric font" hint={look.font === "custom" ? `Now: ${theme.verseText.fontFamily} (set in Text)` : undefined}>
           <select className={SELECT} value={look.font} onChange={(e) => e.target.value !== "custom" && change({ font: e.target.value as Exclude<typeof look.font, "custom"> })}>

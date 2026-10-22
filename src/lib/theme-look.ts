@@ -19,6 +19,14 @@ export const LOOK_SIZES = [
   { id: "large", label: "Large", share: 0.08 },
 ] as const
 
+/** One-click palettes (approved design, "Visual direction"): background, words and accent together. */
+export const LOOK_DIRECTIONS = [
+  { name: "Midnight & gold", background: "#152835", words: "#f7f4ec", accent: "#d9b25f" },
+  { name: "Forest & linen", background: "#234b46", words: "#f3efe4", accent: "#e6d6b0" },
+  { name: "Warm editorial", background: "#f3f2e9", words: "#29313f", accent: "#76643f" },
+  { name: "Modern cobalt", background: "#122952", words: "#f2f5fb", accent: "#9dbcff" },
+] as const
+
 export const LOOK_RATIOS = [
   { id: "16:9", label: "16:9 widescreen", width: 1920, height: 1080 },
   { id: "4:3", label: "4:3 older projector", width: 1440, height: 1080 },
@@ -110,4 +118,9 @@ export function applyLook(t: BroadcastTheme, change: LookChange): BroadcastTheme
   if ("background" in change) return { ...t, background: { ...t.background, type: "solid", color: change.background } }
   if ("words" in change) return { ...t, ...both({ color: change.words }) }
   return { ...t, reference: { ...t.reference, color: change.accent } }
+}
+
+/** A visual direction: its background, words and accent, each through applyLook. */
+export function applyDirection(t: BroadcastTheme, d: Pick<Look, "words" | "accent"> & { background: string }): BroadcastTheme {
+  return applyLook(applyLook(applyLook(t, { background: d.background }), { words: d.words }), { accent: d.accent })
 }
