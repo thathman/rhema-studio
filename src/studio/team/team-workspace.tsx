@@ -1,4 +1,4 @@
-import { FolderSyncIcon, MessageSquareIcon, NetworkIcon, ShieldCheckIcon, SmartphoneIcon, UsersIcon } from "lucide-react"
+import { FolderSyncIcon, MessageSquareIcon, NetworkIcon, ShieldCheckIcon, SmartphoneIcon, UsersIcon, SettingsIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,13 +33,23 @@ export function TeamWorkspace() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-8 pt-6 pb-16 max-[1200px]:px-5">
-        <section className="dark rounded-xl bg-sidebar px-8 py-7 text-sidebar-foreground">
-          <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-sidebar-primary uppercase">Your team</p>
-          <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em] text-white">Your studio. Your people.</h1>
-          <p className="mt-1 max-w-2xl text-sm">One church, one plan: services are shared through the church folder, approved before Sunday, and the team leaves comments on items. Everything stays on your computers.</p>
-          <div className="mt-4 flex flex-wrap gap-2">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Plan together · present confidently</p>
+            <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">Your studio. Your people.</h1>
+            <p className="mt-1 text-xs text-muted-foreground">Share the preparation. Keep the live production computer fully in control.</p>
+          </div>
+          <Button variant="outline" onClick={() => openSettings("remote")}><SettingsIcon /> Connection settings</Button>
+        </header>
+        <section className="flex flex-wrap items-center justify-between gap-6 rounded-[14px] border border-[#274b4b] bg-[#19363a] px-8 py-7">
+          <div className="min-w-0 max-w-2xl">
+            <span className="rounded-[5px] bg-white/15 px-2 py-1 text-[0.625rem] font-bold tracking-[0.06em] text-[#e2f0e7] uppercase">Local-first collaboration</span>
+            <h2 className="mt-3 text-[1.75rem] leading-tight font-bold tracking-[-0.04em] text-white">One church. One shared plan.</h2>
+            <p className="mt-2 text-xs text-[#c7d9d3]">Services are shared through the church folder and approved before Sunday; the team leaves comments on items. Nothing the team edits reaches the live screen without the desk. Everything stays on your computers.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
             <Button onClick={() => useShellStore.getState().goTo("archive")}><FolderSyncIcon /> Share through the church folder</Button>
-            <Button variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" onClick={() => openSettings("remote")}><SmartphoneIcon /> Use a phone as a remote</Button>
+            <Button variant="outline" className="border-white/25 bg-white text-[#19363a] hover:bg-white/90" onClick={() => openSettings("remote")}><SmartphoneIcon /> Use a phone as a remote</Button>
           </div>
         </section>
 
@@ -67,7 +77,7 @@ export function TeamWorkspace() {
 
           <section aria-label="Comments" className="rounded-lg border border-border bg-card p-5 shadow-panel">
             <h2 className="flex items-center gap-2 text-base font-bold tracking-[-0.03em]"><MessageSquareIcon className="size-4" /> Comments</h2>
-            <p className="mt-2 mb-3 text-xs text-muted-foreground">{comments ? `${comments} comment${comments === 1 ? "" : "s"} on this service's items (Prepare → an item → Notes & team).` : "No comments on this service's items yet. They are added in Prepare → an item → Notes & team."}</p>
+            <p className="mt-2 mb-3 text-xs text-muted-foreground">{comments ? `${comments} comment${comments === 1 ? "" : "s"} on this service's items (Prepare → an item → Notes).` : "No comments on this service's items yet. They are added in Prepare → an item → Notes."}</p>
             <UnreadComments />
           </section>
 
