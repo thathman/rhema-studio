@@ -20,7 +20,6 @@ import { openSettings } from "@/lib/settings-dialog"
 import { useBroadcastStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { WorkspaceHeader } from "@/studio/ui/status-chip"
-import { LibraryDialog } from "@/studio/more/library-dialog"
 import { BrandDialog } from "@/studio/more/brand-dialog"
 
 interface Row {
@@ -36,7 +35,7 @@ export function MoreWorkspace() {
   const setPresentView = useShellStore((s) => s.setPresentView)
   const openOutputs = useShellStore((s) => s.openOutputs)
   const [version, setVersion] = useState<string | null>(null)
-  const [libraryOpen, setLibraryOpen] = useState(false)
+  const setLibraryOpen = useShellStore((s) => s.setLibraryOpen)
   const [brandOpen, setBrandOpen] = useState(false)
   const operatorName = useSettingsStore((s) => s.operatorName)
   const setOperatorName = useSettingsStore((s) => s.setOperatorName)
@@ -161,7 +160,6 @@ export function MoreWorkspace() {
           </section>
         </div>
       </div>
-      <LibraryDialog open={libraryOpen} onClose={() => setLibraryOpen(false)} />
       {brandOpen && <BrandDialog open onClose={() => setBrandOpen(false)} />}
     </div>
   )

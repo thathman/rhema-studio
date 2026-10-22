@@ -20,8 +20,8 @@ const at = (place: TourPlace, step: Omit<Step, "data">): Step => ({ ...STEP_DEFA
 export const TUTORIAL_STEPS: Step[] = [
   at({ workspace: "home" }, {
     target: 'nav[aria-label="Workspaces"]',
-    title: "Four places",
-    content: "Home checks you are ready. Prepare builds the service. Present runs it. More holds the library, themes, outputs and settings.",
+    title: "Your studio",
+    content: "Home checks you are ready. Prepare builds the service. Present runs it. Under Your church: the library, the design of your screens, your team and past services. Settings is at the bottom.",
     placement: "right",
   }),
   at({ workspace: "home" }, {

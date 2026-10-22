@@ -53,6 +53,9 @@ export function writeShellPrefs(storage: StorageLike | null, prefs: ShellPrefs):
 interface ShellState extends ShellPrefs {
   /** The outputs dialog is global so Home, Present and More can all open it. */
   outputsDialogOpen: boolean
+  /** The library (songs, hymn books, saved logs): opened from the sidebar and from More. */
+  libraryOpen: boolean
+  setLibraryOpen: (open: boolean) => void
   setWorkspace: (workspace: Workspace) => void
   setPresentView: (view: PresentView) => void
   openOutputs: () => void
@@ -66,6 +69,8 @@ const storage: StorageLike | null =
 export const useShellStore = create<ShellState>((set) => ({
   ...readShellPrefs(storage),
   outputsDialogOpen: false,
+  libraryOpen: false,
+  setLibraryOpen: (libraryOpen) => set({ libraryOpen }),
   setWorkspace: (workspace) => set({ workspace }),
   setPresentView: (presentView) => set({ presentView }),
   openOutputs: () => set({ outputsDialogOpen: true }),
