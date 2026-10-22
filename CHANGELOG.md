@@ -11,6 +11,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Home: hero with a readiness note, stat cards, Sunday at a glance, Your attention (#200).
 - Find anything (Cmd/Ctrl+K): places, design and settings sections, this service's items (previewed), and scripture, hymns and songs through Present's Quick find (#202).
 - Prepare as a run of show (issue #193): the order of service, an item editor (Content, Notes & team, Timing) and the preview side by side, the sources in Add item (#204); phases (pre-service loop, warm-up, main service, post-service loop, each loop / auto once / manual) and groups with counts and minutes, a phase strip (#205); adding straight into a phase or group (#206); timing from the main service's start (warm-up start, each item's time, projected finish, running late or early) (#207). Services keep phases and groups as rows (no database change); service files with them are version 2 (#203).
+- Present's running order shows the phases and groups; the item editor's Stage tab shows an item as the stage screen will (#210).
+- Ticker: saved sets of announcements, a preview before taking it live, and a still "one at a time" mode for people who find motion hard (#211, issue #187).
+- Tests have a 20 s default timeout (cold module imports could pass 5 s on a loaded machine) (#210).
 - Design studio: every design edit on one page, with tabs for Themes (each kind of content previewed and assigned), Lower thirds, News ticker, Brand kit and Output looks (every output's theme per kind in one table); leaving with an unsaved theme asks first (#201).
 
 ### Design and outputs (owner requests, 2026-10-22)
