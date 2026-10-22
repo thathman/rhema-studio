@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
+import { clockText, planTimeline, defaultPhases, headersAfterAppend, sectionEnd, headersAfterInsert, headersAfterMove, headersAfterRemove, interleave, sectionSummaries, type OutlineHeader } from "./run-of-show"
 
 const h = (id: string, at: number, type: OutlineHeader["type"] = "phase"): OutlineHeader => ({ id, type, name: id, at })
 const read = (items: string[], headers: OutlineHeader[]) => interleave(items, headers).map((r) => ("header" in r ? `[${r.header.id}]` : r.item)).join(" ")
@@ -65,5 +65,26 @@ describe("adding to a section", () => {
     const g = [...hs, h("Word", 1, "group")]
     expect(sectionEnd(2, g, "Main")).toBe(2)
     expect(sectionEnd(2, g, "Word")).toBe(2)
+  })
+})
+
+describe("the planned day", () => {
+  const items = [{ reference: "Countdown", planned_minutes: 5 }, { reference: "Hymn", planned_minutes: 4 }, { reference: "Sermon", planned_minutes: 30 }, { reference: "Fellowship loop", planned_minutes: 3 }]
+  const phases = (start?: string): OutlineHeader[] => [
+    { ...h("Warm-up", 0), role: "warmup", rule: "auto_once" },
+    { ...h("Main service", 1), role: "main", rule: "manual", ...(start ? { starts_at: start } : {}) },
+    { ...h("Post-service loop", 3), role: "post", rule: "loop" },
+  ]
+  it("plans from the start: the warm-up ends at it, items follow, the finish adds up", () => {
+    const t = planTimeline(items, phases("10:00"))!
+    expect(t).toMatchObject({ start: "10:00", warmupStart: "09:55", finish: "10:34" })
+    expect(t.rows.map((r) => `${r.time} ${r.label}`)).toEqual(["09:55 Warm-up begins", "10:00 Main service begins", "10:00 Hymn", "10:04 Sermon", "10:34 Main service ends"])
+  })
+  it("running late moves only the finish; no start time, no plan; midnight wraps", () => {
+    expect(planTimeline(items, phases("10:00"), 5)!.finish).toBe("10:39")
+    expect(planTimeline(items, phases("10:00"), 5)!.rows[2].time).toBe("10:00")
+    expect(planTimeline(items, phases())).toBeNull()
+    expect(planTimeline(items, phases("23:50"))!.finish).toBe("00:24")
+    expect(clockText(-5)).toBe("23:55")
   })
 })
