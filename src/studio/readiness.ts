@@ -110,7 +110,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           : [],
     ),
     ...(i.contentError
-      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works. If the database file is damaged, restore a backup in More → Library; save a log for whoever supports you.`, fix: "settings" as const, fixLabel: "Save a log" }]
+      ? [{ id: "content", status: "warn" as const, label: "Saved services and songs are unavailable", detail: `${i.contentError}. Scripture still works. If the database file is damaged, restore a backup in Archive → Backups; save a log for whoever supports you.`, fix: "settings" as const, fixLabel: "Save a log" }]
       : []),
     ...(i.monitors?.missing.length
       ? [{ id: "monitors-missing", status: "warn" as const, label: `${i.monitors.missing.join(", ")}: ${i.monitors.missing.length === 1 ? "its monitor is" : "their monitors are"} not connected`, detail: "Check the cable, or choose a connected monitor in Outputs.", fix: "outputs" as const, fixLabel: "Open outputs" }]

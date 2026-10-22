@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type Workspace = "home" | "prepare" | "present" | "library" | "design" | "archive" | "more"
+export type Workspace = "home" | "prepare" | "present" | "library" | "design" | "team" | "archive" | "more"
 /** The Design page's sections: every design edit lives there. */
 export type DesignTab = "themes" | "lower-thirds" | "ticker" | "brand" | "outputs"
 export type PresentView = "standard" | "production"
@@ -14,7 +14,7 @@ export const SHELL_PREFS_KEY = "rhema-studio.shell"
 
 const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard" }
 
-const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "library", "design", "archive", "more"]
+const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "library", "design", "team", "archive", "more"]
 const VIEWS: readonly PresentView[] = ["standard", "production"]
 
 /** Minimal Storage surface so tests can pass a Map-backed fake. */
