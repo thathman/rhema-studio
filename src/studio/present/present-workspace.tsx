@@ -69,10 +69,10 @@ export function PresentWorkspace() {
   return (
     <div className="flex h-full flex-col">
       {/* The approved design: "Live console" with what is on air and the view on one row, the live tools on the next. */}
-      <header className="flex shrink-0 flex-col gap-2.5 border-b border-border px-[22px] pt-3.5 pb-3">
+      <header className="flex shrink-0 flex-col gap-2.5 border-b border-border px-[22px] pt-3.5 pb-3 [@media(max-height:860px)]:gap-1.5 [@media(max-height:860px)]:pt-2 [@media(max-height:860px)]:pb-2">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-[1.4375rem] leading-tight font-bold tracking-[-0.04em]">Live console</h1>
+            <h1 className="text-[1.4375rem] leading-tight font-bold tracking-[-0.04em] [@media(max-height:860px)]:text-lg">Live console</h1>
             <p className="truncate text-[0.6875rem] text-muted-foreground">{service ? `${service.title}${startsAt ? ` · starts ${startsAt}` : ""}` : "What is next in your service"}</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -183,9 +183,9 @@ function StandardView() {
   }, [])
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3">
+    <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
     <PhaseStrip />
-    <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
+    <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,12rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
       <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken" data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
@@ -212,13 +212,13 @@ function StandardView() {
 
       <div className="col-span-2 flex flex-wrap items-center gap-2.5 rounded-xl border border-border bg-surface-elevated p-2.5 max-[1200px]:col-span-1" role="toolbar" aria-label="Presentation controls">
         <BigButton icon={<ChevronLeftIcon />} label="Previous" iconOnly title="Previous (← / PgUp)" onClick={presentActions.prev} disabled={count === 0} className="w-[var(--control-height)] min-w-0 px-0" />
-        <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-32 max-[1200px]:min-w-0" />
+        <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-32 max-[1400px]:min-w-0" />
         <span className="flex gap-2" role="group" aria-label="Continue the reading">
           <BigButton icon={<ChevronsLeftIcon />} label="Verse −" iconOnly onClick={presentActions.versePrev} disabled={!hasLiveItem} title="Verse −: present the verse before the live one (Shift+←)" className="w-[var(--control-height)] min-w-0 px-0" />
           <BigButton icon={<ChevronsRightIcon />} label="Verse +" iconOnly onClick={presentActions.verseNext} disabled={!hasLiveItem} title="Verse +: present the next verse of the live passage (Shift+→)" className="w-[var(--control-height)] min-w-0 px-0" />
         </span>
         <span className="ml-auto flex gap-2">
-          <BigButton icon={<MonitorIcon />} label="Show live" hint="present the preview" tone="take" onClick={presentActions.showLive} className="min-w-36 uppercase tracking-wide max-[1200px]:min-w-0" />
+          <BigButton icon={<MonitorIcon />} label="Show live" hint="present the preview" tone="take" onClick={presentActions.showLive} className="min-w-36 uppercase tracking-wide max-[1400px]:min-w-0" />
           <BigButton icon={<SquareIcon />} label="Clear" hint="Esc" tone="danger" onClick={presentActions.clear} disabled={!isLive} className="min-w-0" />
           <BigButton icon={<RotateCcwIcon />} label="Restore" hint="Shift+Esc" onClick={presentActions.restore} disabled={!canRestore} className="min-w-0" />
         </span>

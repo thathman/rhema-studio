@@ -21,10 +21,10 @@ export function PhaseStrip() {
   const index = run?.itemId ? items.findIndex((i) => i.id === run.itemId) : -1
   const where = !run ? "" : run.startsAt ? `starts ${at(run.startsAt)}` : range && index >= range.start ? `${index - range.start + 1} of ${range.end - range.start}` : "starting"
   return (
-    <section aria-label="Automated phases" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-[#34504b] bg-[#1b3033] px-3.5 py-2.5">
+    <section aria-label="Automated phases" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-[#34504b] bg-[#1b3033] px-3.5 py-2.5 [@media(max-height:860px)]:py-1.5">
       <p className="min-w-0 flex-1 text-[0.6875rem] text-[#c3d6cf]">
         <b className="text-xs text-[#eef6f2]">Automated phases</b>
-        <span className="block">Loops repeat and the warm-up runs once; the main service always stays manual.</span>
+        <span className="block [@media(max-height:860px)]:hidden">Loops repeat and the warm-up runs once; the main service always stays manual.</span>
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {auto.map((h) => {
