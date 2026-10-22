@@ -15,6 +15,7 @@ const SAMPLE: StagePayload = {
   message: null,
   band: "Key G · 72 bpm",
   finish: { time: "11:42", lateMin: 5 },
+  aux: [{ label: "Communion prep", text: "3:12", tone: "ok" }, { label: "Interpreter", text: "0:45", tone: "warn" }],
 }
 
 const PARTS: ReadonlyArray<readonly [keyof StageStyle, string]> = [
