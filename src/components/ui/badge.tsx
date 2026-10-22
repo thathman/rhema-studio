@@ -21,7 +21,7 @@ const badgeVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
         // Status chips in the redesign's tones.
         neutral: "bg-tone-neutral text-tone-neutral-foreground",
-        violet: "bg-tone-violet text-tone-violet-foreground",
+        accent: "bg-tone-accent text-tone-accent-foreground",
         green: "bg-tone-green text-tone-green-foreground",
         amber: "bg-tone-amber text-tone-amber-foreground",
         rose: "bg-tone-rose text-tone-rose-foreground",

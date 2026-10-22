@@ -31,7 +31,7 @@ export function PrepareWorkspace() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 px-8 pt-6 pb-3 max-[1200px]:px-5">
         <div className="min-w-0">
-          <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">Plan the whole service</p>
+          <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Plan the whole service</p>
           <h1 className="mt-1 truncate text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">{service ? service.title : "Your service."}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Order, content and timing in one place. Nothing here goes live.</p>
         </div>
@@ -56,14 +56,14 @@ export function PrepareWorkspace() {
         </div>
       </header>
 
-      <div className="mx-8 mb-4 shrink-0 rounded-[17px] border border-border bg-card px-4 py-3 shadow-panel max-[1200px]:mx-5">
+      <div className="mx-8 mb-4 shrink-0 rounded-xl border border-border bg-card px-4 py-3 shadow-panel max-[1200px]:mx-5">
         <ServiceBar />
       </div>
 
       <PhaseStrip />
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-[17px] border border-border bg-card shadow-panel" data-tour="prepare-rundown">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-panel" data-tour="prepare-rundown">
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="min-w-0">
               <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
@@ -76,13 +76,13 @@ export function PrepareWorkspace() {
           <RundownFooter />
         </section>
 
-        <section className="min-h-0 overflow-hidden rounded-[17px] border border-border bg-card shadow-panel">
+        <section className="min-h-0 overflow-hidden rounded-xl border border-border bg-card shadow-panel">
           <ItemEditor />
         </section>
 
         {/* On a narrower window the preview gives way to the editor (Present shows it too). */}
         <aside className="flex min-h-0 flex-col gap-4 max-[1280px]:hidden">
-          <div className="h-56 shrink-0 overflow-hidden rounded-[17px] [&>div]:h-full">
+          <div className="h-56 shrink-0 overflow-hidden rounded-xl [&>div]:h-full">
             <PreviewPanel />
           </div>
           <TimingPanel />
@@ -92,7 +92,7 @@ export function PrepareWorkspace() {
   )
 }
 
-const DOT: Record<PhaseRole, string> = { pre: "bg-tone-blue-foreground", warmup: "bg-tone-amber-foreground", main: "bg-tone-green-foreground", post: "bg-tone-neutral-foreground", custom: "bg-tone-violet-foreground" }
+const DOT: Record<PhaseRole, string> = { pre: "bg-tone-blue-foreground", warmup: "bg-tone-amber-foreground", main: "bg-tone-green-foreground", post: "bg-tone-neutral-foreground", custom: "bg-tone-accent-foreground" }
 
 /** The event's phases at a glance: how each runs and its minutes; a click finds it in the order of service. */
 function PhaseStrip() {
@@ -109,7 +109,7 @@ function PhaseStrip() {
           type="button"
           role="listitem"
           onClick={() => document.querySelector(`[aria-label="Phase: ${CSS.escape(p.name)}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" })}
-          className="flex min-w-0 items-center gap-2.5 rounded-[15px] border border-border bg-card px-3.5 py-2.5 text-left shadow-panel outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-w-0 items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-left shadow-panel outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <span aria-hidden className={cn("size-2.5 shrink-0 rounded-full", DOT[p.role ?? "custom"])} />
           <span className="min-w-0 flex-1">

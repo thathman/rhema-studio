@@ -11,7 +11,7 @@ function NavButton({ item, active, live, onSelect }: { item: NavItem; active: bo
       title={item.key ? `${item.label} (⌘${item.key} / Ctrl+${item.key})` : item.label}
       onClick={onSelect}
       className={cn(
-        "relative flex h-10 w-full items-center gap-3 rounded-[11px] px-3 text-[0.8125rem] font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1080px]:justify-center max-[1080px]:px-0 [&_svg]:size-[1.125rem] [&_svg]:shrink-0",
+        "relative flex h-10 w-full items-center gap-3 rounded-lg px-3 text-[0.8125rem] font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1080px]:justify-center max-[1080px]:px-0 [&_svg]:size-[1.125rem] [&_svg]:shrink-0",
         active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-white/[0.07] hover:text-white",
       )}
     >
@@ -79,7 +79,7 @@ export function Sidebar({
         </div>
         <NavButton item={{ id: "more", label: "More tools", icon: <EllipsisIcon /> }} active={workspace === "more"} onSelect={onMore} />
         <NavButton item={{ id: "settings", label: "Settings", icon: <SettingsIcon />, key: "," }} active={workspace === "settings"} onSelect={onSettings} />
-        <button type="button" onClick={onSettings} title="Your name goes on the service log and approvals (Settings)" className="mt-1 flex items-center gap-2.5 rounded-[11px] px-2 py-1.5 text-left outline-none hover:bg-white/[0.07] focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1080px]:justify-center">
+        <button type="button" onClick={onSettings} title="Your name goes on the service log and approvals (Settings)" className="mt-1 flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left outline-none hover:bg-white/[0.07] focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1080px]:justify-center">
           <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[0.6875rem] font-bold text-white">{initials || "?"}</span>
           <span className="flex min-w-0 flex-col max-[1080px]:sr-only">
             <span className="truncate text-[0.8125rem] font-semibold text-white">{operatorName.trim() || "Add your name"}</span>

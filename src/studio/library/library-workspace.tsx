@@ -9,7 +9,7 @@ export function LibraryWorkspace() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 px-8 pt-6 pb-3 max-[1200px]:px-5">
-        <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">Your church</p>
+        <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Your church</p>
         <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Your creative library.</h1>
         <p className="mt-1 text-sm text-muted-foreground">Songs and choir ministrations, the hymn book, pictures and videos: kept on this computer. Adding from here puts an item in the open service.</p>
       </header>
@@ -20,7 +20,7 @@ export function LibraryWorkspace() {
           <TabsTrigger value="media">Pictures and videos</TabsTrigger>
           <TabsTrigger value="files">Import and export</TabsTrigger>
         </TabsList>
-        <div className="mt-3 min-h-0 flex-1 rounded-[17px] border border-border bg-card p-4 shadow-panel">
+        <div className="mt-3 min-h-0 flex-1 rounded-xl border border-border bg-card p-4 shadow-panel">
           <TabsContent value="songs" className="flex h-full min-h-0 flex-col"><SongLibrary /></TabsContent>
           <TabsContent value="hymns" className="flex h-full min-h-0 flex-col"><HymnBook /></TabsContent>
           <TabsContent value="media" className="flex h-full min-h-0 flex-col"><MediaLibrary /></TabsContent>

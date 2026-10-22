@@ -9,8 +9,8 @@ const TONE: Record<Tone, string> = {
   // A deeper red than the pulse so white text meets WCAG AA (5.2:1; the pulse red is 3.8:1).
   live: "bg-[oklch(0.56_0.22_25)] text-white hover:bg-[oklch(0.52_0.21_25)] border-transparent",
   danger: "bg-card text-destructive hover:bg-destructive/10 border-border",
-  // The console's take button: pale violet with deep ink (10.7:1).
-  take: "bg-[#dcd5ff] text-[#27214c] hover:bg-[#cfc6ff] border-transparent",
+  // The console's take button: sea-glass with deep ink (13.6:1), calm but unmistakable on the dark console.
+  take: "bg-[#e4f0eb] text-[#17242b] hover:bg-[#d3e7df] border-transparent",
 }
 
 /** A 52px control for the Standard view: icon, label, big hit area, always labelled. */

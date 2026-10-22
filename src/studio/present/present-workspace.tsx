@@ -167,7 +167,7 @@ function StandardView() {
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] gap-3 p-4 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2 max-[1200px]:p-3">
-      <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-[15px] border border-border bg-surface-sunken" data-tour="present-rundown">
+      <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken" data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight">Running order</h2>
@@ -179,14 +179,14 @@ function StandardView() {
           <RundownList mode="present" />
         </div>
       </section>
-      <div className="min-h-0 overflow-hidden rounded-[15px] max-[1200px]:hidden [&>div]:h-full">
+      <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:hidden [&>div]:h-full">
         <PreviewPanel />
       </div>
-      <div className="min-h-0 overflow-hidden rounded-[15px] [&>div]:h-full" data-studio-live>
+      <div className="min-h-0 overflow-hidden rounded-xl [&>div]:h-full" data-studio-live>
         <LiveOutputPanel />
       </div>
 
-      <div className="col-span-2 flex flex-wrap items-center gap-2.5 rounded-[15px] border border-border bg-surface-elevated p-2.5 max-[1200px]:col-span-1" role="toolbar" aria-label="Presentation controls">
+      <div className="col-span-2 flex flex-wrap items-center gap-2.5 rounded-xl border border-border bg-surface-elevated p-2.5 max-[1200px]:col-span-1" role="toolbar" aria-label="Presentation controls">
         <BigButton icon={<ChevronLeftIcon />} label="Previous" iconOnly title="Previous (← / PgUp)" onClick={presentActions.prev} disabled={count === 0} className="w-[var(--control-height)] min-w-0 px-0" />
         <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-32 max-[1200px]:min-w-0" />
         <span className="flex gap-2" role="group" aria-label="Continue the reading">
@@ -201,14 +201,14 @@ function StandardView() {
       </div>
 
       <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:col-span-1">
-        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-[15px] border border-border bg-card p-4" data-tour="quick-find">
+        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-card p-4" data-tour="quick-find">
           <div>
             <h2 className="text-sm font-semibold tracking-tight">Find &amp; cue anything</h2>
             <p className="text-xs text-muted-foreground">A reference, a hymn number, or a few words</p>
           </div>
           <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1"><QuickFind mode="present" /></div>
         </section>
-        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-[15px] border border-border bg-card p-4" role="group" aria-label="Quick screens">
+        <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-xl border border-border bg-card p-4" role="group" aria-label="Quick screens">
           {/* Back sits in the header so it is never clipped on a short (1366x768) screen; the screens scroll if they must. */}
           <div className="flex items-start justify-between gap-2">
             <div>

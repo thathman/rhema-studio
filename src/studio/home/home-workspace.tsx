@@ -158,35 +158,34 @@ export function HomeWorkspace() {
       <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-7 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">Your Sunday workspace</p>
-            <h1 className="mt-1.5 text-[2rem] leading-tight font-bold tracking-[-0.04em]">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ""}</h1>
+            <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Your Sunday workspace</p>
+            <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.035em]">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ""}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })} · everything for this Sunday's service, right where you need it.</p>
           </div>
         </header>
 
-        <section aria-labelledby="quick" className="relative overflow-hidden rounded-[23px] bg-tone-violet px-9 py-8 max-[1200px]:px-6">
-          <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-tone-violet-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? "This service" : "Sunday"}</p>
-          <h2 id="quick" className="mt-2 text-[2.25rem] leading-[1.05] font-bold tracking-[-0.045em]">
-            Beautiful worship.<br /><span className="font-serif text-primary italic">Without the chaos.</span>
-          </h2>
-          <p className="mt-3 max-w-xl text-[0.9375rem] text-muted-foreground">
-            {items.length === 0
-              ? "Start the service in Prepare: passages, songs, hymns, slides and pictures, in order. Nothing goes on a screen until you show it live."
-              : ready
-                ? "Your service is ready. Turn the screens on and take it to the live console with confidence."
-                : "Your service is taking shape. Finish the details below, then take it to the live console with confidence."}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button onClick={() => setWorkspace("prepare")} className="h-10 px-4"><PencilRulerIcon /> {items.length ? "Continue preparing" : "Prepare a service"}</Button>
-            <Button variant="outline" onClick={() => setWorkspace("present")} className="h-10 bg-card px-4"><PlayIcon /> Open live console</Button>
-            <Button variant="ghost" onClick={openOutputs} className="h-10 px-3"><MonitorIcon /> Outputs</Button>
-            <Button variant="ghost" onClick={() => openSettings()} className="h-10 px-3"><SettingsIcon /> Settings</Button>
+        <section aria-labelledby="quick" className="grid grid-cols-[minmax(0,1fr)_17rem] gap-6 rounded-xl border border-border bg-card p-6 shadow-panel max-[1100px]:grid-cols-1">
+          <div className="min-w-0">
+            <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? "This service" : "No service open"}</p>
+            <h2 id="quick" className="mt-1.5 truncate text-[1.625rem] leading-tight font-bold tracking-[-0.03em]">{current ? current.title : "Plan Sunday's service"}</h2>
+            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+              {items.length === 0
+                ? "Start the service in Prepare: passages, songs, hymns, slides and pictures, in order. Nothing goes on a screen until you show it live."
+                : ready
+                  ? "Ready. Turn the screens on and run it from the live console."
+                  : "Taking shape. Finish what is listed under Your attention, then run it from the live console."}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button onClick={() => setWorkspace("prepare")} className="h-10 px-4"><PencilRulerIcon /> {items.length ? "Continue preparing" : "Prepare a service"}</Button>
+              <Button variant="outline" onClick={() => setWorkspace("present")} className="h-10 px-4"><PlayIcon /> Open live console</Button>
+              <Button variant="ghost" onClick={openOutputs} className="h-10 px-3"><MonitorIcon /> Outputs</Button>
+              <Button variant="ghost" onClick={() => openSettings()} className="h-10 px-3"><SettingsIcon /> Settings</Button>
+            </div>
           </div>
-          <div aria-hidden className="pointer-events-none absolute -right-16 -bottom-24 size-80 rounded-full border-[44px] border-primary/10" />
-          <div className="absolute top-7 right-8 w-60 rotate-2 rounded-2xl bg-card p-4 shadow-lift max-[1100px]:hidden">
-            <p className="text-xs text-muted-foreground">Sunday readiness</p>
-            <p className="mt-1 text-2xl font-bold tracking-[-0.04em]">{ready ? "Ready." : warnings.length <= 2 ? "Almost ready." : "Not ready yet."}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{ready ? "Everything checks out." : `${warnings.length} ${warnings.length === 1 ? "thing" : "things"} to check`}</p>
+          <div className="flex flex-col justify-center border-l border-border pl-6 max-[1100px]:border-t max-[1100px]:border-l-0 max-[1100px]:pt-4 max-[1100px]:pl-0">
+            <p className="text-xs text-muted-foreground">Readiness</p>
+            <p className="mt-1 text-xl font-bold tracking-[-0.03em]">{ready ? "Ready" : warnings.length <= 2 ? "Almost ready" : "Not ready yet"}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{ready ? "Everything checks out." : `${warnings.length} ${warnings.length === 1 ? "thing" : "things"} to check`}</p>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Readiness checks" aria-valuemin={0} aria-valuemax={counted} aria-valuenow={okCount}>
               <div className="h-full rounded-full bg-primary" style={{ width: `${counted ? (okCount / counted) * 100 : 0}%` }} />
             </div>
@@ -206,7 +205,7 @@ export function HomeWorkspace() {
               <h2 id="glance" className="text-[1.1875rem] font-bold tracking-[-0.035em]">Sunday at a glance</h2>
               <Button variant="ghost" size="sm" onClick={() => setWorkspace("prepare")}>Full rundown <ArrowRightIcon /></Button>
             </div>
-            <div className="rounded-[17px] border border-border bg-card p-3 shadow-panel">
+            <div className="rounded-xl border border-border bg-card p-3 shadow-panel">
               {items.length === 0 ? (
                 <p className="px-2 py-6 text-center text-sm text-muted-foreground">Nothing in the service yet. Open Prepare to add passages, songs and slides.</p>
               ) : (
@@ -236,7 +235,7 @@ export function HomeWorkspace() {
                 <h2 id="readiness" className="text-[1.1875rem] font-bold tracking-[-0.035em]">Your attention</h2>
                 <span className={cn("text-xs font-semibold", ready ? "text-confidence-high" : "text-confidence-mid")}>{ready ? "Ready to present" : "Needs attention"}</span>
               </div>
-              <ul className="divide-y divide-border rounded-[17px] border border-border bg-card px-4 shadow-panel">
+              <ul className="divide-y divide-border rounded-xl border border-border bg-card px-4 shadow-panel">
                 {(attention.length ? attention : checks).map((c) => (
                   <li key={c.id} className="flex items-start gap-3 py-3">
                     <span className="mt-0.5">{ICON[c.status]}</span>
@@ -256,7 +255,7 @@ export function HomeWorkspace() {
             </section>
 
             <ChurchFolderCard />
-            <section aria-labelledby="services" className="rounded-[17px] border border-border bg-card p-4 shadow-panel">
+            <section aria-labelledby="services" className="rounded-xl border border-border bg-card p-4 shadow-panel">
             <h2 id="services" className="mb-2 text-sm font-semibold">Saved services</h2>
             {!current && suggested && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2">
@@ -303,7 +302,7 @@ export function HomeWorkspace() {
 
 function Stat({ icon, label, value, unit, detail }: { icon: React.ReactNode; label: string; value: string; unit: string; detail: string }) {
   return (
-    <div className="rounded-[15px] border border-border bg-card p-5 shadow-panel">
+    <div className="rounded-xl border border-border bg-card p-5 shadow-panel">
       <p className="flex items-center gap-2 text-xs text-muted-foreground [&_svg]:size-4">{icon}{label}</p>
       <p className="mt-3 text-[1.75rem] leading-none font-bold tracking-[-0.04em]">{value}<span className="ml-1 text-sm font-semibold tracking-normal text-muted-foreground">{unit}</span></p>
       <p className="mt-2 truncate text-xs text-muted-foreground">{detail}</p>
@@ -329,5 +328,5 @@ function KindTile({ item }: { item: Item }) {
       : isImageItem(item)
         ? ["bg-kind-media text-kind-media-foreground", <ImageIcon key="i" />]
         : ["bg-kind-scripture text-kind-scripture-foreground", <BookOpenIcon key="i" />]
-  return <span aria-hidden className={cn("flex size-9 shrink-0 items-center justify-center rounded-[10px] [&_svg]:size-4", tone)}>{icon}</span>
+  return <span aria-hidden className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg [&_svg]:size-4", tone)}>{icon}</span>
 }

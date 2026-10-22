@@ -16,7 +16,7 @@ export function TopBar({ title }: { title: string }) {
         <button
           type="button"
           onClick={() => useShellStore.getState().setSearchOpen(true)}
-          className="flex h-8 w-56 items-center gap-2 rounded-[10px] border border-border bg-card px-3 text-[0.8125rem] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 max-[1100px]:w-auto"
+          className="flex h-8 w-56 items-center gap-2 rounded-lg border border-border bg-card px-3 text-[0.8125rem] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 max-[1100px]:w-auto"
         >
           <SearchIcon aria-hidden className="size-4" />
           <span className="max-[1100px]:sr-only">Find anything…</span>
@@ -30,7 +30,7 @@ export function TopBar({ title }: { title: string }) {
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
           title={theme === "dark" ? "Light mode" : "Dark mode"}
-          className="flex size-8 items-center justify-center rounded-[10px] border border-border bg-card text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
+          className="flex size-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
         >
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
         </button>

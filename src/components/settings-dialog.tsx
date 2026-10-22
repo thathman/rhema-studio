@@ -1120,7 +1120,7 @@ export function SettingsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
-        <p className="text-[0.6875rem] font-extrabold tracking-[0.15em] text-primary uppercase">Your Rhema Studio</p>
+        <p className="text-[0.6875rem] font-bold tracking-[0.12em] text-muted-foreground uppercase">Your Rhema Studio</p>
         <h1 className="mt-1 text-[1.75rem] leading-tight font-bold tracking-[-0.04em]">Settings that make sense.</h1>
         <p className="mt-1 text-sm text-muted-foreground">Everything stays on this computer. Changes apply at once.</p>
       </header>

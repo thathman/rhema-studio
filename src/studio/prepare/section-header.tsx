@@ -14,7 +14,7 @@ const TONE: Record<PhaseRole, string> = {
   warmup: "bg-tone-amber text-tone-amber-foreground",
   main: "bg-tone-green text-tone-green-foreground",
   post: "bg-tone-neutral text-tone-neutral-foreground",
-  custom: "bg-tone-violet text-tone-violet-foreground",
+  custom: "bg-tone-accent text-tone-accent-foreground",
 }
 
 /** In Present's running order: where the phase or group starts and how it runs (nothing to change here). */
@@ -23,7 +23,7 @@ export function SectionLabel({ header, summary }: { header: OutlineHeader; summa
   return (
     <li
       aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
-      className={cn("flex items-center gap-2 px-2 text-[0.625rem] font-extrabold tracking-[0.1em] uppercase", phase ? "mt-3 text-tone-violet-foreground first:mt-1" : "mt-1.5 pl-4 text-muted-foreground")}
+      className={cn("flex items-center gap-2 px-2 text-[0.625rem] font-extrabold tracking-[0.1em] uppercase", phase ? "mt-3 text-tone-accent-foreground first:mt-1" : "mt-1.5 pl-4 text-muted-foreground")}
     >
       <span className="truncate">{header.name}</span>
       {phase && header.rule && <span className="shrink-0 font-semibold tracking-normal normal-case opacity-80">· {RULE_LABEL[header.rule].chip}</span>}
