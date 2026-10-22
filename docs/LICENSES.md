@@ -6,18 +6,18 @@
 
 | Item | Licence | Notes |
 |---|---|---|
-| Rhema (upstream, OpenBezal) | MIT, © 2025 OpenBezal | `LICENSE` at the repo root is kept verbatim; More → About and the README carry the attribution. |
+| Rhema (upstream, OpenBezal) | MIT, © 2025 OpenBezal | `LICENSE` at the repo root is kept verbatim; Settings → Help (About) and the README carry the attribution. |
 | Rhema Studio additions (this fork) | MIT, same file | No separate licence; every contribution is under the repo's MIT licence. |
 
 ## 2. Bundled content
 
 | Content | Licence / terms | Where it ships | Status |
 |---|---|---|---|
-| Open Yoruba Contemporary Bible (OYCB), © 2009, 2017 Biblica, Inc. | CC BY-SA 4.0 | `rhema.db` (31,087 verses); licence text at `resources/licenses/YORUBA-OYCB-LICENSE.md`, attribution in More → About | **Compliant**: attribution, licence copy and change note shipped. Any derivative must stay CC BY-SA 4.0. |
+| Open Yoruba Contemporary Bible (OYCB), © 2009, 2017 Biblica, Inc. | CC BY-SA 4.0 | `rhema.db` (31,087 verses); licence text at `resources/licenses/YORUBA-OYCB-LICENSE.md`, attribution in Settings → Help (About) | **Compliant**: attribution, licence copy and change note shipped. Any derivative must stay CC BY-SA 4.0. |
 | KJV | Public domain outside the UK (Crown patent in the UK) | `rhema.db` | Fine. |
 | NIV, ESV, NASB, NKJV, NLT, AMP | **Copyrighted** (Biblica, Crossway, Lockman, Thomas Nelson, Tyndale, Lockman). Upstream obtains them with `data/download-biblegateway.py`; their publishers' terms generally allow personal use and limited quotation, not redistribution of the full text. | `rhema.db` inside the installer (the Windows artifact built on 2026-10-20 contains them) | **Owner decision (2026-10-21, issue #33): ship them as upstream does.** The owner states that the original app came with distribution rights and that the use falls under fair use. Engineering note kept for the record: this repository holds no written permission from the publishers, upstream obtains the texts with `data/download-biblegateway.py`, and fair use is a US doctrine that rarely covers distributing a complete translation. If a publisher objects, the remedy is a build without that translation; no code depends on any one of them. |
 | SpaRV, FreJND, PorBLivre (upstream's extra translations) | Public domain / open (per upstream) | may be in `rhema.db` depending on the build | Verify each source's statement before a release that includes them. |
-| openbible.info cross-references | CC BY 4.0 (openbible.info) | `rhema.db` | Attribution in More → About (PR about-notices) and the README. |
+| openbible.info cross-references | CC BY 4.0 (openbible.info) | `rhema.db` | Attribution in Settings → Help (About) and the README. |
 | Song texts | None bundled | — | The song library is church content; each song carries `copyright`, `ccli_number`, `licence` and `licence_note`, and Home flags songs with no licence recorded. The app never claims a licence it does not know. |
 | Quick screens, custom slides, pictures | Church content | — | Pictures are imported by the church; the app records the original path and content hash only. |
 | Whisper speech model | MIT (whisper.cpp / OpenAI Whisper weights, MIT) | not bundled in the installer; downloaded on demand | Fine. |
@@ -30,7 +30,7 @@
 
 | Component | Terms | Notes |
 |---|---|---|
-| NDI 6 SDK runtime (`Processing.NDI.Lib.x64.dll`, 29.8 MB in the Windows installer) | NewTek/Vizrt NDI SDK licence (proprietary; redistribution of the runtime library is permitted under the SDK licence with the required notice) | `data/download-ndi-sdk.ts` fetches it; loaded at runtime via `libloading`. NDI® trademark notice and SDK licence reference in More → About (PR about-notices); the installer's licence screen lists it (data/INSTALLER-LICENSE.txt). |
+| NDI 6 SDK runtime (`Processing.NDI.Lib.x64.dll`, 29.8 MB in the Windows installer) | NewTek/Vizrt NDI SDK licence (proprietary; redistribution of the runtime library is permitted under the SDK licence with the required notice) | `data/download-ndi-sdk.ts` fetches it; loaded at runtime via `libloading`. NDI® trademark notice and SDK licence reference in Settings → Help (About) (PR about-notices); the installer's licence screen lists it (data/INSTALLER-LICENSE.txt). |
 
 ### 3.2 Rust crates (direct dependencies, from `cargo metadata`)
 

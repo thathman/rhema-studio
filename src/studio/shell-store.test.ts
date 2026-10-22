@@ -21,6 +21,14 @@ describe("shell prefs", () => {
     expect(readShellPrefs(s)).toEqual({ workspace: "present", presentView: "production" })
   })
 
+  it("reopens on Production; More (no way in since #218) reopens on Home", () => {
+    const s = fakeStorage()
+    writeShellPrefs(s, { workspace: "production", presentView: "standard" })
+    expect(readShellPrefs(s).workspace).toBe("production")
+    writeShellPrefs(s, { workspace: "more", presentView: "standard" })
+    expect(readShellPrefs(s).workspace).toBe("home")
+  })
+
   it("falls back per field on bad values", () => {
     const s = fakeStorage({
       [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "nope", presentView: "production" }),

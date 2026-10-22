@@ -1,3 +1,4 @@
+import { AboutNotices } from "@/components/about-notices"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
@@ -1065,6 +1066,8 @@ function HelpSection() {
           </div>
         </div>
       </div>
+
+      <AboutNotices />
     </div>
   )
 }
