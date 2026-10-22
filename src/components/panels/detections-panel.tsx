@@ -11,9 +11,9 @@ import { presentVerse } from "@/hooks/use-broadcast"
 import { mark } from "@/lib/latency-marks"
 import type { DetectionResult } from "@/types"
 
-const SOURCE_COLORS: Record<string, { text: string; label: string }> = {
-  direct: { text: "text-green-600", label: "Direct" },
-  semantic: { text: "text-indigo-300", label: "Semantic" },
+const SOURCE_COLORS: Record<string, { text: string; label: string; hint: string; empty: string }> = {
+  direct: { text: "text-ai-direct", label: "References", hint: "Verses named aloud, e.g. \"John 3:16\"", empty: "No references heard yet." },
+  semantic: { text: "text-ai-semantic", label: "Quotations", hint: "Verse words quoted or paraphrased", empty: "No quotations heard yet." },
 }
 
 function DetectionCard({ detection }: { detection: DetectionResult }) {
@@ -72,7 +72,7 @@ function DetectionCard({ detection }: { detection: DetectionResult }) {
       <div className="mt-2 flex gap-2">
         <Button size="sm" className="gap-1" onClick={handlePresent}>
           <PlayIcon className="size-3" />
-          Present
+          Show live
         </Button>
         <Button
           variant="outline"
@@ -116,24 +116,14 @@ function DetectionColumn({
   const style = SOURCE_COLORS[source]
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-border bg-card px-3 py-1.5">
-        <span
-          className={cn(
-            "text-[0.5625rem] font-medium uppercase tracking-wider",
-            style.text
-          )}
-        >
-          {style.label}
-        </span>
-        <span className="text-[0.5625rem] text-muted-foreground">
-          {detections.length}
-        </span>
+      <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-border bg-card px-3 py-1.5" title={style.hint}>
+        <span aria-hidden className={cn("size-1.5 rounded-full bg-current", style.text)} />
+        <span className="text-xs font-medium text-foreground">{style.label}</span>
+        <span className="text-xs text-muted-foreground">{detections.length}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {detections.length === 0 ? (
-          <p className="p-4 text-center text-xs text-muted-foreground">
-            No {style.label.toLowerCase()} detections yet
-          </p>
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">{style.empty}</p>
         ) : (
           detections.map((detection, i) => (
             <DetectionCard key={`${detection.verse_ref}-${i}`} detection={detection} />
@@ -173,20 +163,23 @@ export function DetectionsPanel() {
   return (
     <div
       data-slot="detections-panel"
-      className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card"
+      className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
-      <PanelHeader title="Recent detections">
-        <button
+      <PanelHeader title="Detections">
+        <Button
+          variant="ghost"
+          size="xs"
+          className="text-muted-foreground"
+          disabled={detections.length === 0}
           onClick={() => detectionActions.clearDetections()}
-          className="text-[0.625rem] text-muted-foreground transition-colors hover:text-foreground"
         >
-          Clear all
-        </button>
+          Clear
+        </Button>
       </PanelHeader>
 
       {detections.length === 0 ? (
-        <p className="p-4 text-center text-xs text-muted-foreground">
-          Verse detections will appear here during transcription
+        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+          Verses heard while listening appear here.
         </p>
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-2 divide-x divide-border">

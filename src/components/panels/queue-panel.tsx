@@ -54,15 +54,16 @@ function QueueItemRow({
 
   const sourceBadge =
     item.source === "manual" ? (
-      <Badge variant="outline" className="shrink-0 text-[0.5rem]">
-        Manual
+      <Badge variant="outline" className="shrink-0 text-[0.625rem] text-muted-foreground" title="Added by hand">
+        Added
       </Badge>
     ) : (
       <Badge
         variant="default"
-        className="shrink-0 bg-ai-direct/15 text-[0.5rem] text-ai-direct hover:bg-ai-direct/15"
+        className="shrink-0 bg-ai-direct/15 text-[0.625rem] text-ai-direct hover:bg-ai-direct/15"
+        title="Heard while listening"
       >
-        AI
+        Heard
       </Badge>
     )
 
@@ -84,10 +85,10 @@ function QueueItemRow({
         "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         "group flex h-10 cursor-pointer items-center gap-2 rounded-md px-2.5 transition-colors",
         isHighlighted
-          ? "animate-pulse border border-amber-500/40 bg-amber-500/15"
+          ? "animate-pulse border border-confidence-mid/40 bg-confidence-mid/15"
           : isActive
             ? "border border-primary/30 bg-primary/10"
-            : "hover:bg-muted/50"
+            : "border border-transparent hover:bg-muted/50"
       )}
     >
       <GripVerticalIcon
@@ -131,22 +132,23 @@ export function QueuePanel() {
       className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
       <PanelHeader title="Queue">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">{items.length}</Badge>
-          <button
-            onClick={() => useQueueStore.getState().clearQueue()}
-            className="text-[0.625rem] text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Clear all
-          </button>
-        </div>
+        <span className="text-xs text-muted-foreground">{items.length}</span>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="ml-1 text-muted-foreground"
+          disabled={items.length === 0}
+          onClick={() => useQueueStore.getState().clearQueue()}
+        >
+          Clear
+        </Button>
       </PanelHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-0.5 p-1.5">
           {items.length === 0 && (
-            <p className="p-4 text-center text-xs text-muted-foreground">
-              Verses will appear here when detected or queued
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              Nothing queued. Add verses from Bible or Detections.
             </p>
           )}
           {items.map((item, idx) => (

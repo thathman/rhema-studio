@@ -36,54 +36,52 @@ export function LiveOutputPanel() {
     <div
       data-slot="live-output-panel"
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card",
-        isLive && "shadow-[inset_0_2px_0_0_rgba(16,185,129,0.3)]"
+        "flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card transition-colors",
+        isLive ? "border-live-pulse/60" : "border-border"
       )}
     >
-      <PanelHeader title="Live display">
+      <PanelHeader title="Live">
         <label
           className="flex items-center gap-2"
           title="Auto: while on air, a verse heard while listening replaces what is on screen without Show live. Off (the default): heard verses wait in the preview."
         >
-          <span
-            className={cn(
-              "text-[0.625rem] font-medium tracking-wider uppercase transition-colors",
-              autoLive ? "text-foreground" : "text-muted-foreground"
-            )}
-          >
+          <span className={cn("text-xs font-medium transition-colors", autoLive ? "text-foreground" : "text-muted-foreground")}>
             Auto
           </span>
           <Switch
+            aria-label="Auto: heard verses go live by themselves"
             checked={autoLive}
             onCheckedChange={(checked) =>
               useBroadcastStore.getState().setAutoLive(checked)
             }
           />
         </label>
-        <label className="ml-2 flex items-center gap-2">
-          <span
-            className={cn(
-              "text-[0.625rem] font-medium tracking-wider uppercase transition-colors",
-              isLive ? "text-emerald-400" : "text-muted-foreground"
-            )}
-          >
-            {isLive ? "Live" : "Go live"}
+        <span aria-hidden className="mx-2 h-4 w-px bg-border" />
+        <label
+          className="flex items-center gap-2"
+          title={isLive ? "On air: the screens show Live. Switch off to take it off the screens." : "Off air: the screens show nothing. Switch on to show Live (the preview, if nothing was presented yet)."}
+        >
+          <span className={cn("text-xs font-medium transition-colors", isLive ? "text-destructive" : "text-muted-foreground")}>
+            {isLive ? "On air" : "Go live"}
           </span>
           <Switch
+            aria-label="Go live: show this on the screens"
             checked={isLive}
             onCheckedChange={handleGoLive}
-            className="data-[state=checked]:bg-emerald-500"
+            className="data-[state=checked]:bg-live-pulse"
           />
         </label>
       </PanelHeader>
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 items-center justify-center p-3 transition-opacity",
+          "flex min-h-0 flex-1 items-center justify-center p-3 transition-opacity [container-type:size]",
           !isLive && "opacity-40"
         )}
       >
-        <CanvasVerse theme={activeTheme} verse={verseData} />
+        <div style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
+          <CanvasVerse theme={activeTheme} verse={verseData} />
+        </div>
       </div>
     </div>
   )
