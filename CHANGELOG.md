@@ -4,7 +4,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
-- The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (PT-006, #196).
+- The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### The owner's redesign (in progress, 2026-10-22)
 - Design → Themes → Look opens with Visual direction: four one-click palettes from the approved design (Midnight & gold, Forest & linen, Warm editorial, Modern cobalt) that set the background, the words in both languages and the reference accent together; the chosen one shows as pressed (#249, DS-004).
