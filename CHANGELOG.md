@@ -14,6 +14,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Present's running order shows the phases and groups; the item editor's Stage tab shows an item as the stage screen will (#210).
 - Ticker: saved sets of announcements, a preview before taking it live, and a still "one at a time" mode for people who find motion hard (#211, issue #187).
 - Tests have a 20 s default timeout (cold module imports could pass 5 s on a loaded machine) (#210).
+- The Team page: your name, approvals, comments and the ways to work together (church folder, phone remote; hosting on the network planned) (#214).
 - Library and Archive are pages: songs, the hymn book, pictures and videos, song files; services, the service log, songs sung, sharing and backups (#212).
 - Design studio: every design edit on one page, with tabs for Themes (each kind of content previewed and assigned), Lower thirds, News ticker, Brand kit and Output looks (every output's theme per kind in one table); leaving with an unsaved theme asks first (#201).
 

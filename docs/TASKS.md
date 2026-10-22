@@ -55,7 +55,7 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 | UX-08 Library page (songs, hymns, scripture, slides, pictures and videos) | P1 | MERGED (#212) | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
 | UX-09 Archive page (past services, logs, song usage, reuse, recap) | P1 | MERGED (#212; a monthly recap later) | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
 | UX-10 Design page: the Theme Designer as a workspace; then kinds of content, Output looks, Brand kit, Lower thirds, Ticker, Stage (DS-004) | P1 | IN PROGRESS (#201: the page with Themes, Lower thirds, Ticker, Brand kit, Output looks; next: restyle the canvas, a Stage tab) | UX-02,DS-001–DS-003 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
-| UX-11 Team page from what exists (church folder, comments, pairing); co-editing marked planned | P1 | BACKLOG | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
+| UX-11 Team page from what exists (church folder, comments, pairing); co-editing marked planned | P1 | MERGED (#214; network co-editing waits for CL-005 #162) | UX-02 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
 | UX-12 Responsive sidebar, dark planning polish, new first-run tour, More removed | P1 | BACKLOG | UX-01–UX-11 | Screens match the concept on the Intel Mac; tests and acceptance rows updated |
 | UX-13 Prepare as a run-of-show builder: phases (pre-service loop, warm-up, main service, post-service loop), groups, timing rollups and cues (issue #193) | P1 | IN PROGRESS (#203 model, #204 layout, #205 phases and groups, #206 add to a section, #207 timing; next: item editor confidence and cues, actual times (migration 0013), Present integration, armed loops) | UX-07 | Owner issue #193; original UI, no copied look |
 | PT-006 Production timing: rundown timing engine, stage clocks, delay handling, multi-operator timers (issue #196) | P1 | DESIGN | UX-13 | Owner issue #196 (live-clock parts P0) |
@@ -63,6 +63,7 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 | OP-007 Network display receivers: browser receiver first, Google TV / Android TV app later (issue #198) | P3 | DESIGN | CL-008 | Owner issue #198 |
 | OP-008 Independent congregation video program: clean camera feeds plus Rhema overlays to TV receivers, separate from the stream (issue #208) | P3 | DESIGN | OP-007, CL-008 | Owner issue #208 |
 | OP-009 Phone camera contribution: one mobile publisher fanned out to OBS and the congregation program (issue #209) | P3 | DESIGN | OP-008 | Owner issue #209 |
+| OP-010 Show readiness and signal confidence: what each audience really sees, A/V alignment, live recovery for cameras and TVs (issue #213) | P2 | DESIGN | CL-008, OP-007, OP-008 | Owner issue #213 |
 
 ## Milestone 2B — Songs and Hymnbooks
 

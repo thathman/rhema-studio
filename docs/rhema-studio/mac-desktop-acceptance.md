@@ -313,6 +313,14 @@ The owner's rig: the K3 monitor as the congregation screen, an NDI viewer as the
 
 ## Artifacts
 
+Newest build (2026-10-22, late afternoon), from `main` at `604be9a` (everything through #212: the redesign's Design page, Find anything, the run-of-show Prepare with phases, groups and timing, phases in Present, ticker sets and still mode, the Library and Archive pages), no QA bridge:
+
+| File | Size | SHA-256 |
+|---|---|---|
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22d/Rhema-0.3.2-intel-x86_64.dmg` | 841 MB | `c9297be7d95244cd8a5be21472ef8b37d05ebecf3c9c0ee28a9b3b394a1987a5` |
+| `~/Desktop/Rhema-Intel-QA/latest-2026-10-22d/Rhema.app` (executable) | 1.0 GB | `048e74e7c63a7141d7928b0f4676572fb1797cd418c492efbcfc1922cde58685` |
+
+
 Newest build (2026-10-22 afternoon), from `main` at `cab2893` (everything through #200: per-kind themes, the lower third designer, the stage over NDI and windowed outputs, the news ticker with 30 fps NDI, and the redesign's tokens, sidebar, live console and Home), no QA bridge, in its own folder:
 
 | File | Size | SHA-256 |
