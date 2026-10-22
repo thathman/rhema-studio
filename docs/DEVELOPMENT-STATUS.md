@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-22 05:40 WAT; every PR through #179 merged)
+- Head: see `git log fork/main` (2026-10-22 06:00 WAT; every PR through #180 merged)
 - Contents: see CHANGELOG.md. `studio.db` is at migration 0011 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
