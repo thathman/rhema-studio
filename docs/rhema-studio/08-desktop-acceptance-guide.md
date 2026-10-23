@@ -974,6 +974,14 @@ report), but launching it cannot.
 | 10cu.10 | Two joined computers with headsets and the main desk: each joins the talk channel; two hold Talk together, then all three. | Everyone hears the others while talking, nobody is cut off, no one hears their own voice back; the green marks follow who is speaking; nothing reaches the projector, PA, OBS or NDI. | Partly verified on the Intel Mac (2026-10-23): three test desks with tones over the real listener in one QA window (see ADR 0002 §5: full duplex, no self-echo, marks, leaving, 201–204 ms); real microphones, headsets, echo and two computers not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10da. Recovery after an unexpected close (#246)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10da.1 | A verse on air on the projector; force quit Rhema (Activity Monitor). Start it again. | A banner: closed unexpectedly at …, Romans 8:28, 1 output on; nothing on the screens yet. | Verified on the Intel Mac (2026-10-23, QA build, `kill -9`): banner text as expected, nothing live before choosing |
+| 10da.2 | Put back on the screens. | The verse is on air again on the projector (in its scene if it had one); the log says RECOVERED. | Verified (same run, display awake): program back, projector on showing its scene, log RECOVERED; with the display asleep the projector could not open (macOS reported no monitors) and Rhema said so |
+| 10da.3 | Quit normally (Cmd+Q or the close button), start again. | No banner. | Verified (same build, the close path) |
+
 ### 10cz. Scene transitions (ARCH-002)
 
 | # | Step | Expected | Result |

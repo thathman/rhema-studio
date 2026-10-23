@@ -30,6 +30,8 @@ import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
 import { startLiveStatePublisher } from "@/lib/live-state"
 import { startBrowserFeeds } from "@/lib/browser-feeds"
+import { startLiveRecovery } from "@/lib/live-recovery"
+import { RecoveryBanner } from "@/studio/shell/recovery-banner"
 import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
 // Items' go-live messages and cues run from the operator's window only.
@@ -83,6 +85,13 @@ export function AppShell() {
   useEffect(() => startLiveStatePublisher(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
   useEffect(() => startBrowserFeeds(), [])
+  // What was on the screens, for recovery after an unexpected close.
+  useEffect(() => {
+    let off: (() => void) | undefined
+    let gone = false
+    void startLiveRecovery().then((f) => { if (gone) f(); else off = f })
+    return () => { gone = true; off?.() }
+  }, [])
   // The talk channel's hub (Rhema Comms voice): answers desks that join it.
   useEffect(() => startVoiceHub(), [])
   // openSettings(section) from anywhere: the Settings page, at that section.
@@ -157,6 +166,7 @@ export function AppShell() {
       {/* The live console is always dark (its own deeper palette), top bar included. */}
       <div className={cn("flex min-h-0 min-w-0 flex-col bg-background text-foreground", workspace === "present" && "dark present-surface")}>
         <TopBar title={TITLES[workspace]} />
+        <RecoveryBanner />
         <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
           {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
           <ErrorBoundary key={workspace} name={`the ${TITLES[workspace]} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>
