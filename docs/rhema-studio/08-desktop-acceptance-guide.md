@@ -980,8 +980,8 @@ report), but launching it cannot.
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10de.1 | A service with a main phase start time. Production → Timekeeper → +5 min twice; look at Prepare → Run of show, the stage finish line and the service log. | "running 10 min late" everywhere; expected times 10 min later, the plan unchanged; two log lines with who. | OFFSET_RESULT |
-| 10de.2 | A joined Timekeeper desk: −5 min. | The host's offset moves to +5; the log names the desk. | OFFSET_REMOTE_RESULT |
+| 10de.1 | A service with a main phase start time. Production → Timekeeper → +5 min twice; look at Prepare → Run of show, the stage finish line and the service log. | "running 10 min late" everywhere; expected times 10 min later, the plan unchanged; two log lines with who. | Pass 2026-10-23 (combined QA build): +5 twice → "running 10 min late (Tolu)"; stage finish 10:52, 10 min late; two log lines naming Tolu. |
+| 10de.2 | A joined Timekeeper desk: −5 min. | The host's offset moves to +5; the log names the desk. | Pass 2026-10-23 (combined QA build): Desk C (Present role) −5 → +5 by Desk C; log "Desk C: running 5 min late (−5 min)". |
 
 ### 10dc. Cameras in scenes (OP-009, #209)
 
