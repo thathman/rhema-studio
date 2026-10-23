@@ -1,8 +1,16 @@
 import { create } from "zustand"
 
 export type Workspace = "home" | "prepare" | "present" | "production" | "library" | "design" | "team" | "archive" | "settings" | "more"
-/** The Design page's sections: every design edit lives there. */
-export type DesignTab = "themes" | "lower-thirds" | "ticker" | "stage" | "brand" | "outputs"
+/**
+ * The Design page's sections: every design edit lives there. "outputs" was the old Output looks
+ * table (#299 UX15-4 retired it); it is kept so old links still work and opens "used-on".
+ */
+export type DesignTab = "themes" | "lower-thirds" | "ticker" | "stage" | "brand" | "used-on" | "outputs"
+
+/** The section a Design link really opens: the old Output looks table is now Used on… */
+export function designTabOf(tab: DesignTab): DesignTab {
+  return tab === "outputs" ? "used-on" : tab
+}
 export type PresentView = "standard" | "production"
 
 export interface ShellPrefs {
@@ -76,6 +84,9 @@ interface ShellState extends ShellPrefs {
   setWorkspace: (workspace: Workspace) => void
   setPresentView: (view: PresentView) => void
   openOutputs: () => void
+  /** Open the outputs with this output's editor on top (Design → Used on… → Open output). A new object each time. */
+  editOutputRequest: { id: string } | null
+  editOutput: (id: string) => void
   setOutputsDialogOpen: (open: boolean) => void
   /** The first-install setup (#298), also opened from the Desk menu (#299): global like the outputs dialog. */
   setupOpen: boolean
@@ -90,9 +101,9 @@ export const useShellStore = create<ShellState>((set) => ({
   ...readShellPrefs(storage),
   outputsDialogOpen: false,
   designTab: "themes",
-  setDesignTab: (designTab) => set({ designTab }),
+  setDesignTab: (tab) => set({ designTab: designTabOf(tab) }),
   designRequest: null,
-  openDesign: (tab) => set({ designRequest: tab }),
+  openDesign: (tab) => set({ designRequest: designTabOf(tab) }),
   goRequest: null,
   goTo: (goRequest) => set({ goRequest }),
   newServiceOpen: false,
@@ -104,6 +115,8 @@ export const useShellStore = create<ShellState>((set) => ({
   setWorkspace: (workspace) => set({ workspace }),
   setPresentView: (presentView) => set({ presentView }),
   openOutputs: () => set({ outputsDialogOpen: true }),
+  editOutputRequest: null,
+  editOutput: (id) => set({ outputsDialogOpen: true, editOutputRequest: { id } }),
   setOutputsDialogOpen: (outputsDialogOpen) => set({ outputsDialogOpen }),
   setupOpen: false,
   setSetupOpen: (setupOpen) => set({ setupOpen }),

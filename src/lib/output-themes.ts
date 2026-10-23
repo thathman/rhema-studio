@@ -18,3 +18,21 @@ export function withThemeFor(output: Pick<BroadcastOutput, "themeFor">, content:
   else delete next[content]
   return next
 }
+
+/** One output that shows a look: as its main look, and/or for some kinds of content only. */
+export interface ThemeUse {
+  output: BroadcastOutput
+  main: boolean
+  kinds: ContentType[]
+}
+
+/**
+ * Where a look is used (Design → Used on…): each output showing it, as its main look or for some
+ * kinds of content. Stage outputs are left out: the stage display has no look.
+ */
+export function themeUses(outputs: BroadcastOutput[], themeId: string): ThemeUse[] {
+  return outputs
+    .filter((o) => o.role !== "stage")
+    .map((o) => ({ output: o, main: o.themeId === themeId, kinds: (Object.keys(o.themeFor ?? {}) as ContentType[]).filter((k) => o.themeFor?.[k] === themeId) }))
+    .filter((u) => u.main || u.kinds.length > 0)
+}

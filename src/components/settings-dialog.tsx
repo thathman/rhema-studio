@@ -1151,7 +1151,7 @@ function ScreensSection() {
       <p className="text-muted-foreground">Projectors, stage screens, signage windows and NDI streams are outputs. Each one shows the congregation, stage or signage view, in its own languages and look.</p>
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => useShellStore.getState().openOutputs()}><MonitorIcon /> Open outputs</Button>
-        <Button variant="outline" onClick={() => useShellStore.getState().openDesign("outputs")}><PaletteIcon /> Which look each shows (Design)</Button>
+        <Button variant="outline" onClick={() => useShellStore.getState().openDesign("used-on")}><PaletteIcon /> Where each look is used (Design)</Button>
       </div>
     </div>
   )

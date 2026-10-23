@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Output cards instead of the Output looks table (#299)
+- Design → Output looks (the wide table of every output against every kind of content) is gone. Design → **Used on…** lists, for each look, the outputs that use it, with **Open output** to change it there.
+- Production → Screens shows each output as a card: where it goes (monitor, NDI name, browser feed), what it follows, how it presents it (full screen, a scene, lower thirds, ticker, keyed), its look with a small preview, and its signal; **Edit output** opens its settings.
+- In an output's settings, a different look for some kinds of content is under **Advanced: content-specific looks**; looks already set there are kept.
+- Editing an existing output now keeps a changed "What this output follows" and a **New link** for a browser feed (they were dropped on save before).
 ### A compact transport bar in Present (#299)
 - Present's Previous / Next, the verse steps, Take live, Clear and Restore sit in one slim bar instead of a large boxed strip; every button and keyboard shortcut does exactly what it did before.
 - **Show live is now called Take live.** Beside it, the bar says what is in Preview and where it goes (the main screens and how many outputs are on, the Live panel only when no screen is on, or this console only in rehearsal).

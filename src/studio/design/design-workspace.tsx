@@ -1,8 +1,7 @@
 import { useEffect } from "react"
-import { SaveIcon, TrashIcon } from "lucide-react"
+import { ExternalLinkIcon, SaveIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBroadcastStore } from "@/stores"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { ThemeLibrary } from "@/components/broadcast/theme-library"
@@ -12,9 +11,8 @@ import { LowerThirdDesigner } from "@/studio/design/lower-third-designer"
 import { TickerDesigner } from "@/studio/design/ticker-designer"
 import { StageDesigner } from "@/studio/design/stage-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
-import { CONTENT_TYPES } from "@/types/broadcast"
 import { CONTENT_NAMES } from "@/lib/content-names"
-import { themeIdsOf, withThemeFor } from "@/lib/output-themes"
+import { themeIdsOf, themeUses } from "@/lib/output-themes"
 import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
@@ -23,13 +21,13 @@ const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["ticker", "News ticker", "The crawl along the screen"],
   ["stage", "Stage", "What the team on the platform sees"],
   ["brand", "Brand kit", "Logo, colours and fonts once"],
-  ["outputs", "Output looks", "Which theme each screen uses"],
+  ["used-on", "Used on…", "Which outputs show each look"],
 ]
 
 /**
  * Design studio: every design edit in one place — themes for each kind of
- * content, lower thirds, the news ticker, the church brand and which look
- * each output uses.
+ * content, lower thirds, the news ticker and the church brand, and where each
+ * look is used (choosing it per output is in the output's editor).
  */
 export function DesignWorkspace() {
   const tab = useShellStore((s) => s.designTab)
@@ -99,7 +97,7 @@ export function DesignWorkspace() {
             {tab === "ticker" && <TickerDesigner />}
             {tab === "stage" && <StageDesigner />}
             {tab === "brand" && <BrandDesigner />}
-            {tab === "outputs" && <OutputLooks />}
+            {(tab === "used-on" || tab === "outputs") && <UsedOn />}
           </div>
         )}
       </div>
@@ -107,49 +105,40 @@ export function DesignWorkspace() {
   )
 }
 
-/** Each output's main theme and, if wanted, a theme of its own for each kind of content. */
-function OutputLooks() {
+/**
+ * Where each look is used (#299 UX15-4): the outputs showing it, as their main look or for some
+ * kinds of content. Choosing an output's looks happens in its own editor (Open output), so Design
+ * keeps the looks and Production keeps where they go.
+ */
+export function UsedOn() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const themes = useBroadcastStore((s) => s.themes)
-  const shown = outputs.filter((o) => o.role !== "stage")
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">Each screen shows everything in its main theme unless a kind of content has its own here (hymns in gold, the Bible in blue…). The stage display has no theme.</p>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[56rem] border-separate border-spacing-y-1 text-sm">
-          <thead>
-            <tr className="text-left text-xs text-muted-foreground">
-              <th className="px-2 py-1 font-semibold">Output</th>
-              <th className="px-2 py-1 font-semibold">Main theme</th>
-              {CONTENT_TYPES.map((c) => <th key={c} className="px-2 py-1 font-semibold">{CONTENT_NAMES[c]}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((o) => (
-              <tr key={o.id} className="bg-surface-sunken/60">
-                <td className="rounded-l-lg px-2 py-2 font-medium">{o.name}<span className="block text-xs font-normal text-muted-foreground">{o.role === "signage" ? "Signage" : o.type === "ndi" ? "NDI" : "Screen"}</span></td>
-                <td className="px-2 py-2">
-                  <Select value={o.themeId} onValueChange={(v) => useBroadcastStore.getState().setOutputTheme(o.id, v)}>
-                    <SelectTrigger aria-label={`Main theme for ${o.name}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>{themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </td>
-                {CONTENT_TYPES.map((c, i) => (
-                  <td key={c} className={cn("px-2 py-2", i === CONTENT_TYPES.length - 1 && "rounded-r-lg")}>
-                    <Select value={o.themeFor?.[c] || "__same"} onValueChange={(v) => useBroadcastStore.getState().updateOutput(o.id, { themeFor: withThemeFor(o, c, v === "__same" ? null : v) })}>
-                      <SelectTrigger aria-label={`${CONTENT_NAMES[c]} on ${o.name}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__same">Main theme</SelectItem>
-                        {themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="flex max-w-3xl flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Which outputs show each look. To change an output's look, open the output: its main look is there, and a different look for some kinds of content is under <span className="font-semibold text-foreground">Advanced: content-specific looks</span>.</p>
+      <ul className="flex flex-col divide-y divide-border rounded-lg border border-border" aria-label="Looks and the outputs that use them">
+        {themes.map((t) => {
+          const uses = themeUses(outputs, t.id)
+          return (
+            <li key={t.id} aria-label={t.name} className="flex flex-wrap items-start gap-x-4 gap-y-1.5 px-3 py-2.5 text-sm">
+              <span className="w-48 shrink-0 font-semibold">{t.name}</span>
+              {uses.length === 0 ? (
+                <span className="text-xs text-muted-foreground">Not on any output</span>
+              ) : (
+                <ul className="flex min-w-0 flex-1 flex-col gap-1">
+                  {uses.map(({ output: o, main, kinds }) => (
+                    <li key={o.id} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium">{o.name}</span>
+                      <span className="text-muted-foreground">{[main && "main look", kinds.length > 0 && `${kinds.map((k) => CONTENT_NAMES[k]).join(", ")} only`].filter(Boolean).join(" · ")}</span>
+                      <Button size="xs" variant="ghost" className="ml-auto" onClick={() => useShellStore.getState().editOutput(o.id)} aria-label={`Open output ${o.name}`}><ExternalLinkIcon /> Open output</Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }

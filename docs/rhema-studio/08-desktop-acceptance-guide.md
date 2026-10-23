@@ -981,6 +981,17 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dl. Output cards instead of the Output looks table (#299 UX15-4)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dl.1 | With an existing profile that had per-content looks set in the old Design → Output looks (e.g. Hymns in another look on the projector), open Design. | No Output looks table; a **Used on…** tab lists each look with the outputs that use it ("main look", "Hymns only"); a look on no output says "Not on any output". | Unverified |
+| 10dl.2 | Design → Used on… → **Open output** on an NDI output. | The outputs dialog opens with that output's settings on top; Design stays as it was (an unsaved theme draft is not touched). | Unverified |
+| 10dl.3 | In that output's settings: open **Advanced: content-specific looks**. | The summary says how many are set; each kind shows the look set before; nothing was lost. Change Hymns, Save; reopen. | Unverified |
+| 10dl.4 | With that NDI output on air and taken into a scene, change only its look and Save. | The OBS source name is unchanged (OBS keeps the source); the output stays in its scene; nothing new goes live; only the look changes. | Unverified |
+| 10dl.5 | Production → Screens. | Each output is a card: kind and role, Goes to (monitor / “NDI name” · 1080p… / network), Follows, Presentation, Language, Look with a small preview, Now, Signal when measurable; **Edit output** opens its settings. | Unverified |
+| 10dl.6 | Edit a Bible-only feed: change "What this output follows" to Bible and Hymns, Save, reopen. Edit a browser feed: New link, Save, reopen. | Both changes are kept (before this they were lost on save); the old browser link stops working. | Unverified |
+| 10dl.7 | Settings → Screens and NDI → "Where each look is used (Design)"; Cmd/Ctrl+K "Used on". | Both open Design → Used on…. | Unverified |
 ### 10dm. One place to prepare a service (#299 UX15-5)
 
 | # | Step | Expected | Result |
