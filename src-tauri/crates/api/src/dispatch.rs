@@ -51,6 +51,12 @@ impl CommandDispatcher {
                 let payload = serde_json::json!({ "id": id }).to_string();
                 sink.emit_event("remote:macro", &payload)
             }
+            RemoteCommand::EventNext => sink.emit_event("remote:event_next", "{}"),
+            RemoteCommand::EventPrev => sink.emit_event("remote:event_prev", "{}"),
+            RemoteCommand::EventStart(id) => {
+                let payload = serde_json::json!({ "id": id }).to_string();
+                sink.emit_event("remote:event_start", &payload)
+            }
             RemoteCommand::Show => sink.invoke_backend("show_broadcast", "{}"),
             RemoteCommand::Hide => sink.invoke_backend("hide_broadcast", "{}"),
             RemoteCommand::Confidence(val) => {
@@ -201,6 +207,19 @@ mod tests {
         let (name, payload) = sink.last_event();
         assert_eq!(name, "remote:macro");
         assert!(payload.contains("offering"));
+    }
+
+    #[test]
+    fn dispatch_event_clock_emits_events() {
+        let sink = MockSink::new();
+        CommandDispatcher::dispatch(&RemoteCommand::EventNext, &sink).unwrap();
+        assert_eq!(sink.last_event().0, "remote:event_next");
+        CommandDispatcher::dispatch(&RemoteCommand::EventPrev, &sink).unwrap();
+        assert_eq!(sink.last_event().0, "remote:event_prev");
+        CommandDispatcher::dispatch(&RemoteCommand::EventStart("sermon".into()), &sink).unwrap();
+        let (name, payload) = sink.last_event();
+        assert_eq!(name, "remote:event_start");
+        assert!(payload.contains("sermon"));
     }
 
     #[test]

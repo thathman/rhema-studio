@@ -6,6 +6,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Host and join (ARCH-004, #162)
+- Production → Operators: this computer can **host** the service (every control stays here, with or without anyone joined) or **join** another Rhema on the church network with its pairing code. A joined computer follows the host's screens, live sources, run of show, event clock and timing as they change, and does what its role allows.
+- New role **Timekeeper** (Settings → Remote control → a paired device): it may only move the event clock (Start the next event, Back one, start a chosen event), never a screen. The same commands work from OSC (`/rhema/event_next`, `/rhema/event_prev`, `/rhema/event_start <item id>`) and the HTTP API.
+- The host's Live State goes only to paired devices (with keys off, only to this computer); the joined computer's token is kept in the keychain. Losing the connection reconnects by itself and never affects the host.
+
 ### The event clock (ARCH-003, #246 C03)
 - Which event is happening is now its own record, apart from what the screens show. Production → Timekeeper shows **Now** with **Start (next event)** and **Back one**, and a choice: **Follows the screens** (the default: an item's event starts when its content goes on air, as before) or **I start each event** (showing a verse, a song or a quick screen never moves the clock; the timekeeper does). Nothing here changes a screen.
 - Timing (planned, expected, actual, the stage display's finish line) and each item's message and cue follow the event clock. The service log records each event start ("EVENT …") separately from what was shown; rehearsal and quick screens never start an event; opening another service starts its clock afresh.

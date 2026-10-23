@@ -4278,8 +4278,10 @@ dependencies = [
  "crossbeam-channel",
  "dotenvy",
  "fontdb",
+ "futures-util",
  "keyring",
  "log",
+ "reqwest 0.12.28",
  "rhema-api",
  "rhema-audio",
  "rhema-bible",
@@ -4301,6 +4303,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-store",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -4308,6 +4311,7 @@ name = "rhema-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "log",
  "rosc",
  "serde",

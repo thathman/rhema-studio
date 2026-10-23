@@ -74,6 +74,10 @@ tauri-plugin-opener = "2"
 # RG-08: secrets in the OS credential store (Credential Manager, Keychain, Secret Service).
 keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 fontdb = "0.24.0"
+# Host/Join (ARCH-004): follow another Rhema on the LAN (plain HTTP, no TLS stack).
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4"] }
 
 [features]
 default = ["whisper"]

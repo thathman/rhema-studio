@@ -103,6 +103,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(commands::app_close::UnsavedWork::default())
         .manage(commands::store_check::DamagedStoreFiles::default())
+        .manage(commands::join::JoinRuntime::default())
         .on_window_event(commands::app_close::on_window_event)
         .manage(Mutex::new(state::AppState::new()))
         .manage(Mutex::new(rhema_detection::DetectionPipeline::new()))
@@ -166,6 +167,12 @@ pub fn run() {
             commands::remote::remote_lan_address,
             commands::remote::remote_pair_cancel,
             commands::remote::update_remote_status,
+            commands::remote::publish_live_state,
+            commands::join::join_pair,
+            commands::join::join_me,
+            commands::join::join_command,
+            commands::join::join_connect,
+            commands::join::join_disconnect,
             commands::content::content_list_programs,
             commands::content::content_create_program,
             commands::content::content_update_program,

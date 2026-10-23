@@ -5,6 +5,15 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-004 slice 1: host and join
+
+- **Main checked:** `00e3e8c` (#256, #257, #258, #259 merged after CI and review; #256's own Rust job was held up by the package mirror, its code passed in full on #257).
+- **Branch / PR:** `arch-004/host-join`.
+- **Behaviour:** API crate: `LiveHub` (`publish`, `current`, broadcast), `GET /api/v1/live`, `/api/v1/live/events` (SSE, current first, 15 s keep-alive), `/api/v1/me`; paired keys only (keys off: loopback only); commands `event_next`, `event_prev`, `event_start` (HTTP, OSC, dispatch, pinned names); role `timekeeper` (event clock only) with its own refusal message. App: `publish_live_state`; `commands/join.rs` (`join_pair`, `join_me`, `join_command` with idempotency ids, `join_connect` SSE follower with reconnect backoff and a refusal state, `join_disconnect`; host:port validation; bounded buffer). Frontend: `lib/live-state.ts` (Live State v1 builder and publisher, deduplicated, 15 s refresh), `stores/join-store.ts`, settings `joinAddress`/`joinName`/`joinToken` (keychain), Timekeeper role in Settings, Production → Operators (host card, join form, joined Timekeeper desk).
+- **Tests:** rhema-api 127 (role, OSC, SSE stream with auth, loopback-only open mode); app `join` 2; `src/studio/host-join.test.ts` (4); remote event names pinned; full vitest 710. Desktop check in the QA app: see the PR.
+- **Decisions:** Live State is a versioned JSON the server passes on unread; a joined computer drives no screens of its own; roles are permissions (Timekeeper first; Bible/worship and screens next).
+- **Next:** more delegated roles (Bible operator activating the Bible source, screen operator taking scenes) on the same command path; then MCP-001.
+
 ## 2026-10-23 — ARCH-003 slice 3: the event clock (C03)
 
 - **Branch / PR:** `arch-003/event-clock` (stacked on #257 → #256).

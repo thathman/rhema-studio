@@ -12,20 +12,25 @@ use sha2::{Digest, Sha256};
 use crate::command::{same_key, RemoteCommand};
 
 /// What a key may do. `Present` is the volunteer's set (move through the
-/// service, show/hide); `Configure` adds theme, opacity, confidence and the
-/// on-air switch. Existing entries without a role are `Configure`, as before.
+/// service, show/hide, the event clock); `Configure` adds theme, opacity,
+/// confidence and the on-air switch; `Timekeeper` may only move the event
+/// clock (Host/Join, ARCH-004), never a screen. Existing entries without a role
+/// are `Configure`, as before.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     Present,
     #[default]
     Configure,
+    Timekeeper,
 }
 
 impl Role {
     #[must_use]
     pub fn allows(self, cmd: &RemoteCommand) -> bool {
         match cmd {
+            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => true,
+            _ if self == Role::Timekeeper => false,
             RemoteCommand::Theme(_) | RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_) | RemoteCommand::OnAir(_) => self == Role::Configure,
             RemoteCommand::Next
             | RemoteCommand::Prev
@@ -203,6 +208,19 @@ mod tests {
         assert!(Role::Configure.allows(&RemoteCommand::OnAir(false)));
         let e: KeyEntry = serde_json::from_str(r#"{"hash":"h","name":"old"}"#).unwrap();
         assert_eq!(e.role, Role::Configure, "entries saved before roles keep full access");
+    }
+
+    #[test]
+    fn timekeeper_moves_only_the_event_clock() {
+        for cmd in [RemoteCommand::EventNext, RemoteCommand::EventPrev, RemoteCommand::EventStart("sermon".into())] {
+            assert!(Role::Timekeeper.allows(&cmd));
+            assert!(Role::Present.allows(&cmd));
+            assert!(Role::Configure.allows(&cmd));
+        }
+        for cmd in [RemoteCommand::Next, RemoteCommand::Show, RemoteCommand::SendToLive, RemoteCommand::VerseNext, RemoteCommand::Macro("offering".into()), RemoteCommand::OnAir(true), RemoteCommand::Theme("x".into())] {
+            assert!(!Role::Timekeeper.allows(&cmd), "{cmd}");
+        }
+        assert_eq!(serde_json::to_string(&Role::Timekeeper).unwrap(), "\"timekeeper\"");
     }
 
     #[test]

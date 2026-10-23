@@ -28,6 +28,7 @@ import { Sidebar } from "@/studio/shell/sidebar"
 import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
 import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
+import { startLiveStatePublisher } from "@/lib/live-state"
 import { GlobalSearch } from "@/studio/shell/global-search"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
@@ -76,6 +77,8 @@ export function AppShell() {
     useShellStore.setState({ designRequest: null, designTab: designRequest })
     void go("design")
   }, [designRequest, go])
+  // Host/Join: keep this computer's Live State current for the computers that join it.
+  useEffect(() => startLiveStatePublisher(), [])
   // openSettings(section) from anywhere: the Settings page, at that section.
   const settingsAsked = useSettingsDialogStore((s) => s.isOpen)
   useEffect(() => {
