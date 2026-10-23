@@ -1,3 +1,4 @@
+import { outputOnAir } from "@/lib/output-on-air"
 import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { PlusIcon } from "lucide-react"
@@ -161,7 +162,7 @@ export function BroadcastOutputsDialog({
     }
 
     const status = store.outputStatus[next.id]
-    const wasOnAir = (status?.previewOpen ?? false) || (status?.ndiActive ?? false)
+    const wasOnAir = outputOnAir(existing, status)
     const transportChanged =
       existing.type !== next.type ||
       existing.monitorIndex !== next.monitorIndex ||
@@ -206,7 +207,7 @@ export function BroadcastOutputsDialog({
 
   const onAirCount = outputs.filter((o) => {
     const status = outputStatus[o.id]
-    return o.type === "display" ? status?.previewOpen : status?.ndiActive
+    return outputOnAir(o, status)
   }).length
 
   return (

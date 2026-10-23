@@ -29,6 +29,7 @@ import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-i
 import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
 import { startLiveStatePublisher } from "@/lib/live-state"
+import { startBrowserFeeds } from "@/lib/browser-feeds"
 import { GlobalSearch } from "@/studio/shell/global-search"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
@@ -79,6 +80,8 @@ export function AppShell() {
   }, [designRequest, go])
   // Host/Join: keep this computer's Live State current for the computers that join it.
   useEffect(() => startLiveStatePublisher(), [])
+  // Browser feeds: the LAN listener knows each feed and its secret.
+  useEffect(() => startBrowserFeeds(), [])
   // openSettings(section) from anywhere: the Settings page, at that section.
   const settingsAsked = useSettingsDialogStore((s) => s.isOpen)
   useEffect(() => {

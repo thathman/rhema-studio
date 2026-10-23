@@ -1,3 +1,4 @@
+import { outputOnAir } from "@/lib/output-on-air"
 import { allSignageIds } from "@/lib/signage"
 import { useState } from "react"
 import {
@@ -42,6 +43,7 @@ function transportLabel(output: BroadcastOutput, monitorLabel: string | undefine
   if (output.type === "display") {
     return monitorLabel ?? `Display ${output.monitorIndex + 1}`
   }
+  if (output.type === "browser") return "Browser feed · on the church network"
   const dims = ndiResolutionDimensions(output.ndi.resolution)
   const alpha = output.ndi.alphaMode === "noneOpaque" ? "opaque" : "alpha"
   return `NDI · ${output.ndi.sourceName} · ${dims.height}p${ndiFrameRateToNumber(output.ndi.frameRate)} · ${alpha}`
@@ -68,7 +70,7 @@ export function OutputCard({
   const theme = themes.find((t) => t.id === output.themeId) ?? themes[0]
   const stage = output.role === "stage"
   const signage = output.role === "signage"
-  const onAir = output.type === "display" ? (status?.previewOpen ?? false) : (status?.ndiActive ?? false)
+  const onAir = outputOnAir(output, status)
   const isDefault = output.id === MAIN_OUTPUT_ID
 
   const commitRename = () => {

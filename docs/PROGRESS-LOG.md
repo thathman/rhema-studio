@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-002 slice 2: browser feeds (#198 groundwork)
+
+- **Branch / PR:** `arch-002/browser-feeds`.
+- **Behaviour:** API: `FeedHub` (feeds by id with their secret, current frame, broadcast), `/feed/{id}?k=` (the built `feed.html` via `CommandSink::asset`), `/api/v1/feed/{id}/events?k=` (SSE), `/assets/{*path}` (built code only); app: `feeds_set`, `feed_publish`, `TauriSink::asset` (Tauri's asset resolver). Frontend: output type `browser` (`outputOnAir` everywhere), `deliver()` routes every frame (congregation, scene, stage, signage) to the feed hub for browser outputs while on; start/stop without windows; `lib/browser-feeds.ts` (secrets, registry sync, link); Outputs editor: Browser Feed option and link with Copy / New link; `feed.html` + `src/feed.ts` (same renderer: looks, scenes, stage, lower third, ticker; transparent background; no video).
+- **Tests:** rhema-api 130 (feed secrets, page, assets, stream, renewal); `src/studio/browser-feeds.test.ts`; full vitest 718.
+- **Desktop (QA build, Intel Mac, loopback):** the served page (200; wrong secret 403; its code from `/assets`) drew Romans 8:28 in the Lower Thirds look on a transparent background in headless Chrome at 1920×1080; a hymn going live left the Bible feed on Romans 8:28; off sent `{off:true}`. OBS and a second computer not yet tried. Note: a build started with a plain `&` was killed before bundling; QA builds must run as background tasks. Real data 6/6, WebKit restored.
+- **Next:** C2 action requests.
+
 ## 2026-10-23 — COMMS-001 C1: production notices (#251)
 
 - **Branch / PR:** `comms-001/notices`.

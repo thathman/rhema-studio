@@ -86,6 +86,8 @@ async function isPreviewWindowVisible(outputId: string): Promise<boolean> {
 
 /** Refresh the store's runtime status for one output from the OS. */
 export async function reconcileOutputStatus(output: BroadcastOutput): Promise<void> {
+  // A browser feed is on while the app says so: there is no window or sender to ask.
+  if (output.type === "browser") return
   const previewOpen = await isPreviewWindowVisible(output.id)
   let ndiActive = false
   let ndiReceivers: number | null = null
@@ -114,6 +116,12 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
   // A fresh window has nothing yet: forget what was sent before so the sync sends everything.
   store.resetOutputRuntime(output.id)
   try {
+    // A browser feed has no window or sender: it publishes to its LAN page while on (ARCH-002).
+    if (output.type === "browser") {
+      store.setOutputStatus(output.id, { previewOpen: false, ndiActive: false, feedActive: true })
+      store.syncBroadcastOutputFor(output.id)
+      return true
+    }
     if (output.type === "display") {
       // The same screen as chosen, even if the OS renumbered monitors since.
       let monitorIndex = output.monitorIndex
@@ -186,6 +194,13 @@ export async function enableOutput(output: BroadcastOutput): Promise<boolean> {
  */
 export async function disableOutput(output: BroadcastOutput): Promise<boolean> {
   const store = useBroadcastStore.getState()
+  if (output.type === "browser") {
+    // The page goes dark (an empty frame), then the feed stops publishing.
+    void invoke("feed_publish", { id: output.id, json: JSON.stringify({ off: true }) }).catch(() => {})
+    store.setOutputStatus(output.id, { previewOpen: false, ndiActive: false, feedActive: false })
+    store.resetOutputRuntime(output.id)
+    return true
+  }
   try {
     // Always stop the sender rather than trusting outputStatus: that state is
     // in-memory and only refreshed while the dialog is open, so after a main

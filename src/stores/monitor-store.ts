@@ -25,7 +25,7 @@ async function check(): Promise<void> {
   // An output window closed from the OS (Alt+F4) or an NDI sender that stopped: the status
   // everyone reads (Present, Home readiness) catches up here, not only while Outputs is open.
   const b0 = useBroadcastStore.getState()
-  for (const o of b0.outputs) if (b0.outputStatus[o.id]?.previewOpen || b0.outputStatus[o.id]?.ndiActive) void reconcileOutputStatus(o)
+  for (const o of b0.outputs) if (o.type !== "browser" && (b0.outputStatus[o.id]?.previewOpen || b0.outputStatus[o.id]?.ndiActive)) void reconcileOutputStatus(o)
   let names: (string | null)[]
   try {
     names = (await availableMonitors()).map((m) => m.name ?? null)

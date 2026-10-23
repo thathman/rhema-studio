@@ -12,6 +12,11 @@ use crate::error::CommandError;
 pub trait CommandSink: Send + Sync {
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError>;
     fn invoke_backend(&self, action: &str, args: &str) -> Result<(), CommandError>;
+    /// A file of the app's own built frontend (`feed.html`, `assets/…`) and its type, for the
+    /// browser feed page (ARCH-002). None where there is none (tests, development).
+    fn asset(&self, _path: &str) -> Option<(Vec<u8>, String)> {
+        None
+    }
 }
 
 /// Routes `RemoteCommand` variants to the correct sink method.

@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Browser feeds (ARCH-002, #198)
+- A new kind of output, **Browser Feed**: an output drawn by a web page on the church network, for OBS (Browser source) or a TV's browser, with no window or NDI sender on this computer. It is drawn by the same code as the other outputs, so its looks, scenes, chosen sources, lower third and ticker look the same, and a keyed look stays transparent in OBS. Outputs → edit shows its link (copy it, or make a new one, which closes the old). It needs the HTTP listener on the network; videos do not play in a browser feed.
+
 ### Production notices (Rhema Comms, #251)
 - The bell in the top bar is now **production notices**: short private messages between the main desk and the computers that joined it (Production → Operators), to everyone, the main desk or a role (Timekeeper, Bible, Screens, Present), normal or urgent, tied to the event happening now. Each is answered **Seen**, **Ready** or **Unable**, and everyone sees the answers. The host stamps who sent each one from the device's own key. Notices never reach a screen, the stage, a feed or the service log; the host keeps the last 100 for the session and a reconnecting desk catches up.
 

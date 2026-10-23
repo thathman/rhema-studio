@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { emitTo } from "@tauri-apps/api/event"
+import { invoke } from "@tauri-apps/api/core"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import type {
   SongWithSections,
@@ -346,7 +347,7 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   if (useBroadcastStore.getState().outputs.find((o) => o.id === output.id)?.role !== "signage") return
   signageEmitted.set(output.id, stamp)
   recordFrame(output.id, { theme, verse, overlay: null, ticker })
-  void emitTo(outputWindowLabel(output.id), "broadcast:verse-update", { theme, verse, ticker }).catch(() => {})
+  deliver(output.id, { theme, verse, ticker })
   // Warm the next picture so the swap is instant (the data URL is cached by the media store).
   if (ids.length > 1) void useMediaStore.getState().dataUrl(ids[(index + 1) % ids.length]).catch(() => {})
   ensureSignageTicker()
@@ -440,6 +441,20 @@ function noteSources(): void {
   // A quick screen lasts until something else is shown.
   if (id !== "quick" && sources.quick?.on) sources = { ...sources, quick: { ...sources.quick, on: false } }
   if (sources !== s.sources) useBroadcastStore.setState({ sources })
+}
+
+/**
+ * Send an output its frame: to its window (display, NDI), or for a browser feed to the LAN feed page
+ * (ARCH-002), only while that feed is on.
+ */
+function deliver(outputId: string, payload: Record<string, unknown>): void {
+  const s = useBroadcastStore.getState()
+  const output = s.outputs.find((o) => o.id === outputId)
+  if (output?.type === "browser") {
+    if (s.outputStatus[outputId]?.feedActive) void invoke("feed_publish", { id: outputId, json: JSON.stringify(payload) }).catch(() => {})
+    return
+  }
+  void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", payload).catch(() => {})
 }
 
 function recordFrame(id: string, frame: OutputFrame): void {
@@ -656,7 +671,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (output.role === "stage") {
       recordFrame(outputId, { theme, verse: null, overlay: null, stage: true })
       const q = useQueueStore.getState()
-      void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
+      deliver(outputId, {
         // The stage window draws no theme: send the built-in one (no pictures) rather than the
         // output's, whose pictures can be megabytes, with every timer tick (NFR-03).
         theme: CLASSIC_DARK,
@@ -666,7 +681,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
           isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
         }), finish: s.stageFinish, aux: s.stageAux }, s.stageStyle),
-      }).catch(() => {})
+      })
       return
     }
     // A scene is the output's program, unless Black or Logo covers every screen.
@@ -675,7 +690,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const overlay = output.lowerThirds ? overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null) : null
       const ticker = output.ticker ? tickerForScreens(s) : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
-      void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", { theme, verse: null, overlay, ticker, scene: frame, sound: false }).catch(() => {})
+      deliver(outputId, { theme, verse: null, overlay, ticker, scene: frame, sound: false })
       return
     }
     const verse = shown ? forOutputLanguage(shown, output.language) : null
@@ -684,14 +699,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const changed = get().outputFrames[outputId]?.verse !== verse
     const ticker = output.ticker ? tickerForScreens(s) : null
     recordFrame(outputId, { theme, verse, overlay, ticker })
-    void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
+    deliver(outputId, {
       theme,
       verse,
       overlay,
       ticker,
       sound: soundOutputId(get().outputs, get().outputStatus) === outputId,
       ...(changed ? { sentAt: Date.now() } : {}),
-    }).catch(() => {})
+    })
   },
   syncBroadcastOutput: () => {
     for (const output of get().outputs) {
@@ -774,7 +789,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // Outputs dialog refreshes status every second); off always clears it.
       const ndiError = status.ndiError !== undefined ? status.ndiError : status.ndiActive ? (prev?.ndiError ?? null) : null
       const next = { ...status, ndiError, ndiReceivers: status.ndiReceivers !== undefined ? status.ndiReceivers : status.ndiActive ? (prev?.ndiReceivers ?? null) : null }
-      if (prev && prev.previewOpen === next.previewOpen && prev.ndiActive === next.ndiActive && (prev.ndiError ?? null) === (next.ndiError ?? null) && (prev.ndiReceivers ?? null) === (next.ndiReceivers ?? null)) {
+      if (prev && prev.previewOpen === next.previewOpen && prev.ndiActive === next.ndiActive && !!prev.feedActive === !!next.feedActive && (prev.ndiError ?? null) === (next.ndiError ?? null) && (prev.ndiReceivers ?? null) === (next.ndiReceivers ?? null)) {
         return s
       }
       return { outputStatus: { ...s.outputStatus, [id]: next } }

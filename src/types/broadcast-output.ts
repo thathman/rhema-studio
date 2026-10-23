@@ -1,7 +1,8 @@
 import type { ContentType } from "./broadcast"
 import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
-export type BroadcastOutputType = "display" | "ndi"
+/** display: a window on a monitor; ndi: an NDI sender; browser: a web page on the church network (OBS Browser Source, a TV's browser). */
+export type BroadcastOutputType = "display" | "ndi" | "browser"
 
 /**
  * What an output is for. Absent means `congregation` (every output saved
@@ -213,6 +214,8 @@ export interface BroadcastOutput {
   shows?: ContentType[]
   /** The congregation scene this output shows (its program, ADR 0001); absent: its own feed, full frame. */
   sceneId?: string
+  /** Browser feeds: the secret in the feed's link (renewing it closes the old link). */
+  feedToken?: string
   signage?: SignageSettings
   themeId: string
   /**
@@ -242,6 +245,8 @@ export interface BroadcastOutputStatus {
   ndiError?: string | null
   /** Receivers (OBS, another PC) connected to the NDI sender right now; null when unknown. */
   ndiReceivers?: number | null
+  /** Browser feeds: publishing to the feed page. */
+  feedActive?: boolean
 }
 
 /** The default output: always present, editable, never deletable. */
