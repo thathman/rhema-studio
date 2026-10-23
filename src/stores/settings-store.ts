@@ -57,6 +57,7 @@ function isCustomMacro(m: unknown): m is CustomMacro {
 import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
+import { defaultSetup, normalizeSetup, type SetupProfile } from "@/lib/setup-readiness"
 
 type SttProvider = "deepgram" | "whisper"
 
@@ -126,6 +127,11 @@ interface SettingsState {
   /** Optional OBS connection (obs-websocket v5). */
   obs: ObsSettings
   setObs: (patch: Partial<ObsSettings>) => void
+  /** First-install setup (#298): where it was left, this computer's name, and Home's reminder. */
+  setup: SetupProfile
+  setSetup: (patch: Partial<SetupProfile>) => void
+  /** The last settings save failed (not saved itself): setup shows "Settings are saved" as needing attention. */
+  settingsSaveFailed: boolean
 
   setRemoteSecret: (secret: string) => void
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
@@ -179,6 +185,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
   obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "" },
   setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
+  setup: defaultSetup(),
+  setSetup: (patch) => set((s) => ({ setup: { ...s.setup, ...patch } })),
+  settingsSaveFailed: false,
 
   setRemoteListeners: (patch) => set((s) => ({ remoteListeners: { ...s.remoteListeners, ...patch } })),
   setRemoteAuthRequired: (remoteAuthRequired) => {
@@ -275,6 +284,8 @@ function acceptable(key: string, value: unknown): boolean {
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
+    case "setup":
+      return typeof value === "object" && !Array.isArray(value) // fields are checked one by one in hydrateSettings
     default:
       return true
   }
@@ -300,6 +311,7 @@ const PERSISTED_KEYS = [
   "remoteAuthRequired",
   "remoteListeners",
   "obs",
+  "setup",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",
@@ -397,7 +409,7 @@ export function hydrateSettings(): Promise<void> {
         const value = await store.get(key)
         if (value !== undefined && value !== null && acceptable(key, value)) {
           // One damaged cue must not cost the church all the others.
-          ;(patch as Record<string, unknown>)[key] = key === "customMacros" ? (value as unknown[]).filter(isCustomMacro) : value
+          ;(patch as Record<string, unknown>)[key] = key === "customMacros" ? (value as unknown[]).filter(isCustomMacro) : key === "setup" ? normalizeSetup(value) : value
         }
       }
       // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.
@@ -494,7 +506,9 @@ async function persistAll(state: SettingsState): Promise<void> {
     }
     await store.set("secretsInKeychain", keychainUnreadable || (ok && json !== ""))
     await store.save()
+    if (useSettingsStore.getState().settingsSaveFailed) useSettingsStore.setState({ settingsSaveFailed: false })
   } catch {
     console.warn("[settings] Failed to persist settings")
+    if (!useSettingsStore.getState().settingsSaveFailed) useSettingsStore.setState({ settingsSaveFailed: true })
   }
 }

@@ -33,6 +33,8 @@ import { startLiveRecovery } from "@/lib/live-recovery"
 import { RecoveryBanner } from "@/studio/shell/recovery-banner"
 import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
+import { SetupWizard } from "@/studio/setup/setup-wizard"
+import { decideSetupLaunch } from "@/studio/setup/setup-launch"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
 import "@/stores/stage-time-warnings"
@@ -113,7 +115,9 @@ export function AppShell() {
     bibleActions.loadBooks().catch(console.error)
     // Saved services, and the one that was open last time (empty rundown only:
     // a rundown already on screen, e.g. from detections, is never replaced).
-    void useServiceStore.getState().loadPrograms().then(() => {
+    void useServiceStore.getState().loadPrograms().then((ok) => {
+      // A genuinely new install opens the setup once (#298); the services must be known first.
+      decideSetupLaunch(ok)
       const id = rememberedServiceId()
       if (id && useQueueStore.getState().items.length === 0) {
         void useServiceStore.getState().openProgram(id)
@@ -174,6 +178,7 @@ export function AppShell() {
       {/* Global dialogs: reachable from every workspace, mounted exactly once. */}
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
       <GlobalSearch />
+      <SetupWizard />
     </div>
   )
 }

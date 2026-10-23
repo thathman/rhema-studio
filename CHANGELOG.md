@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### First-install setup (#298)
+- A new install opens **Welcome to Rhema Studio** once: set this computer up as the main desk, join an existing church host, or use Rhema now and finish later.
+- Short, resumable steps: church name, your name and this computer's name, brand and starter looks, Bible and library, screens, connections, and a summary (Done / Optional later / Needs attention). Everything saves as you type; Finish later picks up at the same step.
+- Home shows "Finish church setup · N items" only while the church name, your name or the Bible is missing; unused features (NDI, OBS, cloud speech, AI assistants) are "Not using" and never raise a warning.
+- Existing installations with services, outputs or a church name are never treated as new, and their settings load unchanged.
 ### Built-in look library (#299)
 - Design → Library: ready-made looks in six families (Church Classic, Broadcast Clean, Contemporary, Warm Editorial, High Contrast, Seasonal) for Bible and songs full screen, keyed lower thirds, speaker names, the ticker, the stage display and camera scenes, each with a drawn preview in English and Yorùbá.
 - Filter by layout, family and background; mark favourites. **Use** adds your own editable copy (a camera scene brings its look too); nothing on a screen changes until you choose the copy for an output. A copy can be reset to the library look.

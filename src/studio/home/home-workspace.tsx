@@ -13,6 +13,7 @@ import { isImageItem, isSongItem } from "@/types"
 import { plannedTimes } from "@/lib/run-of-show"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
+import { SetupCard } from "@/studio/setup/setup-card"
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -61,6 +62,9 @@ export function HomeWorkspace() {
             <Button onClick={() => { useShellStore.getState().setNewServiceOpen(true); setWorkspace("prepare") }}><PlusIcon /> New service</Button>
           </div>
         </header>
+
+        {/* The church's setup (#298), only while an essential is missing; this service's readiness stays in "Your attention". */}
+        <SetupCard />
 
         {/* The approved hero (issue #215): a flat, editorial welcome with Sunday's readiness on a note. */}
         <section aria-labelledby="quick" className="relative grid grid-cols-[minmax(0,1.25fr)_290px] overflow-hidden rounded-[22px] border border-border bg-[#eeede6] dark:bg-card max-[1100px]:grid-cols-1">

@@ -203,6 +203,50 @@ describe("settings store", () => {
     expect(s.operatorName).toBe("Tolu")
   })
 
+  it("an old settings file without the setup section keeps everything and gets the setup defaults (#298)", async () => {
+    mockGet.mockImplementation(async (key: string) => {
+      const old: Record<string, unknown> = { operatorName: "Tolu", brandKit: { version: 1, churchName: "Grace Chapel" }, onboardingComplete: false }
+      return key in old ? old[key] : undefined
+    })
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    const { defaultSetup } = await import("@/lib/setup-readiness")
+    await hydrateSettings()
+    const s = useSettingsStore.getState()
+    expect(s.operatorName).toBe("Tolu")
+    expect(s.brandKit.churchName).toBe("Grace Chapel")
+    expect(s.setup).toEqual(defaultSetup())
+    expect(mockSet).not.toHaveBeenCalled()
+  })
+
+  it("the setup section is read field by field and saved with the rest (#298)", async () => {
+    mockGet.mockImplementation(async (key: string) => (key === "setup" ? { version: 1, lastStep: "bible", deviceName: "Sanctuary desk", dismissedAt: 7, stepsDone: { church: "done", x: "done" } } : null))
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    const s = useSettingsStore.getState()
+    expect(s.setup.lastStep).toBe("bible")
+    expect(s.setup.deviceName).toBe("Sanctuary desk")
+    expect(s.setup.dismissedAt).toBe("")
+    expect(s.setup.stepsDone).toEqual({ church: "done" })
+    s.setSetup({ lastStep: "screens" })
+    await flushSave()
+    expect(mockSet).toHaveBeenCalledWith("setup", expect.objectContaining({ version: 1, lastStep: "screens", deviceName: "Sanctuary desk" }))
+  })
+
+  it("a failed save is noted for the setup check, and cleared by the next good save (#298)", async () => {
+    mockGet.mockResolvedValue(null)
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    mockSave.mockRejectedValueOnce(new Error("disk full"))
+    useSettingsStore.getState().setGain(1.4)
+    await flushSave()
+    expect(useSettingsStore.getState().settingsSaveFailed).toBe(true)
+    useSettingsStore.getState().setGain(1.5)
+    await flushSave()
+    expect(useSettingsStore.getState().settingsSaveFailed).toBe(false)
+    warnSpy.mockRestore()
+  })
+
   it("keeps the good cues when one saved cue is damaged", async () => {
     mockGet.mockImplementation(async (key: string) => (key === "customMacros" ? [{ id: "baptism", label: "Baptism", steps: ["quick.black"] }, { id: 5, label: null }, "junk"] : null))
     const { hydrateSettings, useSettingsStore } = await import("./settings-store")
