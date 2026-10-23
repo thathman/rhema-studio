@@ -71,9 +71,15 @@ export function approvalHolds(retry: () => void, opts: { leavingRehearsal?: bool
   return true
 }
 
-/** Rehearsal off sends what is on the rehearsal output to the congregation, so it is a go-live too. */
+/** Leave rehearsal: the real program comes back as it was (ADR 0001), so nothing new goes on air. */
 export function leaveRehearsal(): void {
+  useBroadcastStore.getState().setRehearsal(false)
+}
+
+/** Leave rehearsal showing what was rehearsed: a deliberate go-live, so the approval question applies. */
+export function showRehearsalLive(): void {
   const b = useBroadcastStore.getState()
-  if (b.isLive && b.liveVerse && !b.liveVerse.screen && !b.liveVerse.quick && approvalHolds(leaveRehearsal, { leavingRehearsal: true })) return
-  b.setRehearsal(false)
+  if (!b.rehearsal) return
+  if (b.isLive && b.liveVerse && !b.liveVerse.screen && !b.liveVerse.quick && approvalHolds(showRehearsalLive, { leavingRehearsal: true })) return
+  b.setRehearsal(false, { keepRehearsed: true })
 }

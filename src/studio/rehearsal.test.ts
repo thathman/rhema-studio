@@ -30,7 +30,7 @@ beforeEach(() => {
 })
 
 describe("rehearsal mode", () => {
-  it("freezes every output while on, then sends the current content when turned off", async () => {
+  it("freezes every output while on; Show this live sends the rehearsed content to every output", async () => {
     await presentVerse(verse(16), { goLive: true })
     expect(emitTo).toHaveBeenCalled()
     const before = emitTo.mock.calls.length
@@ -41,7 +41,7 @@ describe("rehearsal mode", () => {
     expect(useBroadcastStore.getState().liveVerse?.lines).toEqual(["Please stand"])
     expect(emitTo.mock.calls.length).toBe(before)
     emitTo.mockClear()
-    useBroadcastStore.getState().setRehearsal(false)
+    useBroadcastStore.getState().setRehearsal(false, { keepRehearsed: true })
     const labels = emitTo.mock.calls.map((c) => c[0])
     expect(labels).toContain("broadcast-main")
     expect(labels).toContain("broadcast-stage-1")

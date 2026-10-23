@@ -245,7 +245,7 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 | # | Do | Expect |
 |---|---|---|
 | 10k.1 | With the projector showing a verse and NDI into OBS, turn Rehearsal on. Present three other items, a quick screen, Clear, Restore. | Projector, OBS and the stage screen never change; the app's Live panel and rundown behave normally; the header reads REHEARSAL. |
-| 10k.2 | Turn Rehearsal off. | Every output shows the current content at once. |
+| 10k.2 | Turn Rehearsal off. | Every output shows what it showed before rehearsal (ADR 0001); what was rehearsed is not shown. "Show this live" instead puts the rehearsed content on every output. |
 
 ## 10l. Cues
 
@@ -619,7 +619,7 @@ report), but launching it cannot.
 | 10bh.1 | More → tick "Ask before showing an unapproved service". Open a service that is not approved; Show live (also try the on-air switch and a Stream Deck/OSC go-live). | "This service is not approved" appears; nothing reaches the screen. Not now leaves the output as it was. | Unverified |
 | 10bh.2 | Show live again → Present anyway. Then edit an item, save, and press Next. | The held item goes live at once. Next after the edit is never held. | Verified on the Intel Mac |
 | 10bh.4 | Gate on, unapproved service: Start the service (Welcome), then Next; press the clicker three times while the question shows, then Present anyway. | The question appears at the first item, the rundown does not move while it shows, and the first item (not the third) goes live. Later Clear then Next is never held. | Verified on the Intel Mac |
-| 10bh.5 | Gate on, unapproved service in rehearsal with a song slide up: turn rehearsal off. | The question appears and the congregation screens stay as they were until Present anyway. | Unverified |
+| 10bh.5 | Gate on, unapproved service in rehearsal with a song slide up: press "Show this live". | The question appears and the congregation screens stay as they were until Present anyway. (Plain "Rehearsal off" shows nothing new, so it does not ask.) | Unverified (changed by ADR 0001) |
 | 10bh.3 | Approve the service, restart, Show live. Turn rehearsal on with another unapproved service; Show live; use Black. | No question for the approved service, in rehearsal, or for quick screens. | Unverified |
 
 ### 10bi. Screen reader and keyboard names (QA-003, RG-09)
@@ -751,7 +751,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10bw.1 | Service open with 4 items; show items 1 and 3; add a verse from Quick find and show it; show a Bible-panel verse that is not in the service; Welcome with nothing live; Black. More → Library → Save the log. | Planned vs actual lists all 4 items in order (item 2 and 4 "not shown"), the added verse "[added during the service]", "Also shown" with the Bible-panel verse; the timeline has "quick screen Welcome" and "quick screen Black screen". | Unverified |
-| 10bw.2 | Item A live; rehearsal on; present B; rehearsal off. Save the log. | After "rehearsal off" the log has "LIVE B". | Verified on the Intel Mac |
+| 10bw.2 | Item A live; rehearsal on; present B; rehearsal off. Save the log. | A is still on air and the log has no "LIVE B"; with "Show this live" instead, the log has "LIVE B". | Unverified (changed by ADR 0001; the earlier pass checked the old behaviour) |
 
 ### 10bx. Editors and outputs audit fixes (SO-003, CV-004, OP-001)
 
@@ -790,7 +790,7 @@ report), but launching it cannot.
 | 10ca.2 | Song live; press Verse + (Shift+→). | The screen keeps the song; only the Bible panel moves. | Verified on the Intel Mac |
 | 10ca.3 | Song on slide 2; Please stand; Next. | Slide 3 of the song. | Verified on the Intel Mac |
 | 10ca.4 | Quick screen over a verse; Clear; Back. | The verse returns but stays off air until Restore. | Verified on the Intel Mac |
-| 10ca.5 | "Ask before showing" on, unapproved service, rehearsal: verse, Black, rehearsal off, Back. | The approval question appears; nothing changes until answered. | Verified on the Intel Mac |
+| 10ca.5 | "Ask before showing" on, unapproved service, rehearsal: verse, Black, "Show this live", Back. | The approval question appears; nothing changes until answered. | Unverified (changed by ADR 0001) |
 | 10ca.7 | Song on slide 2; Clear; look at the status chip at the top of Present. | It reads "Off air · Restore shows" and the song slide. | Verified on the Intel Mac |
 | 10ca.6 | Rundown has John 3:1; put John 3:16 on air from the Bible panel. | The John 3:1 row is not marked LIVE. | Unverified |
 
@@ -871,7 +871,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ci.1 | Custom cue "Show live, Quick screen: Offering"; put a verse in Preview; run the cue; then Back. | The verse airs, Offering covers it, Back returns to the verse. | Verified on the Intel Mac |
-| 10ci.2 | In rehearsal, cue "Show live, Rehearsal off" with "Ask before showing" on and the service unapproved. | The approval question appears before the congregation sees anything. | Verified on the Intel Mac |
+| 10ci.2 | In rehearsal, cue "Show live, Rehearsal off" with "Ask before showing" on and the service unapproved. | Rehearsal ends with the real program as it was; nothing rehearsed reaches the congregation, so no question. | Unverified (changed by ADR 0001) |
 | 10ci.3 | Signage playlist: only Sunday, 00:00 to 00:00, plus a fallback playlist with no schedule. | Sunday loop on Sundays only; the fallback the rest of the week. | Unverified |
 
 ### 10cj. Styling each language of a bilingual screen
@@ -917,6 +917,15 @@ report), but launching it cannot.
 | 10co.4 | Make the Stage output NDI; open it in an NDI viewer. | The viewer shows the stage layout (live words, timer, next). | Verified on the Intel Mac (stage frame; receiver connected) |
 | 10co.5 | A Signage output with "In a window" on the laptop screen. | A movable 960×540 window in the middle of that screen plays the pictures; it is not full screen. | Verified on the Intel Mac |
 | 10co.6 | Ticker: type three items, Start; outputs Stream (NDI) and Main (projector). | The words crawl smoothly on both (30 fps on NDI measured with a receiver; 61 fps on the K3 projector); Clear and new presents leave it; Black hides it; Pause holds and Resume carries on; Stop removes it; never on the stage. | Verified on the Intel Mac (crawl and rates; Pause/Resume in tests) |
+
+### 10cq. Live safety (ADR 0001, issue #246 C01/C02)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cq.1 | John 3:16 live. Rehearsal on; show Romans 8:28, a quick screen and Clear; Rehearsal off. | The screens and NDI never change; after rehearsal John 3:16 is still on air; the log shows rehearsal on/off only; Next continues from John 3:16's item. | Unverified |
+| 10cq.2 | Rehearsal on; show Romans 8:28; press "Show this live". | Romans 8:28 reaches every output; the log has "LIVE Romans 8:28". | Unverified |
+| 10cq.3 | Design → Themes: edit the theme the projector uses (font size). | The projector and NDI do not change; "Live edit off" shows in the header. | Unverified |
+| 10cq.4 | Turn Live edit on, then change the colour; turn it off. | The header says how many screens it touches; they follow the edit while on and go back to the saved look when off. Leaving Design turns it off. | Unverified |
 
 ### 10cn. Numbered books and the item fields (owner reports)
 

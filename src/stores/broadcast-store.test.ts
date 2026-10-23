@@ -132,7 +132,7 @@ describe("broadcast store sync", () => {
     expect(copy.ndi.sourceName).not.toBe(outputs[0].ndi.sourceName)
   })
 
-  it("emitDraftToBroadcast only reaches outputs using the edited theme", async () => {
+  it("with Live edit on, emitDraftToBroadcast only reaches outputs using the edited theme", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const state = useBroadcastStore.getState()
     const [themeA, themeB] = state.themes
@@ -147,6 +147,7 @@ describe("broadcast store sync", () => {
     })
 
     useBroadcastStore.getState().startEditing(themeB.id)
+    useBroadcastStore.getState().setLiveDesign(true)
     emitToMock.mockClear()
     useBroadcastStore.getState().updateDraft({ name: "tweaked" })
 
@@ -415,13 +416,13 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().lowerThird).toBeNull()
   })
 
-  it("theme edits keep the lower third on the outputs that show it, and are frozen during rehearsal", async () => {
+  it("live theme edits keep the lower third on the outputs that show it, and are frozen during rehearsal", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()
     const theme = s.themes[0]
     s.addOutput({ id: "stream", name: "Stream", type: "ndi", themeId: theme.id, monitorIndex: 0, ndi: ndiDefaults, lowerThirds: true })
     useBroadcastStore.getState().setLowerThird({ line1: "Pastor Tolu", line2: "" })
-    useBroadcastStore.setState({ draftTheme: { ...theme, name: "Draft" }, editingThemeId: theme.id })
+    useBroadcastStore.setState({ draftTheme: { ...theme, name: "Draft" }, editingThemeId: theme.id, liveDesign: true })
     emitToMock.mockClear()
     useBroadcastStore.getState().updateDraft({ name: "Draft 2" })
     const toStream = emitToMock.mock.calls.filter((c) => c[0] === "broadcast-stream")
@@ -519,12 +520,13 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().deleteTheme(hymns.id).inUse).toContain("Main Display")
   })
 
-  it("discarding or closing a theme draft puts the saved theme back on the outputs and their cards", async () => {
+  it("discarding or closing a live-edited draft puts the saved theme back on the outputs and their cards", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()
     const theme = s.themes[0]
     s.setOutputTheme("main", theme.id)
     s.startEditing(theme.id)
+    useBroadcastStore.getState().setLiveDesign(true)
     useBroadcastStore.getState().updateDraft({ name: "Draft" })
     expect(useBroadcastStore.getState().outputFrames.main.theme.name).toBe("Draft")
     emitToMock.mockClear()
@@ -600,19 +602,19 @@ describe("updateDraftNested deep paths", () => {
     expect(sent["broadcast-b"]).toBe(false)
   })
 
-  it("while a theme is edited, a present shows its outputs the draft (not the saved theme), with the sound flag", async () => {
+  it("while a theme is live-edited, a present shows its outputs the draft (not the saved theme), with the sound flag", async () => {
     const { emitTo } = await import("@tauri-apps/api/event")
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()
     const out = s.outputs[0]
     const theme = s.themes.find((t) => t.id === out.themeId)!
-    useBroadcastStore.setState({ editingThemeId: theme.id, draftTheme: { ...theme, name: "Draft colour" }, isLive: true, rehearsal: false })
+    useBroadcastStore.setState({ editingThemeId: theme.id, draftTheme: { ...theme, name: "Draft colour" }, liveDesign: true, isLive: true, rehearsal: false })
     vi.mocked(emitTo).mockClear()
     useBroadcastStore.getState().syncBroadcastOutputFor(out.id)
     const sent = vi.mocked(emitTo).mock.calls.find((c) => c[1] === "broadcast:verse-update")![2] as { theme: { name: string }; sound?: boolean }
     expect(sent.theme.name).toBe("Draft colour")
     expect(sent).toHaveProperty("sound")
-    useBroadcastStore.setState({ editingThemeId: null, draftTheme: null, isLive: false })
+    useBroadcastStore.setState({ editingThemeId: null, draftTheme: null, liveDesign: false, isLive: false })
   })
 })
 
