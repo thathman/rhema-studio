@@ -982,6 +982,7 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10de.1 | A service with a main phase start time. Production → Timekeeper → +5 min twice; look at Prepare → Run of show, the stage finish line and the service log. | "running 10 min late" everywhere; expected times 10 min later, the plan unchanged; two log lines with who. | OFFSET_RESULT |
 | 10de.2 | A joined Timekeeper desk: −5 min. | The host's offset moves to +5; the log names the desk. | OFFSET_REMOTE_RESULT |
+| 10de.3 | The joined Timekeeper desk: Start the timer, +1 min, Pause. | The host's timer starts, gains a minute and pauses; the desk's timer follows; three log lines naming the desk. | RT_RESULT |
 
 ### 10dc. Cameras in scenes (OP-009, #209)
 
