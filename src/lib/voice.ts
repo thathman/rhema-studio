@@ -125,8 +125,10 @@ async function answer(id: string, by: string, sdp: string) {
     const voice = a.createMediaStreamSource(stream)
     const analyser = a.createAnalyser()
     analyser.fftSize = 1024
+    // Through the analyser to the monitor: WebKit only keeps processing nodes that reach the output,
+    // and a meter off to the side reads stale levels (found on the desktop).
     voice.connect(analyser)
-    voice.connect(monitor!)
+    analyser.connect(monitor!)
     for (const [name, other] of peers) if (name !== by) voice.connect(other.mix)
     peer.voice = voice
     peer.analyser = analyser
@@ -160,6 +162,10 @@ export async function hostTalk(on: boolean, stream?: MediaStream): Promise<void>
       analyser.fftSize = 1024
       a.createMediaStreamSource(s).connect(gate)
       gate.connect(analyser)
+      // Keep the meter processed without hearing yourself.
+      const silent = a.createGain()
+      silent.gain.value = 0
+      analyser.connect(silent).connect(a.destination)
       for (const p of peers.values()) gate.connect(p.mix)
       hostMic = { stream: s, gate, analyser }
       useVoice.setState({ micError: null })
@@ -184,6 +190,13 @@ export function startVoiceHub(): () => void {
         void answer(p.id, p.by, p.sdp).catch((err) => console.warn("[voice] could not answer", p.by, err))
       } catch {
         // not an offer
+      }
+    }),
+    listen<string>("remote:voice_leave", (e) => {
+      try {
+        drop((JSON.parse(e.payload) as { by: string }).by)
+      } catch {
+        // ignore
       }
     }),
     listen<string>("remote:voice_talk", (e) => {
@@ -273,6 +286,7 @@ export class TalkClient {
 
   leave(): void {
     this.talk(false)
+    if (this.pc) void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_leave" } }).catch(() => {})
     this.player?.pause()
     this.mic?.stop()
     this.pc?.close()

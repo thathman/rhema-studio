@@ -46,6 +46,8 @@ pub enum RemoteCommand {
     NoticeAck(NoticeAckIn),
     /// Rhema Comms voice (C3): this desk holds Talk (true) or let go (false). Everyone sees it.
     VoiceTalk(bool),
+    /// This desk left the talk channel; the host drops its connection at once.
+    VoiceLeave,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -116,6 +118,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::NoticeSend(n) => write!(f, "notice_send(to {})", n.to.as_deref().unwrap_or("all")),
             RemoteCommand::NoticeAck(a) => write!(f, "notice_ack({} {})", a.id, a.state),
             RemoteCommand::VoiceTalk(on) => write!(f, "voice_talk({on})"),
+            RemoteCommand::VoiceLeave => write!(f, "voice_leave"),
         }
     }
 }
@@ -391,6 +394,7 @@ mod tests {
             RemoteCommand::NoticeSend(NoticeIn { text: "Pulpit mic is ready".into(), to: None, priority: None, event: None, action: None }),
             RemoteCommand::NoticeAck(NoticeAckIn { id: "n1".into(), state: "seen".into() }),
             RemoteCommand::VoiceTalk(true),
+            RemoteCommand::VoiceLeave,
         ];
 
         for cmd in &cmds {
@@ -412,13 +416,15 @@ mod tests {
                 RemoteCommand::AddToQueue => {}
                 RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => {}
                 RemoteCommand::BibleActivate(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
-                RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) => {}
+                RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave => {}
             }
         }
 
-        assert_eq!(cmds.len(), 26);
+        assert_eq!(cmds.len(), 27);
         let talk: RemoteCommand = serde_json::from_str(r#"{"command":"voice_talk","value":true}"#).unwrap();
         assert_eq!(talk, RemoteCommand::VoiceTalk(true));
+        let leave: RemoteCommand = serde_json::from_str(r#"{"command":"voice_leave"}"#).unwrap();
+        assert_eq!(leave, RemoteCommand::VoiceLeave);
         let n: RemoteCommand = serde_json::from_str(r#"{"command":"notice_send","value":{"text":"Wrap up in 5","to":"present","priority":"urgent"}}"#).unwrap();
         assert!(matches!(n, RemoteCommand::NoticeSend(NoticeIn { ref to, .. }) if to.as_deref() == Some("present")));
         let take: RemoteCommand = serde_json::from_str(r#"{"command":"take_scene","value":{"output":"main","scene":"s1"}}"#).unwrap();
