@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Production notices (Rhema Comms, #251)
+- The bell in the top bar is now **production notices**: short private messages between the main desk and the computers that joined it (Production → Operators), to everyone, the main desk or a role (Timekeeper, Bible, Screens, Present), normal or urgent, tied to the event happening now. Each is answered **Seen**, **Ready** or **Unable**, and everyone sees the answers. The host stamps who sent each one from the device's own key. Notices never reach a screen, the stage, a feed or the service log; the host keeps the last 100 for the session and a reconnecting desk catches up.
+
 ### AI service drafts (#252, MCP-002)
 - An assistant connected to Rhema can now propose a whole service: phases, timings, songs and hymns from your library, Scripture from your Bible editions, slides with its own words. Rhema checks every item (songs it cannot find are kept as "Missing" placeholders, never invented) and saves it as a draft. **Prepare → AI drafts** lists them; **Open as a new service** puts one in the rundown, unsaved, each item marked as the assistant's, for you to edit, source what is missing and save. Nothing is approved or shown by the assistant.
 

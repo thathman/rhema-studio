@@ -2,6 +2,12 @@ import { useState } from "react"
 import { BellIcon, ChevronRightIcon, InfoIcon, SearchIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { NoticesPanel } from "@/studio/notices-panel"
+import { useNotices } from "@/stores/notices-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { useEventClock } from "@/stores/event-clock-store"
+import { useQueueStore } from "@/stores/queue-store"
 
 const ICON = "flex size-8 items-center justify-center rounded-md border border-border bg-card text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4"
 
@@ -26,12 +32,45 @@ export function TopBar({ title }: { title: string }) {
           <kbd className="ml-auto rounded-[5px] border border-border bg-muted px-[5px] py-px font-sans text-[0.625rem] max-[600px]:hidden">⌘ K</kbd>
         </button>
         <button type="button" className={ICON} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcuts(true)}><InfoIcon /></button>
-        <button type="button" className={`${ICON} max-[450px]:hidden`} aria-label="Team activity: approvals and comments" title="Team activity: approvals and comments" onClick={() => useShellStore.getState().goTo("team")}><BellIcon /></button>
+        <HostNotices />
         <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-tone-green px-2.5 py-[7px] text-[0.6875rem] font-bold text-tone-green-foreground max-[600px]:hidden" title="Services, songs and Bibles are on this computer: no internet needed on Sunday">
           <span aria-hidden className="size-1.5 rounded-full bg-[#2da78a]" /> Offline-ready
         </span>
       </div>
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
     </header>
+  )
+}
+
+/** The main desk's production notices (Rhema Comms): the bell, with what is unread for this desk. */
+function HostNotices() {
+  const notices = useNotices((s) => s.notices)
+  const read = useNotices((s) => s.read)
+  const operator = useSettingsStore((s) => s.operatorName.trim())
+  const current = useEventClock((s) => s.currentId)
+  const event = useQueueStore((s) => s.items.find((i) => i.id === current))
+  const me = operator ? `${operator} (main desk)` : "Main desk"
+  const unread = notices.filter((n) => n.from !== me && (n.to === "host" || n.to === "all") && !read.includes(n.id))
+  return (
+    <Popover onOpenChange={(o) => { if (o) useNotices.getState().markRead(notices.map((n) => n.id)) }}>
+      <PopoverTrigger asChild>
+        <button type="button" className={`${ICON} relative max-[450px]:hidden`} aria-label={unread.length ? `Notices: ${unread.length} new` : "Notices"} title="Production notices from the team">
+          <BellIcon />
+          {unread.length > 0 && <span aria-hidden className={`absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[0.5625rem] font-bold text-white ${unread.some((n) => n.priority === "urgent") ? "bg-on-air" : "bg-primary"}`}>{unread.length}</span>}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-96">
+        <p className="mb-2 text-sm font-semibold">Production notices</p>
+        <NoticesPanel
+          notices={notices}
+          role="host"
+          me={me}
+          eventTitle={event?.reference ?? null}
+          onSend={(n) => useNotices.getState().send({ ...n, from: me, event: event ? { id: event.id, title: event.reference } : null })}
+          onAnswer={(id, state) => useNotices.getState().answer(id, me, state)}
+        />
+        <button type="button" className="mt-2 text-[0.6875rem] text-muted-foreground underline" onClick={() => useShellStore.getState().goTo("team")}>Team activity: approvals and comments</button>
+      </PopoverContent>
+    </Popover>
   )
 }

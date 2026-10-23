@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
 import { useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
+import { NoticesPanel } from "@/studio/notices-panel"
 import { useSettingsStore } from "@/stores/settings-store"
 
 const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event clock only)", bible: "Bible (the Bible source only)", screens: "Screens (congregation scenes only)", present: "Present", configure: "Present and settings" }
@@ -146,6 +147,17 @@ function JoinedDesk() {
           {desks.includes("clock") && <ClockDesk live={live} />}
           {desks.includes("bible") && <BibleDesk live={live} />}
           {desks.includes("scenes") && <ScenesDesk live={live} />}
+          <section aria-label="Notices desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+            <p className="font-semibold">Notices</p>
+            <NoticesPanel
+              notices={live.notices ?? []}
+              role={me?.role ?? "present"}
+              me={me?.name ?? ""}
+              eventTitle={live.rundown.find((r) => r.id === live.event.currentId)?.reference ?? null}
+              onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}) } })}
+              onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
+            />
+          </section>
         </>
       )}
     </Card>

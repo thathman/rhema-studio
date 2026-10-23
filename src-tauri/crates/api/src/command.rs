@@ -40,6 +40,31 @@ pub enum RemoteCommand {
     /// Put a scene on a congregation output, or send the output back to its own feed.
     TakeScene(SceneTake),
     ReleaseScene(String),
+    /// Rhema Comms (#251): a private production notice to everyone or a role, and its answer.
+    /// The host stamps who sent it from the device's key; nothing here reaches a screen.
+    NoticeSend(NoticeIn),
+    NoticeAck(NoticeAckIn),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoticeIn {
+    pub text: String,
+    /// "all", "host" or a role ("timekeeper", "bible", "screens", "present").
+    #[serde(default)]
+    pub to: Option<String>,
+    /// "normal" or "urgent".
+    #[serde(default)]
+    pub priority: Option<String>,
+    /// The run-of-show event it is about, if any.
+    #[serde(default)]
+    pub event: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoticeAckIn {
+    pub id: String,
+    /// "seen", "ready" or "unable".
+    pub state: String,
 }
 
 /// Which scene goes on which output (ids, as the host's Live State lists them).
@@ -75,6 +100,8 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
             RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
             RemoteCommand::ReleaseScene(o) => write!(f, "release_scene({o})"),
+            RemoteCommand::NoticeSend(n) => write!(f, "notice_send(to {})", n.to.as_deref().unwrap_or("all")),
+            RemoteCommand::NoticeAck(a) => write!(f, "notice_ack({} {})", a.id, a.state),
         }
     }
 }
@@ -347,6 +374,8 @@ mod tests {
             RemoteCommand::RestoreSource("bible".into()),
             RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
             RemoteCommand::ReleaseScene("main".into()),
+            RemoteCommand::NoticeSend(NoticeIn { text: "Pulpit mic is ready".into(), to: None, priority: None, event: None }),
+            RemoteCommand::NoticeAck(NoticeAckIn { id: "n1".into(), state: "seen".into() }),
         ];
 
         for cmd in &cmds {
@@ -368,10 +397,13 @@ mod tests {
                 RemoteCommand::AddToQueue => {}
                 RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => {}
                 RemoteCommand::BibleActivate(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
+                RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 23);
+        assert_eq!(cmds.len(), 25);
+        let n: RemoteCommand = serde_json::from_str(r#"{"command":"notice_send","value":{"text":"Wrap up in 5","to":"present","priority":"urgent"}}"#).unwrap();
+        assert!(matches!(n, RemoteCommand::NoticeSend(NoticeIn { ref to, .. }) if to.as_deref() == Some("present")));
         let take: RemoteCommand = serde_json::from_str(r#"{"command":"take_scene","value":{"output":"main","scene":"s1"}}"#).unwrap();
         assert_eq!(take, RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s1".into() }));
     }

@@ -969,6 +969,7 @@ report), but launching it cannot.
 | 10cu.4 | Pull the joined computer's network cable for 30 s, then plug it back. | The desk says Reconnecting…, then shows the current state; the host's service never paused. | Unverified |
 | 10cu.5 | Revoke the device on the host. | The joined desk says Refused: pair again. | Unverified |
 | 10cu.6 | Host: a hymn on the projector, a Bible lower-third NDI feed. Joined as Bible: activate "Rom 8 28", then Next verse. | The NDI feed shows 8:28 then 8:29; the projector keeps the hymn; with nothing on the projector the verse shows there too. | Unverified |
+| 10cu.8 | Joined desk (any role): send "Pulpit mic is ready" to the main desk, urgent. Main desk: open the bell, answer Ready. | The bell shows 1 in red; the notice names the joined device; the joined desk shows "Main desk: Ready"; no screen, stage or NDI feed changes; the service log has no notice text. | Verified on the Intel Mac (2026-10-23, curl as the paired Timekeeper key): the bell read "Notices: 1 new", the notice named "Femi timekeeper" although the request claimed another sender, Ready on the main desk reached the Live State, nothing in the service log |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
 ### 10cn. Numbered books and the item fields (owner reports)
