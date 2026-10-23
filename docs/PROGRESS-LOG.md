@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Take congregation scenes from Present (#243)
+
+- **Branch / PR:** `sc-003/present-scenes`. New `src/studio/present/scenes-strip.tsx` (`ScenesStrip`), mounted under `LiveOutputPanel` in Present's Standard view (`present-workspace.tsx`; the tour's `[data-studio-live]` stays on the Live panel). Not in the transport bar, and Production → Programs (`scene-composer.tsx`) and `lib/scenes.ts` are untouched.
+- **Behaviour:** shown only with a congregation output and a saved scene. Collapsible header lists each congregation output's scene ("Sanctuary: Camera with the Bible · Overflow: its own feed"); with several, a "Which screen" choice. Saved scenes are buttons with a 96×54 `drawScene` thumbnail of how that output would draw them (redrawn only when the scene, what is live or the looks change), pick then **Take scene** → `takeScene(output, scene)`; **Own feed** → `releaseScene(output)`; **Restore** → `takeScene(output, sceneReturn[output])`, all existing store semantics. Unavailable buttons use `aria-disabled` with a reason in the tooltip and a screen-reader description (as in the transport bar). Rehearsal: all three wait with "Rehearsal is on…": the store's `takeScene` sets `sceneId` even in rehearsal and the real screens draw it when rehearsal ends (rehearsal does not save or put back `sceneId`), so Present does not offer it. Black/Logo on air adds "Black covers it".
+- **Tests:** `scenes-strip.test.tsx` (6: hidden without scenes or a congregation screen; Take calls `takeScene` for the chosen output only, stage not offered, second screen; Own feed and Restore call `releaseScene` / `takeScene`; disabled reasons and no-op clicks; rehearsal calls nothing; a Take leaves `isLive`, `liveVerse`, `sources` and other outputs alone).
+- **Next:** desktop acceptance 10ds. Decide whether a scene Take during rehearsal should be undone when rehearsal ends (Production → Programs and the joined Screens desk can still take one in rehearsal, and it reaches the screens when rehearsal ends).
 ## 2026-10-23 — Ticker, lower third and logo scene layers; scene presets (#243)
 
 - **Branch / PR:** `sc-002/scene-layers-presets`.

@@ -40,6 +40,7 @@ First time at this computer? Click **Add your name** at the bottom of the sideba
 | A verse the preacher just mentioned | Type it in **Quick find**, press Enter to preview, then Take live. |
 | Keep an eye on time | **Timer** in the header: set the planned minutes, Start. Amber under two minutes, red when over. |
 | Tell the band something | **Message stage**. Only the stage screen sees it. |
+| Change how the projector is arranged (camera with the verse, lyrics on a picture…) | **Scenes**, under Live: click a scene, then **Take scene**. **Own feed** goes back; **Restore** brings the last scene back. It does not change what is live. |
 | Practise without touching the projector | **Rehearsal on**. Everything works in the app; the screens keep what they showed. Turning it off brings back exactly that; **Show this live** puts what you rehearsed on screen. |
 
 Things that cannot go wrong by accident: nothing goes live before it has loaded; a missing song, picture or translation is reported and the screen keeps what it had; Prepare never presents; the timer ignores the computer's clock.

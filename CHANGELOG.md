@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Take congregation scenes from Present (#243)
+- Present's live console has a **Scenes** strip under Live: each congregation screen's current scene, its saved scenes as small pictures, and **Take scene**, **Own feed** (back to its own feed) and **Restore**, without leaving Present. Scenes are still made in Production → Programs.
+- Taking a scene changes how that screen is arranged, not what is live: Take scene is an outlined button with a layers icon, apart from the teal Take live, and no other screen, feed or source changes.
+- In rehearsal the scene buttons wait (they say why), so a scene picked while practising never reaches the real screens. A button that cannot act says why when hovered or read by a screen reader.
 ### Ticker, lower third and logo in scenes; more scene presets (#243)
 - Production → Programs: a scene can now place the **Ticker**, the **Lower third** and the church **Logo** (from Design → Brand Kit) in boxes of their own. The ticker and lower third follow what is running, and show nothing while nothing is.
 - A scene with its own ticker (or lower third) owns it: while that scene is up, the output shows it only in the scene's box, never also across the whole screen.

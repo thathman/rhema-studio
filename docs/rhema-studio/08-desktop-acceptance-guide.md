@@ -981,6 +981,21 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10ds. Take congregation scenes from Present (#243)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ds.1 | No saved scenes (or no congregation output): open Present (Standard view). | No Scenes strip under Live; Present looks as before. | Unverified |
+| 10ds.2 | Production → Programs: save "Camera with the Bible" and "Lyrics on a picture". Back in Present, a verse on air. | Under Live: **Scenes · Main: its own feed**, the two scenes with small pictures (the verse in the Bible box), Take scene / Own feed / Restore greyed; hovering each says why ("Pick a scene above first", "already shows its own feed", "has not shown a scene yet"). | Unverified |
+| 10ds.3 | Click "Lyrics on a picture", then **Take scene**. | The projector rearranges to the scene; the verse stays live (Live, the transport and the Live sources strip do not change); the scene button says ON AIR; the header reads "Main: Lyrics on a picture". Take scene is an outlined teal button with a layers icon, clearly not the solid Take live. | Unverified |
+| 10ds.4 | With an NDI output following Only Bible (OBS watching it): take "Camera with the Bible" on the projector. | The projector changes; the NDI feed in OBS does not. | Unverified |
+| 10ds.5 | **Own feed**, then **Restore Lyrics on a picture**. | The projector goes back to full frame, then the scene comes back. | Unverified |
+| 10ds.6 | A second congregation output (e.g. an overflow display). Choose it under Scenes and take a scene. | Only the overflow screen changes; the header lists both screens' scenes. | Unverified |
+| 10ds.7 | **Rehearsal on**; pick a scene. | Take scene, Own feed and Restore are greyed and say "Rehearsal is on: the screens are frozen…"; the projector does not change, during or after rehearsal. | Unverified |
+| 10ds.8 | Keyboard only: Tab into the strip, Space on the arrow to fold and unfold it, pick a scene with Space, Tab to Take scene, Enter. A screen reader on a greyed button. | Everything works without the mouse; the reason is read out. Present's keys (→, Esc) still work as before. | Unverified |
+| 10ds.9 | Black on, then take a scene; Black off. | While Black is up the strip says "Black covers it" and the screen stays black; after it, the scene shows. | Unverified |
+| 10ds.10 | Small window (1366×768). | The strip fits under Live without hiding the transport bar; Live stays readable; fold it away if needed. | Unverified |
+
 ### 10dr. Ticker, lower third and logo in scenes; scene presets (#243)
 
 | # | Step | Expected | Result |
