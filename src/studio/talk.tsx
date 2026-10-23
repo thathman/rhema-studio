@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { MicIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { CHANNELS, CHANNEL_IDS, HOST, TalkClient, talkName, type VoicePerson } from "@/lib/voice"
+import { CHANNELS, CHANNEL_IDS, HOST, PRIORITY, TalkClient, talkName, type VoicePerson } from "@/lib/voice"
 import { useSettingsStore } from "@/stores/settings-store"
 
 /**
@@ -56,10 +56,11 @@ export function TalkButton({ onTalk, talking, disabled, className, compact }: { 
 }
 
 /** Whom to talk to: All crew, a channel, or one person (a private call). */
-export function TalkTo({ value, onChange, people, compact }: { value: string; onChange: (talk: string) => void; people: { key: string; name: string }[]; compact?: boolean }) {
+export function TalkTo({ value, onChange, people, compact, priority }: { value: string; onChange: (talk: string) => void; people: { key: string; name: string }[]; compact?: boolean; priority?: boolean }) {
   return (
     <select aria-label="Talk to" title="Whom you talk to" value={value} onChange={(e) => onChange(e.target.value)} className={cn("rounded-md border border-input bg-card px-1.5 text-xs", compact ? "h-8 max-w-28" : "h-9")}>
       <option value="all">All crew</option>
+      {priority && <option value={PRIORITY}>All crew, priority (others quieter)</option>}
       {CHANNELS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       {people.length > 0 && <optgroup label="Only…">{people.map((p) => <option key={p.key} value={`to:${p.key}`}>{p.name}</option>)}</optgroup>}
     </select>

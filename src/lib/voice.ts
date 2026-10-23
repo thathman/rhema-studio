@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import { create } from "zustand"
+import { useSettingsStore } from "@/stores/settings-store"
 
 /**
  * Rhema Comms voice (C3, ADR 0002): one LAN talk channel, full duplex. The host is the hub: each
@@ -15,17 +16,22 @@ export const CHANNELS = [{ id: "production", name: "Production" }, { id: "stage"
 export const CHANNEL_IDS: readonly string[] = CHANNELS.map((c) => c.id)
 /** The main desk, as a talk target ("to:host"). */
 export const HOST = "host"
+/** The main desk talking to everyone over the others: their voices drop while it holds Talk. */
+export const PRIORITY = "priority"
+/** How loud the others are while the main desk talks with priority. */
+const DUCKED = 0.2
 
 /** Where a voice goes: "all", a channel id, or "to:<name>" (one person; "to:host" for the main desk). */
 export function talkName(talk: string, hostName = "Main desk"): string {
   if (talk === "all") return "All crew"
+  if (talk === PRIORITY) return "All crew (priority)"
   if (talk.startsWith("to:")) return talk === `to:${HOST}` ? hostName : talk.slice(3)
   return CHANNELS.find((c) => c.id === talk)?.name ?? talk
 }
 
 /** Whether `from` (talking to `talk`) is heard by a listener named `to` who listens to `listen`. */
 export function hears(talk: string, to: string, listen: readonly string[]): boolean {
-  if (talk === "all") return true
+  if (talk === "all" || talk === PRIORITY) return true
   if (talk.startsWith("to:")) return talk.slice(3) === to
   return listen.includes(talk)
 }
@@ -138,7 +144,9 @@ function rewire() {
         gain.connect(b.sink)
         row.set(to, (r = { gain, source: a.source }))
       }
-      r.gain.gain.value = hears(a.talk, to, b.listen) ? 1 : 0
+      // While the main desk talks with priority, everyone else is quieter for every listener.
+      const ducked = v.hostTalking && v.hostTalkTo === PRIORITY && from !== HOST
+      r.gain.gain.value = hears(a.talk, to, b.listen) ? (ducked ? DUCKED : 1) : 0
     }
   }
 }
@@ -150,7 +158,7 @@ export function setHostChannels(listen: string[], talkTo: string): void {
 }
 
 function validTalk(t: string): string {
-  return t === "all" || CHANNEL_IDS.includes(t) || (t.startsWith("to:") && t.length > 3) ? t.slice(0, 84) : "all"
+  return t === "all" || t === PRIORITY || CHANNEL_IDS.includes(t) || (t.startsWith("to:") && t.length > 3) ? t.slice(0, 84) : "all"
 }
 
 /**
@@ -245,6 +253,8 @@ export async function hostTalk(on: boolean, stream?: MediaStream): Promise<void>
   }
   if (hostMic) hostMic.gate.gain.value = wantTalk ? 1 : 0
   useVoice.setState({ hostTalking: wantTalk && !!hostMic })
+  // Priority ducks the others only while the main desk holds Talk.
+  rewire()
 }
 
 async function openHostMic(stream?: MediaStream): Promise<void> {
@@ -274,6 +284,13 @@ let hosting = false
 export function startVoiceHub(): () => void {
   if (hosting) return () => {}
   hosting = true
+  // A device whose key is revoked leaves the talk channel at once (its next request would be
+  // refused anyway, but an open call would carry on).
+  const offSettings = useSettingsStore.subscribe((s, p) => {
+    if (s.remoteDevices === p.remoteDevices) return
+    const paired = new Set(s.remoteDevices.map((d) => d.name))
+    for (const name of [...peers.keys()]) if (!paired.has(name) && name !== "Shared key" && name !== "This computer") drop(name)
+  })
   const offs = [
     listen<string>("remote:voice_offer", (e) => {
       try {
@@ -329,6 +346,7 @@ export function startVoiceHub(): () => void {
   return () => {
     hosting = false
     clearInterval(meter)
+    offSettings()
     for (const off of offs) void off.then((f) => f())
     for (const name of [...peers.keys()]) drop(name)
   }

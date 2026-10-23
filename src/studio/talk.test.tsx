@@ -39,5 +39,8 @@ describe("the Talk button", () => {
     expect(hears("to:Ade", "Femi", ["production", "stage"])).toBe(false)
     expect(hears("to:host", "host", [])).toBe(true)
     expect([talkName("all"), talkName("stage"), talkName("to:Ade"), talkName("to:host", "Tolu (main desk)")]).toEqual(["All crew", "Stage & worship", "Ade", "Tolu (main desk)"])
+    // Priority (the main desk): heard by everyone, like All crew.
+    expect(hears("priority", "Femi", [])).toBe(true)
+    expect(talkName("priority")).toBe("All crew (priority)")
   })
 })
