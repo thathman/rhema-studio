@@ -17,6 +17,7 @@ import { useEventClock } from "@/stores/event-clock-store"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
 import { remoteActions } from "@/lib/remote-actions"
+import { useTimerStore } from "@/stores/timer-store"
 
 declare global {
   interface Window {
@@ -31,5 +32,6 @@ window.__rhemaQa = () =>
         bible: useBibleStore, broadcast: useBroadcastStore, queue: useQueueStore, service: useServiceStore, songs: useSongStore,
         settings: useSettingsStore, media: useMediaStore, journal: useJournalStore, gate: useApprovalGateStore, shell: useShellStore,
         present: presentActions, remote: remoteActions, eventClock: useEventClock, voice: { useVoice, hostTalk, TalkClient, setVoiceVolume, setHostChannels },
+        timer: useTimerStore,
       }
     : undefined
