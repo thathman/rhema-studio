@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useEventClock } = await import("@/stores/event-clock-store")
 const { useJournalStore } = await import("@/stores/journal-store")
+const { useTimerStore } = await import("@/stores/timer-store")
 const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal } = await import("@/lib/live-recovery")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
@@ -51,6 +52,21 @@ describe("live recovery", () => {
     expect(b.sources.bible?.on).toBe(true)
     expect(useRecovery.getState().offer).toBeNull()
     expect(useJournalStore.getState().entries.some((e) => e.kind === "recovery")).toBe(true)
+  })
+
+  it("puts the timer back, counting the time Rhema was closed while it ran", async () => {
+    useTimerStore.getState().reset()
+    const snap = { ...takeSnapshot(), at: Date.now() - 90_000, outputsOn: [], eventId: null, timer: { durationMs: 35 * 60_000, elapsedMs: 600_000, running: true } }
+    await putBack(snap)
+    const t = useTimerStore.getState().timer
+    expect(t.durationMs).toBe(35 * 60_000)
+    expect(t.startedAt).not.toBeNull()
+    expect(Math.round(t.accumulatedMs / 1000)).toBe(690)
+    // A timer started since is left alone.
+    useTimerStore.setState({ timer: { durationMs: 60_000, accumulatedMs: 5_000, startedAt: null } })
+    await putBack({ ...snap, timer: { durationMs: 1, elapsedMs: 1, running: false } })
+    expect(useTimerStore.getState().timer.durationMs).toBe(60_000)
+    useTimerStore.getState().reset()
   })
 
   it("a trimmed snapshot (pictures as data) leaves the sources on now alone", async () => {

@@ -8,7 +8,8 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
-import { monotonicNow } from "@/stores/timer-store"
+import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { elapsedMs } from "@/lib/timer"
 import type { JournalEntry } from "@/lib/journal"
 import type { VerseRenderData } from "@/types"
 
@@ -29,6 +30,8 @@ export interface LiveSnapshot {
   outputsOn: string[]
   scenes: Record<string, string>
   eventId: string | null
+  /** The service timer when the snapshot was taken (#196): its length, how far it had run, running or not. */
+  timer?: { durationMs: number; elapsedMs: number; running: boolean }
   /** Too big to keep whole: the program and sources were left out (pictures as data). */
   trimmed?: boolean
 }
@@ -77,6 +80,10 @@ export function takeSnapshot(now = Date.now()): LiveSnapshot {
     outputsOn: b.outputs.filter((o) => outputOnAir(o, b.outputStatus[o.id])).map((o) => o.id),
     scenes: Object.fromEntries(b.outputs.filter((o) => o.sceneId).map((o) => [o.id, o.sceneId!])),
     eventId: useEventClock.getState().currentId,
+    timer: (() => {
+      const t = useTimerStore.getState().timer
+      return t.durationMs || t.startedAt !== null || t.accumulatedMs ? { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null } : undefined
+    })(),
   }
   return JSON.stringify(snap).length > MAX_CHARS ? { ...snap, liveVerse: null, sources: {}, trimmed: true } : snap
 }
@@ -100,6 +107,13 @@ export async function putBack(s: LiveSnapshot): Promise<void> {
     if (output && !outputOnAir(output, useBroadcastStore.getState().outputStatus[id])) await enableOutput(output)
   }
   if (s.eventId && useEventClock.getState().currentId !== s.eventId) useEventClock.getState().start(s.eventId)
+  // The timer as it was, still counting the time Rhema was closed if it was running; not over one started since.
+  const now = useTimerStore.getState().timer
+  if (s.timer && now.startedAt === null && now.accumulatedMs === 0) {
+    const ran = s.timer.elapsedMs + (s.timer.running ? Math.max(0, Date.now() - s.at) : 0)
+    useTimerStore.setState({ timer: { durationMs: s.timer.durationMs, accumulatedMs: ran, startedAt: null } })
+    if (s.timer.running) useTimerStore.getState().start()
+  }
   useJournalStore.getState().add({ kind: "recovery", label: `Put back after Rhema closed unexpectedly at ${new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
   useRecovery.setState({ offer: null })
 }
@@ -152,6 +166,8 @@ export async function startLiveRecovery(): Promise<() => void> {
       if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.outputStatus !== p.outputStatus || s.outputs !== p.outputs) soon()
     }),
     useEventClock.subscribe((s, p) => { if (s.currentId !== p.currentId) soon() }),
+    // Started, paused, reset or corrected (not every tick: a running timer is worked out from the time).
+    useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useRecovery.subscribe((s, p) => { if (p.offer && !s.offer) soon() }),
     // The log, a few seconds after it changes (and when it is cleared for another service).
     useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries && !journalTimer) journalTimer = setTimeout(saveJournal, 3000) }),

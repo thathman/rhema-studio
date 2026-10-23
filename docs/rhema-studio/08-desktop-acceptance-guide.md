@@ -999,6 +999,7 @@ report), but launching it cannot.
 | 10da.2 | Put back on the screens. | The verse is on air again on the projector (in its scene if it had one); the log says RECOVERED. | Verified (same run, display awake): program back, projector on showing its scene, log RECOVERED; with the display asleep the projector could not open (macOS reported no monitors) and Rhema said so |
 | 10da.3 | Quit normally (Cmd+Q or the close button), start again. | No banner. | Verified (same build, the close path) |
 | 10da.4 | Start two run-of-show events a few minutes apart, then force quit; start again (wait 4 s after the last change). | The service log is back with both events, their actual times as before, and a line "Service log kept from before Rhema closed unexpectedly at …"; nothing on the screens. | JR_RESULT |
+| 10da.5 | A 35-minute timer running with a verse on air; force quit, wait a minute, start again, **Put back on the screens**. | The timer is back and running, the minute Rhema was closed counted. | JR2_RESULT |
 
 ### 10cz. Scene transitions (ARCH-002)
 

@@ -8,6 +8,8 @@ periodic review, so feature PRs leave those files alone.
 ## 2026-10-23 — The service log survives a crash (#196 R3, #246)
 
 - **Branch / PR:** `pt-008/journal-recovery`. `live-recovery.ts`: the journal (entries, `startItemIds`) kept in `recovery.json` under `journal`, 3 s after it changes; `restoreJournal` after an unclean exit, into an empty log, if under 6 h old, rebasing `mono` from `at` on this run's clock, with a recovery line.
+- The service timer is in the snapshot (length, elapsed, running; saved when it starts, pauses, resets or is corrected) and Put back restores it, counting the time Rhema was closed, unless a timer was started since.
+- **Tests:** `live-recovery.test.ts` (restored, durations kept, never over a begun or an old log; the timer). Desktop: acceptance 10da.4–5.
 - **Tests:** `live-recovery.test.ts` (restored, durations kept, never over a begun or an old log). Desktop: acceptance 10da.4.
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
