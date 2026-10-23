@@ -5,6 +5,10 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Planned time as typed (#196 R4)
+
+- **Branch / PR:** `pt-007/duration-entry`. `run-of-show.ts`: `parseDuration` / `formatDuration` (to the second, ≤ 600 min); Prepare's planned-time field is a `DurationInput` (applied on Enter / blur, Escape undoes, a mistake is marked).
+- **Tests:** `duration.test.ts` (every form, the limits, round trip). vitest 744. Desktop (combined QA build, 2026-10-23): Prepare → Timing on a song: "1h10" → 70 min shown 1:10:00; "4:30" → 4.5 min; "abc" marked, plan unchanged; Escape back to 4:30.
 ## 2026-10-23 — The service timer from a Timekeeper desk (#196 R5)
 
 - **Branch / PR:** `pt-010/remote-timer` (on `pt-006/shared-offset`). Remote commands `timer_start`, `timer_pause`, `timer_adjust` (±10 a step; Timekeeper/Present/Configure; with who) → the timer store and a log line. `LiveStateV1.timer` (length, elapsed, running) published on each timer change; the desk (`DeskTimer`) counts on from when the state arrived (`useJoin.receivedAt`, no clock skew between computers).

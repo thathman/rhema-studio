@@ -149,6 +149,33 @@ export function clockText(minutes: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`
 }
 
+/**
+ * A duration as typed (#196 R4): "35" or "35m" (minutes), "4.5", "4:30" (min:sec), "1:10:00"
+ * (h:mm:ss), "1h10", "1h 10m", "90s". Minutes, to the second, at most 600; null when it is not a
+ * duration (or is empty or zero).
+ */
+export function parseDuration(text: string): number | null {
+  const t = text.trim().toLowerCase().replace(/\s+/g, "")
+  let sec: number
+  let m: RegExpExecArray | null
+  if ((m = /^(\d+(?:[.,]\d+)?)m?(?:in)?$/.exec(t))) sec = Number(m[1].replace(",", ".")) * 60
+  else if ((m = /^(\d+):([0-5]\d)$/.exec(t))) sec = Number(m[1]) * 60 + Number(m[2])
+  else if ((m = /^(\d+):([0-5]\d):([0-5]\d)$/.exec(t))) sec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
+  else if ((m = /^(?:(\d+)h)?(?:(\d+)m(?:in)?)?(?:(\d+)s)?$/.exec(t)) && t) sec = Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0)
+  else if ((m = /^(\d+)h(\d+)$/.exec(t))) sec = Number(m[1]) * 3600 + Number(m[2]) * 60
+  else return null
+  const min = Math.round(sec) / 60
+  return min > 0 && min <= 600 ? min : null
+}
+
+/** A duration in minutes as it is typed back: "35", "4:30", "1:10:00". */
+export function formatDuration(minutes: number): string {
+  const s = Math.round(minutes * 60)
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+  if (h) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+  return sec ? `${m}:${String(sec).padStart(2, "0")}` : String(m)
+}
+
 export interface TimelineRow {
   kind: "milestone" | "item"
   label: string
