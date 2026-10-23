@@ -29,6 +29,7 @@ export function SetupCard() {
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <Button size="sm" onClick={() => useShellStore.getState().setSetupOpen(true)}>Continue setup</Button>
+        <Button size="sm" variant="soft" onClick={() => useShellStore.getState().setSetupStatusOpen(true)}>Setup status</Button>
         <Button size="sm" variant="ghost" onClick={() => useSettingsStore.getState().setSetup({ remindAfter: new Date(Date.now() + DAY_MS).toISOString() })}>Remind me tomorrow</Button>
         <Button size="icon-sm" variant="ghost" aria-label="Hide this reminder" title="Hide this reminder (setup stays in the Desk menu)" onClick={() => useSettingsStore.getState().setSetup({ homeCardHidden: true })}><XIcon /></Button>
       </div>

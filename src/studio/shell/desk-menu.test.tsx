@@ -45,7 +45,7 @@ beforeEach(async () => {
   onSettings.mockReset()
   useSettingsStore.setState({ operatorName: "", joinAddress: "" })
   useJoin.setState({ status: "off", me: null, live: null })
-  useShellStore.setState({ setupOpen: false })
+  useShellStore.setState({ setupOpen: false, setupStatusOpen: false })
   await mount()
 })
 afterEach(async () => {
@@ -87,6 +87,15 @@ describe("the Desk menu", () => {
     await openMenu()
     await act(async () => row("Help and the tour").click())
     expect(useSettingsDialogStore.getState().activeSection).toBe("help")
+  })
+
+  it("Setup status says what is left and opens the Setup status page (#298)", async () => {
+    await openMenu()
+    // No church name and no operator name yet; nothing switched on is failing.
+    expect(row("Setup status").textContent).toContain("Needs 2")
+    await act(async () => row("Setup status").click())
+    expect(useShellStore.getState().setupStatusOpen).toBe(true)
+    expect(document.getElementById("desk-name")).toBeNull()
   })
 
   it("Light, Dark and System switch the shell at once and are remembered", async () => {

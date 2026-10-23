@@ -981,6 +981,21 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dv. Bring in a previous installation, screen test, Setup status (#298)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dv.1 | Archive → Backups → Back up now on a profile with services and songs; then a fresh profile (settings, themes and database moved aside). On the welcome choose "Bring in a previous installation" → Choose a backup file… → the file. | The backup's services and songs are counted, with the newest service and its date; nothing has changed yet (Home and Prepare still empty). "Not brought in yet" lists settings, outputs, looks, the Brand Kit, paired phones and keys. | Unverified |
+| 10dv.2 | Press Keep what is here; choose the file again and press Restore this backup. | Keep changes nothing. Restore says "Restored: N services and M songs"; Prepare lists them; the old database is kept as a `.before-restore-….bak` file next to it. Continue to church setup opens step 1. | Unverified |
+| 10dv.3 | Choose a file that is not a backup (any .db or renamed text file). | Refused with a message; nothing changed. | Unverified |
+| 10dv.4 | (F) Projector on (Outputs). Setup → Screens → Test this screen on it; Cancel; then again and Show test pattern. | Cancel changes nothing. Then only the projector shows bars, its name and size (matching the monitor) and "TEST – not on air"; the stage screen, NDI and feeds are unchanged. End test puts back what it showed. | Unverified |
+| 10dv.5 | Put a verse on air, then Test this screen on the projector. | A second question "People may be watching this output" says something is on air; only Show it anyway shows the pattern. End test puts back the verse (the newest one if it changed meanwhile). | Unverified |
+| 10dv.6 | NDI output with OBS receiving it; browser feed open on a TV or a browser tab. Test each. | Each asks a second time (receivers / pages watching). OBS and the TV show the pattern; the feed row says "Shown on 1 page"; with the tab closed it says "Feed on, no page open"; a stuck page shows "Connected, not shown". | Unverified |
+| 10dv.7 | Start a test, then close the setup (or go to another step, or turn the output off). | The test ends by itself and the output shows its program again. | Unverified |
+| 10dv.8 | Desk menu → Setup status (fresh profile without names; then finished). Home card → Setup status. | The row reads "Needs 2", later "Complete". The page has three cards: Church setup (n of 4), Equipment and connections (Not using list), This service (Home's checks). Fix in Church name opens the setup at step 1; Outputs opens that output; Speech settings opens Settings → Speech. | Unverified |
+| 10dv.9 | (E) Settings → Speech: agree to cloud audio without a key; Setup status. Then save a Deepgram key; then choose speech on this computer. | Cloud speech · Not tested, 1 needs attention; after saving, "Key saved", no warning, the key is never shown; on this computer, Cloud speech is under Not using. Diagnostics → save a log: the key is not in it. | Unverified |
+| 10dv.10 | (H) At step 4 press Finish later; quit Rhema; start; Home card → Continue setup. Then clear your name in the Desk menu and Continue setup again. | Opens at step 4 (Bible and library); with the name cleared, at step 2. | Unverified |
+
 ### 10do. Phone cameras through Rhema's camera router (#209)
 
 | # | Step | Expected | Result |

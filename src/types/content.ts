@@ -137,6 +137,18 @@ export interface Revision extends RevisionSummary {
   items: ItemInput[]
 }
 
+/** What a backup file holds, read before restoring it (content_inspect_backup). */
+export interface BackupSummary {
+  services: number
+  songs: number
+  newest_service: string | null
+  newest_date: string | null
+  /** When a service in it was last changed (ISO). */
+  last_changed: string | null
+  /** Made by a newer Rhema Studio: this one cannot restore it. */
+  newer: boolean
+}
+
 export interface RestoreReport {
   snapshot: string | null
   migrations: string[]

@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LaptopIcon, LinkIcon, TimerIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, ArchiveRestoreIcon, CheckIcon, LaptopIcon, LinkIcon, TimerIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { SETUP_STEPS, type SetupStepId } from "@/lib/setup-readiness"
+import { resumeStep, SETUP_STEPS, type SetupStepId } from "@/lib/setup-readiness"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useShellStore } from "@/studio/shell-store"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { BibleStep, BrandStep, ChurchStep, ConnectionsStep, FinishStep, OperatorStep, ScreensStep } from "@/studio/setup/setup-steps"
+import { RestoreView } from "@/studio/setup/restore-view"
 
 /** Each step's name in the step list, its heading, and whether it may be skipped. */
 const STEP_INFO: Record<SetupStepId, { short: string; title: string; description: string; optional: boolean }> = {
@@ -56,7 +57,11 @@ export function SetupWizard() {
 
 function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
   const setup = useSettingsStore((s) => s.setup)
-  const [step, setStep] = useState<SetupStepId | "welcome">(() => useSettingsStore.getState().setup.lastStep || "welcome")
+  // Opens where it was left (a required step left empty comes first), so a restart resumes in one click.
+  const [step, setStep] = useState<SetupStepId | "welcome" | "restore">(() => {
+    const s = useSettingsStore.getState()
+    return resumeStep(s.setup, { churchName: s.brandKit.churchName, operatorName: s.operatorName })
+  })
   const [error, setError] = useState<string | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   // Each step's heading takes focus (on opening too), so a screen reader announces where the operator is.
@@ -64,15 +69,15 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
     heading.current?.focus()
   }, [step])
 
-  const go = (next: SetupStepId | "welcome") => {
+  const go = (next: SetupStepId | "welcome" | "restore") => {
     setError(null)
     setStep(next)
-    useSettingsStore.getState().setSetup({ lastStep: next === "welcome" ? "" : next })
+    useSettingsStore.getState().setSetup({ lastStep: next === "welcome" || next === "restore" ? "" : next })
   }
-  const index = step === "welcome" ? -1 : SETUP_STEPS.indexOf(step)
+  const index = step === "welcome" || step === "restore" ? -1 : SETUP_STEPS.indexOf(step)
   const mark = (id: SetupStepId, how: "done" | "skipped") => useSettingsStore.getState().setSetup({ stepsDone: { ...useSettingsStore.getState().setup.stepsDone, [id]: how } })
   const next = (how: "done" | "skipped") => {
-    if (step === "welcome") return
+    if (step === "welcome" || step === "restore") return
     const required = REQUIRED[step]
     if (how === "done" && required && !required.filled()) {
       setError(required.message)
@@ -101,15 +106,12 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
     then?.()
   }
 
-  if (step === "welcome") {
-    return (
-      <Welcome
-        onMain={() => { useSettingsStore.getState().setSetup({ mode: "main" }); go("church") }}
-        onJoin={join}
-        onLater={onFinishLater}
-      />
-    )
+  const main = () => {
+    useSettingsStore.getState().setSetup({ mode: "main" })
+    go("church")
   }
+  if (step === "welcome") return <Welcome onMain={main} onJoin={join} onRestore={() => go("restore")} onLater={onFinishLater} />
+  if (step === "restore") return <RestoreView onBack={() => go("welcome")} onContinue={main} onLeave={leaveTo} />
 
   const info = STEP_INFO[step]
   return (
@@ -186,10 +188,11 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
 }
 
 /** The first screen: how this computer will be used. */
-function Welcome({ onMain, onJoin, onLater }: { onMain: () => void; onJoin: () => void; onLater: () => void }) {
+function Welcome({ onMain, onJoin, onRestore, onLater }: { onMain: () => void; onJoin: () => void; onRestore: () => void; onLater: () => void }) {
   const choices = [
     { icon: <LaptopIcon />, title: "Set up this computer as the main desk", text: "This computer runs the service with every control. Volunteers, phones and other computers can join later; nobody else is needed.", note: "Recommended", onClick: onMain },
     { icon: <LinkIcon />, title: "Join an existing church host", text: "This computer follows another Rhema at your church. Opens Production → Operators to pair with it; nothing here is replaced.", onClick: onJoin },
+    { icon: <ArchiveRestoreIcon />, title: "Bring in a previous installation", text: "Services and songs from a backup file, a service file or the church folder. You see what comes in before anything here is replaced.", onClick: onRestore },
     { icon: <TimerIcon />, title: "Use Rhema now, finish later", text: "Start with the built-in looks. Home keeps a short reminder of what is left.", onClick: onLater },
   ]
   return (

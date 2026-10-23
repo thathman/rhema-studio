@@ -9,7 +9,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { SetupWizard } from "./setup-wizard"
 import { SetupCard } from "./setup-card"
 import { decideSetupLaunch, useSetupLaunch } from "./setup-launch"
-import { defaultSetup } from "@/lib/setup-readiness"
+import { defaultSetup, normalizeSetup } from "@/lib/setup-readiness"
 import { defaultBrandKit } from "@/lib/brand-kit"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useBibleStore } from "@/stores/bible-store"
@@ -41,6 +41,8 @@ async function type(id: string, value: string) {
   })
 }
 const heading = () => document.querySelector('[role="dialog"] h2')?.textContent
+/** The two required steps filled in, as they are once someone has gone past them. */
+const named = () => useSettingsStore.setState({ brandKit: { ...defaultBrandKit(), churchName: "Grace Chapel" }, operatorName: "Tolu" })
 
 beforeEach(async () => {
   if (root) await act(async () => root!.unmount())
@@ -119,6 +121,7 @@ describe("the setup wizard", () => {
   })
 
   it("Finish later keeps the place; opening again resumes at the last step", async () => {
+    named()
     useSettingsStore.getState().setSetup({ lastStep: "screens" })
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
@@ -162,6 +165,7 @@ describe("the setup wizard", () => {
 
   it("never lists a Bible edition that is not installed", async () => {
     useBibleStore.setState({ translations: [{ id: 9, abbreviation: "NIV", title: "New International Version", language: "en", is_copyrighted: true, is_downloaded: false }] })
+    named()
     useSettingsStore.getState().setSetup({ lastStep: "bible" })
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
@@ -170,6 +174,7 @@ describe("the setup wizard", () => {
   })
 
   it("hides while the outputs dialog is open and comes back after", async () => {
+    named()
     useSettingsStore.getState().setSetup({ lastStep: "screens" })
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
@@ -181,12 +186,86 @@ describe("the setup wizard", () => {
   })
 })
 
+describe("Join vs Solo keeps this computer's own settings (#298 G)", () => {
+  it("choosing Join after filling in the operator step changes nothing local", async () => {
+    named()
+    useSettingsStore.getState().setSetup({ lastStep: "operator", deviceName: "Sanctuary desk", campus: "Ikeja" })
+    useShellStore.setState({ setupOpen: true })
+    await render(<SetupWizard />)
+    await click("This computer should join another one instead")
+    const s = useSettingsStore.getState()
+    expect(s.setup.mode).toBe("join")
+    expect(s.operatorName).toBe("Tolu")
+    expect(s.brandKit.churchName).toBe("Grace Chapel")
+    expect(s.setup).toMatchObject({ deviceName: "Sanctuary desk", campus: "Ikeja", lastStep: "operator" })
+    // Nothing paired or joined by itself: Operators is where that is done, with the host's approval.
+    expect(s.joinAddress).toBe("")
+    expect(useProductionTab.getState().requested).toBe("operators")
+  })
+
+  it("Solo main desk needs no volunteer, host or other computer to finish", async () => {
+    named()
+    useSettingsStore.getState().setSetup({ lastStep: "finish" })
+    useShellStore.setState({ setupOpen: true })
+    await render(<SetupWizard />)
+    expect(document.body.textContent).toContain("4 of 4 essentials done")
+    expect(document.body.textContent).toContain("Phones and other computers")
+    await click("Open Home")
+    expect(useShellStore.getState().setupOpen).toBe(false)
+    expect(useSettingsStore.getState().setup.stepsDone.finish).toBe("done")
+    expect(useSettingsStore.getState().operatorName).toBe("Tolu")
+  })
+})
+
+describe("interrupted setup and restart (#298 H)", () => {
+  it("a restart opens at the step it was left on, in one click from Home", async () => {
+    named()
+    useShellStore.setState({ setupOpen: true })
+    useSettingsStore.getState().setSetup({ lastStep: "bible" })
+    await render(<SetupWizard />)
+    await click("Finish later")
+    await act(async () => root!.unmount())
+    root = null
+    // As after a restart: the saved section is read again, field by field.
+    useSettingsStore.setState({ setup: normalizeSetup(JSON.parse(JSON.stringify(useSettingsStore.getState().setup))) })
+    await render(<SetupCard />)
+    expect(document.body.textContent).not.toContain("Finish church setup") // essentials are done: no nagging
+    await act(async () => root!.unmount())
+    root = null
+    useShellStore.setState({ setupOpen: true })
+    await render(<SetupWizard />)
+    expect(heading()).toBe("Bible and library")
+  })
+
+  it("a name lost since (cleared, or a damaged file) sends it back to that step first", async () => {
+    useSettingsStore.getState().setSetup({ lastStep: "connections" })
+    useSettingsStore.setState({ brandKit: { ...defaultBrandKit(), churchName: "Grace Chapel" }, operatorName: "" })
+    useShellStore.setState({ setupOpen: true })
+    await render(<SetupWizard />)
+    expect(heading()).toBe("You and this computer")
+  })
+
+  it("a damaged setup section opens at the welcome, not a step that does not exist", async () => {
+    named()
+    useSettingsStore.setState({ setup: normalizeSetup({ lastStep: "cameras", stepsDone: 4 }) })
+    useShellStore.setState({ setupOpen: true })
+    await render(<SetupWizard />)
+    expect(document.body.textContent).toContain("Welcome to Rhema Studio")
+  })
+})
+
 describe("Home's Finish church setup card", () => {
   it("shows the missing essentials and opens the setup", async () => {
     await render(<SetupCard />)
     expect(document.body.textContent).toContain("Finish church setup · 2 items")
     await click("Continue setup")
     expect(useShellStore.getState().setupOpen).toBe(true)
+  })
+
+  it("Setup status opens the three-card status page", async () => {
+    await render(<SetupCard />)
+    await click("Setup status")
+    expect(useShellStore.getState().setupStatusOpen).toBe(true)
   })
 
   it("is hidden once the essentials are done, whatever optional features are unused", async () => {

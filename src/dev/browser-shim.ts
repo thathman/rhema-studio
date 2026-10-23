@@ -99,6 +99,7 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "media_list": return []
     case "media_import": return (args.paths as string[]).map((path) => ({ status: "failed", path, message: "the browser shim has no media folder" }))
     case "content_restore": return { snapshot: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"] }
+    case "content_inspect_backup": return { services: 3, songs: 12, newest_service: "Sunday Service", newest_date: "2026-10-25", last_changed: "2026-10-23T10:00:00Z", newer: false }
     case "content_list_programs": return [...programs.values()].map((p) => p.program)
     case "content_create_program": {
       const id = uid()

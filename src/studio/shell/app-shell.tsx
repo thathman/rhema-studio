@@ -35,6 +35,7 @@ import { RecoveryBanner } from "@/studio/shell/recovery-banner"
 import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
 import { SetupWizard } from "@/studio/setup/setup-wizard"
+import { SetupStatusDialog } from "@/studio/setup/setup-status"
 import { decideSetupLaunch } from "@/studio/setup/setup-launch"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
@@ -182,6 +183,7 @@ export function AppShell() {
       <BroadcastOutputsDialog open={outputsOpen} onOpenChange={setOutputsOpen} />
       <GlobalSearch />
       <SetupWizard />
+      <SetupStatusDialog />
     </div>
   )
 }

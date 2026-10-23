@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
-import { CheckIcon, CircleDashedIcon, LoaderCircleIcon, TriangleAlertIcon } from "lucide-react"
+import { TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
-import { EQUIPMENT_LABEL, type EquipmentItem, type EquipmentState, type SetupItem } from "@/lib/setup-readiness"
+import type { EquipmentItem } from "@/lib/setup-readiness"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMonitorStore } from "@/stores/monitor-store"
@@ -16,6 +16,8 @@ import { useShellStore } from "@/studio/shell-store"
 import { BrandDesigner } from "@/studio/design/brand-designer"
 import { ChurchFolderBlock } from "@/studio/library/library-blocks"
 import { useSetupStatus } from "@/studio/setup/use-setup-status"
+import { EssentialRow, StatusRow } from "@/studio/setup/status-rows"
+import { ScreenTestRow } from "@/studio/setup/screen-test"
 
 type Leave = (open: () => void) => void
 
@@ -187,6 +189,7 @@ export function ScreensStep() {
   const count = useMonitorStore((s) => s.count)
   const names = useMonitorStore((s) => s.names)
   const items = useSetupStatus().equipment.items.filter((i) => i.id.startsWith("output-"))
+  const outputs = useBroadcastStore((s) => s.outputs)
   return (
     <div className="flex max-w-xl flex-col gap-5">
       <p className="text-sm">
@@ -194,13 +197,14 @@ export function ScreensStep() {
       </p>
       <section aria-labelledby="setup-outputs" className="flex flex-col gap-2">
         <h3 id="setup-outputs" className="text-xs font-semibold">Outputs</h3>
-        {items.length === 0 ? (
+        {outputs.length === 0 ? (
           <p className="text-xs text-muted-foreground">No outputs yet. You can plan services without any; add them when you are ready.</p>
         ) : (
           <ul className="divide-y divide-border rounded-lg border border-border bg-card px-4">
-            {items.map((i) => <StatusRow key={i.id} label={i.label} detail={i.detail} state={i.state} />)}
+            {outputs.map((o) => <ScreenTestRow key={o.id} output={o} item={items.find((i) => i.id === `output-${o.id}`)} />)}
           </ul>
         )}
+        <p className="text-xs text-muted-foreground">Test this screen shows a test pattern on that one output, after you confirm, until you end the test. It works on outputs that are on.</p>
       </section>
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-xs text-muted-foreground">
@@ -275,51 +279,5 @@ export function FinishStep() {
       </section>
       <p className="text-xs text-muted-foreground">Whether a particular service is ready is on Home, under “Your attention”. Services and songs are kept on this computer; back them up from Archive → Backups.</p>
     </div>
-  )
-}
-
-const ESSENTIAL: Record<SetupItem["state"], { icon: React.ReactNode; text: string; tone: string }> = {
-  done: { icon: <CheckIcon className="size-4" />, text: "Done", tone: "text-confidence-high" },
-  attention: { icon: <TriangleAlertIcon className="size-4" />, text: "Needs attention", tone: "text-confidence-mid" },
-  checking: { icon: <LoaderCircleIcon className="size-4" />, text: "Checking", tone: "text-muted-foreground" },
-  later: { icon: <CircleDashedIcon className="size-4" />, text: "Optional later", tone: "text-muted-foreground" },
-}
-
-function EssentialRow({ item }: { item: SetupItem }) {
-  const s = ESSENTIAL[item.state]
-  return (
-    <li className="flex items-start gap-3 py-2.5">
-      <span aria-hidden className={cn("mt-0.5", s.tone)}>{s.icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{item.label}</span>
-        {item.detail && <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>}
-      </span>
-      <span className={cn("shrink-0 text-xs font-semibold", s.tone)}>{s.text}</span>
-    </li>
-  )
-}
-
-const TONE: Record<EquipmentState, string> = {
-  verified: "bg-tone-green text-tone-green-foreground",
-  connected: "bg-tone-blue text-tone-blue-foreground",
-  configured: "bg-tone-neutral text-tone-neutral-foreground",
-  "not-tested": "bg-tone-amber text-tone-amber-foreground",
-  "not-using": "bg-tone-neutral text-tone-neutral-foreground",
-}
-
-function StatusRow({ label, detail, state, attention, children }: { label: string; detail?: string; state: EquipmentState; attention?: boolean; children?: React.ReactNode }) {
-  return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium">{label}</span>
-        {detail && <span className="block text-xs text-muted-foreground">{detail}</span>}
-      </span>
-      <span className={cn("shrink-0 rounded-[5px] px-[7px] py-[3px] text-[0.625rem] font-bold tracking-[0.04em] uppercase", TONE[state])}>
-        {attention && <TriangleAlertIcon aria-hidden className="mr-1 inline size-3 align-[-2px]" />}
-        {EQUIPMENT_LABEL[state]}
-        {attention && <span className="sr-only"> (needs attention)</span>}
-      </span>
-      {children && <span className="flex shrink-0 gap-1.5">{children}</span>}
-    </li>
   )
 }

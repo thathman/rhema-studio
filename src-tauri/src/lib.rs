@@ -232,6 +232,7 @@ pub fn run() {
             commands::content::content_restore_revision,
             commands::content::content_backup,
             commands::content::content_restore,
+            commands::content::content_inspect_backup,
             commands::media::media_import,
             commands::media::media_list,
             commands::media::media_set_dimensions,

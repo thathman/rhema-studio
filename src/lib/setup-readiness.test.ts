@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { churchSetup, defaultSetup, equipment, isFreshInstall, normalizeSetup, shouldAutoOpenSetup, showSetupCard, type ChurchSetupInput, type EquipmentInput, type InstallFacts } from "./setup-readiness"
+import { churchSetup, defaultSetup, equipment, isFreshInstall, normalizeSetup, resumeStep, setupStatusLabel, shouldAutoOpenSetup, showSetupCard, type ChurchSetupInput, type EquipmentInput, type InstallFacts } from "./setup-readiness"
 
 const fresh: InstallFacts = {
   churchName: "",
@@ -188,5 +188,34 @@ describe("showSetupCard", () => {
     expect(showSetupCard(2, { ...defaultSetup(), homeCardHidden: true }, now)).toBe(false)
     expect(showSetupCard(2, { ...defaultSetup(), remindAfter: "2026-10-24T12:00:00Z" }, now)).toBe(false)
     expect(showSetupCard(2, { ...defaultSetup(), remindAfter: "2026-10-22T12:00:00Z" }, now)).toBe(true)
+  })
+})
+
+describe("resumeStep (#298 H: interrupted setup, restart)", () => {
+  const names = { churchName: "Grace Chapel", operatorName: "Tolu" }
+  it("opens at the step it was left on", () => {
+    expect(resumeStep({ ...defaultSetup(), lastStep: "screens" }, names)).toBe("screens")
+    expect(resumeStep(defaultSetup(), names)).toBe("welcome")
+  })
+
+  it("goes back to the first required step that is no longer filled in", () => {
+    expect(resumeStep({ ...defaultSetup(), lastStep: "bible" }, { ...names, churchName: " " })).toBe("church")
+    expect(resumeStep({ ...defaultSetup(), lastStep: "finish" }, { ...names, operatorName: "" })).toBe("operator")
+    // On the required step itself: stays there.
+    expect(resumeStep({ ...defaultSetup(), lastStep: "church" }, { churchName: "", operatorName: "" })).toBe("church")
+    expect(resumeStep({ ...defaultSetup(), lastStep: "operator" }, { ...names, operatorName: "" })).toBe("operator")
+  })
+
+  it("a damaged setup section resumes at the welcome, never at a step that does not exist", () => {
+    expect(resumeStep(normalizeSetup({ lastStep: "cameras", stepsDone: "x" }), names)).toBe("welcome")
+    expect(resumeStep(normalizeSetup(null), names)).toBe("welcome")
+  })
+})
+
+describe("setupStatusLabel", () => {
+  it("is Complete only with no missing essential and nothing switched on failing", () => {
+    expect(setupStatusLabel(0, 0)).toBe("Complete")
+    expect(setupStatusLabel(2, 0)).toBe("Needs 2")
+    expect(setupStatusLabel(0, 1)).toBe("Needs 1")
   })
 })
