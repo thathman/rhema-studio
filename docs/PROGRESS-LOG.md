@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — COMMS-001 C4 (part): talk channels and private calls
+
+- **Branch / PR:** `comms-004/channels`.
+- **Behaviour:** `voice_channels {listen, talk}`; host routing matrix (one gain per speaker → listener, `rewire`, `hears`); Talk to (All crew / channel / Only…) on both desks, Hear checkboxes on joined desks; crew list shows targets.
+- **Tests:** rhema-api (`voice_channels` parse, 28 commands); `talk.test.tsx` (routing rule, names); in-app tone test (ADR 0002 §2a). Real data 6/6, WebKit restored.
+- **Remaining C4:** phone voice (HTTPS decision), priority controls, revocation from the talk channel (revoking a key already ends its access at the next request; an open call continues until it leaves).
+
 ## 2026-10-23 — Recovery after an unexpected close (#246 live safety)
 
 - **Branch / PR:** `live-recovery`.

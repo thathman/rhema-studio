@@ -44,6 +44,17 @@ suppression on) and its own `AudioContext`; its output is an `<audio>` element o
 output, with nothing connected to the sound player, outputs, NDI, recording or listening. Selecting
 a separate headset output is C4 (WebKit's `setSinkId` support is to be checked).
 
+## 2a. Channels and private calls (C4)
+
+Everyone is in All crew; Production and Stage & worship are heard unless a desk unticks them; the
+main desk hears every channel. A speaker talks to All crew, one channel, or one person
+(`to:<name>`, `to:host`). The host keeps one gain node per speaker → listener pair and sets each to
+1 or 0 by that rule (`rewire`), so joining, leaving or changing channels never renegotiates WebRTC.
+Desks send their choice with `voice_channels {listen, talk}`.
+
+Verified in the app (2026-10-23, tones over the real listener): A to Production was heard by B
+(listening) and not C; A privately to C was heard by C only; B to All crew by A and C.
+
 ## 3. Phones (C4) — needs an owner decision
 
 Browsers allow the microphone only in a secure context. The phone remote page is served over plain
