@@ -62,7 +62,9 @@ shortcuts and the phone remote keep calling the same actions.
   Restore (the scene it last showed). Only congregation outputs take scenes; Black and Logo cover them.
 - **Drawing:** `drawScene` (`src/lib/scene-renderer.ts`) draws each feed layer's look whole and then
   crops and scales it into its box, so a transparent look stays keyed; the output window and the
-  composer's preview use the same code. The lower third and ticker still draw over the whole frame.
+  composer's preview use the same code. The lower third and ticker draw over the whole frame, unless
+  the scene has a ticker or lower-third layer of its own (#243): such a scene owns that source on its
+  output, which then draws it only in the layer's box. A logo layer shows the Brand Kit logo.
 - **Composer:** Production → Programs. Edits stay in the composer until Save or Take, so a scene on air
   never changes while it is arranged.
 

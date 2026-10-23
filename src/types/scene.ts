@@ -1,4 +1,5 @@
 import type { BroadcastTheme, ContentType, VerseRenderData } from "./broadcast"
+import type { LowerThird, Ticker } from "./broadcast-output"
 
 /** A place in the frame, in % of its width and height (x/y = top-left). */
 export interface SceneBox {
@@ -19,9 +20,12 @@ export interface SceneCrop {
 /**
  * feed: live content (the sources it follows) in an approved look; color and picture: a
  * background; camera: a camera on the church network (a WHEP stream, e.g. from MediaMTX; #209); clock: the
- * service timer in a look (a countdown before the service).
+ * service timer in a look (a countdown before the service); ticker: the running ticker, in its box;
+ * lowerThird: the lower third on air, in its box; logo: the church's Brand Kit logo, fitted in its box.
+ * A scene with a ticker (or lower third) layer owns that source on its output: the output does not
+ * also draw it over the whole frame.
  */
-export type SceneLayerKind = "feed" | "color" | "picture" | "camera" | "clock"
+export type SceneLayerKind = "feed" | "color" | "picture" | "camera" | "clock" | "ticker" | "lowerThird" | "logo"
 
 /**
  * A clock as an output draws it: counting down to `at`, up from `at` (wall-clock ms), or still at
@@ -94,6 +98,12 @@ export interface SceneLayerFrame {
   cameraUrl?: string
   /** camera: words for its box while the camera is not playing, in `theme`'s text style. */
   fallback?: string
+  /** ticker: the running ticker (null when none runs). */
+  ticker?: Ticker | null
+  /** lowerThird: the lower third on air (null when none is up). */
+  overlay?: LowerThird | null
+  /** ticker, lowerThird: the output's verse font, for a style without its own. */
+  fontFamily?: string
   /** Shown in the composer's preview only (e.g. "Camera — planned"). */
   label?: string
 }

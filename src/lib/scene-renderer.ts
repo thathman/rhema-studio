@@ -1,6 +1,8 @@
-import { renderVerse } from "@/lib/verse-renderer"
+import { drawLowerThird, renderVerse } from "@/lib/verse-renderer"
 import { clockText } from "@/lib/scenes"
-import type { SceneFrame, SceneLayerFrame } from "@/types"
+import { drawTicker } from "@/lib/ticker-draw"
+import { entranceProgress } from "@/lib/lower-third-style"
+import type { LowerThird, SceneFrame, SceneLayerFrame, Ticker } from "@/types"
 
 export interface SceneDrawOptions {
   /** A loaded picture for a URL, or null while it loads (the caller loads it and redraws). */
@@ -17,6 +19,25 @@ export interface SceneDrawOptions {
   camera?: (layerId: string) => HTMLVideoElement | null
   /** The page shows this playing camera itself, under the canvas: leave its box see-through. */
   cameraBelow?: (layerId: string) => boolean
+  /** The ticker's looping video backing, where one plays. */
+  tickerVideo?: HTMLVideoElement | null
+  /** The lower third's looping video backing, where one plays. */
+  lowerThirdVideo?: HTMLVideoElement | null
+}
+
+/** Something in the scene moves by itself: a ticker running in its box, or a lower third coming in. */
+export function sceneMoving(frame: SceneFrame | undefined, now: number): boolean {
+  return !!frame?.layers.some((l) => (l.kind === "ticker" && !!l.ticker && !l.ticker.pausedAt) || (l.kind === "lowerThird" && !!l.overlay && entranceProgress(l.overlay, now) < 1))
+}
+
+/** The ticker a scene draws in a box of its own (for its video or picture backing), or null. */
+export function sceneTicker(frame: SceneFrame | undefined): Ticker | null {
+  return frame?.layers.find((l) => l.kind === "ticker" && l.ticker)?.ticker ?? null
+}
+
+/** The lower third a scene draws in a box of its own, or null. */
+export function sceneOverlay(frame: SceneFrame | undefined): LowerThird | null {
+  return frame?.layers.find((l) => l.kind === "lowerThird" && l.overlay)?.overlay ?? null
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
@@ -40,6 +61,35 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, r: { x: number; y:
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
   ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2)
+}
+
+/**
+ * Paint something that lays itself out in a frame (the ticker, a lower third) into a layer's box,
+ * as if the box were the whole frame. A see-through layer goes through its own canvas, because
+ * those drawings set their own transparency.
+ */
+function inBox(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, opts: SceneDrawOptions, paint: (c: CanvasRenderingContext2D, w: number, h: number) => void): void {
+  if (l.opacity >= 1) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(r.x, r.y, r.w, r.h)
+    ctx.clip()
+    ctx.translate(r.x, r.y)
+    paint(ctx, r.w, r.h)
+    ctx.restore()
+    return
+  }
+  const lc = opts.layerCanvas(l.id)
+  const w = Math.max(1, Math.round(r.w)), h = Math.max(1, Math.round(r.h))
+  if (lc.width !== w || lc.height !== h) {
+    lc.width = w
+    lc.height = h
+  }
+  const lctx = lc.getContext("2d")
+  if (!lctx) return
+  lctx.clearRect(0, 0, w, h)
+  paint(lctx, w, h)
+  ctx.drawImage(lc, r.x, r.y, w, h)
 }
 
 /**
@@ -85,6 +135,25 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
         const cw = r.w / scale, ch = r.h / scale
         ctx.drawImage(v, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
       }
+    } else if (l.kind === "logo" && l.imageUrl) {
+      const img = opts.image(l.imageUrl)
+      if (img && img.naturalWidth > 0) {
+        const s = source(l, img.naturalWidth, img.naturalHeight)
+        // Fitted inside the box, whole and centred, keeping its shape.
+        const scale = Math.min(r.w / s.sw, r.h / s.sh)
+        const w = s.sw * scale, h = s.sh * scale
+        ctx.drawImage(img, s.sx, s.sy, s.sw, s.sh, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h)
+      }
+    } else if (l.kind === "ticker" && l.ticker) {
+      // The band fills its box; the words move at the speed they have over the whole frame.
+      const tk = l.ticker
+      const now = opts.now ?? Date.now()
+      inBox(ctx, l, r, opts, (c, w, h) => drawTicker(c, w, h, { ...tk, style: { ...tk.style, position: "top", height: 100, speed: (tk.style.speed * height) / Math.max(1, h) } }, l.fontFamily, { imageCache: opts.imageCache, video: opts.tickerVideo ?? null, now }))
+    } else if (l.kind === "lowerThird" && l.overlay) {
+      // Laid out in its box as it would be on a frame of that size.
+      const lt = l.overlay
+      const now = opts.now ?? Date.now()
+      inBox(ctx, l, r, opts, (c, w, h) => drawLowerThird(c, w, h, lt, l.fontFamily, { imageCache: opts.imageCache, video: opts.lowerThirdVideo ?? null, progress: entranceProgress(lt, now) }))
     } else if (l.kind === "clock" && l.theme && l.clock) {
       // The time fills its box in the look's text style; whatever is behind shows around it.
       fitText(ctx, clockText(l.clock, opts.now ?? Date.now()), r, l.theme, 0.8)

@@ -1,14 +1,16 @@
 import { useTimerStore, monotonicNow } from "@/stores/timer-store"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EyeIcon, EyeOffIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon, UndoIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, BookmarkPlusIcon, CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
 import { drawScene } from "@/lib/scene-renderer"
-import { copyScene, newLayer, newScene, SCENE_PRESETS, sceneClock, sceneFrame } from "@/lib/scenes"
+import { copyScene, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneFrame, type ScenePreset } from "@/lib/scenes"
+import { overlayFor } from "@/lib/lower-third-style"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { useMediaStore } from "@/stores/media-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
@@ -62,12 +64,7 @@ export function SceneComposer() {
             ))}
             {scenes.length === 0 && <li className="text-xs text-muted-foreground">No scenes yet. Start from one below.</li>}
           </ul>
-          <span className="mt-1 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">New from</span>
-          {SCENE_PRESETS.map((p) => (
-            <button key={p.id} type="button" title={p.description} onClick={() => open(newScene(p.name, p))} className="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs hover:bg-muted [&_svg]:size-3.5">
-              <PlusIcon /> {p.name}
-            </button>
-          ))}
+          <NewFrom onNew={(p) => open(newScene(p.name, p))} />
         </section>
 
         <section aria-label="Scene preview" className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-3">
@@ -92,10 +89,11 @@ export function SceneComposer() {
                   </select>
                 </label>
                 <Button size="sm" variant="outline" onClick={() => open(copyScene(draft, `${draft.name} copy`))}><CopyIcon /> Duplicate</Button>
+                <SaveAsPreset key={draft.id} scene={draft} />
                 {saved && <ConfirmDelete label={`Delete ${draft.name}`} onConfirm={() => { useBroadcastStore.getState().deleteScene(draft.id); open(null) }} />}
               </div>
               {target && <ScenePreview scene={draft} output={target} selected={layerId} onSelect={setLayerId} onMove={(id, box) => editLayer(id, { box })} />}
-              <AddLayer onAdd={(kind) => { const l = newLayer(kind, { box: kind === "feed" ? { x: 10, y: 60, w: 80, h: 35 } : { x: 0, y: 0, w: 100, h: 100 } }); setDraft({ ...draft, layers: [...draft.layers, l] }); setLayerId(l.id) }} />
+              <AddLayer onAdd={(kind) => { const l = newLayer(kind, { box: kind === "feed" ? { x: 10, y: 60, w: 80, h: 35 } : layerBox(kind) }); setDraft({ ...draft, layers: [...draft.layers, l] }); setLayerId(l.id) }} />
               <ol aria-label="Layers, bottom first" className="flex flex-col gap-1">
                 {draft.layers.map((l, i) => (
                   <li key={l.id} className={cn("flex items-center gap-1 rounded-md border px-2 py-1 text-xs", l.id === layerId ? "border-primary" : "border-border")}>
@@ -127,7 +125,56 @@ function describe(l: SceneLayer): string {
   if (l.kind === "feed") return l.shows?.length ? l.shows.map((k) => CONTENT_NAMES[k]).join(" + ") + (l.held ? " · held" : "") : "whatever is on air" + (l.held ? " · held" : "")
   if (l.kind === "color") return "colour"
   if (l.kind === "picture") return "picture"
+  if (l.kind === "clock") return "clock"
+  if (l.kind === "ticker") return "the running ticker"
+  if (l.kind === "lowerThird") return "the lower third on air"
+  if (l.kind === "logo") return "the church logo"
   return l.cameraUrl ? "camera" : "camera (no stream yet)"
+}
+
+/** The new-scene menu: the ready-made arrangements, then the church's own presets (rename, delete). */
+function NewFrom({ onNew }: { onNew: (p: ScenePreset) => void }) {
+  const own = useBroadcastStore((s) => s.scenePresets)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [name, setName] = useState("")
+  const item = "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs hover:bg-muted [&_svg]:size-3.5 [&_svg]:shrink-0"
+  const heading = "mt-1 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase"
+  return (
+    <>
+      <span className={heading}>New from</span>
+      {SCENE_PRESETS.map((p) => (
+        <button key={p.id} type="button" title={p.description} onClick={() => onNew(p)} className={item}>
+          <PlusIcon /> {p.name}
+        </button>
+      ))}
+      {own.length > 0 && <span className={heading}>Your presets</span>}
+      {own.map((p) => renaming === p.id ? (
+        <form key={p.id} className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); useBroadcastStore.getState().renameScenePreset(p.id, name); setRenaming(null) }}>
+          <input aria-label={`New name for ${p.name}`} autoFocus value={name} maxLength={80} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setRenaming(null) }} className="h-7 min-w-0 flex-1 rounded-md border border-input bg-transparent px-1.5 text-xs" />
+          <Button size="xs" type="submit" disabled={!name.trim()}>Save</Button>
+        </form>
+      ) : (
+        <div key={p.id} className="flex items-center gap-0.5">
+          <button type="button" title="Your preset: a new scene with this arrangement" onClick={() => onNew(ownPreset(p))} className={item}><PlusIcon /> <span className="truncate">{p.name}</span></button>
+          <IconButton label={`Rename the preset ${p.name}`} onClick={() => { setRenaming(p.id); setName(p.name) }}><PencilIcon /></IconButton>
+          <ConfirmDelete label={`Delete the preset ${p.name}`} onConfirm={() => useBroadcastStore.getState().deleteScenePreset(p.id)} />
+        </div>
+      ))}
+    </>
+  )
+}
+
+/** Keep this scene's arrangement as one of the church's presets, for new scenes. */
+function SaveAsPreset({ scene }: { scene: Scene }) {
+  const [name, setName] = useState<string | null>(null)
+  if (name === null) return <Button size="sm" variant="outline" onClick={() => setName(scene.name)} title="Keep this arrangement as a preset for new scenes"><BookmarkPlusIcon /> Save as preset</Button>
+  return (
+    <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); useBroadcastStore.getState().saveScenePreset(scene, name); setName(null) }}>
+      <input aria-label="Preset name" autoFocus value={name} maxLength={80} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setName(null) }} title="A preset of the same name is replaced" className="h-8 w-40 rounded-md border border-input bg-transparent px-2 text-xs" />
+      <Button size="sm" type="submit" disabled={!name.trim()}>Save preset</Button>
+      <Button size="sm" variant="ghost" type="button" onClick={() => setName(null)}>Cancel</Button>
+    </form>
+  )
 }
 
 function swap<T>(a: T[], i: number, j: number): T[] {
@@ -141,7 +188,7 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
 }
 
 function AddLayer({ onAdd }: { onAdd: (kind: SceneLayerKind) => void }) {
-  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["clock", "Clock"], ["camera", "Camera"]]
+  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["clock", "Clock"], ["camera", "Camera"], ["ticker", "Ticker"], ["lowerThird", "Lower third"], ["logo", "Logo"]]
   return (
     <div role="group" aria-label="Add a layer" className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Add</span>
@@ -156,9 +203,14 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const sources = useBroadcastStore((s) => s.sources)
   const themes = useBroadcastStore((s) => s.themes)
+  const ticker = useBroadcastStore((s) => tickerForScreens(s))
+  const lowerThird = useBroadcastStore((s) => s.lowerThird)
+  const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
   const timer = useTimerStore((s) => s.timer)
   useTimerStore((s) => s.tick)
-  const live = { isLive, liveVerse, sources, themes }
+  // The lower third as this output would show it (one that follows the program takes its words).
+  const overlay = overlayFor(lowerThird, feedFrame({ isLive, liveVerse, sources }, output.shows))
+  const live = { isLive, liveVerse, sources, themes, ticker, overlay, logoUrl }
   const theme = live.themes.find((t) => t.id === output.themeId) ?? live.themes[0]
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layers = useRef(new Map<string, HTMLCanvasElement>())
@@ -366,7 +418,10 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
         <Num label="Width %" value={b.w} min={1} max={100 - b.x} onChange={(w) => onChange({ box: { ...b, w } })} />
         <Num label="Height %" value={b.h} min={1} max={100 - b.y} onChange={(h) => onChange({ box: { ...b, h } })} />
       </div>
-      {layer.kind !== "color" && (
+      {layer.kind === "ticker" && <p className="text-muted-foreground">The ticker that is running (Present → Ticker), in this box. While this scene is up, the ticker shows only here, not across the whole screen. Nothing shows here while no ticker runs.</p>}
+      {layer.kind === "lowerThird" && <p className="text-muted-foreground">The lower third that is up (Present → Lower third), laid out in this box. While this scene is up, the lower third shows only here, not across the whole screen.</p>}
+      {layer.kind === "logo" && <LogoNote />}
+      {layer.kind !== "color" && layer.kind !== "ticker" && layer.kind !== "lowerThird" && (
         <div className="grid grid-cols-4 gap-1.5">
           <Num label="Crop left" value={crop.l} max={90 - crop.r} onChange={(l) => onChange({ crop: { ...crop, l } })} />
           <Num label="Crop top" value={crop.t} max={90 - crop.b} onChange={(t) => onChange({ crop: { ...crop, t } })} />
@@ -385,6 +440,11 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       </div>
     </div>
   )
+}
+
+function LogoNote() {
+  const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
+  return <p className="text-muted-foreground">{logoUrl ? "The church logo from the Brand Kit (Design), fitted whole in this box. A new logo there shows here too." : "No church logo yet: add it in Design → Brand Kit, and it shows here."}</p>
 }
 
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {

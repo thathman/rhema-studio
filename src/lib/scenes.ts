@@ -3,7 +3,7 @@ import { themeIdFor } from "@/lib/output-themes"
 import { feedFrame, type LiveSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
-import type { BroadcastOutput, BroadcastTheme, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerKind, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastTheme, LowerThird, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 
 /**
@@ -12,7 +12,7 @@ import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
  * output makes it that output's program.
  */
 
-const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "camera", "clock"]
+const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "camera", "clock", "ticker", "lowerThird", "logo"]
 const clamp = (n: unknown, lo: number, hi: number, d: number) => (typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d)
 
 export const FULL: SceneBox = { x: 0, y: 0, w: 100, h: 100 }
@@ -20,9 +20,17 @@ export const FULL: SceneBox = { x: 0, y: 0, w: 100, h: 100 }
 let seq = 0
 const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `layer-${Date.now()}-${++seq}`)
 
+const LAYER_NAMES: Record<SceneLayerKind, string> = { feed: "Live content", color: "Colour", picture: "Picture", camera: "Camera", clock: "Clock", ticker: "Ticker", lowerThird: "Lower third", logo: "Logo" }
+
+/** Where a new layer of a kind goes when nothing says: the ticker along the bottom, the logo in the top-right corner, the rest full frame. */
+export function layerBox(kind: SceneLayerKind): SceneBox {
+  if (kind === "ticker") return { x: 0, y: 92, w: 100, h: 8 }
+  if (kind === "logo") return { x: 84, y: 4, w: 12, h: 12 }
+  return { ...FULL }
+}
+
 export function newLayer(kind: SceneLayerKind, patch: Partial<SceneLayer> = {}): SceneLayer {
-  const name = kind === "feed" ? "Live content" : kind === "color" ? "Colour" : kind === "picture" ? "Picture" : kind === "clock" ? "Clock" : "Camera"
-  return { id: newId(), name, kind, box: { ...FULL }, opacity: 1, visible: true, ...(kind === "color" ? { color: "#101820" } : {}), ...patch }
+  return { id: newId(), name: LAYER_NAMES[kind], kind, box: layerBox(kind), opacity: 1, visible: true, ...(kind === "color" ? { color: "#101820" } : {}), ...patch }
 }
 
 export interface ScenePreset {
@@ -30,6 +38,10 @@ export interface ScenePreset {
   name: string
   description: string
   layers: () => SceneLayer[]
+  /** A preset the church saved from one of its scenes (it can be renamed and deleted). */
+  own?: boolean
+  background?: string
+  fadeMs?: number
 }
 
 /** Ready-made arrangements; each is an ordinary scene once added. */
@@ -48,11 +60,50 @@ export const SCENE_PRESETS: ScenePreset[] = [
     newLayer("camera", { name: "Pulpit camera" }),
     newLayer("feed", { name: "Bible", shows: ["bible"], box: { x: 0, y: 70, w: 100, h: 30 } }),
   ] },
+  { id: "full-camera", name: "Full camera", description: "One camera, full screen", layers: () => [newLayer("camera", { name: "Camera" })] },
+  { id: "pip-camera", name: "Camera in a corner", description: "Whatever is on air, with a small camera in the top-right corner", layers: () => [
+    newLayer("feed", { name: "On air" }),
+    newLayer("camera", { name: "Pulpit camera", box: { x: 70, y: 4, w: 26, h: 26 } }),
+  ] },
+  { id: "sermon-split", name: "Sermon split", description: "The preacher's camera on the left, the verse on the right", layers: () => [
+    newLayer("color", { name: "Background" }),
+    newLayer("camera", { name: "Pulpit camera", box: { x: 0, y: 25, w: 50, h: 50 } }),
+    newLayer("feed", { name: "Bible", shows: ["bible"], box: { x: 50, y: 25, w: 50, h: 50 } }),
+  ] },
+  { id: "welcome", name: "Welcome", description: "The church logo, a countdown to the service and the ticker", layers: () => [
+    newLayer("color", { name: "Background" }),
+    newLayer("logo", { box: { x: 35, y: 10, w: 30, h: 30 } }),
+    newLayer("clock", { name: "Countdown to the service", clockShows: "until", box: { x: 25, y: 46, w: 50, h: 26 } }),
+    newLayer("ticker"),
+  ] },
 ]
 
 export function newScene(name: string, preset: ScenePreset = SCENE_PRESETS[0]): Scene {
   const now = Date.now()
-  return { id: newId(), name: name.trim().slice(0, 80) || preset.name, background: "#000000", layers: preset.layers(), createdAt: now, updatedAt: now }
+  return { id: newId(), name: name.trim().slice(0, 80) || preset.name, background: preset.background ?? "#000000", layers: preset.layers(), ...(preset.fadeMs ? { fadeMs: preset.fadeMs } : {}), createdAt: now, updatedAt: now }
+}
+
+/**
+ * A church's own preset, saved from a scene: its arrangement with new ids and without held copies
+ * (a preset starts every new scene following live).
+ */
+export function presetFromScene(scene: Scene, name: string): Scene {
+  const now = Date.now()
+  return { ...scene, id: newId(), name: name.trim().slice(0, 80) || scene.name, layers: scene.layers.map((l) => ({ ...l, id: newId(), held: undefined })), createdAt: now, updatedAt: now }
+}
+
+/** A saved preset as the composer's new-scene menu offers it, beside the built-in ones. */
+export function ownPreset(p: Scene): ScenePreset {
+  return { id: p.id, name: p.name, description: "Your preset", own: true, background: p.background, fadeMs: p.fadeMs, layers: () => p.layers.map((l) => ({ ...l, id: newId() })) }
+}
+
+/**
+ * Which sources a scene draws in boxes of its own. A scene with a ticker layer (shown or hidden)
+ * owns the ticker on its output, and one with a lower-third layer owns the lower third: the output
+ * then never also draws them over the whole frame.
+ */
+export function sceneOwns(scene: Pick<Scene, "layers"> | undefined): { ticker: boolean; lowerThird: boolean } {
+  return { ticker: !!scene?.layers.some((l) => l.kind === "ticker"), lowerThird: !!scene?.layers.some((l) => l.kind === "lowerThird") }
 }
 
 /** A copy with new ids (Duplicate). */
@@ -101,6 +152,12 @@ interface LiveState {
   clock?: SceneClock | null
   /** Wall-clock ms for "count down to a time" (default: now). */
   now?: number
+  /** The running ticker, for ticker layers (null or absent: none runs). */
+  ticker?: Ticker | null
+  /** The lower third on air for this output, for lower-third layers. */
+  overlay?: LowerThird | null
+  /** The church's Brand Kit logo (a data URL), for logo layers. */
+  logoUrl?: string | null
 }
 
 /**
@@ -145,6 +202,8 @@ export function layerContent(s: LiveState, output: Pick<BroadcastOutput, "themeI
  * output never draws (a camera that is not connected yet).
  */
 export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId" | "themeFor" | "language">, scene: Scene, preview = false): SceneFrame {
+  // The ticker and lower third fall back to the output's verse font, as they do over the whole frame.
+  const font = () => (s.themes.find((t) => t.id === output.themeId) ?? s.themes[0])?.verseText?.fontFamily
   return {
     sceneId: scene.id,
     background: scene.background,
@@ -154,6 +213,9 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
       if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }
       if (l.kind === "color") return { ...base, color: l.color ?? "#000000" }
       if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }
+      if (l.kind === "logo") return { ...base, imageUrl: s.logoUrl ?? null, ...(preview && !s.logoUrl ? { label: "Add the church logo in Design → Brand Kit" } : {}) }
+      if (l.kind === "ticker") return { ...base, ticker: s.ticker ?? null, fontFamily: font(), ...(preview && !s.ticker ? { label: `${l.name} · shows when the ticker runs` } : {}) }
+      if (l.kind === "lowerThird") return { ...base, overlay: s.overlay ?? null, fontFamily: font(), ...(preview && !s.overlay ? { label: `${l.name} · shows when a lower third is up` } : {}) }
       if (l.kind === "clock") {
         const theme = s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0]
         const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : (s.clock ?? null)
