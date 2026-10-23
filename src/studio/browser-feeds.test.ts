@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { enableOutput, disableOutput } = await import("@/lib/broadcast-output-control")
 const { outputOnAir } = await import("@/lib/output-on-air")
-const { startBrowserFeeds, feedUrl } = await import("@/lib/browser-feeds")
+const { startBrowserFeeds, feedUrl, feedHealthLabel } = await import("@/lib/browser-feeds")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
 /** Browser feeds (ARCH-002): an output drawn by a LAN web page; published only while on. */
@@ -55,5 +55,12 @@ describe("browser feeds", () => {
     const before = calls.length
     useBroadcastStore.getState().setLiveVerse({ reference: "Romans 8:29", segments: [{ text: "For whom" }], content: "bible" }, null, { goLive: true })
     expect(calls.slice(before).filter((c) => c.cmd === "feed_publish")).toEqual([])
+  })
+
+  it("say in plain words whether a page shows the latest frame (receiver trust)", () => {
+    expect(feedHealthLabel(null)).toBeNull()
+    expect(feedHealthLabel({ watching: 0, current: false, behind: false })).toBe("No page is showing it")
+    expect(feedHealthLabel({ watching: 1, current: true, behind: false })).toBe("1 page · showing the latest")
+    expect(feedHealthLabel({ watching: 2, current: false, behind: true })).toBe("2 pages · behind: not showing the latest")
   })
 })

@@ -1004,6 +1004,7 @@ report), but launching it cannot.
 | 10cv.1 | HTTP listener on the network. Outputs: add a Browser Feed following Bible with a lower-third look; copy its link; turn it on. Open the link in a browser on another computer and in OBS (Browser source 1920×1080). | Both show the verse in its look; OBS keys it over the camera; a new verse appears within a moment. | Partly verified on the Intel Mac (2026-10-23, loopback): Chrome drew Romans 8:28 in the Lower Thirds look on a transparent page from the served link; a hymn going live left the Bible feed on Romans 8:28; a wrong secret got 403. OBS and another computer not yet tried |
 | 10cv.2 | New link, save; reload the old link. | The old link answers "not valid"; the new one works. | Unverified |
 | 10cv.3 | Turn the feed off. | The page goes empty; nothing more is sent. | Unverified |
+| 10cv.4 | With the feed on: Outputs, its card, with no page open; then open the link; then freeze that browser (e.g. pause it in OBS) and show a new verse. | "No page is showing it"; then "1 page · showing the latest"; then after 3 s "behind" in red. | Partly verified on the Intel Mac (2026-10-23, QA build, headless Chrome): "No page is showing it", then "1 page · showing the latest" with frame 2 of 2 acknowledged; "behind" not yet produced on hardware |
 
 ### 10cn. Numbered books and the item fields (owner reports)
 

@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Browser feed health (#246 item 9, receiver trust)
+
+- **Branch / PR:** `arch-002/feed-health`.
+- **Behaviour:** feed frames are numbered (SSE event id); `feed.html` acknowledges each drawn frame (`POST /api/v1/feed/{id}/ack?k=`, never ahead of what was sent); `FeedHub::status` / `feed_status` give pages following and the newest acknowledged frame; the output card shows the health (`useFeedHealth`, `feedHealthLabel`; "behind" after 3 s).
+- **Tests:** rhema-api 131 (ids in the stream, watching count, ack only with the secret, never ahead); `browser-feeds.test.ts` (wording); vitest green.
+- **Desktop:** acceptance 10cv.4. Real data 6/6, WebKit restored.
+- **Next:** congregation scene transitions / presets, or #198 TV setup (QR for the feed link).
+
 ## 2026-10-23 — Browser feed QR code (#198)
 
 - **Branch / PR:** `arch-002/feed-qr`. `FeedLink` (output editor) draws a QR code of the LAN link with the existing `qrcode` package; none when the listener is on this computer only.

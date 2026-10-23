@@ -1,15 +1,8 @@
 import { outputOnAir } from "@/lib/output-on-air"
+import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
 import { allSignageIds } from "@/lib/signage"
 import { useState } from "react"
-import {
-  CopyIcon,
-  MonitorIcon,
-  MoreHorizontalIcon,
-  PencilIcon,
-  RadioIcon,
-  SettingsIcon,
-  Trash2Icon,
-} from "lucide-react"
+import { CopyIcon, GlobeIcon, MonitorIcon, MoreHorizontalIcon, PencilIcon, RadioIcon, SettingsIcon, Trash2Icon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -71,6 +64,8 @@ export function OutputCard({
   const stage = output.role === "stage"
   const signage = output.role === "signage"
   const onAir = outputOnAir(output, status)
+  const feedHealth = useFeedHealth(output.id, output.type === "browser" && onAir)
+  const feedLabel = feedHealthLabel(feedHealth)
   const isDefault = output.id === MAIN_OUTPUT_ID
 
   const commitRename = () => {
@@ -103,7 +98,7 @@ export function OutputCard({
           className={cn(
             "absolute top-1.5 left-1.5 inline-flex items-center gap-1.5 rounded-4xl border px-2 py-0.5 text-[0.6875rem] font-semibold tracking-wider uppercase backdrop-blur-sm",
             onAir && output.type === "display" && "border-destructive/40 bg-destructive/15 text-destructive",
-            onAir && output.type === "ndi" && "border-confidence-high/40 bg-confidence-high/15 text-confidence-high",
+            onAir && output.type !== "display" && "border-confidence-high/40 bg-confidence-high/15 text-confidence-high",
             !onAir && "border-border bg-background/70 text-muted-foreground"
           )}
         >
@@ -111,7 +106,7 @@ export function OutputCard({
             className={cn(
               "size-1.5 rounded-full",
               onAir && output.type === "display" && "animate-pulse bg-destructive",
-              onAir && output.type === "ndi" && "bg-confidence-high",
+              onAir && output.type !== "display" && "bg-confidence-high",
               !onAir && "bg-muted-foreground"
             )}
           />
@@ -149,10 +144,12 @@ export function OutputCard({
           <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             {output.type === "display" ? (
               <MonitorIcon className="size-3 shrink-0" />
+            ) : output.type === "browser" ? (
+              <GlobeIcon className="size-3 shrink-0" />
             ) : (
               <RadioIcon className="size-3 shrink-0" />
             )}
-            <span className="truncate">{transportLabel(output, monitorLabel)}</span>
+            <span className={cn("truncate", feedHealth?.behind && "text-destructive")} role={feedHealth ? "status" : undefined}>{feedLabel ?? transportLabel(output, monitorLabel)}</span>
           </div>
         </div>
 

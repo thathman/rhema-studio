@@ -428,3 +428,10 @@ pub fn voice_answer(state: State<'_, Mutex<HttpRuntime>>, id: String, sdp: Strin
     let hub = state.lock().map_err(|e| e.to_string())?.voice.clone();
     Ok(hub.answer(&id, sdp))
 }
+
+/// A browser feed's health (receiver trust): pages following it and the newest frame one drew.
+#[tauri::command]
+pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<Option<rhema_api::FeedStatus>, String> {
+    let hub = state.lock().map_err(|e| e.to_string())?.feeds.clone();
+    Ok(hub.status(&id))
+}
