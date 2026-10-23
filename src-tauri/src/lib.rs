@@ -402,8 +402,15 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // Any orderly exit (the main window, Cmd+Q, the Dock's Quit, logout) is a clean close:
+        // no "closed unexpectedly" offer next time.
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                commands::app_close::clear_running(app);
+            }
+        });
 }
 
 /// Store an embedding warning in `AppState` (read by `detection_status`)

@@ -18,6 +18,8 @@ import type { LowerThird, SceneFrame, StagePayload, Ticker } from "@/types"
  */
 interface Frame {
   off?: boolean
+  /** The host's clock when it sent the frame. */
+  hostNow?: number
   theme?: BroadcastTheme
   verse?: VerseRenderData | null
   overlay?: LowerThird | null
@@ -31,6 +33,8 @@ const canvas = document.getElementById("feed") as HTMLCanvasElement
 const ctx = canvas.getContext("2d")!
 const layers = new Map<string, HTMLCanvasElement>()
 let frame: Frame | null = null
+/** Host time minus this machine's, from the latest frame (clock layers count by the host). */
+let offset = 0
 let ticking = false
 
 function draw() {
@@ -54,6 +58,7 @@ function draw() {
   ctx.clearRect(0, 0, width, height)
   if (f.scene) {
     drawScene(ctx, width, height, f.scene, {
+      now: Date.now() + offset,
       imageCache: themeImageCache(),
       layerCanvas: (id) => {
         let c = layers.get(id)
@@ -100,6 +105,7 @@ let lastKey: string | null = null
 let lastFade = 0
 
 function show(next: Frame) {
+  if (typeof next.hostNow === "number") offset = next.hostNow - Date.now()
   // A Take or release fades when the scene says so; Black and Logo always cut.
   const key = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
   const ms = next.scene?.fadeMs ?? lastFade

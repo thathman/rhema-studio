@@ -202,7 +202,7 @@ fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, 
                 }
             }
             log::debug!("OSC command: {cmd}");
-            if let Err(e) = CommandDispatcher::dispatch(&cmd, sink) {
+            if let Err(e) = CommandDispatcher::dispatch_as(&cmd, sink, "OSC") {
                 log::warn!("OSC dispatch error for {}: {e}", msg.addr);
             }
         }
@@ -235,7 +235,10 @@ mod tests {
 
     impl CommandSink for MockSink {
         fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
-            self.commands.lock().unwrap().push(event.to_string());
+            // Commands only: the service log's record (remote:audit) is not a command.
+            if event != "remote:audit" {
+                self.commands.lock().unwrap().push(event.to_string());
+            }
             Ok(())
         }
 

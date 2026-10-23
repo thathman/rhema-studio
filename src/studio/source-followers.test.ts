@@ -70,4 +70,13 @@ describe("the service log", () => {
     ])
     expect(journalText()).toMatch(/SCENE\s+main: Sermon split/)
   })
+
+  it("a quick screen replaced by content is one LIVE line, not also a source line", async () => {
+    const { useJournalStore } = await import("@/stores/journal-store")
+    const b = useBroadcastStore.getState()
+    b.setLiveVerse({ reference: "", segments: [], screen: "black", quick: true }, null, { goLive: true })
+    useJournalStore.setState({ entries: [] })
+    b.setLiveVerse({ reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" }, null, { goLive: true })
+    expect(useJournalStore.getState().entries.map((e) => e.kind)).toEqual(["live"])
+  })
 })

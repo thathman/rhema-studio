@@ -27,6 +27,8 @@ export interface LiveSnapshot {
   outputsOn: string[]
   scenes: Record<string, string>
   eventId: string | null
+  /** Too big to keep whole: the program and sources were left out (pictures as data). */
+  trimmed?: boolean
 }
 
 /** Offered for this long after the crash; older is another service. */
@@ -51,7 +53,7 @@ export function takeSnapshot(now = Date.now()): LiveSnapshot {
     scenes: Object.fromEntries(b.outputs.filter((o) => o.sceneId).map((o) => [o.id, o.sceneId!])),
     eventId: useEventClock.getState().currentId,
   }
-  return JSON.stringify(snap).length > MAX_CHARS ? { ...snap, liveVerse: null, sources: {} } : snap
+  return JSON.stringify(snap).length > MAX_CHARS ? { ...snap, liveVerse: null, sources: {}, trimmed: true } : snap
 }
 
 /** Whether a snapshot is worth offering: recent, and something was on the screens. */
@@ -62,7 +64,8 @@ export function worthOffering(s: LiveSnapshot | null | undefined, now = Date.now
 /** Put back what was on the screens: the sources, the program, each output and its scene, the event. */
 export async function putBack(s: LiveSnapshot): Promise<void> {
   const b = useBroadcastStore.getState()
-  useBroadcastStore.setState({ sources: s.sources })
+  // A trimmed snapshot has no sources: leave what is on now alone.
+  if (!s.trimmed) useBroadcastStore.setState({ sources: s.sources })
   for (const [outputId, sceneId] of Object.entries(s.scenes)) {
     if (b.scenes.some((x) => x.id === sceneId) && b.outputs.some((o) => o.id === outputId)) b.takeScene(outputId, sceneId)
   }
@@ -80,10 +83,10 @@ let store: Store | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
 let last = ""
 
-function save() {
+function save(evenInRehearsal = false) {
   timer = null
   // Rehearsal is a sandbox, and an open offer still holds the crash's snapshot.
-  if (!store || useBroadcastStore.getState().rehearsal || useRecovery.getState().offer) return
+  if (!store || (useBroadcastStore.getState().rehearsal && !evenInRehearsal) || useRecovery.getState().offer) return
   const snap = takeSnapshot()
   const key = JSON.stringify({ ...snap, at: 0 })
   if (key === last) return
@@ -104,6 +107,13 @@ export async function startLiveRecovery(): Promise<() => void> {
   }
   const offs = [
     useBroadcastStore.subscribe((s, p) => {
+      // Rehearsal starting: keep what was really on the screens up to now (a change in the last
+      // second would otherwise be lost while rehearsal stops saving).
+      if (s.rehearsal && !p.rehearsal) {
+        if (timer) clearTimeout(timer)
+        save(true)
+        return
+      }
       if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.outputStatus !== p.outputStatus || s.outputs !== p.outputs) soon()
     }),
     useEventClock.subscribe((s, p) => { if (s.currentId !== p.currentId) soon() }),

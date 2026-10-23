@@ -52,4 +52,11 @@ describe("live recovery", () => {
     expect(useRecovery.getState().offer).toBeNull()
     expect(useJournalStore.getState().entries.some((e) => e.kind === "recovery")).toBe(true)
   })
+
+  it("a trimmed snapshot (pictures as data) leaves the sources on now alone", async () => {
+    useBroadcastStore.getState().setLiveVerse({ reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" }, null, { goLive: true })
+    const before = useBroadcastStore.getState().sources
+    await putBack({ ...takeSnapshot(), liveVerse: null, sources: {}, trimmed: true, outputsOn: [], eventId: null })
+    expect(useBroadcastStore.getState().sources).toBe(before)
+  })
 })
