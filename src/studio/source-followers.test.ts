@@ -55,4 +55,19 @@ describe("the service log", () => {
     expect(journalText()).toMatch(/LIVE\s+Amazing Grace · Verse 1 .*· Hymns/)
     expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Amazing Grace · Verse 1")
   })
+
+  it("records a scene taken to an output and released, as SCENE lines", async () => {
+    const { useJournalStore, journalText } = await import("@/stores/journal-store")
+    const { newScene, SCENE_PRESETS } = await import("@/lib/scenes")
+    useJournalStore.setState({ entries: [] })
+    const scene = { ...newScene("Sermon split", SCENE_PRESETS[0]) }
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    useBroadcastStore.getState().releaseScene(MAIN_OUTPUT_ID)
+    expect(useJournalStore.getState().entries.map((e) => [e.kind, e.label])).toEqual([
+      ["scene", `${MAIN_OUTPUT_ID}: Sermon split`],
+      ["scene", `${MAIN_OUTPUT_ID}: back to its own feed`],
+    ])
+    expect(journalText()).toMatch(/SCENE\s+main: Sermon split/)
+  })
 })

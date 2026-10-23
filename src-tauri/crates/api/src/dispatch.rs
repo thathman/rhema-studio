@@ -41,7 +41,11 @@ impl CommandDispatcher {
             RemoteCommand::VoiceTalk(on) => sink.emit_event("remote:voice_talk", &serde_json::json!({ "on": on, "by": by }).to_string()),
             RemoteCommand::VoiceLeave => sink.emit_event("remote:voice_leave", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "by": by }).to_string()),
-            other => Self::dispatch(other, sink),
+            other => {
+                // Who did it, for the service log (#246 C17); the command's own event follows.
+                let _ = sink.emit_event("remote:actor", &serde_json::json!({ "by": by }).to_string());
+                Self::dispatch(other, sink)
+            }
         }
     }
 
@@ -277,6 +281,12 @@ mod tests {
         assert_eq!(event, "remote:notice_send");
         let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(v["by"], "Femi's laptop");
+        // A screen command carries who sent it first, for the service log.
+        let before = sink.events.lock().unwrap().len();
+        CommandDispatcher::dispatch_as(&RemoteCommand::Next, &sink, "Femi's laptop").unwrap();
+        let ev = sink.events.lock().unwrap()[before..].to_vec();
+        assert_eq!(ev[0].0, "remote:actor");
+        assert!(ev[0].1.contains("Femi's laptop"));
         assert_eq!(v["to"], "present");
         assert_eq!(v["priority"], "urgent");
         assert_eq!(v["text"].as_str().unwrap().chars().count(), 280);

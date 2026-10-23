@@ -13,7 +13,13 @@ import { activateBibleReference } from "@/lib/bible-activate"
 import { useNotices } from "@/stores/notices-store"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
-const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
+/** Who sent the next remote command (the host announces it just before; #246 C17). */
+let actor: { by: string; at: number } | null = null
+const noteRemote = (event: string) => {
+  const by = actor && Date.now() - actor.at < 2000 ? actor.by : null
+  actor = null
+  useJournalStore.getState().add({ kind: "remote", label: `${event.replace("remote:", "")}${by ? ` · by ${by}` : ""}` })
+}
 import { remoteActions } from "@/lib/remote-actions"
 import { confidenceLevel } from "@/lib/confidence"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
@@ -40,6 +46,16 @@ export function useRemoteControl() {
         if (cancelled) unlisten()
         else unlisteners.push(unlisten)
       }
+      keep(
+        await listen<string>("remote:actor", (e) => {
+          try {
+            const by = (JSON.parse(e.payload) as { by?: unknown }).by
+            if (typeof by === "string") actor = { by: by.slice(0, 60), at: Date.now() }
+          } catch {
+            // ignore
+          }
+        }),
+      )
       const register = async (event: string, handler: () => void) => {
         keep(
           await listen(event, () => {
