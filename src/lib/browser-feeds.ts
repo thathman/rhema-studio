@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { newFeedToken } from "@/lib/output-on-air"
+import { useFeedHealthStore } from "@/lib/show-health"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 
 /**
@@ -50,13 +51,16 @@ export function useFeedHealth(id: string, on: boolean): FeedHealth | null {
       const current = s.acked >= s.seq
       const behindSince = current ? 0 : s.seq === last.seq && last.behindSince ? last.behindSince : Date.now()
       last = { seq: s.seq, behindSince }
-      setHealth({ watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000 })
+      const h = { watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000 }
+      setHealth(h)
+      useFeedHealthStore.setState({ [id]: h })
     }
     void ask()
     const t = setInterval(() => void ask(), 2000)
     return () => {
       clearInterval(t)
       setHealth(null)
+      useFeedHealthStore.setState({ [id]: null })
     }
   }, [id, on])
   return health
