@@ -1,13 +1,13 @@
 # Rhema Studio — Product Requirements Document
 
-**Document:** PRD v0.1 (proposed for owner review)  
-**Updated:** 2026-10-20  
+**Document:** PRD v0.2 (living requirements)  
+**Updated:** 2026-10-23  
 **Project:** [thathman/rhema-studio](https://github.com/thathman/rhema-studio)  
 **Status:** Product specification; not a statement of shipped functionality  
 **Product principle:** **Simple by default. Powerful when needed.**  
 **Execution tracker:** [TASKS.md](TASKS.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
-> **Source of truth policy.** This document defines the product outcomes and acceptance criteria. TASKS.md defines implementation units and records status. RELEASE-PLAN.md defines release eligibility. Detailed design notes reside in docs/rhema-studio/01–07 on the unmerged Studio development stack. Resolve contradictions through a reviewed PR and record decisions; do not quietly rewrite completed history.
+> **Source of truth policy.** This document defines the product outcomes and acceptance criteria. TASKS.md defines implementation units and records status. RELEASE-PLAN.md defines release eligibility. Architecture decisions and progress now reside in `docs/rhema-studio/`, `CHANGELOG.md`, `docs/PROGRESS-LOG.md`, [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246). The original integration stack was merged. Resolve contradictions through a reviewed PR and record decisions; do not quietly rewrite completed history.
 
 ## 1. Vision and boundaries
 
@@ -151,6 +151,15 @@ IDs are durable; do not recycle them after implementation. Priorities: **P0** es
 
 **Acceptance:** disabling all AI providers has no impact on manual presentation, saved services, or offline media.
 
+### FR-11 — Unified production architecture (owner approved; first slices merged)
+A solo main computer must do everything, with optional joined operators sharing one authoritative service. Keep separately activated Bible, Songs, Hymns, Slides, Pictures, Ticker, Lower Thirds and Timers; feed variants follow a source while OBS and sanctuary scenes independently decide whether and how to display it. Maintain Plan, Live State and Execution History separately. Protect Preview, Draft and Rehearsal from public output; support source/scene-specific Take/Clear/Hold/Restore and recovery. Current implementation: independent sources [#255](https://github.com/thathman/rhema-studio/pull/255), scene composer [#257](https://github.com/thathman/rhema-studio/pull/257), safe rehearsal [#254](https://github.com/thathman/rhema-studio/pull/254)/[#256](https://github.com/thathman/rhema-studio/pull/256), event clock [#259](https://github.com/thathman/rhema-studio/pull/259), Host/Join [#260](https://github.com/thathman/rhema-studio/pull/260)/[#261](https://github.com/thathman/rhema-studio/pull/261), browser graphics/health [#265](https://github.com/thathman/rhema-studio/pull/265)/[#271](https://github.com/thathman/rhema-studio/pull/271), and recovery [#275](https://github.com/thathman/rhema-studio/pull/275). Actual local camera/Google TV/OBS physical acceptance remains open.
+
+### FR-12 — Rhema Comms (approved; first slices merged)
+Optional production notices and acknowledgments, actionable requests, simultaneous full-duplex group PTT, speaking indicators, configurable talk groups/private calls, and intended paired-phone audio. Isolate Comms from PA, stream and Bible detection. Implemented first slices: [#264](https://github.com/thathman/rhema-studio/pull/264), [#266](https://github.com/thathman/rhema-studio/pull/266), [#270](https://github.com/thathman/rhema-studio/pull/270) and channels/private calls [#274](https://github.com/thathman/rhema-studio/pull/274). Phone microphone HTTPS and real headset/echo/priority/revocation tests remain open; [#251](https://github.com/thathman/rhema-studio/issues/251).
+
+### FR-13 — Rhema MCP (requested; first slices merged)
+Optional local read-only MCP access to authorized church resources plus schema-valid, editable service drafts for human review, without AI live publishing or mandatory service. Read-only server [#262](https://github.com/thathman/rhema-studio/pull/262), draft validation/create [#263](https://github.com/thathman/rhema-studio/pull/263) merged; external AI-client and review acceptance remain; [#252](https://github.com/thathman/rhema-studio/issues/252).
+
 ## 4. Nonfunctional requirements / quality attributes
 
 | ID | Requirement | Release evidence |
@@ -190,16 +199,10 @@ Follow [RELEASE-PLAN.md](RELEASE-PLAN.md). No release is declared on the strengt
 
 **Open owner/product decisions:** default distribution platforms and minimum hardware; branding/installer app-ID migration; project-vs-release approval defaults; which licensed Yoruba/English texts may ship; multi-translation versification strategy; media codecs; music-stand scope; whether Canva Autofill fits target plan tiers; optional sync hosting model and cost; licensing of future third-party code; release packaging size for speech models; archive consent/retention.
 
-## 7. Current implementation snapshot (not shipped)
+## 7. Current verified build snapshot (NOT RELEASED)
+**Checked main `f63abc8c` on 2026-10-23.** Earlier language/foundation/content PRs #3/#1/#2 and song/hymn, media, Design, signage, Archive and neutral workspace slices are merged. Since PR #253, **22 PRs #254–#275 have merged**, including #274 talk channels/private calls. Core implementations include independent source buses, scene compositor, rehearsal isolation, event clock, Host/Join, browser feeds with QR and ACK, PTT and notices, MCP drafts and safe crash recovery. [#276](https://github.com/thathman/rhema-studio/pull/276) actor/scene event logging is open at this check; [#4](https://github.com/thathman/rhema-studio/pull/4) speech provider remains open/diverged.
 
-As checked on 2026-10-20, **main** is still the upstream-derived app. The following are *open, passing-CI but unmerged* PRs; treat their implementation status as **In PR**, not **Done**:
-
-- [#3 Language integration](https://github.com/thathman/rhema-studio/pull/3) — Yoruba OYCB, numbered-book search, dual-language themes, CI.
-- [#1 Studio foundation](https://github.com/thathman/rhema-studio/pull/1) — Home/Prepare/Present/More, Standard and Production views, readiness and preview/live controls; stacked on #3.
-- [#2 Content persistence](https://github.com/thathman/rhema-studio/pull/2) — SQLite studio.db, service saving, revisions/conflicts, audit, item identity; stacked on #1. The initial data-fidelity review must still be checked against the latest code and desktop acceptance.
-- [#4 Speech delta](https://github.com/thathman/rhema-studio/pull/4) — Yoruba speech language and OpenAI STT, separately stacked on #3; optional, live provider unverified.
-
-**Not yet implemented:** song/hymn authoring, mixed media/slides, Canva integration, immutable releases, remote collaboration, signage, full production cues and archive.
+**Still incomplete / unverified:** local phone/IP-camera fanout, actual Google TV camera video/audio, external OBS hardware scene/NDI/browser proof, 2+ real-computer failure/handoff drills, physical headset/phone voice over secure HTTPS, Windows installation, novice acceptance and release sign-off. No shipped release; see [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
 ## 8. Execution rule
 
