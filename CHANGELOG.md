@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Take congregation scenes from Present (#243)
+- Present's live console has a **Scenes** strip under Live: each congregation screen's current scene, its saved scenes as small pictures, and **Take scene**, **Own feed** (back to its own feed) and **Restore**, without leaving Present. Scenes are still made in Production → Programs.
+- Taking a scene changes how that screen is arranged, not what is live: Take scene is an outlined button with a layers icon, apart from the teal Take live, and no other screen, feed or source changes.
+- In rehearsal the scene buttons wait (they say why), so a scene picked while practising never reaches the real screens. A button that cannot act says why when hovered or read by a screen reader.
 ### The main desk can take back control; desks stay on one service (#243, #246)
 - Production → Operators and Settings → Remote: **Take back control** pauses a joined desk or phone without unpairing it; **Give control back** ends it. Both go in the service log ("Main desk took back control from Desk C").
 - A paused desk shows "Paused by the main desk", still sees the service and keeps Talk and notices; its other buttons wait.

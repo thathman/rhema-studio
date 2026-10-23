@@ -27,6 +27,7 @@ import { ObsChip } from "@/studio/present/obs-chip"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
 import { TransportBar } from "@/studio/present/transport-bar"
+import { ScenesStrip } from "@/studio/present/scenes-strip"
 
 /**
  * Present's two layouts over the same service. "production" (stored name kept) is the
@@ -206,8 +207,12 @@ function StandardView() {
       <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:hidden [&>div]:h-full">
         <PreviewPanel />
       </div>
-      <div className="min-h-0 overflow-hidden rounded-xl [&>div]:h-full" data-studio-live>
-        <LiveOutputPanel />
+      {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live. */}
+      <div className="flex min-h-0 flex-col gap-2">
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl [&>div]:h-full" data-studio-live>
+          <LiveOutputPanel />
+        </div>
+        <ScenesStrip />
       </div>
 
       <TransportBar className="col-span-2 max-[1200px]:col-span-1" />
