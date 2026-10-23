@@ -1,4 +1,5 @@
 import { renderVerse } from "@/lib/verse-renderer"
+import { clockText } from "@/lib/scenes"
 import type { SceneFrame, SceneLayerFrame } from "@/types"
 
 export interface SceneDrawOptions {
@@ -10,6 +11,8 @@ export interface SceneDrawOptions {
   imageCache?: Map<string, HTMLImageElement>
   /** The composer's preview: placeholders and labels; an output never draws them. */
   preview?: boolean
+  /** Wall-clock ms, for clock layers (default: now). */
+  now?: number
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
@@ -50,7 +53,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
         const cw = r.w / scale, ch = r.h / scale
         ctx.drawImage(img, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
       }
-    } else if (l.kind === "feed" && l.theme && l.verse) {
+    } else if ((l.kind === "feed" && l.theme && l.verse) || (l.kind === "clock" && l.theme && l.clock)) {
       const lc = opts.layerCanvas(l.id)
       const { width: tw, height: th } = l.theme.resolution
       if (lc.width !== tw || lc.height !== th) {
@@ -60,7 +63,9 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
       const lctx = lc.getContext("2d")
       if (lctx) {
         lctx.clearRect(0, 0, tw, th)
-        renderVerse(lctx, l.theme, l.verse, { scale: 1, imageCache: opts.imageCache })
+        // A clock is one line of text in its look.
+        const verse = l.kind === "clock" ? { kind: "lyric" as const, reference: "", segments: [], lines: [clockText(l.clock!, opts.now ?? Date.now())] } : l.verse!
+        renderVerse(lctx, l.theme!, verse, { scale: 1, imageCache: opts.imageCache })
         const s = source(l, tw, th)
         ctx.drawImage(lc, s.sx, s.sy, s.sw, s.sh, r.x, r.y, r.w, r.h)
       }

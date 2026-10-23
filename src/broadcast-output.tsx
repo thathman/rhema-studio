@@ -515,6 +515,18 @@ function BroadcastCanvas() {
     }
   }, [draw, drawTickerBand, logDebug, preloadThemeAssets, pushNdiFrame, pushNdiBurst])
 
+  // A running clock layer: redraw each second (the output works out the time itself).
+  // ponytail: a hidden NDI window's timers fire about once a second, so a second may be skipped; use the Rust pacer if that shows.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const scene = latestData.current?.scene
+      if (stageRef.current || !scene?.layers.some((l) => l.kind === "clock" && l.clock && l.clock.mode !== "still")) return
+      draw()
+      if (ndiConfigRef.current.active && !paceFps) void pushNdiFrame()
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [draw, pushNdiFrame])
+
   // Slow keepalive: push one frame every 2s if idle (prevents NDI receivers from dropping the source)
   useEffect(() => {
     const timer = setInterval(() => {

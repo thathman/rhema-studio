@@ -3,7 +3,8 @@ import { themeIdFor } from "@/lib/output-themes"
 import { feedFrame, type LiveSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
-import type { BroadcastOutput, BroadcastTheme, Scene, SceneBox, SceneCrop, SceneFrame, SceneLayer, SceneLayerKind, VerseRenderData } from "@/types"
+import type { BroadcastOutput, BroadcastTheme, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerKind, VerseRenderData } from "@/types"
+import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 
 /**
  * Congregation scenes (ADR 0001, ARCH-002): layers of live content, colour, pictures and cameras
@@ -11,7 +12,7 @@ import type { BroadcastOutput, BroadcastTheme, Scene, SceneBox, SceneCrop, Scene
  * output makes it that output's program.
  */
 
-const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "camera"]
+const KINDS: readonly SceneLayerKind[] = ["feed", "color", "picture", "camera", "clock"]
 const clamp = (n: unknown, lo: number, hi: number, d: number) => (typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d)
 
 export const FULL: SceneBox = { x: 0, y: 0, w: 100, h: 100 }
@@ -20,7 +21,7 @@ let seq = 0
 const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `layer-${Date.now()}-${++seq}`)
 
 export function newLayer(kind: SceneLayerKind, patch: Partial<SceneLayer> = {}): SceneLayer {
-  const name = kind === "feed" ? "Live content" : kind === "color" ? "Colour" : kind === "picture" ? "Picture" : "Camera"
+  const name = kind === "feed" ? "Live content" : kind === "color" ? "Colour" : kind === "picture" ? "Picture" : kind === "clock" ? "Clock" : "Camera"
   return { id: newId(), name, kind, box: { ...FULL }, opacity: 1, visible: true, ...(kind === "color" ? { color: "#101820" } : {}), ...patch }
 }
 
@@ -92,6 +93,23 @@ interface LiveState {
   liveVerse: VerseRenderData | null
   sources: LiveSources
   themes: BroadcastTheme[]
+  /** The service timer for clock layers; absent or null: not set. */
+  clock?: SceneClock | null
+}
+
+/** The service timer as a clock layer shows it; null when there is nothing to show. */
+export function sceneClock(t: TimerState, mono: number, wall: number): SceneClock | null {
+  const running = t.startedAt !== null
+  if (t.durationMs > 0) return running ? { mode: "down", at: wall + remainingMs(t, mono), text: "" } : { mode: "still", at: 0, text: formatMs(Math.max(0, remainingMs(t, mono))) }
+  if (running) return { mode: "up", at: wall - elapsedMs(t, mono), text: "" }
+  return t.accumulatedMs > 0 ? { mode: "still", at: 0, text: formatMs(t.accumulatedMs) } : null
+}
+
+/** The time a clock layer shows now; a countdown stops at 0:00 for the congregation. */
+export function clockText(c: SceneClock, wall: number): string {
+  if (c.mode === "down") return formatMs(Math.max(0, c.at - wall + 999))
+  if (c.mode === "up") return formatMs(Math.max(0, wall - c.at))
+  return c.text
 }
 
 /** What one feed layer shows, and in which look, on this output. */
@@ -115,6 +133,10 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
       if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }
       if (l.kind === "color") return { ...base, color: l.color ?? "#000000" }
       if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }
+      if (l.kind === "clock") {
+        const theme = s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0]
+        return { ...base, theme, clock: s.clock ?? null, ...(preview && !s.clock ? { label: `${l.name} · set the service timer in Present` } : {}) }
+      }
       return { ...base, ...(preview ? { label: `${l.name} · cameras are planned (#209)` } : {}) }
     }),
   }

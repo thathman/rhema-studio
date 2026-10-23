@@ -1,3 +1,4 @@
+import { useTimerStore, monotonicNow } from "@/stores/timer-store"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, CopyIcon, EyeIcon, EyeOffIcon, PinIcon, PinOffIcon, PlusIcon, SaveIcon, UndoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -5,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
 import { drawScene } from "@/lib/scene-renderer"
-import { copyScene, newLayer, newScene, SCENE_PRESETS, sceneFrame } from "@/lib/scenes"
+import { copyScene, newLayer, newScene, SCENE_PRESETS, sceneClock, sceneFrame } from "@/lib/scenes"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMediaStore } from "@/stores/media-store"
@@ -131,7 +132,7 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
 }
 
 function AddLayer({ onAdd }: { onAdd: (kind: SceneLayerKind) => void }) {
-  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["camera", "Camera (planned)"]]
+  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["clock", "Clock"], ["camera", "Camera (planned)"]]
   return (
     <div role="group" aria-label="Add a layer" className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Add</span>
@@ -146,6 +147,8 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const sources = useBroadcastStore((s) => s.sources)
   const themes = useBroadcastStore((s) => s.themes)
+  const timer = useTimerStore((s) => s.timer)
+  useTimerStore((s) => s.tick)
   const live = { isLive, liveVerse, sources, themes }
   const theme = live.themes.find((t) => t.id === output.themeId) ?? live.themes[0]
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -157,7 +160,7 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d")
     if (!ctx) return
-    drawScene(ctx, W, H, sceneFrame(live, output, scene, true), {
+    drawScene(ctx, W, H, sceneFrame({ ...live, clock: sceneClock(timer, monotonicNow(), Date.now()) }, output, scene, true), {
       preview: true,
       imageCache: themeImageCache(),
       layerCanvas: (id) => {
@@ -308,6 +311,18 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
             {assets.filter((a) => a.kind === "image" && a.present !== false).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </label>
+      )}
+      {layer.kind === "clock" && (
+        <>
+          <p className="text-muted-foreground">The service timer (Present → timer): a countdown to the start, or the time so far. It stops at 0:00 on the screens.</p>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[0.625rem] text-muted-foreground">Look (from Design)</span>
+            <select aria-label="Clock look" value={layer.themeId ?? ""} onChange={(e) => onChange({ themeId: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-card px-1.5">
+              <option value="">{target ? `${target.name}'s look` : "The output's look"}</option>
+              {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        </>
       )}
       {layer.kind === "camera" && <p className="rounded-md bg-muted px-2 py-1.5 text-muted-foreground">Cameras on the church network are planned (issue #209). This keeps the camera's place in the scene; outputs show the background there until then.</p>}
       <div className="grid grid-cols-4 gap-1.5">

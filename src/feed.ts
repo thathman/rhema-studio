@@ -96,6 +96,10 @@ function show(next: Frame) {
 }
 
 onThemeFontsLoaded(draw)
+// A running clock layer: redraw each second.
+setInterval(() => {
+  if (frame?.scene?.layers.some((l) => l.kind === "clock" && l.clock && l.clock.mode !== "still")) draw()
+}, 1000)
 const id = decodeURIComponent(location.pathname.split("/").pop() ?? "")
 const key = new URLSearchParams(location.search).get("k") ?? ""
 // EventSource reconnects by itself; the host sends the current frame first.

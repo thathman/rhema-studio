@@ -27,7 +27,7 @@ import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from 
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 import { feedFrame, sourceOf, type LiveSources, type SourceId } from "@/lib/live-sources"
-import { normalizeScene, sceneFrame } from "@/lib/scenes"
+import { normalizeScene, sceneClock, sceneFrame } from "@/lib/scenes"
 import type { Scene, SceneFrame } from "@/types"
 
 /** The program (what is on air and what Restore and Back return to), with the rundown's place in it. */
@@ -687,7 +687,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }
     // A scene is the output's program, unless Black or Logo covers every screen.
     if (scene && !(s.isLive && s.liveVerse?.screen)) {
-      const frame = sceneFrame(s, output, scene)
+      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()) }, output, scene)
       const overlay = output.lowerThirds ? overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null) : null
       const ticker = output.ticker ? tickerForScreens(s) : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
@@ -1241,3 +1241,12 @@ useQueueStore.subscribe((state, prev) => {
   if (state.items !== prev.items || state.activeIndex !== prev.activeIndex) syncStageOutputs()
 })
 useTimerStore.subscribe(syncStageOutputs)
+// Clock layers work out the time themselves: resend only when the timer starts, stops or changes.
+useTimerStore.subscribe((s, prev) => {
+  if (s.timer === prev.timer) return
+  const b = useBroadcastStore.getState()
+  for (const o of b.outputs) {
+    const scene = o.sceneId ? b.scenes.find((x) => x.id === o.sceneId) : undefined
+    if (scene?.layers.some((l) => l.kind === "clock" && l.visible)) b.syncBroadcastOutputFor(o.id)
+  }
+})

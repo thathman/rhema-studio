@@ -6,7 +6,8 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: (...args: unknown[]) => emitTo(...args) }))
 
 import { presentActions } from "./present-actions"
-import { newLayer, newScene, normalizeScene, SCENE_PRESETS, copyScene } from "@/lib/scenes"
+import { newLayer, newScene, normalizeScene, SCENE_PRESETS, copyScene, sceneClock, clockText } from "@/lib/scenes"
+import { useTimerStore } from "@/stores/timer-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { MAIN_OUTPUT_ID, defaultNdiSettings } from "@/types"
 
@@ -109,5 +110,30 @@ describe("congregation scenes (ARCH-002)", () => {
     const c = copyScene(newScene("A"), "")
     expect(c.name).toBe("A copy")
     expect(newLayer("color").color).toBeTruthy()
+  })
+
+  it("a clock layer counts the service timer down by itself; frames go out only when the timer changes", () => {
+    expect(sceneClock({ durationMs: 600_000, startedAt: null, accumulatedMs: 0 }, 0, 1_000)).toEqual({ mode: "still", at: 0, text: "10:00" })
+    expect(sceneClock({ durationMs: 0, startedAt: null, accumulatedMs: 0 }, 0, 1_000)).toBeNull()
+    const down = sceneClock({ durationMs: 600_000, startedAt: 5_000, accumulatedMs: 0 }, 65_000, 1_000_000)!
+    expect(down).toEqual({ mode: "down", at: 1_540_000, text: "" })
+    expect(clockText(down, 1_000_000)).toBe("9:00")
+    expect(clockText(down, 2_000_000)).toBe("0:00")
+    expect(clockText(sceneClock({ durationMs: 0, startedAt: 0, accumulatedMs: 0 }, 90_000, 500_000)!, 500_000)).toBe("1:30")
+    const scene = newScene("Countdown", SCENE_PRESETS[0])
+    scene.layers = [newLayer("color"), newLayer("clock", { themeId: themes[1].id, box: { x: 30, y: 40, w: 40, h: 20 } })]
+    expect(normalizeScene(JSON.parse(JSON.stringify(scene)))!.layers.map((l) => l.kind)).toEqual(["color", "clock"])
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    useTimerStore.getState().setDurationMinutes(5)
+    const clock = sent("broadcast-main")!.scene!.layers[1]
+    expect(clock.kind).toBe("clock")
+    expect(clock.clock).toEqual({ mode: "still", at: 0, text: "5:00" })
+    useTimerStore.getState().start()
+    expect(sent("broadcast-main")!.scene!.layers[1].clock?.mode).toBe("down")
+    const n = emitTo.mock.calls.length
+    useTimerStore.setState((t) => ({ tick: t.tick + 1 }))
+    expect(emitTo.mock.calls.filter((c) => c[0] === "broadcast-main").length).toBe(emitTo.mock.calls.slice(0, n).filter((c) => c[0] === "broadcast-main").length)
+    useTimerStore.getState().reset()
   })
 })
