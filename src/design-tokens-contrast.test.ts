@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { contrastRatio } from "@/lib/brand-kit"
 
@@ -39,6 +39,14 @@ const PAIRS: Array<[string, string]> = [
   ["surface-elevated", "foreground"],
   ["surface-sunken", "foreground"],
   ["card", "gold-foreground"],
+  // Teal text (selected tabs, links, teal labels) has its own token: the button teal is too dark on dark cards.
+  ["background", "primary-text"],
+  ["card", "primary-text"],
+  ["popover", "primary-text"],
+  ["muted", "primary-text"],
+  ["accent", "primary-text"],
+  ["surface-elevated", "primary-text"],
+  ["surface-sunken", "primary-text"],
   ["sidebar", "sidebar-foreground"],
   ["sidebar", "sidebar-accent-foreground"],
   ["sidebar-accent", "sidebar-accent-foreground"],
@@ -65,6 +73,13 @@ describe("colour tokens meet WCAG AA for text (#215)", () => {
       expect(contrastRatio(tokens[surface], tokens[text])).toBeGreaterThanOrEqual(4.5)
     })
   }
+
+  it("teal text uses the text token, never the button fill (text-primary)", () => {
+    const src = new URL("./", import.meta.url)
+    const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+    const offenders = files.filter((f) => /(?<![\w-])text-primary(?![-\w])/.test(readFileSync(new URL(f, src), "utf8")))
+    expect(offenders).toEqual([])
+  })
 
   it("reads the colours as written (a known pair, to guard the parser)", () => {
     expect(light.background.toLowerCase()).toBe("#f5f4ef")

@@ -54,7 +54,7 @@ export function MediaKindIcon({ mediaId }: { mediaId: string }) {
   const playing = useSoundStore((s) => s.playing && s.assetId === mediaId)
   if (kind === "audio") {
     return playing
-      ? <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-primary uppercase"><Volume2Icon className="size-3.5" aria-hidden /> playing</span>
+      ? <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] font-semibold text-primary-text uppercase"><Volume2Icon className="size-3.5" aria-hidden /> playing</span>
       : <Volume2Icon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Sound" />
   }
   return <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={kind === "video" ? "Video" : "Picture"} />

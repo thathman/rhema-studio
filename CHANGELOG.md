@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Rehearsal keeps every screen's scene; clearer teal text in dark mode (#246, #215)
+- A scene taken during rehearsal (Production → Programs, the Present Scenes strip or a joined Screens desk) no longer appears on the real screens when rehearsal ends: each screen gets back exactly the scene it had before, also after **Show this live**.
+- The Present Scenes strip now works in rehearsal for practice: a Take shows in Rhema, marked "In rehearsal", while the screens keep their scene. Take in Production → Programs is not red during rehearsal.
+- Teal text in dark mode (the selected Production and Design tab, links, teal labels) is a lighter teal that reads clearly on dark cards; teal buttons are unchanged.
+- Help sentences in Settings are 12 px instead of 11 px.
 ### Phone cameras through Rhema's own camera router (#209)
 - Production → Cameras: add a camera (Pulpit, Choir…), scan its QR code with a phone on the church Wi-Fi, allow the camera and press Start camera; no app to buy and nothing on the internet.
 - The camera router (MediaMTX) comes inside Rhema, starts by itself while cameras are added and stops with Rhema; each camera is sent once and shared by Rhema's scenes and TVs (WHEP) and OBS (RTSP).

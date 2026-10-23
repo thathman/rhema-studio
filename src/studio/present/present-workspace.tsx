@@ -87,7 +87,7 @@ export function PresentWorkspace() {
                 tone="warn"
                 label="Show this live"
                 onClick={showRehearsalLive}
-                title="Leave rehearsal and put what is up here on the screens (the approval question applies)"
+                title="Leave rehearsal and put what is up here on the screens (the approval question applies). Scenes taken in rehearsal are not kept."
               />
             )}
             <StatusChip

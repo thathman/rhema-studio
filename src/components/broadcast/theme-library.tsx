@@ -84,7 +84,7 @@ function ThemeCard({
         {/* Pin icon */}
         {theme.pinned && (
           <div className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full bg-background/80">
-            <HeartIcon className="size-3 text-primary" strokeWidth={2} />
+            <HeartIcon className="size-3 text-primary-text" strokeWidth={2} />
           </div>
         )}
       </button>

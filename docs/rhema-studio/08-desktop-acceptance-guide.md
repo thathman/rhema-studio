@@ -981,6 +981,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dw. Rehearsal keeps each screen's scene; teal text and Settings help (#246, #215)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dw.1 | Projector (congregation output) open showing a saved scene, e.g. "Lyrics on a picture". Present → Rehearsal on. Present Scenes strip: pick another scene, Take scene. | The strip marks it "In rehearsal" (amber, not "On air") and shows the rehearsal note; the projector does not change. | Unverified |
+| 10dw.2 | Still in rehearsal: Production → Programs, open a scene, Take it; then Back to its own feed. | The program bar reads "Rehearsal ·"; Take is a brass outline, not red; the projector and the multiview do not change. | Unverified |
+| 10dw.3 | Rehearsal off. | The projector still shows "Lyrics on a picture", exactly as before rehearsal; Programs and the strip say so; Restore offers what it offered before. | Unverified |
+| 10dw.4 | Repeat 10dw.1, then **Show this live** with a verse up. | The verse goes live; the projector keeps "Lyrics on a picture" (the rehearsed scene is not kept). | Unverified |
+| 10dw.5 | Joined Screens desk (Host/Join) while the main desk is in rehearsal: Take a scene on the projector. Then end rehearsal on the main desk. | The projector does not change during or after rehearsal. | Unverified |
+| 10dw.6 | Rehearsal on, Take a scene in the strip, quit Rhema normally and start it again. | The projector's saved scene is the one from before rehearsal. | Unverified |
+| 10dw.7 | Dark appearance: Production (selected tab), Design (selected tab), a link-style button, the Choir tag in Songs, the "playing" label on a sound item. | Teal text reads clearly on dark cards (lighter teal); teal buttons with white text look as before. Light appearance unchanged. | Unverified |
+| 10dw.8 | Settings → Speech, Remote, OBS and About sections. | Help sentences are 12 px; section group headings, badges and small fields stay compact; nothing overflows at 1366×768. | Unverified |
+
 ### 10do. Phone cameras through Rhema's camera router (#209)
 
 | # | Step | Expected | Result |

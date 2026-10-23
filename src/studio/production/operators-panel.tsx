@@ -72,7 +72,7 @@ function HostCard() {
   return (
     <Card kicker="This computer" title="Host the service">
       <p className="text-muted-foreground">This computer runs the service with every control, with or without anyone joined. Paired computers and phones follow it and do only what their role allows; if one drops out, nothing here changes.</p>
-      <p className={cn("font-semibold", hosting ? "text-primary" : "text-muted-foreground")}>
+      <p className={cn("font-semibold", hosting ? "text-primary-text" : "text-muted-foreground")}>
         {hosting ? `Hosting on the church network (port ${http?.port})` : http?.running ? "Listening on this computer only: turn on the network in Settings → Remote control" : "Not hosting: start the HTTP listener on the network in Settings → Remote control"}
       </p>
       <ul aria-label="Paired operators" className="flex flex-col divide-y divide-border rounded-md border border-border">
@@ -149,7 +149,7 @@ function JoinedDesk() {
   return (
     <Card kicker={`Joined ${live?.church || address}`} title={live?.service?.title ?? "The host's service"}>
       <div className="flex flex-wrap items-center gap-2">
-        <span role="status" className={cn("rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase", status === "connected" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+        <span role="status" className={cn("rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase", status === "connected" ? "bg-primary/10 text-primary-text" : "bg-muted text-muted-foreground")}>
           {status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}
         </span>
         {me && <span className="text-muted-foreground">as {me.name} · {ROLE_NAMES[me.role] ?? me.role}</span>}

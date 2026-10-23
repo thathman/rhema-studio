@@ -25,6 +25,7 @@ import type { BroadcastOutput, Scene, SceneBox, SceneLayer, SceneLayerKind } fro
 export function SceneComposer() {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
+  const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
   const [targetId, setTargetId] = useState(congregation[0]?.id ?? "")
   const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
@@ -56,9 +57,9 @@ export function SceneComposer() {
           <ul className="flex flex-col gap-1">
             {scenes.map((s) => (
               <li key={s.id}>
-                <button type="button" aria-current={draft?.id === s.id ? "true" : undefined} onClick={() => open(s)} className={cn("flex w-full flex-col rounded-md px-2.5 py-1.5 text-left text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50", draft?.id === s.id ? "bg-primary/10 text-primary" : "hover:bg-muted")}>
+                <button type="button" aria-current={draft?.id === s.id ? "true" : undefined} onClick={() => open(s)} className={cn("flex w-full flex-col rounded-md px-2.5 py-1.5 text-left text-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50", draft?.id === s.id ? "bg-primary/10 text-primary-text" : "hover:bg-muted")}>
                   <span className="truncate font-semibold">{s.name}</span>
-                  {onAir(s.id).length > 0 && <span className="text-[0.625rem] font-bold text-live-pulse uppercase">On {onAir(s.id).map((o) => o.name).join(", ")}</span>}
+                  {onAir(s.id).length > 0 && <span className={cn("text-[0.625rem] font-bold uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{rehearsal ? "Rehearsal on" : "On"} {onAir(s.id).map((o) => o.name).join(", ")}</span>}
                 </button>
               </li>
             ))}
@@ -448,13 +449,14 @@ function LogoNote() {
 }
 
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" aria-pressed={on} onClick={onClick} className={cn("rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted")}>{children}</button>
+  return <button type="button" aria-pressed={on} onClick={onClick} className={cn("rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary-text" : "border-border text-muted-foreground hover:bg-muted")}>{children}</button>
 }
 
 /** The program of one congregation output: which scene it shows, Take, back to its own feed, Restore. */
 function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTake }: { congregation: BroadcastOutput[]; target: BroadcastOutput | undefined; onTarget: (id: string) => void; draft: Scene | null; dirty: boolean; onSave: () => void; onTake: () => void }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const back = useBroadcastStore((s) => (target ? s.sceneReturn[target.id] : undefined))
+  const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const showing = target?.sceneId ? scenes.find((s) => s.id === target.sceneId) : undefined
   const restorable = !showing && back ? scenes.find((s) => s.id === back) : undefined
   if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Production → Screens) to take a scene to it.</p>
@@ -464,9 +466,13 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
       <select aria-label="Congregation output" value={target.id} onChange={(e) => onTarget(e.target.value)} className="h-8 rounded-md border border-[#34504b] bg-[#1b3033] px-1.5 text-[#e9f1ed]">
         {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
-      <span className="min-w-0 flex-1 truncate">{showing ? <>Shows <strong>{showing.name}</strong></> : "Shows its own feed, full screen"}</span>
+      <span className="min-w-0 flex-1 truncate">
+        {rehearsal && <strong className="mr-1.5 text-[#e2bf86]" title="Rehearsal is on: a Take here stays in the app. The screens keep their scene, and it comes back when rehearsal ends.">Rehearsal ·</strong>}
+        {showing ? <>Shows <strong>{showing.name}</strong></> : "Shows its own feed, full screen"}
+      </span>
       {draft && dirty && <Button size="sm" variant="outline" onClick={onSave} className="border-[#34504b] bg-transparent text-[#e9f1ed] hover:bg-[#1b3033]"><SaveIcon /> Save scene</Button>}
-      {draft && <Button size="sm" onClick={onTake} className="bg-live-pulse text-white hover:bg-live-pulse/90" title={`Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
+      {/* In rehearsal nothing reaches a screen, so Take is not red. */}
+      {draft && <Button size="sm" onClick={onTake} className={rehearsal ? "border border-[#b38c58] bg-transparent text-[#e2bf86] hover:bg-[#1b3033]" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
       {showing && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-[#34504b] bg-transparent text-[#e9f1ed] hover:bg-[#1b3033]">Back to its own feed</Button>}
       {restorable && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().takeScene(target.id, restorable.id)} className="border-[#34504b] bg-transparent text-[#e9f1ed] hover:bg-[#1b3033]"><UndoIcon /> Restore {restorable.name}</Button>}
     </section>

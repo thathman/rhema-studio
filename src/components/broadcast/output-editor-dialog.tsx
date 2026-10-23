@@ -176,7 +176,7 @@ export function OutputEditorDialog({
                   const next = on ? form.shows!.filter((x) => x !== k) : [...form.shows!, k]
                   if (next.length) patch({ shows: next })
                 }}
-                className={cn("rounded-full border px-2.5 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted")}
+                className={cn("rounded-full border px-2.5 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary-text" : "border-border text-muted-foreground hover:bg-muted")}
               >
                 {CONTENT_NAMES[k]}
               </button>

@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), e
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { ScenesStrip, SCENES_REHEARSAL_REASON } from "./scenes-strip"
+import { ScenesStrip, SCENES_REHEARSAL_NOTE } from "./scenes-strip"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { SCENE_PRESETS, newScene } from "@/lib/scenes"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput } from "@/types"
@@ -119,23 +119,24 @@ describe("Present's scenes", () => {
     expect(button("Take scene Camera with the Bible to Sanctuary").title).toBe("Sanctuary already shows Camera with the Bible")
   })
 
-  it("in rehearsal, takes nothing to the real screens", async () => {
-    useBroadcastStore.setState({ rehearsal: true, sceneReturn: { [MAIN_OUTPUT_ID]: "lyr" } })
+  it("in rehearsal, a Take is practice: it shows here, and the real scene comes back after", async () => {
+    useBroadcastStore.setState({ outputs: outputs().map((o) => (o.id === MAIN_OUTPUT_ID ? { ...o, sceneId: "lyr" } : o)) })
+    useBroadcastStore.getState().setRehearsal(true)
     await render()
+    expect(el.textContent).toContain(SCENES_REHEARSAL_NOTE)
     await click(sceneButton("Camera with the Bible"))
     const takeBtn = button("Take scene Camera with the Bible to Sanctuary")
-    const restore = button("Restore Lyrics on a picture on Sanctuary")
-    for (const b of [takeBtn, restore]) {
-      expect(b.getAttribute("aria-disabled")).toBe("true")
-      expect(b.title).toBe(SCENES_REHEARSAL_REASON)
-      await click(b)
-    }
-    expect(take).not.toHaveBeenCalled()
-    expect(output(MAIN_OUTPUT_ID).sceneId).toBeUndefined()
-    await act(async () => useBroadcastStore.setState({ outputs: outputs().map((o) => (o.id === MAIN_OUTPUT_ID ? { ...o, sceneId: "cam" } : o)) }))
+    expect(takeBtn.getAttribute("aria-disabled")).toBeNull()
+    await click(takeBtn)
+    expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, "cam")
+    // Never called on air while rehearsing.
+    expect(sceneButton("Camera with the Bible").getAttribute("aria-label")).toBe("Camera with the Bible, in rehearsal")
+    expect(el.textContent).not.toContain("On air")
     await click(button("Sanctuary: back to its own feed"))
-    expect(release).not.toHaveBeenCalled()
-    expect(output(MAIN_OUTPUT_ID).sceneId).toBe("cam")
+    expect(release).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID)
+    await act(async () => useBroadcastStore.getState().setRehearsal(false))
+    expect(output(MAIN_OUTPUT_ID).sceneId).toBe("lyr")
+    expect(el.textContent).not.toContain(SCENES_REHEARSAL_NOTE)
   })
 
   it("a scene Take changes the layout only: nothing else goes live", async () => {

@@ -94,7 +94,7 @@ export function ProductionWorkspace() {
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={cn("-mb-px min-h-11 border-b-[3px] px-3.5 py-2.5 text-[0.6875rem] font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
+              className={cn("-mb-px min-h-11 border-b-[3px] px-3.5 py-2.5 text-[0.6875rem] font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", tab === id ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground")}
             >
               {label}
             </button>
