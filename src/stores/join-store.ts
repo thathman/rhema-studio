@@ -16,6 +16,10 @@ interface JoinState {
   error: string | null
   /** The name and role the host gives this computer. */
   me: { name: string; role: string } | null
+  /** The main desk has taken back control (#243): this desk still follows and talks, its commands wait. */
+  paused: boolean
+  /** A passing note that is not an error (the host moved to another service and this desk refreshed). */
+  note: string | null
   live: LiveStateV1 | null
   /** This desk's monotonic time when `live` arrived: a running timer counts on from it (no clock skew). */
   receivedAt: number
@@ -26,6 +30,17 @@ interface JoinState {
   send: (command: { command: string; value?: string | number | Record<string, unknown> }) => Promise<void>
 }
 
+/**
+ * The service this desk is looking at, sent with each command (#246 C16): "" when the host has no
+ * saved service open; undefined when this desk has no Live State yet or the host is an older build
+ * that does not say (then the command is sent untagged, as before).
+ */
+export function serviceOf(live: LiveStateV1 | null): string | undefined {
+  if (!live) return undefined
+  if (live.service === null) return ""
+  return live.service.id
+}
+
 let listening = false
 async function listenOnce() {
   if (listening) return
@@ -33,7 +48,11 @@ async function listenOnce() {
   await listen<string>("join:live", (e) => {
     try {
       const live = JSON.parse(e.payload) as LiveStateV1
-      if (live?.v === 1) useJoin.setState({ live, receivedAt: performance.now(), status: "connected", error: null })
+      if (live?.v !== 1) return
+      const name = useJoin.getState().me?.name
+      // The host lists the desks it has taken back control from; an older host does not say.
+      const paused = Array.isArray(live.paused) && name ? live.paused.includes(name) : useJoin.getState().paused
+      useJoin.setState({ live, receivedAt: performance.now(), status: "connected", error: null, paused })
     } catch {
       // A snapshot this build cannot read: keep the last one.
     }
@@ -53,6 +72,8 @@ export const useJoin = create<JoinState>((set, get) => ({
   status: "off",
   error: null,
   me: null,
+  paused: false,
+  note: null,
   live: null,
   receivedAt: 0,
   pair: async (address, code, name) => {
@@ -71,8 +92,8 @@ export const useJoin = create<JoinState>((set, get) => ({
     await listenOnce()
     set({ status: "connecting", error: null })
     try {
-      const me = await invoke<{ name: string; role: string }>("join_me", { address, token })
-      set({ me })
+      const me = await invoke<{ name: string; role: string; paused?: boolean }>("join_me", { address, token })
+      set({ me: { name: me.name, role: me.role }, paused: me.paused === true })
       await invoke("join_connect", { address, token })
     } catch (e) {
       set({ status: String(e).includes("pair again") ? "refused" : "reconnecting", error: String(e) })
@@ -80,16 +101,22 @@ export const useJoin = create<JoinState>((set, get) => ({
   },
   leave: async (forget = false) => {
     await invoke("join_disconnect").catch(() => {})
-    set({ status: "off", live: null, me: null, error: null })
+    set({ status: "off", live: null, me: null, error: null, paused: false, note: null })
     if (forget) useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "" })
   },
   send: async (command) => {
     const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
     try {
-      await invoke("join_command", { address, token, command })
-      set({ error: null })
+      await invoke("join_command", { address, token, command, service: serviceOf(get().live) })
+      set({ error: null, note: null })
     } catch (e) {
-      set({ error: String(e) })
+      const msg = String(e)
+      // join_command marks the two refusals this desk handles itself (src-tauri/src/commands/join.rs).
+      if (msg.startsWith("paused:")) set({ paused: true, error: null })
+      else if (msg.startsWith("other-service:")) {
+        set({ error: null, note: "The main desk is on a different service now, so that was not sent. This desk has refreshed: check what is live, then try again." })
+        void get().connect()
+      } else set({ error: msg })
     }
   },
 }))

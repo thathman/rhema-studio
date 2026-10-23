@@ -191,15 +191,37 @@ pub fn new_feed_hub() -> SharedFeeds {
 
 /// The host's Live State (ADR 0001): the app publishes a JSON snapshot whenever it changes; joined
 /// devices read it (`/api/v1/live`) or follow it (`/api/v1/live/events`, server-sent events). The
-/// server never looks inside it.
+/// server reads only which service it is about (#246 C16), to refuse commands meant for another.
 #[derive(Debug)]
 pub struct LiveHub {
     current: std::sync::RwLock<Option<String>>,
+    service: std::sync::RwLock<Option<String>>,
     tx: broadcast::Sender<String>,
+}
+
+/// The one part of a Live State the server reads: `service.id` ("" when no saved service is open).
+#[derive(Deserialize)]
+struct LiveService {
+    service: Option<ServiceId>,
+}
+
+#[derive(Deserialize)]
+struct ServiceId {
+    id: Option<String>,
+}
+
+/// The service a Live State is about: `Some("")` for none open, `None` when it does not say
+/// (an older build), so nothing is refused for it.
+fn service_of(json: &str) -> Option<String> {
+    match serde_json::from_str::<LiveService>(json).ok()?.service {
+        None => Some(String::new()),
+        Some(s) => s.id,
+    }
 }
 
 impl LiveHub {
     pub fn publish(&self, json: String) {
+        *self.service.write().unwrap_or_else(std::sync::PoisonError::into_inner) = service_of(&json);
         *self.current.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(json.clone());
         // No one following is fine.
         let _ = self.tx.send(json);
@@ -209,13 +231,19 @@ impl LiveHub {
     pub fn current(&self) -> Option<String> {
         self.current.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
     }
+
+    /// The service the host is running now ("" for none), or None before it has said.
+    #[must_use]
+    pub fn service(&self) -> Option<String> {
+        self.service.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+    }
 }
 
 pub type SharedLive = Arc<LiveHub>;
 
 #[must_use]
 pub fn new_live_hub() -> SharedLive {
-    Arc::new(LiveHub { current: std::sync::RwLock::new(None), tx: broadcast::channel(32).0 })
+    Arc::new(LiveHub { current: std::sync::RwLock::new(None), service: std::sync::RwLock::new(None), tx: broadcast::channel(32).0 })
 }
 
 /// Handle to a running HTTP server. Call `stop()` to shut it down.
@@ -474,7 +502,14 @@ struct CommandRequest {
     /// One id per press (FR-04 idempotent): a retry of the same press is acknowledged, not repeated.
     #[serde(default)]
     id: Option<String>,
+    /// The service the sending desk is looking at (#246 C16; "" for none). Absent (the phone page,
+    /// older desks, scripts) = accepted as before.
+    #[serde(default)]
+    service: Option<String>,
 }
+
+/// What a desk looking at another service is told; it refreshes its Live State.
+const OTHER_SERVICE_MESSAGE: &str = "That desk is looking at a different service; it will refresh";
 
 /// Command ids seen recently, so a retried press is not carried out twice.
 #[derive(Default)]
@@ -559,26 +594,28 @@ async fn pair_handler<S: CommandSink + 'static>(
 
 /// Who may read the Live State: a paired device. With keys off ("open"), only this computer
 /// itself, since the Live State holds the service plan and private stage notes.
-fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &HeaderMap) -> Result<(String, crate::keys::Role), StatusCode> {
+/// A paused desk still reads it: it sees what is happening while the main desk has control.
+fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &HeaderMap) -> Result<crate::keys::KeyEntry, StatusCode> {
     if !state.rate.allow(peer.ip()) {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     match check_key(&state.keys, presented_key(headers)) {
-        Ok(Some(entry)) => Ok((entry.name, entry.role)),
-        Ok(None) if peer.ip().is_loopback() => Ok(("This computer".into(), crate::keys::Role::Configure)),
+        Ok(Some(entry)) => Ok(entry),
+        Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry { hash: String::new(), name: "This computer".into(), role: crate::keys::Role::Configure, paused: false }),
         Ok(None) => Err(StatusCode::FORBIDDEN),
         Err(_) => Err(StatusCode::UNAUTHORIZED),
     }
 }
 
-/// `GET /api/v1/me`: the name and role this key has, so a joined desk shows what it may do.
+/// `GET /api/v1/me`: the name and role this key has, and whether the main desk has taken back
+/// control, so a joined desk shows what it may do.
 async fn me_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> axum::response::Response {
     match live_reader(&state, peer, &headers) {
-        Ok((name, role)) => Json(serde_json::json!({ "name": name, "role": role })).into_response(),
+        Ok(e) => Json(serde_json::json!({ "name": e.name, "role": e.role, "paused": e.paused })).into_response(),
         Err(code) => code.into_response(),
     }
 }
@@ -678,8 +715,9 @@ async fn voice_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    let (name, _) = match live_reader(&state, peer, &headers) {
-        Ok(who) => who,
+    // The talk channel stays open to a paused desk: only its commands wait.
+    let name = match live_reader(&state, peer, &headers) {
+        Ok(who) => who.name,
         Err(code) => return code.into_response(),
     };
     if offer.sdp.len() > 64 * 1024 || !offer.sdp.starts_with("v=0") {
@@ -778,6 +816,10 @@ async fn command_handler<S: CommandSink + 'static>(
                 Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")) }),
             );
         }
+        Ok(Some(entry)) if entry.paused_for(&request.command) => {
+            log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
+            return (StatusCode::LOCKED, Json(CommandResponse { success: false, error: Some(crate::keys::PAUSED_MESSAGE.into()) }));
+        }
         Ok(Some(entry)) if !entry.role.allows(&request.command) => {
             let why = match entry.role {
                 crate::keys::Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
@@ -794,6 +836,16 @@ async fn command_handler<S: CommandSink + 'static>(
         Ok(Some(entry)) => entry.name,
         Ok(None) => "an open remote".to_string(),
     };
+    // Several services must never share state (#246 C16): a desk still showing the 9 AM service
+    // cannot move the 11 AM one. Crew talk is not about a service.
+    if !request.command.is_comms() {
+        if let (Some(sent), Some(host)) = (request.service.as_deref(), state.live.service()) {
+            if sent != host {
+                log::info!("HTTP command from {by} refused: it is for another service");
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()) }));
+            }
+        }
+    }
     if request.id.as_deref().is_some_and(|id| !state.recent.first_time(id)) {
         log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
         return (StatusCode::OK, Json(CommandResponse { success: true, error: None }));
@@ -932,7 +984,7 @@ mod tests {
 
     #[tokio::test]
     async fn live_state_needs_a_paired_key_and_streams_each_change() {
-        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![crate::keys::KeyEntry { hash: crate::keys::hash_key("tok"), name: "Femi's laptop".into(), role: crate::keys::Role::Timekeeper }] }));
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![crate::keys::KeyEntry { hash: crate::keys::hash_key("tok"), name: "Femi's laptop".into(), role: crate::keys::Role::Timekeeper, paused: false }] }));
         let live = new_live_hub();
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
         let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
@@ -1027,7 +1079,7 @@ mod tests {
     async fn a_desk_joins_the_talk_channel_with_its_key_and_gets_the_host_answer() {
         let voice = new_voice_hub();
         let keys = new_key_set();
-        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k1"), name: "Ade bible".into(), role: crate::keys::Role::Bible });
+        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k1"), name: "Ade bible".into(), role: crate::keys::Role::Bible, paused: false });
         keys.write().unwrap().require_auth = true;
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, voice: voice.clone(), ..Default::default() };
         let result = start_http_server(config, Arc::new(VoiceSink(voice.clone())), new_shared_status()).await.expect("bind");
@@ -1176,6 +1228,80 @@ mod tests {
         assert_eq!(sink.command_count(), 2, "the retried press once, the old client's once");
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    /// Host authority (#243): the main desk takes back control of Desk C without unpairing it.
+    #[tokio::test]
+    async fn a_paused_desk_is_refused_commands_but_still_reads_and_talks() {
+        let sink = Arc::new(MockSink::new());
+        let keys = crate::keys::key_set_from(&[("tok", "Desk C")]);
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"service":{"id":"s1","title":"9 AM"}}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), live, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let key = "X-Rhema-Key: tok\r\n";
+        assert!(raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"next"}"#), key).await.contains("200 OK"));
+
+        keys.write().unwrap().entries[0].paused = true;
+        let refused = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"event_next"}"#), key).await;
+        assert!(refused.contains("423") && refused.contains("The main desk has taken back control"), "{refused}");
+        let me = get_with(port, "/api/v1/me", key, None).await;
+        assert!(me.contains(r#""paused":true"#), "{me}");
+        let read = get_with(port, "/api/v1/live", key, None).await;
+        assert!(read.contains("200 OK") && read.contains("9 AM"), "a paused desk still sees the service: {read}");
+        let talk = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"voice_talk","value":true}"#), key).await;
+        assert!(talk.contains("200 OK"), "the talk channel keeps working: {talk}");
+        let notice = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"notice_send","value":{"text":"Ready when you are"}}"#), key).await;
+        assert!(notice.contains("200 OK"), "notices keep working: {notice}");
+
+        keys.write().unwrap().entries[0].paused = false;
+        assert!(raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"event_next"}"#), key).await.contains("200 OK"), "control given back");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.command_count(), 4, "next, talk, notice, then event_next once given back");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// Several services never share state (#246 C16): a desk looking at another service is refused.
+    #[tokio::test]
+    async fn a_command_for_another_service_is_refused_and_untagged_ones_still_work() {
+        let sink = Arc::new(MockSink::new());
+        let live = new_live_hub();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |body: &'static str| async move { raw_http_request(port, "POST", "/api/v1/command", Some(body)).await };
+        assert!(send(r#"{"command":"next","service":"s9"}"#).await.contains("200 OK"), "before the host has said which service, nothing is refused");
+
+        live.publish(r#"{"v":1,"service":{"id":"s11","title":"11 AM","revision":4}}"#.into());
+        let other = send(r#"{"command":"next","service":"s9"}"#).await;
+        assert!(other.contains("409") && other.contains("That desk is looking at a different service; it will refresh"), "{other}");
+        assert!(send(r#"{"command":"next","service":"s11"}"#).await.contains("200 OK"));
+        assert!(send(r#"{"command":"next"}"#).await.contains("200 OK"), "the phone page and older desks send no service");
+        assert!(send(r#"{"command":"voice_talk","value":false,"service":"s9"}"#).await.contains("200 OK"), "crew talk is not about a service");
+
+        live.publish(r#"{"v":1,"service":null}"#.into());
+        assert!(send(r#"{"command":"next","service":""}"#).await.contains("200 OK"), "no service open on either");
+        assert!(send(r#"{"command":"next","service":"s11"}"#).await.contains("409"));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.command_count(), 5);
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    #[test]
+    fn the_service_is_read_from_the_live_state_and_the_command_field_is_optional() {
+        assert_eq!(service_of(r#"{"v":1,"service":{"id":"s1","title":"x","revision":2}}"#).as_deref(), Some("s1"));
+        assert_eq!(service_of(r#"{"v":1,"service":null}"#).as_deref(), Some(""));
+        assert_eq!(service_of(r#"{"v":1,"service":{"title":"from an older build"}}"#), None);
+        assert_eq!(service_of("not json"), None);
+        let old: CommandRequest = serde_json::from_str(r#"{"command":"next","id":"p1"}"#).unwrap();
+        assert_eq!((old.command, old.service), (RemoteCommand::Next, None));
+        let tagged: CommandRequest = serde_json::from_str(r#"{"command":"bible_activate","value":"John 3:16","service":"s1"}"#).unwrap();
+        assert_eq!((tagged.command, tagged.service.as_deref()), (RemoteCommand::BibleActivate("John 3:16".into()), Some("s1")));
     }
 
     #[tokio::test]

@@ -63,6 +63,22 @@ pub struct KeyEntry {
     pub name: String,
     #[serde(default)]
     pub role: Role,
+    /// The main desk has taken back control (#243): this key's commands are refused until the host
+    /// gives control back, but it still reads the Live State and keeps the talk channel and
+    /// notices. Absent (entries saved before this) = not paused.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub paused: bool,
+}
+
+/// What a paused desk is told when it sends a command.
+pub const PAUSED_MESSAGE: &str = "The main desk has taken back control";
+
+impl KeyEntry {
+    /// True when the main desk has taken back control and this is a service command (not crew talk).
+    #[must_use]
+    pub fn paused_for(&self, cmd: &RemoteCommand) -> bool {
+        self.paused && !cmd.is_comms()
+    }
 }
 
 /// Whether a key is required is a separate switch from the list of keys:
@@ -94,7 +110,7 @@ pub fn hash_key(key: &str) -> String {
 pub fn key_set_from(keys: &[(&str, &str)]) -> KeySet {
     Arc::new(RwLock::new(Keys {
         require_auth: true,
-        entries: keys.iter().map(|(k, name)| KeyEntry { hash: hash_key(k), name: (*name).to_string(), role: Role::Configure }).collect(),
+        entries: keys.iter().map(|(k, name)| KeyEntry { hash: hash_key(k), name: (*name).to_string(), role: Role::Configure, paused: false }).collect(),
     }))
 }
 
@@ -179,7 +195,7 @@ pub fn try_pair(window: &PairingWindow, keys: &KeySet, code: &str, name: &str) -
     let token = random_hex();
     let mut k = keys.write().unwrap_or_else(std::sync::PoisonError::into_inner);
     // A newly paired device may present, not change settings, until the operator says otherwise.
-    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: Role::Present };
+    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: Role::Present, paused: false };
     k.entries.push(entry.clone());
     k.require_auth = true;
     drop(k);
@@ -212,7 +228,7 @@ mod tests {
 
     #[test]
     fn paired_names_are_unique_and_never_the_main_desk() {
-        let e = |n: &str| KeyEntry { hash: n.into(), name: n.into(), role: Role::Present };
+        let e = |n: &str| KeyEntry { hash: n.into(), name: n.into(), role: Role::Present, paused: false };
         let have = [e("Femi's laptop"), e("Femi's laptop 2"), e("Phone")];
         assert_eq!(unique_name("Femi's laptop", &have), "Femi's laptop 3");
         assert_eq!(unique_name("  phone ", &have), "phone 2");
@@ -277,6 +293,32 @@ mod tests {
         }
         assert!(Role::Present.allows(&take) && Role::Present.allows(&RemoteCommand::ClearSource("hymn".into())));
         assert!(!Role::Timekeeper.allows(&RemoteCommand::BibleActivate("x".into())));
+    }
+
+    #[test]
+    fn a_paused_desk_keeps_talking_but_sends_no_service_command() {
+        let e = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Present, paused: true };
+        for cmd in [RemoteCommand::Next, RemoteCommand::EventNext, RemoteCommand::BibleActivate("John 3:16".into()), RemoteCommand::ReleaseScene("main".into())] {
+            assert!(e.paused_for(&cmd), "{cmd}");
+        }
+        let notice = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "ready".into(), to: None, priority: None, event: None, action: None });
+        for cmd in [RemoteCommand::VoiceTalk(true), RemoteCommand::VoiceLeave, notice, RemoteCommand::NoticeAck(crate::command::NoticeAckIn { id: "n1".into(), state: "seen".into() })] {
+            assert!(!e.paused_for(&cmd), "{cmd}");
+        }
+        let given_back = KeyEntry { paused: false, ..e };
+        assert!(!given_back.paused_for(&RemoteCommand::Next));
+    }
+
+    #[test]
+    fn paused_round_trips_and_old_entries_are_not_paused() {
+        let old: KeyEntry = serde_json::from_str(r#"{"hash":"h","name":"old","role":"present"}"#).unwrap();
+        assert!(!old.paused, "entries saved before this are not paused");
+        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"hash":"h","name":"old","role":"present"}"#, "not paused writes nothing new");
+        let paused = KeyEntry { paused: true, ..old };
+        let back: KeyEntry = serde_json::from_str(&serde_json::to_string(&paused).unwrap()).unwrap();
+        assert_eq!(back, paused);
+        let from_app: KeyEntry = serde_json::from_str(r#"{"hash":"h","name":"Desk C","role":"bible","paused":true}"#).unwrap();
+        assert!(from_app.paused && from_app.role == Role::Bible);
     }
 
     #[test]

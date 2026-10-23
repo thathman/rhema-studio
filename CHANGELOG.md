@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The main desk can take back control; desks stay on one service (#243, #246)
+- Production → Operators and Settings → Remote: **Take back control** pauses a joined desk or phone without unpairing it; **Give control back** ends it. Both go in the service log ("Main desk took back control from Desk C").
+- A paused desk shows "Paused by the main desk", still sees the service and keeps Talk and notices; its other buttons wait.
+- A desk still looking at another service cannot change this one: the host refuses it and the desk refreshes. Phones and scripts that do not say which service they mean work as before.
 ### First-install setup (#298)
 - A new install opens **Welcome to Rhema Studio** once: set this computer up as the main desk, join an existing church host, or use Rhema now and finish later.
 - Short, resumable steps: church name, your name and this computer's name, brand and starter looks, Bible and library, screens, connections, and a summary (Done / Optional later / Needs attention). Everything saves as you type; Finish later picks up at the same step.

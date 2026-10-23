@@ -23,7 +23,8 @@ export interface LiveStateV1 {
   v: 1
   at: number
   church: string
-  service: { title: string } | null
+  /** The service open on the host (#246 C16): a desk tags each command with its id, so the host refuses one meant for another service. id and revision are absent from older hosts. */
+  service: { id?: string; title: string; revision?: number } | null
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
   sources: { id: string; reference: string; on: boolean; revision: number }[]
   event: { mode: "screens" | "own"; currentId: string | null }
@@ -40,6 +41,8 @@ export interface LiveStateV1 {
   notices: Notice[]
   /** The talk channel (Rhema Comms voice): who is in it, holding Talk, audible now. */
   voice?: VoicePerson[]
+  /** Desks the main desk has taken back control from (#243), by name: each shows "Paused by the main desk". Absent from older hosts. */
+  paused?: string[]
 }
 
 export function buildLiveState(now = Date.now()): LiveStateV1 {
@@ -53,7 +56,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     v: 1,
     at: now,
     church: useSettingsStore.getState().brandKit.churchName.trim(),
-    service: current ? { title: current.title } : null,
+    service: current ? { id: current.id, title: current.title, revision: current.revision } : null,
     program: { onAir: b.isLive, reference: b.isLive ? (b.liveVerse?.reference || null) : null, rehearsal: b.rehearsal },
     sources: [...CONTENT_TYPES, "quick" as const].flatMap((id) => {
       const s = b.sources[id]
@@ -68,6 +71,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
     notices: useNotices.getState().notices.slice(0, 50),
     voice: voiceCrew(),
+    paused: useSettingsStore.getState().remoteDevices.filter((d) => d.paused === true).map((d) => d.name),
   }
 }
 
@@ -117,6 +121,7 @@ export function startLiveStatePublisher(): () => void {
     useServiceOffset.subscribe(() => soon()),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
+    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices) soon() }),
   ]
   soon()
   return () => subs.forEach((u) => u())

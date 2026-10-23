@@ -34,7 +34,7 @@ impl Default for RemoteKeys {
 pub fn remote_set_keys(remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>, require_auth: Option<bool>) -> Result<usize, String> {
     let mut entries: Vec<KeyEntry> = devices.into_iter().filter(|d| d.hash.len() == 64).collect();
     if let Some(s) = shared.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
-        entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure });
+        entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure, paused: false });
     }
     let n = entries.len();
     let mut k = remote.keys.write().map_err(|e| e.to_string())?;

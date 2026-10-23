@@ -11,6 +11,8 @@ export interface RemoteDevice {
   paired_at: string
   /** Absent on entries saved before roles existed: treated as configure (full access). */
   role?: RemoteRole
+  /** The main desk has taken back control (#243): its commands wait; it still sees the service and talks. Absent = not paused. */
+  paused?: boolean
 }
 
 let remoteKeysPush: Promise<void> = Promise.resolve()
@@ -33,7 +35,7 @@ export function pushRemoteKeys(): Promise<void> {
   remoteKeysPush = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
     try {
-      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure" })), requireAuth: s.remoteAuthRequired })
+      await invoke("remote_set_keys", { shared: s.remoteSecret.trim() || null, devices: s.remoteDevices.map((d) => ({ hash: d.hash, name: d.name, role: d.role ?? "configure", paused: d.paused === true })), requireAuth: s.remoteAuthRequired })
     } catch (e) {
       if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
         const { toast } = await import("sonner")
@@ -137,6 +139,8 @@ interface SettingsState {
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
   revokeRemoteDevice: (hash: string) => void
   setRemoteDeviceRole: (hash: string, role: RemoteRole) => void
+  /** Take back control from a paired desk (true) or give it back (false); see src/lib/desk-control.ts. */
+  setRemoteDevicePaused: (hash: string, paused: boolean) => void
   setOperatorName: (name: string) => void
   setHymnFirstLanguage: (lang: "en" | "yo") => void
   setBrandKit: (kit: BrandKit) => void
@@ -208,6 +212,18 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
   setRemoteDeviceRole: (hash, role) => {
     set((s) => ({ remoteDevices: s.remoteDevices.map((x) => (x.hash === hash ? { ...x, role } : x)) }))
+    void pushRemoteKeys()
+  },
+  setRemoteDevicePaused: (hash, paused) => {
+    // Not paused is written as absent, so a settings file stays as an older build wrote it.
+    set((s) => ({
+      remoteDevices: s.remoteDevices.map((x) => {
+        if (x.hash !== hash) return x
+        const next = { ...x, paused: true }
+        if (!paused) delete (next as RemoteDevice).paused
+        return next
+      }),
+    }))
     void pushRemoteKeys()
   },
   setCustomMacros: (customMacros) => set({ customMacros }),

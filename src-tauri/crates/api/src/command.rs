@@ -108,6 +108,15 @@ pub struct SceneTake {
     pub scene: String,
 }
 
+impl RemoteCommand {
+    /// Crew talk, not a service command (Rhema Comms, #251): notices, their answers and the talk
+    /// channel. These keep working for a desk the main desk has taken back control from.
+    #[must_use]
+    pub fn is_comms(&self) -> bool {
+        matches!(self, RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_))
+    }
+}
+
 impl fmt::Display for RemoteCommand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
