@@ -4,7 +4,7 @@
 //! either accepts the browser's one-time warning or installs the CA (served at `/rhema-ca.pem`) to
 //! trust it. Nothing leaves the church network; no outside service is involved.
 
-use rcgen::{BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose, SanType};
+use rcgen::{BasicConstraints, CertificateParams, CidrSubnet, DistinguishedName, DnType, ExtendedKeyUsagePurpose, GeneralSubtree, IsCa, KeyPair, KeyUsagePurpose, NameConstraints, SanType};
 
 /// PEM text for one certificate and its private key.
 #[derive(Debug, Clone)]
@@ -20,6 +20,23 @@ fn ca_params() -> CertificateParams {
     dn.push(DnType::OrganizationName, "Rhema Studio (this church's computer)");
     p.distinguished_name = dn;
     p.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
+    // A phone that installs this CA trusts it only for private network addresses and this
+    // computer's own names: even a stolen CA key cannot vouch for a public website.
+    p.name_constraints = Some(NameConstraints {
+        permitted_subtrees: vec![
+            GeneralSubtree::IpAddress(CidrSubnet::V4([10, 0, 0, 0], [255, 0, 0, 0])),
+            GeneralSubtree::IpAddress(CidrSubnet::V4([172, 16, 0, 0], [255, 240, 0, 0])),
+            GeneralSubtree::IpAddress(CidrSubnet::V4([192, 168, 0, 0], [255, 255, 0, 0])),
+            GeneralSubtree::IpAddress(CidrSubnet::V4([169, 254, 0, 0], [255, 255, 0, 0])),
+            GeneralSubtree::IpAddress(CidrSubnet::V4([127, 0, 0, 0], [255, 0, 0, 0])),
+            GeneralSubtree::IpAddress(CidrSubnet::V6([0xfc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0xfe, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])),
+            GeneralSubtree::IpAddress(CidrSubnet::V6([0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0xff, 0xc0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])),
+            GeneralSubtree::IpAddress(CidrSubnet::V6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], [0xff; 16])),
+            GeneralSubtree::DnsName("localhost".into()),
+            GeneralSubtree::DnsName("local".into()),
+        ],
+        excluded_subtrees: vec![],
+    });
     p.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign, KeyUsagePurpose::DigitalSignature];
     p.not_before = rcgen::date_time_ymd(2026, 1, 1);
     p.not_after = rcgen::date_time_ymd(2036, 1, 1);
@@ -88,5 +105,28 @@ mod tests {
         // A second server certificate from the same saved CA (the next start) also builds.
         assert!(make_server(&ca, &["10.0.0.5".into()]).is_ok());
         assert!(make_server(&Pem { cert: ca.cert.clone(), key: "nonsense".into() }, &["10.0.0.5".into()]).is_err());
+    }
+
+    /// Whether a client that installed only this CA accepts `server` for `name`.
+    fn trusted(ca: &Pem, server: &Pem, name: &str) -> bool {
+        use rustls::client::danger::ServerCertVerifier;
+        use rustls::pki_types::{pem::PemObject, CertificateDer, ServerName, UnixTime};
+        let mut roots = rustls::RootCertStore::empty();
+        for c in CertificateDer::pem_slice_iter(ca.cert.as_bytes()) {
+            roots.add(c.unwrap()).unwrap();
+        }
+        let verifier = rustls::client::WebPkiServerVerifier::builder_with_provider(std::sync::Arc::new(roots), std::sync::Arc::new(rustls::crypto::ring::default_provider())).build().unwrap();
+        let leaf = CertificateDer::pem_slice_iter(server.cert.as_bytes()).next().unwrap().unwrap();
+        verifier.verify_server_cert(&leaf, &[], &ServerName::try_from(name.to_string()).unwrap(), &[], UnixTime::now()).is_ok()
+    }
+
+    #[test]
+    fn the_local_ca_is_trusted_for_the_church_network_only() {
+        let ca = make_ca().unwrap();
+        assert!(trusted(&ca, &make_server(&ca, &["192.168.3.86".into()]).unwrap(), "192.168.3.86"));
+        assert!(trusted(&ca, &make_server(&ca, &["10.1.2.3".into(), "localhost".into()]).unwrap(), "localhost"));
+        // Even signed by the CA (its key stolen), a public address or website is refused.
+        assert!(!trusted(&ca, &make_server(&ca, &["8.8.8.8".into()]).unwrap(), "8.8.8.8"));
+        assert!(!trusted(&ca, &make_server(&ca, &["bank.example.com".into()]).unwrap(), "bank.example.com"));
     }
 }

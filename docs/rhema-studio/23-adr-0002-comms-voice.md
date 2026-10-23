@@ -65,7 +65,9 @@ followed each press and release, and a listening desk heard the phone only while
 **Secure page on the LAN, built as an option (2026-10-23):** "Secure page for phones (https)" (off by
 default) serves the same routes over https on the next port with a certificate from a local CA that
 Rhema makes once; a phone either accepts its browser's warning once or installs the CA from
-`/rhema-ca.pem`. That covers both options below, per phone; which to recommend stays the owner's
+`/rhema-ca.pem`. The CA carries name constraints: only private network addresses (10/8,
+172.16/12, 192.168/16, link-local, loopback, IPv6 local) and `localhost` / `.local`, so installing
+it on a phone never lets it vouch for a public website, even with its key. That covers both options below, per phone; which to recommend stays the owner's
 call. Checked: curl trusting only the downloaded CA verified the https page (and refused it without
 the CA); the served certificate names this Mac's LAN address, 127.0.0.1 and localhost, is for
 server use and lasts 397 days; headless Chrome joined the talk channel over https and the crew
