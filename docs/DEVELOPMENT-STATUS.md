@@ -1,19 +1,33 @@
 # Rhema Studio — Development Status
 
-**Updated:** 2026-10-23 · **Verified main:** `f63abc8cdcf7eaf56b20a97975faf63d922c002c` · **Release: NO-GO**
+**Verified:** 2026-10-23 · **GitHub `main`:** `8c66cb1f7984276c2b527847a60dc706fd1061bf` · **Release eligibility:** NO-GO
 
-Sources: [PRD.md](PRD.md), [TASKS.md](TASKS.md), [RELEASE-PLAN.md](RELEASE-PLAN.md), `CHANGELOG.md` and [PROGRESS-LOG.md](PROGRESS-LOG.md).
+Primary sources: [PRD.md](PRD.md), [TASKS.md](TASKS.md), [RELEASE-PLAN.md](RELEASE-PLAN.md), `CHANGELOG.md`, [PROGRESS-LOG.md](PROGRESS-LOG.md).
 
-## Current verified build
-- The latest merge is [#274](https://github.com/thathman/rhema-studio/pull/274), Comms channels/private calls. **22 PRs #254–#275** merged after the obsolete docs PR #253, including independent source architecture, scene composition, rehearsal sandbox, separate event clock, Host/Join, browser feed QR/ack, notices, PTT, MCP drafts and recovery.
-- **Open PRs:** [#276](https://github.com/thathman/rhema-studio/pull/276) actor-aware remote commands and scene Take log, [#253](https://github.com/thathman/rhema-studio/pull/253) stale docs (previously 58 behind), [#4](https://github.com/thathman/rhema-studio/pull/4) old speech provider branch (827 behind, 1 ahead).
-- **Branches checked:** 254 retained, mostly merged historical work. `history/scenes-actors` ahead2/behind0 now has #276, and `comms-004/channels` was merged as #274. Old docs branch diverged, speech branch diverged. Do not count 254 branches as active tasks.
-- **CI and testing:** PR #274 workflow 39927459128 completed successfully; recent PRs contain Vitest/Rust and isolated Intel Mac QA evidence. Latest main CI status was not independently returned by the GitHub connector; no new hardware acceptance may be inferred.
-- **Physical risks:** still lacking live camera MediaMTX/phone fanout to real Google TV and OBS, real second-computer intercom/microphone/phone HTTPS, verified Windows install and exact integrated hardware A/V, novice and owner sign-off.
-- **Crash recovery:** #275 offers restoration after unexpected close, never automatically takes an output live. Stage, timer, source, scene and record semantics have first implementations, not final independent hardware validation.
+## Integrated main
 
-## Next work
-Review #276 (actor-aware execution log) and #277 (show-health routing/attention first slice; not merged); validate physical OBS, receiver and camera stack; phone voice security/audio and real multi-machine operation; connect AI client to MCP draft; update exact release gates before any published build.
+- **Most recent merge:** [#286](https://github.com/thathman/rhema-studio/pull/286), opt-in local HTTPS phone page with a locally generated certificate authority; tested with local curl/headless Chrome only, **not on a real phone over Wi-Fi**.
+- **Additional merges since previous review at `f63abc8c`:** [#276](https://github.com/thathman/rhema-studio/pull/276) actor-attributed service commands/scene log; [#277](https://github.com/thathman/rhema-studio/pull/277) real-signal show-health/attention; [#279](https://github.com/thathman/rhema-studio/pull/279) scene time-of-day and target countdown; [#280](https://github.com/thathman/rhema-studio/pull/280) Comms ADR naming; [#281](https://github.com/thathman/rhema-studio/pull/281) independently reviewed live/mic/data fixes; [#282](https://github.com/thathman/rhema-studio/pull/282) failure guide; [#283](https://github.com/thathman/rhema-studio/pull/283) MCP prompts and editable waiting drafts; [#284](https://github.com/thathman/rhema-studio/pull/284) paired phone PTT; [#285](https://github.com/thathman/rhema-studio/pull/285) voice latency diagnostics/consumer correction.
+- **Only open PRs at this check:** [#278](https://github.com/thathman/rhema-studio/pull/278) PRD/task/status reconciliation and [#4](https://github.com/thathman/rhema-studio/pull/4) historic speech/OpenAI Whisper provider; the older docs [#253](https://github.com/thathman/rhema-studio/pull/253) was closed as superseded.
+- **Already integrated foundations:** source→feed→scene→program model, independent Bible/Songs/Hymns source state and scoped displays, service clock, rehearsal sandbox, solo Host/Join with delegates, basic scene builder, browser graphics/QR/ACK, show-health routing, crash recovery, Comms notices/requests/group PTT/private calls/phone controls and MCP planning interface.
+
+## Evidence and limits
+
+PR bodies and `PROGRESS-LOG.md` record frontend unit tests (latest reported 738), Rust crate tests and isolated Intel Mac QA/tone/headless browser runs. The latest `main` GitHub Actions workflow result was not available from the connector, so no independent claim of full latest-main CI success is made.
+
+**Important unresolved engineering risk:** [#285](https://github.com/thathman/rhema-studio/pull/285) measured increasing WebRTC jitter-buffer delay in a multi-desk test; the root cause was not fully resolved. Real microphone/headset/phone Wi-Fi tests, WebKit lock/sleep and >2 independent devices remain necessary. [#286](https://github.com/thathman/rhema-studio/pull/286) adds a trust-sensitive local CA and HTTPS option; the exact secure pairing/trust flow should be documented and independently reviewed on real Android/iOS devices before deployment.
+
+Browser graphics and scene camera placeholders **are not proof** of a publish-once MediaMTX phone/IP camera stream or independent moving video on the sanctuary TV. Physical projector, OBS transparency/NDI, Google TV audio/decoding, Windows x64 launch, multidevice role-failure and volunteer acceptance remain open.
+
+**Current release candidate evidence is older than `main`**, and cannot be used as acceptance for these newly merged features. Do not publish a release or imply that everything is working on church hardware.
+
+## Next eligible actions
+
+1. Verify OBS and sanctuary simultaneous, different Bible/lyric graphics and actual NDI/browser receiver state; build camera router + independent congregation moving-video path and test real Google TV.
+2. Validate WebRTC PTT on physical computers and phones with secure HTTPS pairing; diagnose the real jitter/latency problem, echo and revocation.
+3. Validate real Host/Join failsafe, network disconnection, output restoration and actor/service-history accuracy.
+4. Test external MCP AI planning toolchain with a complete real draft and licensed Bible/song references.
+5. Conduct and record Windows/projector/OBS/Google TV/volunteer acceptance. Leave release at NO-GO.
 
 ## Historical archive (records before the October 23 reconciliation; may describe superseded status)
 
