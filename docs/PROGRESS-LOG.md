@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Fixes from an independent review of the day's work
+
+- **Branch / PR:** `review/today-fixes`.
+- **Fixed:** the main desk's microphone could stay open (release during the permission prompt, double tap); talk routes per speaker/listener map, rebuilt on node change; late answers drop their peer; paired names unique and never "host" / "Main desk"; the service log records each remote command from one `remote:audit` event after it ran (no swapped names; OSC named); quick screens no second source line; browser feed clocks count by the host's time; trimmed recovery snapshots keep the live sources; snapshot saved as rehearsal starts; any orderly exit is clean (`RunEvent::Exit`); a desk closed while joining leaves.
+- **Tests:** rhema-api 133 (audit event, unique names); `live-recovery.test.ts`, `source-followers.test.ts` (fails without the fix). Desktop: the host-mic release case (Desk A heard nothing, −192 dB), six concurrent commands from two devices all named right, channel and three-desk tone tests unchanged.
+- **Found and recorded, not fixed:** voice delay builds up over seconds in single-window QA with a locked screen, also in a plain WebRTC loop (ADR 0002 §4); needs the two-computer rehearsal. A desk-side gain tried for it was reverted.
+
 ## 2026-10-23 — Show health (#213 P1, first slice)
 
 - **Branch / PR:** `show-health`.

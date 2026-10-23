@@ -73,6 +73,15 @@ phone). Text notices and action requests already work on phones without it.
   with test tones (one bridge more than a real microphone has).
 - Page timers are throttled heavily while the screen is locked; timings must be taken on the audio
   clock (`playbackTime`), not with timers.
+- **Open risk: delay building up.** Measured again over eight bursts (2026-10-23, screen locked, all
+  desks in one QA window, tone tracks made in WebAudio): desk → host → desk grew from about 200 ms
+  to about 2.5 s within 15 s, on the #270 build as on later ones. A plain WebRTC loop between two
+  connections in the same page, with no host and no Rhema mixing, grew the same way (281 → 1535 ms),
+  so it is WebKit's audio pipeline in this setup, not the hub's mixing or routing. Whether it
+  happens with real microphones, on two computers, with the screen unlocked, is not known: measure
+  that first in the physical rehearsal (#251). If it does, candidates are resetting a desk's
+  connection when its delay grows (the host can see it in `getStats`) and sending without WebAudio
+  on the desk side.
 
 ## 5. Verification
 
