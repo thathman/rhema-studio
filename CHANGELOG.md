@@ -28,7 +28,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - A browser feed's settings show a QR code of its link when the listener is on the church network, so a TV, tablet or phone opens the feed by scanning instead of typing.
 
 ### Talk: full-duplex Push-to-Talk with the crew (Rhema Comms C3, #251)
-- Joined desks and the main desk can talk to each other on the church network: hold Talk, and everyone hears you; several people can talk at once. The main desk mixes the voices (each desk hears everyone but itself), with no cloud and no extra software. Who is talking shows on every desk. Crew audio never reaches the screens, PA, OBS, NDI, recordings or listening. Design and measurements: `docs/rhema-studio/22-adr-0002-comms-voice.md`.
+- Joined desks and the main desk can talk to each other on the church network: hold Talk, and everyone hears you; several people can talk at once. The main desk mixes the voices (each desk hears everyone but itself), with no cloud and no extra software. Who is talking shows on every desk. Crew audio never reaches the screens, PA, OBS, NDI, recordings or listening. Design and measurements: `docs/rhema-studio/23-adr-0002-comms-voice.md`.
 
 ### Clock layer in scenes (ARCH-002)
 - A congregation scene can have a **Clock**: the service timer in a look's text style, filling its box, for a countdown before the service. Screens and browser feeds count it themselves (one frame a second), so it keeps time with the window covered and adds no traffic while it runs.
