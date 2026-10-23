@@ -57,6 +57,13 @@ Verified in the app (2026-10-23, tones over the real listener): A to Production 
 
 ## 3. Phones (C4) — needs an owner decision
 
+**Built (2026-10-23):** the phone remote page joins the talk channel and holds to talk wherever the
+browser allows its microphone (a secure page), with the same signaling and release rules as a desk;
+on a plain-http page it says why it cannot. Checked with headless Chrome (fake microphone) against
+the QA build over `http://127.0.0.1` (a secure context): it joined in about 1 s, the crew marks
+followed each press and release, and a listening desk heard the phone only while it held Talk.
+What remains is serving the page securely on the LAN, below.
+
 Browsers allow the microphone only in a secure context. The phone remote page is served over plain
 HTTP on the LAN, so a phone cannot talk until the listener can serve HTTPS with a local certificate
 (a self-signed one shows a warning each phone must accept once; a local CA must be installed on each

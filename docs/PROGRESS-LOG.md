@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Phone Talk (Comms C4)
+
+- **Branch / PR:** `comms-004/phone-talk`. `remote.html` Talk: join (getUserMedia, offer to `/api/v1/voice` with the phone's key), hold to talk (pointer; release, blur, hidden page and leaving stop it), leave; a note where the page is not secure.
+- **Tests:** `phone-remote.test.ts` (insecure page: note, no button). Desktop: headless Chrome with a fake microphone as the phone against the QA build (http://127.0.0.1 is a secure context): joined in ~1 s; crew marks followed press and release; a desk heard the phone only while it held Talk (first sound 0.3–0.7 s after a press, beep spacing included). The same run showed the delay build-up across processes (sound arriving seconds late): see the one-consumer fix PR and ADR 0002 §4.
+
 ## 2026-10-23 — MCP-003: prompts and draft revision (#252)
 
 - **Branch / PR:** `mcp-003/prompts-revise`. `prompts/list`, `prompts/get` (`draft_service`, `reuse_service`, `check_service`); tools `rhema_list_service_drafts`, `rhema_update_service_draft` (`mcp_drafts::list`, `update`); Prepare shows "revised".
