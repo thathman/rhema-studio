@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — COMMS-001 C2: action requests
+
+- **Branch / PR:** `comms-002/action-requests`.
+- **Behaviour:** `NoticeIn.action {kind, value}` (API: kinds bible / scene / event only, value capped at 120); the host store keeps a checked `action` on each notice (`asAction`). Notices panel: "Ask to show a verse / take a scene / start an item" when writing; the recipient gets one button, which runs the request through the desk's own path (main desk: `activateBibleReference`, `takeScene`, event clock; joined desk: `bible_activate`, `take_scene`, `event_start` with its key, so the host's role checks apply) and answers Ready. Scene requests switch the outputs already showing a scene, else main (`sceneTargets`).
+- **Tests:** rhema-api 130 (action carried, unknown kinds dropped); notices test (button only for the recipient, acts and answers Ready, scene targets); vitest 719.
+- **Desktop (QA build, Intel Mac, loopback):** paired Bible and Timekeeper test keys; the Timekeeper's request to the main desk arrived with its action ("shell" kind dropped); the bell read "Notices: 2 new"; pressing "Show Romans 8:28" set the Bible source to Romans 8:28 (KJV), on, and the Live State showed "Tolu (main desk): ready"; the Timekeeper key's `bible_activate` got 403. Window capture failed in this session (bridge and API evidence only). Real data 6/6, WebKit restored.
+- **Next:** ARCH-001 leftovers (stage follows a chosen source; journal source tags). Cameras (#209) wait on the owner: the first camera use asks for macOS camera permission, and MediaMTX is not installed.
+
 ## 2026-10-23 — ARCH-002 slice 2: browser feeds (#198 groundwork)
 
 - **Branch / PR:** `arch-002/browser-feeds`.

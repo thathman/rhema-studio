@@ -6,6 +6,7 @@ import { openSettings } from "@/lib/settings-dialog"
 import { useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { NoticesPanel } from "@/studio/notices-panel"
+import { sceneTargets } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
 const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event clock only)", bible: "Bible (the Bible source only)", screens: "Screens (congregation scenes only)", present: "Present", configure: "Present and settings" }
@@ -154,8 +155,17 @@ function JoinedDesk() {
               role={me?.role ?? "present"}
               me={me?.name ?? ""}
               eventTitle={live.rundown.find((r) => r.id === live.event.currentId)?.reference ?? null}
-              onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}) } })}
+              onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
               onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
+              onAction={(a) => {
+                // The host checks this desk's role for each, as for its own buttons.
+                const send = useJoin.getState().send
+                if (a.kind === "bible") void send({ command: "bible_activate", value: a.value })
+                else if (a.kind === "event") void send({ command: "event_start", value: a.value })
+                else for (const output of sceneTargets(live.outputs)) void send({ command: "take_scene", value: { output, scene: a.value } })
+              }}
+              scenes={live.scenes}
+              rundown={live.rundown}
             />
           </section>
         </>

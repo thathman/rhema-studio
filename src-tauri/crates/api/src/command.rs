@@ -58,6 +58,17 @@ pub struct NoticeIn {
     /// The run-of-show event it is about, if any.
     #[serde(default)]
     pub event: Option<String>,
+    /// An action request (Comms C2): what the recipient is asked to get ready. It is only opened
+    /// on their desk for them to act on; nothing runs by itself.
+    #[serde(default)]
+    pub action: Option<NoticeAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoticeAction {
+    /// "bible" (a reference), "scene" (a scene id) or "event" (a run-of-show item id).
+    pub kind: String,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -374,7 +385,7 @@ mod tests {
             RemoteCommand::RestoreSource("bible".into()),
             RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
             RemoteCommand::ReleaseScene("main".into()),
-            RemoteCommand::NoticeSend(NoticeIn { text: "Pulpit mic is ready".into(), to: None, priority: None, event: None }),
+            RemoteCommand::NoticeSend(NoticeIn { text: "Pulpit mic is ready".into(), to: None, priority: None, event: None, action: None }),
             RemoteCommand::NoticeAck(NoticeAckIn { id: "n1".into(), state: "seen".into() }),
         ];
 

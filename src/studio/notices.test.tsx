@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { buildLiveState } from "@/lib/live-state"
-import { isFor, useNotices } from "@/stores/notices-store"
+import { asAction, isFor, sceneTargets, useNotices } from "@/stores/notices-store"
 import { NoticesPanel } from "./notices-panel"
 
 /** Production notices (Rhema Comms C1, #251): private, addressed, answered, carried in the Live State. */
@@ -39,7 +39,7 @@ describe("production notices", () => {
     const onAnswer = vi.fn()
     const onSend = vi.fn()
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<NoticesPanel notices={useNotices.getState().notices} role="bible" me="Ade (Bible)" onSend={onSend} onAnswer={onAnswer} eventTitle="Opening prayer" />))
+    await act(async () => createRoot(el).render(<NoticesPanel notices={useNotices.getState().notices} role="bible" me="Ade (Bible)" onSend={onSend} onAnswer={onAnswer} onAction={vi.fn()} eventTitle="Opening prayer" />))
     expect(el.textContent).toContain("Next reading is Psalm 100")
     expect(el.textContent).toContain("Psalm 100 is ready")
     expect(el.textContent).not.toContain("Camera scene")
@@ -52,6 +52,26 @@ describe("production notices", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }))
     })
     await act(async () => (el.querySelector("form") as HTMLFormElement).requestSubmit())
-    expect(onSend).toHaveBeenCalledWith({ to: "host", priority: "normal", text: "Reading after the hymn" })
+    expect(onSend).toHaveBeenCalledWith({ to: "host", priority: "normal", text: "Reading after the hymn", action: null })
+  })
+
+  it("an action request is only a button on the recipient's desk; pressing it acts and answers Ready (C2)", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    expect(asAction({ kind: "shell", value: "rm" })).toBeNull()
+    expect(asAction({ kind: "bible", value: "  " })).toBeNull()
+    const n = useNotices.getState().send({ from: "Main desk", to: "bible", text: "Next reading", action: { kind: "bible", value: " Romans 8:28 " } })!
+    expect(n.action).toEqual({ kind: "bible", value: "Romans 8:28" })
+    const onAction = vi.fn()
+    const onAnswer = vi.fn()
+    const el = document.createElement("div")
+    await act(async () => createRoot(el).render(<NoticesPanel notices={useNotices.getState().notices} role="bible" me="Ade (Bible)" onSend={vi.fn()} onAnswer={onAnswer} onAction={onAction} />))
+    expect(onAction).not.toHaveBeenCalled()
+    const show = [...el.querySelectorAll("button")].find((b) => b.textContent === "Show Romans 8:28")!
+    await act(async () => show.click())
+    expect(onAction).toHaveBeenCalledWith({ kind: "bible", value: "Romans 8:28" })
+    expect(onAnswer).toHaveBeenCalledWith(n.id, "ready")
+    // A scene request switches the outputs already showing a scene, else the main output.
+    expect(sceneTargets([{ id: "main", sceneId: null }, { id: "obs", sceneId: "s1" }])).toEqual(["obs"])
+    expect(sceneTargets([{ id: "side" }, { id: "main" }])).toEqual(["main"])
   })
 })

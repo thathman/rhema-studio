@@ -35,6 +35,7 @@ impl CommandDispatcher {
             RemoteCommand::NoticeSend(n) => sink.emit_event("remote:notice_send", &serde_json::json!({
                 "text": n.text.chars().take(280).collect::<String>(), "to": n.to.as_deref().unwrap_or("all"),
                 "priority": if n.priority.as_deref() == Some("urgent") { "urgent" } else { "normal" }, "event": n.event, "by": by,
+                "action": n.action.as_ref().filter(|a| matches!(a.kind.as_str(), "bible" | "scene" | "event")).map(|a| serde_json::json!({ "kind": a.kind, "value": a.value.chars().take(120).collect::<String>() })),
             }).to_string()),
             RemoteCommand::NoticeAck(a) => sink.emit_event("remote:notice_ack", &serde_json::json!({ "id": a.id, "state": a.state, "by": by }).to_string()),
             other => Self::dispatch(other, sink),
@@ -267,7 +268,7 @@ mod tests {
     #[test]
     fn notices_carry_who_sent_them() {
         let sink = MockSink::new();
-        let n = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "x".repeat(400), to: Some("present".into()), priority: Some("urgent".into()), event: Some("sermon".into()) });
+        let n = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "x".repeat(400), to: Some("present".into()), priority: Some("urgent".into()), event: Some("sermon".into()), action: Some(crate::command::NoticeAction { kind: "bible".into(), value: "Romans 8:28".into() }) });
         CommandDispatcher::dispatch_as(&n, &sink, "Femi's laptop").unwrap();
         let (event, payload) = sink.last_event();
         assert_eq!(event, "remote:notice_send");
@@ -276,6 +277,10 @@ mod tests {
         assert_eq!(v["to"], "present");
         assert_eq!(v["priority"], "urgent");
         assert_eq!(v["text"].as_str().unwrap().chars().count(), 280);
+        assert_eq!(v["action"], serde_json::json!({ "kind": "bible", "value": "Romans 8:28" }));
+        let odd = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "x".into(), to: None, priority: None, event: None, action: Some(crate::command::NoticeAction { kind: "shell".into(), value: "rm".into() }) });
+        CommandDispatcher::dispatch_as(&odd, &sink, "x").unwrap();
+        assert!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["action"].is_null(), "unknown action kinds are dropped");
         CommandDispatcher::dispatch(&RemoteCommand::NoticeAck(crate::command::NoticeAckIn { id: "n1".into(), state: "ready".into() }), &sink).unwrap();
         let (event, payload) = sink.last_event();
         assert_eq!(event, "remote:notice_ack");
