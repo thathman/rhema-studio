@@ -20,11 +20,14 @@ const EXPECTED_EVENT_NAMES = [
   "remote:verse_next",
   "remote:verse_prev",
   "remote:macro",
+  "remote:event_next",
+  "remote:event_prev",
+  "remote:event_start",
 ]
 
 describe("REMOTE_EVENTS", () => {
   it("has one entry per RemoteCommand variant", () => {
-    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(15)
+    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(18)
   })
 
   it("matches the event names the Rust dispatcher emits", () => {

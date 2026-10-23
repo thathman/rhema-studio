@@ -8,6 +8,7 @@ import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/
 import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
+import { useEventClock } from "@/stores/event-clock-store"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
@@ -57,6 +58,18 @@ export function useRemoteControl() {
       await register(REMOTE_EVENTS.verse_prev, remoteActions.versePrev)
       await register(REMOTE_EVENTS.show, () => remoteActions.toggleOnAir(true))
       await register(REMOTE_EVENTS.hide, () => remoteActions.toggleOnAir(false))
+      // The event clock (C03): a timekeeper on another computer or a Stream Deck; never a screen.
+      await register(REMOTE_EVENTS.event_next, () => useEventClock.getState().next())
+      await register(REMOTE_EVENTS.event_prev, () => useEventClock.getState().previous())
+      keep(
+        await listen<string>(REMOTE_EVENTS.event_start, (event) => {
+          if (cancelled) return
+          const id = parsePayload(event.payload)?.id
+          if (typeof id !== "string") return
+          noteRemote(`${REMOTE_EVENTS.event_start} ${id}`)
+          useEventClock.getState().start(id)
+        }),
+      )
 
       // remote:paired — a device completed pairing; remember its token hash
       keep(
@@ -65,7 +78,7 @@ export function useRemoteControl() {
           const p = parsePayload(event.payload)
           if (typeof p?.hash === "string" && typeof p?.name === "string") {
             noteRemote(`${REMOTE_PAIRED_EVENT} ${p.name}`)
-            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: p.role === "configure" ? "configure" : "present" })
+            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: p.role === "configure" || p.role === "timekeeper" ? p.role : "present" })
             toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
           }
         }),

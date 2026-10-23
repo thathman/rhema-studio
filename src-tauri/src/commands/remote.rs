@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use rhema_api::{
     close_pairing, hash_key, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet, Role,
-    OscConfig, OscHandle, PairingWindow, SharedStatus, new_shared_status, start_http_server, start_osc_listener,
+    OscConfig, OscHandle, PairingWindow, SharedLive, SharedStatus, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
 };
 
 /// Who may send remote commands, shared by both listeners so a revoke takes
@@ -205,6 +205,8 @@ pub struct HttpRuntime {
     /// Listening on the whole network (not only 127.0.0.1), as started.
     lan: bool,
     status: SharedStatus,
+    /// The Live State joined devices follow (Host/Join); kept across restarts of the listener.
+    live: SharedLive,
 }
 
 impl HttpRuntime {
@@ -214,6 +216,7 @@ impl HttpRuntime {
             bound_port: None,
             lan: false,
             status: new_shared_status(),
+            live: new_live_hub(),
         }
     }
 
@@ -237,9 +240,9 @@ pub async fn start_http(
     port: Option<u16>,
     lan: Option<bool>,
 ) -> Result<u16, String> {
-    let (status, already_running) = {
+    let (status, live, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
-        (runtime.shared_status(), runtime.handle.is_some())
+        (runtime.shared_status(), runtime.live.clone(), runtime.handle.is_some())
     };
 
     if already_running {
@@ -251,6 +254,7 @@ pub async fn start_http(
         host: bind_host(lan).into(),
         keys: remote.keys.clone(),
         pairing: remote.pairing.clone(),
+        live,
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -299,6 +303,18 @@ pub async fn get_http_status(
         lan: runtime.lan,
         port: runtime.bound_port,
     })
+}
+
+/// The app's Live State for joined devices (a JSON snapshot; the server passes it on unread).
+#[tauri::command]
+pub fn publish_live_state(state: State<'_, Mutex<HttpRuntime>>, json: String) -> Result<(), String> {
+    // Bounded: a snapshot is a few kilobytes; anything near this is a bug, not a service.
+    if json.len() > 2 * 1024 * 1024 {
+        return Err("live state too large".into());
+    }
+    let live = state.lock().map_err(|e| e.to_string())?.live.clone();
+    live.publish(json);
+    Ok(())
 }
 
 /// Update the status snapshot from the frontend.

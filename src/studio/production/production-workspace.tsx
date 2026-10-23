@@ -15,6 +15,7 @@ import { HoldControl } from "@/studio/present/service-timer"
 import { AuxTimersPanel } from "@/studio/present/aux-timers"
 import type { ReadinessCheck } from "@/studio/readiness"
 import { SceneComposer } from "@/studio/production/scene-composer"
+import { OperatorsPanel } from "@/studio/production/operators-panel"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 
@@ -88,7 +89,7 @@ export function ProductionWorkspace() {
           {tab === "health" && <Health />}
           {tab === "programs" && <SceneComposer />}
           {tab === "cameras" && <Planned title="Cameras on the church network" issue={209} text="Phone or IP cameras on the church's own network, one stream per angle, shared by OBS and Rhema without the internet. Today OBS handles the cameras; Rhema's graphics go to OBS over NDI." />}
-          {tab === "operators" && <Planned title="Operators and their screens" issue={197} text="Each volunteer on their own device (director, Bible & worship, stage, timekeeper, video), with one computer holding the authority to take anything live. Today the team prepares together (Team → church folder, approvals) and one desk runs the service." />}
+          {tab === "operators" && <OperatorsPanel />}
         </div>
       </div>
     </div>

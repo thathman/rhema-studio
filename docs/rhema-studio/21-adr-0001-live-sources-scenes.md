@@ -66,6 +66,20 @@ shortcuts and the phone remote keep calling the same actions.
 - **Composer:** Production → Programs. Edits stay in the composer until Save or Take, so a scene on air
   never changes while it is arranged.
 
+### Host/Join as built (ARCH-004 slice 1)
+
+- The host publishes its **Live State** (`src/lib/live-state.ts`, version 1: program, sources, event
+  clock, run of show, timing, stage message) to its LAN listener; paired devices read it
+  (`GET /api/v1/live`) or follow it (`GET /api/v1/live/events`, server-sent events). The listener never
+  reads it; keys off means this computer only.
+- **Roles** are permissions, not staffing: `timekeeper` may only move the event clock
+  (`event_next`, `event_prev`, `event_start`), `present` adds the screens, `configure` adds settings.
+  The host always keeps every control.
+- **Joining** (Production → Operators): pair with the host's code; the token goes to the keychain;
+  the joined computer follows the Live State (reconnecting by itself) and sends commands through the
+  host's ordinary command API, which checks the key's role and makes retries harmless. A joined
+  computer drives none of its own screens; losing it changes nothing on the host.
+
 ## 3. Action semantics
 
 | Action | Scope | Meaning |

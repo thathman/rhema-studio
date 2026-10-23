@@ -10,8 +10,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use axum::response::sse::{Event, KeepAlive, Sse};
 use serde::{Deserialize, Serialize};
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 use tower_http::cors::CorsLayer;
 
 use crate::command::RemoteCommand;
@@ -29,6 +30,8 @@ pub struct HttpConfig {
     pub keys: KeySet,
     /// The pairing window `/pair` checks against.
     pub pairing: PairingWindow,
+    /// The host's Live State for joined devices (Host/Join, ARCH-004).
+    pub live: SharedLive,
 }
 
 impl Default for HttpConfig {
@@ -38,8 +41,38 @@ impl Default for HttpConfig {
             host: "0.0.0.0".into(),
             keys: new_key_set(),
             pairing: new_pairing_window(),
+            live: new_live_hub(),
         }
     }
+}
+
+/// The host's Live State (ADR 0001): the app publishes a JSON snapshot whenever it changes; joined
+/// devices read it (`/api/v1/live`) or follow it (`/api/v1/live/events`, server-sent events). The
+/// server never looks inside it.
+#[derive(Debug)]
+pub struct LiveHub {
+    current: std::sync::RwLock<Option<String>>,
+    tx: broadcast::Sender<String>,
+}
+
+impl LiveHub {
+    pub fn publish(&self, json: String) {
+        *self.current.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(json.clone());
+        // No one following is fine.
+        let _ = self.tx.send(json);
+    }
+
+    #[must_use]
+    pub fn current(&self) -> Option<String> {
+        self.current.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+    }
+}
+
+pub type SharedLive = Arc<LiveHub>;
+
+#[must_use]
+pub fn new_live_hub() -> SharedLive {
+    Arc::new(LiveHub { current: std::sync::RwLock::new(None), tx: broadcast::channel(32).0 })
 }
 
 /// Handle to a running HTTP server. Call `stop()` to shut it down.
@@ -75,6 +108,7 @@ pub struct HttpStartResult {
 
 /// Shared state for axum route handlers.
 struct AppState<S: CommandSink> {
+    live: SharedLive,
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
     keys: KeySet,
@@ -128,6 +162,7 @@ where
         .map_err(|e| CommandError::DispatchFailed(format!("Invalid bind address: {e}")))?;
 
     let state = Arc::new(AppState {
+        live: config.live.clone(),
         sink,
         status,
         keys: config.keys.clone(),
@@ -141,6 +176,9 @@ where
         .route("/api/v1/status", get(status_handler::<S>))
         .route("/api/v1/command", post(command_handler::<S>))
         .route("/api/v1/pair", post(pair_handler::<S>))
+        .route("/api/v1/me", get(me_handler::<S>))
+        .route("/api/v1/live", get(live_handler::<S>))
+        .route("/api/v1/live/events", get(live_events_handler::<S>))
         .route("/remote", get(remote_page))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
@@ -316,6 +354,75 @@ async fn pair_handler<S: CommandSink + 'static>(
     }
 }
 
+/// Who may read the Live State: a paired device. With keys off ("open"), only this computer
+/// itself, since the Live State holds the service plan and private stage notes.
+fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &HeaderMap) -> Result<(String, crate::keys::Role), StatusCode> {
+    if !state.rate.allow(peer.ip()) {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+    match check_key(&state.keys, presented_key(headers)) {
+        Ok(Some(entry)) => Ok((entry.name, entry.role)),
+        Ok(None) if peer.ip().is_loopback() => Ok(("This computer".into(), crate::keys::Role::Configure)),
+        Ok(None) => Err(StatusCode::FORBIDDEN),
+        Err(_) => Err(StatusCode::UNAUTHORIZED),
+    }
+}
+
+/// `GET /api/v1/me`: the name and role this key has, so a joined desk shows what it may do.
+async fn me_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    match live_reader(&state, peer, &headers) {
+        Ok((name, role)) => Json(serde_json::json!({ "name": name, "role": role })).into_response(),
+        Err(code) => code.into_response(),
+    }
+}
+
+/// `GET /api/v1/live`: the host's Live State now (204 before the app has published one).
+async fn live_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    if let Err(code) = live_reader(&state, peer, &headers) {
+        return code.into_response();
+    }
+    match state.live.current() {
+        Some(json) => ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], json).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    }
+}
+
+/// `GET /api/v1/live/events`: the Live State as server-sent events, the current one first, then
+/// each change; a comment every 15 s keeps the connection open through idle routers.
+async fn live_events_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    if let Err(code) = live_reader(&state, peer, &headers) {
+        return code.into_response();
+    }
+    let rx = state.live.tx.subscribe();
+    let first = state.live.current();
+    let stream = futures_util::stream::unfold((rx, first), |(mut rx, first)| async move {
+        if let Some(json) = first {
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(json)), (rx, None)));
+        }
+        loop {
+            match rx.recv().await {
+                Ok(json) => return Some((Ok(Event::default().event("live").data(json)), (rx, None))),
+                // Slow reader: skip to the newest; the next message is the whole state anyway.
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                Err(broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
+}
+
 /// The key a request carries, from `X-Rhema-Key` or `Authorization: Bearer`.
 fn presented_key(headers: &HeaderMap) -> Option<&str> {
     if let Some(v) = headers.get("x-rhema-key").and_then(|v| v.to_str().ok()) {
@@ -347,10 +454,11 @@ async fn command_handler<S: CommandSink + 'static>(
             );
         }
         Ok(Some(entry)) if !entry.role.allows(&request.command) => {
-            log::warn!("HTTP command refused for {}: {} may not change settings", entry.name, entry.name);
+            let why = if entry.role == crate::keys::Role::Timekeeper { "this device keeps time: it may move the event clock, not the screens" } else { "this device may present but not change settings" };
+            log::warn!("HTTP command refused for {}: {why}", entry.name);
             return (
                 StatusCode::FORBIDDEN,
-                Json(CommandResponse { success: false, error: Some("this device may present but not change settings".into()) }),
+                Json(CommandResponse { success: false, error: Some(why.into()) }),
             );
         }
         Ok(_) => {}
@@ -467,6 +575,69 @@ mod tests {
         let mut response = String::new();
         stream.read_to_string(&mut response).await.expect("read");
         response
+    }
+
+    async fn get_with(port: u16, path: &str, headers: &str, read_bytes: Option<usize>) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.expect("connect");
+        stream.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{headers}Connection: close\r\n\r\n").as_bytes()).await.expect("write");
+        let mut out = Vec::new();
+        match read_bytes {
+            None => { stream.read_to_end(&mut out).await.expect("read"); }
+            Some(n) => {
+                let mut buf = [0u8; 1024];
+                while out.len() < n {
+                    let r = tokio::time::timeout(std::time::Duration::from_secs(2), stream.read(&mut buf)).await.expect("in time").expect("read");
+                    if r == 0 { break; }
+                    out.extend_from_slice(&buf[..r]);
+                }
+            }
+        }
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    #[tokio::test]
+    async fn live_state_needs_a_paired_key_and_streams_each_change() {
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(crate::keys::Keys { require_auth: true, entries: vec![crate::keys::KeyEntry { hash: crate::keys::hash_key("tok"), name: "Femi's laptop".into(), role: crate::keys::Role::Timekeeper }] }));
+        let live = new_live_hub();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        assert!(get_with(port, "/api/v1/live", "", None).await.contains("401"));
+        assert!(get_with(port, "/api/v1/live", "X-Rhema-Key: nope\r\n", None).await.contains("401"));
+        assert!(get_with(port, "/api/v1/live", "X-Rhema-Key: tok\r\n", None).await.contains("204"));
+        let me = get_with(port, "/api/v1/me", "X-Rhema-Key: tok\r\n", None).await;
+        assert!(me.contains("Femi's laptop") && me.contains("timekeeper"), "{me}");
+
+        live.publish(r#"{"v":1,"now":"Opening prayer"}"#.into());
+        let now = get_with(port, "/api/v1/live", "Authorization: Bearer tok\r\n", None).await;
+        assert!(now.contains("200 OK") && now.contains("Opening prayer"), "{now}");
+
+        // The stream starts with the current state, then each change.
+        let handle = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", Some(400)).await });
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
+        let stream = handle.await.unwrap();
+        assert!(stream.contains("text/event-stream"), "{stream}");
+        assert!(stream.contains("event: live") && stream.contains("Opening prayer") && stream.contains("Sermon"), "{stream}");
+
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn open_keys_show_the_live_state_to_this_computer_only() {
+        let live = new_live_hub();
+        live.publish("{}".into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), live, ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // The test connects from 127.0.0.1: allowed. A LAN peer gets 403 (live_reader).
+        assert!(get_with(result.bound_port, "/api/v1/live", "", None).await.contains("200 OK"));
+        let mut h = result.handle;
+        h.stop();
     }
 
     #[tokio::test]

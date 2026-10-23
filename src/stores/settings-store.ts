@@ -2,7 +2,8 @@ import type { OpenedFrom } from "@/lib/church-folder"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 
-export type RemoteRole = "present" | "configure"
+/** present: move through the service; configure: settings too; timekeeper: only the event clock (Host/Join). */
+export type RemoteRole = "present" | "configure" | "timekeeper"
 
 export interface RemoteDevice {
   hash: string
@@ -101,6 +102,11 @@ interface SettingsState {
   setCustomMacros: (macros: CustomMacro[]) => void
   /** Shared key for OSC/HTTP control; blank means nothing authenticates. */
   remoteSecret: string
+  /** Host/Join (ARCH-004): the host this computer joins ("address:port"), the name it paired as, and its token (kept in the keychain). */
+  joinAddress: string
+  joinName: string
+  joinToken: string
+  setJoin: (patch: { joinAddress?: string; joinName?: string; joinToken?: string }) => void
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
   /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
@@ -158,6 +164,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   openedFrom: {},
   commentsSeen: [],
   remoteSecret: "",
+  joinAddress: "",
+  joinName: "",
+  joinToken: "",
+  setJoin: (patch) => set(patch),
   remoteDevices: [],
   remoteAuthRequired: false,
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
@@ -223,6 +233,9 @@ function acceptable(key: string, value: unknown): boolean {
       return value === "en" || value === "yo"
     case "operatorName":
     case "remoteSecret":
+    case "joinAddress":
+    case "joinName":
+    case "joinToken":
     case "churchFolder":
     case "cloudSpeechConsentAt":
       return typeof value === "string"
@@ -272,6 +285,9 @@ const PERSISTED_KEYS = [
   "openedFrom",
   "commentsSeen",
   "remoteSecret",
+  "joinAddress",
+  "joinName",
+  "joinToken",
   "remoteDevices",
   "remoteAuthRequired",
   "remoteListeners",
@@ -294,8 +310,8 @@ const PERSISTED_KEYS = [
 // file's copies are blanked; `secretsInKeychain: true` in the file says so.
 // Without a keychain the file keeps the values, as before.
 
-type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword"
-const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword"]
+type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken"
+const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken"]
 const KEYCHAIN_TIMEOUT_MS = 5000
 
 function readSecret(s: SettingsState, name: SecretName): string {

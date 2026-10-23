@@ -10,7 +10,7 @@ import { ProductionWorkspace } from "./production-workspace"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 
 describe("Production control", () => {
-  it("opens on the real timekeeper; the planned parts (cameras, operators) say so and offer no controls", async () => {
+  it("opens on the real timekeeper; the planned part (cameras) says so and offers no controls", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
     document.body.appendChild(el)
@@ -18,7 +18,7 @@ describe("Production control", () => {
     expect(el.textContent).toContain("The service timer")
     expect([...el.querySelectorAll("button")].some((b) => b.textContent?.includes("Start"))).toBe(true)
     const tab = (name: string) => [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLButtonElement
-    for (const name of ["Cameras", "Operators"]) {
+    for (const name of ["Cameras"]) {
       await act(async () => tab(name).click())
       const panel = el.querySelector('[role="tabpanel"]')!
       expect(panel.textContent).toContain("Not built yet")

@@ -69,6 +69,12 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 - **Take** puts the scene on the chosen congregation output (it saves first). **Back to its own feed** returns the output to full frame; **Restore** takes the scene again. Taking a scene changes no other output (OBS feeds stay as they are), and a new verse never changes which scene is up. Black and Logo cover every screen and feed, scenes included.
 - Edits stay in the composer until Save or Take. Cameras are planned (#209): a camera layer keeps the camera's place and shows the background there until then.
 
+## Operators: host and join (Production → Operators)
+
+- **Host:** the computer that runs the service keeps every control. Start the HTTP listener on the network (Settings → Remote control), then **Pair a device** and give the code to the operator. Set each paired device's role there: **Timekeeper** moves only the event clock; **Present** moves through the service; **Present and settings** adds settings.
+- **Join:** on the other computer, Production → Operators → Join a host: the host's address and port (shown in Settings → Remote control on the host), the code and a name. The joined desk shows what is on the host's screens, the live sources, the run of show with **Now**, and the expected end; a Timekeeper starts the next event, goes back one or starts any event. Nothing there changes a screen.
+- If the network drops, the joined computer says *Reconnecting…* and catches up by itself; the host carries on. **Leave** stops following; **Forget this host** also drops its key (revoke the device on the host to be sure).
+
 ## Timing and the stage
 
 The service timer (Present header) also shows, once items have planned minutes and the timer runs, the planned end time and, when the service is a minute or more off plan, when it now looks like ending ("Planned end 12:30 · now about 12:41"). If the timer was started late, "Correct the timer" moves it by a minute either way; each correction is a line in the service log.

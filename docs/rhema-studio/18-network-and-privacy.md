@@ -13,6 +13,8 @@ Rhema Studio presents with no internet connection. There is no telemetry, no ana
 | NDI (local network) | Only for outputs set to NDI | The output picture, to NDI receivers on the network | Yes |
 | Remote control (OSC and HTTP, incoming) | Only while the operator has started a listener | Nothing leaves; devices on the network send commands in | Yes |
 | Phone remote page (incoming) | Served by the HTTP listener above | The page and the live reference text to paired phones | Yes |
+| Host/Join: Live State (incoming, `/api/v1/live`, `/api/v1/live/events`, `/api/v1/me`) | Served by the HTTP listener to **paired** devices only (with keys off, to this computer only) | What is on the screens, each live source's reference, the event clock, the run of show (titles, planned minutes), timing, the stage message; never a secret, a picture or the transcript | Yes |
+| Host/Join: joining another Rhema (outgoing) | Only after the operator types a host's address and pairing code (Production → Operators) | The pairing code and this computer's name, then the commands its role allows; the token is kept in the keychain | Yes |
 | QR link slides | Never by the app; the code only shows an address for people to scan | Nothing | n/a |
 
 Keys the settings file can hold for later providers (`openaiApiKey`, `claudeApiKey`) are not used by any code on `main` (the OpenAI speech provider is parked in PR #4).

@@ -26,6 +26,11 @@ pub enum RemoteCommand {
     VersePrev,
     /// Run a named macro (a short sequence of ordinary actions) by id.
     Macro(String),
+    /// The event clock (ADR 0001, C03): start the next run-of-show event, go back one, or start
+    /// one by its item id. None of them changes a screen.
+    EventNext,
+    EventPrev,
+    EventStart(String),
 }
 
 impl fmt::Display for RemoteCommand {
@@ -46,6 +51,9 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::VerseNext => write!(f, "verse_next"),
             RemoteCommand::VersePrev => write!(f, "verse_prev"),
             RemoteCommand::Macro(id) => write!(f, "macro({id})"),
+            RemoteCommand::EventNext => write!(f, "event_next"),
+            RemoteCommand::EventPrev => write!(f, "event_prev"),
+            RemoteCommand::EventStart(id) => write!(f, "event_start({id})"),
         }
     }
 }
@@ -310,6 +318,9 @@ mod tests {
             RemoteCommand::VerseNext,
             RemoteCommand::VersePrev,
             RemoteCommand::Macro("x".into()),
+            RemoteCommand::EventNext,
+            RemoteCommand::EventPrev,
+            RemoteCommand::EventStart("x".into()),
         ];
 
         for cmd in &cmds {
@@ -329,10 +340,11 @@ mod tests {
                 RemoteCommand::BibleNext => {}
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
+                RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 15);
+        assert_eq!(cmds.len(), 18);
     }
 
     #[test]

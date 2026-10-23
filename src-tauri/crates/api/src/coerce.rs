@@ -108,6 +108,14 @@ pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, Comma
         "/rhema/add_to_queue" => Ok(RemoteCommand::AddToQueue),
         "/rhema/verse_next" => Ok(RemoteCommand::VerseNext),
         "/rhema/verse_prev" => Ok(RemoteCommand::VersePrev),
+        "/rhema/event_next" => Ok(RemoteCommand::EventNext),
+        "/rhema/event_prev" => Ok(RemoteCommand::EventPrev),
+        "/rhema/event_start" => {
+            let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
+                address: address.into(),
+            })?;
+            Ok(RemoteCommand::EventStart(coerce_string(arg)?))
+        }
         "/rhema/macro" => {
             let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
                 address: address.into(),
@@ -322,6 +330,14 @@ mod tests {
     fn parse_osc_macro() {
         assert_eq!(parse_osc("/rhema/macro", &[OscType::String("service-start".into())]).unwrap(), RemoteCommand::Macro("service-start".into()));
         assert!(matches!(parse_osc("/rhema/macro", &[]), Err(CommandError::MissingArgument { .. })));
+    }
+
+    #[test]
+    fn parse_osc_event_clock() {
+        assert_eq!(parse_osc("/rhema/event_next", &[]).unwrap(), RemoteCommand::EventNext);
+        assert_eq!(parse_osc("/rhema/event_prev", &[]).unwrap(), RemoteCommand::EventPrev);
+        assert_eq!(parse_osc("/rhema/event_start", &[OscType::String("sermon".into())]).unwrap(), RemoteCommand::EventStart("sermon".into()));
+        assert!(parse_osc("/rhema/event_start", &[]).is_err());
     }
 
     #[test]
