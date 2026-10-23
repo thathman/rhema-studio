@@ -20,7 +20,7 @@
 | ARCH-002 congregation scene composer, clock, fades and browser feeds | **MERGED first slices** #257/#265/#268/#271–#273 | Real local camera sources and Google TV |
 | ARCH-003 safe rehearsal, source/event clock and crash recovery | **MERGED first slices** #254/#256/#259/#275 | Physical power/failure, rehearsals, outputs |
 | ARCH-004 shared Host/Join and delegated roles | **MERGED first slices** #260/#261 | Real multicomputer, failure/permissions |
-| ARCH-005 receiver health and actor/source history | **PARTIAL** #271/#275; **IN PR** #276 actor logging | Receiver/A-V reality and merged history |
+| ARCH-005 receiver and show health, actor/source history | **PARTIAL MERGED** #271/#275; **IN PR** #276 actor logging and #277 show routing/attention | Real OBS, cameras, TV/A-V and validation of both PRs |
 | COMMS-001 notices, requests, mixed PTT, talk channels | **MERGED first slices** #264/#266/#270/#274 | Real headset and secure phone microphone |
 | MCP-001/002 external AI service draft interface | **MERGED first slices** #262/#263 | Actual connected assistant and review |
 | OP-007/008/009 browser/Google TV + local phone camera | **Browser graphics MERGED**, physical video **NOT BUILT** | Independent camera/TV stream and latency |
