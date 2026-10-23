@@ -114,6 +114,7 @@ The service timer (Present header) also shows, once items have planned minutes a
 An item can also have an **end by** time (Prepare, beside its planned minutes: "sermon ends by 12:15"). While it is the item in hand, the timer chip shows "by 12:15 · 6 min", amber in the last two minutes and red once the time has passed.
 
 
+- **Time warnings on the stage** (Design → Stage display → Time warnings): "5 minutes left" (choose 1 to 30) and "Time is up" appear as a stage message as the running timer reaches them, once each; only the stage sees them, a message you sent is never covered, and rehearsal never sends them. Off until you tick them.
 - **Timer**: monotonic (ignores clock changes); amber under two minutes, red when over. Planned minutes per item give "n min late/early".
 - **The event clock** (Production → Timekeeper): which event of the run of show is happening, kept apart from the screens. **Follows the screens** (default): an item's event starts when its content goes on air. **I start each event**: only Start / Back one move it, so a timekeeper can run the times while others show verses and songs out of order. Timing, the stage finish line and each item's message and cue follow it; the service log records each event start.
 - **Message stage**: a framed banner on stage outputs only. Clear it from the same control.

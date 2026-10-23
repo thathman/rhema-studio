@@ -976,6 +976,13 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10df. Time warnings on the stage (#196 R6)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10df.1 | Design → Stage display: tick "At 1 minutes left" and "When the time is up". Timer 2 min, Start; watch the stage display. | After a minute "1 minute left" on the stage, a minute later "Time is up"; the projector unchanged; both in the service log as messages. | TW_RESULT |
+| 10df.2 | Send your own stage message, then let a warning come due. | Your message stays. | TW2_RESULT |
+
 ### 10dc. Cameras in scenes (OP-009, #209)
 
 | # | Step | Expected | Result |

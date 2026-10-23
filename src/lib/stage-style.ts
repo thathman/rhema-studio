@@ -9,6 +9,8 @@ export const DEFAULT_STAGE_STYLE: StageStyle = {
   showNote: true,
   showBand: true,
   showFinish: true,
+  warnAtMinutes: 0,
+  warnWhenOver: false,
 }
 
 const hex = (v: unknown, fallback: string) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback)
@@ -28,6 +30,8 @@ export function normalizeStageStyle(raw: Partial<StageStyle> | null | undefined)
     showNote: flag(r.showNote, d.showNote),
     showBand: flag(r.showBand, d.showBand),
     showFinish: flag(r.showFinish, d.showFinish),
+    warnAtMinutes: typeof r.warnAtMinutes === "number" && Number.isFinite(r.warnAtMinutes) ? Math.min(30, Math.max(0, Math.round(r.warnAtMinutes))) : d.warnAtMinutes,
+    warnWhenOver: flag(r.warnWhenOver, d.warnWhenOver),
   }
 }
 
