@@ -5,6 +5,7 @@ import { HistoryIcon, RotateCcwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useServiceStore } from "@/stores/service-store"
+import { useShellStore } from "@/studio/shell-store"
 import { useQueueStore } from "@/stores"
 import { diffRevision, type RevisionDiff } from "@/lib/revision-diff"
 import type { Revision, RevisionSummary } from "@/types"
@@ -23,7 +24,9 @@ export function ServiceHistory() {
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
   const items = useQueueStore((s) => s.items)
-  const [open, setOpen] = useState(false)
+  // In the shell store, like New service, so Home's Team changes can open it.
+  const open = useShellStore((s) => s.historyOpen)
+  const setOpen = useShellStore((s) => s.setHistoryOpen)
   const [revisions, setRevisions] = useState<RevisionSummary[]>([])
   const [picked, setPicked] = useState<{ revision: Revision; diff: RevisionDiff } | null>(null)
   const [busy, setBusy] = useState(false)

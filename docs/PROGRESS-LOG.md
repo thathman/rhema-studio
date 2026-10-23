@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Home Team changes; design docs reconciled with the shell (#215, #299)
+
+- **Branch / PR:** `ux-017/docs-home-team` (from `integration/night-1`).
+- **Behaviour:** `teamChanges` (`src/lib/team-changes.ts`) lists, newest first and at most four, the open service's comments from others (`commentKey`/`commentsSeen` mark unread), its newest saved version (`content_list_revisions`, `saved_by`) and its approval (`approved_at/by/revision`, "saved again since" when changed). `TeamChanges` on Home uses the open service, else `todaysService`; no entries, no card. A comment previews its item (`presentActions.previewItem`) and goes to Prepare; a save or approval opens the service if needed (Home's dirty guard) and calls the new `shell-store.openHistory`, which goes to Prepare with `historyOpen` (History's popover state, moved into the shell store like New service). Docs: `03-ux-design-system.md` rewritten for the eight-page shell, Desk menu, transport bar, Production and Design tabs, #215 palette, type and touch rules; `04-screen-flows.md` redrawn; old More / Production view / Display Mode / Show live paths fixed in the acceptance guide, the production guide and the songs design note.
+- **Tests:** `src/studio/home/team-changes.test.tsx` (8: ordering and unread, nothing when empty or no service, comment opens Prepare on its item, save opens History, suggested service opened first, blocked over unsaved changes, History opens when asked).
+- **Next:** desktop acceptance 10du. `mac-desktop-acceptance.md` keeps the old wording because it records past runs.
 ## 2026-10-23 — Activate on Bible feeds only, and who activated each source (#243)
 
 - **Branch / PR:** `ls-010/bible-activate-actor`.

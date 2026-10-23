@@ -91,6 +91,10 @@ interface ShellState extends ShellPrefs {
   /** The first-install setup (#298), also opened from the Desk menu (#299): global like the outputs dialog. */
   setupOpen: boolean
   setSetupOpen: (open: boolean) => void
+  /** Prepare's History of the open service, also opened from Home's Team changes. */
+  historyOpen: boolean
+  setHistoryOpen: (open: boolean) => void
+  openHistory: () => void
 }
 
 // ponytail: localStorage like ThemeProvider; per-machine UI convenience, not content.
@@ -120,6 +124,9 @@ export const useShellStore = create<ShellState>((set) => ({
   setOutputsDialogOpen: (outputsDialogOpen) => set({ outputsDialogOpen }),
   setupOpen: false,
   setSetupOpen: (setupOpen) => set({ setupOpen }),
+  historyOpen: false,
+  setHistoryOpen: (historyOpen) => set({ historyOpen }),
+  openHistory: () => set({ historyOpen: true, goRequest: "prepare" }),
 }))
 
 useShellStore.subscribe((state, prev) => {

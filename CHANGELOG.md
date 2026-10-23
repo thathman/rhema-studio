@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Team changes on Home; design docs match the studio (#215)
+- Home has a small **Team changes** card for the open service (or today's): the latest comments others left on items (unread ones marked **New**), who saved it last and who approved it, with times.
+- Click a comment to open Prepare on that item; click a save or approval to open Prepare with the service's **History**. When nothing has happened, the card does not appear.
+- The design and screen-flow guides, and the acceptance steps, now describe today's sidebar, Desk menu, Take live and where things moved from the old More page.
 ### The main desk can take back control; desks stay on one service (#243, #246)
 - Production → Operators and Settings → Remote: **Take back control** pauses a joined desk or phone without unpairing it; **Give control back** ends it. Both go in the service log ("Main desk took back control from Desk C").
 - A paused desk shows "Paused by the main desk", still sees the service and keeps Talk and notices; its other buttons wait.
