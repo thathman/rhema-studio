@@ -973,6 +973,14 @@ report), but launching it cannot.
 | 10cu.9 | Main desk: send the Bible desk "Next reading", Ask to show a verse: Romans 8:28. Bible desk: press "Show Romans 8:28". Then ask a Timekeeper to show a verse and press it there. | Nothing shows until the Bible desk presses; then Romans 8:28 is on the Bible source and the notice reads "Ready". The Timekeeper's press is refused by the host. | Partly verified on the Intel Mac (2026-10-23, loopback): a paired Timekeeper key's request to the main desk carried "Show Romans 8:28" (an unknown kind was dropped); pressing it in the bell put Romans 8:28 (KJV) on the Bible source and answered Ready; the Timekeeper key's own `bible_activate` got 403. Two computers not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10cy. Phone remote: sources and notices
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cy.1 | Pair a phone (Present). With a verse and a hymn on, open the phone page. | It lists Bible and Hymns with what each shows and Take off. | Verified on the Intel Mac (2026-10-23, headless Chrome at 390 px on the served page with a paired test key): both listed, no sideways scroll; a real phone not yet tried |
+| 10cy.2 | On the phone: Take off on Bible. | The Bible source goes off on the host (and its Bible feeds); the hymn stays; the log has "Bible off". | Verified (same run): host Bible source off, program still the hymn, log "remote clear_source bible" then "Bible off: Romans 8:28 (KJV)" |
+| 10cy.3 | Send a notice to everyone from another desk; on the phone answer Ready, then send "Usher team ready at the doors". | The sender sees "Usher phone: Ready"; the main desk's bell has the phone's message, named "Usher phone". | Verified (same run, Live State) |
+
 ### 10cw. Stage follows a source; the log names sources (ARCH-001)
 
 | # | Step | Expected | Result |

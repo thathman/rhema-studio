@@ -6,6 +6,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Phone remote: live sources and notices (ARCH-001, Rhema Comms #251)
+- The phone remote lists each live source with what it shows, and **Take off** / **Put back** for it, within its role.
+- Paired phones get production notices: those for their role and everyone's, answered Seen / Ready / Unable, and a message box to the main desk. The host names the phone.
+
 ### Stage displays follow sources; the service log names sources (ARCH-001, #243)
 - A stage output can follow chosen sources, like a congregation output: a pulpit monitor following the Bible keeps the verse while a hymn is up.
 - The service log tags each thing put on air with its source ("· Hymns"), and records a source changing beside the program: "Bible: Romans 8:28" when a verse is activated while a song is up, "Bible off" and "Bible back" for Clear and Restore of that source.
