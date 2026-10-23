@@ -8,7 +8,7 @@ periodic review, so feature PRs leave those files alone.
 ## 2026-10-23 — Planned time as typed (#196 R4)
 
 - **Branch / PR:** `pt-007/duration-entry`. `run-of-show.ts`: `parseDuration` / `formatDuration` (to the second, ≤ 600 min); Prepare's planned-time field is a `DurationInput` (applied on Enter / blur, Escape undoes, a mistake is marked).
-- **Tests:** `duration.test.ts` (every form, the limits, round trip). vitest 744.
+- **Tests:** `duration.test.ts` (every form, the limits, round trip). vitest 744. Desktop (combined QA build, 2026-10-23): Prepare → Timing on a song: "1h10" → 70 min shown 1:10:00; "4:30" → 4.5 min; "abc" marked, plan unchanged; Escape back to 4:30.
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
 - **Branch / PR:** `mcp-004/look-suggestions`. `mcp_drafts.rs`: `Looks` (built-in names plus `broadcast-themes.json` custom looks and scenes, read-only), `check_with` keeps `suggested_look` / `suggested_scene` (80 chars) and warns on unknown names; `mcp.rs`: `rhema_list_looks_and_scenes`, schema fields. Review shows them per item; `draftToRundown` does not carry them (decision: suggestions, not a data-model change).
