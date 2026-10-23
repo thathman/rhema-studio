@@ -5,6 +5,10 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Production guide: when something fails (Comms C5 / #246 failure semantics)
+
+- **Branch / PR:** `docs/when-it-fails`. A table of failures (network or listener, a joined computer, the talk channel, a stuck browser page, an NDI sender, a projector or sleeping display, Rhema itself), what keeps working, what the operator sees and what to do; each from behaviour verified on 2026-10-23.
+
 ## 2026-10-23 — Clock layer modes (#196 R2.4 / R2.6 / R2.7)
 
 - **Branch / PR:** `arch-002/clock-modes`. `SceneLayer.clockShows` ("timer" default, "time", "until") and `until` ("HH:MM"); `untilClock` (today's, tomorrow's past 12 h), `clockText` "time"; composer "Shows" and the time field; normalize keeps valid values only.
