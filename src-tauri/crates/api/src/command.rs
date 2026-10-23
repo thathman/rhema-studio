@@ -31,6 +31,9 @@ pub enum RemoteCommand {
     EventNext,
     EventPrev,
     EventStart(String),
+    /// Running late (+) or early (−), in minutes, added to the service's shared offset (#196).
+    /// Only what is expected moves; the plan and the screens stay as they are.
+    EventOffset(i32),
     /// Activate the Bible source with a typed reference ("Romans 8:28", "jn 3 16"): every feed that
     /// follows Bible takes it; the main screens too unless a song, hymn or slide is up (ADR 0001).
     BibleActivate(String),
@@ -121,6 +124,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::EventNext => write!(f, "event_next"),
             RemoteCommand::EventPrev => write!(f, "event_prev"),
             RemoteCommand::EventStart(id) => write!(f, "event_start({id})"),
+            RemoteCommand::EventOffset(m) => write!(f, "event_offset({m:+})"),
             RemoteCommand::BibleActivate(r) => write!(f, "bible_activate({r})"),
             RemoteCommand::ClearSource(id) => write!(f, "clear_source({id})"),
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
@@ -398,6 +402,7 @@ mod tests {
             RemoteCommand::EventNext,
             RemoteCommand::EventPrev,
             RemoteCommand::EventStart("x".into()),
+            RemoteCommand::EventOffset(5),
             RemoteCommand::BibleActivate("John 3:16".into()),
             RemoteCommand::ClearSource("bible".into()),
             RemoteCommand::RestoreSource("bible".into()),
@@ -427,13 +432,15 @@ mod tests {
                 RemoteCommand::BibleNext => {}
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
-                RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => {}
+                RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) => {}
                 RemoteCommand::BibleActivate(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
                 RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 28);
+        assert_eq!(cmds.len(), 29);
+        let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
+        assert_eq!(off, RemoteCommand::EventOffset(-5));
         let ch: RemoteCommand = serde_json::from_str(r#"{"command":"voice_channels","value":{"listen":["stage"],"talk":"to:Ade bible"}}"#).unwrap();
         assert!(matches!(ch, RemoteCommand::VoiceChannels(VoiceChannelsIn { ref talk, .. }) if talk == "to:Ade bible"));
         let talk: RemoteCommand = serde_json::from_str(r#"{"command":"voice_talk","value":true}"#).unwrap();

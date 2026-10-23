@@ -192,7 +192,10 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">Now: {current ? current.reference : "no event yet"}</span>
         {live.timing && <span className={cn("tabular-nums", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>ends {hhmm(live.timing.expectedEnd)}{late !== 0 ? ` · ${Math.abs(late)} min ${late > 0 ? "late" : "early"}` : " · on time"}</span>}
+        {live.timing?.offsetMinutes ? <span className="text-muted-foreground">({live.timing.offsetMinutes > 0 ? "+" : "−"}{Math.abs(live.timing.offsetMinutes)} min{live.timing.offsetBy ? ` by ${live.timing.offsetBy}` : ""})</span> : null}
         <span className="flex-1" />
+        <Button size="sm" variant="outline" disabled={status !== "connected"} onClick={() => void send({ command: "event_offset", value: -5 })}>−5 min</Button>
+        <Button size="sm" variant="outline" disabled={status !== "connected"} onClick={() => void send({ command: "event_offset", value: 5 })}>+5 min</Button>
         <Button size="sm" variant="outline" disabled={at <= 0 || status !== "connected"} onClick={() => void send({ command: "event_prev" })}>Back one</Button>
         <Button size="sm" disabled={!next || status !== "connected"} onClick={() => void send({ command: "event_next" })}>{next ? `Start ${next.reference}` : "Last event"}</Button>
       </div>

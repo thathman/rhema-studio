@@ -6,6 +6,7 @@ import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow } from "@/stores/timer-store"
+import { useServiceOffset } from "@/stores/service-offset-store"
 
 /**
  * Keeps the stage display's "Ends 10:42 · 5 min late" (issue #196): the run of show's timing
@@ -25,6 +26,7 @@ export function updateStageFinish() {
     onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)),
     liveItemId: useEventClock.getState().currentId,
     now: Math.max(Date.now(), entries.at(-1)?.at ?? 0),
+    adjustMinutes: useServiceOffset.getState().minutes,
   })
   const end = t ? new Date(t.expectedEnd) : null
   const finish = t && end ? { time: clockText(end.getHours() * 60 + end.getMinutes()), lateMin: Math.round(t.lateMs / 60_000) } : null
@@ -37,4 +39,5 @@ export function updateStageFinish() {
 useQueueStore.subscribe((s, prev) => { if (s.items !== prev.items || s.headers !== prev.headers) updateStageFinish() })
 useJournalStore.subscribe((s, prev) => { if (s.entries !== prev.entries) updateStageFinish() })
 useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId) updateStageFinish() })
+useServiceOffset.subscribe((s, prev) => { if (s.minutes !== prev.minutes) updateStageFinish() })
 setInterval(updateStageFinish, 15_000)

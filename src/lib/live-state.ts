@@ -9,6 +9,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useNotices, type Notice } from "@/stores/notices-store"
+import { useServiceOffset } from "@/stores/service-offset-store"
 import { useVoice, type VoicePerson } from "@/lib/voice"
 import { monotonicNow } from "@/stores/timer-store"
 
@@ -26,7 +27,8 @@ export interface LiveStateV1 {
   sources: { id: string; reference: string; on: boolean; revision: number }[]
   event: { mode: "screens" | "own"; currentId: string | null }
   rundown: { id: string; reference: string; plannedMinutes: number | null }[]
-  timing: { plannedEnd: number; expectedEnd: number; lateMs: number } | null
+  /** offsetMinutes: the shared running-late offset and who set it (#196). */
+  timing: { plannedEnd: number; expectedEnd: number; lateMs: number; offsetMinutes?: number; offsetBy?: string | null } | null
   stageMessage: string
   /** Congregation scenes and outputs, for a screens operator. */
   scenes: { id: string; name: string }[]
@@ -42,7 +44,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
   const q = useQueueStore.getState()
   const clock = useEventClock.getState()
   const entries = useJournalStore.getState().entries
-  const timing = serviceTiming({ items: q.items, headers: q.headers, firstOnAir: eventStarts(entries), onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)), liveItemId: clock.currentId, now })
+  const timing = serviceTiming({ items: q.items, headers: q.headers, firstOnAir: eventStarts(entries), onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)), liveItemId: clock.currentId, now, adjustMinutes: useServiceOffset.getState().minutes })
   const current = useServiceStore.getState().current
   return {
     v: 1,
@@ -56,7 +58,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     }),
     event: { mode: clock.mode, currentId: clock.currentId },
     rundown: q.items.map((i) => ({ id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null })),
-    timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs } : null,
+    timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by } : null,
     stageMessage: b.stageMessage,
     scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
@@ -108,6 +110,7 @@ export function startLiveStatePublisher(): () => void {
     useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries) soon() }),
     useServiceStore.subscribe((s, p) => { if (s.current !== p.current) soon() }),
     useNotices.subscribe((s, p) => { if (s.notices !== p.notices) soon() }),
+    useServiceOffset.subscribe(() => soon()),
     useVoice.subscribe(() => soon()),
   ]
   soon()
