@@ -4,7 +4,7 @@ import { SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { draftAuthor, draftToRundown, type AiDraft } from "@/lib/ai-drafts"
+import { draftAuthor, draftToRundown, type AiDraft, type AiDraftItem } from "@/lib/ai-drafts"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -67,7 +67,7 @@ export function AiDrafts() {
                   </div>
                   <p>{items.length} items · {minutes} min planned{missing.length > 0 ? <span className="font-semibold text-confidence-mid"> · {missing.length} missing from the library</span> : null}</p>
                   <ol className="flex flex-col gap-0.5 text-muted-foreground">
-                    {d.phases.map((p, i) => <li key={i}><span className="font-semibold text-foreground">{p.name}</span>{p.starts_at ? ` · ${p.starts_at}` : ""}: {p.items.map((it) => it.song?.title ?? it.reference ?? it.title ?? "").join(" · ")}</li>)}
+                    {d.phases.map((p, i) => <li key={i}><span className="font-semibold text-foreground">{p.name}</span>{p.starts_at ? ` · ${p.starts_at}` : ""}: {p.items.map((it) => `${it.song?.title ?? it.reference ?? it.title ?? ""}${suggestion(it)}`).join(" · ")}</li>)}
                   </ol>
                   {d.assumptions && d.assumptions.length > 0 && <p className="text-muted-foreground">Assumed: {d.assumptions.join("; ")}</p>}
                   {replace?.id === d.id ? (
@@ -90,4 +90,10 @@ export function AiDrafts() {
       </Dialog>
     </>
   )
+}
+
+/** The assistant's look / scene suggestion for an item, to apply by hand if wanted (MCP-004). */
+function suggestion(it: AiDraftItem): string {
+  const parts = [it.suggested_look ? `look: ${it.suggested_look}` : null, it.suggested_scene ? `scene: ${it.suggested_scene}` : null].filter(Boolean)
+  return parts.length ? ` (${parts.join(", ")})` : ""
 }
