@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: (...args: unknown[]) => emitTo(...args) }))
 
 import { presentActions } from "./present-actions"
-import { newLayer, newScene, normalizeScene, SCENE_PRESETS, copyScene, sceneClock, clockText } from "@/lib/scenes"
+import { newLayer, newScene, normalizeScene, SCENE_PRESETS, copyScene, sceneClock, clockText, untilClock } from "@/lib/scenes"
 import { useTimerStore } from "@/stores/timer-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { MAIN_OUTPUT_ID, defaultNdiSettings } from "@/types"
@@ -147,5 +147,26 @@ describe("congregation scenes (ARCH-002)", () => {
     expect(sent("broadcast-main")!.scene!.fadeMs).toBe(500)
     useBroadcastStore.getState().saveScene({ ...scene, fadeMs: undefined })
     expect(sent("broadcast-main")!.scene!.fadeMs).toBeUndefined()
+  })
+
+  it("a clock can show the time of day or count down to a set time (the service start)", () => {
+    const at945 = new Date(2026, 9, 25, 9, 45, 0).getTime()
+    const c = untilClock("10:00", at945)!
+    expect(c.mode).toBe("down")
+    expect(clockText(c, at945)).toBe("15:00")
+    expect(clockText(c, at945 + 20 * 60_000)).toBe("0:00")
+    // Long past today's 10:00: tomorrow's.
+    expect(untilClock("10:00", new Date(2026, 9, 25, 23, 0).getTime())!.at).toBe(new Date(2026, 9, 26, 10, 0).getTime())
+    expect(untilClock("25:00", at945)).toBeNull()
+    expect(clockText({ mode: "time", at: 0, text: "" }, new Date(2026, 9, 25, 9, 5).getTime())).toMatch(/9:05/)
+    const scene = newScene("Before service", SCENE_PRESETS[0])
+    scene.layers = [newLayer("clock", { clockShows: "until", until: "10:00" }), newLayer("clock", { clockShows: "time" })]
+    const back = normalizeScene(JSON.parse(JSON.stringify({ ...scene, layers: [...scene.layers, { ...newLayer("clock"), clockShows: "weird", until: "noon" }] })))!
+    expect(back.layers.map((l) => [l.clockShows, l.until])).toEqual([["until", "10:00"], ["time", undefined], [undefined, undefined]])
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    const layers = sent("broadcast-main")!.scene!.layers
+    expect(layers[0].clock?.mode).toBe("down")
+    expect(layers[1].clock?.mode).toBe("time")
   })
 })

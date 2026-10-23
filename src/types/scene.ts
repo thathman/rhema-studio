@@ -29,7 +29,8 @@ export type SceneLayerKind = "feed" | "color" | "picture" | "camera" | "clock"
  * when the timer starts, stops or changes.
  */
 export interface SceneClock {
-  mode: "down" | "up" | "still"
+  /** time: the time of day (no `at`). */
+  mode: "down" | "up" | "still" | "time"
   at: number
   text: string
 }
@@ -40,6 +41,10 @@ export interface SceneLayer {
   kind: SceneLayerKind
   /** feed: the live sources it follows; absent = whatever is put on air (the program). */
   shows?: ContentType[]
+  /** clock: what it shows: the service timer (absent), the time of day, or a countdown to `until`. */
+  clockShows?: "timer" | "time" | "until"
+  /** clock "until": the time of day counted down to, "HH:MM" (e.g. the service start). */
+  until?: string
   /** feed, clock: the look (an approved theme); absent = the output's own looks. */
   themeId?: string
   /** color: the fill. */

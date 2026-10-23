@@ -323,7 +323,21 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       )}
       {layer.kind === "clock" && (
         <>
-          <p className="text-muted-foreground">The service timer (Present → timer): a countdown to the start, or the time so far. It stops at 0:00 on the screens.</p>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[0.625rem] text-muted-foreground">Shows</span>
+            <select aria-label="What the clock shows" value={layer.clockShows ?? "timer"} onChange={(e) => onChange({ clockShows: e.target.value === "timer" ? undefined : (e.target.value as "time" | "until") })} className="h-8 rounded-md border border-input bg-card px-1.5">
+              <option value="timer">The service timer (Present → timer)</option>
+              <option value="until">A countdown to a time (e.g. the service start)</option>
+              <option value="time">The time of day</option>
+            </select>
+          </label>
+          {layer.clockShows === "until" && (
+            <label className="flex items-center justify-between gap-2">
+              <span>Count down to</span>
+              <input type="time" aria-label="Count down to" value={layer.until ?? ""} onChange={(e) => onChange({ until: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
+            </label>
+          )}
+          <p className="text-muted-foreground">{layer.clockShows === "time" ? "This computer's time of day." : layer.clockShows === "until" ? "Counts down to that time today, then stays at 0:00." : "A countdown or the time so far, as Present's timer runs. It stops at 0:00 on the screens."}</p>
           <label className="flex flex-col gap-0.5">
             <span className="text-[0.625rem] text-muted-foreground">Look (from Design)</span>
             <select aria-label="Clock look" value={layer.themeId ?? ""} onChange={(e) => onChange({ themeId: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-card px-1.5">
