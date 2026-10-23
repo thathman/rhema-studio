@@ -1005,6 +1005,7 @@ report), but launching it cannot.
 | 10cx.1 | Production → Programs: a scene with a Clock layer in a look; Take it to the projector. Present → timer: 20 min, Start. | The projector shows 20:00, then counts down each second, filling the clock's box in the look's text. | Verified on the Intel Mac (2026-10-23, windowed projector, frames read from its canvas): 20:00 still, then 19:34 → 19:29 over about six seconds |
 | 10cx.2 | Lock the screen for a minute (or cover the projector window), then look. | Still the right time; it never jumped. | Partly verified: before the fix a locked screen held the clock back ~15 s, which is why it now uses the frame pacer; the fixed build was checked with the screen awake only |
 | 10cx.3 | An NDI output with the same scene, watched in OBS. | Counts each second. | Unverified |
+| 10cx.4 | A scene with two clocks: "countdown to" the service start, and "time of day"; Take it. | The countdown to that time and the time of day, both counting. | Verified on the Intel Mac (2026-10-23, canvas read): at 10:13:38 "29:22" to 10:43 beside "10:13", then "28:39" and "10:14" |
 
 ### 10cy. Phone remote: sources and notices
 
