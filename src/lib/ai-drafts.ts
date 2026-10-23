@@ -30,6 +30,8 @@ export interface AiDraft {
   title: string
   date?: string | null
   created_at: string
+  /** When the assistant last revised it (rhema_update_service_draft). */
+  updated_at?: string
   client?: { name?: string; version?: string } | null
   assumptions?: string[]
   phases: { name: string; role?: PhaseRole; rule?: PhaseRule; starts_at?: string; items: AiDraftItem[] }[]

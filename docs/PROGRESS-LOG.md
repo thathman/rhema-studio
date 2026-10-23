@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — MCP-003: prompts and draft revision (#252)
+
+- **Branch / PR:** `mcp-003/prompts-revise`. `prompts/list`, `prompts/get` (`draft_service`, `reuse_service`, `check_service`); tools `rhema_list_service_drafts`, `rhema_update_service_draft` (`mcp_drafts::list`, `update`); Prepare shows "revised".
+- **Tests:** `mcp` tests (prompts, unknown prompt / missing argument refused, read-only flags) and `mcp_drafts` (list, revise in place, bad id, removed draft). Desktop: `Rhema --mcp` over stdio from a script acting as the assistant: prompts, create, revise, unknown id refused, list; Prepare → AI drafts showed "revised" with three items. Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — Production guide: when something fails (Comms C5 / #246 failure semantics)
 
 - **Branch / PR:** `docs/when-it-fails`. A table of failures (network or listener, a joined computer, the talk channel, a stuck browser page, an NDI sender, a projector or sleeping display, Rhema itself), what keeps working, what the operator sees and what to do; each from behaviour verified on 2026-10-23.

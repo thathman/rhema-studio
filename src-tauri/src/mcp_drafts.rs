@@ -222,6 +222,54 @@ pub fn save(data_dir: &Path, draft: &Value, client: &Value) -> Result<String, St
     Ok(id)
 }
 
+fn is_draft_id(id: &str) -> bool {
+    id.len() == 36 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+/// The drafts waiting for review (newest first): what an assistant needs to find its own.
+pub fn list(data_dir: &Path) -> Vec<Value> {
+    let Ok(entries) = std::fs::read_dir(data_dir.join(DRAFTS_DIR)) else { return Vec::new() };
+    let mut out: Vec<Value> = entries
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+        .filter(|e| e.metadata().is_ok_and(|m| m.len() < 2 * 1024 * 1024))
+        .filter_map(|e| std::fs::read(e.path()).ok())
+        .filter_map(|b| serde_json::from_slice::<Value>(&b).ok())
+        .filter(|v| v.get("v") == Some(&json!(1)) && v.get("id").and_then(Value::as_str).is_some_and(is_draft_id))
+        .map(|v| {
+            let items: usize = v["phases"].as_array().map_or(0, |p| p.iter().map(|ph| ph["items"].as_array().map_or(0, Vec::len)).sum());
+            json!({ "id": v["id"], "title": v["title"], "date": v["date"], "items": items, "created_at": v["created_at"], "updated_at": v["updated_at"], "by": v["client"]["name"], "status": v["status"] })
+        })
+        .collect();
+    out.sort_by(|a, b| b["created_at"].as_str().unwrap_or("").cmp(a["created_at"].as_str().unwrap_or("")));
+    out
+}
+
+/// Replace a waiting draft with a revised one (same id, still for people to review). Refuses a
+/// draft that is not there any more (people removed it); what people saved from it is a service of
+/// its own and is never touched.
+pub fn update(data_dir: &Path, id: &str, draft: &Value, client: &Value) -> Result<(), String> {
+    if !is_draft_id(id) {
+        return Err("not a draft id (rhema_list_service_drafts lists them)".into());
+    }
+    let dir = data_dir.join(DRAFTS_DIR);
+    let path = dir.join(format!("{id}.json"));
+    let old: Value = std::fs::read(&path)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .ok_or_else(|| "that draft is not waiting any more (people may have removed it): create a new one".to_string())?;
+    let mut doc = draft.clone();
+    doc["v"] = json!(1);
+    doc["id"] = json!(id);
+    doc["status"] = json!("awaiting review");
+    doc["created_at"] = old["created_at"].clone();
+    doc["updated_at"] = json!(chrono_now());
+    doc["client"] = client.clone();
+    let tmp = dir.join(format!(".{id}.tmp"));
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?).map_err(|e| format!("could not save the draft: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("could not save the draft: {e}"))
+}
+
 /// RFC 3339 UTC, without a date crate.
 fn chrono_now() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
@@ -292,6 +340,25 @@ mod tests {
         let saved: Value = serde_json::from_slice(&std::fs::read(dir.join(DRAFTS_DIR).join(format!("{id}.json"))).unwrap()).unwrap();
         assert_eq!(saved["status"], "awaiting review");
         assert_eq!(saved["client"]["name"], "Claude");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_waiting_draft_is_listed_and_revised_in_place() {
+        let dir = std::env::temp_dir().join(format!("rhema-drafts-rev-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let draft = json!({ "title": "Sunday", "phases": [{ "name": "Main", "items": [{ "kind": "slide", "title": "Welcome" }] }] });
+        let id = save(&dir, &draft, &json!({ "name": "Claude" })).unwrap();
+        let listed = list(&dir);
+        assert_eq!((listed.len(), listed[0]["id"].as_str(), listed[0]["items"].as_u64(), listed[0]["by"].as_str()), (1, Some(id.as_str()), Some(1), Some("Claude")));
+        let revised = json!({ "title": "Sunday (revised)", "phases": [{ "name": "Main", "items": [{ "kind": "slide", "title": "Welcome" }, { "kind": "slide", "title": "Notices" }] }] });
+        update(&dir, &id, &revised, &json!({ "name": "Claude" })).unwrap();
+        let listed = list(&dir);
+        assert_eq!((listed.len(), listed[0]["title"].as_str(), listed[0]["items"].as_u64()), (1, Some("Sunday (revised)"), Some(2)), "same draft, revised");
+        assert!(listed[0]["updated_at"].is_string() && listed[0]["created_at"].is_string());
+        assert!(update(&dir, "../../etc/passwd", &revised, &json!({})).is_err(), "only draft ids");
+        std::fs::remove_file(dir.join(DRAFTS_DIR).join(format!("{id}.json"))).unwrap(); // people removed it
+        assert!(update(&dir, &id, &revised, &json!({})).unwrap_err().contains("not waiting any more"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

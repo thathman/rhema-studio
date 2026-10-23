@@ -63,7 +63,7 @@ export function AiDrafts() {
                     <span className="text-sm font-semibold">{d.title}</span>
                     {d.date && <span className="text-muted-foreground">{d.date}</span>}
                     <span className="flex-1" />
-                    <span className="text-muted-foreground">{draftAuthor(d)} · {new Date(d.created_at).toLocaleString()}</span>
+                    <span className="text-muted-foreground">{draftAuthor(d)} · {new Date(d.created_at).toLocaleString()}{d.updated_at ? ` · revised ${new Date(d.updated_at).toLocaleString()}` : ""}</span>
                   </div>
                   <p>{items.length} items · {minutes} min planned{missing.length > 0 ? <span className="font-semibold text-confidence-mid"> · {missing.length} missing from the library</span> : null}</p>
                   <ol className="flex flex-col gap-0.5 text-muted-foreground">

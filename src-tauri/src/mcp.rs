@@ -105,6 +105,8 @@ fn tools() -> Value {
         { "name": "rhema_list_translations", "description": "The Bible editions installed on this computer (abbreviation, title, language).", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_validate_service_draft", "description": "Check a proposed service without saving it: every song and hymn is matched to the church's library (by id, exact title, other title or hymn number), every Scripture reference is looked up in the installed editions, and anything not found is listed as missing. Returns errors to fix, warnings, the planned minutes and what was found.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": ro },
         { "name": "rhema_create_service_draft", "description": "Save a checked proposed service as a draft for the church to review in Rhema → Prepare → AI drafts. It does not change any saved service, approve anything or put anything on screen; people open it, edit it and save it themselves. Fails with the same errors as the check.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } },
+        { "name": "rhema_list_service_drafts", "description": "The drafts waiting for the church to review in Prepare → AI drafts (newest first): id, title, date, number of items, when made or revised, by which assistant.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
+        { "name": "rhema_update_service_draft", "description": "Replace a waiting draft with a revised one (same id; checked like rhema_create_service_draft). It still only waits for people to review; whatever they already saved from it is not changed. Fails if the draft is not waiting any more.", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" }, "draft": draft_schema() }, "required": ["id", "draft"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false } },
         { "name": "rhema_lookup_bible_reference", "description": "The exact text of a Bible reference from an installed edition (e.g. \"Romans 8:28\", \"1 Corinthians 13:4-7\", \"Psalm 23\"). Always use this for Scripture; never quote verses from memory.", "inputSchema": { "type": "object", "properties": { "reference": { "type": "string" }, "translation": { "type": "string", "description": "An installed abbreviation, e.g. KJV; default: the first English edition." } }, "required": ["reference"] }, "annotations": ro }
     ])
 }
@@ -226,12 +228,79 @@ fn call(s: &Server, name: &str, a: &Value) -> Value {
                 Err(e) => tool_error(&e),
             }
         }
+        "rhema_list_service_drafts" => match s.dir.as_deref() {
+            Some(dir) => text(&json!({ "drafts": crate::mcp_drafts::list(dir) })),
+            None => tool_error("the data folder is not available"),
+        },
+        "rhema_update_service_draft" => {
+            let checked = crate::mcp_drafts::check(s.content.as_ref(), s.bible.as_ref(), a.get("draft").unwrap_or(&Value::Null));
+            let (Some(draft), Some(dir)) = (checked.draft, s.dir.as_deref()) else {
+                let mut r = tool_error("the draft was not saved: fix the errors first (rhema_validate_service_draft lists them)");
+                r["structuredContent"] = checked.report;
+                return r;
+            };
+            match crate::mcp_drafts::update(dir, str_arg("id"), &draft, &s.client) {
+                Ok(()) => {
+                    let mut report = checked.report;
+                    report["draftId"] = json!(str_arg("id"));
+                    report["next"] = json!("Revised. It still waits in Rhema → Prepare → AI drafts for people to open, edit and save.");
+                    text(&report)
+                }
+                Err(e) => tool_error(&e),
+            }
+        }
         "rhema_lookup_bible_reference" => {
             let Some(b) = &s.bible else { return tool_error("no Bible editions found") };
             lookup(b, str_arg("reference"), str_arg("translation"))
         }
         _ => tool_error("unknown tool"),
     }
+}
+
+/// Ready-made requests a person can pick in their assistant (#252 "prompts/templates").
+fn prompts() -> Value {
+    let arg = |name: &str, description: &str, required: bool| json!({ "name": name, "description": description, "required": required });
+    json!([
+        { "name": "draft_service", "title": "Draft a service", "description": "Plan a service as a draft for the church to review: timed run of show, songs and hymns from its library, readings from its Bibles.", "arguments": [
+            arg("occasion", "e.g. Sunday service, Thanksgiving, Easter", true),
+            arg("date", "YYYY-MM-DD", false),
+            arg("start_time", "e.g. 10:00", false),
+            arg("length_minutes", "e.g. 120", false),
+            arg("template", "a service or template to start from (title)", false),
+        ] },
+        { "name": "reuse_service", "title": "Reuse a past service", "description": "Start from one of the church's past services and propose this week's version as a draft.", "arguments": [
+            arg("service", "the past service's title", true),
+            arg("changes", "what should be different this time", false),
+        ] },
+        { "name": "check_service", "title": "Check a service's timing and gaps", "description": "Read one service and report its timing against its planned length, and anything missing (songs not in the library, readings not found). Changes nothing.", "arguments": [
+            arg("service", "the service's title", true),
+        ] },
+    ])
+}
+
+fn prompt(name: &str, args: &Value) -> Option<Value> {
+    let get = |k: &str| args.get(k).and_then(Value::as_str).map(|s| s.chars().take(200).collect::<String>()).filter(|s| !s.trim().is_empty());
+    let text = match name {
+        "draft_service" => format!(
+            "Plan a {occasion}{date}{start}{len} for this church in Rhema Studio, as a draft for them to review.\n\n1. Call rhema_get_capabilities, then rhema_list_services{tpl} to see how they usually run services.\n2. Choose songs and hymns only from their library (rhema_search_songs, by title or hymn number); if a fitting song is not there, name it as a suggestion rather than inventing it.\n3. Choose readings with rhema_lookup_bible_reference in their installed editions; never quote Scripture from memory.\n4. Give every item planned minutes so the service fits its length; put walk-in and warm-up in their phases.\n5. Check it with rhema_validate_service_draft, fix what it reports, then save it with rhema_create_service_draft and tell me what you assumed.",
+            occasion = get("occasion").unwrap_or_else(|| "service".into()),
+            date = get("date").map(|d| format!(" on {d}")).unwrap_or_default(),
+            start = get("start_time").map(|t| format!(" starting at {t}")).unwrap_or_default(),
+            len = get("length_minutes").map(|m| format!(", {m} minutes long")).unwrap_or_default(),
+            tpl = get("template").map(|t| format!(" (start from \"{t}\": read it with rhema_get_service)")).unwrap_or_default(),
+        ),
+        "reuse_service" => format!(
+            "Find the past service \"{svc}\" with rhema_list_services and read it with rhema_get_service. Propose this week's version as a draft{changes}: keep what works, check every song is still in the library and every reading with rhema_lookup_bible_reference, keep the timing realistic, then rhema_validate_service_draft and rhema_create_service_draft. Tell me what you changed.",
+            svc = get("service")?,
+            changes = get("changes").map(|c| format!(" with these changes: {c}")).unwrap_or_default(),
+        ),
+        "check_service" => format!(
+            "Read the service \"{svc}\" (rhema_list_services, then rhema_get_service). Report, without changing anything: its total planned minutes against its phases and start time, items with no planned minutes, songs or hymns that rhema_search_songs cannot find, and readings rhema_lookup_bible_reference cannot find. Suggest fixes; if I agree, propose a revised draft.",
+            svc = get("service")?,
+        ),
+        _ => return None,
+    };
+    Some(json!({ "description": name, "messages": [{ "role": "user", "content": { "type": "text", "text": text } }] }))
 }
 
 fn run_of_show_row(it: &rhema_content::ProgramItem) -> Value {
@@ -364,13 +433,18 @@ fn handle(s: &mut Server, msg: &Value) -> Option<Value> {
             }
             json!({
             "protocolVersion": params.get("protocolVersion").and_then(Value::as_str).unwrap_or("2025-06-18"),
-            "capabilities": { "tools": { "listChanged": false } },
+            "capabilities": { "tools": { "listChanged": false }, "prompts": { "listChanged": false } },
             "serverInfo": { "name": "rhema-studio", "title": "Rhema Studio", "version": env!("CARGO_PKG_VERSION") },
             "instructions": "Access to this church's Rhema Studio: read its services, songs and hymns and the installed Bible editions, and propose a service as a draft for the church to review (check it with rhema_validate_service_draft, then rhema_create_service_draft). Quote Scripture only from rhema_lookup_bible_reference; refer to songs by title and number (lyrics are not available); list songs you cannot find rather than inventing them."
             })
         }
         "ping" => json!({}),
         "tools/list" => json!({ "tools": tools() }),
+        "prompts/list" => json!({ "prompts": prompts() }),
+        "prompts/get" => match prompt(params.get("name").and_then(Value::as_str).unwrap_or(""), params.get("arguments").unwrap_or(&Value::Null)) {
+            Some(p) => p,
+            None => return Some(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32602, "message": "unknown prompt" } })),
+        },
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             call(s, name, params.get("arguments").unwrap_or(&Value::Null))
@@ -417,6 +491,21 @@ mod tests {
     }
 
     #[test]
+    fn prompts_are_listed_and_filled_in_and_unknown_ones_refused() {
+        let mut s = Server { enabled: true, ..off() };
+        let init = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} })).unwrap();
+        assert!(init["result"]["capabilities"]["prompts"].is_object());
+        let list = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 2, "method": "prompts/list" })).unwrap();
+        let names: Vec<&str> = list["result"]["prompts"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["draft_service", "reuse_service", "check_service"]);
+        let got = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 3, "method": "prompts/get", "params": { "name": "draft_service", "arguments": { "occasion": "Thanksgiving service", "start_time": "10:00", "length_minutes": "120" } } })).unwrap();
+        let text = got["result"]["messages"][0]["content"]["text"].as_str().unwrap();
+        assert!(text.contains("Thanksgiving service starting at 10:00, 120 minutes long") && text.contains("rhema_create_service_draft") && text.contains("never quote Scripture from memory"), "{text}");
+        assert_eq!(handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 4, "method": "prompts/get", "params": { "name": "nope" } })).unwrap()["error"]["code"], -32602);
+        assert_eq!(handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 5, "method": "prompts/get", "params": { "name": "reuse_service", "arguments": {} } })).unwrap()["error"]["code"], -32602, "the service is required");
+    }
+
+    #[test]
     fn references_people_type() {
         assert_eq!(parse_reference("Romans 8:28"), Some(("Romans".into(), 8, Some((28, 28)))));
         assert_eq!(parse_reference("1 Corinthians 13:4-7"), Some(("1 Corinthians".into(), 13, Some((4, 7)))));
@@ -438,8 +527,9 @@ mod tests {
         let list = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
         let names: Vec<&str> = list["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"rhema_lookup_bible_reference") && names.contains(&"rhema_get_service"));
-        // Everything reads, except saving a draft for review (it writes only a draft file).
-        assert!(list["result"]["tools"].as_array().unwrap().iter().all(|t| (t["annotations"]["readOnlyHint"] == true) != (t["name"] == "rhema_create_service_draft")));
+        // Everything reads, except saving or revising a draft for review (they write only draft files).
+        let writes = |n: &Value| n == "rhema_create_service_draft" || n == "rhema_update_service_draft";
+        assert!(list["result"]["tools"].as_array().unwrap().iter().all(|t| (t["annotations"]["readOnlyHint"] == true) != writes(&t["name"])));
         let call = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": "rhema_list_services", "arguments": {} } })).unwrap();
         assert_eq!(call["result"]["isError"], true);
         assert!(call["result"]["content"][0]["text"].as_str().unwrap().contains("Settings → AI assistants"));
