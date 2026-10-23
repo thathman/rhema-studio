@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Secure phone page (https) for talking from phones (#251)
+- Settings → Remote → **Secure page for phones (https)**: the phone page is also served over https on the next port with a certificate this computer makes for itself, so phones can join the talk channel on the church Wi-Fi. Each phone accepts the warning once, or installs this computer's certificate (`/rhema-ca.pem`) to trust it. Off by default.
+
 ### Phones in the talk channel (Rhema Comms C4, #251)
 - The phone remote can join the talk channel and hold to talk, wherever the phone's browser allows its microphone (a secure page). On the plain-http church page it says so; serving it securely is an open owner decision.
 

@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Secure phone page (https) with a local CA (#251)
+
+- **Branch / PR:** `comms-004/https-phones`. `rhema-api` `tls` (rcgen: local CA, 397-day server certificate, rustls config) and an https listener on the HTTP port + 1 (tokio-rustls + hyper-util, same router, peer address kept); `/rhema-ca.pem`; app `phone_tls` (CA in app data `tls/`, key 0600), `start_http(https)`, `tls_port` in status; Settings checkbox (off by default), pairing QR uses https when on.
+- **Tests:** rhema-api `tls` and an https round trip trusting only the CA; listener restart test. Desktop: see acceptance 10cu.12. Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — Voice: one consumer per remote track; where the delay builds up
 
 - **Branch / PR:** `voice/one-consumer`. The host hub no longer plays each desk's track into a muted `<audio>` element; WebAudio is its only consumer.

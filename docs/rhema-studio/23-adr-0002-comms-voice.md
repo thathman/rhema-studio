@@ -62,7 +62,14 @@ browser allows its microphone (a secure page), with the same signaling and relea
 on a plain-http page it says why it cannot. Checked with headless Chrome (fake microphone) against
 the QA build over `http://127.0.0.1` (a secure context): it joined in about 1 s, the crew marks
 followed each press and release, and a listening desk heard the phone only while it held Talk.
-What remains is serving the page securely on the LAN, below.
+**Secure page on the LAN, built as an option (2026-10-23):** "Secure page for phones (https)" (off by
+default) serves the same routes over https on the next port with a certificate from a local CA that
+Rhema makes once; a phone either accepts its browser's warning once or installs the CA from
+`/rhema-ca.pem`. That covers both options below, per phone; which to recommend stays the owner's
+call. Checked: curl trusting only the downloaded CA verified the https page (and refused it without
+the CA); the served certificate names this Mac's LAN address, 127.0.0.1 and localhost, is for
+server use and lasts 397 days; headless Chrome joined the talk channel over https and the crew
+marks followed each press.
 
 Browsers allow the microphone only in a secure context. The phone remote page is served over plain
 HTTP on the LAN, so a phone cannot talk until the listener can serve HTTPS with a local certificate
