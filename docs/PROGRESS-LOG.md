@@ -52,7 +52,7 @@ periodic review, so feature PRs leave those files alone.
 
 ## 2026-10-23 — COMMS-001 C3: full-duplex Push-to-Talk (LAN)
 
-- **Branch / PR:** `comms-003/voice`. ADR 0002 (`docs/rhema-studio/22-adr-0002-comms-voice.md`).
+- **Branch / PR:** `comms-003/voice`. ADR 0002 (`docs/rhema-studio/23-adr-0002-comms-voice.md`).
 - **Behaviour:** API: `POST /api/v1/voice` (complete SDP offer with the desk's key → the host window's answer, 10 s), `VoiceHub`, commands `voice_talk` / `voice_leave` (any paired desk). App: `voice_answer`, `join_voice`. Frontend: `src/lib/voice.ts` (host hub that mixes each desk's voice into everyone else's track and the main desk's monitor; `TalkClient` for joined desks; speaking meters; `setVoiceVolume`), `src/studio/talk.tsx` (hold-to-talk with release on up / cancel / blur / hidden; crew list), top-bar Talk on the main desk, Talk section on a joined desk, `voice` in the Live State.
 - **Found on the desktop and fixed:** suspended AudioContext silenced the first desk; meters off the output path read stale; desks lingered after leaving (explicit `voice_leave`).
 - **Tests:** rhema-api 132 (voice offer round trip with the key, 401, bad SDP, late answer; `voice_talk` / `voice_leave` parse); `src/studio/talk.test.tsx` (talk only while held); vitest green. In-app tone test and audio-clock latency: see ADR 0002 §5; results kept in local `qa-screenshots/voice/`.
