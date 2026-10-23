@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Output cards instead of the Output looks table (#299)
+- Design → Output looks (the wide table of every output against every kind of content) is gone. Design → **Used on…** lists, for each look, the outputs that use it, with **Open output** to change it there.
+- Production → Screens shows each output as a card: where it goes (monitor, NDI name, browser feed), what it follows, how it presents it (full screen, a scene, lower thirds, ticker, keyed), its look with a small preview, and its signal; **Edit output** opens its settings.
+- In an output's settings, a different look for some kinds of content is under **Advanced: content-specific looks**; looks already set there are kept.
+- Editing an existing output now keeps a changed "What this output follows" and a **New link** for a browser feed (they were dropped on save before).
+
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### Words while a camera is not playing (#213)

@@ -5,7 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
-## 2026-10-23 — Words while a camera is not playing (#213 fallback)
+## 2026-10-23 — Output cards instead of the Output looks table (#299 UX15-4)
+
+- **Branch / PR:** `ux15-4/output-cards`. Design's `outputs` tab (`OutputLooks` matrix) replaced by `used-on` (`UsedOn`: each look → `themeUses()` outputs, main look or kinds; **Open output** → `shellStore.editOutput(id)`, which opens the outputs dialog with that output's editor). `DesignTab` keeps `"outputs"` and `designTabOf()` sends it to `used-on` (`openDesign`, `setDesignTab`); Settings → Screens and global search point at Used on…. Production → Screens: `ScreenRow` → `OutputInspector` cards (`output-summary.ts`: transport, destination, follows, presentation, look thumbnail, language, now, signal; **Edit output**). Output editor: `themeFor` behind **Advanced: content-specific looks** (`ContentLooks`, count in the summary); main theme labelled "Look (main theme)".
+- **Fix found here:** saving an existing output dropped `shows` and a renewed `feedToken` (the update listed fields by hand); `outputEditPatch()` now carries both, never `id` or `sceneId`, so saving still never switches a scene. `themeId`, `themeFor`, NDI `sourceName`, output ids and feed tokens unchanged on load.
+- **Not done:** named feed defaults (`Rhema Bible | L3` presets) are not offered: no preset mechanism exists to hang them on, and creating senders by default would change what OBS sees. Left for a later slice.
+- **Tests:** `output-cards.test.tsx` (Used on lists outputs and opens the editor; the disclosure shows what is set and Save round-trips `themeFor`, NDI name, feed link, no scene; card wording), `output-themes.test.ts` (+1 `themeUses`), `shell-store.test.ts` (+2 legacy `outputs` → `used-on`, edit request). Desktop: acceptance 10dl.
+
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.
 - **Tests:** `whep-cameras.test.ts` (+1: kept, framed, drawn only while the camera is not playing). Desktop: acceptance 10dc.4.

@@ -23,6 +23,8 @@ import type { BroadcastOutput } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings } from "@/types"
 import { OutputCard } from "./output-card"
 import { OutputEditorDialog } from "./output-editor-dialog"
+import { outputEditPatch } from "@/lib/output-summary"
+import { useShellStore } from "@/studio/shell-store"
 
 const RECONCILE_INTERVAL_MS = 750
 
@@ -106,6 +108,17 @@ export function BroadcastOutputsDialog({
     return () => clearInterval(intervalId)
   }, [open])
 
+  // "Open output" elsewhere (Design → Used on…, Production → Screens): that output's editor, on top of the grid.
+  const editRequest = useShellStore((s) => s.editOutputRequest)
+  const [seenEditRequest, setSeenEditRequest] = useState(editRequest)
+  if (editRequest !== seenEditRequest) {
+    setSeenEditRequest(editRequest)
+    if (editRequest && outputs.some((o) => o.id === editRequest.id)) {
+      setEditingId(editRequest.id)
+      setEditorOpen(true)
+    }
+  }
+
   const editingOutput = editingId ? outputs.find((o) => o.id === editingId) : undefined
 
   // The draft id doubles as the editor's form identity, so it must stay stable
@@ -175,21 +188,7 @@ export function BroadcastOutputsDialog({
 
     void withBusy(next.id, async () => {
       if (wasOnAir && transportChanged) await disableOutput(existing)
-      useBroadcastStore.getState().updateOutput(next.id, {
-        name: next.name,
-        type: next.type,
-        themeId: next.themeId,
-        themeFor: next.themeFor ?? {},
-        monitorIndex: next.monitorIndex,
-        windowed: next.windowed === true,
-        monitorName: next.monitorName ?? null,
-        ndi: next.ndi,
-        role: next.role,
-        language: next.language,
-        signage: next.signage,
-        lowerThirds: next.lowerThirds,
-        ticker: next.ticker === true,
-      })
+      useBroadcastStore.getState().updateOutput(next.id, outputEditPatch(next))
       if (wasOnAir && transportChanged) {
         const updated = useBroadcastStore.getState().outputs.find((o) => o.id === next.id)
         if (updated) await enableOutput(updated)

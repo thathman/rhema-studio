@@ -4,7 +4,7 @@ import { newFeedToken } from "@/lib/output-on-air"
 import { invoke } from "@tauri-apps/api/core"
 import QRCode from "qrcode"
 import { Fragment, useEffect, useState } from "react"
-import { GlobeIcon, MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
+import { ChevronRightIcon, GlobeIcon, MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
 import {
   Dialog,
@@ -31,7 +31,7 @@ import {
 } from "@/lib/broadcast-output-control"
 import { useBroadcastStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
-import { CONTENT_TYPES } from "@/types/broadcast"
+import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import { withThemeFor } from "@/lib/output-themes"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import type {
@@ -471,7 +471,7 @@ export function OutputEditorDialog({
                 id="output-theme-label"
                 className="text-xs text-muted-foreground"
               >
-                Theme
+                Look (main theme)
               </span>
               <Select
                 value={form.themeId}
@@ -492,25 +492,7 @@ export function OutputEditorDialog({
                 </SelectContent>
               </Select>
             </div>
-            {(form.role ?? "congregation") !== "stage" && (form.role ?? "congregation") !== "signage" && (
-              <div className="flex flex-col gap-1.5" role="group" aria-label="A different look for some content">
-                <span className="text-xs text-muted-foreground">A different look for some content (the theme above for the rest)</span>
-                <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
-                  {CONTENT_TYPES.map((c) => (
-                    <Fragment key={c}>
-                      <span className="text-xs">{CONTENT_NAMES[c]}</span>
-                      <Select value={form.themeFor?.[c] || "__same"} onValueChange={(v) => patch({ themeFor: withThemeFor(form, c, v === "__same" ? null : v) })}>
-                        <SelectTrigger aria-label={`Theme for ${CONTENT_NAMES[c]}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__same">Same as above</SelectItem>
-                          {themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </Fragment>
-                  ))}
-                </div>
-              </div>
-            )}
+            {(form.role ?? "congregation") !== "stage" && (form.role ?? "congregation") !== "signage" && <ContentLooks form={form} onChange={(themeFor) => patch({ themeFor })} />}
           </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -526,6 +508,43 @@ export function OutputEditorDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * A different look for some kinds of content on this output (`themeFor`: hymns in gold, the Bible
+ * in blue…), behind an Advanced disclosure (#299 UX15-4). It shows what is already set, so nothing
+ * saved is lost; the main look covers every kind left on "Same as the main look".
+ */
+export function ContentLooks({ form, onChange }: { form: Pick<BroadcastOutput, "themeFor">; onChange: (themeFor: Partial<Record<ContentType, string>>) => void }) {
+  const themes = useBroadcastStore((s) => s.themes)
+  const set = CONTENT_TYPES.filter((c) => form.themeFor?.[c]).length
+  return (
+    <details className="group rounded-md border border-border">
+      <summary className="flex cursor-pointer items-center gap-2 px-2.5 py-2 text-xs font-semibold outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50">
+        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+        Advanced: content-specific looks
+        <span className="font-normal text-muted-foreground">{set === 0 ? "· none, the main look for everything" : `· ${set} set`}</span>
+      </summary>
+      <div className="flex flex-col gap-1.5 border-t border-border p-2.5" role="group" aria-label="A different look for some content">
+        <span className="text-xs text-muted-foreground">A different look for some kinds of content on this output; the rest use the main look above.</span>
+        <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
+          {CONTENT_TYPES.map((c) => (
+            <Fragment key={c}>
+              <span className="text-xs">{CONTENT_NAMES[c]}</span>
+              <Select value={form.themeFor?.[c] || "__same"} onValueChange={(v) => onChange(withThemeFor(form, c, v === "__same" ? null : v))}>
+                <SelectTrigger aria-label={`Look for ${CONTENT_NAMES[c]}`} className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__same">Same as the main look</SelectItem>
+                  {themes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  {form.themeFor?.[c] && !themes.some((t) => t.id === form.themeFor?.[c]) && <SelectItem value={form.themeFor[c]!}>A look that is no longer saved</SelectItem>}
+                </SelectContent>
+              </Select>
+            </Fragment>
+          ))}
+        </div>
+      </div>
+    </details>
   )
 }
 

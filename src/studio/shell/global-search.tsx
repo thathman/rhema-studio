@@ -22,7 +22,7 @@ const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["ticker", "News ticker", "crawl announcements scrolling"],
   ["stage", "Stage display", "confidence monitor platform team timer next note band"],
   ["brand", "Brand kit", "logo colours fonts church"],
-  ["outputs", "Output looks", "which theme each screen output"],
+  ["used-on", "Used on…", "which outputs show each look theme screen output looks"],
 ]
 
 const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [

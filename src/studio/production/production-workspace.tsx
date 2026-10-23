@@ -2,7 +2,7 @@ import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useState } from "react"
-import { CheckIcon, GlobeIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RadioIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, GlobeIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RadioIcon, RotateCcwIcon, SettingsIcon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { elapsedMs, formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
@@ -12,8 +12,9 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
 import { attention, showing, useFeedHealthStore } from "@/lib/show-health"
 import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
-import { CONTENT_NAMES } from "@/lib/content-names"
-import type { BroadcastOutput, BroadcastOutputStatus, Scene } from "@/types"
+import { outputDestination, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
+import { CanvasVerse } from "@/components/ui/canvas-verse"
+import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, Scene } from "@/types"
 import { useJournalStore } from "@/stores/journal-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
@@ -171,14 +172,16 @@ function Timekeeper() {
 }
 
 /**
- * Where everything goes (#213 show health): each output with what it is, what it shows now, what
- * it follows and how its signal is doing; what needs attention first.
+ * Where everything goes (#213 show health; #299 UX15-4 cards): each output as a card with where it
+ * goes, what it follows, how it presents it, its look and how its signal is doing; what needs
+ * attention first. Editing opens the output's own editor; nothing here takes anything live.
  */
 function Screens() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const status = useBroadcastStore((s) => s.outputStatus)
   const frames = useBroadcastStore((s) => s.outputFrames)
   const scenes = useBroadcastStore((s) => s.scenes)
+  const themes = useBroadcastStore((s) => s.themes)
   const feeds = useFeedHealthStore()
   const openOutputs = useShellStore((s) => s.openOutputs)
   const needs = attention(outputs, status, feeds)
@@ -193,29 +196,57 @@ function Screens() {
           ))}
         </ul>
       )}
-      <ul className="flex flex-col divide-y divide-border">
-        {outputs.map((o) => <ScreenRow key={o.id} output={o} status={status[o.id]} frame={frames[o.id]} scenes={scenes} />)}
+      <ul aria-label="Outputs" className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+        {outputs.map((o) => <OutputInspector key={o.id} output={o} status={status[o.id]} frame={frames[o.id]} scenes={scenes} themes={themes} />)}
       </ul>
     </Card>
   )
 }
 
-function ScreenRow({ output: o, status: st, frame, scenes }: { output: BroadcastOutput; status: BroadcastOutputStatus | undefined; frame: OutputFrame | undefined; scenes: Scene[] }) {
+const ROLE_NAMES = { congregation: "Congregation", stage: "Stage", signage: "Signage" } as const
+const LANGUAGE_NAMES = { both: "Both languages, as prepared", first: "First language only", second: "Second language only" } as const
+const SAMPLE_VERSE = { reference: "John 3:16", segments: [{ text: "For God so loved the world" }] }
+
+function OutputInspector({ output: o, status: st, frame, scenes, themes }: { output: BroadcastOutput; status: BroadcastOutputStatus | undefined; frame: OutputFrame | undefined; scenes: Scene[]; themes: BroadcastTheme[] }) {
   const on = outputOnAir(o, st)
   const feed = useFeedHealth(o.id, o.type === "browser" && on)
-  const kind = o.type === "ndi" ? `NDI · ${o.ndi.sourceName}` : o.type === "browser" ? "Browser feed" : o.windowed ? "In a window" : "Display"
-  const follows = o.shows?.length ? `follows ${o.shows.map((k) => CONTENT_NAMES[k]).join(", ")}` : null
+  const role = o.role ?? "congregation"
+  const theme = themes.find((t) => t.id === o.themeId)
+  const ownLooks = Object.values(o.themeFor ?? {}).filter(Boolean).length
+  const row = (label: string, value: React.ReactNode) => (
+    <div className="contents">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0">{value}</dd>
+    </div>
+  )
   return (
-    <li className="flex flex-wrap items-center gap-3 py-2.5 text-xs">
-      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4">{o.type === "browser" ? <GlobeIcon /> : o.type === "ndi" ? <RadioIcon /> : <MonitorIcon />}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-semibold">{o.name}</span>
-        <span className="block text-muted-foreground">{kind} · {o.role ?? "congregation"}{follows ? ` · ${follows}` : ""}{o.ticker ? " · ticker" : ""}{o.lowerThirds ? " · lower thirds" : ""}</span>
-        <span className="block truncate">Showing: {showing(o, frame, scenes, on)}</span>
-      </span>
-      {st?.ndiError ? <Badge tone="warn">{st.ndiError}</Badge> : <Badge tone={on ? "ok" : "off"}>{on ? "On" : "Off"}</Badge>}
-      {o.type === "ndi" && on && typeof st?.ndiReceivers === "number" && <span className="text-muted-foreground">{st.ndiReceivers} {st.ndiReceivers === 1 ? "receiver" : "receivers"}</span>}
-      {o.type === "browser" && on && feedHealthLabel(feed) && <span className={cn(feed?.behind ? "text-destructive" : "text-muted-foreground")}>{feedHealthLabel(feed)}</span>}
+    <li aria-label={o.name} className="flex min-w-0 flex-col rounded-lg border border-border bg-card">
+      <div className="flex items-start gap-3 border-b border-border px-3 py-2.5">
+        <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4">{o.type === "browser" ? <GlobeIcon /> : o.type === "ndi" ? <RadioIcon /> : <MonitorIcon />}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">{o.name}</span>
+          <span className="block text-xs text-muted-foreground">{outputTransport(o)} · {ROLE_NAMES[role]}</span>
+        </span>
+        {st?.ndiError ? <Badge tone="warn">{st.ndiError}</Badge> : <Badge tone={on ? "ok" : "off"}>{on ? "On" : "Off"}</Badge>}
+      </div>
+      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-3 py-2.5 text-xs">
+        {row("Goes to", <span className="break-words">{outputDestination(o)}</span>)}
+        {row("Follows", outputFollows(o))}
+        {row("Presentation", outputPresentation(o, scenes, theme))}
+        {role === "congregation" && row("Language", LANGUAGE_NAMES[o.language ?? "both"])}
+        {role !== "stage" && row("Look", (
+          <span className="flex items-center gap-2">
+            {theme && <span className="w-16 shrink-0 overflow-hidden rounded-[3px] border border-border bg-[#1d2327]"><CanvasVerse theme={theme} verse={SAMPLE_VERSE} className="w-full" /></span>}
+            <span className="min-w-0">{theme?.name ?? "A look that is no longer saved"}{ownLooks > 0 && <span className="block text-muted-foreground">+ {ownLooks} content-specific {ownLooks === 1 ? "look" : "looks"}</span>}</span>
+          </span>
+        ))}
+        {row("Now", <span className="block truncate">{showing(o, frame, scenes, on)}</span>)}
+        {o.type === "ndi" && on && typeof st?.ndiReceivers === "number" && row("Signal", `${st.ndiReceivers} ${st.ndiReceivers === 1 ? "receiver" : "receivers"}`)}
+        {o.type === "browser" && on && feedHealthLabel(feed) && row("Signal", <span className={cn(feed?.behind && "text-destructive")}>{feedHealthLabel(feed)}</span>)}
+      </dl>
+      <div className="mt-auto flex justify-end border-t border-border px-3 py-2">
+        <Button size="sm" variant="outline" onClick={() => useShellStore.getState().editOutput(o.id)} aria-label={`Edit ${o.name}`}><SettingsIcon /> Edit output</Button>
+      </div>
     </li>
   )
 }
