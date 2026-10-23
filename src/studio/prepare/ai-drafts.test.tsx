@@ -28,7 +28,9 @@ describe("Prepare → AI drafts", () => {
     await act(async () => button("AI drafts").click())
     expect(document.body.textContent).toContain("Thanksgiving Service")
     expect(document.body.textContent).toContain("1 missing from the library")
-    await act(async () => button("Open as a new service").click())
+    // It says where the draft goes: the rundown being edited here.
+    expect(document.body.textContent).toContain("Opening a draft replaces the rundown (1 item). You are asked first.")
+    await act(async () => button("Open in the rundown").click())
     expect(useQueueStore.getState().items[0].reference).toBe("Mine")
     expect(document.body.textContent).toContain("Replace them with this draft?")
     await act(async () => button("Replace").click())

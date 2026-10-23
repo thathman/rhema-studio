@@ -46,6 +46,17 @@ function useNextHint(): string {
   return next ? `Next: ${next.sectionLabel}` : "→ / PgDn"
 }
 
+/**
+ * Present's two layouts over the same service. "production" (stored name kept) is the
+ * original dashboard, an advanced view for listening checks and recovery (#299); the
+ * service itself is built in Prepare only.
+ */
+const VIEW_LABEL = { standard: "Standard", production: "Advanced" } as const
+const VIEW_TITLE = {
+  standard: "The live console",
+  production: "Advanced: the original dashboard with transcript, detections and its own queue, for listening checks and recovery. Build the service in Prepare.",
+} as const
+
 export function PresentWorkspace() {
   const view = useShellStore((s) => s.presentView)
   const setView = useShellStore((s) => s.setPresentView)
@@ -109,13 +120,14 @@ export function PresentWorkspace() {
                   type="button"
                   aria-pressed={view === v}
                   onClick={() => setView(v)}
+                  title={VIEW_TITLE[v]}
                   className={cn(
-                    "flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium capitalize [&_svg]:size-3.5",
+                    "flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium [&_svg]:size-3.5",
                     view === v ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {v === "standard" ? <LayoutPanelLeftIcon /> : <LayoutGridIcon />}
-                  <span className="max-[1200px]:sr-only">{v}</span>
+                  <span className="max-[1200px]:sr-only">{VIEW_LABEL[v]}</span>
                 </button>
               ))}
             </div>
@@ -127,7 +139,7 @@ export function PresentWorkspace() {
             <StatusChip
               tone="warn"
               label="Auto-live on"
-              title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (also the Auto switch on the Live panel in Production view)."
+              title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (also the Auto switch on the Live panel in the Advanced view)."
               onClick={() => useBroadcastStore.getState().setAutoLive(false)}
             />
           )}

@@ -976,6 +976,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dm. One place to prepare a service (#299 UX15-5)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dm.1 | Open a saved service in Prepare. Change an item's planned time, then Save. | Beside the service's name: "Saved", then "Unsaved changes" after the edit, "Saved" again after Save. | Unverified |
+| 10dm.2 | Close the service (keep the rundown). | The name reads "Items not saved as a service" with "Not saved as a service"; New service's tooltip says it saves the items on screen. | Unverified |
+| 10dm.3 | In Prepare, click, double-click and use the arrow keys on several items (verse, song, slide); click each phase in the strip. | Only the preview changes; the outputs, NDI and the Live panel keep what they showed; Present shows nothing new live. | Unverified |
+| 10dm.4 | Prepare → Present service. | The live console opens with the same service; nothing is live until Show live. | Unverified |
+| 10dm.5 | With assistants allowed and a draft waiting, a rundown with items: Prepare → AI drafts. | The dialog says opening a draft replaces the rundown (names the open service and item count) and that you are asked first; "Open in the rundown" asks, Replace puts the draft in Prepare's rundown unsaved. | Unverified |
+| 10dm.6 | Present header: hover the two view buttons; pick Advanced, then Standard. | They read Standard and Advanced (the original dashboard with transcript, detections and its own queue); both still work and the choice is remembered after a restart. | Unverified |
+| 10dm.7 | Cmd/Ctrl+K, type "new service", Enter. | Prepare opens with the New service form open. | Unverified |
+| 10dm.8 | Make the window narrower than 1280 px in Prepare; press Timing, then Timing again. | The run-of-show column opens over the item editor and closes again; the order of service and editor stay usable. | Unverified |
+
 ### 10df. Time warnings on the stage (#196 R6)
 
 | # | Step | Expected | Result |

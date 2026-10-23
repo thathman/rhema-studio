@@ -5,8 +5,8 @@ A drill to run once before the first public release and after any change to the 
 ## What "last good" means
 
 - **Approved service**: Prepare → Approve pins the saved version; History shows it as "approved" and it is never pruned (CL-002).
-- **Service file**: More → Library → "Save this service as a file" carries that service with its songs and pictures (CL-003).
-- **Database backup**: More → Library → "Back up now" copies everything (services, songs, history, media index; not the picture files themselves, which live in the media folder).
+- **Service file**: Archive → Share services → "Save this service as a file" carries that service with its songs and pictures (CL-003).
+- **Database backup**: Archive → Backups → "Back up now" copies everything (services, songs, history, media index; not the picture files themselves, which live in the media folder).
 
 ## Drill
 

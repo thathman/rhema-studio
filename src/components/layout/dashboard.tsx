@@ -7,7 +7,7 @@ import { DetectionsPanel } from "@/components/panels/detections-panel"
 import { EmbeddingWarningBanner } from "@/components/ui/embedding-warning-banner"
 
 /**
- * Present → Production: the Standard layout (queue, preview, live) on top and
+ * Present → Advanced (stored as "production"): the Standard layout (queue, preview, live) on top and
  * the listening tools (transcript, detections, Bible) underneath. Status,
  * outputs, theme and settings live in the Studio shell and Present's header,
  * so this view has no header of its own. Every panel scrolls inside itself.

@@ -5,7 +5,7 @@ For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; on
 ## Before the service (Prepare, 10 minutes)
 
 1. **Home** tells you if anything is wrong: Bible loaded, theme chosen, an output on a screen, songs and pictures all present, fonts installed. Fix the amber lines first; the Fix button takes you there.
-2. **Prepare → New service** (or Copy last week's). Give it a date.
+2. **Prepare → New service** (or Copy last week's). Give it a date. Prepare is the one place to build the service; beside its name it says **Saved**, **Unsaved changes** or **Not saved as a service**. Save, Copy, History and Approve all act on that service.
 3. Add items in the order of the service:
    - **Bible**: type `john 3 16` or a few words, press Add. A book or chapter alone works too (`1 Samuel`, `1 Kings 3`), and so do ordinals in words (`First Samuel 3:10`, `Samuẹli Kínní 3:10`).
    - **Hymn book**: the CAC Gospel Hymn Book in English and Yorùbá (Part 1 and Part 2). Type the number (`245`, or `V12` for Part 2) or a few words in either language; click to preview, Add. "First: Yorùbá / English" sets which language comes first. The first time, press **Import the hymn book…** and choose the hymn book file; it stays on this computer.

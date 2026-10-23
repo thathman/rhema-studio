@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — One place to prepare a service (#299 UX15-5)
+
+- **Branch / PR:** `ux15-5/one-prepare`. Audit of every way into building a service: Prepare is the only editor of the run of show (one `useQueueStore` + `useServiceStore`); Present's "production" view is the original dashboard over the same stores, now labelled Advanced; the More workspace has no way in (#218) and its Classic layout row is gone, Signage points at Outputs. Prepare: `saveStateOf` / `SaveState` chip beside the service name; service bar is a "This service" toolbar with plain titles; Present service says nothing goes live; AI drafts says the draft replaces the rundown being edited; Timing button opens the timing column over the editor below 1280 px (timing-panel.tsx untouched).
+- **Tests:** `prepare-no-live.test.tsx` (click, double-click, Present keys and phase strip in Prepare never go live; Present service only switches workspace; saved-state words), `more-workspace.test.tsx` (no Classic layout or planned rows; Prepare and Signage go to the real places; Find anything → New service), `ai-drafts.test.tsx` updated. Desktop: acceptance 10dm.
+- **Next:** desktop pass of 10dm; the Desk menu (UX15-1) may link More tools again, which now only points at real places.
+
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.

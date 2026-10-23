@@ -27,6 +27,12 @@ never unmounts live state.
 | **Present** | Run the service. Standard or Production view | `⌘3` |
 | **More** | Library, outputs, themes, integrations, settings, legacy layout, about | `⌘4` |
 
+> **Since #218 / #299:** the sidebar is Home, Prepare, Present, Production, Library,
+> Design, Team, Archive and Settings; More is gone from it and offers no "Classic
+> layout". Prepare is the one place to build a service. The Production view below is
+> labelled **Advanced** in Present's header (stored as `production`, so saved choices
+> still load).
+
 Progressive disclosure rules:
 
 - Anything a volunteer needs on Sunday is reachable in **≤ 2 clicks from Present**.

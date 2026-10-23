@@ -2,7 +2,7 @@ import {
   MonitorIcon,
   PaletteIcon,
   SettingsIcon,
-  LayoutGridIcon,
+  PencilRulerIcon,
   BookOpenIcon,
   LibraryIcon,
   TvIcon,
@@ -12,7 +12,6 @@ import {
   ChevronRightIcon,
 } from "lucide-react"
 import { AboutNotices } from "@/components/about-notices"
-import { Badge } from "@/components/ui/badge"
 
 
 import { openSettings } from "@/lib/settings-dialog"
@@ -23,29 +22,30 @@ interface Row {
   icon: React.ReactNode
   label: string
   detail: string
-  onClick?: () => void
-  planned?: string
+  onClick: () => void
 }
 
+/**
+ * More tools: a list of shortcuts into the real workspaces. It has no way in
+ * from the sidebar (#218); it never offers a second place to build a service
+ * (#299): services are built in Prepare only.
+ */
 export function MoreWorkspace() {
-  const setWorkspace = useShellStore((s) => s.setWorkspace)
-  const setPresentView = useShellStore((s) => s.setPresentView)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
-
   const groups: Array<{ title: string; rows: Row[] }> = [
+    {
+      title: "Service",
+      rows: [
+        { icon: <PencilRulerIcon />, label: "Prepare", detail: "Build and edit the service: the one place for its items, times and approval", onClick: () => useShellStore.getState().goTo("prepare") },
+      ],
+    },
     {
       title: "Production",
       rows: [
         { icon: <MonitorIcon />, label: "Outputs", detail: "Screens and NDI senders, which theme each one shows", onClick: openOutputs },
         { icon: <PaletteIcon />, label: "Themes", detail: "Design how scripture looks on screen", onClick: () => useShellStore.getState().openDesign("themes") },
         { icon: <PaletteIcon />, label: "Church brand", detail: "Logo, colours and fonts once; three matching themes", onClick: () => useShellStore.getState().openDesign("brand") },
-        {
-          icon: <LayoutGridIcon />,
-          label: "Classic layout",
-          detail: "The original Rhema dashboard with transcript and detections (Production view)",
-          onClick: () => { setPresentView("production"); setWorkspace("present") },
-        },
         { icon: <PlugIcon />, label: "Remote control", detail: "OSC and HTTP settings for Stream Deck and automation", onClick: () => openSettings("remote") },
       ],
     },
@@ -57,17 +57,17 @@ export function MoreWorkspace() {
       ],
     },
     {
-      title: "Later",
+      title: "Church",
       rows: [
-        { icon: <TvIcon />, label: "Signage", detail: "Foyer screens and announcement playlists", planned: "Milestone 8" },
-        { icon: <ArchiveIcon />, label: "Archive", detail: "Earlier service logs: what actually went live, searchable (in Library)", onClick: () => useShellStore.getState().goTo("archive") },
+        { icon: <TvIcon />, label: "Signage", detail: "Foyer screens: give an output the Signage role and pick its pictures", onClick: openOutputs },
+        { icon: <ArchiveIcon />, label: "Archive", detail: "Past services, what went live, backups and the church folder", onClick: () => useShellStore.getState().goTo("archive") },
         { icon: <UsersIcon />, label: "Team", detail: "Your name, approvals, comments and the church folder", onClick: () => useShellStore.getState().goTo("team") },
       ],
     },
     {
       title: "App",
       rows: [
-        { icon: <SettingsIcon />, label: "Settings", detail: "Audio, speech, display, API keys, diagnostics", onClick: () => openSettings() },
+        { icon: <SettingsIcon />, label: "Settings", detail: "Audio, speech, display, remote control, diagnostics", onClick: () => openSettings() },
       ],
     },
   ]
@@ -85,20 +85,15 @@ export function MoreWorkspace() {
                   <li key={r.label}>
                     <button
                       type="button"
-                      disabled={!r.onClick}
                       onClick={r.onClick}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left outline-none hover:bg-muted/50 focus-visible:bg-muted/50 disabled:cursor-default disabled:hover:bg-transparent [&_svg]:size-4"
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left outline-none hover:bg-muted/50 focus-visible:bg-muted/50 [&_svg]:size-4"
                     >
                       <span className="text-muted-foreground">{r.icon}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-medium">{r.label}</span>
                         <span className="block text-xs text-muted-foreground">{r.detail}</span>
                       </span>
-                      {r.planned ? (
-                        <Badge variant="outline" className="text-[0.6875rem]">Planned · {r.planned}</Badge>
-                      ) : (
-                        <ChevronRightIcon className="text-muted-foreground" />
-                      )}
+                      <ChevronRightIcon className="text-muted-foreground" />
                     </button>
                   </li>
                 ))}

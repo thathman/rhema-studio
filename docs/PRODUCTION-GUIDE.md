@@ -1,6 +1,6 @@
 # Rhema Studio — production operator guide
 
-For the person running outputs, OBS and the stage screen. The volunteer guide (`docs/QUICK-START.md`) covers the Standard view; this page covers everything behind it.
+For the person running outputs, OBS and the stage screen. The volunteer guide (`docs/QUICK-START.md`) covers the Standard view; this page covers everything behind it. Services are built in Prepare only; Present's **Advanced** view (the original dashboard: transcript, detections and its own queue) is for listening checks and recovery, over the same service.
 
 ## Outputs (Production → Screens → Open outputs, or Settings → Outputs)
 
@@ -143,7 +143,7 @@ Archive → Song usage: choose a date range (default: the last six months), Show
 
 ## Speech recognition and Auto
 
-While Rhema listens, verses it hears in the sermon appear in the preview and the detections list; the operator presents them. With a service open, a heard verse that is already in the service makes that item flash; it does not move Next and is not added to the service (add it from the detections list if you want it kept). Without a service open, heard verses collect in the list as before. **Auto** (the switch on the Live panel in Present → Production, or Settings → Display Mode → Heard verses) makes heard verses replace what is on screen without Show live. It starts off, also after updating from a build where it was on by default: turn it on again if your church relies on it; while it is on and Rhema is listening, Present shows "Auto-live on" in the header, and clicking it turns Auto off.
+While Rhema listens, verses it hears in the sermon appear in the preview and the detections list; the operator presents them. With a service open, a heard verse that is already in the service makes that item flash; it does not move Next and is not added to the service (add it from the detections list if you want it kept). Without a service open, heard verses collect in the list as before. **Auto** (the switch on the Live panel in Present → Advanced view, or Settings → Display Mode → Heard verses) makes heard verses replace what is on screen without Show live. It starts off, also after updating from a build where it was on by default: turn it on again if your church relies on it; while it is on and Rhema is listening, Present shows "Auto-live on" in the header, and clicking it turns Auto off.
 
 ## Translations
 
@@ -167,4 +167,4 @@ Team → Your name is optional and local. When set it is written on every change
 
 ## Diagnostics
 
-Settings → Diagnostics → Save logs. Each output also logs how long screens take to appear: a "[latency]" summary every 20 changes (median and slowest, from send to drawn) and a warning for any change over 100 ms, so a slow computer shows up in the saved logs. The content database path and applied migrations are shown in More → Library.
+Settings → Diagnostics → Save logs. Each output also logs how long screens take to appear: a "[latency]" summary every 20 changes (median and slowest, from send to drawn) and a warning for any change over 100 ms, so a slow computer shows up in the saved logs. The content database path (and the copy from before the last upgrade) is shown in Archive → Backups.

@@ -221,7 +221,7 @@ frame.
 
 - Local only, in `studio.db`, under the existing backup/migration machinery
   (`studio.db.before-0003.bak` on first run).
-- **Export**: More → Library → Export songs: a single `rhema-songs-v1.json`
+- **Export**: Library → Import & export → Save songs to a file: a single `rhema-songs-v1.json`
   (songs, sections, texts, arrangements, hymnbooks, numbers). Optional subset.
 - **Import**:
   - `rhema-songs-v1.json` (round trip; modes Skip existing / Replace / Duplicate).
