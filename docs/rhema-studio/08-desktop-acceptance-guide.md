@@ -980,8 +980,8 @@ report), but launching it cannot.
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10df.1 | Design → Stage display: tick "At 1 minutes left" and "When the time is up". Timer 2 min, Start; watch the stage display. | After a minute "1 minute left" on the stage, a minute later "Time is up"; the projector unchanged; both in the service log as messages. | TW_RESULT |
-| 10df.2 | Send your own stage message, then let a warning come due. | Your message stays. | TW2_RESULT |
+| 10df.1 | Design → Stage display: tick "At 1 minutes left" and "When the time is up". Timer 2 min, Start; watch the stage display. | After a minute "1 minute left" on the stage, a minute later "Time is up"; the projector unchanged; both in the service log as messages. | Pass 2026-10-23 (combined QA build): "1 minute left", then "Time is up" on the stage display, each logged once. |
+| 10df.2 | Send your own stage message, then let a warning come due. | Your message stays. | Pass 2026-10-23 (combined QA build): "Wrap up after this point" stayed when the 1-minute warning came due. |
 
 ### 10dc. Cameras in scenes (OP-009, #209)
 
