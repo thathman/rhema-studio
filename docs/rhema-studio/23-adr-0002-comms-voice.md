@@ -104,6 +104,13 @@ phone). Text notices and action requests already work on phones without it.
   first seconds; with WebAudio alone a direct loop held ~121 ms (jitter buffer ~45 ms) for four
   rounds before growing. The hub no longer adds that element; desks still hear everyone (three-desk
   test). Across processes (headless Chrome as a phone → the QA host) the same build-up showed.
+- **Why (measured 2026-10-23):** with the screen locked, the QA app's own `AudioContext` clock ran at
+  0.67–0.78 of real time (13.9 s of audio in 20.6 s), so WebKit plays audio out about a third slow
+  and every jitter buffer fills. Holding a macOS "user initiated, latency critical" activity in the
+  app process (keeping it out of App Nap) did not change it (0.67 with it held): WKWebView renders
+  audio in WebKit's own helper processes. So the build-up is a locked-screen effect on this Mac;
+  a church's main computer is unlocked during the service, which the rehearsal must confirm by
+  measuring the same clock ratio there (it should read 1.0).
 
 ## 5. Verification
 
