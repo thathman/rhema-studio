@@ -42,6 +42,7 @@ export function HomeWorkspace() {
   const counted = okCount + warnings.length
   const minutes = items.reduce((m, i) => m + (i.planned_minutes ?? 0), 0)
   const operatorName = useSettingsStore((s) => s.operatorName).trim()
+  const churchName = useSettingsStore((s) => s.brandKit.churchName.trim())
   // Planned times from the run of show when the service has a start time (10:00, 10:02…), else the order.
   const plannedAt = plannedTimes(items, headers)
   const comingUp = current?.service_date ? new Date(`${current.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" }) : null
@@ -51,7 +52,7 @@ export function HomeWorkspace() {
       <div className="mx-auto flex max-w-[1700px] flex-col gap-5 px-8 pt-7 pb-16 max-[1200px]:px-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[0.625rem] font-extrabold tracking-[0.16em] text-muted-foreground uppercase">Your Sunday workspace</p>
+            <p className="max-w-full truncate text-[0.625rem] font-extrabold tracking-[0.16em] text-muted-foreground uppercase" title={churchName ? `${churchName} workspace` : "Set up your church"}>{churchName ? `${churchName} workspace` : "Set up your church"}</p>
             <h1 className="mt-1 text-[1.625rem] leading-tight font-bold tracking-[-0.035em]">{greeting()}{operatorName ? `, ${operatorName.split(/\s+/)[0]}` : ", team"} <span aria-hidden className="font-semibold text-muted-foreground">✳</span></h1>
             <p className="mt-1 max-w-[540px] text-xs text-muted-foreground">Everything for this Sunday's service, right where you need it.</p>
           </div>
