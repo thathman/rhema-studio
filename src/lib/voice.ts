@@ -93,8 +93,6 @@ interface Peer {
   voice: AudioNode | null
   analyser: AnalyserNode | null
   talking: boolean
-  /** Keeps WebKit pulling the remote track (it can stay silent in WebAudio otherwise). */
-  sink: HTMLAudioElement | null
   listen: string[]
   talkTo: string
 }
@@ -180,7 +178,6 @@ function drop(name: string) {
   peers.delete(name)
   p.voice?.disconnect()
   p.analyser?.disconnect()
-  p.sink?.pause()
   p.pc.close()
   rewire()
   publishPeers()
@@ -192,15 +189,13 @@ async function answer(id: string, by: string, sdp: string) {
   drop(by) // a desk that reconnects replaces its old connection
   const pc = new RTCPeerConnection({ iceServers: [] })
   const mix = a.createMediaStreamDestination()
-  const peer: Peer = { pc, mix, voice: null, analyser: null, talking: false, sink: null, listen: [...CHANNEL_IDS], talkTo: "all" }
+  const peer: Peer = { pc, mix, voice: null, analyser: null, talking: false, listen: [...CHANNEL_IDS], talkTo: "all" }
   peers.set(by, peer)
   rewire()
   pc.ontrack = (e) => {
     const stream = e.streams[0] ?? new MediaStream([e.track])
-    peer.sink = new Audio()
-    peer.sink.muted = true
-    peer.sink.srcObject = stream
-    void peer.sink.play().catch(() => {})
+    // WebAudio is the remote track's only consumer: a second one (a muted <audio> element) made the
+    // jitter buffer grow from the first seconds (measured on the desktop, ADR 0002 §4).
     const voice = a.createMediaStreamSource(stream)
     const analyser = a.createAnalyser()
     analyser.fftSize = 1024
