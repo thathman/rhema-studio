@@ -11,14 +11,18 @@ import { useSettingsStore } from "@/stores/settings-store"
 
 /**
  * Prepare → AI drafts (Rhema MCP, #252): services an assistant proposed, waiting for review.
- * Opening one puts it in the rundown as an unsaved service to edit and save; nothing is saved,
- * approved or shown by opening it. Shown when assistants are allowed or a draft is waiting.
+ * Opening one puts it in Prepare's rundown (the one being edited, #299) as an unsaved service
+ * to edit and save; nothing is saved, approved or shown by opening it. Shown when assistants
+ * are allowed or a draft is waiting.
  */
 export function AiDrafts() {
   const enabled = useSettingsStore((s) => s.mcpEnabled)
   const [drafts, setDrafts] = useState<AiDraft[]>([])
   const [open, setOpen] = useState(false)
   const [replace, setReplace] = useState<AiDraft | null>(null)
+  const current = useServiceStore((s) => s.current)
+  const count = useQueueStore((s) => s.items.length)
+  const dirty = useServiceStore((s) => s.dirty)
   const load = useCallback(() => invoke<AiDraft[]>("ai_drafts_list").then(setDrafts).catch(() => setDrafts([])), [])
   useEffect(() => {
     void load()
@@ -33,7 +37,7 @@ export function AiDrafts() {
     useQueueStore.setState({ items, headers, activeIndex: null })
     setReplace(null)
     setOpen(false)
-    toast.success(`${d.title}: opened as an unsaved service`, { description: "Check every item, source anything marked Missing, then save it as a new service." })
+    toast.success(`${d.title} is now the rundown in Prepare`, { description: "Unsaved: check every item, source anything marked Missing, then use New service to save it." })
   }
   const remove = async (d: AiDraft) => {
     await invoke("ai_draft_delete", { id: d.id }).catch(() => {})
@@ -49,8 +53,13 @@ export function AiDrafts() {
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Services an AI assistant proposed</DialogTitle>
-            <DialogDescription>Each was checked against your library and Bible editions. Opening one makes an unsaved service for you to edit and save; nothing is approved or shown until you do.</DialogDescription>
+            <DialogDescription>Each was checked against your library and Bible editions. Opening one puts it in the rundown you edit here in Prepare, as an unsaved service to check and save; nothing is approved or shown until you do.</DialogDescription>
           </DialogHeader>
+          {drafts.length > 0 && (count > 0 || current) && (
+            <p className="rounded-md bg-muted p-2 text-xs">
+              Opening a draft replaces the rundown{current ? ` of "${current.title}"` : ""} ({count} {count === 1 ? "item" : "items"}){current ? " and closes that service; what it has saved stays saved" : ""}.{count > 0 || dirty ? " You are asked first." : ""}
+            </p>
+          )}
           {drafts.length === 0 && <p className="text-sm text-muted-foreground">None waiting. Ask your assistant to plan a service with Rhema (Settings → AI assistants).</p>}
           <ul className="flex flex-col gap-3">
             {drafts.map((d) => {
@@ -72,13 +81,13 @@ export function AiDrafts() {
                   {d.assumptions && d.assumptions.length > 0 && <p className="text-muted-foreground">Assumed: {d.assumptions.join("; ")}</p>}
                   {replace?.id === d.id ? (
                     <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md bg-muted p-2">
-                      <span className="flex-1">The rundown has items{useServiceStore.getState().dirty ? " and unsaved changes" : ""}. Replace them with this draft?</span>
+                      <span className="flex-1">The rundown has {count} {count === 1 ? "item" : "items"}{dirty ? " and unsaved changes" : ""}. Replace them with this draft?</span>
                       <Button size="sm" variant="ghost" onClick={() => setReplace(null)}>Keep mine</Button>
                       <Button size="sm" variant="destructive" onClick={() => openDraft(d, true)}>Replace</Button>
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => openDraft(d)}>Open as a new service</Button>
+                      <Button size="sm" onClick={() => openDraft(d)} title="Put this draft in the rundown here, as an unsaved service">Open in the rundown</Button>
                       <Button size="sm" variant="ghost" onClick={() => void remove(d)}>Remove</Button>
                     </div>
                   )}

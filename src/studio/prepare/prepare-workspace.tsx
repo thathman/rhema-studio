@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
 import { RundownList } from "@/studio/present/rundown-list"
-import { ServiceBar } from "@/studio/prepare/service-bar"
+import { SaveState, ServiceBar } from "@/studio/prepare/service-bar"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { ItemEditor } from "@/studio/prepare/item-editor"
 import { AddItems } from "@/studio/prepare/add-items"
@@ -13,7 +13,7 @@ import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { RULE_LABEL, defaultPhases, sectionSummaries, type PhaseRole } from "@/lib/run-of-show"
-import { CalendarDaysIcon, FolderPlusIcon, LayersIcon, MonitorPlayIcon } from "lucide-react"
+import { CalendarDaysIcon, ClockIcon, FolderPlusIcon, LayersIcon, MonitorPlayIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { cn } from "@/lib/utils"
@@ -21,13 +21,16 @@ import { cn } from "@/lib/utils"
 /**
  * Service builder: the order of service, the selected item's editor and the
  * preview, with the service's details above. Nothing here can present —
- * Prepare only edits; a click previews.
+ * Prepare only edits; a click previews. It is the one place a service is
+ * built (#299): Present runs it, Production routes it, Design styles it.
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
   const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(s.items)))
   const service = useServiceStore((s) => s.current)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // On a narrower window the timing column folds away; this brings it back over the editor.
+  const [timingOpen, setTimingOpen] = useState(false)
   const weekday = service?.service_date ? new Date(`${service.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long" }) : null
 
   return (
@@ -57,7 +60,22 @@ export function PrepareWorkspace() {
           </Popover>
           <AiDrafts />
           <AddItems />
-          <Button onClick={() => useShellStore.getState().setWorkspace("present")} disabled={count === 0}><MonitorPlayIcon /> Present service</Button>
+          <Button
+            variant="outline"
+            className="hidden max-[1280px]:inline-flex"
+            aria-expanded={timingOpen}
+            aria-controls="prepare-timing"
+            onClick={() => setTimingOpen((o) => !o)}
+          >
+            <ClockIcon /> Timing
+          </Button>
+          <Button
+            onClick={() => useShellStore.getState().setWorkspace("present")}
+            disabled={count === 0}
+            title="Open this same service in the live console. Nothing goes live until you press Show live there."
+          >
+            <MonitorPlayIcon /> Present service
+          </Button>
         </div>
       </header>
 
@@ -65,7 +83,7 @@ export function PrepareWorkspace() {
 
       <PhaseStrip />
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
+      <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel" data-tour="prepare-rundown">
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="min-w-0">
@@ -83,8 +101,17 @@ export function PrepareWorkspace() {
           <ItemEditor />
         </section>
 
-        {/* The show scheduler (approved design); on a narrower window it gives way to the editor. */}
-        <aside className="flex min-h-0 flex-col max-[1280px]:hidden">
+        {/* The show scheduler (approved design); on a narrower window it gives way to the editor, and Timing opens it over it. */}
+        <aside
+          id="prepare-timing"
+          aria-label="Timing"
+          className={cn(
+            "flex min-h-0 flex-col",
+            timingOpen
+              ? "max-[1280px]:absolute max-[1280px]:top-0 max-[1280px]:right-8 max-[1200px]:right-5 max-[1280px]:bottom-6 max-[1280px]:z-10 max-[1280px]:w-80 max-[1280px]:max-w-[calc(100%-2.5rem)] max-[1280px]:rounded-lg max-[1280px]:shadow-lg"
+              : "max-[1280px]:hidden",
+          )}
+        >
           <TimingPanel />
         </aside>
       </div>
@@ -169,7 +196,10 @@ function EventOverview() {
       <div className="flex flex-wrap items-center gap-4 px-[15px] py-2.5 [@media(max-height:860px)]:py-1.5">
         <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4"><CalendarDaysIcon /></span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-semibold">{service ? service.title : "Unsaved service"}</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-base font-semibold">{service ? service.title : items.length ? "Items not saved as a service" : "No service open"}</p>
+            <SaveState />
+          </div>
           <p className="truncate text-xs text-muted-foreground">{[date, main?.starts_at ? `${main.starts_at} start` : null].filter(Boolean).join(" · ") || "Give it a date and a start time to plan its times"}</p>
         </div>
         <dl className="flex items-stretch">

@@ -87,7 +87,7 @@ export const TUTORIAL_STEPS: Step[] = [
   at({ workspace: "present", presentView: "standard" }, {
     target: '[role="group"][aria-label="Present view"]',
     title: "Listening for verses",
-    content: "Production view adds listening: Rhema hears the preacher and proposes the verses mentioned. Standard is the simple view for running a service.",
+    content: "The Advanced view adds listening: Rhema hears the preacher and proposes the verses mentioned. Standard is the simple view for running a service; the service itself is built in Prepare.",
     placement: "bottom",
   }),
   at({ workspace: "production" }, {

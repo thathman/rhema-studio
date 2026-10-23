@@ -51,4 +51,4 @@ Settings → Diagnostics → Save logs runs every line through a redaction pass 
 
 ## Not done
 
-- TLS. (Roles per device: #78. Rate limiting and the phone remote: see above.) (Every remote command is now a "remote command" line in the service log, More → Library → Save the log.)
+- TLS. (Roles per device: #78. Rate limiting and the phone remote: see above.) (Every remote command is now a "remote command" line in the service log, Archive → What went live → Save the log.)

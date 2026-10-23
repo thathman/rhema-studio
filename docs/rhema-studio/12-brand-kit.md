@@ -54,7 +54,7 @@ interface BrandKit {
    accent colour), a meta line (date · time · place) and body lines. Stored as
    `kind='slide'` with `payload.template = "announcement"` so older builds still show it
    as a plain slide (title + lines) — no new item kind, no migration.
-4. **Where it lives in the UI.** More → Church brand (logo, colours, fonts, variants,
+4. **Where it lives in the UI.** Design → Brand kit (first planned under More → Church brand) (logo, colours, fonts, variants,
    Apply). Prepare → Slides gains a second tab "Announcement" with the structured fields
    and a variant select; the preview follows as you type.
 
@@ -82,6 +82,6 @@ interface BrandKit {
 
 ## 7. Sequencing
 
-1. Logo element in themes + renderer (small, visible). 2. Brand kit record + More →
-Church brand + Apply. 3. Announcement template tab. 4. Variants. 5. Font availability
+1. Logo element in themes + renderer (small, visible). 2. Brand kit record + Design →
+Brand kit + Apply. 3. Announcement template tab. 4. Variants. 5. Font availability
 warning on Home.

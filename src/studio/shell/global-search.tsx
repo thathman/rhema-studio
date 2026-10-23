@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon } from "lucide-react"
+import { ArrowRightIcon, BookOpenIcon, HouseIcon, ImageIcon, LibraryBigIcon, MonitorIcon, MusicIcon, PaletteIcon, PencilRulerIcon, PlayIcon, PlusIcon, PresentationIcon, SearchIcon, SettingsIcon, ArchiveIcon, MonitorCogIcon, UsersIcon } from "lucide-react"
 import { useState } from "react"
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useQueueStore } from "@/stores"
@@ -9,7 +9,7 @@ import { isImageItem, isSongItem, type QueueItem } from "@/types"
 
 const PLACES: ReadonlyArray<readonly [Workspace, string, React.ReactNode, string]> = [
   ["home", "Home", <HouseIcon key="i" />, "overview readiness today"],
-  ["prepare", "Prepare", <PencilRulerIcon key="i" />, "service builder rundown plan"],
+  ["prepare", "Prepare", <PencilRulerIcon key="i" />, "service builder rundown run of show plan edit history approve copy"],
   ["present", "Present", <PlayIcon key="i" />, "live console show go live"],
   ["design", "Design", <PaletteIcon key="i" />, "themes looks studio"],
   ["production", "Production", <MonitorCogIcon key="i" />, "production control timekeeper timers hold screens outputs ndi health preflight"],
@@ -88,6 +88,8 @@ export function GlobalSearch() {
           {PLACES.map(([w, label, icon, words]) => (
             <CommandItem key={w} value={`${label} ${words}`} onSelect={() => run(() => useShellStore.getState().goTo(w))}>{icon} {label}</CommandItem>
           ))}
+          {/* Services are built in Prepare only (#299): a new one starts there too. */}
+          <CommandItem value="new service create sunday plan prepare" onSelect={() => run(() => { useShellStore.getState().setNewServiceOpen(true); useShellStore.getState().goTo("prepare") })}><PlusIcon /> New service</CommandItem>
           <CommandItem value="library songs hymn book import export backup" onSelect={() => run(() => useShellStore.getState().goTo("library"))}><LibraryBigIcon /> Library</CommandItem>
           <CommandItem value="archive past services logs" onSelect={() => run(() => useShellStore.getState().goTo("archive"))}><ArchiveIcon /> Archive</CommandItem>
           <CommandItem value="outputs screens projector ndi stage signage monitor" onSelect={() => run(() => useShellStore.getState().openOutputs())}><MonitorIcon /> Outputs</CommandItem>

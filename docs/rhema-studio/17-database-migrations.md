@@ -1,6 +1,6 @@
 # Content database: migrations, upgrades and downgrades
 
-`studio.db` lives in the app data folder (More → Library shows the path). The Bible database (`rhema.db`) is separate, read-only and ships with the app; nothing here touches it.
+`studio.db` lives in the app data folder (Archive → Backups shows the path). The Bible database (`rhema.db`) is separate, read-only and ships with the app; nothing here touches it.
 
 ## Migrations in order
 
@@ -22,7 +22,7 @@ Every migration only adds tables or nullable/defaulted columns; none rewrites or
 
 ## Upgrade
 
-On open, the app checks the file (`PRAGMA quick_check`; a damaged file is refused, not half-used), then applies the migrations it is missing in order, each in its own transaction. **Before the first pending migration it copies the whole file** to `studio.db.before-<version>.bak` next to it (SQLite online backup). More → Library shows that copy's path. The crate test `every_older_schema_upgrades_and_restores` opens a file at every older version and checks it upgrades with its data.
+On open, the app checks the file (`PRAGMA quick_check`; a damaged file is refused, not half-used), then applies the migrations it is missing in order, each in its own transaction. **Before the first pending migration it copies the whole file** to `studio.db.before-<version>.bak` next to it (SQLite online backup). Archive → Backups shows that copy's path. The crate test `every_older_schema_upgrades_and_restores` opens a file at every older version and checks it upgrades with its data.
 
 ## Downgrade (going back to an older Rhema Studio)
 
@@ -35,7 +35,7 @@ To go back:
 3. Rename the matching `studio.db.before-<version>.bak` to `studio.db`, where `<version>` is the first migration the older build does not know.
 4. Start the older build. Work saved with the newer build after the upgrade is not in that copy; re-enter it, or move back to the newer build (which still has `studio.db.newer`).
 
-More → Library → "Restore from a backup…" does the same from inside the app for any backup file, and keeps the replaced database as a snapshot first.
+Archive → Backups → "Restore from a backup…" does the same from inside the app for any backup file, and keeps the replaced database as a snapshot first.
 
 ## Settings
 

@@ -26,6 +26,22 @@ import { isVerseItem } from "@/types"
 import { ServiceHistory } from "@/studio/prepare/service-history"
 import { useShellStore } from "@/studio/shell-store"
 import { useBibleStore } from "@/stores/bible-store"
+import { StatusChip } from "@/studio/ui/status-chip"
+import { saveStateOf } from "@/studio/prepare/save-state"
+
+/** The saved / unsaved line beside the service's name. */
+export function SaveState() {
+  const current = useServiceStore((s) => s.current)
+  const dirty = useServiceStore((s) => s.dirty)
+  const saving = useServiceStore((s) => s.saving)
+  const count = useQueueStore((s) => s.items.length)
+  const state = saveStateOf({ current, dirty, saving, count })
+  return (
+    <span role="status" aria-live="polite" className="shrink-0">
+      <StatusChip tone={state.tone} label={state.label} title={state.title} className="h-7" />
+    </span>
+  )
+}
 
 /**
  * Pick, create, save, close and delete the service the rundown belongs to.
@@ -190,7 +206,7 @@ export function ServiceBar() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2" data-tour="service-bar">
+    <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="This service" data-tour="service-bar">
       <Select value={current?.id ?? ""} onValueChange={(id) => void open(id)} disabled={loading || dirty}>
         <SelectTrigger className="h-9 w-64" aria-label="Service" title={dirty ? "Save or discard changes before switching" : undefined}>
           <SelectValue placeholder={programs.length ? "Open a service…" : "No saved services yet"} />
@@ -324,7 +340,7 @@ export function ServiceBar() {
 
       <Popover open={newOpen} onOpenChange={setNewOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : undefined}>
+          <Button variant="outline" size="sm" disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : !current ? (count > 0 ? "Save the items on screen as a new service" : "Start a new service") : count > 0 ? `Start another service from the items on screen, or from a template; "${current.title}" stays as saved` : `Start another service; "${current.title}" stays as saved`}>
             <PlusIcon /> New service
           </Button>
         </PopoverTrigger>

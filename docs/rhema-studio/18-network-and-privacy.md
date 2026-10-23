@@ -27,7 +27,7 @@ Keys the settings file can hold for later providers (`openaiApiKey`, `claudeApiK
 
 ## Transcripts on this computer
 
-Recognised speech is kept in memory while the app runs. It is written to a kept service log only when "Include what was said" is ticked for that log (More → Library → Service log; off every time), and then stays there, searchable, until the log is deleted. Short fragments can also appear in the app's own log files (see the consent text).
+Recognised speech is kept in memory while the app runs. It is written to a kept service log only when "Include what was said" is ticked for that log (Archive → What went live; off every time), and then stays there, searchable, until the log is deleted. Short fragments can also appear in the app's own log files (see the consent text).
 
 ## Not yet done
 

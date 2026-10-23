@@ -17,6 +17,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### One place to prepare a service (#299 UX15-5)
+- Prepare is the one place to build a service. More tools no longer offers "Classic layout", Signage opens Outputs (it is no longer marked "planned"), and Find anything has **New service**.
+- Prepare says beside the service's name whether it is **Saved**, has **Unsaved changes**, or is **Not saved as a service** yet; New service, Copy, History, Approve and Present service say what they do to that service.
+- AI drafts says the draft goes into the rundown you are editing (replacing it, after asking); **Open in the rundown**.
+- Present's original dashboard view is now labelled **Advanced** (it was "Production"); on a narrower window Prepare's **Timing** button brings back the run-of-show column.
 ### Your desk at the foot of the sidebar; Cloud keys folded into Speech (#299)
 - The sidebar's bottom shows who is at this computer and whether it is the main desk or joined to a host; click it to type your name in place, switch Light, Dark or System at once, or open Settings, setup, shortcuts, help and About.
 - The "Local-first workspace / Works offline" card is gone, and Light or dark moved out of Settings into this menu.

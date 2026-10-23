@@ -97,7 +97,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },
     i.listening
       ? { id: "listening", status: "ok", label: "Listening for verse references" }
-      : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in the Production view to detect verses from the sermon." },
+      : { id: "listening", status: "info", label: "Listening is off", detail: "Optional. Turn it on in Present's Advanced view to detect verses from the sermon." },
     ...(i.missingSongs
       ? [{ id: "missing-songs", status: "warn" as const, label: `${i.missingSongs} song${i.missingSongs === 1 ? "" : "s"} in the service ${i.missingSongs === 1 ? "is" : "are"} not in the library`, detail: "They cannot be shown. Remove them or import the songs again.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),

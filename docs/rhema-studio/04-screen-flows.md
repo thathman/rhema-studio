@@ -94,6 +94,11 @@ Themes is live today (theme designer dialog). Others are planned with the conten
 
 ## 6. More (F)
 
+> **Since #218 / #299:** More has no place in the sidebar, and it no longer offers
+> "Classic layout": services are built in Prepare only, and Present's original
+> dashboard is its **Advanced** view (the header toggle). Signage is built (an output
+> with the Signage role). The list below is the original design.
+
 A grouped list: **Outputs** (dialog), **Themes** (designer), **Settings** (dialog),
 **Classic layout** (Production view shortcut, labelled "the original Rhema dashboard"),
 **Remote control guide** (opens docs), **About** (version, upstream attribution,
