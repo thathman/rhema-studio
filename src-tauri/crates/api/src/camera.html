@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>Rhema camera</title>
+<style>
+  :root { color-scheme: dark; --bg:#17242b; --card:#1f3038; --fg:#eef3f1; --muted:#a9bbb6; --line:#2f444d; --teal:#256d68; --live:#c34b4d; --warn:#e3b45b; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; font:16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); display:flex; flex-direction:column; padding:12px; padding-bottom:max(12px, env(safe-area-inset-bottom)); gap:12px; }
+  header { display:flex; align-items:center; gap:10px; }
+  h1 { font-size:18px; margin:0; flex:1; min-width:0; overflow-wrap:anywhere; }
+  .state { font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:4px 8px; border-radius:6px; background:#33474f; white-space:nowrap; }
+  .state.live { background:var(--live); color:#fff; }
+  .state.wait { background:#4a4126; color:var(--warn); }
+  .frame { position:relative; flex:1; min-height:180px; background:#000; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  video { width:100%; height:100%; object-fit:contain; }
+  .frame p { position:absolute; inset:auto 12px 12px 12px; margin:0; font-size:14px; color:var(--muted); text-align:center; }
+  #msg { margin:0; font-size:14px; color:var(--muted); min-height:20px; }
+  #msg.err { color:#ff9b9d; }
+  .row { display:flex; gap:10px; }
+  label { display:flex; flex-direction:column; gap:4px; flex:1; font-size:13px; color:var(--muted); }
+  select { font:inherit; color:var(--fg); background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; }
+  .check { flex-direction:row; align-items:center; gap:8px; font-size:14px; }
+  button { font:inherit; font-weight:700; border-radius:12px; min-height:56px; border:1px solid var(--line); background:var(--card); color:var(--fg); touch-action:manipulation; }
+  button.go { background:var(--teal); border-color:var(--teal); color:#fff; font-size:18px; }
+  button:disabled { opacity:.5; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Camera</h1>
+  <span id="state" class="state">Not sending</span>
+</header>
+<div class="frame">
+  <video id="preview" autoplay muted playsinline></video>
+  <p id="turn" hidden>Turn the phone sideways for a wide picture.</p>
+</div>
+<p id="msg" role="status"></p>
+<div class="row">
+  <label>Camera
+    <select id="facing"><option value="environment">Back camera</option><option value="user">Front (selfie) camera</option></select>
+  </label>
+  <label>Quality
+    <select id="quality"><option value="720">720p, 30 fps</option><option value="1080">1080p, 30 fps</option></select>
+  </label>
+</div>
+<label class="check"><input type="checkbox" id="sound"> Also send this phone's sound (usually off: the church sound desk has the sound)</label>
+<button id="go" class="go" type="button">Start camera</button>
+<button id="stop" type="button" hidden>Stop sending</button>
+<script>
+"use strict";
+// Rhema's camera page (#209): this phone sends one camera to the camera router on the church
+// network (WHIP, through Rhema); Rhema's screens and OBS each take it from the router.
+const q = new URLSearchParams(location.search);
+const name = q.get("name") || "", key = q.get("k") || "";
+const whip = `/api/v1/camera/${encodeURIComponent(name)}/whip?k=${encodeURIComponent(key)}`;
+const $ = (id) => document.getElementById(id);
+const els = { title: $("title"), state: $("state"), preview: $("preview"), msg: $("msg"), facing: $("facing"), quality: $("quality"), sound: $("sound"), go: $("go"), stop: $("stop"), turn: $("turn") };
+const label = q.get("label") || name;
+els.title.textContent = `${label.charAt(0).toUpperCase()}${label.slice(1)} camera`;
+document.title = `${els.title.textContent} · Rhema`;
+
+let stream = null, pc = null, session = null, want = false, retry = null, wake = null, lost = null;
+
+function say(text, error) { els.msg.textContent = text; els.msg.className = error ? "err" : ""; }
+function badge(text, cls) { els.state.textContent = text; els.state.className = `state ${cls || ""}`; }
+
+// Remember this phone's choices for the next time it opens the page.
+try {
+  const saved = JSON.parse(localStorage.getItem("rhema-camera") || "{}");
+  if (saved.facing) els.facing.value = saved.facing;
+  if (saved.quality) els.quality.value = saved.quality;
+} catch {}
+function remember() { try { localStorage.setItem("rhema-camera", JSON.stringify({ facing: els.facing.value, quality: els.quality.value })); } catch {} }
+
+if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  els.go.disabled = true;
+  say("This page needs the secure link (https://…) that Rhema shows. Scan the camera's QR code in Rhema again.", true);
+}
+
+function size() { return els.quality.value === "1080" ? { width: 1920, height: 1080, bitrate: 5000000 } : { width: 1280, height: 720, bitrate: 2500000 }; }
+
+function stopTracks() { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; }
+
+async function openCamera() {
+  stopTracks();
+  const s = size();
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: els.facing.value }, width: { ideal: s.width }, height: { ideal: s.height }, frameRate: { ideal: 30, max: 30 } },
+    audio: els.sound.checked ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
+  });
+  els.preview.srcObject = stream;
+  // The camera stopped by itself (another app took it, the phone locked): take it again.
+  stream.getVideoTracks()[0].addEventListener("ended", () => { if (want) again("The camera stopped. Starting it again…", true); });
+}
+
+// H.264 first: TVs and browsers decode it in hardware, and OBS reads it without converting.
+function preferH264(transceiver) {
+  if (!transceiver.setCodecPreferences || !window.RTCRtpSender || !RTCRtpSender.getCapabilities) return;
+  const caps = RTCRtpSender.getCapabilities("video");
+  if (!caps) return;
+  const isH264 = (c) => /h264/i.test(c.mimeType);
+  const rank = (c) => (/packetization-mode=1/.test(c.sdpFmtpLine || "") ? 0 : 2) + (/profile-level-id=42e0/i.test(c.sdpFmtpLine || "") ? 0 : 1);
+  const h264 = caps.codecs.filter(isH264).sort((a, b) => rank(a) - rank(b));
+  if (!h264.length) return;
+  try { transceiver.setCodecPreferences([...h264, ...caps.codecs.filter((c) => !isH264(c))]); } catch {}
+}
+
+function gathered(p) {
+  return new Promise((done) => {
+    if (p.iceGatheringState === "complete") return done();
+    p.addEventListener("icegatheringstatechange", () => { if (p.iceGatheringState === "complete") done(); });
+    setTimeout(done, 2000);
+  });
+}
+
+function hangUp() {
+  if (session) { fetch(session, { method: "DELETE" }).catch(() => {}); session = null; }
+  if (pc) { pc.close(); pc = null; }
+  clearTimeout(lost);
+}
+
+async function publish() {
+  hangUp();
+  badge("Connecting", "wait");
+  const p = new RTCPeerConnection({ iceServers: [] });
+  pc = p;
+  const s = size();
+  const video = p.addTransceiver(stream.getVideoTracks()[0], { direction: "sendonly", streams: [stream], sendEncodings: [{ maxBitrate: s.bitrate, maxFramerate: 30 }] });
+  preferH264(video);
+  const audio = stream.getAudioTracks()[0];
+  if (audio) p.addTransceiver(audio, { direction: "sendonly", streams: [stream] });
+  p.addEventListener("connectionstatechange", () => {
+    if (p !== pc) return;
+    const st = p.connectionState;
+    if (st === "connected") { clearTimeout(lost); badge("Live", "live"); say("Sending. Rhema and OBS can show this camera now. Keep this page open."); }
+    // A short drop often heals itself; a failed connection is made again.
+    if (st === "disconnected") { badge("Reconnecting", "wait"); clearTimeout(lost); lost = setTimeout(() => { if (p === pc && p.connectionState !== "connected") again("The connection dropped. Trying again…"); }, 5000); }
+    if (st === "failed") again("The connection dropped. Trying again…");
+  });
+  await p.setLocalDescription(await p.createOffer());
+  await gathered(p);
+  const r = await fetch(whip, { method: "POST", headers: { "Content-Type": "application/sdp" }, body: p.localDescription.sdp });
+  if (p !== pc) return;
+  if (r.status === 403) { const e = new Error("This camera link is no longer valid. Scan the camera's QR code in Rhema again."); e.final = true; throw e; }
+  if (!r.ok) throw new Error((await r.text().catch(() => "")) || `The camera router answered ${r.status}.`);
+  const loc = r.headers.get("Location");
+  session = loc ? `${loc}${loc.includes("?") ? "&" : "?"}k=${encodeURIComponent(key)}` : null;
+  await p.setRemoteDescription({ type: "answer", sdp: await r.text() });
+}
+
+async function run(reopen) {
+  clearTimeout(retry); retry = null;
+  try {
+    if (reopen || !stream || stream.getVideoTracks()[0].readyState === "ended") await openCamera();
+    await publish();
+  } catch (e) {
+    if (e && (e.name === "NotAllowedError" || e.name === "SecurityError")) return stop("Rhema needs this phone's camera. Allow the camera for this page in the browser's settings, then press Start.", true);
+    if (e && e.name === "NotFoundError") return stop("This phone has no camera the browser can use.", true);
+    if (e && e.final) return stop(e.message, true);
+    again(e && e.message ? e.message : "Could not reach Rhema. Trying again…");
+  }
+}
+
+function again(text, reopen) {
+  if (!want) return;
+  hangUp();
+  badge("Reconnecting", "wait");
+  say(`${text} (trying again in a few seconds)`, true);
+  clearTimeout(retry);
+  retry = setTimeout(() => run(!!reopen), 3000);
+}
+
+async function keepAwake() {
+  try { if (want && navigator.wakeLock && document.visibilityState === "visible") wake = await navigator.wakeLock.request("screen"); } catch {}
+}
+
+function start() {
+  want = true; remember();
+  els.go.hidden = true; els.stop.hidden = false;
+  say("Starting the camera…");
+  void keepAwake();
+  void run(true);
+}
+
+function stop(text, error) {
+  want = false;
+  clearTimeout(retry); retry = null;
+  hangUp(); stopTracks();
+  els.preview.srcObject = null;
+  if (wake) { wake.release().catch(() => {}); wake = null; }
+  els.go.hidden = false; els.stop.hidden = true;
+  badge("Not sending");
+  say(text || "Stopped. Press Start camera to send again.", error);
+}
+
+els.go.addEventListener("click", start);
+els.stop.addEventListener("click", () => stop());
+// A new camera or quality while sending: take the camera again and send it.
+for (const el of [els.facing, els.quality, els.sound]) el.addEventListener("change", () => { remember(); if (want) void run(true); });
+// The screen lock is released when the page is hidden; take it again on return, and check the camera.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !want) return;
+  void keepAwake();
+  if (!pc || pc.connectionState === "failed" || !stream || stream.getVideoTracks()[0].readyState === "ended") void run(!stream || stream.getVideoTracks()[0].readyState === "ended");
+});
+window.addEventListener("pagehide", () => hangUp());
+const portrait = window.matchMedia("(orientation: portrait)");
+const turn = () => { els.turn.hidden = !portrait.matches; };
+portrait.addEventListener ? portrait.addEventListener("change", turn) : portrait.addListener(turn);
+turn();
+</script>
+</body>
+</html>

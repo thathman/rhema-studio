@@ -981,6 +981,22 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10do. Phone cameras through Rhema's camera router (#209)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10do.1 | Release-style build with the router (`scripts/fetch-mediamtx.sh x86_64-apple-darwin`, then build with `--config src-tauri/tauri.camera-router.conf.json`). Stop the hand-started MediaMTX in ~/.local/mediamtx first. Open Production → Cameras. | "Camera router" card shows Off (or On once a camera exists); no "not installed". `Rhema.app/Contents/MacOS/mediamtx` exists. | Unverified |
+| 10do.2 | Settings → Remote: HTTP listener on the network with "Secure page for phones (https)". Production → Cameras → Add a camera "Pulpit". | Router turns On by itself, showing this computer's address; the Pulpit card shows a QR code, the camera page link, the WHEP and RTSP addresses, "Waiting for the camera". | Unverified |
+| 10do.3 | On an Android phone (Chrome) on the church Wi-Fi: scan the QR, accept the certificate warning, allow the camera, Back camera, 720p, Start camera. | The page says Live; within a few seconds the card says Sending, H264. The screen stays awake. | Unverified |
+| 10do.4 | Same with an iPhone (Safari), front camera, 1080p. | Live; Sending. | Unverified |
+| 10do.5 | Card → Use in a scene… → a scene with an empty camera place; Take it on the projector. A scene on air is greyed out in the list. | The projector shows the phone's picture in the camera place; "watched by 1". | Unverified |
+| 10do.6 | OBS: Media Source, Local File off, the card's RTSP address. Cut in Rhema to another scene. | OBS shows the camera; Rhema's cut does not change OBS; "watched by 2" while both watch. | Unverified |
+| 10do.7 | A Google TV browser feed showing the camera scene. | The TV plays the camera (no sound). | Unverified |
+| 10do.8 | Turn the phone's Wi-Fi off for 20 s, then on. | The page says Reconnecting, then Live again by itself; the scene shows its background meanwhile. | Unverified |
+| 10do.9 | While the phone sends, press New link on the card. Then Remove the camera. | Within about 2 s the card stops saying Sending; the phone page soon says the link is no longer valid; after Remove the router stops (no other cameras). | Unverified |
+| 10do.12 | In Safari on this Mac open `http://127.0.0.1:9997/v3/paths/list`. | It asks for a password (or says unauthorised); nothing is listed. | Unverified |
+| 10do.10 | With the hand-started MediaMTX still running, Turn on. | The card says port 8889 is already in use; nothing crashes. | Unverified |
+| 10do.11 | Quit Rhema. | No `mediamtx` process is left running; the log (Settings → Diagnostics) shows the router's lines and no password. | Unverified |
 ### 10du. Team changes on Home (#215)
 
 | # | Step | Expected | Result |

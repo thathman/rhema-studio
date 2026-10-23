@@ -6,7 +6,8 @@
       "../sdk/ndi/linux/libndi.so": "sdk/ndi/linux/libndi.so",
       "../data/YORUBA-OYCB-LICENSE.md": "licenses/YORUBA-OYCB-LICENSE.md",
       "../LICENSE": "licenses/LICENSE.txt",
-      "../data/THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md"
+      "../data/THIRD-PARTY-NOTICES.md": "licenses/THIRD-PARTY-NOTICES.md",
+      "../data/MEDIAMTX-LICENSE.txt": "licenses/MEDIAMTX-LICENSE.txt"
     }
   }
 }

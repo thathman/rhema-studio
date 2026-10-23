@@ -87,7 +87,11 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 - Arrange: drag a layer to move it, drag its corner to resize, arrow keys to nudge (Shift for 5%). Box, crop and opacity can be typed. Layers draw bottom first; reorder them in the list.
 - **Take** puts the scene on the chosen congregation output (it saves first). Next to the scene's background, **Take** chooses how it comes on: **Cut** (as before) or a cross-fade of 0.3, 0.5 or 1 second; releasing it fades the same way. Black and Logo always cut. **Back to its own feed** returns the output to full frame; **Restore** takes the scene again. Taking a scene changes no other output (OBS feeds stay as they are), and a new verse never changes which scene is up. Black and Logo cover every screen and feed, scenes included.
 - **From Present:** the **Scenes** strip under Live (Standard view) takes saved scenes without leaving the live console. It shows what each congregation screen is arranged as now; with more than one, choose the screen first. Click a scene (its small picture shows that screen's look of it), then **Take scene**; **Own feed** goes back to the screen's own feed; **Restore** takes its last scene again. Take scene only rearranges that screen: what is live stays live, and OBS feeds and other screens do not change. In rehearsal the strip's buttons wait (hover for why); leave rehearsal to change a scene. The arrow beside **Scenes** folds the strip away. Scenes are made and edited here in Programs, not in Present.
-- Edits stay in the composer until Save or Take. Cameras are planned (#209): a camera layer keeps the camera's place and shows the background there until then.
+- Edits stay in the composer until Save or Take.
+
+## Cameras (Production → Cameras)
+
+Phones on the church Wi-Fi can be cameras: **Add a camera** (Pulpit, Choir…), scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; scenes and TVs take it with **Use in a scene…** (or its WHEP address in a Camera layer), and OBS with its RTSP address in a Media Source. Phones need the secure phone page (Settings → Remote control → "Secure page for phones (https)"). Nothing goes to the internet. Step by step, ports and security: [rhema-studio/cameras.md](rhema-studio/cameras.md).
 
 ## Operators: host and join (Production → Operators)
 

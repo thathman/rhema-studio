@@ -32,6 +32,12 @@
 |---|---|---|
 | NDI 6 SDK runtime (`Processing.NDI.Lib.x64.dll`, 29.8 MB in the Windows installer) | NewTek/Vizrt NDI SDK licence (proprietary; redistribution of the runtime library is permitted under the SDK licence with the required notice) | `data/download-ndi-sdk.ts` fetches it; loaded at runtime via `libloading`. NDI® trademark notice and SDK licence reference in Settings → Help (About) (PR about-notices); the installer's licence screen lists it (data/INSTALLER-LICENSE.txt). |
 
+### 3.1a Camera router (MediaMTX)
+
+| Component | Terms | Notes |
+|---|---|---|
+| MediaMTX v1.21.2 (`mediamtx` / `mediamtx.exe`, beside the app's own program) | MIT (© 2019 aler9) | `scripts/fetch-mediamtx.sh` fetches the pinned release and checks its SHA-256; release builds add it with `--config src-tauri/tauri.camera-router.conf.json`. Licence text ships as `licenses/MEDIAMTX-LICENSE.txt` and is listed in data/INSTALLER-LICENSE.txt (#209). |
+
 ### 3.2 Rust crates (direct dependencies, from `cargo metadata`)
 
 All permissive. `whisper-rs` is Unlicense; `aho-corasick` is Unlicense OR MIT; everything else is MIT, Apache-2.0, ISC or Zlib (dual-licensed where shown):

@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
 import { startLiveStatePublisher } from "@/lib/live-state"
 import { startBrowserFeeds } from "@/lib/browser-feeds"
+import { startCameras } from "@/lib/cameras"
 import { startLiveRecovery } from "@/lib/live-recovery"
 import { RecoveryBanner } from "@/studio/shell/recovery-banner"
 import { startVoiceHub } from "@/lib/voice"
@@ -86,6 +87,8 @@ export function AppShell() {
   useEffect(() => startLiveStatePublisher(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
   useEffect(() => startBrowserFeeds(), [])
+  // Cameras (#209): the camera page's list, and the camera router when cameras are added.
+  useEffect(() => startCameras(), [])
   // What was on the screens, for recovery after an unexpected close.
   useEffect(() => {
     let off: (() => void) | undefined

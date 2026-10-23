@@ -25,6 +25,7 @@ import type { ReadinessCheck } from "@/studio/readiness"
 import { SceneComposer } from "@/studio/production/scene-composer"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
 import { useProductionTab, type ProductionTab } from "@/studio/production/production-tab"
+import { CamerasPanel } from "@/studio/production/cameras-panel"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 
@@ -61,9 +62,9 @@ function Badge({ tone, children }: { tone: "ok" | "warn" | "live" | "off"; child
 }
 
 /**
- * Production control (approved design): the service's timing, screens and readiness in one place.
- * What is built is here; the two-program, camera and multi-operator parts are planned (issues #197,
- * #208, #209) and say so rather than offer controls that do nothing.
+ * Production control (approved design): the service's timing, screens, cameras and readiness in
+ * one place. What is not built yet (the two-program parts, #197, #208) says so rather than offer
+ * controls that do nothing.
  */
 export function ProductionWorkspace() {
   const requested = useProductionTab((s) => s.requested)
@@ -83,7 +84,7 @@ export function ProductionWorkspace() {
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Production control</h1>
             <p className="mt-1 text-xs text-muted-foreground">The service's timing, screens and readiness in one place. Nothing here takes anything live.</p>
           </div>
-          <div className="flex flex-wrap gap-2"><Badge tone="ok">This computer</Badge><Badge tone="off">Cameras: planned</Badge></div>
+          <div className="flex flex-wrap gap-2"><Badge tone="ok">This computer</Badge></div>
         </header>
         <nav role="tablist" aria-label="Production" className="flex flex-wrap gap-1 border-b border-border">
           {TABS.map(([id, label]) => (
@@ -104,7 +105,7 @@ export function ProductionWorkspace() {
           {tab === "screens" && <Screens />}
           {tab === "health" && <Health />}
           {tab === "programs" && <SceneComposer />}
-          {tab === "cameras" && <Planned title="Cameras on the church network" issue={209} text="Phone or IP cameras on the church's own network, one stream per angle, shared by OBS and Rhema without the internet. Today OBS handles the cameras; Rhema's graphics go to OBS over NDI." />}
+          {tab === "cameras" && <CamerasPanel />}
           {tab === "operators" && <OperatorsPanel />}
         </div>
       </div>
@@ -314,15 +315,6 @@ function EventClockBar() {
         <span className="text-muted-foreground">{mode === "screens" ? "Each item's event starts when it goes on air; you can also move it on here." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
       </div>
     </div>
-  )
-}
-
-function Planned({ title, issue, text }: { title: string; issue: number; text: string }) {
-  return (
-    <Card kicker="Planned" title={title} badge={<Badge tone="off">Not built yet</Badge>}>
-      <p className="max-w-3xl text-xs text-muted-foreground">{text}</p>
-      <p className="text-xs">Planned in issue #{issue}. Nothing on this tab controls anything yet.</p>
-    </Card>
   )
 }
 

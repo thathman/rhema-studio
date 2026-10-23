@@ -118,6 +118,7 @@ pub fn run() {
         .manage(Mutex::new(commands::remote::OscRuntime::new()))
         .manage(Mutex::new(commands::remote::HttpRuntime::new()))
         .manage(commands::remote::RemoteKeys::new())
+        .manage(commands::camera_router::CameraRouter::default())
         .manage(commands::content::ContentState(Mutex::new(None)))
         .manage(commands::content::ContentOpenError(Mutex::new(None)))
         .manage(commands::media::MediaState(std::sync::OnceLock::new()))
@@ -185,6 +186,10 @@ pub fn run() {
             commands::join::join_command,
             commands::join::join_voice,
             commands::cameras::whep_offer,
+            commands::camera_router::camera_router_start,
+            commands::camera_router::camera_router_stop,
+            commands::camera_router::camera_router_status,
+            commands::camera_router::cameras_set,
             commands::join::join_connect,
             commands::join::join_disconnect,
             commands::content::content_list_programs,
@@ -410,6 +415,7 @@ pub fn run() {
         // no "closed unexpectedly" offer next time.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                commands::camera_router::shutdown(app);
                 commands::app_close::clear_running(app);
             }
         });

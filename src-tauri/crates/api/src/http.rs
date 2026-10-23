@@ -38,6 +38,8 @@ pub struct HttpConfig {
     pub voice: SharedVoice,
     /// Opt-in https beside the http port, for phone pages (a phone's microphone needs a secure page).
     pub tls: Option<TlsListener>,
+    /// Phone cameras and the camera router their page publishes to (#209).
+    pub cameras: crate::cameras::SharedCameras,
 }
 
 /// The https listener: its port, this computer's certificate and the local CA that signed it.
@@ -59,6 +61,7 @@ impl Default for HttpConfig {
             feeds: new_feed_hub(),
             voice: new_voice_hub(),
             tls: None,
+            cameras: crate::cameras::new_camera_hub(),
         }
     }
 }
@@ -284,6 +287,7 @@ struct AppState<S: CommandSink> {
     live: SharedLive,
     feeds: SharedFeeds,
     voice: SharedVoice,
+    cameras: crate::cameras::SharedCameras,
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
     keys: KeySet,
@@ -340,6 +344,7 @@ where
         live: config.live.clone(),
         feeds: config.feeds.clone(),
         voice: config.voice.clone(),
+        cameras: config.cameras.clone(),
         sink,
         status,
         keys: config.keys.clone(),
@@ -362,6 +367,9 @@ where
         .route("/api/v1/feed/{id}/ack", post(feed_ack_handler::<S>))
         .route("/assets/{*path}", get(asset_handler::<S>))
         .route("/remote", get(remote_page))
+        .route("/camera", get(camera_page_handler::<S>))
+        .route("/api/v1/camera/{name}/whip", post(camera_whip_handler::<S>))
+        .route("/api/v1/camera/{name}/whip/{session}", axum::routing::patch(camera_session_handler::<S>).delete(camera_session_handler::<S>))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
         .layer(CorsLayer::permissive())
@@ -696,6 +704,71 @@ async fn asset_handler<S: CommandSink + 'static>(
         Some((bytes, mime)) => ([(axum::http::header::CONTENT_TYPE, mime), (axum::http::header::CACHE_CONTROL, "public, max-age=3600".to_string())], bytes).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+/// `GET /camera?name=<camera>&k=<secret>`: the camera page a phone opens to send its camera to the
+/// router (#209). It works only on the https port, where the browser lets a page use the camera.
+async fn camera_page_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Query(q): Query,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let (name, k) = (q.get("name").map_or("", String::as_str), q.get("k").map_or("", String::as_str));
+    if !state.cameras.knows(name, k) {
+        return (StatusCode::FORBIDDEN, "This camera link is not valid. Scan it again from Rhema: Production, Cameras.").into_response();
+    }
+    (
+        [
+            (axum::http::header::CACHE_CONTROL, "no-store"),
+            (axum::http::header::X_FRAME_OPTIONS, "DENY"),
+            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; media-src 'self' blob: mediastream:; form-action 'none'; frame-ancestors 'none'"),
+            (axum::http::header::HeaderName::from_static("permissions-policy"), "camera=(self), microphone=(self)"),
+        ],
+        axum::response::Html(include_str!("camera.html")),
+    )
+        .into_response()
+}
+
+/// The camera's secret (`?k=`) for its WHIP requests; refused without it.
+fn camera_allowed<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, name: &str, q: &std::collections::HashMap<String, String>) -> Result<(), StatusCode> {
+    if !state.rate.allow(peer.ip()) {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+    if state.cameras.knows(name, q.get("k").map_or("", String::as_str)) { Ok(()) } else { Err(StatusCode::FORBIDDEN) }
+}
+
+/// `POST /api/v1/camera/{name}/whip?k=<secret>`: the camera page's WHIP offer, passed to the router.
+async fn camera_whip_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    axum::extract::Query(q): Query,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    if let Err(code) = camera_allowed(&state, peer, &name, &q) {
+        return code.into_response();
+    }
+    state.cameras.forward(axum::http::Method::POST, &name, None, &headers, body).await
+}
+
+/// `PATCH` (more ICE candidates) and `DELETE` (hang up) on a camera's WHIP session.
+async fn camera_session_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    method: axum::http::Method,
+    axum::extract::Path((name, session)): axum::extract::Path<(String, String)>,
+    axum::extract::Query(q): Query,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    if let Err(code) = camera_allowed(&state, peer, &name, &q) {
+        return code.into_response();
+    }
+    state.cameras.forward(method, &name, Some(&session), &headers, body).await
 }
 
 #[derive(Deserialize)]
@@ -1128,6 +1201,88 @@ mod tests {
         // A new secret (the link was renewed) closes the old link.
         feeds.set(&[("l3".into(), "n3w".into())]);
         assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("403"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    /// A stand-in camera router: records each request and answers like MediaMTX's WHIP.
+    async fn fake_router() -> (u16, Arc<Mutex<Vec<String>>>) {
+        let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+        let log = seen.clone();
+        let app = Router::new().fallback(move |method: axum::http::Method, uri: axum::http::Uri, headers: HeaderMap, body: String| {
+            let log = log.clone();
+            async move {
+                let h = |n: &str| headers.get(n).and_then(|v| v.to_str().ok()).unwrap_or("-").to_string();
+                log.lock().unwrap().push(format!("{method} {} auth={} type={} if-match={} body={body}", uri.path(), h("authorization"), h("content-type"), h("if-match")));
+                if method == axum::http::Method::POST {
+                    (StatusCode::CREATED, [("content-type", "application/sdp"), ("location", "/pulpit/whip/5e55-10n"), ("etag", "\"x1\""), ("www-authenticate", "Basic realm=\"mediamtx\"")], "v=0 answer".to_string()).into_response()
+                } else {
+                    StatusCode::NO_CONTENT.into_response()
+                }
+            }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (port, seen)
+    }
+
+    #[tokio::test]
+    async fn a_camera_page_publishes_through_rhema_with_its_secret_only() {
+        let cameras = crate::cameras::new_camera_hub();
+        cameras.set(&[("pulpit".into(), "0123456789abcdef".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), cameras: cameras.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |method: &'static str, path: &'static str, body: &'static str, extra: &'static str| async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: x\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            let mut out = String::new();
+            s.read_to_string(&mut out).await.unwrap();
+            out
+        };
+
+        // The page itself: only with the camera's secret.
+        assert!(send("GET", "/camera?name=pulpit&k=0123456789abcdef", "", "").await.contains("200 OK"));
+        assert!(send("GET", "/camera?name=pulpit&k=wrong", "", "").await.contains("403"));
+        assert!(send("GET", "/camera?name=choir&k=0123456789abcdef", "", "").await.contains("403"));
+
+        // Router off: the page hears so.
+        let off = send("POST", "/api/v1/camera/pulpit/whip?k=0123456789abcdef", "v=0 offer", "Content-Type: application/sdp\r\n").await;
+        assert!(off.contains("503"), "{off}");
+
+        let (router, seen) = fake_router().await;
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}") }));
+        // Without the secret nothing reaches the router.
+        assert!(send("POST", "/api/v1/camera/pulpit/whip", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
+        assert!(send("POST", "/api/v1/camera/pulpit/whip?k=wrong", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
+        assert!(send("DELETE", "/api/v1/camera/pulpit/whip/5e55-10n?k=wrong", "", "").await.contains("403"));
+        assert!(seen.lock().unwrap().is_empty());
+
+        // The offer goes on with Rhema's sign-in; the answer and the session address come back.
+        let ok = send("POST", "/api/v1/camera/pulpit/whip?k=0123456789abcdef", "v=0 offer", "Content-Type: application/sdp\r\n").await;
+        assert!(ok.contains("201 Created") && ok.contains("v=0 answer"), "{ok}");
+        assert!(ok.to_ascii_lowercase().contains("location: /api/v1/camera/pulpit/whip/5e55-10n"), "{ok}");
+        assert!(ok.to_ascii_lowercase().contains("etag: \"x1\""), "{ok}");
+        assert!(!ok.to_ascii_lowercase().contains("www-authenticate"), "the phone is never asked to sign in: {ok}");
+        let patch = send("PATCH", "/api/v1/camera/pulpit/whip/5e55-10n?k=0123456789abcdef", "a=candidate:1", "Content-Type: application/trickle-ice-sdpfrag\r\nIf-Match: \"x1\"\r\n").await;
+        assert!(patch.contains("204"), "{patch}");
+        assert!(send("DELETE", "/api/v1/camera/pulpit/whip/5e55-10n?k=0123456789abcdef", "", "").await.contains("204"));
+        assert!(send("DELETE", "/api/v1/camera/pulpit/whip/bad%2Fid?k=0123456789abcdef", "", "").await.contains("404"));
+
+        let seen = seen.lock().unwrap().clone();
+        let basic = "Basic Y2FtLXB1bHBpdDowMTIzNDU2Nzg5YWJjZGVm"; // cam-pulpit:<its secret>: each camera signs in as itself
+        assert_eq!(seen, vec![
+            format!("POST /pulpit/whip auth={basic} type=application/sdp if-match=- body=v=0 offer"),
+            format!("PATCH /pulpit/whip/5e55-10n auth={basic} type=application/trickle-ice-sdpfrag if-match=\"x1\" body=a=candidate:1"),
+            format!("DELETE /pulpit/whip/5e55-10n auth={basic} type=- if-match=- body="),
+        ]);
+
+        // A removed camera's link stops at once.
+        cameras.set(&[]);
+        assert!(send("POST", "/api/v1/camera/pulpit/whip?k=0123456789abcdef", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
         let mut h = result.handle;
         h.stop();
     }

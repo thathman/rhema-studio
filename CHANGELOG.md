@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Phone cameras through Rhema's own camera router (#209)
+- Production → Cameras: add a camera (Pulpit, Choir…), scan its QR code with a phone on the church Wi-Fi, allow the camera and press Start camera; no app to buy and nothing on the internet.
+- The camera router (MediaMTX) comes inside Rhema, starts by itself while cameras are added and stops with Rhema; each camera is sent once and shared by Rhema's scenes and TVs (WHEP) and OBS (RTSP).
+- "Use in a scene…" puts a camera into a scene; each card shows the OBS address, how many screens watch it, and addresses for free camera apps (RTMP/SRT).
+- Each camera sends as itself, to its own name only; New link or removing a camera disconnects whoever still sends with the old link. Watching is open on the church network for now; only Rhema can reach the router's controls.
 ### Team changes on Home; design docs match the studio (#215)
 - Home has a small **Team changes** card for the open service (or today's): the latest comments others left on items (unread ones marked **New**), who saved it last and who approved it, with times.
 - Click a comment to open Prepare on that item; click a save or approval to open Prepare with the service's **History**. When nothing has happened, the card does not appear.
