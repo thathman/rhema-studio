@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-002: scene transitions
+
+- **Branch / PR:** `arch-002/scene-fade`.
+- **Behaviour:** `Scene.fadeMs` (0–3000; absent: cut) in `SceneFrame.fadeMs`; composer "Take: Cut / Fade 0.3 / 0.5 / 1 s". Output windows and the feed page snapshot the previous picture and cross-fade when the scene up changes (Take, release, another scene); Black / Logo always cut; a fade is motion (NDI pacer); a timer ends the fade when no animation frames come (covered or locked window).
+- **Tests:** `scene-contracts.test.ts` (fade kept and clamped, in the frame, none for a cut); vitest green. Desktop: acceptance 10cz.1. Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — Browser feed health (#246 item 9, receiver trust)
 
 - **Branch / PR:** `arch-002/feed-health`.

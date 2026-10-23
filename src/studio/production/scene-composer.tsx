@@ -82,6 +82,15 @@ export function SceneComposer() {
                 <label className="flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
                   <input type="checkbox" checked={draft.background === "transparent"} onChange={(e) => edit({ background: e.target.checked ? "transparent" : "#000000" })} /> Transparent
                 </label>
+                <label className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+                  Take
+                  <select aria-label="How the scene comes on air" value={draft.fadeMs ?? 0} onChange={(e) => { const ms = Number(e.target.value); edit({ fadeMs: ms > 0 ? ms : undefined }) }} className="h-7 rounded-md border border-input bg-card px-1">
+                    <option value={0}>Cut</option>
+                    <option value={300}>Fade 0.3 s</option>
+                    <option value={500}>Fade 0.5 s</option>
+                    <option value={1000}>Fade 1 s</option>
+                  </select>
+                </label>
                 <Button size="sm" variant="outline" onClick={() => open(copyScene(draft, `${draft.name} copy`))}><CopyIcon /> Duplicate</Button>
                 {saved && <ConfirmDelete label={`Delete ${draft.name}`} onConfirm={() => { useBroadcastStore.getState().deleteScene(draft.id); open(null) }} />}
               </div>

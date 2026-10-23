@@ -136,4 +136,16 @@ describe("congregation scenes (ARCH-002)", () => {
     expect(emitTo.mock.calls.filter((c) => c[0] === "broadcast-main").length).toBe(emitTo.mock.calls.slice(0, n).filter((c) => c[0] === "broadcast-main").length)
     useTimerStore.getState().reset()
   })
+
+  it("a scene's fade is kept (0–3 s) and travels in its frame; a cut sends none", () => {
+    const scene = newScene("Fade in", SCENE_PRESETS[0])
+    expect(normalizeScene({ ...scene, fadeMs: 500 })!.fadeMs).toBe(500)
+    expect(normalizeScene({ ...scene, fadeMs: 99_000 })!.fadeMs).toBe(3000)
+    expect(normalizeScene({ ...scene, fadeMs: "x" })!.fadeMs).toBeUndefined()
+    useBroadcastStore.getState().saveScene({ ...scene, fadeMs: 500 })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    expect(sent("broadcast-main")!.scene!.fadeMs).toBe(500)
+    useBroadcastStore.getState().saveScene({ ...scene, fadeMs: undefined })
+    expect(sent("broadcast-main")!.scene!.fadeMs).toBeUndefined()
+  })
 })

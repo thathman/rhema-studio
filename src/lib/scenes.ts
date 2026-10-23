@@ -85,7 +85,7 @@ export function normalizeScene(raw: unknown): Scene | null {
     const shows = Array.isArray(l.shows) ? l.shows.filter((k): k is ContentType => (CONTENT_TYPES as readonly string[]).includes(k)) : undefined
     return [{ ...l, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
-  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) }
+  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) }
 }
 
 interface LiveState {
@@ -128,6 +128,7 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
   return {
     sceneId: scene.id,
     background: scene.background,
+    ...(scene.fadeMs ? { fadeMs: scene.fadeMs } : {}),
     layers: scene.layers.filter((l) => l.visible).map((l) => {
       const base = { id: l.id, kind: l.kind, box: l.box, crop: l.crop, opacity: l.opacity }
       if (l.kind === "feed") return { ...base, ...layerContent(s, output, l) }

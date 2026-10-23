@@ -41,6 +41,13 @@ let tickerPlayer: VideoPlayer | null = null
 let tickerRunning = false
 // The frame rate the Rust pacer drives this window at (0 = off); see set_output_pace.
 let paceFps = 0
+// Scene transitions (ARCH-002): the picture before a scene change, faded out over the new one.
+let fadeFrom: HTMLCanvasElement | null = null
+let fadeStart = 0
+let fadeMs = 0
+/** What was up: a scene's id, "own" (the output's own feed) or "screen" (Black / Logo); null before the first frame. */
+let lastSceneKey: string | null = null
+let lastSceneFade = 0
 const playing = (p: VideoPlayer | null) => {
   const el = p?.element()
   return !!el && !el.paused && !el.ended
@@ -171,6 +178,16 @@ function BroadcastCanvas() {
           progress: entranceProgress(data.overlay, Date.now()),
           reserveBottom: tickerReserve(data.ticker, height),
         })
+      }
+      // A scene change fading: the old picture over the new one, going.
+      if (fadeFrom) {
+        const p = fadeMs > 0 ? (performance.now() - fadeStart) / fadeMs : 1
+        if (p >= 1) fadeFrom = null
+        else {
+          fctx.globalAlpha = 1 - p
+          fctx.drawImage(fadeFrom, 0, 0, width, height)
+          fctx.globalAlpha = 1
+        }
       }
       if (data.ticker && verse?.screen !== "black") {
         if (baseCanvas.width !== width || baseCanvas.height !== height) {
@@ -363,7 +380,7 @@ function BroadcastCanvas() {
     const motion = (): "ticker" | "full" | null => {
       const d = latestData.current
       if (!d || stageRef.current) return null
-      if ((d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
+      if (fadeFrom || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
       return d.ticker && !d.ticker.pausedAt ? "ticker" : null
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
@@ -405,6 +422,12 @@ function BroadcastCanvas() {
       const ov = latestData.current?.overlay
       if (ov && entranceProgress(ov, Date.now()) < 1) requestAnimationFrame(animateOverlay)
     }
+    // A scene fade on a screen; over NDI the pacer draws it.
+    const animateFade = () => {
+      if (ndiConfigRef.current.active) return
+      draw()
+      if (fadeFrom) requestAnimationFrame(animateFade)
+    }
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
       if (event.payload.role === "stage") {
         videoPlayer?.sync(undefined)
@@ -416,6 +439,23 @@ function BroadcastCanvas() {
       }
       stageRef.current = null
       setStage(null)
+      // A Take or release fades when the scene says so; Black and Logo always cut.
+      const sceneKey = event.payload.scene?.sceneId ?? (event.payload.verse?.screen ? "screen" : "own")
+      if (lastSceneKey !== null && sceneKey !== lastSceneKey && sceneKey !== "screen" && lastSceneKey !== "screen") {
+        const ms = event.payload.scene?.fadeMs ?? lastSceneFade
+        const canvas = canvasRef.current
+        if (ms > 0 && canvas && canvas.width > 0) {
+          const snap = document.createElement("canvas")
+          snap.width = canvas.width
+          snap.height = canvas.height
+          snap.getContext("2d")?.drawImage(canvas, 0, 0)
+          fadeFrom = snap
+          fadeStart = performance.now()
+          fadeMs = ms
+        }
+      } else if (sceneKey === "screen") fadeFrom = null
+      lastSceneKey = sceneKey
+      lastSceneFade = event.payload.scene?.fadeMs ?? 0
       latestData.current = {
         ...event.payload,
         theme: normalizeTheme(event.payload.theme),
@@ -429,6 +469,12 @@ function BroadcastCanvas() {
       backingPlayer?.sync(ov?.backing?.kind === "video" ? { url: ov.backing.url, fit: "cover", loop: true, sound: false, name: "lower third", token: 0 } : undefined)
       if (ov?.backing?.kind === "picture") void loadThemeImage(ov.backing.url).then(() => { draw(); pushNdiBurstRef.current?.() })
       if (ov && entranceProgress(ov, Date.now()) < 1) animateOverlay()
+      if (fadeFrom) {
+        animateFade()
+        // A covered or locked window gets no animation frames: still end on the new picture.
+        const ends = fadeStart + fadeMs
+        setTimeout(() => { if (fadeFrom && performance.now() >= ends) { fadeFrom = null; draw(); pushNdiBurstRef.current?.() } }, fadeMs + 50)
+      }
       const tk = event.payload.ticker
       tickerVideo.sync(tk?.backing?.kind === "video" ? { url: tk.backing.url, fit: "cover", loop: true, sound: false, name: "ticker", token: 0 } : undefined)
       if (tk?.backing?.kind === "picture") void loadThemeImage(tk.backing.url)
