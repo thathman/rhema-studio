@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Cameras in scenes (OP-009, #209)
+
+- **Branch / PR:** `op-009/whep-cameras`. `SceneLayer.cameraUrl` (WHEP), `src/lib/whep.ts` (`WhepPlayer`, `syncCameras`: receive-only, muted, retry every 4 s), drawn by `drawScene` (cover, crop); output windows signal through `whep_offer` (Rust, church-network addresses only: the windows' CSP keeps them from other hosts); browser feed pages fetch the WHEP address directly; a playing camera is drawn by the frame pacer at 30 fps on screens too.
+- **Found on the desktop and fixed:** camera decoded but never drawn (animation-frame loop in a locked window; first frame not reported).
+- **Tests:** Rust `cameras` (address check); `whep-cameras.test.ts` (fields, frame, player bookkeeping). Desktop: acceptance 10dc (stand-in WHEP camera). Screenshots in local `qa-screenshots/cameras/`. Real data 6/6, WebKit restored.
+- **Still needs the owner:** MediaMTX and real phone cameras (#209), OBS and a Google TV.
+
 ## 2026-10-23 — Secure phone page (https) with a local CA (#251)
 
 - **Branch / PR:** `comms-004/https-phones`. `rhema-api` `tls` (rcgen: local CA, 397-day server certificate, rustls config) and an https listener on the HTTP port + 1 (tokio-rustls + hyper-util, same router, peer address kept); `/rhema-ca.pem`; app `phone_tls` (CA in app data `tls/`, key 0600), `start_http(https)`, `tls_port` in status; Settings checkbox (off by default), pairing QR uses https when on.

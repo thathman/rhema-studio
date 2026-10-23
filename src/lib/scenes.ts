@@ -44,7 +44,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
     newLayer("picture", { name: "Picture" }),
     newLayer("feed", { name: "Lyrics", shows: ["song", "hymn"], box: { x: 0, y: 66, w: 100, h: 34 } }),
   ] },
-  { id: "camera-bible", name: "Camera with the Bible", description: "A camera full screen, the verse along the bottom (cameras: planned)", layers: () => [
+  { id: "camera-bible", name: "Camera with the Bible", description: "A camera full screen, the verse along the bottom", layers: () => [
     newLayer("camera", { name: "Pulpit camera" }),
     newLayer("feed", { name: "Bible", shows: ["bible"], box: { x: 0, y: 70, w: 100, h: 30 } }),
   ] },
@@ -85,7 +85,8 @@ export function normalizeScene(raw: unknown): Scene | null {
     const shows = Array.isArray(l.shows) ? l.shows.filter((k): k is ContentType => (CONTENT_TYPES as readonly string[]).includes(k)) : undefined
     const clockShows = l.clockShows === "time" || l.clockShows === "until" ? l.clockShows : undefined
     const until = typeof l.until === "string" && /^\d{1,2}:\d{2}$/.test(l.until) ? l.until : undefined
-    return [{ ...l, clockShows, until, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    const cameraUrl = typeof l.cameraUrl === "string" && /^https?:\/\//.test(l.cameraUrl.trim()) ? l.cameraUrl.trim().slice(0, 300) : undefined
+    return [{ ...l, clockShows, until, cameraUrl, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) }
 }
@@ -157,7 +158,8 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
         const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : (s.clock ?? null)
         return { ...base, theme, clock, ...(preview && !clock ? { label: l.clockShows === "until" ? `${l.name} · choose the time to count down to` : `${l.name} · set the service timer in Present` } : {}) }
       }
-      return { ...base, ...(preview ? { label: `${l.name} · cameras are planned (#209)` } : {}) }
+      // A camera: its stream, played by each output from the church network.
+      return { ...base, ...(l.cameraUrl ? { cameraUrl: l.cameraUrl } : {}), ...(preview ? { label: l.cameraUrl ? `${l.name} · camera` : `${l.name} · add its stream address` } : {}) }
     }),
   }
 }

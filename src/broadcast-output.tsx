@@ -10,6 +10,7 @@ import { useRef, useEffect, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { onThemeFontsLoaded, renderVerse, drawLowerThird } from "@/lib/verse-renderer"
+import { syncCameras, WhepPlayer } from "@/lib/whep"
 import { paintFrame } from "@/lib/output-paint"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -41,6 +42,9 @@ let tickerPlayer: VideoPlayer | null = null
 let tickerRunning = false
 // The frame rate the Rust pacer drives this window at (0 = off); see set_output_pace.
 let paceFps = 0
+/** Cameras on the church network in the scene up (OP-009): one WHEP player per camera layer. */
+const cameras = new Map<string, WhepPlayer>()
+const cameraPlaying = () => [...cameras.values()].some((p) => p.ready)
 // Scene transitions (ARCH-002): the picture before a scene change, faded out over the new one.
 let fadeFrom: HTMLCanvasElement | null = null
 let fadeStart = 0
@@ -154,6 +158,7 @@ function BroadcastCanvas() {
         ? (drawScene(fctx, width, height, scene, {
             imageCache: themeImageCache(),
             layerCanvas: sceneLayerCanvas,
+            camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
             image: (url) => {
               const img = themeImageCache().get(url)
               if (!img) void loadThemeImage(url).then(() => { redrawRef.current?.(); pushNdiBurstRef.current?.() })
@@ -380,7 +385,7 @@ function BroadcastCanvas() {
     const motion = (): "ticker" | "full" | null => {
       const d = latestData.current
       if (!d || stageRef.current) return null
-      if (fadeFrom || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
+      if (fadeFrom || cameraPlaying() || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
       return d.ticker && !d.ticker.pausedAt ? "ticker" : null
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
@@ -389,7 +394,9 @@ function BroadcastCanvas() {
     // timers are held back for many seconds).
     const clockRunning = () => !stageRef.current && !!latestData.current?.scene?.layers.some((l) => l.kind === "clock" && l.clock && l.clock.mode !== "still")
     const syncPace = () => {
-      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : clockRunning() ? 1 : 0
+      // A camera moves with every frame: the pacer draws it on screens too (a covered or locked
+      // window gets no animation frames). A running clock needs one a second.
+      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() ? 30 : clockRunning() ? 1 : 0
       if (fps === paceFps) return
       paceFps = fps
       void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})
@@ -421,6 +428,10 @@ function BroadcastCanvas() {
       draw()
       const ov = latestData.current?.overlay
       if (ov && entranceProgress(ov, Date.now()) < 1) requestAnimationFrame(animateOverlay)
+    }
+    const camerasChanged = () => {
+      draw()
+      syncPace()
     }
     // A scene fade on a screen; over NDI the pacer draws it.
     const animateFade = () => {
@@ -462,6 +473,8 @@ function BroadcastCanvas() {
         ...(event.payload.scene ? { scene: { ...event.payload.scene, layers: event.payload.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } } : {}),
       }
       for (const l of latestData.current.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, () => { draw(); pushNdiBurstRef.current?.() })
+      // The scene's cameras: start new ones, stop the ones it no longer has.
+      syncCameras(cameras, latestData.current.scene?.layers ?? [], (url, sdp) => invoke<string>("whep_offer", { url, sdp }), camerasChanged)
       // A new screen clears the operator's warning, so a failure to draw it must be reported again.
       frameFailing = false
       videoPlayer?.sync(event.payload.verse?.video)
@@ -559,6 +572,8 @@ function BroadcastCanvas() {
       paceFps = 0
       unlistenPace.then((fn) => fn())
       unsubscribeFonts()
+      for (const p of cameras.values()) p.close()
+      cameras.clear()
       unlisten.then((fn) => fn())
       unlistenNdiConfig.then((fn) => fn())
     }
