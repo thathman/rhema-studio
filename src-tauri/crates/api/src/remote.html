@@ -32,6 +32,17 @@
   .src span i { font-style:normal; color:var(--muted); }
   .src.off span { opacity:.6; }
   .src button { min-height:44px; padding:0 14px; font-size:14px; }
+  h2 { font-size:15px; margin:20px 0 8px; }
+  .notice { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+  .notice.urgent { border-color:var(--live); }
+  .notice small { display:block; color:var(--muted); font-size:12px; }
+  .notice p { color:var(--fg); margin:4px 0 0; font-size:15px; overflow-wrap:anywhere; }
+  .answers { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .answers button { min-height:44px; padding:0 14px; font-size:14px; }
+  .answers button.on { border-color:var(--fg); }
+  #noticeForm { display:flex; gap:8px; margin-bottom:12px; }
+  #noticeForm input { flex:1; min-width:0; }
+  #noticeForm button { min-height:48px; padding:0 16px; }
   .forget { background:none; border:none; min-height:44px; color:var(--muted); font-weight:400; width:100%; margin-top:16px; }
 </style>
 </head>
@@ -57,6 +68,9 @@
       <button data-cmd="show">Back on air</button>
       <button class="big clear" data-cmd="hide">Clear screen</button>
     </div>
+    <h2>Notices</h2>
+    <form id="noticeForm"><input id="noticeText" maxlength="280" placeholder="Message to the main desk" aria-label="Message to the main desk"><button type="submit">Send</button></form>
+    <div id="notices" aria-live="polite"></div>
     <button class="forget" id="forget" type="button">Unpair this phone</button>
   </section>
   <div id="msg" role="status"></div>
@@ -143,6 +157,7 @@
     const box = $("sources")
     const r = await fetch("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
     const live = r && r.status === 200 ? await r.json().catch(() => null) : null
+    notices(live)
     box.replaceChildren()
     for (const s of (live && live.sources) || []) {
       const row = document.createElement("div")
@@ -159,6 +174,56 @@
       box.append(row)
     }
   }
+  // Production notices (Rhema Comms): those for this phone's role, everyone's, and its own; answer
+  // Seen / Ready / Unable. Private: never on a screen.
+  let me = null
+  const ANSWERS = { seen: "Seen", ready: "Ready", unable: "Unable" }
+  const isFor = (n, role) => n.to === "all" || n.to === role || (role === "configure" && n.to === "present")
+  async function notices(live) {
+    if (!me) {
+      const r = await fetch("/api/v1/me", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
+      me = r && r.ok ? await r.json().catch(() => null) : null
+    }
+    const box = $("notices")
+    box.replaceChildren()
+    if (!me || !live) return
+    for (const n of (live.notices || []).filter((n) => isFor(n, me.role) || n.from === me.name).slice(0, 20)) {
+      const card = document.createElement("div")
+      card.className = "notice" + (n.priority === "urgent" ? " urgent" : "")
+      const head = document.createElement("small")
+      head.textContent = (n.priority === "urgent" ? "URGENT · " : "") + n.from + " · " + new Date(n.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + (n.event ? " · " + n.event.title : "")
+      const text = document.createElement("p")
+      text.textContent = n.text
+      card.append(head, text)
+      if (n.answers.length) {
+        const a = document.createElement("small")
+        a.textContent = n.answers.map((x) => x.by + ": " + (ANSWERS[x.state] || x.state)).join(" · ")
+        card.append(a)
+      }
+      if (n.from !== me.name) {
+        const mine = n.answers.find((x) => x.by === me.name)
+        const row = document.createElement("div")
+        row.className = "answers"
+        for (const state of ["seen", "ready", "unable"]) {
+          const b = document.createElement("button")
+          b.type = "button"
+          b.textContent = ANSWERS[state]
+          if (mine && mine.state === state) b.className = "on"
+          b.addEventListener("click", () => send("notice_ack", b, { id: n.id, state }))
+          row.append(b)
+        }
+        card.append(row)
+      }
+      box.append(card)
+    }
+  }
+  $("noticeForm").addEventListener("submit", async (e) => {
+    e.preventDefault()
+    const text = $("noticeText").value.trim()
+    if (!text) return
+    await send("notice_send", e.submitter || $("noticeForm").querySelector("button"), { text, to: "host" })
+    $("noticeText").value = ""
+  })
   document.addEventListener("visibilitychange", poll)
   show(); poll()
 })()

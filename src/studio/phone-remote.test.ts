@@ -8,11 +8,15 @@ describe("phone remote: live sources", () => {
     const store = new Map([["rhema-remote-token", "phone-key"]])
     vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) })
     const sent: { url: string; body?: unknown; auth?: string }[] = []
-    const live = { v: 1, sources: [{ id: "bible", reference: "Romans 8:28 (KJV)", on: true, revision: 2 }, { id: "hymn", reference: "Amazing Grace · Verse 1", on: false, revision: 1 }] }
+    const live = { v: 1, notices: [
+      { id: "n1", from: "Main desk", to: "all", priority: "urgent", text: "Five minutes over", at: 0, answers: [] },
+      { id: "n2", from: "Main desk", to: "bible", priority: "normal", text: "Not for phones", at: 0, answers: [] },
+    ], sources: [{ id: "bible", reference: "Romans 8:28 (KJV)", on: true, revision: 2 }, { id: "hymn", reference: "Amazing Grace · Verse 1", on: false, revision: 1 }] }
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       sent.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined, auth: (init?.headers as Record<string, string> | undefined)?.Authorization })
       if (url === "/api/v1/status") return new Response(JSON.stringify({ on_air: true, live_verse: "Amazing Grace · Verse 1" }))
       if (url === "/api/v1/live") return new Response(JSON.stringify(live))
+      if (url === "/api/v1/me") return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
       return new Response(JSON.stringify({ success: true }))
     }))
     document.body.innerHTML = page.slice(page.indexOf("<body>") + 6, page.indexOf("<script>"))
@@ -27,6 +31,17 @@ describe("phone remote: live sources", () => {
     ;(document.querySelectorAll("#sources .src button")[1] as HTMLButtonElement).click()
     await vi.waitFor(() => expect(sent.filter((s) => s.url === "/api/v1/command")).toHaveLength(2))
     expect(sent.filter((s) => s.url === "/api/v1/command")[1].body).toMatchObject({ command: "restore_source", value: "hymn" })
+    // Notices for this phone's role: answered with its key; one written goes to the main desk.
+    await vi.waitFor(() => expect(document.querySelectorAll("#notices .notice")).toHaveLength(1))
+    expect(document.querySelector("#notices .notice")!.textContent).toContain("Five minutes over")
+    const ready = [...document.querySelectorAll("#notices button")].find((b) => b.textContent === "Ready") as HTMLButtonElement
+    ready.click()
+    await vi.waitFor(() => expect(sent.filter((s) => s.url === "/api/v1/command")).toHaveLength(3))
+    expect(sent.filter((s) => s.url === "/api/v1/command")[2].body).toMatchObject({ command: "notice_ack", value: { id: "n1", state: "ready" } })
+    ;(document.getElementById("noticeText") as HTMLInputElement).value = "Doors are open"
+    ;(document.getElementById("noticeForm") as HTMLFormElement).requestSubmit()
+    await vi.waitFor(() => expect(sent.filter((s) => s.url === "/api/v1/command")).toHaveLength(4))
+    expect(sent.filter((s) => s.url === "/api/v1/command")[3].body).toMatchObject({ command: "notice_send", value: { text: "Doors are open", to: "host" } })
     vi.unstubAllGlobals()
   })
 })
