@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — The run of show as a table (#196 Prepare columns)
+
+- **Main checked:** 0a68c8a (PRs #288, #290–#296 merged after desktop QA; real data unchanged, WebKit restored).
+- **Branch / PR:** `pt-011/cuesheet`. `cuesheet.ts`: rows from the timing engine's events (plan, actual, expected, offset = actual or expected start − planned start) with a total line per group; `cuesheet-dialog.tsx` from Prepare → Timing → Table, the time typed in place with `DurationInput`.
+- **Tests:** `cuesheet.test.ts` (groups, offsets done / on now / to come, hard stop); `timing-panel.test.tsx` renders the table. Desktop: acceptance 10dg.
+- **Next:** Google TV receiver (#198 Phase B) now that the owner gave a test device.
+
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.

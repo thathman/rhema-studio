@@ -10,6 +10,8 @@ import type { EventTiming } from "@/lib/timing-engine"
 import { mmss } from "@/lib/journal"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { cn } from "@/lib/utils"
+import { useState } from "react"
+import { CuesheetDialog } from "@/studio/prepare/cuesheet-dialog"
 
 function Clock({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
@@ -50,11 +52,16 @@ export function TimingPanel() {
   const plan = planTimeline(items, headers)
   const expected = new Map(timing?.events.map((e) => [e.index, e]) ?? [])
   const lateMinutes = timing ? Math.round(timing.lateMs / 60_000) : 0
+  const [table, setTable] = useState(false)
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel">
-      <div className="border-b border-border px-4 py-3">
-        <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Run of show</p>
-        <h2 className="text-sm font-semibold">Timing{total ? ` · ${total} planned` : ""}</h2>
+      <div className="flex items-end justify-between gap-2 border-b border-border px-4 py-3">
+        <div>
+          <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Run of show</p>
+          <h2 className="text-sm font-semibold">Timing{total ? ` · ${total} planned` : ""}</h2>
+        </div>
+        {plan && <Button size="xs" variant="outline" onClick={() => setTable(true)}>Table</Button>}
+        <CuesheetDialog open={table} onOpenChange={setTable} />
       </div>
       {!main ? (
         <p className="p-4 text-xs text-muted-foreground">Organise the service into phases (under the order of service) to plan its times: when the warm-up begins, when each item starts, when it ends.</p>
