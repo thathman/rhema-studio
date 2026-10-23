@@ -469,7 +469,12 @@ function BroadcastCanvas() {
       backingPlayer?.sync(ov?.backing?.kind === "video" ? { url: ov.backing.url, fit: "cover", loop: true, sound: false, name: "lower third", token: 0 } : undefined)
       if (ov?.backing?.kind === "picture") void loadThemeImage(ov.backing.url).then(() => { draw(); pushNdiBurstRef.current?.() })
       if (ov && entranceProgress(ov, Date.now()) < 1) animateOverlay()
-      if (fadeFrom) animateFade()
+      if (fadeFrom) {
+        animateFade()
+        // A covered or locked window gets no animation frames: still end on the new picture.
+        const ends = fadeStart + fadeMs
+        setTimeout(() => { if (fadeFrom && performance.now() >= ends) { fadeFrom = null; draw(); pushNdiBurstRef.current?.() } }, fadeMs + 50)
+      }
       const tk = event.payload.ticker
       tickerVideo.sync(tk?.backing?.kind === "video" ? { url: tk.backing.url, fit: "cover", loop: true, sound: false, name: "ticker", token: 0 } : undefined)
       if (tk?.backing?.kind === "picture") void loadThemeImage(tk.backing.url)

@@ -109,6 +109,8 @@ function show(next: Frame) {
     from.height = canvas.height
     from.getContext("2d")?.drawImage(canvas, 0, 0)
     fade = { from, start: performance.now(), ms }
+    // A hidden page gets no animation frames: still end on the new picture.
+    setTimeout(() => { if (fade && performance.now() >= fade.start + fade.ms) { fade = null; draw() } }, ms + 50)
   } else if (key === "screen" || key === "off") fade = null
   lastKey = key
   lastFade = next.scene?.fadeMs ?? 0
