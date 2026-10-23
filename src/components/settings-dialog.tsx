@@ -862,10 +862,12 @@ function RemoteControlSection() {
                 <select
                   aria-label={`What ${d.name} may do`}
                   value={d.role ?? "configure"}
-                  onChange={(e) => setRemoteDeviceRole(d.hash, e.target.value === "present" || e.target.value === "timekeeper" ? e.target.value : "configure")}
+                  onChange={(e) => setRemoteDeviceRole(d.hash, (["present", "timekeeper", "bible", "screens"] as const).find((r) => r === e.target.value) ?? "configure")}
                   className="h-6 rounded border border-border bg-background px-1 text-[0.6875rem]"
                 >
                   <option value="timekeeper">Timekeeper (the event clock only)</option>
+                  <option value="bible">Bible (activates and steps the Bible only)</option>
+                  <option value="screens">Screens (congregation scenes only)</option>
                   <option value="present">Present only</option>
                   <option value="configure">Present and change settings</option>
                 </select>

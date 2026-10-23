@@ -21,7 +21,7 @@ interface JoinState {
   connect: () => Promise<void>
   leave: (forget?: boolean) => Promise<void>
   /** A host command (the event clock, …): refused by the host if the role does not allow it. */
-  send: (command: { command: string; value?: string }) => Promise<void>
+  send: (command: { command: string; value?: string | Record<string, string> }) => Promise<void>
 }
 
 let listening = false

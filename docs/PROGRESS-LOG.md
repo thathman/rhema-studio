@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-004 slice 2: Bible and Screens operators
+
+- **Branch / PR:** `arch-004/operator-roles` (stacked on #260).
+- **Behaviour:** commands `bible_activate`, `clear_source`, `restore_source`, `take_scene {output, scene}`, `release_scene` (HTTP, OSC, dispatch, pinned names); roles `bible` and `screens` with their own refusal messages; `src/lib/bible-activate.ts` (`bibleScope` shared with Auto, `activateBibleReference` via the host's own reference parser); Live State v1 gains scenes and congregation outputs; joined desks by role (clock / Bible / scenes; Present gets all).
+- **Tests:** rhema-api 129; `src/studio/operator-roles.test.tsx` (Bible rule, desks per role); full vitest 713; app crate check clean.
+- **Next:** MCP-001 read-only server (#252), then Comms notices (#251) on the Host/Join channel.
+
 ## 2026-10-23 — ARCH-004 slice 1: host and join
 
 - **Main checked:** `00e3e8c` (#256, #257, #258, #259 merged after CI and review; #256's own Rust job was held up by the package mirror, its code passed in full on #257).

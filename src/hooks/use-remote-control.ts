@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
 import { useEventClock } from "@/stores/event-clock-store"
+import { activateBibleReference } from "@/lib/bible-activate"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
@@ -70,6 +71,29 @@ export function useRemoteControl() {
           useEventClock.getState().start(id)
         }),
       )
+      // Delegated operators (Host/Join): the Bible source, any source's take-off, congregation scenes.
+      const withPayload = async (event: string, handler: (p: Record<string, unknown>) => void) => {
+        keep(
+          await listen<string>(event, (e) => {
+            if (cancelled) return
+            const p = parsePayload(e.payload)
+            if (!p) return
+            noteRemote(`${event} ${Object.values(p).filter((v) => typeof v === "string").join(" ")}`)
+            handler(p)
+          }),
+        )
+      }
+      const SOURCES = ["bible", "song", "hymn", "slide", "picture"] as const
+      const asSource = (v: unknown) => SOURCES.find((s) => s === v)
+      await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120)) })
+      await withPayload(REMOTE_EVENTS.clear_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().clearSource(id) })
+      await withPayload(REMOTE_EVENTS.restore_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().restoreSource(id) })
+      await withPayload(REMOTE_EVENTS.take_scene, (p) => {
+        const b = useBroadcastStore.getState()
+        const output = b.outputs.find((o) => o.id === p.output && (o.role ?? "congregation") === "congregation")
+        if (output && typeof p.scene === "string") b.takeScene(output.id, p.scene)
+      })
+      await withPayload(REMOTE_EVENTS.release_scene, (p) => { if (typeof p.output === "string") useBroadcastStore.getState().releaseScene(p.output) })
 
       // remote:paired — a device completed pairing; remember its token hash
       keep(
@@ -78,7 +102,7 @@ export function useRemoteControl() {
           const p = parsePayload(event.payload)
           if (typeof p?.hash === "string" && typeof p?.name === "string") {
             noteRemote(`${REMOTE_PAIRED_EVENT} ${p.name}`)
-            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: p.role === "configure" || p.role === "timekeeper" ? p.role : "present" })
+            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: p.role === "configure" || p.role === "timekeeper" || p.role === "bible" || p.role === "screens" ? p.role : "present" })
             toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
           }
         }),

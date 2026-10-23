@@ -2,8 +2,8 @@ import type { OpenedFrom } from "@/lib/church-folder"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 
-/** present: move through the service; configure: settings too; timekeeper: only the event clock (Host/Join). */
-export type RemoteRole = "present" | "configure" | "timekeeper"
+/** present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join). */
+export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens"
 
 export interface RemoteDevice {
   hash: string

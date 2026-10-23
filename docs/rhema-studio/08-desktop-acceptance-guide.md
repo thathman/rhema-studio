@@ -968,6 +968,8 @@ report), but launching it cannot.
 | 10cu.3 | Joined (Timekeeper): try a screen command (e.g. curl `next` with its key). | Refused by the host (403). | Verified on the Intel Mac (403, "this device keeps time: it may move the event clock, not the screens"); no key: 401 |
 | 10cu.4 | Pull the joined computer's network cable for 30 s, then plug it back. | The desk says Reconnecting…, then shows the current state; the host's service never paused. | Unverified |
 | 10cu.5 | Revoke the device on the host. | The joined desk says Refused: pair again. | Unverified |
+| 10cu.6 | Host: a hymn on the projector, a Bible lower-third NDI feed. Joined as Bible: activate "Rom 8 28", then Next verse. | The NDI feed shows 8:28 then 8:29; the projector keeps the hymn; with nothing on the projector the verse shows there too. | Unverified |
+| 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
 ### 10cn. Numbered books and the item fields (owner reports)
 

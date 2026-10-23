@@ -71,7 +71,7 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 
 ## Operators: host and join (Production → Operators)
 
-- **Host:** the computer that runs the service keeps every control. Start the HTTP listener on the network (Settings → Remote control), then **Pair a device** and give the code to the operator. Set each paired device's role there: **Timekeeper** moves only the event clock; **Present** moves through the service; **Present and settings** adds settings.
+- **Host:** the computer that runs the service keeps every control. Start the HTTP listener on the network (Settings → Remote control), then **Pair a device** and give the code to the operator. Set each paired device's role there: **Timekeeper** moves only the event clock; **Bible** activates a typed reference and steps it (the main screens take it only when no song, hymn or slide is up there; the Bible feeds always do); **Screens** takes scenes to congregation outputs; **Present** does all of these and moves through the service; **Present and settings** adds settings.
 - **Join:** on the other computer, Production → Operators → Join a host: the host's address and port (shown in Settings → Remote control on the host), the code and a name. The joined desk shows what is on the host's screens, the live sources, the run of show with **Now**, and the expected end; a Timekeeper starts the next event, goes back one or starts any event. Nothing there changes a screen.
 - If the network drops, the joined computer says *Reconnecting…* and catches up by itself; the host carries on. **Leave** stops following; **Forget this host** also drops its key (revoke the device on the host to be sure).
 

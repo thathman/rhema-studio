@@ -73,8 +73,12 @@ shortcuts and the phone remote keep calling the same actions.
   (`GET /api/v1/live`) or follow it (`GET /api/v1/live/events`, server-sent events). The listener never
   reads it; keys off means this computer only.
 - **Roles** are permissions, not staffing: `timekeeper` may only move the event clock
-  (`event_next`, `event_prev`, `event_start`), `present` adds the screens, `configure` adds settings.
-  The host always keeps every control.
+  (`event_next`, `event_prev`, `event_start`); `bible` may activate a typed reference
+  (`bible_activate`), step the passage and take the Bible source off or back; `screens` may take and
+  release congregation scenes (`take_scene`, `release_scene`); `present` has all of these and the
+  screens; `configure` adds settings. The host always keeps every control. A Bible activation that
+  is not the desk's own Show Live follows one rule (`bibleScope`): with a song, hymn, slide or quick
+  screen on the main screens it reaches only the Bible feeds; otherwise the main screens too.
 - **Joining** (Production → Operators): pair with the host's code; the token goes to the keychain;
   the joined computer follows the Live State (reconnecting by itself) and sends commands through the
   host's ordinary command API, which checks the key's role and makes retries harmless. A joined

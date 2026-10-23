@@ -30,6 +30,11 @@ export const REMOTE_EVENTS = {
   event_next: "remote:event_next",
   event_prev: "remote:event_prev",
   event_start: "remote:event_start",
+  bible_activate: "remote:bible_activate",
+  clear_source: "remote:clear_source",
+  restore_source: "remote:restore_source",
+  take_scene: "remote:take_scene",
+  release_scene: "remote:release_scene",
 } as const
 
 /** Emitted by the backend when a device completes pairing: `{ name, hash }`. Not a command. */
