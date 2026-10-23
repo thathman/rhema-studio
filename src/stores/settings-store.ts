@@ -120,7 +120,8 @@ interface SettingsState {
    * which ports, and whether other devices may connect. Running listeners
    * start again with the app, so a phone keeps working after a restart.
    */
-  remoteListeners: { osc: boolean; http: boolean; oscPort: number; httpPort: number; lan: boolean }
+  /** https: also serve the phone page securely on the next port (a phone's microphone needs it; #251). */
+  remoteListeners: { osc: boolean; http: boolean; oscPort: number; httpPort: number; lan: boolean; https?: boolean }
   setRemoteListeners: (patch: Partial<SettingsState["remoteListeners"]>) => void
   /** Optional OBS connection (obs-websocket v5). */
   obs: ObsSettings

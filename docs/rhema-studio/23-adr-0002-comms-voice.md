@@ -62,7 +62,16 @@ browser allows its microphone (a secure page), with the same signaling and relea
 on a plain-http page it says why it cannot. Checked with headless Chrome (fake microphone) against
 the QA build over `http://127.0.0.1` (a secure context): it joined in about 1 s, the crew marks
 followed each press and release, and a listening desk heard the phone only while it held Talk.
-What remains is serving the page securely on the LAN, below.
+**Secure page on the LAN, built as an option (2026-10-23):** "Secure page for phones (https)" (off by
+default) serves the same routes over https on the next port with a certificate from a local CA that
+Rhema makes once; a phone either accepts its browser's warning once or installs the CA from
+`/rhema-ca.pem`. The CA carries name constraints: only private network addresses (10/8,
+172.16/12, 192.168/16, link-local, loopback, IPv6 local) and `localhost` / `.local`, so installing
+it on a phone never lets it vouch for a public website, even with its key. That covers both options below, per phone; which to recommend stays the owner's
+call. Checked: curl trusting only the downloaded CA verified the https page (and refused it without
+the CA); the served certificate names this Mac's LAN address, 127.0.0.1 and localhost, is for
+server use and lasts 397 days; headless Chrome joined the talk channel over https and the crew
+marks followed each press.
 
 Browsers allow the microphone only in a secure context. The phone remote page is served over plain
 HTTP on the LAN, so a phone cannot talk until the listener can serve HTTPS with a local certificate
@@ -97,6 +106,13 @@ phone). Text notices and action requests already work on phones without it.
   first seconds; with WebAudio alone a direct loop held ~121 ms (jitter buffer ~45 ms) for four
   rounds before growing. The hub no longer adds that element; desks still hear everyone (three-desk
   test). Across processes (headless Chrome as a phone → the QA host) the same build-up showed.
+- **Why (measured 2026-10-23):** with the screen locked, the QA app's own `AudioContext` clock ran at
+  0.67–0.78 of real time (13.9 s of audio in 20.6 s), so WebKit plays audio out about a third slow
+  and every jitter buffer fills. Holding a macOS "user initiated, latency critical" activity in the
+  app process (keeping it out of App Nap) did not change it (0.67 with it held): WKWebView renders
+  audio in WebKit's own helper processes. So the build-up is a locked-screen effect on this Mac;
+  a church's main computer is unlocked during the service, which the rehearsal must confirm by
+  measuring the same clock ratio there (it should read 1.0).
 
 ## 5. Verification
 

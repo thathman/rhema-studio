@@ -16,7 +16,7 @@ describe("remote listeners after a restart (FR-04)", () => {
     const names = calls.map(([c]) => c)
     expect(names.indexOf("remote_set_keys")).toBeGreaterThanOrEqual(0)
     expect(names.indexOf("remote_set_keys")).toBeLessThan(names.indexOf("start_http"))
-    expect(calls.find(([c]) => c === "start_http")?.[1]).toEqual({ port: 9090, lan: false })
+    expect(calls.find(([c]) => c === "start_http")?.[1]).toEqual({ port: 9090, lan: false, https: false })
     expect(names).not.toContain("start_osc")
   })
 
