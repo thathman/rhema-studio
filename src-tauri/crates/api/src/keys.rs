@@ -177,20 +177,50 @@ pub fn try_pair(window: &PairingWindow, keys: &KeySet, code: &str, name: &str) -
     *guard = None;
     drop(guard);
     let token = random_hex();
-    let name = name.trim();
+    let mut k = keys.write().unwrap_or_else(std::sync::PoisonError::into_inner);
     // A newly paired device may present, not change settings, until the operator says otherwise.
-    let entry = KeyEntry { hash: hash_key(&token), name: if name.is_empty() { "Paired device".into() } else { name.chars().take(60).collect() }, role: Role::Present };
-    {
-        let mut k = keys.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        k.entries.push(entry.clone());
-        k.require_auth = true;
-    }
+    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: Role::Present };
+    k.entries.push(entry.clone());
+    k.require_auth = true;
+    drop(k);
     PairOutcome::Paired { token, entry }
+}
+
+/**
+ * A paired device's name, unique among the paired devices: the talk channel and the service log
+ * know devices by name. "host" and "Main desk" are the main computer's, so a device asking for
+ * them gets "<name> (device)"; a taken name gets " 2", " 3"…
+ */
+fn unique_name(asked: &str, entries: &[KeyEntry]) -> String {
+    let mut base: String = asked.trim().chars().take(52).collect();
+    if base.is_empty() {
+        base = "Paired device".into();
+    }
+    if ["host", "main desk"].contains(&base.to_lowercase().as_str()) {
+        base = format!("{base} (device)");
+    }
+    let taken = |n: &str| entries.iter().any(|e| e.name.eq_ignore_ascii_case(n));
+    if !taken(&base) {
+        return base;
+    }
+    (2..).map(|i| format!("{base} {i}")).find(|n| !taken(n)).unwrap_or(base)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paired_names_are_unique_and_never_the_main_desk() {
+        let e = |n: &str| KeyEntry { hash: n.into(), name: n.into(), role: Role::Present };
+        let have = [e("Femi's laptop"), e("Femi's laptop 2"), e("Phone")];
+        assert_eq!(unique_name("Femi's laptop", &have), "Femi's laptop 3");
+        assert_eq!(unique_name("  phone ", &have), "phone 2");
+        assert_eq!(unique_name("host", &have), "host (device)");
+        assert_eq!(unique_name("Main Desk", &have), "Main Desk (device)");
+        assert_eq!(unique_name("", &have), "Paired device");
+        assert_eq!(unique_name("Ade", &have), "Ade");
+    }
 
     #[test]
     fn empty_set_is_open_and_keys_are_matched_by_hash() {

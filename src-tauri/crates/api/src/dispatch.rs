@@ -42,9 +42,13 @@ impl CommandDispatcher {
             RemoteCommand::VoiceLeave => sink.emit_event("remote:voice_leave", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "by": by }).to_string()),
             other => {
-                // Who did it, for the service log (#246 C17); the command's own event follows.
-                let _ = sink.emit_event("remote:actor", &serde_json::json!({ "by": by }).to_string());
-                Self::dispatch(other, sink)
+                let done = Self::dispatch(other, sink);
+                // The service log's record of it, with who sent it (#246 C17): one self-contained
+                // event, so concurrent requests can never swap their names.
+                if done.is_ok() {
+                    let _ = sink.emit_event("remote:audit", &serde_json::json!({ "command": other.to_string(), "by": by }).to_string());
+                }
+                done
             }
         }
     }
@@ -281,12 +285,14 @@ mod tests {
         assert_eq!(event, "remote:notice_send");
         let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(v["by"], "Femi's laptop");
-        // A screen command carries who sent it first, for the service log.
+        // A screen command is recorded for the service log after it, with who sent it, in one event.
         let before = sink.events.lock().unwrap().len();
-        CommandDispatcher::dispatch_as(&RemoteCommand::Next, &sink, "Femi's laptop").unwrap();
+        CommandDispatcher::dispatch_as(&RemoteCommand::BibleActivate("Psalm 23:1".into()), &sink, "Femi's laptop").unwrap();
         let ev = sink.events.lock().unwrap()[before..].to_vec();
-        assert_eq!(ev[0].0, "remote:actor");
-        assert!(ev[0].1.contains("Femi's laptop"));
+        assert_eq!(ev[0].0, "remote:bible_activate");
+        assert_eq!(ev[1].0, "remote:audit");
+        let audit: serde_json::Value = serde_json::from_str(&ev[1].1).unwrap();
+        assert_eq!((audit["command"].as_str(), audit["by"].as_str()), (Some("bible_activate(Psalm 23:1)"), Some("Femi's laptop")));
         assert_eq!(v["to"], "present");
         assert_eq!(v["priority"], "urgent");
         assert_eq!(v["text"].as_str().unwrap().chars().count(), 280);

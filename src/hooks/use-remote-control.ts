@@ -13,13 +13,8 @@ import { activateBibleReference } from "@/lib/bible-activate"
 import { useNotices } from "@/stores/notices-store"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
-/** Who sent the next remote command (the host announces it just before; #246 C17). */
-let actor: { by: string; at: number } | null = null
-const noteRemote = (event: string) => {
-  const by = actor && Date.now() - actor.at < 2000 ? actor.by : null
-  actor = null
-  useJournalStore.getState().add({ kind: "remote", label: `${event.replace("remote:", "")}${by ? ` · by ${by}` : ""}` })
-}
+/** A note in the service log that is not a remote command (a device paired). */
+const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
 import { remoteActions } from "@/lib/remote-actions"
 import { confidenceLevel } from "@/lib/confidence"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
@@ -47,10 +42,12 @@ export function useRemoteControl() {
         else unlisteners.push(unlisten)
       }
       keep(
-        await listen<string>("remote:actor", (e) => {
+        // Every remote command, with who sent it, as the host carried it out (#246 C17).
+        await listen<string>("remote:audit", (e) => {
+          if (cancelled) return
           try {
-            const by = (JSON.parse(e.payload) as { by?: unknown }).by
-            if (typeof by === "string") actor = { by: by.slice(0, 60), at: Date.now() }
+            const p = JSON.parse(e.payload) as { command?: unknown; by?: unknown }
+            if (typeof p.command === "string") useJournalStore.getState().add({ kind: "remote", label: `${p.command.slice(0, 120)}${typeof p.by === "string" && p.by ? ` · by ${p.by.slice(0, 60)}` : ""}` })
           } catch {
             // ignore
           }
@@ -60,7 +57,6 @@ export function useRemoteControl() {
         keep(
           await listen(event, () => {
             if (cancelled) return
-            noteRemote(event)
             handler()
           }),
         )
@@ -84,7 +80,6 @@ export function useRemoteControl() {
           if (cancelled) return
           const id = parsePayload(event.payload)?.id
           if (typeof id !== "string") return
-          noteRemote(`${REMOTE_EVENTS.event_start} ${id}`)
           useEventClock.getState().start(id)
         }),
       )
@@ -95,7 +90,6 @@ export function useRemoteControl() {
             if (cancelled) return
             const p = parsePayload(e.payload)
             if (!p) return
-            noteRemote(`${event} ${Object.values(p).filter((v) => typeof v === "string").join(" ")}`)
             handler(p)
           }),
         )
@@ -156,7 +150,6 @@ export function useRemoteControl() {
         if (cancelled) return
         const id = parsePayload(event.payload)?.id
         if (typeof id === "string") {
-          noteRemote(`${REMOTE_EVENTS.macro} ${id}`)
           runMacro(id)
         }
       })
@@ -165,7 +158,6 @@ export function useRemoteControl() {
       // remote:theme — switch active theme by name
       const u3 = await listen<string>(REMOTE_EVENTS.theme, (event) => {
         if (cancelled) return
-        noteRemote(REMOTE_EVENTS.theme)
         const payload = parsePayload(event.payload)
         const name = payload?.name as string | undefined
         if (!name) return
@@ -183,7 +175,6 @@ export function useRemoteControl() {
       // remote:opacity — set broadcast output opacity
       const u4 = await listen<string>(REMOTE_EVENTS.opacity, (event) => {
         if (cancelled) return
-        noteRemote(REMOTE_EVENTS.opacity)
         const payload = parsePayload(event.payload)
         const value = payload?.value as number | undefined
         if (value === undefined) return
@@ -197,7 +188,6 @@ export function useRemoteControl() {
       // remote:on_air — toggle live broadcast state
       const u5 = await listen<string>(REMOTE_EVENTS.on_air, (event) => {
         if (cancelled) return
-        noteRemote(REMOTE_EVENTS.on_air)
         const payload = parsePayload(event.payload)
         const active = payload?.active as boolean | undefined
         if (active === undefined) return
@@ -208,7 +198,6 @@ export function useRemoteControl() {
       // remote:confidence — set detection confidence threshold
       const u8 = await listen<string>(REMOTE_EVENTS.confidence, (event) => {
         if (cancelled) return
-        noteRemote(REMOTE_EVENTS.confidence)
         const payload = parsePayload(event.payload)
         const value = payload?.value as number | undefined
         if (value === undefined) return

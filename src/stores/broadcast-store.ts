@@ -451,7 +451,8 @@ function deliver(outputId: string, payload: Record<string, unknown>): void {
   const s = useBroadcastStore.getState()
   const output = s.outputs.find((o) => o.id === outputId)
   if (output?.type === "browser") {
-    if (s.outputStatus[outputId]?.feedActive) void invoke("feed_publish", { id: outputId, json: JSON.stringify(payload) }).catch(() => {})
+    // hostNow: clocks on the page count by this computer's time, not the TV's (which may be off).
+    if (s.outputStatus[outputId]?.feedActive) void invoke("feed_publish", { id: outputId, json: JSON.stringify({ ...payload, hostNow: Date.now() }) }).catch(() => {})
     return
   }
   void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", payload).catch(() => {})

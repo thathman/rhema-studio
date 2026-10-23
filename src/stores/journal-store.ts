@@ -117,11 +117,13 @@ useBroadcastStore.subscribe((s, prev) => {
   if (s.sources === prev.sources) return
   const ids = new Set([...Object.keys(prev.sources), ...Object.keys(s.sources)]) as Set<SourceId>
   for (const id of ids) {
+    // Quick screens (Black, Logo…) are program entries already.
+    if (id === "quick") continue
     const a = prev.sources[id]
     const b = s.sources[id]
     // The program's own source: its live / clear / restore entry already says so.
     if ((b && b.value === s.liveVerse) || (a && (a.value === s.liveVerse || a.value === prev.liveVerse))) continue
-    const name = id === "quick" ? "Quick screen" : CONTENT_NAMES[id]
+    const name = CONTENT_NAMES[id]
     if (b?.on && (!a?.on || a.revision !== b.revision)) {
       const back = a && !a.on && a.revision === b.revision
       useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}`, itemId: b.itemId, source: name })

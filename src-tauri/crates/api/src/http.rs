@@ -785,8 +785,8 @@ mod tests {
 
     impl CommandSink for MockSink {
         fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
-            // Commands only: who sent each (remote:actor) is not a command.
-            if event != "remote:actor" {
+            // Commands only: the service log's record of each (remote:audit) is not a command.
+            if event != "remote:audit" {
                 self.commands.lock().unwrap().push(event.to_string());
             }
             Ok(())

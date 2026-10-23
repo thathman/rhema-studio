@@ -31,6 +31,15 @@ pub fn mark_running(state: &LastExit, dir: &std::path::Path) {
     }
 }
 
+/// An orderly close: remove this run's lock.
+pub fn clear_running(app: &tauri::AppHandle) {
+    if let Ok(l) = app.state::<LastExit>().lock.lock() {
+        if let Some(path) = l.as_ref() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 /// The last run ended without a clean close (the frontend then offers to put back what was on air).
 #[tauri::command]
 pub fn last_exit_unclean(state: State<'_, LastExit>) -> bool {
@@ -68,11 +77,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         // only focuses the (gone) main window of the running copy.
         WindowEvent::Destroyed => {
             // A clean close: no recovery offer next time.
-            if let Ok(l) = window.state::<LastExit>().lock.lock() {
-                if let Some(path) = l.as_ref() {
-                    let _ = std::fs::remove_file(path);
-                }
-            }
+            clear_running(window.app_handle());
             window.app_handle().exit(0);
         }
         _ => {}

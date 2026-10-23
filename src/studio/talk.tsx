@@ -91,7 +91,8 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
   const [error, setError] = useState<string | null>(null)
   const [talk, setTalk] = useState("all")
   const [listen, setListen] = useState<string[]>([...CHANNEL_IDS])
-  useEffect(() => () => client.current?.leave(), [])
+  const mounted = useRef(true)
+  useEffect(() => () => { mounted.current = false; client.current?.leave() }, [])
   const route = (l: string[], t: string) => {
     setListen(l)
     setTalk(t)
@@ -104,6 +105,8 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
     const c = new TalkClient(joinAddress, joinToken)
     try {
       await c.join()
+      // The desk was closed while joining: do not leave the microphone open.
+      if (!mounted.current) return c.leave()
       client.current = c
       c.channels(listen, talk)
       setState("on")

@@ -103,8 +103,8 @@ let ctx: AudioContext | null = null
 let monitor: GainNode | null = null
 const peers = new Map<string, Peer>()
 let hostMic: { stream: MediaStream; gate: GainNode; analyser: AnalyserNode } | null = null
-/** One gain per speaker → listener ("a>b"); 1 when the speaker's talk reaches that listener. */
-const routes = new Map<string, GainNode>()
+/** One gain per speaker → listener (from → to → route); 1 when the speaker's talk reaches that listener. */
+const routes = new Map<string, Map<string, { gain: GainNode; source: AudioNode }>>()
 
 /**
  * Wire every speaker to every listener through its own gain and set each by the talk rules: All
@@ -117,26 +117,30 @@ function rewire() {
   const ends = new Map<string, { source: AudioNode | null; sink: AudioNode; listen: readonly string[]; talk: string }>()
   if (monitor) ends.set(HOST, { source: hostMic?.gate ?? null, sink: monitor, listen: v.hostListen, talk: v.hostTalkTo })
   for (const [name, p] of peers) ends.set(name, { source: p.analyser, sink: p.mix, listen: p.listen, talk: p.talkTo })
-  for (const [key, g] of routes) {
-    const [from, to] = key.split(">")
-    if (!ends.get(from)?.source || !ends.has(to)) {
-      g.disconnect()
-      routes.delete(key)
+  // Routes whose speaker or listener left, or whose speaker's node changed, go.
+  for (const [from, row] of routes) {
+    for (const [to, r] of row) {
+      if (ends.get(from)?.source !== r.source || !ends.has(to)) {
+        r.gain.disconnect()
+        row.delete(to)
+      }
     }
+    if (row.size === 0) routes.delete(from)
   }
   for (const [from, a] of ends) {
     if (!a.source) continue
+    let row = routes.get(from)
+    if (!row) routes.set(from, (row = new Map()))
     for (const [to, b] of ends) {
       if (from === to) continue
-      const key = `${from}>${to}`
-      let g = routes.get(key)
-      if (!g) {
-        g = ctx.createGain()
-        a.source.connect(g)
-        g.connect(b.sink)
-        routes.set(key, g)
+      let r = row.get(to)
+      if (!r) {
+        const gain = ctx.createGain()
+        a.source.connect(gain)
+        gain.connect(b.sink)
+        row.set(to, (r = { gain, source: a.source }))
       }
-      g.gain.value = hears(a.talk, to, b.listen) ? 1 : 0
+      r.gain.gain.value = hears(a.talk, to, b.listen) ? 1 : 0
     }
   }
 }
@@ -224,35 +228,50 @@ async function answer(id: string, by: string, sdp: string) {
   await pc.setLocalDescription(await pc.createAnswer())
   await gathered(pc)
   publishPeers()
-  await invoke("voice_answer", { id, sdp: pc.localDescription!.sdp })
+  // Too late (the desk's request timed out): it will offer again; drop this one.
+  const taken = await invoke<boolean>("voice_answer", { id, sdp: pc.localDescription!.sdp }).catch(() => false)
+  if (!taken && peers.get(by)?.pc === pc) drop(by)
 }
 
-/** The main desk's Talk. `stream` replaces the microphone (tests). */
+/** Whether the main desk wants to talk now (the last press or release). */
+let wantTalk = false
+/** The microphone being opened: one at a time, however many presses. */
+let opening: Promise<void> | null = null
+
+/**
+ * The main desk's Talk. `stream` replaces the microphone (tests). A release while the microphone
+ * is still opening (its permission prompt takes focus) wins: the gate follows the latest wish.
+ */
 export async function hostTalk(on: boolean, stream?: MediaStream): Promise<void> {
+  wantTalk = on
   if (on && !hostMic) {
-    try {
-      const a = await audio()
-      const s = stream ?? (await navigator.mediaDevices.getUserMedia(MIC))
-      const gate = a.createGain()
-      gate.gain.value = 0
-      const analyser = a.createAnalyser()
-      analyser.fftSize = 1024
-      a.createMediaStreamSource(s).connect(gate)
-      gate.connect(analyser)
-      // Keep the meter processed without hearing yourself.
-      const silent = a.createGain()
-      silent.gain.value = 0
-      analyser.connect(silent).connect(a.destination)
-      hostMic = { stream: s, gate, analyser }
-      rewire()
-      useVoice.setState({ micError: null })
-    } catch (e) {
-      useVoice.setState({ micError: `The microphone is not available: ${e instanceof Error ? e.message : String(e)}` })
-      return
-    }
+    opening ??= openHostMic(stream).finally(() => { opening = null })
+    await opening
   }
-  if (hostMic) hostMic.gate.gain.value = on ? 1 : 0
-  useVoice.setState({ hostTalking: on && !!hostMic })
+  if (hostMic) hostMic.gate.gain.value = wantTalk ? 1 : 0
+  useVoice.setState({ hostTalking: wantTalk && !!hostMic })
+}
+
+async function openHostMic(stream?: MediaStream): Promise<void> {
+  try {
+    const a = await audio()
+    const s = stream ?? (await navigator.mediaDevices.getUserMedia(MIC))
+    const gate = a.createGain()
+    gate.gain.value = 0
+    const analyser = a.createAnalyser()
+    analyser.fftSize = 1024
+    a.createMediaStreamSource(s).connect(gate)
+    gate.connect(analyser)
+    // Keep the meter processed without hearing yourself.
+    const silent = a.createGain()
+    silent.gain.value = 0
+    analyser.connect(silent).connect(a.destination)
+    hostMic = { stream: s, gate, analyser }
+    rewire()
+    useVoice.setState({ micError: null })
+  } catch (e) {
+    useVoice.setState({ micError: `The microphone is not available: ${e instanceof Error ? e.message : String(e)}` })
+  }
 }
 
 let hosting = false
