@@ -144,3 +144,28 @@ describe("computeReadiness", () => {
   })
 })
 
+
+describe("preflight: the plan and cameras (#213, #196)", () => {
+  const slide = (id: string, reference: string, planned_minutes: number, end_by?: string) => ({ id, kind: "slide", reference, title: reference, text: reference, planned_minutes, end_by }) as never
+  const main = (starts_at?: string) => [{ id: "m", type: "phase" as const, name: "Main service", at: 0, role: "main" as const, rule: "manual" as const, starts_at }]
+
+  it("says when the plan ends, and warns when an item is planned past its end by", async () => {
+    const { planCheck } = await import("./readiness")
+    expect(planCheck([slide("a", "Welcome", 5)], [])).toBeUndefined()
+    expect(planCheck([slide("a", "Welcome", 5)], main())).toEqual({ startSet: false, plannedEnd: null, overruns: [] })
+    const ok = planCheck([slide("a", "Welcome", 10), slide("b", "Sermon", 35, "10:50")], main("10:00"))
+    expect(ok).toEqual({ startSet: true, plannedEnd: "10:45", overruns: [] })
+    const over = planCheck([slide("a", "Welcome", 10), slide("b", "Sermon", 45, "10:50")], main("10:00"))!
+    expect(over.overruns).toEqual([{ item: "Sermon", endsAt: "10:55", endBy: "10:50", minutes: 5 }])
+    const r = computeReadiness({ ...good, timing: over })
+    expect(r.ready).toBe(false)
+    expect(r.checks.find((c) => c.id === "timing-end-by")?.detail).toContain("Sermon is planned to end at 10:55, 5 min after its end by 10:50")
+    expect(computeReadiness({ ...good, timing: ok! }).checks.find((c) => c.id === "timing")?.label).toBe("Planned to end at 10:45")
+  })
+
+  it("notes a scene's camera layer without a stream address, without blocking", () => {
+    const r = computeReadiness({ ...good, camerasWithoutAddress: ["Pulpit camera + verse"] })
+    expect(r.ready).toBe(true)
+    expect(r.checks.find((c) => c.id === "cameras")?.label).toBe("Pulpit camera + verse: a camera layer has no stream address")
+  })
+})

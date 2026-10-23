@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Readiness checks the plan and cameras (#213 preflight, #196)
+
+- **Branch / PR:** `sh-002/preflight-timing-cameras`. `readiness.ts`: `planCheck` (the timing engine on the plan alone: planned end, items planned more than 30 s past their end by) and checks `timing-start` (info), `timing-end-by` (warn), `timing` (ok), `cameras` (info); `use-readiness.ts` feeds them.
+- **Tests:** `readiness.test.ts` (+2). vitest 743. Desktop: checked with the combined QA build (PF_RESULT).
+
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
 - **Branch / PR:** `mcp-004/look-suggestions`. `mcp_drafts.rs`: `Looks` (built-in names plus `broadcast-themes.json` custom looks and scenes, read-only), `check_with` keeps `suggested_look` / `suggested_scene` (80 chars) and warns on unknown names; `mcp.rs`: `rhema_list_looks_and_scenes`, schema fields. Review shows them per item; `draftToRundown` does not carry them (decision: suggestions, not a data-model change).

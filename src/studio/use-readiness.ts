@@ -11,7 +11,7 @@ import { allSignageIds } from "@/lib/signage"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
-import { computeReadiness } from "@/studio/readiness"
+import { computeReadiness, planCheck } from "@/studio/readiness"
 import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
@@ -27,6 +27,7 @@ export function useReadiness() {
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
   const outputs = useBroadcastStore((s) => s.outputs)
+  const scenes = useBroadcastStore((s) => s.scenes)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
@@ -118,6 +119,8 @@ export function useReadiness() {
     // With "Use my translation" on, those verses show in the operator's translation.
     missingTranslations: overrideTranslations ? [] : missingTranslations,
     unsupportedItems: unsupportedItems.length,
+    timing: planCheck(items, headers),
+    camerasWithoutAddress: scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !l.cameraUrl)).map((sc) => sc.name),
     signage: outputs
       .filter((o) => o.role === "signage")
       .map((o) => {
@@ -127,3 +130,4 @@ export function useReadiness() {
   })
   return { ready, checks, onAir, items, headers, activeIndex, current, dirty, programs, suggested, outputs, setWorkspace, openOutputs }
 }
+
