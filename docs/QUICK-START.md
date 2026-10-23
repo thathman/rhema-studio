@@ -28,7 +28,7 @@ For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; on
 | A verse the preacher just mentioned | Type it in **Quick find**, press Enter to preview, then Show live. |
 | Keep an eye on time | **Timer** in the header: set the planned minutes, Start. Amber under two minutes, red when over. |
 | Tell the band something | **Message stage**. Only the stage screen sees it. |
-| Practise without touching the projector | **Rehearsal on**. Everything works in the app; screens freeze until you turn it off. |
+| Practise without touching the projector | **Rehearsal on**. Everything works in the app; the screens keep what they showed. Turning it off brings back exactly that; **Show this live** puts what you rehearsed on screen. |
 
 Things that cannot go wrong by accident: nothing goes live before it has loaded; a missing song, picture or translation is reported and the screen keeps what it had; Prepare never presents; the timer ignores the computer's clock.
 

@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import { SaveIcon, TrashIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBroadcastStore } from "@/stores"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
@@ -13,7 +14,7 @@ import { StageDesigner } from "@/studio/design/stage-designer"
 import { BrandDesigner } from "@/studio/design/brand-designer"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import { CONTENT_NAMES } from "@/lib/content-names"
-import { withThemeFor } from "@/lib/output-themes"
+import { themeIdsOf, withThemeFor } from "@/lib/output-themes"
 import { cn } from "@/lib/utils"
 
 const TABS: ReadonlyArray<readonly [DesignTab, string, string]> = [
@@ -50,7 +51,8 @@ export function DesignWorkspace() {
           <p className="mt-1 text-xs text-muted-foreground">Every look in one place: scripture, songs, hymns, slides, pictures, lower thirds, the ticker, the stage display and your brand.</p>
         </div>
         {tab === "themes" && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <LiveEditSwitch />
             <Button variant="outline" onClick={() => useBroadcastStore.getState().discardDraft()}><TrashIcon /> Discard changes</Button>
             <Button onClick={() => useBroadcastStore.getState().saveDraft()}><SaveIcon /> Save theme</Button>
           </div>
@@ -149,5 +151,23 @@ function OutputLooks() {
         </table>
       </div>
     </div>
+  )
+}
+
+/**
+ * Live edit (ADR 0001): off, a draft stays in the Designer; on, the screens using this theme show it
+ * as it is edited. It turns itself off when editing ends.
+ */
+function LiveEditSwitch() {
+  const on = useBroadcastStore((s) => s.liveDesign)
+  const editing = useBroadcastStore((s) => s.editingThemeId)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const screens = editing ? outputs.filter((o) => (o.role ?? "congregation") === "congregation" && themeIdsOf(o).includes(editing)) : []
+  if (!editing) return null
+  return (
+    <label className={cn("flex h-[33px] items-center gap-2 rounded-md border px-3 text-[0.6875rem] font-semibold", on ? "border-on-air/50 bg-on-air/10 text-on-air" : "border-border text-muted-foreground")} title="Off: changes stay here until you save. On: the screens using this theme show your changes as you make them.">
+      <Switch checked={on} onCheckedChange={(v) => useBroadcastStore.getState().setLiveDesign(v)} aria-label="Live edit: show unsaved changes on the screens" />
+      {on ? `Live edit · ${screens.length} ${screens.length === 1 ? "screen" : "screens"}` : "Live edit off"}
+    </label>
   )
 }

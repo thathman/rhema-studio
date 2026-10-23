@@ -25,6 +25,19 @@ import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from 
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 
+/** The program (what is on air and what Restore and Back return to), with the rundown's place in it. */
+export interface ProgramSnapshot {
+  isLive: boolean
+  liveVerse: VerseRenderData | null
+  liveSourceVerse: Verse | null
+  liveItem: ItemTranslations | null
+  liveSlide: LiveSlide | null
+  liveItemId: string | null
+  heldLive: HeldLive | null
+  cleared: boolean
+  activeIndex: number | null
+}
+
 /** What was live before a quick screen took over, so Back can return to it. */
 export interface HeldLive {
   liveVerse: VerseRenderData
@@ -129,9 +142,12 @@ interface BroadcastState {
   /**
    * Rehearsal: everything works in the app (Preview, Live panel, rundown)
    * but no output window, NDI sender or stage screen receives anything.
-   * Turning it off sends the current state to every output. Not persisted.
+   * Turning it off puts back the program as it was when rehearsal began (ADR 0001):
+   * only `keepRehearsed` sends what was rehearsed. Not persisted.
    */
   rehearsal: boolean
+  /** The real program while rehearsal runs, put back when it ends. */
+  rehearsalReturn: ProgramSnapshot | null
   /** Why the last present did not reach the output; cleared by the next successful present. */
   presentWarning: string | null
   // When on, detections auto-present to the live output. When off, the live
@@ -143,6 +159,12 @@ interface BroadcastState {
   editingThemeId: string | null
   renamingThemeId: string | null
   draftTheme: BroadcastTheme | null
+  /**
+   * Live edit: the Designer's unsaved draft shows on the outputs that use the theme. Off by
+   * default and turned off when editing ends, so a draft never reaches a screen unasked (ADR 0001).
+   */
+  liveDesign: boolean
+  setLiveDesign: (on: boolean) => void
   selectedElement: SelectedElement
 
   // Theme management
@@ -161,7 +183,8 @@ interface BroadcastState {
   setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean; follow?: boolean }) => void
   setPresentWarning: (warning: string | null) => void
   setStageMessage: (message: string) => void
-  setRehearsal: (on: boolean) => void
+  /** Off puts back the program from before rehearsal, unless `keepRehearsed` (a deliberate go-live). */
+  setRehearsal: (on: boolean, opts?: { keepRehearsed?: boolean }) => void
   /** Remember the current live content (if any) before a quick screen replaces it. */
   holdLive: () => void
   /** Put the held content back on air (or off air, as it was) and forget it. */
@@ -362,7 +385,8 @@ function recordFrame(id: string, frame: OutputFrame): void {
 
 function emitDraftToBroadcast(state: BroadcastState): void {
   // Rehearsal freezes every real output, theme edits included (syncBroadcastOutputFor returns early).
-  if (!state.draftTheme) return
+  // Without Live edit the draft stays in the Designer.
+  if (!state.draftTheme || !state.liveDesign) return
   // The same send as a present (with the sound flag), so the outputs on this theme show the draft.
   for (const output of state.outputs) {
     if (output.themeId === state.editingThemeId && (output.role ?? "congregation") === "congregation") useBroadcastStore.getState().syncBroadcastOutputFor(output.id)
@@ -452,12 +476,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   deleteTickerPreset: (id) => set({ tickerPresets: get().tickerPresets.filter((p) => p.id !== id) }),
   outputFrames: {},
   rehearsal: false,
+  rehearsalReturn: null,
   presentWarning: null,
   // Off until the operator turns it on (PRD FR-01: speech suggestions are proposals unless an
   // automation is explicitly enabled; AI-001 "no AI output auto-live"). A saved choice is kept.
   autoLive: false,
   isDesignerOpen: false,
   editingThemeId: null,
+  liveDesign: false,
   renamingThemeId: null,
   draftTheme: null,
   selectedElement: null,
@@ -547,7 +573,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (!saved) return
     // A theme open in the Designer shows on its congregation outputs as edited, for presents too
     // (otherwise each present flipped the screen back to the saved theme).
-    const theme = s.draftTheme && s.editingThemeId === saved.id && (output.role ?? "congregation") === "congregation" ? s.draftTheme : saved
+    const theme = s.liveDesign && s.draftTheme && s.editingThemeId === saved.id && (output.role ?? "congregation") === "congregation" ? s.draftTheme : saved
 
     // Signage runs its own loop; neither the live output nor rehearsal touches it.
     if (output.role === "signage") {
@@ -704,9 +730,23 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     get().syncBroadcastOutput()
   },
   setPresentWarning: (presentWarning) => set({ presentWarning }),
-  setRehearsal: (rehearsal) => {
-    set({ rehearsal })
-    if (!rehearsal) get().syncBroadcastOutput()
+  setRehearsal: (rehearsal, opts = {}) => {
+    const s = get()
+    if (rehearsal === s.rehearsal) return
+    if (rehearsal) {
+      const { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared } = s
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex } })
+      return
+    }
+    const back = opts.keepRehearsed ? null : s.rehearsalReturn
+    if (back) {
+      const { activeIndex, ...program } = back
+      useQueueStore.setState({ activeIndex })
+      set({ ...program, rehearsal, rehearsalReturn: null })
+    } else {
+      set({ rehearsal, rehearsalReturn: null })
+    }
+    get().syncBroadcastOutput()
   },
   setLowerThird: (lt) => {
     // A strip that follows what is live has no words of its own.
@@ -792,7 +832,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setDesignerOpen: (isDesignerOpen) => {
     if (!isDesignerOpen) {
       const was = get().editingThemeId
-      set({ isDesignerOpen, editingThemeId: null, draftTheme: null, selectedElement: null })
+      set({ isDesignerOpen, editingThemeId: null, draftTheme: null, liveDesign: false, selectedElement: null })
       resyncThemeOutputs(was)
     } else {
       set({ isDesignerOpen })
@@ -814,6 +854,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({
       editingThemeId: themeId,
       draftTheme: { ...theme, updatedAt: Date.now() },
+      ...(was !== themeId ? { liveDesign: false } : {}),
       selectedElement: null,
     })
     // Switching to another theme ends the previous draft: its outputs get their saved theme back.
@@ -824,6 +865,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({
       editingThemeId: null,
       draftTheme: null,
+      liveDesign: false,
       selectedElement: null,
     })
     // Outputs may have been showing the draft; put the saved theme back.
@@ -886,6 +928,12 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       get().startEditing(editingThemeId)
       resyncThemeOutputs(editingThemeId)
     }
+  },
+  setLiveDesign: (liveDesign) => {
+    if (liveDesign === get().liveDesign) return
+    set({ liveDesign })
+    // On: the outputs on this theme show the draft; off: their saved theme again.
+    resyncThemeOutputs(get().editingThemeId)
   },
   setSelectedElement: (selectedElement) => set({ selectedElement }),
   setRenamingTheme: (id) => set({ renamingThemeId: id }),

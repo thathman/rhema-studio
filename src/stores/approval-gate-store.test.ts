@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { approvalHolds, leaveRehearsal, useApprovalGateStore } from "./approval-gate-store"
+import { approvalHolds, leaveRehearsal, showRehearsalLive, useApprovalGateStore } from "./approval-gate-store"
 import { useBroadcastStore } from "./broadcast-store"
 import { useServiceStore } from "./service-store"
 import { useSettingsStore } from "./settings-store"
@@ -52,11 +52,16 @@ describe("approval before go-live (CL-002, opt-in)", () => {
     expect(useApprovalGateStore.getState().held).toBeNull()
   })
 
-  it("leaving rehearsal with service content on the output asks first", () => {
-    useBroadcastStore.setState({ rehearsal: true, isLive: true, liveVerse: slide })
-    leaveRehearsal()
+  it("showing rehearsed service content live asks first; plain leaving shows nothing new, so it does not", () => {
+    useBroadcastStore.setState({ rehearsal: true, isLive: true, liveVerse: slide, rehearsalReturn: null })
+    showRehearsalLive()
     expect(useBroadcastStore.getState().rehearsal).toBe(true)
     useApprovalGateStore.getState().presentAnyway()
     expect(useBroadcastStore.getState().rehearsal).toBe(false)
+    useApprovalGateStore.setState({ held: null })
+    useBroadcastStore.setState({ rehearsal: true, isLive: true, liveVerse: slide })
+    leaveRehearsal()
+    expect(useBroadcastStore.getState().rehearsal).toBe(false)
+    expect(useApprovalGateStore.getState().held).toBeNull()
   })
 })

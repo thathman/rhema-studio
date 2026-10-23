@@ -36,10 +36,16 @@ describe("an item's go-live message and cue", () => {
     expect(fresh).toHaveBeenCalledTimes(2)
   })
 
-  it("waits in rehearsal until the congregation sees it", () => {
-    goLive("rehearsed", { rehearsal: true })
+  it("never in rehearsal: leaving it fires nothing; Show this live does, as the congregation then sees it", () => {
+    useBroadcastStore.getState().setRehearsal(true)
+    goLive("rehearsed")
     expect(fresh).not.toHaveBeenCalled()
-    useBroadcastStore.setState({ rehearsal: false })
+    useBroadcastStore.getState().setRehearsal(false)
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+    expect(fresh).not.toHaveBeenCalled()
+    useBroadcastStore.getState().setRehearsal(true)
+    goLive("rehearsed")
+    useBroadcastStore.getState().setRehearsal(false, { keepRehearsed: true })
     expect(fresh).toHaveBeenCalledTimes(1)
   })
 })

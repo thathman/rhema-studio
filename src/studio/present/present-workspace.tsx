@@ -1,5 +1,5 @@
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
-import { leaveRehearsal } from "@/stores/approval-gate-store"
+import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect } from "react"
 import { ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, LayoutGridIcon, LayoutPanelLeftIcon, MonitorIcon, RotateCcwIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -85,8 +85,16 @@ export function PresentWorkspace() {
               tone={rehearsal ? "warn" : "off"}
               label={rehearsal ? "Rehearsal on" : "Rehearsal off"}
               onClick={() => (rehearsal ? leaveRehearsal() : useBroadcastStore.getState().setRehearsal(true))}
-              title={rehearsal ? "Outputs, NDI and the stage screen are frozen. Click to go back to normal; they will show the current content." : "Practise without touching any screen: outputs, NDI and the stage screen keep what they show now."}
+              title={rehearsal ? "Outputs, NDI and the stage screen are frozen. Click to leave rehearsal: they keep showing what they showed before it." : "Practise without touching any screen: outputs, NDI and the stage screen keep what they show now."}
             />
+            {rehearsal && (
+              <StatusChip
+                tone="warn"
+                label="Show this live"
+                onClick={showRehearsalLive}
+                title="Leave rehearsal and put what is up here on the screens (the approval question applies)"
+              />
+            )}
             <StatusChip
               tone={onAir > 0 ? "ok" : "warn"}
               label={onAir > 0 ? `${onAir}/${outputs.length} outputs on` : "No output on a screen"}
