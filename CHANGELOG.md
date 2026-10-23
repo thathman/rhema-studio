@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Built-in look library (#299)
+- Design → Library: ready-made looks in six families (Church Classic, Broadcast Clean, Contemporary, Warm Editorial, High Contrast, Seasonal) for Bible and songs full screen, keyed lower thirds, speaker names, the ticker, the stage display and camera scenes, each with a drawn preview in English and Yorùbá.
+- Filter by layout, family and background; mark favourites. **Use** adds your own editable copy (a camera scene brings its look too); nothing on a screen changes until you choose the copy for an output. A copy can be reset to the library look.
+- All original and offline, in the fonts Rhema already ships; the four built-in themes are unchanged.
+
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### Words while a camera is not playing (#213)

@@ -1,0 +1,303 @@
+import { useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
+import { ask } from "@tauri-apps/plugin-dialog"
+import { HeartIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { CanvasVerse } from "@/components/ui/canvas-verse"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useBroadcastStore } from "@/stores"
+import { useShellStore, type DesignTab } from "@/studio/shell-store"
+import { LOWER_THIRDS } from "@/lib/builtin-themes"
+import { SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
+import { LIBRARY_LOOKS, LOOK_FAMILIES } from "@/lib/look-library-data"
+import { adoptLook, CONTENT_LABELS, filterLooks, LAYOUT_NAMES, readLookFavourites, resetCopy, themeUsedBy, writeLookFavourites, type LibraryLook, type LookBackground, type LookFamilyId, type LookLayout } from "@/lib/look-library"
+import { mayLeaveThemeDraft } from "@/lib/theme-draft"
+import { drawScene } from "@/lib/scene-renderer"
+import { drawStage } from "@/lib/stage-canvas"
+import { applyStageStyle } from "@/lib/stage-style"
+import { onThemeFontsLoaded } from "@/lib/verse-renderer"
+import { themeImageCache } from "@/lib/theme-image-cache"
+import { cn } from "@/lib/utils"
+import type { BroadcastTheme, LowerThird, SceneFrame, StagePayload, Ticker, VerseRenderData } from "@/types"
+
+// Sample words for the previews: public-domain scripture and hymn text, in English and Yorùbá.
+const PSALM_EN = "Make a joyful noise unto the LORD, all ye lands."
+const PSALM_YO = "Ẹ hó ìhó ayọ̀ sí Olúwa, gbogbo ilẹ̀."
+const BIBLE_SAMPLE: VerseRenderData = { content: "bible", reference: "Psalm 100:1", segments: [{ verseNumber: 1, text: PSALM_EN }], translationLines: [PSALM_EN, PSALM_YO] }
+const SONG_SAMPLE: VerseRenderData = { ...SAMPLE_BILINGUAL_SONG, content: "hymn" }
+const SPEAKER_SAMPLE = { line1: "Pastor Adéwálé Ògúnlẹ́yẹ", line2: "Senior Pastor · Olùṣọ́-àgùntàn" }
+const NOTICES_SAMPLE = ["Ẹ kú àbọ̀: welcome to everyone joining us today", "Youth meeting, Friday 6 pm", "Harvest thanksgiving next Sunday"]
+const STAGE_SAMPLE: StagePayload = {
+  current: { title: "Psalm 100:1", lines: [PSALM_EN, PSALM_YO] },
+  next: "Offering",
+  note: "Reader comes to the lectern",
+  timer: { label: "12:40", tone: "ok" },
+  message: null,
+  band: "Key G · 72 bpm",
+  finish: { time: "11:42", lateMin: 0 },
+}
+const NO_WORDS: VerseRenderData = { reference: "", segments: [] }
+// A keyed frame with nothing of its own, for previewing bands and tickers over it.
+const KEYED: BroadcastTheme = { ...LOWER_THIRDS, id: "look-preview-keyed", textBox: { ...LOWER_THIRDS.textBox, enabled: false } }
+// Transparent looks are previewed over the usual sign for "nothing here", so the key is visible.
+const CHECKER = { backgroundColor: "#2c3338", backgroundImage: "repeating-conic-gradient(#3a4248 0% 25%, transparent 0% 50%)", backgroundSize: "18px 18px" }
+
+const sampleFor = (shows: string[] | undefined) => (shows?.includes("bible") ? BIBLE_SAMPLE : SONG_SAMPLE)
+const themeLook = (id: string | undefined) => {
+  const l = LIBRARY_LOOKS.find((x) => x.id === id)
+  return l?.kind === "theme" ? l.theme : undefined
+}
+
+const LAYOUTS: ReadonlyArray<LookLayout | "all"> = ["all", "fullscreen", "lower-third", "ticker", "scene", "stage"]
+const BACKGROUNDS: ReadonlyArray<readonly [LookBackground | "all", string]> = [["all", "Any"], ["dark", "Dark"], ["light", "Light"], ["transparent", "Transparent"]]
+
+const storage = typeof localStorage === "undefined" ? null : localStorage
+
+/**
+ * Design → Library: ready-made looks to start from. Use adds the church's own
+ * copy; nothing on a screen changes until that copy is chosen for an output.
+ */
+export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: string) => void }) {
+  const [layout, setLayout] = useState<LookLayout | "all">("all")
+  const [family, setFamily] = useState<LookFamilyId | "all">("all")
+  const [background, setBackground] = useState<LookBackground | "all">("all")
+  const [favouritesOnly, setFavouritesOnly] = useState(false)
+  const [favourites, setFavourites] = useState(() => readLookFavourites(storage))
+  const looks = useMemo(() => filterLooks(LIBRARY_LOOKS, { layout, family, background, favouritesOnly, favourites }), [layout, family, background, favouritesOnly, favourites])
+  const groups = LOOK_FAMILIES.map((f) => ({ family: f, looks: looks.filter((l) => l.family === f.id) })).filter((g) => g.looks.length > 0)
+
+  const toggleFavourite = (id: string) => {
+    const next = new Set(favourites)
+    if (!next.delete(id)) next.add(id)
+    setFavourites(next)
+    writeLookFavourites(storage, next)
+  }
+  const clear = () => { setLayout("all"); setFamily("all"); setBackground("all"); setFavouritesOnly(false) }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="max-w-3xl text-sm text-muted-foreground">
+        Ready-made looks, made for Rhema and fully offline. <strong className="font-semibold text-foreground">Use</strong> adds your own copy to your looks, to change as you like.
+        Nothing on the screens changes until you choose the copy for an output in its settings.
+      </p>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Layout">
+          {LAYOUTS.map((l) => (
+            <Chip key={l} on={layout === l} onClick={() => setLayout(l)}>{l === "all" ? "All layouts" : LAYOUT_NAMES[l]}</Chip>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Background">
+          {BACKGROUNDS.map(([b, label]) => (
+            <Chip key={b} on={background === b} onClick={() => setBackground(b)}>{b === "all" ? "Any background" : label}</Chip>
+          ))}
+        </div>
+        <Select value={family} onValueChange={(v) => setFamily(v as LookFamilyId | "all")}>
+          <SelectTrigger aria-label="Family" className="h-7 w-48 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Every family</SelectItem>
+            {LOOK_FAMILIES.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <button type="button" aria-pressed={favouritesOnly} onClick={() => setFavouritesOnly(!favouritesOnly)} className={cn("flex items-center gap-1 rounded-full border px-2.5 py-0.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5", favouritesOnly ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
+          <HeartIcon className={cn(favouritesOnly && "fill-current text-primary")} /> Favourites
+        </button>
+      </div>
+      {groups.length === 0 ? (
+        <div className="flex flex-col items-start gap-2 py-8 text-sm text-muted-foreground">
+          {favouritesOnly && favourites.size === 0 ? "No favourites yet: mark a look with the heart to keep it here." : "No looks match these filters."}
+          <Button size="sm" variant="outline" onClick={clear}>Show every look</Button>
+        </div>
+      ) : (
+        groups.map((g) => (
+          <section key={g.family.id} aria-label={g.family.name} className="flex flex-col gap-3">
+            <header>
+              <h3 className="text-sm font-bold">{g.family.name}</h3>
+              <p className="text-xs text-muted-foreground">{g.family.description}</p>
+            </header>
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+              {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} />)}
+            </ul>
+          </section>
+        ))
+      )}
+    </div>
+  )
+}
+
+function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" role="radio" aria-checked={on} onClick={onClick} className={cn("rounded-full border px-2.5 py-0.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50", on ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
+      {children}
+    </button>
+  )
+}
+
+const BACKGROUND_NAMES: Record<LookBackground, string> = { dark: "Dark", light: "Light", transparent: "Transparent (keyed)" }
+
+function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook; favourite: boolean; onFavourite: () => void; onOpen: (tab: DesignTab, id?: string) => void }) {
+  const themes = useBroadcastStore((s) => s.themes)
+  const copies = look.kind === "theme" ? themes.filter((t) => t.libraryLookId === look.id) : []
+  return (
+    <li className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
+      <LookPreview look={look} />
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <div className="flex items-start gap-2">
+          <h4 className="min-w-0 flex-1 text-xs leading-snug font-semibold">{look.name}</h4>
+          <button type="button" aria-pressed={favourite} aria-label={favourite ? `Remove ${look.name} from favourites` : `Add ${look.name} to favourites`} onClick={onFavourite} className="-m-1 rounded p-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5">
+            <HeartIcon className={cn(favourite && "fill-current text-primary")} />
+          </button>
+        </div>
+        <p className="text-[0.6875rem] text-muted-foreground">{LAYOUT_NAMES[look.layout]} · {CONTENT_LABELS[look.content]} · {BACKGROUND_NAMES[look.background]} · {look.aspect}</p>
+        <p className="text-xs text-muted-foreground">{look.purpose}</p>
+        {copies.length > 0 && <p className="text-[0.6875rem] text-muted-foreground">In your themes: {copies.map((c) => c.name).join(", ")}</p>}
+        <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
+          <Button size="xs" onClick={() => void addLook(look, false, onOpen)} title="Add your own copy to your looks"><PlusIcon /> Use</Button>
+          {look.kind !== "scene" && <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title="Add your own copy and open it to edit"><PencilIcon /> Use and edit</Button>}
+          {copies.length > 0 && look.kind === "theme" && <ResetMenu look={look} copies={copies} />}
+        </div>
+      </div>
+    </li>
+  )
+}
+
+/** Reset: put one of the church's copies back as the library has it. Not for a copy a screen shows now. */
+function ResetMenu({ look, copies }: { look: Extract<LibraryLook, { kind: "theme" }>; copies: BroadcastTheme[] }) {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="icon-xs" variant="ghost" aria-label={`More for ${look.name}`}><MoreHorizontalIcon /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-72">
+        <DropdownMenuLabel className="text-[0.6875rem]">Reset a copy to this look</DropdownMenuLabel>
+        {copies.map((c) => {
+          const usedBy = themeUsedBy(c.id, outputs, scenes)
+          return (
+            <DropdownMenuItem key={c.id} disabled={usedBy.length > 0} onSelect={() => void reset(c, look)}>
+              <RotateCcwIcon /> <span className="truncate">{c.name}{usedBy.length > 0 ? ` (on ${usedBy.join(", ")})` : ""}</span>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+async function reset(copy: BroadcastTheme, look: Extract<LibraryLook, { kind: "theme" }>) {
+  const s = useBroadcastStore.getState()
+  const open = s.editingThemeId === copy.id
+  if (open && !(await mayLeaveThemeDraft())) return
+  s.saveTheme(resetCopy(copy, look))
+  // The Designer reloads the copy, so a later Save does not bring the old version back.
+  if (open) useBroadcastStore.getState().startEditing(copy.id)
+  toast(`“${copy.name}” is back to the library look.`)
+}
+
+/** Add the look's copies to the church's looks; with `edit`, open the copy too. Never touches an output. */
+async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab, id?: string) => void) {
+  if (look.kind === "ticker" && !(await confirm(`Use “${look.name}” as your ticker look?`, "It replaces your ticker's look. A ticker running now keeps its look until you start it again."))) return
+  if (look.kind === "stage" && !(await confirm(`Use “${look.name}” on the stage display?`, "It replaces your stage look, and stage screens show it straight away. The congregation never sees the stage display."))) return
+  if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
+  const s = useBroadcastStore.getState()
+  const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
+  const added = adoptLook(look, { takenNames: taken, library: LIBRARY_LOOKS })
+  for (const t of added.themes) useBroadcastStore.getState().saveTheme(t)
+  if (added.lowerThirdStyle) useBroadcastStore.getState().saveLowerThirdStyle(added.lowerThirdStyle)
+  // Only the saved look: the ticker on air keeps the look it started with.
+  if (added.tickerStyle) useBroadcastStore.setState({ tickerStyle: added.tickerStyle })
+  if (added.stageStyle) useBroadcastStore.getState().saveStageStyle(added.stageStyle)
+  if (added.scene) useBroadcastStore.getState().saveScene(added.scene)
+
+  const choose = { label: "Choose for a screen", onClick: () => useShellStore.getState().openOutputs() }
+  switch (look.kind) {
+    case "theme": {
+      const copy = added.themes[0]
+      if (edit) {
+        useBroadcastStore.getState().startEditing(copy.id)
+        onOpen("themes")
+      }
+      toast(`Added “${copy.name}” to your themes.`, { description: "Choose it for an output in the output's settings; nothing on the screens has changed.", action: choose })
+      return
+    }
+    case "lower-third":
+      if (edit) onOpen("lower-thirds", added.lowerThirdStyle?.id)
+      toast(`Added “${added.lowerThirdStyle?.name}” to your lower-third styles.`, { description: "Pick it when you show a name in Present. A band on air now keeps its look." })
+      return
+    case "ticker":
+      if (edit) onOpen("ticker")
+      toast(`Your ticker now uses “${look.name}”.`)
+      return
+    case "stage":
+      if (edit) onOpen("stage")
+      toast(`The stage display now uses “${look.name}”.`)
+      return
+    case "scene":
+      toast(`Added the scene “${added.scene?.name}”${added.themes.length ? ` and its look “${added.themes.map((t) => t.name).join("”, “")}”` : ""}.`, { description: "Set its camera and take it in Production → Programs; nothing is on air yet." })
+      return
+  }
+}
+
+async function confirm(title: string, message: string): Promise<boolean> {
+  try {
+    return await ask(message, { title, kind: "info", okLabel: "Use it", cancelLabel: "Cancel" })
+  } catch {
+    return false
+  }
+}
+
+/** A realistic preview, drawn by the same code the outputs use. */
+function LookPreview({ look }: { look: LibraryLook }) {
+  const keyed = look.background === "transparent"
+  const label = `Preview of ${look.name}`
+  return (
+    <div className="aspect-video w-full overflow-hidden border-b border-border" style={keyed ? CHECKER : undefined} aria-label={label} role="img">
+      {look.kind === "theme" && <CanvasVerse theme={look.theme} verse={look.content === "bible" ? BIBLE_SAMPLE : SONG_SAMPLE} className="[&_canvas]:rounded-none" />}
+      {look.kind === "lower-third" && <CanvasVerse theme={KEYED} verse={NO_WORDS} overlay={{ ...SPEAKER_SAMPLE, style: look.style } satisfies LowerThird} className="[&_canvas]:rounded-none" />}
+      {/* Further into the crawl than a fresh ticker, so the preview shows its words. */}
+      {look.kind === "ticker" && <CanvasVerse theme={KEYED} verse={NO_WORDS} ticker={{ items: NOTICES_SAMPLE, style: { ...look.style, speed: look.style.speed * 3 }, startedAt: 0, backing: null } satisfies Ticker} className="[&_canvas]:rounded-none" />}
+      {look.kind === "stage" && <StagePreview look={look} />}
+      {look.kind === "scene" && <ScenePreview look={look} />}
+    </div>
+  )
+}
+
+function StagePreview({ look }: { look: Extract<LibraryLook, { kind: "stage" }> }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const ctx = ref.current?.getContext("2d")
+    if (ctx) drawStage(ctx, 1280, 720, applyStageStyle(STAGE_SAMPLE, look.style))
+  }, [look])
+  return <canvas ref={ref} width={1280} height={720} className="block h-full w-full" />
+}
+
+// One canvas for every scene preview's feed layer: each is drawn and placed before the next.
+let layerCanvas: HTMLCanvasElement | null = null
+
+function ScenePreview({ look }: { look: Extract<LibraryLook, { kind: "scene" }> }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const draw = () => {
+      const canvas = ref.current
+      const ctx = canvas?.getContext("2d")
+      if (!canvas || !ctx) return
+      const frame: SceneFrame = {
+        sceneId: look.id,
+        // A plain stand-in for the camera picture.
+        background: "#2a3136",
+        layers: look.scene.layers.map((l, i) => l.kind === "camera"
+          ? { id: `${i}`, kind: "camera", box: l.box, opacity: 1, label: "Camera" }
+          : { id: `${i}`, kind: "feed", box: l.box, opacity: 1, theme: themeLook(l.lookId), verse: sampleFor(l.shows) }),
+      }
+      try {
+        drawScene(ctx, canvas.width, canvas.height, frame, { image: () => null, layerCanvas: () => (layerCanvas ??= document.createElement("canvas")), imageCache: themeImageCache(), preview: true })
+      } catch (e) {
+        console.error("[look-library] scene preview failed to draw", e)
+      }
+    }
+    draw()
+    return onThemeFontsLoaded(draw)
+  }, [look])
+  return <canvas ref={ref} width={960} height={540} className="block h-full w-full" />
+}

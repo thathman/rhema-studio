@@ -976,6 +976,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dk. Built-in look library (#299 UX15-3)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dk.1 | Design → Library. Scroll through every family. | Six families (Church Classic, Broadcast Clean, Contemporary, Warm Editorial, High Contrast, Seasonal), each card with a drawn preview, its layout, content, background and 16:9. Yorùbá lines ("Ẹ hó ìhó ayọ̀ sí Olúwa, gbogbo ilẹ̀", "Oore ọ̀fẹ́ ìyanu") show every tone mark and dot below; lower thirds and tickers show the checkerboard through their transparent parts. No network needed. | Unverified |
+| 10dk.2 | Filter: Lower third, then Transparent, then Family High Contrast; the heart on two cards; Favourites; restart Rhema. | Each filter narrows the cards; Favourites shows the two; they are still marked after the restart. "Show every look" clears the filters. | Unverified |
+| 10dk.3 | Note what Main output and an NDI output show. On "Clean · Scripture strip" press **Use**. | A toast says it was added to your themes; Design → Themes lists "Clean · Scripture strip" (not Built-in); no screen, NDI feed or browser feed changes. | Unverified |
+| 10dk.4 | Production → Screens → Open outputs, edit the NDI output, choose "Clean · Scripture strip" as its look, put John 3:16 on air; watch it in OBS (or an NDI viewer). | The verse is in a dark strip at the bottom with the camera visible through the rest (transparent key); the projector keeps its own look. | Unverified |
+| 10dk.5 | On "Classic · Scripture" press **Use and edit**, change the words' colour, Save. Back in Library, the card says "In your themes"; its … menu → Reset that copy. | The editor opens the copy; after Reset it looks like the library card again with its name kept. A copy an output uses shows "(on <output>)" and cannot be reset. The library card itself never changes. | Unverified |
+| 10dk.6 | "High Contrast · Name band" → Use and edit; in Present show a name with that style. "Classic · Notices" → Use (confirm) while a ticker runs, then stop and start the ticker. | Lower thirds opens on the new style; the name band uses it. The running ticker keeps its look until it is started again, then uses Classic · Notices. | Unverified |
+| 10dk.7 | "Contemporary · Camera and lyrics" → Use. Production → Programs. | A new scene with a camera layer and a Lyrics layer in "Contemporary · Lyrics words" (also added to your themes); nothing is taken on air until you Take it. | Unverified |
+| 10dk.8 | "High Contrast · Large confidence" → Use (the question says stage screens change at once). | The stage display shows larger words; the congregation outputs are unchanged. | Unverified |
+
 ### 10df. Time warnings on the stage (#196 R6)
 
 | # | Step | Expected | Result |
