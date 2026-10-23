@@ -7,10 +7,9 @@ periodic review, so feature PRs leave those files alone.
 
 ## 2026-10-23 — The service log survives a crash (#196 R3, #246)
 
-- **Branch / PR:** `pt-008/journal-recovery`. `live-recovery.ts`: the journal (entries, `startItemIds`) kept in `recovery.json` under `journal`, 3 s after it changes; `restoreJournal` after an unclean exit, into an empty log, if under 6 h old, rebasing `mono` from `at` on this run's clock, with a recovery line.
+- **Branch / PR:** `pt-008/journal-recovery`. `live-recovery.ts`: the journal (entries, `startItemIds`) kept in `recovery.json` under `journal`, 3 s after it changes; `restoreJournal` after an unclean exit, once, if under 6 h old, before anything this run logged already (a scene put back at start-up), rebasing `mono` from `at` on this run's clock, with a recovery line.
 - The service timer is in the snapshot (length, elapsed, running; saved when it starts, pauses, resets or is corrected) and Put back restores it, counting the time Rhema was closed, unless a timer was started since.
-- **Tests:** `live-recovery.test.ts` (restored, durations kept, never over a begun or an old log; the timer). Desktop: acceptance 10da.4–5.
-- **Tests:** `live-recovery.test.ts` (restored, durations kept, never over a begun or an old log). Desktop: acceptance 10da.4.
+- **Tests:** `live-recovery.test.ts` (restored after a start-up entry, durations kept, only once, never an old log; the timer). Desktop: acceptance 10da.4–5 passed on the combined QA build after the start-up fix. Real data unchanged, WebKit restored.
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
 - **Branch / PR:** `mcp-004/look-suggestions`. `mcp_drafts.rs`: `Looks` (built-in names plus `broadcast-themes.json` custom looks and scenes, read-only), `check_with` keeps `suggested_look` / `suggested_scene` (80 chars) and warns on unknown names; `mcp.rs`: `rhema_list_looks_and_scenes`, schema fields. Review shows them per item; `draftToRundown` does not carry them (decision: suggestions, not a data-model change).
