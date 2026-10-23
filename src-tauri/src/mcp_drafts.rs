@@ -125,14 +125,16 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
             }
             let notes = short(it.get("notes"), 500);
             // Suggestions only: shown to the reviewer, never stored in the service (MCP-004).
-            let look = short(it.get("suggested_look"), 80);
-            let scene = short(it.get("suggested_scene"), 80);
+            let mut look = short(it.get("suggested_look"), 80);
+            let mut scene = short(it.get("suggested_scene"), 80);
             if let Some(l) = looks {
-                if let Some(x) = look.as_deref().filter(|x| !l.looks.iter().any(|n| n.eq_ignore_ascii_case(x))) {
-                    warnings.push(format!("{at}: \"{x}\" is not one of the church's looks (rhema_list_looks_and_scenes)"));
-                }
-                if let Some(x) = scene.as_deref().filter(|x| !l.scenes.iter().any(|n| n.eq_ignore_ascii_case(x))) {
-                    warnings.push(format!("{at}: \"{x}\" is not one of the church's scenes (rhema_list_looks_and_scenes)"));
+                // Known names are kept as the church spells them; unknown ones are warned about.
+                for (value, names, what) in [(&mut look, &l.looks, "looks"), (&mut scene, &l.scenes, "scenes")] {
+                    let Some(x) = value.clone() else { continue };
+                    match names.iter().find(|n| n.to_lowercase() == x.to_lowercase()) {
+                        Some(n) => *value = Some(n.clone()),
+                        None => warnings.push(format!("{at}: \"{x}\" is not one of the church's {what} (rhema_list_looks_and_scenes)")),
+                    }
                 }
             }
             let base = json!({ "planned_minutes": planned, "notes": notes, "suggested_look": look, "suggested_scene": scene });
@@ -388,7 +390,7 @@ mod tests {
             { "kind": "slide", "title": "Notices", "suggested_look": "Neon party", "suggested_scene": "Camera only" },
         ] }] }));
         let items = &c.draft.as_ref().unwrap()["phases"][0]["items"];
-        assert_eq!(items[0]["suggested_look"], "thanksgiving GOLD");
+        assert_eq!(items[0]["suggested_look"], "Thanksgiving gold", "kept as the church spells it");
         assert_eq!(items[0]["suggested_scene"], "Bible and lyrics");
         let warnings: Vec<String> = c.report["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect();
         assert!(warnings.iter().any(|w| w.contains("\"Neon party\" is not one of the church's looks")), "{warnings:?}");
