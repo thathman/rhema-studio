@@ -31,7 +31,7 @@ describe("timed moves in the service", () => {
       { id: "post", type: "phase", name: "Post-service loop", at: 3, rule: "loop", role: "post" },
     ]
     useQueueStore.setState({ items: [item("a", 2), item("b", 3, false), item("c", 1), item("p", 1)], headers })
-    useBroadcastStore.setState({ isLive: false, liveItemId: null })
+    useBroadcastStore.setState({ isLive: false, liveItemId: null, rehearsal: false, rehearsalReturn: null })
     usePhaseRun.setState({ run: null })
     useTimedAdvance.getState().setOn(false)
   })
@@ -67,6 +67,32 @@ describe("timed moves in the service", () => {
     expect(presented).toEqual([])
     usePhaseRun.setState({ run: { headerId: "main", itemId: "a", startsAt: null, nextAt: null } })
     live("a")
+    expect(useTimedAdvance.getState().dueAt).toBeNull()
+  })
+
+  it("a move pending on air waits through rehearsal, which neither cancels nor makes it (ADR 0001)", async () => {
+    useTimedAdvance.getState().setOn(true)
+    live("a")
+    useBroadcastStore.getState().setRehearsal(true)
+    live("c") // shown in rehearsal
+    await vi.advanceTimersByTimeAsync(3 * 60_000)
+    expect(presented).toEqual([])
+    useBroadcastStore.getState().setRehearsal(false)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(presented).toEqual(["b"])
+  })
+
+  it("Show this live with another item: the old move is dropped and the new item's is looked at", async () => {
+    useTimedAdvance.getState().setOn(true)
+    live("a")
+    useBroadcastStore.getState().setRehearsal(true)
+    live("c")
+    useBroadcastStore.getState().setRehearsal(false, { keepRehearsed: true })
+    // a's move (to b at 2 min) is dropped at once, so Present stops counting down to it; c's next
+    // item is in the post-service phase, so none is due.
+    expect(useTimedAdvance.getState().dueAt).toBeNull()
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(presented).toEqual([])
     expect(useTimedAdvance.getState().dueAt).toBeNull()
   })
 

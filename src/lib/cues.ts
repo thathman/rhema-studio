@@ -9,43 +9,60 @@ import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { useSettingsStore, type CustomMacro } from "@/stores/settings-store"
 
 /**
+ * What a cue step touches (ADR 0001, #246 C04), so a cue can say what it will do before it runs.
+ * program: what the main screens show; screen: a quick screen over it; override: Black or Logo
+ * over every screen and feed; timer, stage, ticker; rehearsal: leaving it.
+ */
+export type CueScope = "program" | "screen" | "override" | "timer" | "stage" | "ticker" | "rehearsal"
+
+const IMPACT: Record<CueScope, string> = {
+  rehearsal: "Leaves rehearsal: the real program comes back",
+  program: "Changes what the main screens show",
+  screen: "Puts a screen over what the main screens show",
+  override: "Covers every screen and feed",
+  timer: "Changes the service timer",
+  stage: "Changes the stage message",
+  ticker: "Starts or stops the ticker",
+}
+
+/**
  * Every operator verb, named once, so macros, the keyboard, remotes and any
  * future cue list all run the same code. Each action is safe to repeat.
  */
 export const CUE_ACTIONS = {
-  next: { label: "Next", run: () => presentActions.next() },
-  prev: { label: "Previous", run: () => presentActions.prev() },
-  showLive: { label: "Show live", run: () => presentActions.showLive() },
-  clear: { label: "Clear", run: () => presentActions.clear() },
-  restore: { label: "Restore", run: () => presentActions.restore() },
-  "quick.welcome": { label: "Quick screen: Welcome", run: () => presentActions.quickScreen("welcome") },
-  "quick.stand": { label: "Quick screen: Please stand", run: () => presentActions.quickScreen("stand") },
-  "quick.pray": { label: "Quick screen: Let us pray", run: () => presentActions.quickScreen("pray") },
-  "quick.offering": { label: "Quick screen: Offering", run: () => presentActions.quickScreen("offering") },
-  "quick.technical": { label: "Quick screen: Technical issue", run: () => presentActions.quickScreen("technical") },
-  "quick.logo": { label: "Quick screen: Logo", run: () => presentActions.quickScreen("logo") },
-  "quick.black": { label: "Quick screen: Black", run: () => presentActions.quickScreen("black") },
-  "quick.back": { label: "Back from quick screen", run: () => presentActions.back() },
-  "timer.start": { label: "Start the timer", run: () => useTimerStore.getState().start() },
-  "timer.pause": { label: "Pause the timer", run: () => useTimerStore.getState().pause() },
-  "timer.reset": { label: "Reset the timer", run: () => resetTimerLogged() },
+  next: { scope: "program", label: "Next", run: () => presentActions.next() },
+  prev: { scope: "program", label: "Previous", run: () => presentActions.prev() },
+  showLive: { scope: "program", label: "Show live", run: () => presentActions.showLive() },
+  clear: { scope: "program", label: "Clear", run: () => presentActions.clear() },
+  restore: { scope: "program", label: "Restore", run: () => presentActions.restore() },
+  "quick.welcome": { scope: "screen", label: "Quick screen: Welcome", run: () => presentActions.quickScreen("welcome") },
+  "quick.stand": { scope: "screen", label: "Quick screen: Please stand", run: () => presentActions.quickScreen("stand") },
+  "quick.pray": { scope: "screen", label: "Quick screen: Let us pray", run: () => presentActions.quickScreen("pray") },
+  "quick.offering": { scope: "screen", label: "Quick screen: Offering", run: () => presentActions.quickScreen("offering") },
+  "quick.technical": { scope: "screen", label: "Quick screen: Technical issue", run: () => presentActions.quickScreen("technical") },
+  "quick.logo": { scope: "override", label: "Quick screen: Logo", run: () => presentActions.quickScreen("logo") },
+  "quick.black": { scope: "override", label: "Quick screen: Black", run: () => presentActions.quickScreen("black") },
+  "quick.back": { scope: "screen", label: "Back from quick screen", run: () => presentActions.back() },
+  "timer.start": { scope: "timer", label: "Start the timer", run: () => useTimerStore.getState().start() },
+  "timer.pause": { scope: "timer", label: "Pause the timer", run: () => useTimerStore.getState().pause() },
+  "timer.reset": { scope: "timer", label: "Reset the timer", run: () => resetTimerLogged() },
   // "Start the service" twice must not wipe the timer of a service already running.
-  "timer.fresh": { label: "Start the timer from zero (unless it is running)", run: () => {
+  "timer.fresh": { scope: "timer", label: "Start the timer from zero (unless it is running)", run: () => {
     if (isRunning(useTimerStore.getState().timer)) return
     resetTimerLogged()
     useTimerStore.getState().start()
   } },
-  "stage.clearMessage": { label: "Clear the stage message", run: () => useBroadcastStore.getState().setStageMessage("") },
-  "rehearsal.off": { label: "Rehearsal off", run: () => leaveRehearsal() },
+  "stage.clearMessage": { scope: "stage", label: "Clear the stage message", run: () => useBroadcastStore.getState().setStageMessage("") },
+  "rehearsal.off": { scope: "rehearsal", label: "Rehearsal off", run: () => leaveRehearsal() },
   // Issue #187: a running ticker is left alone, so a repeated command does not restart the crawl.
-  "ticker.take": { label: "Take the ticker live (unless it is running)", run: async () => {
+  "ticker.take": { scope: "ticker", label: "Take the ticker live (unless it is running)", run: async () => {
     const s = useBroadcastStore.getState()
     if (s.ticker) return
     const backing = await lowerThirdBacking(s.tickerStyle)
     if (!useBroadcastStore.getState().ticker) useBroadcastStore.getState().setTicker({ backing })
   } },
-  "ticker.stop": { label: "Stop the ticker", run: () => useBroadcastStore.getState().setTicker(null) },
-} as const satisfies Record<string, { label: string; run: () => unknown }>
+  "ticker.stop": { scope: "ticker", label: "Stop the ticker", run: () => useBroadcastStore.getState().setTicker(null) },
+} as const satisfies Record<string, { scope: CueScope; label: string; run: () => unknown }>
 
 export type CueId = keyof typeof CUE_ACTIONS
 
@@ -114,4 +131,14 @@ export async function runSteps(steps: CueId[]): Promise<CueId[]> {
 export function runMacro(id: string): Promise<CueId[]> {
   const macro = findMacro(id)
   return macro ? runSteps(macro.steps) : Promise.resolve([])
+}
+
+/** What a cue will touch, one line per kind of effect, in the order its steps first touch it. */
+export function cueImpact(steps: readonly CueId[]): string[] {
+  const seen: CueScope[] = []
+  for (const id of steps) {
+    const scope = CUE_ACTIONS[id]?.scope
+    if (scope && !seen.includes(scope)) seen.push(scope)
+  }
+  return seen.map((s) => IMPACT[s])
 }

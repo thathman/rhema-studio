@@ -9,7 +9,8 @@ import { useHold } from "@/stores/hold-store"
  * A loop or run-once phase running by itself in Present (issue #193). Nothing runs until the
  * operator starts it; every step is an ordinary go-live of the next item in the phase. Taking
  * anything else, Clear, Black or a quick screen stops it at once, so it never fights the operator.
- * The main service is never run this way.
+ * The main service is never run this way. A run started on air waits while rehearsal is on and
+ * carries on after; one started in rehearsal belongs to it and ends with it (ADR 0001).
  */
 export interface PhaseRun {
   headerId: string
@@ -19,6 +20,8 @@ export interface PhaseRun {
   startsAt: number | null
   /** When the next item goes up, epoch ms (null on the last item of a run-once phase). */
   nextAt: number | null
+  /** Started in rehearsal: it runs only there. */
+  rehearsal?: boolean
 }
 
 interface PhaseRunState {
@@ -33,14 +36,20 @@ let pending: { at: number; fn: () => void } | null = null
 // While the run itself is going live, the live item changing is not the operator's doing.
 let presenting = false
 
+/** A step waits on hold, and while the app is not where the run was started (on air or in rehearsal). */
+function waiting(): boolean {
+  const run = usePhaseRun.getState().run
+  return !!useHold.getState().hold || (!!run && !!run.rehearsal !== useBroadcastStore.getState().rehearsal)
+}
+
 function later(ms: number, fn: () => void) {
   if (timer) clearTimeout(timer)
   const step = { at: Date.now() + Math.max(0, ms), fn }
   pending = step
   timer = setTimeout(() => {
     timer = null
-    // On hold: the step waits (still pending) and runs at Resume.
-    if (useHold.getState().hold) return
+    // On hold (or in rehearsal for a run on air): the step waits (still pending) and runs later.
+    if (waiting()) return
     if (pending === step) pending = null
     fn()
   }, Math.max(0, ms))
@@ -48,7 +57,7 @@ function later(ms: number, fn: () => void) {
 
 /** On the app's tick: run a step whose timer is late (held back while the window is hidden). */
 export function catchUpPhaseRun(now = Date.now()) {
-  if (!pending || now < pending.at || useHold.getState().hold) return
+  if (!pending || now < pending.at || waiting()) return
   const { fn } = pending
   pending = null
   if (timer) clearTimeout(timer)
@@ -88,7 +97,7 @@ async function step(run: PhaseRun) {
   if (!b.isLive || b.liveItemId !== item.id) return usePhaseRun.getState().stop()
   const ms = dwellSeconds(header, item.planned_minutes) * 1000
   const more = nextInPhase(header.rule, range.start, range.end, index) !== null
-  const next: PhaseRun = { headerId: run.headerId, itemId: item.id, startsAt: null, nextAt: more ? Date.now() + ms : null }
+  const next: PhaseRun = { headerId: run.headerId, itemId: item.id, startsAt: null, nextAt: more ? Date.now() + ms : null, ...(run.rehearsal ? { rehearsal: true } : {}) }
   usePhaseRun.setState({ run: next })
   later(ms, () => { if (usePhaseRun.getState().run === next) void step(next) })
 }
@@ -100,7 +109,7 @@ export const usePhaseRun = create<PhaseRunState>((set, get) => ({
     const header = useQueueStore.getState().headers.find((h) => h.id === headerId)
     if (header?.type !== "phase" || (header.rule !== "loop" && header.rule !== "auto_once")) return
     const due = header.role === "warmup" && header.rule === "auto_once" ? warmupDue(Date.now()) : null
-    const run: PhaseRun = { headerId, itemId: null, startsAt: due, nextAt: null }
+    const run: PhaseRun = { headerId, itemId: null, startsAt: due, nextAt: null, ...(useBroadcastStore.getState().rehearsal ? { rehearsal: true } : {}) }
     set({ run })
     if (due) later(due - Date.now(), () => { if (get().run === run) void step(run) })
     else void step(run)
@@ -116,7 +125,16 @@ export const usePhaseRun = create<PhaseRunState>((set, get) => ({
 // The operator took over: something else went live, or the output went off air.
 useBroadcastStore.subscribe((s, prev) => {
   const run = usePhaseRun.getState().run
-  if (!run?.itemId || presenting) return
+  if (s.rehearsal !== prev.rehearsal) {
+    // Leaving rehearsal ends a run started there. A run on air carries on (a step due meanwhile runs
+    // now), unless Show this live put something else up: that is the operator taking over.
+    if (!s.rehearsal && run?.rehearsal) usePhaseRun.getState().stop()
+    else if (!s.rehearsal && run?.itemId && (!s.isLive || s.liveItemId !== run.itemId)) usePhaseRun.getState().stop()
+    else if (!s.rehearsal) catchUpPhaseRun()
+    return
+  }
+  // What rehearsal shows is not the operator taking over a run on air.
+  if (!run?.itemId || presenting || !!run.rehearsal !== s.rehearsal) return
   if ((prev.isLive && !s.isLive) || s.liveItemId !== run.itemId) usePhaseRun.getState().stop()
 })
 

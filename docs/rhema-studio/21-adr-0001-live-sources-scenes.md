@@ -63,7 +63,7 @@ shortcuts and the phone remote keep calling the same actions.
 | **Restore** | Source | Re-activate the last cleared value of that source. Restore on the main console restores the source Clear last took off. |
 | **Take** | Program | Put a scene on a destination (Milestone C). |
 | **Black** | Emergency override | Covers every visual layer (sources, lower third, ticker, video) on every public destination until released. Stage and signage keep their own rules (#246 C12). Back/Restore releases it to exactly what was there. |
-| **Rehearsal** | Whole host | A sandbox: everything works in the app, no destination changes. Leaving puts back the program as it was. **Show this live** leaves rehearsal and makes the rehearsed program real (a go-live: the approval question applies). |
+| **Rehearsal** | Whole host | A sandbox: everything works in the app, no destination changes, the service log records only that rehearsal ran. Leaving puts back the program, lower third, ticker, stage message and timer as they were; loops and timed moves on air wait and carry on. **Show this live** leaves rehearsal and makes the rehearsed program real (a go-live: the approval question applies); the rest still comes back as it was. |
 | **Live edit** | Designer | Off (default, and off again whenever editing ends): a theme draft stays in the Designer. On: destinations using that theme show the draft as it is edited. |
 
 ## 4. States that must stay distinct
@@ -88,12 +88,12 @@ timing engine will follow an explicit current event, not "whatever is on air".
 | # | Contract | Decision | Status |
 | --- | --- | --- | --- |
 | C01 | Designer drafts reach live outputs | Drafts stay in the Designer unless Live edit is on; Live edit shows how many screens it touches and ends with editing. Saving remains the normal way to change a look on air. | **Done (this slice)** |
-| C02 | Rehearsal leaks into production | Rehearsal snapshots the real program (and the rundown position) and restores it on exit; Show this live is the deliberate path, behind the approval gate. Nothing rehearsed is logged as aired; go-live cues do not fire on exit. | **Done (this slice)**; timers/cues inside rehearsal: next |
+| C02 | Rehearsal leaks into production | Rehearsal snapshots the real program (and the rundown position) and restores it on exit; Show this live is the deliberate path, behind the approval gate. Nothing rehearsed is logged as aired; go-live cues do not fire on exit. The lower third, ticker, stage message and service timer always come back as they were (even with Show this live); the ticker never reaches signage from rehearsal; the service log keeps only rehearsal on/off. A loop or timed move on air waits through rehearsal and carries on after; one started in rehearsal ends with it. | **Done** (#254, ARCH-003 slice 2) |
 | C07 | One global live | Per-source state with `shows` on outputs; legacy adapter. | **Done (ARCH-001 slice 1)**: `src/lib/live-sources.ts`, `sources` in the store |
 | C05 | Ambiguous Restore | Restore is per source; Back releases an override to exactly what it covered. | **Done** for sources (`clearSource`/`restoreSource`, Present → Live → Sources); the main Clear/Restore keeps acting on the program |
 | C11 | Auto Bible affects unrelated outputs | Auto activates only the `bible` source while a song, hymn, slide or quick screen is on the program; feeds bound to other sources are untouched. Default stays off. | **Done** (`presentVerse(…, { sourceOnly })`) |
 | C03 | Event timing follows content | An explicit current event in Live State drives timing and go-live cues; activation no longer implies an event start. | Milestone D |
-| C04 | Unscoped cues/macros | Each cue step declares its domain (source, program, override, timer, rehearsal); impact preview before running. | After C07 |
+| C04 | Unscoped cues/macros | Each cue step declares its scope (program, screen, override, timer, stage, ticker, rehearsal); each cue lists what it will touch before it runs. | **Done** (ARCH-003 slice 2): `CueScope`, `cueImpact` |
 | C09 | Approval vs live overrides | The approval gate covers first go-live of a service revision and rehearsal results; spontaneous Scripture and camera operations by the operator are never held. | Unchanged; documented |
 
 ## 7. Compatibility rules

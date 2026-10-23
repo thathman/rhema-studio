@@ -6,6 +6,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Rehearsal as a sandbox; cues say what they touch (ARCH-003)
+- Rehearsal now covers the whole desk: a lower third, ticker or stage message set in rehearsal, and anything done to the service timer, are undone when it ends (also with Show this live, which takes only the rehearsed screens live). A ticker started in rehearsal never reaches a signage screen. The service log records only that rehearsal ran.
+- A loop or timed move running on air waits through rehearsal (anything shown in rehearsal no longer stops it) and carries on after, catching up a step that came due; a loop started in rehearsal ends with it.
+- Every cue says what it will touch before you run it: the screens, a quick screen over them, every screen and feed (Black, Logo), the timer, the stage message, the ticker, or leaving rehearsal (#246 C04).
+
 ### Independent live sources (ARCH-001, ADR 0001)
 - Bible, Songs, Hymns, Slides, Pictures and quick screens each keep their own live value. An output can follow chosen sources (Outputs → edit → "What this output follows"): a "Rhema Bible | Lower Third" NDI feed set to Bible keeps Romans 8:28, in its own look, while a hymn is on the projector, and takes the next verse as soon as it is shown. Outputs left on "Everything put on air" behave exactly as before.
 - Present → Live shows the sources the feeds follow, each with its own take-off and Restore; Clear and Restore on the main controls still act on what the main screens show. Black and Logo cover every feed; Back returns each to its own source. The ticker stays independent. Rehearsal never changes a source.
