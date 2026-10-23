@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Words while a camera is not playing (#213)
+- A scene's camera layer can show words of your own ("Camera back shortly") in its box while the camera is not connected or has dropped, instead of the background.
+
 ### Readiness checks the plan and cameras (#213, #196)
 - Home: when the plan ends, a warning for an item planned past its end by, a note for a missing start time and for a camera layer without a stream address.
 

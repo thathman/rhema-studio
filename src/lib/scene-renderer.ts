@@ -27,6 +27,19 @@ function source(l: SceneLayerFrame, w: number, h: number) {
   return { sx: (w * c.l) / 100, sy: (h * c.t) / 100, sw: (w * (100 - c.l - c.r)) / 100, sh: (h * (100 - c.t - c.b)) / 100 }
 }
 
+/** One line of text fitted to a box, in a look's text style (a clock, a camera's fallback words). */
+function fitText(ctx: CanvasRenderingContext2D, text: string, r: { x: number; y: number; w: number; h: number }, theme: SceneLayerFrame["theme"], maxOfHeight = 0.3): void {
+  const vt = theme?.verseText
+  const family = vt?.fontFamily ? `"${vt.fontFamily}", sans-serif` : "sans-serif"
+  ctx.font = `${vt?.fontWeight ?? 600} 100px ${family}`
+  const size = Math.max(8, Math.min(r.h * maxOfHeight, (100 * r.w * 0.9) / Math.max(1, ctx.measureText(text).width)))
+  ctx.font = `${vt?.fontWeight ?? 600} ${Math.floor(size)}px ${family}`
+  ctx.fillStyle = vt?.color ?? "#ffffff"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2)
+}
+
 /**
  * Draw a scene: the background, then each layer in its box, bottom first. A feed layer is its look
  * drawn whole (a transparent look stays transparent) and then cropped and scaled into its box, so a
@@ -55,9 +68,11 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
         const cw = r.w / scale, ch = r.h / scale
         ctx.drawImage(img, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
       }
-    } else if (l.kind === "camera" && opts.camera) {
-      const v = opts.camera(l.id)
-      if (v && v.videoWidth > 0) {
+    } else if (l.kind === "camera") {
+      const v = opts.camera?.(l.id) ?? null
+      // Not playing (not connected yet, or dropped): its fallback words, if it has them (#213).
+      if ((!v || v.videoWidth === 0) && l.fallback && !opts.preview) fitText(ctx, l.fallback, r, l.theme)
+      else if (v && v.videoWidth > 0) {
         const s = source(l, v.videoWidth, v.videoHeight)
         // Cover the box, keeping the camera's shape (like a picture).
         const scale = Math.max(r.w / s.sw, r.h / s.sh)
@@ -66,16 +81,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
       }
     } else if (l.kind === "clock" && l.theme && l.clock) {
       // The time fills its box in the look's text style; whatever is behind shows around it.
-      const text = clockText(l.clock, opts.now ?? Date.now())
-      const vt = l.theme.verseText
-      const family = vt?.fontFamily ? `"${vt.fontFamily}", sans-serif` : "sans-serif"
-      ctx.font = `${vt?.fontWeight ?? 600} 100px ${family}`
-      const size = Math.max(8, Math.min(r.h * 0.8, (100 * r.w * 0.9) / Math.max(1, ctx.measureText(text).width)))
-      ctx.font = `${vt?.fontWeight ?? 600} ${Math.floor(size)}px ${family}`
-      ctx.fillStyle = vt?.color ?? "#ffffff"
-      ctx.textAlign = "center"
-      ctx.textBaseline = "middle"
-      ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2)
+      fitText(ctx, clockText(l.clock, opts.now ?? Date.now()), r, l.theme, 0.8)
     } else if (l.kind === "feed" && l.theme && l.verse) {
       const lc = opts.layerCanvas(l.id)
       const { width: tw, height: th } = l.theme.resolution

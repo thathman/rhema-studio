@@ -43,6 +43,8 @@ export interface SceneLayer {
   shows?: ContentType[]
   /** camera: its stream on the church network (WHEP, e.g. http://192.168.1.10:8889/pulpit/whep). */
   cameraUrl?: string
+  /** camera: words shown in its box while the camera is not playing (#213 fallback); absent = the background. */
+  cameraFallback?: string
   /** clock: what it shows: the service timer (absent), the time of day, or a countdown to `until`. */
   clockShows?: "timer" | "time" | "until"
   /** clock "until": the time of day counted down to, "HH:MM" (e.g. the service start). */
@@ -90,6 +92,8 @@ export interface SceneLayerFrame {
   clock?: SceneClock | null
   /** camera: its WHEP stream address. */
   cameraUrl?: string
+  /** camera: words for its box while the camera is not playing, in `theme`'s text style. */
+  fallback?: string
   /** Shown in the composer's preview only (e.g. "Camera — planned"). */
   label?: string
 }

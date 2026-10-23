@@ -86,7 +86,8 @@ export function normalizeScene(raw: unknown): Scene | null {
     const clockShows = l.clockShows === "time" || l.clockShows === "until" ? l.clockShows : undefined
     const until = typeof l.until === "string" && /^\d{1,2}:\d{2}$/.test(l.until) ? l.until : undefined
     const cameraUrl = typeof l.cameraUrl === "string" && /^https?:\/\//.test(l.cameraUrl.trim()) ? l.cameraUrl.trim().slice(0, 300) : undefined
-    return [{ ...l, clockShows, until, cameraUrl, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    const cameraFallback = typeof l.cameraFallback === "string" && l.cameraFallback.trim() ? l.cameraFallback.trim().slice(0, 120) : undefined
+    return [{ ...l, clockShows, until, cameraUrl, cameraFallback, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) }
 }
@@ -159,7 +160,8 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
         return { ...base, theme, clock, ...(preview && !clock ? { label: l.clockShows === "until" ? `${l.name} · choose the time to count down to` : `${l.name} · set the service timer in Present` } : {}) }
       }
       // A camera: its stream, played by each output from the church network.
-      return { ...base, ...(l.cameraUrl ? { cameraUrl: l.cameraUrl } : {}), ...(preview ? { label: l.cameraUrl ? `${l.name} · camera` : `${l.name} · add its stream address` } : {}) }
+      const fallback = l.cameraFallback ? { fallback: l.cameraFallback, theme: s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0] } : {}
+      return { ...base, ...(l.cameraUrl ? { cameraUrl: l.cameraUrl } : {}), ...fallback, ...(preview ? { label: l.cameraUrl ? `${l.name} · camera` : `${l.name} · add its stream address` } : {}) }
     }),
   }
 }
