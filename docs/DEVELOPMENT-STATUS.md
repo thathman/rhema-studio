@@ -13,7 +13,7 @@ Sources: [PRD.md](PRD.md), [TASKS.md](TASKS.md), [RELEASE-PLAN.md](RELEASE-PLAN.
 - **Crash recovery:** #275 offers restoration after unexpected close, never automatically takes an output live. Stage, timer, source, scene and record semantics have first implementations, not final independent hardware validation.
 
 ## Next work
-Review #276; validate physical OBS, receiver and camera stack; phone voice security/audio and real multi-machine operation; connect AI client to MCP draft; update exact release gates before any published build.
+Review #276 (actor-aware execution log) and #277 (show-health routing/attention first slice; not merged); validate physical OBS, receiver and camera stack; phone voice security/audio and real multi-machine operation; connect AI client to MCP draft; update exact release gates before any published build.
 
 ## Historical archive (records before the October 23 reconciliation; may describe superseded status)
 
