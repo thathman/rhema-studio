@@ -373,3 +373,9 @@ pub struct HttpStatus {
 fn bind_host(lan: Option<bool>) -> &'static str {
     if lan.unwrap_or(true) { "0.0.0.0" } else { "127.0.0.1" }
 }
+
+/// The command an AI assistant runs to reach Rhema's MCP server (this app, with `--mcp`).
+#[tauri::command]
+pub fn mcp_server_command() -> Result<String, String> {
+    std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).map_err(|e| e.to_string())
+}

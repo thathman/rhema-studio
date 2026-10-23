@@ -1,4 +1,5 @@
 mod commands;
+pub mod mcp;
 #[cfg(feature = "qa-bridge")]
 mod qa_bridge;
 mod events;
@@ -167,6 +168,7 @@ pub fn run() {
             commands::remote::remote_lan_address,
             commands::remote::remote_pair_cancel,
             commands::remote::update_remote_status,
+            commands::remote::mcp_server_command,
             commands::remote::publish_live_state,
             commands::join::join_pair,
             commands::join::join_me,

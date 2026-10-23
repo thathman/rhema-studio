@@ -1,5 +1,6 @@
 import { AboutNotices } from "@/components/about-notices"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { AssistantsSection } from "@/components/settings/assistants-section"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
 import { useState, useEffect, useRef } from "react"
@@ -39,7 +40,7 @@ import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { qrDataUrl } from "@/lib/qr-bulletin"
-import { MonitorIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react"
+import { MonitorIcon, MoonIcon, PaletteIcon, SparklesIcon, SunIcon } from "lucide-react"
 import { useTheme } from "@/components/theme-provider"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
@@ -57,6 +58,7 @@ type NavSection =
   | "display"
   | "api-keys"
   | "remote"
+  | "assistants"
   | "diagnostics"
   | "help"
 
@@ -87,6 +89,11 @@ const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
     name: "Remote Control",
     id: "remote",
     icon: <RadioIcon strokeWidth={2} />,
+  },
+  {
+    name: "AI assistants",
+    id: "assistants",
+    icon: <SparklesIcon strokeWidth={2} />,
   },
   {
     name: "Cloud keys",
@@ -461,6 +468,7 @@ function ApiKeysSection() {
 /* -------------------------------------------------------------------------- */
 
 const sectionTitles: Record<NavSection, string> = {
+  assistants: "AI assistants (MCP)",
   screens: "Screens and NDI",
   appearance: "Appearance",
   audio: "Audio",
@@ -1091,6 +1099,7 @@ function StatusDot({ running }: { running: boolean }) {
 }
 
 const sectionComponents: Record<NavSection, React.FC> = {
+  assistants: AssistantsSection,
   screens: ScreensSection,
   appearance: AppearanceSection,
   audio: AudioSection,
@@ -1113,7 +1122,7 @@ const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
   { title: "Screens and NDI", ids: ["screens"] },
   { title: "Live behaviour", ids: ["display"] },
   { title: "Microphone and speech", ids: ["audio", "speech", "api-keys"] },
-  { title: "Studio connections", ids: ["remote"] },
+  { title: "Studio connections", ids: ["remote", "assistants"] },
   { title: "Appearance", ids: ["appearance"] },
   { title: "Diagnostics and support", ids: ["diagnostics", "help"] },
 ]

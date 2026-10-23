@@ -36,7 +36,7 @@ pub use songs::*;
 pub use usage::*;
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -219,6 +219,24 @@ impl std::fmt::Debug for ContentDb {
 impl ContentDb {
     pub fn open(path: &Path) -> Result<Self> {
         Self::open_with_migrations(path, MIGRATIONS)
+    }
+
+    /// Open an existing database read-only: no migrations, no writes, safe beside the running app
+    /// (the Rhema MCP server, #252). A database from a newer Rhema is refused, as `open` refuses it;
+    /// one this Rhema has not yet brought up to date is refused too (it cannot migrate read-only).
+    pub fn open_read_only(path: &Path) -> Result<Self> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        let db = Self { conn: Mutex::new(conn), path: Some(path.to_path_buf()), last_backup: None };
+        let newer: Vec<String> = db.applied_migrations()?.into_iter().filter(|v| !MIGRATIONS.iter().any(|(k, _)| k == v)).collect();
+        if !newer.is_empty() {
+            return Err(ContentError::NewerSchema { versions: newer });
+        }
+        let applied = db.applied_migrations()?;
+        if MIGRATIONS.iter().any(|(k, _)| !applied.iter().any(|v| v == k)) {
+            return Err(ContentError::Invalid("this Rhema has not opened its data since it was updated: open Rhema once, then ask again".into()));
+        }
+        Ok(db)
     }
 
     pub fn open_in_memory() -> Result<Self> {
@@ -1061,6 +1079,30 @@ mod tests {
     }
 
     // ── in-memory: logic ────────────────────────────────────────────────
+
+    #[test]
+    fn read_only_open_reads_and_never_writes() {
+        let dir = std::env::temp_dir().join(format!("rhema-ro-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("studio.db");
+        {
+            let db = ContentDb::open(&path).unwrap();
+            db.create_program("Thanksgiving", Some("2026-11-01")).unwrap();
+        }
+        let ro = ContentDb::open_read_only(&path).unwrap();
+        assert_eq!(ro.list_programs().unwrap()[0].title, "Thanksgiving");
+        assert!(ro.create_program("Nope", None).is_err(), "a read-only open must refuse writes");
+        drop(ro);
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("INSERT INTO schema_migrations (version) VALUES ('9999_from_the_future')", []).unwrap();
+        drop(conn);
+        assert!(matches!(ContentDb::open_read_only(&path), Err(ContentError::NewerSchema { .. })));
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("DELETE FROM schema_migrations WHERE version IN ('9999_from_the_future', ?1)", [MIGRATIONS.last().unwrap().0]).unwrap();
+        drop(conn);
+        assert!(matches!(ContentDb::open_read_only(&path), Err(ContentError::Invalid(m)) if m.contains("open Rhema once")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn migrations_apply_once_and_in_order() {
