@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use rhema_api::{
     close_pairing, hash_key, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet, Role,
-    OscConfig, OscHandle, PairingWindow, SharedFeeds, SharedLive, SharedStatus, new_feed_hub, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
+    OscConfig, OscHandle, PairingWindow, SharedFeeds, SharedVoice, new_voice_hub, SharedLive, SharedStatus, new_feed_hub, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
 };
 
 /// Who may send remote commands, shared by both listeners so a revoke takes
@@ -214,6 +214,8 @@ pub struct HttpRuntime {
     live: SharedLive,
     /// Browser feeds (outputs of type "browser"); kept across restarts of the listener.
     feeds: SharedFeeds,
+    /// Rhema Comms voice offers waiting for this window's answer.
+    voice: SharedVoice,
 }
 
 impl HttpRuntime {
@@ -225,6 +227,7 @@ impl HttpRuntime {
             status: new_shared_status(),
             live: new_live_hub(),
             feeds: new_feed_hub(),
+            voice: new_voice_hub(),
         }
     }
 
@@ -248,9 +251,9 @@ pub async fn start_http(
     port: Option<u16>,
     lan: Option<bool>,
 ) -> Result<u16, String> {
-    let (status, live, feeds, already_running) = {
+    let (status, live, feeds, voice, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
-        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.handle.is_some())
+        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.voice.clone(), runtime.handle.is_some())
     };
 
     if already_running {
@@ -264,6 +267,7 @@ pub async fn start_http(
         pairing: remote.pairing.clone(),
         live,
         feeds,
+        voice,
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -413,4 +417,14 @@ fn bind_host(lan: Option<bool>) -> &'static str {
 #[tauri::command]
 pub fn mcp_server_command() -> Result<String, String> {
     std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).map_err(|e| e.to_string())
+}
+
+/// The host window's answer to a desk's talk-channel offer (Rhema Comms C3, ADR 0002).
+#[tauri::command]
+pub fn voice_answer(state: State<'_, Mutex<HttpRuntime>>, id: String, sdp: String) -> Result<bool, String> {
+    if sdp.len() > 64 * 1024 {
+        return Err("answer too large".into());
+    }
+    let hub = state.lock().map_err(|e| e.to_string())?.voice.clone();
+    Ok(hub.answer(&id, sdp))
 }

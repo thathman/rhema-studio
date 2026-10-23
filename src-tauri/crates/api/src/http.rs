@@ -34,6 +34,8 @@ pub struct HttpConfig {
     pub live: SharedLive,
     /// Browser feeds: outputs drawn by a web page on the LAN (OBS Browser Source, a TV's browser).
     pub feeds: SharedFeeds,
+    /// Rhema Comms voice: offers waiting for the host window's answer.
+    pub voice: SharedVoice,
 }
 
 impl Default for HttpConfig {
@@ -45,6 +47,7 @@ impl Default for HttpConfig {
             pairing: new_pairing_window(),
             live: new_live_hub(),
             feeds: new_feed_hub(),
+            voice: new_voice_hub(),
         }
     }
 }
@@ -96,6 +99,37 @@ impl FeedHub {
 }
 
 pub type SharedFeeds = Arc<FeedHub>;
+
+/// Rhema Comms voice (C3, ADR 0002): a desk's WebRTC offer waits here for the host window's answer.
+#[derive(Debug, Default)]
+pub struct VoiceHub {
+    pending: std::sync::Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<String>>>,
+}
+
+impl VoiceHub {
+    fn wait(&self, id: &str) -> tokio::sync::oneshot::Receiver<String> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.pending.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id.to_string(), tx);
+        rx
+    }
+
+    fn forget(&self, id: &str) {
+        self.pending.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(id);
+    }
+
+    /// The host window's answer to an offer; false when nobody waits for it (timed out).
+    pub fn answer(&self, id: &str, sdp: String) -> bool {
+        let tx = self.pending.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(id);
+        tx.is_some_and(|tx| tx.send(sdp).is_ok())
+    }
+}
+
+pub type SharedVoice = Arc<VoiceHub>;
+
+#[must_use]
+pub fn new_voice_hub() -> SharedVoice {
+    Arc::new(VoiceHub::default())
+}
 
 #[must_use]
 pub fn new_feed_hub() -> SharedFeeds {
@@ -166,6 +200,7 @@ pub struct HttpStartResult {
 struct AppState<S: CommandSink> {
     live: SharedLive,
     feeds: SharedFeeds,
+    voice: SharedVoice,
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
     keys: KeySet,
@@ -221,6 +256,7 @@ where
     let state = Arc::new(AppState {
         live: config.live.clone(),
         feeds: config.feeds.clone(),
+        voice: config.voice.clone(),
         sink,
         status,
         keys: config.keys.clone(),
@@ -239,6 +275,7 @@ where
         .route("/api/v1/live/events", get(live_events_handler::<S>))
         .route("/feed/{id}", get(feed_page_handler::<S>))
         .route("/api/v1/feed/{id}/events", get(feed_events_handler::<S>))
+        .route("/api/v1/voice", post(voice_handler::<S>))
         .route("/assets/{*path}", get(asset_handler::<S>))
         .route("/remote", get(remote_page))
         // Undocumented alias for the path the code shipped with before #146.
@@ -519,6 +556,45 @@ async fn asset_handler<S: CommandSink + 'static>(
     }
 }
 
+#[derive(Deserialize)]
+struct VoiceOffer {
+    sdp: String,
+}
+
+/// `POST /api/v1/voice`: a paired desk joins the talk channel (Rhema Comms C3, ADR 0002). Its
+/// complete WebRTC offer goes to the host window, which answers within ten seconds; the answer is
+/// this request's reply. The host stamps who it is from the key.
+async fn voice_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(offer): Json<VoiceOffer>,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let (name, _) = match live_reader(&state, peer, &headers) {
+        Ok(who) => who,
+        Err(code) => return code.into_response(),
+    };
+    if offer.sdp.len() > 64 * 1024 || !offer.sdp.starts_with("v=0") {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    let rx = state.voice.wait(&id);
+    if state.sink.emit_event("remote:voice_offer", &serde_json::json!({ "id": id, "by": name, "sdp": offer.sdp }).to_string()).is_err() {
+        state.voice.forget(&id);
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(10), rx).await {
+        Ok(Ok(sdp)) => Json(serde_json::json!({ "sdp": sdp })).into_response(),
+        _ => {
+            state.voice.forget(&id);
+            (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "The host did not answer. Is Rhema open there?" }))).into_response()
+        }
+    }
+}
+
 /// `GET /api/v1/feed/{id}/events?k=<secret>`: the feed's frames as server-sent events.
 async fn feed_events_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
@@ -768,6 +844,43 @@ mod tests {
                 _ => None,
             }
         }
+    }
+
+    /// Plays the host window: answers each voice offer with the desk's name in the SDP.
+    struct VoiceSink(SharedVoice);
+    impl CommandSink for VoiceSink {
+        fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+            if event == "remote:voice_offer" {
+                let v: serde_json::Value = serde_json::from_str(payload).unwrap();
+                let (id, by) = (v["id"].as_str().unwrap().to_string(), v["by"].as_str().unwrap().to_string());
+                assert!(v["sdp"].as_str().unwrap().starts_with("v=0"));
+                let hub = self.0.clone();
+                tokio::spawn(async move { assert!(hub.answer(&id, format!("v=0 answer for {by}"))) });
+            }
+            Ok(())
+        }
+        fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_desk_joins_the_talk_channel_with_its_key_and_gets_the_host_answer() {
+        let voice = new_voice_hub();
+        let keys = new_key_set();
+        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k1"), name: "Ade bible".into(), role: crate::keys::Role::Bible });
+        keys.write().unwrap().require_auth = true;
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, voice: voice.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(VoiceSink(voice.clone())), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let ok = raw_http_request_with(port, "POST", "/api/v1/voice", Some(r#"{"sdp":"v=0 offer"}"#), "X-Rhema-Key: k1\r\n").await;
+        assert!(ok.contains("200 OK") && ok.contains("v=0 answer for Ade bible"), "{ok}");
+        assert!(raw_http_request_with(port, "POST", "/api/v1/voice", Some(r#"{"sdp":"v=0 offer"}"#), "X-Rhema-Key: wrong\r\n").await.contains("401"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/voice", Some(r#"{"sdp":"not sdp"}"#), "X-Rhema-Key: k1\r\n").await.contains("400"));
+        assert!(!voice.answer("nobody-waits", "v=0".into()), "a late answer is dropped");
+        let mut handle = result.handle;
+        handle.stop();
     }
 
     #[tokio::test]

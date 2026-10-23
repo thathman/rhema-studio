@@ -89,6 +89,20 @@ pub async fn join_command(address: String, token: String, command: serde_json::V
     Err(msg.unwrap_or_else(|| "The host refused".into()))
 }
 
+/// Join the host's talk channel (Rhema Comms C3): send this desk's complete WebRTC offer, get the
+/// host's answer.
+#[tauri::command]
+pub async fn join_voice(address: String, token: String, sdp: String) -> Result<String, String> {
+    let url = format!("{}/api/v1/voice", base_url(&address)?);
+    let r = client(Some(Duration::from_secs(15)))?.post(url).header("X-Rhema-Key", token).json(&serde_json::json!({ "sdp": sdp })).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
+    let ok = r.status().is_success();
+    let v = r.json::<serde_json::Value>().await.unwrap_or_default();
+    if ok {
+        return v.get("sdp").and_then(|s| s.as_str()).map(String::from).ok_or_else(|| "The host sent no answer".into());
+    }
+    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| "The host refused the talk channel".into(), String::from))
+}
+
 /// Follow the host's Live State: "join:live" carries each snapshot, "join:state" the connection
 /// ("connected", "reconnecting" with the reason, "refused", "stopped"). Reconnects by itself.
 #[tauri::command]
