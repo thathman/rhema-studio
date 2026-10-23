@@ -43,6 +43,21 @@ export function pushRemoteKeys(): Promise<void> {
   })
   return remoteKeysPush
 }
+/** A camera on the church network (#209): one phone or IP camera, one name in the camera router. */
+export interface CameraSource {
+  /** Its name in the router (its path): lower-case letters, digits and dashes, e.g. "pulpit". */
+  name: string
+  /** What the operator called it, e.g. "Pulpit". */
+  label: string
+  /** The secret in its camera-page link; a new one closes the old link. */
+  token: string
+}
+
+function isCameraSource(c: unknown): c is CameraSource {
+  const x = c as CameraSource
+  return typeof c === "object" && c !== null && typeof x.name === "string" && /^[a-z0-9][a-z0-9_-]{0,39}$/.test(x.name) && typeof x.label === "string" && typeof x.token === "string" && x.token.length >= 16
+}
+
 /** A church-defined cue: steps are cue action ids (validated when run, so a newer build's unknown step is skipped). */
 export interface CustomMacro {
   id: string
@@ -126,6 +141,15 @@ interface SettingsState {
   /** Optional OBS connection (obs-websocket v5). */
   obs: ObsSettings
   setObs: (patch: Partial<ObsSettings>) => void
+  /** Cameras on the church network (#209), sent through the camera router shipped with Rhema. */
+  cameras: CameraSource[]
+  setCameras: (cameras: CameraSource[]) => void
+  /** Start the camera router with Rhema while any camera is added (never when none is). */
+  cameraRouterAuto: boolean
+  setCameraRouterAuto: (on: boolean) => void
+  /** The password cameras publish with (made by Rhema; kept in the system keychain). */
+  cameraPassword: string
+  setCameraPassword: (password: string) => void
 
   setRemoteSecret: (secret: string) => void
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
@@ -179,6 +203,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
   obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "" },
   setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
+  cameras: [],
+  setCameras: (cameras) => set({ cameras }),
+  cameraRouterAuto: true,
+  setCameraRouterAuto: (cameraRouterAuto) => set({ cameraRouterAuto }),
+  cameraPassword: "",
+  setCameraPassword: (cameraPassword) => set({ cameraPassword }),
 
   setRemoteListeners: (patch) => set((s) => ({ remoteListeners: { ...s.remoteListeners, ...patch } })),
   setRemoteAuthRequired: (remoteAuthRequired) => {
@@ -242,6 +272,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "joinAddress":
     case "joinName":
     case "joinToken":
+    case "cameraPassword":
     case "churchFolder":
     case "cloudSpeechConsentAt":
       return typeof value === "string"
@@ -250,6 +281,7 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "object" && value !== null && typeof o.enabled === "boolean" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
     }
     case "remoteAuthRequired":
+    case "cameraRouterAuto":
     case "mcpEnabled":
     case "requireApproval":
     case "autoMode":
@@ -272,6 +304,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "commentsSeen":
       return Array.isArray(value) && value.every((x) => typeof x === "string")
     case "customMacros":
+    case "cameras":
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
@@ -300,6 +333,9 @@ const PERSISTED_KEYS = [
   "remoteAuthRequired",
   "remoteListeners",
   "obs",
+  "cameras",
+  "cameraRouterAuto",
+  "cameraPassword",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",
@@ -318,8 +354,8 @@ const PERSISTED_KEYS = [
 // file's copies are blanked; `secretsInKeychain: true` in the file says so.
 // Without a keychain the file keeps the values, as before.
 
-type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken"
-const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken"]
+type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken" | "cameraPassword"
+const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken", "cameraPassword"]
 const KEYCHAIN_TIMEOUT_MS = 5000
 
 function readSecret(s: SettingsState, name: SecretName): string {
@@ -397,7 +433,7 @@ export function hydrateSettings(): Promise<void> {
         const value = await store.get(key)
         if (value !== undefined && value !== null && acceptable(key, value)) {
           // One damaged cue must not cost the church all the others.
-          ;(patch as Record<string, unknown>)[key] = key === "customMacros" ? (value as unknown[]).filter(isCustomMacro) : value
+          ;(patch as Record<string, unknown>)[key] = key === "customMacros" ? (value as unknown[]).filter(isCustomMacro) : key === "cameras" ? (value as unknown[]).filter(isCameraSource) : value
         }
       }
       // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.

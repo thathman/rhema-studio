@@ -4339,6 +4339,7 @@ dependencies = [
  "hyper-util",
  "log",
  "rcgen",
+ "reqwest 0.12.28",
  "rosc",
  "rustls",
  "serde",

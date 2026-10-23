@@ -2,6 +2,7 @@ pub mod ai_drafts;
 pub mod app_close;
 pub mod audio;
 pub mod bible;
+pub mod camera_router;
 pub mod cameras;
 pub mod broadcast;
 pub mod content;

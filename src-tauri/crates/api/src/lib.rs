@@ -3,6 +3,7 @@
 //! Implements: OSC server, HTTP API (Axum).
 //! Planned: `OpenAI` embeddings client.
 
+pub mod cameras;
 pub mod coerce;
 pub mod command;
 pub mod keys;
@@ -13,6 +14,7 @@ pub mod http;
 pub mod osc;
 pub mod tls;
 
+pub use cameras::{new_camera_hub, valid_camera_name, CameraHub, RouterTarget, SharedCameras};
 pub use coerce::{coerce_bool, coerce_f32_normalized, coerce_string, parse_osc};
 pub use command::RemoteCommand;
 pub use dispatch::{CommandDispatcher, CommandSink};

@@ -10,20 +10,19 @@ import { ProductionWorkspace } from "./production-workspace"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 
 describe("Production control", () => {
-  it("opens on the real timekeeper; the planned part (cameras) says so and offers no controls", async () => {
+  it("opens on the real timekeeper; Cameras is the camera router panel", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
     document.body.appendChild(el)
     await act(async () => createRoot(el).render(<ProductionWorkspace />))
     expect(el.textContent).toContain("The service timer")
     expect([...el.querySelectorAll("button")].some((b) => b.textContent?.includes("Start"))).toBe(true)
-    const tab = (name: string) => [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLButtonElement
-    for (const name of ["Cameras"]) {
-      await act(async () => tab(name).click())
-      const panel = el.querySelector('[role="tabpanel"]')!
-      expect(panel.textContent).toContain("Not built yet")
-      expect(panel.querySelectorAll("button, input, select").length).toBe(0)
-    }
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Cameras") as HTMLButtonElement
+    await act(async () => tab.click())
+    const panel = el.querySelector('[role="tabpanel"]')!
+    expect(panel.textContent).toContain("Camera router")
+    expect(panel.textContent).toContain("Add a camera")
+    expect(panel.textContent).not.toContain("Not built yet")
   })
 
   it("Programs is the Scene Composer: a ready-made arrangement, Take, and back to the output's own feed", async () => {

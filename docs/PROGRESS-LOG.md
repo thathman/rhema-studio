@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Camera router inside Rhema; phones join from a camera page (#209)
+
+- **Branch / PR:** `cam-001/bundled-router`. `scripts/fetch-mediamtx.sh` (MediaMTX v1.21.2, SHA-256 pinned per target) → `src-tauri/binaries/mediamtx-<triple>`; release builds add it with `--config src-tauri/tauri.camera-router.conf.json` (`externalBin` is not in `tauri.conf.json` because tauri-build fails when the binary is missing, which would break dev and CI). `commands/camera_router.rs`: config (WebRTC 8889 + UDP 8189, RTSP 8554 TCP only, RTMP 1935, SRT 8890, API 127.0.0.1:9997; HLS, MoQ, playback, metrics off; `webrtcAdditionalHosts` = `remote_lan_address`; publish = `rhema` + the keychain password, read open, API local), spawn, log capture, restart with 1–30 s backoff, kill on exit; `camera_router_start/stop/status`, `cameras_set`. rhema-api `cameras.rs`: `/camera?name&k` page (`camera.html`, WHIP publisher: back/front, 720p30/1080p30, H.264 first, wake lock) and `/api/v1/camera/{name}/whip[/{session}]` forwarding POST/PATCH/DELETE to the router with Rhema's sign-in, `Location` rewritten. Frontend: settings `cameras`, `cameraRouterAuto`, secret `cameraPassword`; `lib/cameras.ts`; Production → Cameras panel.
+- **Tests:** rhema-api (proxy forwards method/body/headers, refuses without the secret, 503 when off, no `WWW-Authenticate` to the phone; names; Location); app crate `camera_router` (ports, LAN host, auth users, password check, binary order, backoff, busy port, paths list); `cameras-panel.test.tsx`; `fetch-mediamtx.sh` run for x86_64-apple-darwin, a wrong checksum refused, shellcheck clean. End to end (no desktop app): the real rhema-api listener over https + MediaMTX v1.21.2 on spare ports + headless Chrome with a fake camera: page Live, router path `pulpit` ready, H264 Baseline from `webRTCSession`, Stop removed it.
+- **Next:** desktop acceptance 10do (real phone, OBS, Google TV); per-camera read passwords; tally/health in Show health.
+
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.

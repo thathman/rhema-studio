@@ -80,7 +80,11 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 - A Clock can instead show **the time of day**, or **a countdown to a time** you choose (the service start, say 10:00): today's, or tomorrow's once today's is long gone; it stays at 0:00 when the time comes. Put both side by side on a "Before service" scene.
 - Arrange: drag a layer to move it, drag its corner to resize, arrow keys to nudge (Shift for 5%). Box, crop and opacity can be typed. Layers draw bottom first; reorder them in the list.
 - **Take** puts the scene on the chosen congregation output (it saves first). Next to the scene's background, **Take** chooses how it comes on: **Cut** (as before) or a cross-fade of 0.3, 0.5 or 1 second; releasing it fades the same way. Black and Logo always cut. **Back to its own feed** returns the output to full frame; **Restore** takes the scene again. Taking a scene changes no other output (OBS feeds stay as they are), and a new verse never changes which scene is up. Black and Logo cover every screen and feed, scenes included.
-- Edits stay in the composer until Save or Take. Cameras are planned (#209): a camera layer keeps the camera's place and shows the background there until then.
+- Edits stay in the composer until Save or Take.
+
+## Cameras (Production → Cameras)
+
+Phones on the church Wi-Fi can be cameras: **Add a camera** (Pulpit, Choir…), scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; scenes and TVs take it with **Use in a scene…** (or its WHEP address in a Camera layer), and OBS with its RTSP address in a Media Source. Phones need the secure phone page (Settings → Remote control → "Secure page for phones (https)"). Nothing goes to the internet. Step by step, ports and security: [rhema-studio/cameras.md](rhema-studio/cameras.md).
 
 ## Operators: host and join (Production → Operators)
 

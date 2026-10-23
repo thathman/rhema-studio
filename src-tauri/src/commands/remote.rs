@@ -218,6 +218,8 @@ pub struct HttpRuntime {
     voice: SharedVoice,
     /// The https port for phone pages, when https is on.
     tls_port: Option<u16>,
+    /// Phone cameras and the camera router (#209); kept across restarts of the listener.
+    cameras: rhema_api::SharedCameras,
 }
 
 impl HttpRuntime {
@@ -231,7 +233,13 @@ impl HttpRuntime {
             live: new_live_hub(),
             feeds: new_feed_hub(),
             voice: new_voice_hub(),
+            cameras: rhema_api::new_camera_hub(),
         }
+    }
+
+    /// The camera list and router target the camera page's requests are checked against.
+    pub fn cameras(&self) -> rhema_api::SharedCameras {
+        self.cameras.clone()
     }
 
     pub fn shared_status(&self) -> SharedStatus {
@@ -255,9 +263,9 @@ pub async fn start_http(
     lan: Option<bool>,
     https: Option<bool>,
 ) -> Result<u16, String> {
-    let (status, live, feeds, voice, already_running) = {
+    let (status, live, feeds, voice, cameras, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
-        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.voice.clone(), runtime.handle.is_some())
+        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.voice.clone(), runtime.cameras(), runtime.handle.is_some())
     };
 
     if already_running {
@@ -286,6 +294,7 @@ pub async fn start_http(
         feeds,
         voice,
         tls,
+        cameras,
     };
 
     let sink = Arc::new(TauriSink { app });
