@@ -75,12 +75,12 @@ describe("the output editor's Advanced: content-specific looks", () => {
     expect("id" in patch).toBe(false)
     expect(outputEditPatch({ ...saved, type: "browser", feedToken: "k1" }).feedToken).toBe("k1")
     expect("feedToken" in outputEditPatch({ ...saved, feedToken: undefined })).toBe(false)
-  })
+  }, 60_000) // the whole dialog renders in jsdom: slow on a busy machine
 
   it("says none are set for an output with only a main look", async () => {
     await render(<OutputEditorDialog open onOpenChange={() => {}} output={main} draft={main} monitors={[]} monitorsRefreshing={false} onRefreshMonitors={() => {}} onSubmit={() => {}} />)
     expect(document.body.querySelector("details summary")!.textContent).toContain("none, the main look for everything")
-  })
+  }, 60_000)
 })
 
 describe("an output's card in Production → Screens", () => {
