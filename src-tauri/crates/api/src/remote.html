@@ -26,6 +26,12 @@
   #msg { min-height:20px; margin-top:12px; font-size:14px; }
   .err { color:#ff8a8a; }
   [hidden] { display:none !important; }
+  .sources { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+  .src { display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 8px 8px 12px; }
+  .src span { flex:1; min-width:0; overflow-wrap:anywhere; font-size:14px; }
+  .src span i { font-style:normal; color:var(--muted); }
+  .src.off span { opacity:.6; }
+  .src button { min-height:44px; padding:0 14px; font-size:14px; }
   .forget { background:none; border:none; min-height:44px; color:var(--muted); font-weight:400; width:100%; margin-top:16px; }
 </style>
 </head>
@@ -44,6 +50,7 @@
   </section>
   <section id="controls" hidden>
     <div class="status" aria-live="polite"><span id="air" class="air">Off air</span><b id="live">Nothing on screen</b></div>
+    <div class="sources" id="sources" aria-label="Live sources"></div>
     <div class="grid">
       <button class="big" data-cmd="next">Next ▶</button>
       <button data-cmd="prev">◀ Previous</button>
@@ -81,11 +88,11 @@
   // One id per press: if the answer is lost on Wi-Fi the phone asks again with the same id, and
   // the computer, having already done it, does not do it twice. (No crypto.randomUUID on plain http.)
   const pressId = () => Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
-  async function post(cmd, id) {
+  async function post(cmd, id, value) {
     let lastError
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await fetch("/api/v1/command", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify({ command: cmd, id }) })
+        return await fetch("/api/v1/command", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify(value === undefined ? { command: cmd, id } : { command: cmd, value, id }) })
       } catch (e) {
         lastError = e
         if (attempt < 2) { say("Sending…"); await new Promise((r) => setTimeout(r, 700)) }
@@ -93,10 +100,10 @@
     }
     throw lastError
   }
-  async function send(cmd, btn) {
+  async function send(cmd, btn, value) {
     btn.disabled = true
     try {
-      const r = await post(cmd, pressId())
+      const r = await post(cmd, pressId(), value)
       if (r.status === 401 || r.status === 403) {
         const j = await r.json().catch(() => ({}))
         if (r.status === 401) { set(null); show(); say("This phone is no longer paired. Pair it again.", true) }
@@ -124,9 +131,33 @@
         : s.rehearsal
           ? "Rehearsal: the screens are frozen. " + (s.live_verse ? "Rehearsing: " + s.live_verse : "")
           : (s.live_verse || "Nothing on screen")
+      sources()
     } catch {}
     polling = false
     timer = setTimeout(poll, 2000)
+  }
+  // Each live source (ADR 0001): what it shows, and take it off or put it back. The computer
+  // checks what this phone may do.
+  const NAMES = { bible: "Bible", song: "Songs", hymn: "Hymns", slide: "Slides", picture: "Pictures", quick: "Quick screen" }
+  async function sources() {
+    const box = $("sources")
+    const r = await fetch("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
+    const live = r && r.status === 200 ? await r.json().catch(() => null) : null
+    box.replaceChildren()
+    for (const s of (live && live.sources) || []) {
+      const row = document.createElement("div")
+      row.className = "src" + (s.on ? "" : " off")
+      const label = document.createElement("span")
+      const name = document.createElement("i")
+      name.textContent = (NAMES[s.id] || s.id) + (s.on ? " · " : " · off · ")
+      label.append(name, s.reference || "")
+      const b = document.createElement("button")
+      b.type = "button"
+      b.textContent = s.on ? "Take off" : "Put back"
+      b.addEventListener("click", () => send(s.on ? "clear_source" : "restore_source", b, s.id))
+      row.append(label, b)
+      box.append(row)
+    }
   }
   document.addEventListener("visibilitychange", poll)
   show(); poll()
