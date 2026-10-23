@@ -8,7 +8,7 @@ periodic review, so feature PRs leave those files alone.
 ## 2026-10-23 — Readiness checks the plan and cameras (#213 preflight, #196)
 
 - **Branch / PR:** `sh-002/preflight-timing-cameras`. `readiness.ts`: `planCheck` (the timing engine on the plan alone: planned end, items planned more than 30 s past their end by) and checks `timing-start` (info), `timing-end-by` (warn), `timing` (ok), `cameras` (info); `use-readiness.ts` feeds them.
-- **Tests:** `readiness.test.ts` (+2). vitest 743. Desktop: checked with the combined QA build (PF_RESULT).
+- **Tests:** `readiness.test.ts` (+2). vitest 743. Desktop: checked with the combined QA build (Pass 2026-10-23 (combined QA build), on Home: no start time → info; an item planned to end 30 min after its end by → warning naming it and both times; a camera layer with no address → info. ("Planned to end at …" is listed only when nothing needs attention.)).
 
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
