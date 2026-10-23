@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Church colours on library looks, a language filter, ready-made feeds (#299)
+- Design → Library: **Use with church colours** adds a copy of a look in your Brand Kit's colours and fonts. The library look and every look a screen uses stay as they were. If your colour would be hard to read on that look, the copy keeps the look's own colour and the message says so.
+- Before the Brand Kit has your colours, the button says where to set them (Design → Brand Kit).
+- The Library filters by language: **Yorùbá**, **English**, or **Both together** (looks that show a verse or song in two languages at once). Each card says which.
+- Production → Screens: **Add a ready-made feed** adds "Rhema Bible | Full", "Rhema Bible | Lower third", "Rhema Lyrics | Full", "Rhema Lyrics | Lower third" or "Rhema Ticker | Alpha" as NDI or a browser feed. It is a new output, off, and no other output changes. If a feed with that name is already there, you are told and no second one is added.
+
 ### Rehearsal keeps every screen's scene; clearer teal text in dark mode (#246, #215)
 - A scene taken during rehearsal (Production → Programs, the Present Scenes strip or a joined Screens desk) no longer appears on the real screens when rehearsal ends: each screen gets back exactly the scene it had before, also after **Show this live**.
 - The Present Scenes strip now works in rehearsal for practice: a Take shows in Rhema, marked "In rehearsal", while the screens keep their scene. Take in Production → Programs is not red during rehearsal.

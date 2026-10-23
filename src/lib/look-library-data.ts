@@ -6,7 +6,8 @@ import type { LibraryLook, LookFamily, SceneTemplateLayer } from "@/lib/look-lib
  * The built-in look library (#299 UX15-3): original looks made for Rhema,
  * using only the fonts bundled with the app. Nothing here is a picture or
  * someone else's template. Ids are stable (a copy remembers which look it
- * came from, for Reset), so never rename one; add new looks instead.
+ * came from, for Reset), so never rename one; add new looks instead. A look with
+ * English words built in (a ticker's "NOTICES" tag) is marked `languages: ["en"]`.
  */
 
 export const LOOK_FAMILIES: readonly LookFamily[] = [
@@ -120,7 +121,7 @@ const classic: LibraryLook[] = [
       line1: { size: 38, color: CC.paper, weight: 600, uppercase: false }, line2: { size: 24, color: CC.gold, weight: 500 },
       background: { kind: "color", color: CC.ink, opacity: 0.9, mediaId: null }, radius: 4, accent: { enabled: true, color: CC.gold, width: 6 }, animation: "fade",
     }) },
-  { kind: "ticker", id: "look-classic-ticker", family: "church-classic", name: "Classic · Notices", purpose: "Church notices crawling along the bottom in navy and gold.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9",
+  { kind: "ticker", id: "look-classic-ticker", family: "church-classic", name: "Classic · Notices", purpose: "Church notices crawling along the bottom in navy and gold.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9", languages: ["en"],
     style: ticker({ position: "bottom", height: 7, speed: 120, fontFamily: PLEX, size: 48, color: CC.paper, weight: 500, background: { kind: "color", color: CC.ink, opacity: 0.95, mediaId: null }, label: "NOTICES", labelColor: CC.ink, labelBackground: CC.gold, separator: "•", direction: "left", motion: "crawl", pageSeconds: 6 }) },
   { kind: "scene", id: "look-classic-scene-bible", family: "church-classic", name: "Classic · Camera and scripture", purpose: "A camera full frame with the scripture band over it.", layout: "scene", content: "bible", background: "dark", aspect: "16:9",
     scene: { background: "#000000", layers: cameraWith("bible", "look-classic-bible-l3") } },
@@ -176,7 +177,7 @@ const clean: LibraryLook[] = [
       line1: { size: 36, color: BC.white, weight: 700, uppercase: true }, line2: { size: 24, color: "#cfe9e5", weight: 400 },
       background: { kind: "color", color: BC.slate, opacity: 0.88, mediaId: null }, radius: 0, accent: { enabled: true, color: BC.rule, width: 10 }, animation: "slide",
     }) },
-  { kind: "ticker", id: "look-clean-ticker", family: "broadcast-clean", name: "Clean · News crawl", purpose: "A news-style crawl with a teal tag, for the stream.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9",
+  { kind: "ticker", id: "look-clean-ticker", family: "broadcast-clean", name: "Clean · News crawl", purpose: "A news-style crawl with a teal tag, for the stream.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9", languages: ["en"],
     style: ticker({ position: "bottom", height: 6, speed: 150, fontFamily: INTER, size: 50, color: BC.white, weight: 600, background: { kind: "color", color: BC.slate, opacity: 0.92, mediaId: null }, label: "UPDATES", labelColor: BC.white, labelBackground: "#256d68", separator: "|", direction: "left", motion: "crawl", pageSeconds: 6 }) },
   { kind: "scene", id: "look-clean-scene-bible", family: "broadcast-clean", name: "Clean · Camera and scripture", purpose: "The sanctuary camera with the scripture strip keyed over it.", layout: "scene", content: "bible", background: "dark", aspect: "16:9",
     scene: { background: "#000000", layers: cameraWith("bible", "look-clean-bible-l3") } },
@@ -303,7 +304,7 @@ const editorial: LibraryLook[] = [
       line1: { size: 38, color: WE.ink, weight: 600, uppercase: false }, line2: { size: 22, color: WE.brass, weight: 500 },
       background: { kind: "color", color: WE.paper, opacity: 0.96, mediaId: null }, radius: 2, accent: { enabled: true, color: WE.rule, width: 6 }, animation: "fade",
     }) },
-  { kind: "ticker", id: "look-editorial-ticker", family: "warm-editorial", name: "Editorial · This week", purpose: "A slow, paper-toned crawl for the week's notices.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9",
+  { kind: "ticker", id: "look-editorial-ticker", family: "warm-editorial", name: "Editorial · This week", purpose: "A slow, paper-toned crawl for the week's notices.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9", languages: ["en"],
     style: ticker({ position: "bottom", height: 7, speed: 100, fontFamily: SERIF, size: 50, color: WE.ink, weight: 500, background: { kind: "color", color: WE.paper, opacity: 0.96, mediaId: null }, label: "THIS WEEK", labelColor: "#ffffff", labelBackground: WE.brass, separator: "·", direction: "left", motion: "crawl", pageSeconds: 6 }) },
   { kind: "scene", id: "look-editorial-scene-bible", family: "warm-editorial", name: "Editorial · Camera and scripture", purpose: "The camera with a paper scripture card over it.", layout: "scene", content: "bible", background: "dark", aspect: "16:9",
     scene: { background: "#000000", layers: cameraWith("bible", "look-editorial-bible-l3") } },
@@ -372,7 +373,7 @@ const contrast: LibraryLook[] = [
       line1: { size: 40, color: HC.white, weight: 800, uppercase: false }, line2: { size: 28, color: HC.yellow, weight: 600 },
       background: { kind: "color", color: HC.black, opacity: 0.95, mediaId: null }, radius: 0, accent: { enabled: true, color: HC.yellow, width: 10 }, animation: "none",
     }) },
-  { kind: "ticker", id: "look-contrast-ticker", family: "high-contrast", name: "High Contrast · Still notices", purpose: "Large notices one at a time, without motion.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9",
+  { kind: "ticker", id: "look-contrast-ticker", family: "high-contrast", name: "High Contrast · Still notices", purpose: "Large notices one at a time, without motion.", layout: "ticker", content: "announcements", background: "transparent", aspect: "16:9", languages: ["en"],
     style: ticker({ position: "bottom", height: 9, speed: 100, fontFamily: INTER, size: 56, color: HC.white, weight: 700, background: { kind: "color", color: HC.black, opacity: 1, mediaId: null }, label: "NOTICE", labelColor: HC.black, labelBackground: HC.yellow, separator: "•", direction: "left", motion: "pages", pageSeconds: 8 }) },
   { kind: "scene", id: "look-contrast-scene-bible", family: "high-contrast", name: "High Contrast · Camera and scripture", purpose: "The camera with the large scripture band over it.", layout: "scene", content: "bible", background: "dark", aspect: "16:9",
     scene: { background: "#000000", layers: cameraWith("bible", "look-contrast-bible-l3") } },

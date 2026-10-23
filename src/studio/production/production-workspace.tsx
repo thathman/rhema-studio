@@ -26,6 +26,7 @@ import { SceneComposer } from "@/studio/production/scene-composer"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
 import { useProductionTab, type ProductionTab } from "@/studio/production/production-tab"
 import { CamerasPanel } from "@/studio/production/cameras-panel"
+import { ReadyMadeFeeds } from "@/studio/production/ready-made-feeds"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 
@@ -195,7 +196,7 @@ function Screens() {
   const openOutputs = useShellStore((s) => s.openOutputs)
   const needs = attention(outputs, status, feeds)
   return (
-    <Card kicker="Outputs" title="Screens, NDI senders and browser feeds" badge={<Button size="sm" onClick={openOutputs}><MonitorIcon /> Open outputs</Button>}>
+    <Card kicker="Outputs" title="Screens, NDI senders and browser feeds" badge={<div className="flex flex-wrap justify-end gap-2"><ReadyMadeFeeds /><Button size="sm" onClick={openOutputs}><MonitorIcon /> Open outputs</Button></div>}>
       {needs.length > 0 && (
         <ul aria-label="Needs attention" className="mb-2 flex flex-col gap-1">
           {needs.map((n) => (
@@ -240,7 +241,7 @@ function OutputInspector({ output: o, status: st, frame, scenes, themes }: { out
       </div>
       <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-3 py-2.5 text-xs">
         {row("Goes to", <span className="break-words">{outputDestination(o)}</span>)}
-        {row("Follows", outputFollows(o))}
+        {row("Follows", outputFollows(o, theme))}
         {row("Presentation", outputPresentation(o, scenes, theme))}
         {role === "congregation" && row("Language", LANGUAGE_NAMES[o.language ?? "both"])}
         {role !== "stage" && row("Look", (

@@ -981,6 +981,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dx. Church colours on library looks, language filter, ready-made feeds (#299)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dx.1 | Fresh profile (Brand Kit never applied). Design → Library → any Bible look → **Use with church colours**. | A message says to set your church colours in Design → Brand Kit, with **Open Brand Kit**; nothing is added to Themes. | Unverified |
+| 10dx.2 | Design → Brand Kit: name "Grace Chapel", text #ffffff, accent #ffcc00, heading font Inter, body font Geist; Apply. Library → "Classic · Scripture" → **Use with church colours**. | "Classic · Scripture · Grace Chapel" is added to Themes: white Geist words, gold Inter reference, the Classic navy page. The library card's preview is unchanged; no output changes. | Unverified |
+| 10dx.3 | Brand Kit text colour #14202b (navy), Apply; Library → "Classic · Scripture" → Use with church colours. | The message says the look's own text colour was kept because yours would be hard to read; the copy's words stay paper-coloured, fonts change. | Unverified |
+| 10dx.4 | Use with church colours on a lower third ("Clean · Name strip") and a camera scene ("Clean · Camera and scripture"). | A name-band style and a scene (with its own look copy) in the church colours, named "… · Grace Chapel"; nothing is on air. Ticker and stage cards have no church-colours button. | Unverified |
+| 10dx.5 | An output already uses a theme; note its look. Repeat 10dx.2 on that same library look. | The output still shows its old look; the built-in themes are unchanged in Themes. | Unverified |
+| 10dx.6 | Library language chips: Yorùbá, English, Both together. | Both together keeps the full-screen and lower-third Bible/song looks, scenes and stage, not name bands or tickers; Yorùbá leaves out the tickers tagged NOTICES/UPDATES/THIS WEEK/NOTICE; each card ends with its language line. | Unverified |
+| 10dx.7 | Production → Screens → **Add a ready-made feed** → NDI → "Rhema Bible \| Lower third". | A new card "Rhema Bible \| Lower third": NDI "Rhema Bible \| Lower third" alpha, follows Bible, Lower Thirds look, lower thirds; it is **Off**. Every other card is unchanged. OBS lists the source only after you turn it on in Outputs. | Unverified |
+| 10dx.8 | Add "Rhema Bible \| Lower third" again. | A message says it is already set up and names that output; no second card. | Unverified |
+| 10dx.9 | Add "Rhema Ticker \| Alpha" (NDI) and "Rhema Lyrics \| Full" as Browser feed; turn the ticker feed on in Outputs, start a ticker in Present; check Show health. | Ticker card: follows the news ticker, "Ticker only · transparent, for keying"; OBS shows only the ticker over transparency. The browser feed has a link in its settings. Show health does not warn that a signage loop has no pictures. | Unverified |
 ### 10dw. Rehearsal keeps each screen's scene; teal text and Settings help (#246, #215)
 
 | # | Step | Expected | Result |

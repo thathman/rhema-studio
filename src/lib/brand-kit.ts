@@ -1,4 +1,4 @@
-import type { BroadcastTheme, ThemeLogo } from "@/types"
+import type { BroadcastTheme, LowerThirdStyle, ThemeLogo } from "@/types"
 import { CLASSIC_DARK } from "@/lib/builtin-themes"
 
 /** Fonts bundled with the app (see package.json @fontsource), so they are always available offline. */
@@ -59,6 +59,84 @@ export function contrastRatio(a: string, b: string): number {
 /** `wanted` if it reads on `background` (≥ 4.5:1), else `fallback`. */
 export function readable(wanted: string, background: string, fallback: string): string {
   return contrastRatio(wanted, background) >= 4.5 ? wanted : fallback
+}
+
+/**
+ * The Brand Kit holds the church's own colours or fonts, not the ones Rhema starts with. (A kit
+ * applied with the starting colours counts too: the caller checks for brand-managed themes.)
+ */
+export function hasChurchColours(kit: BrandKit): boolean {
+  const d = defaultBrandKit()
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+  return (["primary", "accent", "text", "background"] as const).some((k) => !same(kit.colors[k], d.colors[k])) ||
+    kit.fonts.heading !== d.fonts.heading || kit.fonts.body !== d.fonts.body
+}
+
+/** What a keyed look's words sit on when it has no band of its own: the camera picture, taken as dark. */
+export const CAMERA_GROUND = "#1f1f1f"
+
+/** The colours a theme's words sit on: its text box when solid enough, else its background (each gradient stop). */
+export function themeGrounds(theme: Pick<BroadcastTheme, "background" | "textBox">): string[] {
+  if (theme.textBox.enabled && theme.textBox.opacity >= 0.6) return [theme.textBox.color]
+  const bg = theme.background
+  if (bg.type === "transparent") return [CAMERA_GROUND]
+  if (bg.type === "gradient" && bg.gradient?.stops.length) return bg.gradient.stops.map((s) => s.color)
+  return [bg.color]
+}
+
+/** `color` reads (≥ 4.5:1) on every one of `grounds`. */
+export function readsOn(color: string, grounds: readonly string[]): boolean {
+  return hex(color) !== null && grounds.every((g) => contrastRatio(color, g) >= 4.5)
+}
+
+/** A copy in the church's colours, and which of the look's own colours were kept because the church's would not read. */
+export interface BrandedCopy<T> {
+  value: T
+  keptText: boolean
+  keptAccent: boolean
+}
+
+/**
+ * A theme in the church's colours and fonts (#299): the words in the kit's text colour and body
+ * font, the reference, second language and verse numbers in its accent and the reference in its
+ * heading font. The look's background and layout stay. A colour that would not read on the look's
+ * background is not used: the look keeps its own (keptText / keptAccent). Pure: give it a copy.
+ */
+export function brandTheme(theme: BroadcastTheme, kit: BrandKit): BrandedCopy<BroadcastTheme> {
+  const grounds = themeGrounds(theme)
+  const keptText = !readsOn(kit.colors.text, grounds)
+  const keptAccent = !readsOn(kit.colors.accent, grounds)
+  const accent = (own: string) => (keptAccent ? own : kit.colors.accent)
+  const second = theme.secondaryVerseText
+  return {
+    value: {
+      ...theme,
+      verseText: { ...theme.verseText, fontFamily: kit.fonts.body, color: keptText ? theme.verseText.color : kit.colors.text },
+      ...(second ? { secondaryVerseText: { ...second, fontFamily: kit.fonts.body, color: accent(second.color) } } : {}),
+      reference: { ...theme.reference, fontFamily: kit.fonts.heading, color: accent(theme.reference.color) },
+      verseNumbers: { ...theme.verseNumbers, color: accent(theme.verseNumbers.color) },
+    },
+    keptText,
+    keptAccent,
+  }
+}
+
+/** A name band in the church's colours and heading font; the accent bar always takes the accent (it carries no words). */
+export function brandLowerThirdStyle(style: LowerThirdStyle, kit: BrandKit): BrandedCopy<LowerThirdStyle> {
+  const grounds = style.background.kind === "color" && style.background.opacity >= 0.6 ? [style.background.color] : [CAMERA_GROUND]
+  const keptText = !readsOn(kit.colors.text, grounds)
+  const keptAccent = !readsOn(kit.colors.accent, grounds)
+  return {
+    value: {
+      ...style,
+      fontFamily: kit.fonts.heading,
+      line1: { ...style.line1, color: keptText ? style.line1.color : kit.colors.text },
+      line2: { ...style.line2, color: keptAccent ? style.line2.color : kit.colors.accent },
+      accent: { ...style.accent, color: hex(kit.colors.accent) ? kit.colors.accent : style.accent.color },
+    },
+    keptText,
+    keptAccent,
+  }
 }
 
 /**
