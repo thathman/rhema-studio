@@ -245,6 +245,14 @@ interface BroadcastState {
   setAutoMode: (mode: AutoMode) => void
   syncBroadcastOutput: () => void
   syncBroadcastOutputFor: (outputId: string) => void
+  /**
+   * Screen test (#298): outputs showing a test pattern, with when it started. While one is, its
+   * program frames are kept but not sent; ending the test sends the newest of them, so the output
+   * goes back to exactly what it would be showing.
+   */
+  outputTests: Record<string, number>
+  startOutputTest: (id: string, frame: Record<string, unknown>) => void
+  endOutputTest: (id: string) => void
 
   // Output management
   addOutput: (output: BroadcastOutput) => void
@@ -491,6 +499,16 @@ function noteSources(by = currentActor()): void {
  * (ARCH-002), only while that feed is on.
  */
 function deliver(outputId: string, payload: Record<string, unknown>): void {
+  lastProgram.set(outputId, payload)
+  // A screen test holds the output; the newest program frame goes out when it ends.
+  if (useBroadcastStore.getState().outputTests[outputId]) return
+  send(outputId, payload)
+}
+
+/** The program frame each output was last given (sent, or held back by a screen test). */
+const lastProgram = new Map<string, Record<string, unknown>>()
+
+function send(outputId: string, payload: Record<string, unknown>): void {
   const s = useBroadcastStore.getState()
   const output = s.outputs.find((o) => o.id === outputId)
   if (output?.type === "browser") {
@@ -759,6 +777,33 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       ...(changed ? { sentAt: Date.now() } : {}),
     })
   },
+  outputTests: {},
+  startOutputTest: (id, frame) => {
+    if (!get().outputs.some((o) => o.id === id)) return
+    set((s) => ({ outputTests: { ...s.outputTests, [id]: s.outputTests[id] ?? Date.now() } }))
+    send(id, frame)
+  },
+  endOutputTest: (id) => {
+    if (!get().outputTests[id]) return
+    set((s) => {
+      const outputTests = { ...s.outputTests }
+      delete outputTests[id]
+      return { outputTests }
+    })
+    const output = get().outputs.find((o) => o.id === id)
+    if (!output) return
+    if (!lastProgram.has(id)) get().syncBroadcastOutputFor(id)
+    const last = lastProgram.get(id)
+    // Not a change of screen for the latency log: without the old send time.
+    if (last) {
+      const frame = { ...last }
+      delete frame.sentAt
+      send(id, frame)
+    } else {
+      // Nothing was ever sent here (rehearsal froze it before its first frame): its plain look.
+      send(id, { theme: get().themes.find((t) => t.id === output.themeId) ?? CLASSIC_DARK, verse: null, overlay: null, ticker: null })
+    }
+  },
   syncBroadcastOutput: () => {
     for (const output of get().outputs) {
       get().syncBroadcastOutputFor(output.id)
@@ -788,6 +833,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
     forgetSignage(id)
+    lastProgram.delete(id)
+    if (get().outputTests[id]) {
+      set((s) => {
+        const outputTests = { ...s.outputTests }
+        delete outputTests[id]
+        return { outputTests }
+      })
+    }
     set((s) => {
       const outputFrames = { ...s.outputFrames }
       delete outputFrames[id]

@@ -328,6 +328,20 @@ pub struct RestoreReport {
     pub migrations: Vec<String>,
 }
 
+/// What a backup file would bring in (services, songs, the newest service), read from a local
+/// copy so a USB stick or NAS is touched once (off the main thread). Nothing on this computer changes.
+#[tauri::command(async)]
+pub fn content_inspect_backup(path: String) -> CmdResult<rhema_content::BackupSummary> {
+    let local = local_temp("inspect");
+    std::fs::copy(&path, &local).map_err(|e| {
+        let _ = std::fs::remove_file(&local);
+        copy_error("Could not read the backup", &e)
+    })?;
+    let summary = rhema_content::inspect_backup(&local).map_err(ContentCommandError::from);
+    let _ = std::fs::remove_file(&local);
+    summary
+}
+
 /// Replace the live database with a verified backup. The current file is
 /// snapshotted first; on any failure the previous database is reopened.
 ///

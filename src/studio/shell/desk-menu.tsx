@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react"
 import { getVersion } from "@tauri-apps/api/app"
-import { ChevronsUpDownIcon, CircleHelpIcon, FileTextIcon, InfoIcon, KeyboardIcon, ListChecksIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon, UserRoundIcon } from "lucide-react"
+import { ChevronsUpDownIcon, CircleHelpIcon, ClipboardCheckIcon, FileTextIcon, InfoIcon, KeyboardIcon, ListChecksIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon, UserRoundIcon } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useTheme } from "@/components/theme-provider"
 import { openSettings } from "@/lib/settings-dialog"
 import { cn } from "@/lib/utils"
+import { setupStatusLabel } from "@/lib/setup-readiness"
 import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
+import { useSetupStatus } from "@/studio/setup/use-setup-status"
 
 /** The roles a host can give a joined computer, as the Desk menu names them. */
 const ROLES: Record<string, string> = { timekeeper: "Timekeeper", bible: "Bible", screens: "Screens", present: "Present", configure: "Present and settings" }
@@ -176,6 +178,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
             <button type="button" className={ROW} onClick={() => run(() => useShellStore.getState().setSetupOpen(true))}>
               <ListChecksIcon /> Complete setup
             </button>
+            <SetupStatusRow onOpen={() => run(() => useShellStore.getState().setSetupStatusOpen(true))} />
             <button type="button" className={ROW} onClick={() => run(() => setShortcuts(true))}>
               <KeyboardIcon /> Keyboard shortcuts
             </button>
@@ -201,5 +204,17 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
         }}
       />
     </>
+  )
+}
+
+/** "Setup status · Complete / Needs 2": worked out only while the menu is open. */
+function SetupStatusRow({ onOpen }: { onOpen: () => void }) {
+  const { church, equipment } = useSetupStatus()
+  const label = setupStatusLabel(church.missing, equipment.attention)
+  return (
+    <button type="button" className={ROW} onClick={onOpen}>
+      <ClipboardCheckIcon /> Setup status
+      <span className={cn("ml-auto text-[0.625rem] font-semibold", label === "Complete" ? "text-confidence-high" : "text-confidence-mid")}>{label}</span>
+    </button>
   )
 }

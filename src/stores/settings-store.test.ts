@@ -232,6 +232,42 @@ describe("settings store", () => {
     expect(mockSet).toHaveBeenCalledWith("setup", expect.objectContaining({ version: 1, lastStep: "screens", deviceName: "Sanctuary desk" }))
   })
 
+  it("a damaged setup section costs nothing else: names, Brand Kit and keys load as saved (#298 H)", async () => {
+    for (const damaged of ["{not json", 42, [1, 2], { version: 99, lastStep: { x: 1 }, stepsDone: "all", mode: 3, deviceName: null }]) {
+      vi.resetModules()
+      mockSet.mockReset()
+      mockGet.mockImplementation(async (key: string) => {
+        const saved: Record<string, unknown> = { setup: damaged, operatorName: "Tolu", brandKit: { version: 1, churchName: "Grace Chapel" }, sttProvider: "whisper" }
+        return key in saved ? saved[key] : undefined
+      })
+      const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+      const { defaultSetup } = await import("@/lib/setup-readiness")
+      await hydrateSettings()
+      const s = useSettingsStore.getState()
+      expect(s.setup).toEqual(defaultSetup())
+      expect(s.operatorName).toBe("Tolu")
+      expect(s.brandKit.churchName).toBe("Grace Chapel")
+      expect(s.sttProvider).toBe("whisper")
+      // Reading it never rewrites the file by itself.
+      expect(mockSet).not.toHaveBeenCalled()
+    }
+  })
+
+  it("joining a host keeps this computer's own operator name and setup (#298 G)", async () => {
+    mockGet.mockImplementation(async (key: string) => {
+      const saved: Record<string, unknown> = { operatorName: "Tolu", setup: { version: 1, deviceName: "Sanctuary desk", campus: "Ikeja", mode: "main" }, brandKit: { version: 1, churchName: "Grace Chapel" } }
+      return key in saved ? saved[key] : undefined
+    })
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    useSettingsStore.getState().setJoin({ joinAddress: "192.168.1.10:8080", joinName: "Main desk", joinToken: "t" })
+    const s = useSettingsStore.getState()
+    expect(s.joinAddress).toBe("192.168.1.10:8080")
+    expect(s.operatorName).toBe("Tolu")
+    expect(s.setup).toMatchObject({ deviceName: "Sanctuary desk", campus: "Ikeja", mode: "main" })
+    expect(s.brandKit.churchName).toBe("Grace Chapel")
+  })
+
   it("a failed save is noted for the setup check, and cleared by the next good save (#298)", async () => {
     mockGet.mockResolvedValue(null)
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})

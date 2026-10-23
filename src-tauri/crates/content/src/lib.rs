@@ -607,6 +607,50 @@ pub fn verify_backup(source: &Path) -> Result<Vec<String>> {
     Ok(rows.collect::<std::result::Result<_, _>>()?)
 }
 
+/// What a backup file holds, read without changing anything: shown to the operator before a restore.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BackupSummary {
+    pub services: i64,
+    pub songs: i64,
+    /// The service with the latest date (or the latest change), and its date.
+    pub newest_service: Option<String>,
+    pub newest_date: Option<String>,
+    /// When a service in it was last changed (ISO), if any.
+    pub last_changed: Option<String>,
+    /// Written by a newer Rhema Studio: this build cannot restore it.
+    pub newer: bool,
+}
+
+/// Read-only look inside a backup (after `verify_backup`): how many services and songs it would bring in.
+/// Older files without a songs table count zero songs.
+pub fn inspect_backup(source: &Path) -> Result<BackupSummary> {
+    let applied = verify_backup(source)?;
+    let known: HashSet<&str> = MIGRATIONS.iter().map(|(v, _)| *v).collect();
+    let newer = applied.iter().any(|v| !known.contains(v.as_str()));
+    let conn = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+    let table = |name: &str| -> Result<bool> {
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1", [name], |r| r.get(0))?;
+        Ok(n > 0)
+    };
+    let (services, newest_service, newest_date, last_changed) = if table("programs")? {
+        let services: i64 = conn.query_row("SELECT COUNT(*) FROM programs", [], |r| r.get(0))?;
+        let newest: Option<(String, Option<String>)> = conn
+            .query_row(
+                "SELECT title, service_date FROM programs ORDER BY COALESCE(service_date, '') DESC, updated_at DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let last: Option<String> = conn.query_row("SELECT MAX(updated_at) FROM programs", [], |r| r.get(0))?;
+        let (title, date) = newest.map_or((None, None), |(t, d)| (Some(t), d));
+        (services, title, date, last)
+    } else {
+        (0, None, None, None)
+    };
+    let songs: i64 = if table("songs")? { conn.query_row("SELECT COUNT(*) FROM songs", [], |r| r.get(0))? } else { 0 };
+    Ok(BackupSummary { services, songs, newest_service, newest_date, last_changed, newer })
+}
+
 /// Replace the database at `path` with the verified backup at `source`,
 /// keeping the current file as `<name>.before-restore-<stamp>.bak` first.
 /// Every handle on `path` must be dropped before calling. If the restored
@@ -1506,6 +1550,38 @@ mod tests {
         assert!(matches!(restore_from(&tmp.db(), &plain), Err(ContentError::Invalid(_))));
         let db = ContentDb::open(&tmp.db()).unwrap();
         assert_eq!(db.list_programs().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_backup_is_inspected_without_changing_it() {
+        let tmp = TempDir::new();
+        let backup = tmp.0.join("look.db");
+        {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            db.create_program("Harvest", Some("2026-10-04")).unwrap();
+            db.create_program("Sunday", Some("2026-10-18")).unwrap();
+            db.backup_to(&backup).unwrap();
+        }
+        let before = std::fs::read(&backup).unwrap();
+        let s = inspect_backup(&backup).unwrap();
+        assert_eq!(s.services, 2);
+        assert_eq!(s.songs, 0);
+        assert_eq!(s.newest_service.as_deref(), Some("Sunday"));
+        assert_eq!(s.newest_date.as_deref(), Some("2026-10-18"));
+        assert!(s.last_changed.is_some());
+        assert!(!s.newer);
+        assert_eq!(std::fs::read(&backup).unwrap(), before, "looking inside never writes to the file");
+
+        // The first schema had no songs table: zero songs, not an error.
+        let old = tmp.0.join("old.db");
+        ContentDb::open_with_migrations(&old, &MIGRATIONS[..1]).unwrap().create_program("Old", None).unwrap();
+        let s = inspect_backup(&old).unwrap();
+        assert_eq!((s.services, s.songs), (1, 0));
+
+        // Not a backup: refused, as a restore would be.
+        let garbage = tmp.0.join("garbage.db");
+        std::fs::write(&garbage, b"not a database at all").unwrap();
+        assert!(inspect_backup(&garbage).is_err());
     }
 
     #[test]

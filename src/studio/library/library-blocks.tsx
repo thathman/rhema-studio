@@ -8,7 +8,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useServiceStore } from "@/stores/service-store"
-import { useQueueStore } from "@/stores"
 import { Button } from "@/components/ui/button"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 
@@ -18,6 +17,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { backupDatabaseToFile, contentStatus, exportServicePackageToFile, exportSongsToFile, importServicePackageFromFile, importSongsFromFiles, restoreDatabaseFromFile, type ImportOutcome } from "@/lib/song-files"
 import { journalText, keepJournal, useJournalStore } from "@/stores/journal-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { describeError, reloadAfterRestore } from "@/studio/library/content-actions"
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
 import type { ContentStatus, ImportMode, ServiceLog, ServiceLogSummary } from "@/types"
@@ -123,11 +123,7 @@ export function DatabaseBlock() {
     try {
       const r = await restoreDatabaseFromFile()
       if (!r) return
-      // Everything on screen came from the old database.
-      useServiceStore.getState().closeProgram({ discard: true })
-      useQueueStore.getState().clearQueue()
-      useSongStore.setState({ songs: {}, results: [] })
-      await useServiceStore.getState().loadPrograms()
+      await reloadAfterRestore()
       setStatus(await contentStatus())
       toast.success("Database restored", { description: r.snapshot ? `The previous database was kept at ${r.snapshot}` : undefined })
     } catch (e) {
@@ -424,9 +420,4 @@ export function HymnbookList() {
       </ul>
     </div>
   )
-}
-
-function describeError(e: unknown): string {
-  if (typeof e === "object" && e !== null && "message" in e) return String((e as { message: unknown }).message)
-  return e instanceof Error ? e.message : String(e)
 }

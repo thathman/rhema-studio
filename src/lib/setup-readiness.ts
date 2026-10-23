@@ -72,6 +72,18 @@ export function normalizeSetup(raw: unknown): SetupProfile {
   }
 }
 
+/**
+ * Where the setup opens again: the step it was left on, unless a required step before it is no
+ * longer filled in (the name was cleared, or the settings file was damaged); then that step.
+ */
+export function resumeStep(setup: SetupProfile, filled: { churchName: string; operatorName: string }): SetupStepId | "welcome" {
+  if (!setup.lastStep) return "welcome"
+  const at = SETUP_STEPS.indexOf(setup.lastStep)
+  if (at > SETUP_STEPS.indexOf("church") && !filled.churchName.trim()) return "church"
+  if (at > SETUP_STEPS.indexOf("operator") && !filled.operatorName.trim()) return "operator"
+  return setup.lastStep
+}
+
 /** Cheap facts that say whether this computer has been used before. */
 export interface InstallFacts {
   churchName: string
@@ -271,4 +283,10 @@ export function showSetupCard(missing: number, setup: SetupProfile, now: number)
   if (missing === 0 || setup.homeCardHidden) return false
   const after = Date.parse(setup.remindAfter)
   return Number.isNaN(after) || now >= after
+}
+
+/** The Desk menu's few words: "Complete", or what is left (essentials, then equipment that is on and failing). */
+export function setupStatusLabel(missing: number, attention: number): string {
+  const n = missing + attention
+  return n === 0 ? "Complete" : `Needs ${n}`
 }

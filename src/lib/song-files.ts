@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { readFile, writeTextFile } from "@tauri-apps/plugin-fs"
-import type { ContentStatus, Hymnbook, ImportMode, ImportReport, PackageReport, RestoreReport, ServicePackage, SongExport, SongSummary, SongWithSections } from "@/types"
+import type { BackupSummary, ContentStatus, Hymnbook, ImportMode, ImportReport, PackageReport, RestoreReport, ServicePackage, SongExport, SongSummary, SongWithSections } from "@/types"
 import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 import { songToMarkdown } from "@/lib/lyrics"
@@ -159,8 +159,19 @@ export async function backupDatabaseToFile(): Promise<string | null> {
  * verifies the file and keeps the current database as a snapshot first.
  */
 export async function restoreDatabaseFromFile(): Promise<RestoreReport | null> {
+  const path = await pickBackupFile()
+  return path ? restoreDatabaseFrom(path) : null
+}
+
+/** Ask for a backup file; null when cancelled. */
+export async function pickBackupFile(): Promise<string | null> {
   const selected = await open({ multiple: false, filters: [{ name: "Rhema Studio database", extensions: ["db", "bak"] }] })
   if (!selected) return null
-  const path = Array.isArray(selected) ? selected[0] : selected
-  return invoke<RestoreReport>("content_restore", { path })
+  return Array.isArray(selected) ? (selected[0] ?? null) : selected
 }
+
+/** What a backup holds (services, songs, the newest service), without changing anything. */
+export const inspectBackup = (path: string) => invoke<BackupSummary>("content_inspect_backup", { path })
+
+/** Restore this backup file (checked and snapshotted by the backend, as above). */
+export const restoreDatabaseFrom = (path: string) => invoke<RestoreReport>("content_restore", { path })

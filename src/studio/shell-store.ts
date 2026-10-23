@@ -95,6 +95,9 @@ interface ShellState extends ShellPrefs {
   historyOpen: boolean
   setHistoryOpen: (open: boolean) => void
   openHistory: () => void
+  /** Setup status (#298): the church's setup, the equipment and this service, on one page. */
+  setupStatusOpen: boolean
+  setSetupStatusOpen: (open: boolean) => void
 }
 
 // ponytail: localStorage like ThemeProvider; per-machine UI convenience, not content.
@@ -127,6 +130,8 @@ export const useShellStore = create<ShellState>((set) => ({
   historyOpen: false,
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
   openHistory: () => set({ historyOpen: true, goRequest: "prepare" }),
+  setupStatusOpen: false,
+  setSetupStatusOpen: (setupStatusOpen) => set({ setupStatusOpen }),
 }))
 
 useShellStore.subscribe((state, prev) => {
