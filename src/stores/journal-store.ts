@@ -7,6 +7,9 @@ import { invoke } from "@tauri-apps/api/core"
 import { formatJournal, type JournalEntry } from "@/lib/journal"
 import { plannedMs } from "@/lib/service-timing"
 import { useSettingsStore } from "@/stores/settings-store"
+import { CONTENT_NAMES } from "@/lib/content-names"
+import type { SourceId } from "@/lib/live-sources"
+import type { ContentType } from "@/types/broadcast"
 
 interface JournalState {
   entries: JournalEntry[]
@@ -83,17 +86,37 @@ useBroadcastStore.subscribe((s, prev) => {
     seenBeforeRehearsal = null
     if (before && before.isLive === s.isLive && before.liveVerse === s.liveVerse) return
     if (s.isLive && s.liveVerse && !isQuick(s)) notePlan()
-    if (s.isLive && s.liveVerse) add({ kind: isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId })
-    else if (before?.isLive) add({ kind: "clear", label: labelOf(before), itemId: before.liveItemId })
+    if (s.isLive && s.liveVerse) add({ kind: isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId, ...sourceOf(s) })
+    else if (before?.isLive) add({ kind: "clear", label: labelOf(before), itemId: before.liveItemId, ...sourceOf(before) })
     return
   }
   const wentOff = prev.isLive && !s.isLive
   const wentOn = s.isLive && (!prev.isLive || s.liveVerse !== prev.liveVerse)
-  if (wentOff) add({ kind: "clear", label: labelOf(prev), itemId: prev.liveItemId })
+  if (wentOff) add({ kind: "clear", label: labelOf(prev), itemId: prev.liveItemId, ...sourceOf(prev) })
   if (wentOn) {
     if (!isQuick(s)) notePlan()
     const restored = prev.liveVerse === s.liveVerse && !prev.isLive
-    add({ kind: restored ? "restore" : isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId })
+    add({ kind: restored ? "restore" : isQuick(s) ? "quick" : "live", label: labelOf(s), itemId: s.liveItemId, ...sourceOf(s) })
+  }
+})
+
+// A live source changing without the program (ADR 0001): a heard verse while a hymn is up, a source
+// taken off or put back.
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.sources === prev.sources) return
+  const ids = new Set([...Object.keys(prev.sources), ...Object.keys(s.sources)]) as Set<SourceId>
+  for (const id of ids) {
+    const a = prev.sources[id]
+    const b = s.sources[id]
+    // The program's own source: its live / clear / restore entry already says so.
+    if ((b && b.value === s.liveVerse) || (a && (a.value === s.liveVerse || a.value === prev.liveVerse))) continue
+    const name = id === "quick" ? "Quick screen" : CONTENT_NAMES[id]
+    if (b?.on && (!a?.on || a.revision !== b.revision)) {
+      const back = a && !a.on && a.revision === b.revision
+      useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}`, itemId: b.itemId, source: name })
+    } else if (a?.on && !b?.on) {
+      useJournalStore.getState().add({ kind: "source", label: `${name} off: ${a.value.reference}`, itemId: a.itemId, source: name })
+    }
   }
 })
 
@@ -107,7 +130,13 @@ useServiceStore.subscribe((s, prev) => {
   if (s.current?.id !== prev.current?.id) useJournalStore.setState({ startItemIds: null })
 })
 
-type Aired = { liveVerse: { reference: string; lines?: string[]; screen?: "black" | "logo"; quick?: boolean } | null; heldLive?: unknown; liveItemId?: string | null }
+type Aired = { liveVerse: { reference: string; lines?: string[]; screen?: "black" | "logo"; quick?: boolean; content?: ContentType } | null; heldLive?: unknown; liveItemId?: string | null }
+
+/** The source tag for a program entry: what kind of content it was (not a quick screen). */
+function sourceOf(s: Aired): { source?: string } {
+  const c = s.liveVerse?.content
+  return c && !isQuick(s) ? { source: CONTENT_NAMES[c] } : {}
+}
 
 /** A quick screen, whether or not something was live to come back to. */
 const isQuick = (s: Aired) => Boolean(s.liveVerse?.quick || s.liveVerse?.screen || (s.heldLive && s.liveItemId === null))

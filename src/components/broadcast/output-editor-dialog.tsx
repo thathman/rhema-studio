@@ -151,6 +151,40 @@ export function OutputEditorDialog({
     onOpenChange(false)
   }
 
+  const followsPicker = (
+    <fieldset className="mt-2 flex flex-col gap-1.5">
+      <legend className="mb-1 text-xs text-muted-foreground">What this output follows</legend>
+      <label className="flex items-center gap-2 text-xs">
+        <input type="radio" name="shows" checked={!form.shows?.length} onChange={() => patch({ shows: undefined })} />
+        <span>Everything put on air <span className="text-muted-foreground">(the latest thing shown, as on the projector)</span></span>
+      </label>
+      <label className="flex items-center gap-2 text-xs">
+        <input type="radio" name="shows" checked={!!form.shows?.length} onChange={() => patch({ shows: form.shows?.length ? form.shows : ["bible"] })} />
+        <span>Only these, each as soon as it is live <span className="text-muted-foreground">(e.g. a Bible lower-third feed for OBS that keeps the verse while a hymn is on the projector)</span></span>
+      </label>
+      {!!form.shows?.length && (
+        <span role="group" aria-label="Sources this output follows" className="ml-5 flex flex-wrap gap-1.5">
+          {CONTENT_TYPES.map((k) => {
+            const on = form.shows!.includes(k)
+            return (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  const next = on ? form.shows!.filter((x) => x !== k) : [...form.shows!, k]
+                  if (next.length) patch({ shows: next })
+                }}
+                className={cn("rounded-full border px-2.5 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted")}
+              >
+                {CONTENT_NAMES[k]}
+              </button>
+            )
+          })}
+        </span>
+      )}
+    </fieldset>
+  )
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[460px]">
@@ -246,38 +280,7 @@ export function OutputEditorDialog({
                     <SelectItem value="second">Second language only (first when there is no second)</SelectItem>
                   </SelectContent>
                 </Select>
-                <fieldset className="mt-2 flex flex-col gap-1.5">
-                  <legend className="mb-1 text-xs text-muted-foreground">What this output follows</legend>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input type="radio" name="shows" checked={!form.shows?.length} onChange={() => patch({ shows: undefined })} />
-                    <span>Everything put on air <span className="text-muted-foreground">(the latest thing shown, as on the projector)</span></span>
-                  </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input type="radio" name="shows" checked={!!form.shows?.length} onChange={() => patch({ shows: form.shows?.length ? form.shows : ["bible"] })} />
-                    <span>Only these, each as soon as it is live <span className="text-muted-foreground">(e.g. a Bible lower-third feed for OBS that keeps the verse while a hymn is on the projector)</span></span>
-                  </label>
-                  {!!form.shows?.length && (
-                    <span role="group" aria-label="Sources this output follows" className="ml-5 flex flex-wrap gap-1.5">
-                      {CONTENT_TYPES.map((k) => {
-                        const on = form.shows!.includes(k)
-                        return (
-                          <button
-                            key={k}
-                            type="button"
-                            aria-pressed={on}
-                            onClick={() => {
-                              const next = on ? form.shows!.filter((x) => x !== k) : [...form.shows!, k]
-                              if (next.length) patch({ shows: next })
-                            }}
-                            className={cn("rounded-full border px-2.5 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted")}
-                          >
-                            {CONTENT_NAMES[k]}
-                          </button>
-                        )
-                      })}
-                    </span>
-                  )}
-                </fieldset>
+                {followsPicker}
                 <label className="mt-2 flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={form.lowerThirds === true} onChange={(e) => patch({ lowerThirds: e.target.checked })} />
                   <span>Show lower thirds on this output <span className="text-muted-foreground">(names, scripture and lyrics strips from Present; usually the stream)</span></span>
@@ -288,6 +291,8 @@ export function OutputEditorDialog({
                 </label>
               </>
             )}
+            {/* A stage display can follow chosen sources too (ADR 0001): its words come from them. */}
+            {form.role === "stage" && followsPicker}
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">

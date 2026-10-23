@@ -677,8 +677,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         theme: CLASSIC_DARK,
         verse: null,
         role: "stage",
+        // A stage that follows chosen sources shows their words; otherwise the program (ADR 0001).
         stage: applyStageStyle({ ...buildStagePayload({
-          isLive: s.isLive, liveVerse: s.liveVerse, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
+          isLive: shown !== null, liveVerse: shown, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
         }), finish: s.stageFinish, aux: s.stageAux }, s.stageStyle),
       })

@@ -973,6 +973,13 @@ report), but launching it cannot.
 | 10cu.9 | Main desk: send the Bible desk "Next reading", Ask to show a verse: Romans 8:28. Bible desk: press "Show Romans 8:28". Then ask a Timekeeper to show a verse and press it there. | Nothing shows until the Bible desk presses; then Romans 8:28 is on the Bible source and the notice reads "Ready". The Timekeeper's press is refused by the host. | Partly verified on the Intel Mac (2026-10-23, loopback): a paired Timekeeper key's request to the main desk carried "Show Romans 8:28" (an unknown kind was dropped); pressing it in the bell put Romans 8:28 (KJV) on the Bible source and answered Ready; the Timekeeper key's own `bible_activate` got 403. Two computers not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10cw. Stage follows a source; the log names sources (ARCH-001)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cw.1 | Two stage outputs: "Pulpit" following Bible, "Band" following everything. Put Romans 8:28 live, then a hymn verse. | Pulpit keeps Romans 8:28; Band shows the hymn; the projector shows the hymn. | Unverified |
+| 10cw.2 | With the hymn up, take the Bible source off and put it back (Production → sources), then Keep log. | The log has the hymn "· Hymns", then "Bible off: Romans 8:28" and "Bible back: Romans 8:28". | Unverified |
+
 ### 10cv. Browser feeds (ARCH-002, #198)
 
 | # | Step | Expected | Result |
