@@ -980,8 +980,8 @@ report), but launching it cannot.
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10dd.1 | Two joined desks in the talk channel, one talking. On the main desk, Talk to → All crew, priority; hold Talk; let go. | While the main desk talks, the other voice is much quieter for everyone and the main desk is clear; letting go brings it back. | PRIORITY_RESULT |
-| 10dd.2 | Settings → Remote: revoke a desk that is in the talk channel. | It leaves the crew list at once and hears nothing more. | REVOKE_RESULT |
+| 10dd.1 | Two joined desks in the talk channel, one talking. On the main desk, Talk to → All crew, priority; hold Talk; let go. | While the main desk talks, the other voice is much quieter for everyone and the main desk is clear; letting go brings it back. | Pass 2026-10-23 (combined QA build): Desk B heard Desk A at −28 dB; −41 dB while the main desk talked on priority (−13 dB, the ×0.2 duck); the main desk at −28 dB; Desk A back to −28 dB on release. |
+| 10dd.2 | Settings → Remote: revoke a desk that is in the talk channel. | It leaves the crew list at once and hears nothing more. | Pass 2026-10-23 (combined QA build): crew Desk A, B, C → Desk A, B as soon as Desk C's key was revoked. |
 
 ### 10dc. Cameras in scenes (OP-009, #209)
 
