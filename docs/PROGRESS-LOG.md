@@ -5,6 +5,16 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-002 slice 1: Congregation Scene Composer
+
+- **Main checked:** `49b41e0`; #256 (ARCH-003 slice 2) open, its Rust job re-run after a slow package mirror (CI step limit raised to 20 min in this branch).
+- **Branch / PR:** `arch-002/scene-composer` (stacked on #256).
+- **Behaviour:** scene model (`src/types/scene.ts`, `src/lib/scenes.ts`: presets, normalize, copy, `sceneFrame`, `layerContent`), shared drawer `drawScene`, output window composes `payload.scene`, store `scenes` (saved), `sceneId` per output, `takeScene` / `releaseScene` / `sceneReturn`, `deleteScene` releases; Black/Logo override scenes. UI: Production → Programs (scenes list and presets, live preview with drag/resize/nudge, inspector, program bar with Take / back / Restore). Edits are drafts until Save/Take.
+- **Tests:** `src/studio/scene-contracts.test.ts` (6, written after the model), Production composer test (preset → Take → release → Restore); full vitest 700; browser screenshots of the composer with Bible and hymn live side by side.
+- **Decisions:** a feed layer draws its look whole, then crop/scale (keyed looks stay keyed); camera layers are labelled placeholders until #209; only congregation outputs take scenes; scene changes reach air only by Save/Take.
+- **Remaining for ARCH-002:** clock and lower-third layers inside scenes, transitions, scene presets per church (save as preset), browser-source feeds, NDI/projector hardware checks (10cs).
+- **Next:** the Design toolbar overflow at 1024 (sweep), then ARCH-004 groundwork or MCP-001 read-only server.
+
 ## 2026-10-23 — ARCH-003 slice 2: rehearsal sandbox, scoped cues
 
 - **Main checked:** `49b41e0` (#255 merged after CI green and review).

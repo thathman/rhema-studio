@@ -211,6 +211,8 @@ export interface BroadcastOutput {
    * Absent: whatever was put on air last, as before.
    */
   shows?: ContentType[]
+  /** The congregation scene this output shows (its program, ADR 0001); absent: its own feed, full frame. */
+  sceneId?: string
   signage?: SignageSettings
   themeId: string
   /**

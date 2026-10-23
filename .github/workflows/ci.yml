@@ -67,7 +67,8 @@ jobs:
           components: clippy
       # A stuck package mirror once held this step for the whole job (45 min): fail fast, retry slow fetches.
       - name: Install Linux dependencies
-        timeout-minutes: 10
+        # The runner's mirror is sometimes slow (about a second a package): give it room, still failing fast on a real hang.
+        timeout-minutes: 20
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |

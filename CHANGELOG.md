@@ -6,6 +6,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Congregation Scene Composer (ARCH-002)
+- Production → Programs is the Scene Composer: arrange live content (each layer following its own sources, in a look from Design, or held), colours, Library pictures and camera places (cameras planned, #209) on one frame; drag to move, drag the corner to resize, arrow keys to nudge; box, crop and opacity in numbers too. Ready-made arrangements: Full screen, Bible and lyrics, Lyrics on a picture, Camera with the Bible.
+- **Take** puts the scene on a congregation output (saving it first); **Back to its own feed** and **Restore** follow. Each layer keeps following its source, so the next verse or line appears in its place without another Take; OBS feeds and other outputs are untouched; Black still covers everything. Edits stay in the composer until Save or Take.
+
 ### Rehearsal as a sandbox; cues say what they touch (ARCH-003)
 - Rehearsal now covers the whole desk: a lower third, ticker or stage message set in rehearsal, and anything done to the service timer, are undone when it ends (also with Show this live, which takes only the rehearsed screens live). A ticker started in rehearsal never reaches a signage screen. The service log records only that rehearsal ran.
 - A loop or timed move running on air waits through rehearsal (anything shown in rehearsal no longer stops it) and carries on after, catching up a step that came due; a loop started in rehearsal ends with it.

@@ -14,6 +14,7 @@ import { useReadiness } from "@/studio/use-readiness"
 import { HoldControl } from "@/studio/present/service-timer"
 import { AuxTimersPanel } from "@/studio/present/aux-timers"
 import type { ReadinessCheck } from "@/studio/readiness"
+import { SceneComposer } from "@/studio/production/scene-composer"
 
 type Tab = "timekeeper" | "screens" | "health" | "programs" | "cameras" | "operators"
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -83,7 +84,7 @@ export function ProductionWorkspace() {
           {tab === "timekeeper" && <Timekeeper />}
           {tab === "screens" && <Screens />}
           {tab === "health" && <Health />}
-          {tab === "programs" && <Planned title="Two programs, one service" issue={208} text="An online program (OBS / YouTube, 720p30) and an in-room program (the congregation's screens, 1080p30) cut independently from the same cameras, each with its own layout. Today Rhema runs the in-room screens and sends a clean feed and lower thirds to OBS over NDI." />}
+          {tab === "programs" && <SceneComposer />}
           {tab === "cameras" && <Planned title="Cameras on the church network" issue={209} text="Phone or IP cameras on the church's own network, one stream per angle, shared by OBS and Rhema without the internet. Today OBS handles the cameras; Rhema's graphics go to OBS over NDI." />}
           {tab === "operators" && <Planned title="Operators and their screens" issue={197} text="Each volunteer on their own device (director, Bible & worship, stage, timekeeper, video), with one computer holding the authority to take anything live. Today the team prepares together (Team → church folder, approvals) and one desk runs the service." />}
         </div>

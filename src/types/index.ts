@@ -48,3 +48,4 @@ export type {
   ServiceLog,
   ServiceLogSummary, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
 } from "./content"
+export type { Scene, SceneBox, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind } from "./scene"
