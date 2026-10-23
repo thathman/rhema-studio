@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Execution history: who did it, and scene takes (#246 C17)
+
+- **Branch / PR:** `history/scenes-actors`.
+- **Behaviour:** `dispatch_as` emits `remote:actor {by}` before a screen command's event (not for notices / voice); `noteRemote` appends "· by <name>"; journal kind `scene` for Takes and releases.
+- **Tests:** rhema-api (actor before the command; the HTTP test sink counts commands only); `source-followers.test.ts` (SCENE lines). Desktop: acceptance 10cw.3. Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — COMMS-001 C4 (part): talk channels and private calls
 
 - **Branch / PR:** `comms-004/channels`.

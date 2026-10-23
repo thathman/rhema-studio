@@ -100,6 +100,17 @@ useBroadcastStore.subscribe((s, prev) => {
   }
 })
 
+// A scene taken to an output or released from it (ARCH-002; #246 C17).
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.outputs === prev.outputs) return
+  for (const o of s.outputs) {
+    const was = prev.outputs.find((x) => x.id === o.id)
+    if (!was || was.sceneId === o.sceneId) continue
+    const name = o.sceneId ? s.scenes.find((x) => x.id === o.sceneId)?.name ?? "a scene" : null
+    useJournalStore.getState().add({ kind: "scene", label: name ? `${o.name}: ${name}` : `${o.name}: back to its own feed` })
+  }
+})
+
 // A live source changing without the program (ADR 0001): a heard verse while a hymn is up, a source
 // taken off or put back.
 useBroadcastStore.subscribe((s, prev) => {

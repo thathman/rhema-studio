@@ -785,7 +785,10 @@ mod tests {
 
     impl CommandSink for MockSink {
         fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
-            self.commands.lock().unwrap().push(event.to_string());
+            // Commands only: who sent each (remote:actor) is not a command.
+            if event != "remote:actor" {
+                self.commands.lock().unwrap().push(event.to_string());
+            }
             Ok(())
         }
 
