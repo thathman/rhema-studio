@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.45 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.46 · **Updated:** 2026-10-23 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -10,6 +10,24 @@
 - Every issue/PR should include: task IDs, affected FRs, change scope, migration/security/license notes, tests and screenshots, performance and offline impact, rollback plan, acceptance checklist.
 - Do not conflate **in PR** with **done**. GitHub Issues are enabled (2026-10-20): #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 owner decision on bundled translations, #34 owner decision on the Canva relay, #35 CV-004/005 Brand Kit and templates, #36 MD-002 video, #37 MD-004 lower thirds, #38 PT-003 cues, #39 QA-005 migration matrix. This file stays the master queue; link new issues here as they are opened.
 - Track separate **code quality** vs **volunteer UX acceptance**. An intuitive app is not established merely by unit tests.
+
+## Verified implementation checkpoint — 2026-10-23
+**Main `f63abc8c`**. Merged code is not production acceptance. See `docs/PROGRESS-LOG.md` and CHANGELOG for native/automated test evidence.
+
+| Workstream | Actual code status | Next gate |
+|---|---|---|
+| ARCH-001 independent Bible/Songs/Hymns sources | **MERGED first slices** #255/#267/#269 | Verify OBS/NDI variants physically |
+| ARCH-002 congregation scene composer, clock, fades and browser feeds | **MERGED first slices** #257/#265/#268/#271–#273 | Real local camera sources and Google TV |
+| ARCH-003 safe rehearsal, source/event clock and crash recovery | **MERGED first slices** #254/#256/#259/#275 | Physical power/failure, rehearsals, outputs |
+| ARCH-004 shared Host/Join and delegated roles | **MERGED first slices** #260/#261 | Real multicomputer, failure/permissions |
+| ARCH-005 receiver health and actor/source history | **PARTIAL** #271/#275; **IN PR** #276 actor logging | Receiver/A-V reality and merged history |
+| COMMS-001 notices, requests, mixed PTT, talk channels | **MERGED first slices** #264/#266/#270/#274 | Real headset and secure phone microphone |
+| MCP-001/002 external AI service draft interface | **MERGED first slices** #262/#263 | Actual connected assistant and review |
+| OP-007/008/009 browser/Google TV + local phone camera | **Browser graphics MERGED**, physical video **NOT BUILT** | Independent camera/TV stream and latency |
+| ST-004 speech delta | **Open, diverged PR #4** | Rebase with provider/licensing checks |
+| Release | **NO-GO** | Windows, projector/OBS/TV and owner tests |
+
+**Branches:** 254 retained; most earlier ARCH/MCP branches have zero commits ahead of main. `history/scenes-actors` 2 ahead (now PR #276); old docs #253 diverged/58 behind before today's reconciliation; feature speech #4 diverged. C4 branch `comms-004/channels` was merged as PR #274.
 
 ## Current active work
 
@@ -60,11 +78,11 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 | UX-13 Prepare as a run-of-show builder: phases (pre-service loop, warm-up, main service, post-service loop), groups, timing rollups and cues (issue #193) | P1 | IN PROGRESS (#203 model, #204 layout, #205 phases and groups, #206 add to a section, #207 timing, #210 Present sections, armed loops and warm-up #219, actual times from the service log #220 (no migration), go-live stage message and cue per item #221, timed moves per item #222, Intel Mac acceptance of a sample service passed (main window hidden; #223 fixes timers in a hidden main window); next: owner acceptance (the item editor's Confidence tab is in #236); a Rust tick lets loops and timed moves catch up where the window's throttling cannot be switched off (#224; Windows not yet tried)) | UX-07 | Owner issue #193; original UI, no copied look |
 | UX-14 Design-direction correction (issue #215): neutral palette (warm stone, white cards, ink sidebar and console, deep teal accent, brass sparingly, red only for live), no purple or gradients in app chrome; screenshot sweep and owner product review before mass UI merges | P0 | IN PROGRESS (foundation, shell and Home to the approved design #218, Present #235, Prepare #236, a Production page #237, Library #238, Team, Archive and Settings #239, the Design page's look #240, Edit the look #241; every page is on the approved design, run in the desktop app (mac-desktop-acceptance.md); next: owner product review) | UX-01–UX-13 | Owner issue #215; design approved 2026-10-22 (Rhema_Studio_Neutral_Complete_Experience_UPDATED.html) |
 | PT-006 Production timing: rundown timing engine, stage clocks, delay handling, multi-operator timers (issue #196) | P1 | IN PROGRESS (timing engine: planned, expected and actual kept apart, hard stops, in Prepare's timing #227, the service's expected end on the stage display #230, Present's service timer #229, auxiliary timers #232, holds with reasons #233, midnight and clock-change instants #250; next: networked parts wait for CL-005/#197) | UX-13 | Owner issue #196 (live-clock parts P0) |
-| CL-008 Networked production epic: one host, role-based operators, independent displays, OBS, synchronized run of show (issue #197) | P2 | DESIGN | CL-005 (#162), UX-13, PT-006 | Owner epic #197 |
-| CL-009 Architecture RFC v2: each live source (Bible, lyrics, slides, ticker, lower third…) published once, and each screen or feed decides whether and how to show it through its own scene; full one-machine operation with optional LAN volunteers (issue #243; v2 replaces the per-Take target model) | P1 | DESIGN (owner review required; code review posted on #243) | CL-008, PT-006, OP-008 | A0 ADR (Proposed) and PRD/TASKS alignment first; no implementation until the owner confirms terminology, layer semantics, scene ownership and one Bible source plus Hold |
-| CL-010 Cross-feature contract audit: draft vs live design, rehearsal isolation, event vs content time, scoped cues, per-layer Restore, feed identity, approvals, hand-off, Black scope, stage subscriptions, audio, versions, archive, docs drift (issue #246) | P1 | DESIGN (owner review required) / C18 docs drift fixed #248 | CL-009 | Contracts decided by the owner before the #243 build; C01-C17 are decisions, not bug fixes |
+| CL-008 Networked production epic (#197) | P2 | PARTIAL MERGED (#260/#261 Host/Join) | ARCH-004 | Real volunteer LAN devices and program failure drills |
+| CL-009 Unified sources/feeds/scenes (#243) | P1 | OWNER-APPROVED; first slices MERGED (#254/#255/#257/#265–#273) | ARCH-001/002 | NDI/OBS and sanctuary independence on hardware |
+| CL-010 Cross-feature contract audit (#246) | P1 | PARTIAL MERGED (safety #254/#256, event #259, ACK #271, recovery #275, attribution in PR #276) | ARCH-003/005 | End-to-end test of live/rehearsal, history and receiver |
 | FR-11 Product opportunities beyond broadcast: rehearsal packs, speaker companion, content QA, volunteer simulator, service editions, accessibility captions, after-service review, recovery kit (issue #217) | P2 | DISCOVERY | UX-14, UX-13, PT-006 | Owner issue #217: recommendations only, each needs a product decision before any build |
-| OP-007 Network display receivers: browser receiver first, Google TV / Android TV app later (issue #198) | P3 | DESIGN | CL-008 | Owner issue #198 |
+| OP-007 Browser and Google TV receiver (#198) | P2 | BROWSER GRAPHICS MERGED (#265/#271/#272); TV video pending | ARCH-002 | Google TV live video/render tests |
 | OP-008 Independent congregation video program: clean camera feeds plus Rhema overlays to TV receivers, separate from the stream (issue #208) | P3 | DESIGN | OP-007, CL-008 | Owner issue #208 |
 | OP-009 Phone camera contribution: one mobile publisher fanned out to OBS and the congregation program (issue #209) | P3 | DESIGN | OP-008 | Owner issue #209 |
 | OP-010 Show readiness and signal confidence: what each audience really sees, A/V alignment, live recovery for cameras and TVs (issue #213) | P2 | DESIGN | CL-008, OP-007, OP-008 | Owner issue #213 |
@@ -184,17 +202,16 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
 | QA-010 Backup/restore incident rehearsal | P0 | MERGED (runbook #59) / MERGED (drill run on the owner's Intel Mac with two profiles and a disk-image USB stick: R1–R5 pass, 2026-10-21) / BACKLOG (two physical laptops and a real USB pull, #62) | ST-008 | `docs/rhema-studio/14-backup-restore-rehearsal.md`: five-step drill (approve + service file + backup → standby open/restore → restore approved → USB pulled), all rows unverified until performed |
 
-## Roll-up / near-term sequence
-
-1. **Integration gate:** ST-005 → ST-006 → ST-007 (PR #3, #1, #2; #4 separate). Verify actual desktop and Windows before approval. Avoid accidental squash/stack duplication.
-2. **Content foundation:** ST-008, SO-001 → SO-010, SV-001 → SV-005. No complicated media project before a real song-to-Live flow works.
-3. **Production reliability:** MD-001 → MD-006, OP-001 → OP-005, PT-001 → PT-005. Parallelize visuals only across non-conflicting boundaries.
-4. **Design and remote prep:** CV-001 → CV-005, CL-001 → CL-006; a Canva export and approved service must be fully usable offline.
-5. **Expansion:** signage, engagement, archive, AI. Only promote into a release after the gates in RELEASE-PLAN.md.
-
-**Changes to task status:** maintain a brief revision history below (date, task IDs, PR/issue, verified evidence). Start with explicit PR links and no speculative completion claims.
+## Roll-up / near-term sequence — updated 2026-10-23
+1. Review #276 actor-aware service execution log; resolve outdated speech PR #4 separately; avoid merging obsolete #253.
+2. Verify NDI fullscreen/lower-third Bible/lyrics/ticker in actual OBS and independently rendered sanctuary/browser outputs, receiver ACK and crash recovery.
+3. Implement local phone/IP camera router/fanout and validate OBS 720p30 vs sanctuary 1080p30 and physical Google TV decoding/audio, WAN disconnected.
+4. Test multiple host/join computers, permissions and fallback; real headset PTT and safe paired phone HTTPS microphone.
+5. Test actual MCP-capable AI assistant creating a validated, editable service draft and human approval. Release only after Windows and owner acceptance.
 
 ## Revision history
+
+- **2026-10-23 (rev 0.46):** Reconciled main f63abc8c, #254–#275 merges including #274, outstanding #276/#4 and branch checks; no release claims.
 
 - **2026-10-21 (rev 0.43):** PRs #111–#122 merged; stale "later" notes in done criteria replaced with the PRs that did the work.
 - **2026-10-21 (rev 0.42):** PRs #96–#110 merged (see DEVELOPMENT-STATUS); QA-001 unsigned installer artifact built from `main`.
