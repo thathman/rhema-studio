@@ -1,62 +1,21 @@
 # Rhema Studio — Development Status
 
-Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
+**Updated:** 2026-10-23 · **Verified main:** `f63abc8cdcf7eaf56b20a97975faf63d922c002c` · **Release: NO-GO**
 
-**Updated:** 2026-10-22
+Sources: [PRD.md](PRD.md), [TASKS.md](TASKS.md), [RELEASE-PLAN.md](RELEASE-PLAN.md), `CHANGELOG.md` and [PROGRESS-LOG.md](PROGRESS-LOG.md).
 
-## Integrated `main`
+## Current verified build
+- The latest merge is [#274](https://github.com/thathman/rhema-studio/pull/274), Comms channels/private calls. **22 PRs #254–#275** merged after the obsolete docs PR #253, including independent source architecture, scene composition, rehearsal sandbox, separate event clock, Host/Join, browser feed QR/ack, notices, PTT, MCP drafts and recovery.
+- **Open PRs:** [#276](https://github.com/thathman/rhema-studio/pull/276) actor-aware remote commands and scene Take log, [#253](https://github.com/thathman/rhema-studio/pull/253) stale docs (previously 58 behind), [#4](https://github.com/thathman/rhema-studio/pull/4) old speech provider branch (827 behind, 1 ahead).
+- **Branches checked:** 254 retained, mostly merged historical work. `history/scenes-actors` ahead2/behind0 now has #276, and `comms-004/channels` was merged as #274. Old docs branch diverged, speech branch diverged. Do not count 254 branches as active tasks.
+- **CI and testing:** PR #274 workflow 39927459128 completed successfully; recent PRs contain Vitest/Rust and isolated Intel Mac QA evidence. Latest main CI status was not independently returned by the GitHub connector; no new hardware acceptance may be inferred.
+- **Physical risks:** still lacking live camera MediaMTX/phone fanout to real Google TV and OBS, real second-computer intercom/microphone/phone HTTPS, verified Windows install and exact integrated hardware A/V, novice and owner sign-off.
+- **Crash recovery:** #275 offers restoration after unexpected close, never automatically takes an output live. Stage, timer, source, scene and record semantics have first implementations, not final independent hardware validation.
 
-- Head: see `git log fork/main` (2026-10-22 17:45 WAT; every PR through #216 merged)
-- Contents: see CHANGELOG.md. `studio.db` is at migration 0012 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
-- Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
+## Next work
+Review #276; validate physical OBS, receiver and camera stack; phone voice security/audio and real multi-machine operation; connect AI client to MCP draft; update exact release gates before any published build.
 
-## Issues
-
-Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 and #34 owner decisions (bundled translations; Canva relay), #35 Brand Kit/templates, #36 video, #37 lower thirds, #38 cues, #39 migration matrix.
-
-## Open PRs
-
-- The owner's redesign continues: UX-03, UX-04 and UX-07 to UX-12 in TASKS.md (UX-01, 02, 05, 06 merged).
-
-- PR #4 `feature/speech-language-openai` (retargeted to `main`): Yoruba speech language and OpenAI Whisper provider. Kept independent until provider/bundling decisions are made (ST-004).
-
-## Active milestone
-
-All PRD milestones through 8 have first slices merged: 2B songs, 2C service builder, 3 media (pictures, backgrounds, pages; video/lower thirds desktop-gated), 4 outputs (roles, stage, language, health, signage), 5 production (timers, cues, rehearsal), 6 design (brand kit; Canva blocked on #34), 7 collaboration (approval, package, operator name, pairing, church folder per #72; hosted sync designed, hosting choice open), 8 signage (loop, schedule, playlists, QR), 9 archive (logs). Open work is listed under "Next eligible tasks".
-
-## Latest test results
-
-- Frontend: 669 vitest tests pass (two render-heavy tests can time out on a heavily loaded machine; given 30 s, #176, #180); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
-- Rust: `rhema-content` 62 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
-- Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
-- CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
-
-## Unverified (release-acceptance blockers, not development blockers)
-
-Gate-by-gate evidence for the newest installer: `docs/rhema-studio/19-release-candidate-evidence.md` (decision: NO-GO until desktop rows and owner sign-off).
-
-
-- The desktop rows that need hardware in `docs/rhema-studio/08-desktop-acceptance-guide.md` (sections 1–10cn): projector and stage screens, a second monitor, microphone and speech, OBS, video, signage, Windows. Most app-only rows were verified on the owner's Intel Mac on 2026-10-21/22 (`docs/rhema-studio/mac-desktop-acceptance.md`, driven through a test bridge in a separate profile; owner sign-off not yet recorded).
-- Windows installer: workflow run 39622759376 built `main` at `4e70783` (artifact 99,722,311 bytes, digest sha256:491068266b73881be3ca3a819f261ff822387564aa68ee2471f58663be9ea224; CI run 39622722135 green on the same commit; #156–#163 came after). Not installed or launched; not a release.
-- Yoruba speech recognition and the OpenAI provider (PR #4).
-
-## Important decisions
-
-- Merge commits only for stacked PRs; squash never (duplicate-change risk).
-- Saved service items pin their translation; active translation is for spontaneous content; override is per-session and never persisted.
-- Live state has one writer per content kind (`presentVerse`, later `presentSlide`); on-air flag and content land in one store update.
-- Song items in `program_items`: `kind='song'`, `reference` = song title (display), `payload` JSON `{song_id, arrangement_id, languages}`.
-- Pictures are read from `<app data>/media` by the webview (fs plugin app-dir scope) and travel to output windows as data URLs inside the render data, like theme images; the file index (hash, size, dimensions) lives in `media_assets`.
-- `src/dev/browser-shim.ts` stubs Tauri IPC for plain-browser dev runs (`bun run dev` + localhost); dev-only, absent from production builds. Use it for layout checks, never as acceptance evidence.
-
-## Known risks
-
-- **Canva (owner decision):** the Connect API's token exchange must run on a backend (client secret); a hosted or self-hosted relay is a cost/ops choice, and the integration must be a Canva-reviewed public one. See `docs/rhema-studio/11-canva-connect-findings.md`. CV-002 onwards waits for this.
-- **Licensing (decided 2026-10-21, #33):** the installer keeps the upstream translations (NIV, ESV, NASB, NKJV, NLT, AMP) on the owner's statement of upstream rights and fair use; `docs/LICENSES.md` §2 records the decision and the absence of written publisher permission in the repo.
-
-- No hands-on desktop or projector verification yet of the integrated build.
-- Video in a hidden NDI-only window may be throttled to about 1 frame a second by WebView2/WebKit (row 10ab.4); visible display outputs are not affected.
-- Whisper model is not bundled in the Windows installer (by design); speech is optional.
+## Historical archive (records before the October 23 reconciliation; may describe superseded status)
 
 ## Merged 2026-10-21 (this run)
 
