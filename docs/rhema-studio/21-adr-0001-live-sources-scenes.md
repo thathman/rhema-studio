@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (owner ratified the five principles of #243 on 2026-10-23; this ADR fixes the
   implementation contracts left open in #243 and #246).
-- **Scope:** the live model of one Rhema host; Host/Join (#162), Comms (#251) and MCP (#252) build on it.
+- **Scope:** the live model of one Rhema host (tasks ARCH-001 to ARCH-003 in #253); Host/Join (#162, ARCH-004), Comms (#251) and MCP (#252) build on it.
 - **Supersedes:** the per-Take destination model of the first #243 draft.
 
 ## 1. Context

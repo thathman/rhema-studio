@@ -918,7 +918,7 @@ report), but launching it cannot.
 | 10co.5 | A Signage output with "In a window" on the laptop screen. | A movable 960×540 window in the middle of that screen plays the pictures; it is not full screen. | Verified on the Intel Mac |
 | 10co.6 | Ticker: type three items, Start; outputs Stream (NDI) and Main (projector). | The words crawl smoothly on both (30 fps on NDI measured with a receiver; 61 fps on the K3 projector); Clear and new presents leave it; Black hides it; Pause holds and Resume carries on; Stop removes it; never on the stage. | Verified on the Intel Mac (crawl and rates; Pause/Resume in tests) |
 
-### 10cq. Live safety (ADR 0001, issue #246 C01/C02)
+### 10cq. Live safety (ADR 0001, ARCH-003, issue #246 C01/C02)
 
 | # | Step | Expected | Result |
 |---|---|---|---|
