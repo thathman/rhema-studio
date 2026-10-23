@@ -32,6 +32,25 @@ describe("cameras on the church network (OP-009)", () => {
     expect(frame.layers[0].cameraUrl).toBe("http://192.168.1.10:8889/pulpit/whep")
   })
 
+  it("a camera that is not playing shows its fallback words (#213), on outputs only", async () => {
+    const { drawScene } = await import("@/lib/scene-renderer")
+    const scene = newScene("Camera", SCENE_PRESETS[0])
+    scene.layers = [newLayer("camera", { cameraUrl: "http://10.0.0.5:8889/a/whep", cameraFallback: "  Camera back shortly  " })]
+    const back = normalizeScene(JSON.parse(JSON.stringify(scene)))!
+    expect(back.layers[0].cameraFallback).toBe("Camera back shortly")
+    const theme = { id: "t", verseText: { color: "#fafafa", fontFamily: "Inter", fontWeight: 700 } } as never
+    const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {}, themes: [theme] }, { themeId: "t" }, back)
+    expect(frame.layers[0]).toMatchObject({ fallback: "Camera back shortly", theme })
+    const said: string[] = []
+    const ctx = new Proxy({}, { get: (_t, k) => (k === "fillText" ? (t: string) => said.push(t) : k === "measureText" ? () => ({ width: 100 }) : () => {}), set: () => true }) as never
+    const opts = { image: () => null, layerCanvas: () => document.createElement("canvas"), imageCache: new Map() } as never
+    drawScene(ctx, 1920, 1080, frame, { ...(opts as object), camera: () => null } as never)
+    expect(said).toEqual(["Camera back shortly"])
+    said.length = 0
+    drawScene(ctx, 1920, 1080, frame, { ...(opts as object), camera: () => ({ videoWidth: 640, videoHeight: 360 }) } as never)
+    expect(said).toEqual([])
+  })
+
   it("one player per camera layer: started, kept, restarted when its address changes, stopped when gone", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC)
     const offers: string[] = []

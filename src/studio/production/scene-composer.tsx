@@ -354,6 +354,12 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
           <span className="text-muted-foreground">A camera relayed on the church network (MediaMTX: http://&lt;its computer&gt;:8889/&lt;camera&gt;/whep). Each screen plays it directly, without sound; until it connects the scene's background shows there. Only addresses on the church network are used.</span>
         </label>
       )}
+      {layer.kind === "camera" && (
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[0.625rem] text-muted-foreground">While the camera is not playing, show</span>
+          <input aria-label="Words while the camera is not playing" value={layer.cameraFallback ?? ""} maxLength={120} placeholder="the scene's background (e.g. type: Camera back shortly)" onChange={(e) => onChange({ cameraFallback: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
+        </label>
+      )}
       <div className="grid grid-cols-4 gap-1.5">
         <Num label="Left %" value={b.x} max={100 - b.w} onChange={(x) => onChange({ box: { ...b, x } })} />
         <Num label="Top %" value={b.y} max={100 - b.h} onChange={(y) => onChange({ box: { ...b, y } })} />

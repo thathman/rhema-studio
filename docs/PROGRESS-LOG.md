@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Words while a camera is not playing (#213 fallback)
+
+- **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.
+- **Tests:** `whep-cameras.test.ts` (+1: kept, framed, drawn only while the camera is not playing). Desktop: acceptance 10dc.4.
+
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
 - **Branch / PR:** `mcp-004/look-suggestions`. `mcp_drafts.rs`: `Looks` (built-in names plus `broadcast-themes.json` custom looks and scenes, read-only), `check_with` keeps `suggested_look` / `suggested_scene` (80 chars) and warns on unknown names; `mcp.rs`: `rhema_list_looks_and_scenes`, schema fields. Review shows them per item; `draftToRundown` does not carry them (decision: suggestions, not a data-model change).
