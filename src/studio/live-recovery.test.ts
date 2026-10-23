@@ -82,15 +82,18 @@ describe("live recovery", () => {
       { at, mono: 5, kind: "event" as const, label: "Welcome", itemId: "a" },
       { at: at + 240_000, mono: 240_005, kind: "event" as const, label: "Sermon", itemId: "b" },
     ] }
+    // This run logged a scene at start-up before the kept log was read: it stays, after them.
+    useJournalStore.getState().add({ kind: "scene", label: "Main Display: Pulpit camera" })
     expect(restoreJournal(kept, at + 700_000, 1_000)).toBe(true)
     const { entries, startItemIds } = useJournalStore.getState()
     expect(startItemIds).toEqual(["a", "b"])
-    expect(entries.map((e) => e.kind)).toEqual(["event", "event", "recovery"])
+    expect(entries.map((e) => e.kind)).toEqual(["event", "event", "scene", "recovery"])
     // Rebased on this run's clock: 4 min apart as before.
     expect(entries[1].mono - entries[0].mono).toBe(240_000)
     expect(entries[0].mono).toBe(at - (at + 700_000 - 1_000))
-    // Never over a log that has begun, never an old one.
+    // Only once, never an old one.
     expect(restoreJournal(kept, at + 700_000, 1_000)).toBe(false)
+    expect(useJournalStore.getState().entries).toHaveLength(4)
     useJournalStore.setState({ entries: [] })
     expect(restoreJournal(kept, at + 7 * 3_600_000, 1_000)).toBe(false)
   })
