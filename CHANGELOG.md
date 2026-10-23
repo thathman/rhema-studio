@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Talk: full-duplex Push-to-Talk with the crew (Rhema Comms C3, #251)
+- Joined desks and the main desk can talk to each other on the church network: hold Talk, and everyone hears you; several people can talk at once. The main desk mixes the voices (each desk hears everyone but itself), with no cloud and no extra software. Who is talking shows on every desk. Crew audio never reaches the screens, PA, OBS, NDI, recordings or listening. Design and measurements: `docs/rhema-studio/22-adr-0002-comms-voice.md`.
+
 ### Clock layer in scenes (ARCH-002)
 - A congregation scene can have a **Clock**: the service timer in a look's text style, filling its box, for a countdown before the service. Screens and browser feeds count it themselves (one frame a second), so it keeps time with the window covered and adds no traffic while it runs.
 
