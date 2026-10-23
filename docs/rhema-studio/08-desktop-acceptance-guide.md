@@ -976,6 +976,21 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dn. First-install setup and church setup readiness (#298)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dn.1 | (A) Fresh profile, offline (move the app's settings, themes and database aside first; put them back after). Start Rhema. | "Welcome to Rhema Studio" opens once, over Home; the first-run tour does not start on top of it. | Unverified |
+| 10dn.2 | (A) Choose "Set up this computer as the main desk". Press Continue with no church name; then type a long name with diacritics ("Ìjọ Àpóstélì Kristi, Oke-Ado"), Continue; your name, Continue. Skip the optional steps to the summary; Open Home. | The empty name is refused with an amber message and the field is focused; the preview and then Home read "… WORKSPACE" in full or truncated cleanly; the summary says 4 of 4 essentials done; NDI, OBS, cloud speech and AI assistants are under "Not using"; no warning about keys. | Unverified |
+| 10dn.3 | (A) Fresh profile again: at step 3 press Finish later; quit and start Rhema. | The setup does not open by itself again; Home shows "Finish church setup · N items" if an essential is missing; Continue setup reopens it at step 3. Remind me tomorrow hides the card until the next day; × hides it. | Unverified |
+| 10dn.4 | (A) Fresh profile: choose "Use Rhema now, finish later". Open Prepare and Present. | Both work at once; Home shows the Finish church setup card. | Unverified |
+| 10dn.5 | (B) An existing profile with saved services and a church name, but the tour never finished (`onboardingComplete` false). Start Rhema. | No setup wizard; settings, services, themes and outputs are as before; Live is not blocked. With no church name but saved services: still no wizard, only the Home card. | Unverified |
+| 10dn.6 | (C) Open the setup (Desk menu or Home card), rename the church at step 1, Continue; restart. | Home's heading shows the new name; brand themes made earlier are renamed ("New name · Scripture"); a blank name shows "Set up your church". | Unverified |
+| 10dn.7 | (D) No internet, no API key, the bundled Bible. Finish the setup. | Church setup: 4 of 4 essentials done; "Your attention" on Home is unchanged by the setup; cloud speech is not flagged. Then Settings → Speech: agree to cloud audio without a key and look at the summary: Cloud speech · Not tested, needs attention. Switch to speech on this computer: the warning goes. | Unverified |
+| 10dn.8 | (A) On the welcome screen choose "Join an existing church host". | Production opens at Operators with the Join form; nothing on this computer is replaced. | Unverified |
+| 10dn.9 | (I) Keyboard only: Tab through the welcome choices and every step; Escape closes. VoiceOver on: move between steps. At 1024×600, light and dark. | Focus is always visible; each step's heading is announced; the step list says which step is current and which are done; everything fits with the step body scrolling; colours follow the neutral design in both themes. | Unverified |
+| 10dn.10 | Screens step: Open Outputs, then close it. | The setup steps aside while Outputs is open and comes back at Screens; no screen turned on by itself. | Unverified |
+
 ### 10df. Time warnings on the stage (#196 R6)
 
 | # | Step | Expected | Result |

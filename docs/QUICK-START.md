@@ -2,6 +2,16 @@
 
 For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; only **Present** does.
 
+## The first time on a new computer (2 minutes)
+
+On a new install Rhema opens **Welcome to Rhema Studio** once. Choose:
+
+- **Set up this computer as the main desk** (recommended): the church's name, your name, then optional steps for the brand, the Bible, screens and connections. Every field saves as you type; **Skip** passes an optional step; **Finish later** stops anywhere and Rhema picks up at the same step next time.
+- **Join an existing church host**: opens Production → Operators to pair with the main desk.
+- **Use Rhema now, finish later**: go straight to Home.
+
+Nothing in the setup turns on a screen, a microphone or a listener, and no internet or cloud key is needed. Until the church's name, your name and a Bible are in place, Home shows a small **Finish church setup** card (Continue, Remind me tomorrow, or hide it). Features you do not use, such as NDI, OBS or cloud speech, are listed as **Not using** and never count against you.
+
 ## Before the service (Prepare, 10 minutes)
 
 1. **Home** tells you if anything is wrong: Bible loaded, theme chosen, an output on a screen, songs and pictures all present, fonts installed. Fix the amber lines first; the Fix button takes you there.

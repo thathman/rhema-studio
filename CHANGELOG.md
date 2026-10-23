@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### First-install setup (#298)
+- A new install opens **Welcome to Rhema Studio** once: set this computer up as the main desk, join an existing church host, or use Rhema now and finish later.
+- Short, resumable steps: church name, your name and this computer's name, brand and starter looks, Bible and library, screens, connections, and a summary (Done / Optional later / Needs attention). Everything saves as you type; Finish later picks up at the same step.
+- Home shows "Finish church setup · N items" only while the church name, your name or the Bible is missing; unused features (NDI, OBS, cloud speech, AI assistants) are "Not using" and never raise a warning.
+- Existing installations with services, outputs or a church name are never treated as new, and their settings load unchanged.
+
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### Words while a camera is not playing (#213)
