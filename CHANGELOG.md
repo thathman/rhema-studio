@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Team changes on Home; design docs match the studio (#215)
+- Home has a small **Team changes** card for the open service (or today's): the latest comments others left on items (unread ones marked **New**), who saved it last and who approved it, with times.
+- Click a comment to open Prepare on that item; click a save or approval to open Prepare with the service's **History**. When nothing has happened, the card does not appear.
+- The design and screen-flow guides, and the acceptance steps, now describe today's sidebar, Desk menu, Take live and where things moved from the old More page.
 ### Searchable Settings, bigger touch targets, calmer surfaces (#215)
 - Settings has a **Search settings** box above its list: type "gain", "deepgram" or "pair" and only the sections that hold it stay, each naming the matching settings; Enter opens the first and the matches are highlighted in it; Esc clears.
 - Settings' list sits under five headings: Bible and languages, Display and output, Microphone and speech, Connections, Data and diagnostics. Every section and setting is where it was.

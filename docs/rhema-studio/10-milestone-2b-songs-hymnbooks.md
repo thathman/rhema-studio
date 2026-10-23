@@ -7,7 +7,7 @@ Status: **design only. Not implemented.** Starts from an integrated `main` after
 
 A volunteer with no training can add a hymn in under two minutes, find it by number
 or a line of its lyrics during a service, and put it on screen in English, Yoruba or
-both, through the same Preview → Show live path verses use today.
+both, through the same Preview → Take live path verses use today.
 
 Out of scope for 2B: chords/keys display, CCLI reporting uploads, cloud sync, media
 backgrounds per song, stage display, multi-user editing. Song *text* is local only.
@@ -187,7 +187,7 @@ rundown with the default arrangement and the service's current language choice.
   item. The big Next button shows the next section label ("Next: Chorus").
 - Production view: the queue panel shows the song's slides as a sub-list; a slide
   click presents it.
-- Show live / Clear / Restore unchanged. Remote `next`/`prev` step slides.
+- Take live / Clear / Restore unchanged. Remote `next`/`prev` step slides.
 
 ## 7. Presentation through the existing engine
 

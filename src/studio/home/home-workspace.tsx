@@ -14,6 +14,7 @@ import { plannedTimes } from "@/lib/run-of-show"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
 import { SetupCard } from "@/studio/setup/setup-card"
+import { TeamChanges } from "@/studio/home/team-changes"
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -160,6 +161,7 @@ export function HomeWorkspace() {
               {attention.length > 0 && okCount > 0 && <p className="text-xs text-muted-foreground">{okCount} other {okCount === 1 ? "check is" : "checks are"} fine.</p>}
             </section>
 
+            <TeamChanges />
             <ChurchFolderCard />
             <section aria-labelledby="services" className="rounded-lg border border-border bg-card p-4 shadow-panel">
             <h2 id="services" className="mb-2 text-sm font-semibold">Saved services</h2>
