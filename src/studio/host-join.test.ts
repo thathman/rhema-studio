@@ -42,7 +42,7 @@ describe("the host's Live State", () => {
   it("carries what joined computers need, never a secret", () => {
     const s = buildLiveState(1000)
     expect(s).toMatchObject({ v: 1, program: { onAir: true, reference: "Romans 8:28", rehearsal: false }, event: { mode: "screens", currentId: "Welcome" }, stageMessage: "Wrap up" })
-    expect(s.sources).toEqual([{ id: "bible", reference: "Romans 8:28", on: true, revision: 3 }])
+    expect(s.sources).toEqual([{ id: "bible", reference: "Romans 8:28", on: true, revision: 3, activatedAt: 0 }])
     expect(s.rundown.map((r) => r.reference)).toEqual(["Welcome", "Sermon"])
     const text = JSON.stringify(s)
     for (const secret of ["shh", "dg-secret", "token"]) expect(text).not.toContain(secret)

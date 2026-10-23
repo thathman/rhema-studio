@@ -2,7 +2,7 @@ import { cancelPendingPresents, presentCustomSlide, presentImage, presentSlide, 
 import { fetchChapter, stepVerse } from "@/hooks/use-bible"
 import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type SongWithSections } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
@@ -140,6 +140,8 @@ let verseStepSeq = 0
  */
 export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
   const { liveSourceVerse: source, liveItem, liveItemId } = useBroadcastStore.getState()
+  // Who stepped (a joined Bible desk): known only now, before the chapter lookups.
+  const by = currentActor()
   if (!source) {
     // No verse to continue: step the Bible panel. Off air it also readies that verse;
     // with a song, slide or quick screen on air it never replaces it (preview only).
@@ -177,7 +179,7 @@ export async function stepLiveVerse(offset: 1 | -1): Promise<void> {
     useBibleStore.getState().setPendingNavigation({ bookNumber: verse.book_number, chapter: verse.chapter, verse: verse.verse })
     // Still the operator's item (its background, and Next continues from it).
     const background = liveItemId ? (useQueueStore.getState().items.find((i) => i.id === liveItemId)?.background ?? null) : null
-    await presentVerse(verse, { item: liveItem, goLive: true, itemId: liveItemId, background })
+    await presentVerse(verse, { item: liveItem, goLive: true, itemId: liveItemId, background, by })
   } catch (e) {
     console.warn("[remote-actions] stepLiveVerse failed:", e)
   }

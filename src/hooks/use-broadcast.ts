@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { mark } from "@/lib/latency-marks"
 import { composeQrSlide } from "@/lib/qr-bulletin"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import type { VerseRenderData } from "@/types"
@@ -98,6 +98,8 @@ export interface PresentOptions {
    * the program on the main screens is left alone (a verse heard while a song is up).
    */
   sourceOnly?: boolean
+  /** Who activates it ("Auto", a joined desk); default: whoever is acting now (see currentActor). */
+  by?: string
 }
 
 /** Data-URL fill for a background picture, or null (missing file → no background, text still shows). */
@@ -153,6 +155,8 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   if (!opts.follow && !opts.sourceOnly && reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
   if (!opts.follow) presentSeq += 1
   const ticket = presentSeq
+  // Who, taken now: a remote command's sender is only known while its handler runs.
+  const by = opts.by ?? currentActor()
   const followTicket = opts.follow ? ++followSeq : 0
   const startKey = translationsKey()
   const ref = `${verse.book_name} ${verse.chapter}:${verse.verse}`
@@ -204,7 +208,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     if (followTicket !== followSeq || !sameVerse) return "superseded"
   }
   // The translation was changed while this loaded: resolve again, so the screen shows the one now chosen.
-  if (translationsKey() !== startKey) return presentVerse(verse, opts)
+  if (translationsKey() !== startKey) return presentVerse(verse, { ...opts, by })
 
   // Never present a verse with no text (e.g. a citation that doesn't exist
   // in the chosen translation) — keep whatever is currently live instead.
@@ -239,7 +243,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     ? toDualVerseRenderData(renderEntries)
     : toVerseRenderData(renderEntries[0]?.verse ?? verseToPresent, renderEntries[0]?.translation ?? "KJV")
   if (opts.sourceOnly) {
-    useBroadcastStore.getState().activateSource({ ...data, ...layer, content: "bible" }, opts.itemId ?? null)
+    useBroadcastStore.getState().activateSource({ ...data, ...layer, content: "bible" }, opts.itemId ?? null, by)
     mark(`presentVerse end ${ref} (Bible source only)`)
     return "presented"
   }
@@ -248,7 +252,7 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
     .setLiveVerse(
       { ...data, ...layer, content: "bible" },
       verseToPresent,
-      { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null, follow: opts.follow }
+      { goLive: opts.goLive, item: opts.item ?? null, itemId: opts.itemId ?? null, follow: opts.follow, by }
     )
   mark(`presentVerse end ${ref}`)
   return "presented"
@@ -268,6 +272,7 @@ export async function presentSlide(
   if (reachesScreen(opts) && approvalHolds(() => void presentSlide(item, index, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
+  const by = currentActor()
   const warn = (message: string) => useBroadcastStore.getState().setPresentWarning(message)
   let song = null
   try {
@@ -296,6 +301,7 @@ export async function presentSlide(
   const content = song.song.tags.split(",").some((t) => t.trim().toLowerCase() === CAC_TAG) ? "hymn" : "song"
   useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...layer, content }, null, {
     goLive: opts.goLive,
+    by,
     slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song },
   })
   if (slide.missing.length > 0) {
@@ -319,6 +325,7 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
   if (reachesScreen(opts) && approvalHolds(() => void presentCustomSlide(item, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
+  const by = currentActor()
   const data = toCustomSlideRenderData(item)
   if (!data.reference && data.lines?.length === 0) {
     useBroadcastStore.getState().setPresentWarning("Empty slide not shown: give it a title or some text.")
@@ -342,7 +349,7 @@ export async function presentCustomSlide(item: SlideQueueItem, opts: { goLive?: 
   }
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: 0 })
-  useBroadcastStore.getState().setLiveVerse({ ...render, content: "slide" }, null, { goLive: opts.goLive, itemId: item.id })
+  useBroadcastStore.getState().setLiveVerse({ ...render, content: "slide" }, null, { goLive: opts.goLive, itemId: item.id, by })
   return "presented"
 }
 
@@ -388,6 +395,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
   if (reachesScreen(opts) && approvalHolds(() => void presentImage(item, opts))) return "held_for_approval"
   presentSeq += 1
   const ticket = presentSeq
+  const by = currentActor()
   const asset = cached ?? (await media.list()).find((a) => a.id === item.image.media_id)
   if (asset?.kind === "audio") return ticket === presentSeq ? playSoundItem(item, asset) : "superseded"
   // A video asset streams to the outputs; nothing is decoded here.
@@ -399,7 +407,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
       return "empty"
     }
     useBibleStore.getState().selectSlide({ item, index: 0 })
-    useBroadcastStore.getState().setLiveVerse({ ...toVideoRenderData(item, videoUrl, ticket), content: "picture" }, null, { goLive: opts.goLive, itemId: item.id })
+    useBroadcastStore.getState().setLiveVerse({ ...toVideoRenderData(item, videoUrl, ticket), content: "picture" }, null, { goLive: opts.goLive, itemId: item.id, by })
     return "presented"
   }
   let url: string | null = null
@@ -415,7 +423,7 @@ export async function presentImage(item: ImageQueueItem, opts: { goLive?: boolea
     return "empty"
   }
   useBibleStore.getState().selectSlide({ item, index: 0 })
-  useBroadcastStore.getState().setLiveVerse({ ...toImageRenderData(item, url), content: "picture" }, null, { goLive: opts.goLive, itemId: item.id })
+  useBroadcastStore.getState().setLiveVerse({ ...toImageRenderData(item, url), content: "picture" }, null, { goLive: opts.goLive, itemId: item.id, by })
   return "presented"
 }
 

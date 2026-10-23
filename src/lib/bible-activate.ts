@@ -3,6 +3,8 @@ import { sourceOf } from "@/lib/live-sources"
 import { parseTypedReference } from "@/lib/quick-search"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { toast } from "sonner"
+import type { BroadcastOutput, Scene, Verse } from "@/types"
 
 /**
  * One rule for every Bible activation that is not the operator's own Show Live (ADR 0001, C11):
@@ -22,4 +24,24 @@ export async function activateBibleReference(reference: string): Promise<Present
   const verse = { id: 0, translation_id: useBibleStore.getState().activeTranslationId ?? 1, book_number: ref.book.book_number, book_name: ref.book.name, book_abbreviation: ref.book.abbreviation ?? "", chapter: ref.chapter, verse: ref.verse, text: "" }
   const scope = bibleScope()
   return presentVerse(verse, scope.sourceOnly ? scope : { goLive: true })
+}
+
+/**
+ * The main desk's "Activate on Bible feeds": the verse becomes the live Bible source, so every feed
+ * that follows Bible (NDI, browser feeds, a scene's Bible box) shows it, and the main screens keep
+ * what they show. It waits in the preview for Show live.
+ */
+export async function activateOnBibleFeeds(verse: Verse, opts: { itemId?: string | null; by?: string } = {}): Promise<PresentOutcome> {
+  const outcome = await presentVerse(verse, { sourceOnly: true, itemId: opts.itemId ?? null, by: opts.by })
+  if (outcome === "presented") {
+    if (useBroadcastStore.getState().rehearsal) toast.info("Rehearsal: the Bible feeds were not changed")
+    else toast.success(`${verse.book_name} ${verse.chapter}:${verse.verse} is on the Bible feeds`, { description: "The main screens still show what they showed. Show live puts it there too." })
+  }
+  return outcome
+}
+
+/** How many outputs follow Bible (on their own or through a scene's Bible box): where "Activate on Bible feeds" shows. */
+export function bibleFeedCount(outputs: readonly BroadcastOutput[], scenes: readonly Scene[]): number {
+  const sceneFollows = new Set(scenes.filter((sc) => sc.layers.some((l) => l.kind === "feed" && l.shows?.includes("bible"))).map((sc) => sc.id))
+  return outputs.filter((o) => o.shows?.includes("bible") || (o.sceneId !== undefined && sceneFollows.has(o.sceneId))).length
 }

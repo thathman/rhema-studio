@@ -121,12 +121,14 @@ useBroadcastStore.subscribe((s, prev) => {
     if (id === "quick") continue
     const a = prev.sources[id]
     const b = s.sources[id]
-    // The program's own source: its live / clear / restore entry already says so.
-    if ((b && b.value === s.liveVerse) || (a && (a.value === s.liveVerse || a.value === prev.liveVerse))) continue
+    // The program's own source: its live / clear / restore entry already says so. A new value that is
+    // not the program's was activated on its own (on the Bible feeds only), even over the program's.
+    const ownActivation = !!b?.on && a?.revision !== b.revision && b.value !== s.liveVerse
+    if (!ownActivation && ((b && b.value === s.liveVerse) || (a && (a.value === s.liveVerse || a.value === prev.liveVerse)))) continue
     const name = CONTENT_NAMES[id]
     if (b?.on && (!a?.on || a.revision !== b.revision)) {
       const back = a && !a.on && a.revision === b.revision
-      useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}`, itemId: b.itemId, source: name })
+      useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}${b.by && !back ? ` · by ${b.by}` : ""}`, itemId: b.itemId, source: name })
     } else if (a?.on && !b?.on) {
       useJournalStore.getState().add({ kind: "source", label: `${name} off: ${a.value.reference}`, itemId: a.itemId, source: name })
     }

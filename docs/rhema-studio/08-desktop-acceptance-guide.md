@@ -976,6 +976,17 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dp. Activate on Bible feeds only, and who activated each source (#243)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dp.1 | Settings → Operator name "Tolu". Outputs: an NDI output "Rhema Bible \| Lower Third" following Only Bible, and the projector following everything. Present: a hymn on the projector. Quick find "rom 8 28": press **Bible feeds** on the result. | The NDI feed (in an NDI viewer or OBS) shows Romans 8:28; the projector keeps the hymn; the preview shows 8:28; a toast says it is on the Bible feeds; Present → Live → Sources shows "Bible Romans 8:28 (KJV) · by Tolu" and the time (e.g. 10:42); hovering it shows "Bible · Romans 8:28 (KJV) · by Tolu 10:42". | Unverified |
+| 10dp.2 | Show live a verse (Romans 8:1) on the projector, then in the Dashboard view's Detections press **Activate on Bible feeds** on another heard verse. | The projector keeps Romans 8:1; the NDI feed changes; the service log has "Bible: … · by Tolu". | Unverified |
+| 10dp.3 | Remove "Only Bible" from every output. | Neither button shows in Quick find or Detections. | Unverified |
+| 10dp.4 | Bible feed back. Live panel → Auto → **Bible feeds only**; listening on; a hymn on the projector; say "Romans 8:31". | The NDI feed shows 8:31; the projector keeps the hymn; the strip shows "Auto: Bible feeds" and "by Auto"; "Auto-live on" is not in the header. Settings → Display Mode shows Bible feeds only selected. | Unverified |
+| 10dp.5 | Quit and reopen Rhema. | Auto is still Bible feeds only. Choose On, then Off: the Live panel and Settings agree. | Unverified |
+| 10dp.6 | A joined Bible desk named "Femi's laptop": activate "Rom 8 28", then Next verse. | Host's Sources strip: "by Femi's laptop"; the joined desk shows "Romans 8:29 · by Femi's laptop" and the time; the host's own Show live afterwards reads "by Tolu". | Unverified (two computers) |
+
 ### 10df. Time warnings on the stage (#196 R6)
 
 | # | Step | Expected | Result |

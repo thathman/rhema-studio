@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Activate on Bible feeds only, and who activated each source (#243)
+
+- **Branch / PR:** `ls-010/bible-activate-actor`.
+- **Behaviour:** `activateOnBibleFeeds` (`bible-activate.ts`) is the main desk's Bible-only path (`presentVerse(…, { sourceOnly })`), offered in Detections and Present → Quick find when `bibleFeedCount` > 0 (outputs with `shows` including Bible, or showing a scene with a Bible feed layer). Auto is three-way (`AutoMode`: manual / auto / bible): `autoBibleFeeds` is a new state flag saved under its own key `autoBibleFeeds`, never on with `autoLive`, so a build without it reads it as Auto off; the Live panel's Auto is a select, Settings → Display Mode has a third radio, the sources strip shows "Auto: Bible feeds". `LiveSource.by` (optional) records who: `currentActor()` is the sender of the remote command being carried out (`actingAs`, wrapped round every remote handler in `use-remote-control.ts`) or else Settings → Operator name; presents capture it as they start, so a verse that loads after the handler returns is still the sender's; detections pass "Auto". The host's API now adds `"by"` to every frontend command event it carries for a sender (`Signed` sink in `dispatch.rs`). Live State `sources[]` carries `activatedAt` and `by`; the joined desk shows them; the service log's source lines add "· by …" and now also log a Bible-only activation that replaces the program's own verse on the feeds.
+- **Tests:** `bible-feeds-activate.test.tsx` (10: Bible-only activation over a hymn and over a verse on the projector; where it is offered; Auto Bible feeds only on and off air; the three choices; saved key and old settings; `by` locally, under `actingAs`, from `remote:bible_activate` and `remote:verse_next`, in the Live State; the strip label; an old recovery snapshot without `by`). `rhema-api`: `notices_carry_who_sent_them` checks `by` in `bible_activate` and `verse_next`.
+- **Next:** desktop acceptance 10dp. Commands started by a cue later in its run (after a wait) or replayed after the approval question are recorded as the main desk's operator.
+
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.

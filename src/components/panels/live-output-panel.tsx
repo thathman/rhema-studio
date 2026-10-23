@@ -1,15 +1,17 @@
 import { PanelHeader } from "@/components/ui/panel-header"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { approvalHolds } from "@/stores/approval-gate-store"
 import { useBroadcastStore, useBibleStore } from "@/stores"
+import { autoModeOf, type AutoMode } from "@/stores/broadcast-store"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
 
 export function LiveOutputPanel() {
   const isLive = useBroadcastStore((s) => s.isLive)
-  const autoLive = useBroadcastStore((s) => s.autoLive)
+  const autoMode = useBroadcastStore(autoModeOf)
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
@@ -44,18 +46,19 @@ export function LiveOutputPanel() {
       <PanelHeader title="Live">
         <label
           className="flex items-center gap-2"
-          title="Auto: while on air, a verse heard while listening goes live without Show live. While a song, hymn or slide is up it goes only to the feeds that follow Bible and waits in the preview here. Off (the default): heard verses wait in the preview."
+          title="Auto: On: while on air, a verse heard while listening goes live without Show live (while a song, hymn or slide is up it goes only to the feeds that follow Bible). Bible feeds only: it goes to the feeds that follow Bible and never the main screens. Off (the default): heard verses wait in the preview."
         >
-          <span className={cn("text-xs font-medium transition-colors", autoLive ? "text-foreground" : "text-muted-foreground")}>
+          <span className={cn("text-xs font-medium transition-colors", autoMode !== "manual" ? "text-foreground" : "text-muted-foreground")}>
             Auto
           </span>
-          <Switch
-            aria-label="Auto: heard verses go live by themselves"
-            checked={autoLive}
-            onCheckedChange={(checked) =>
-              useBroadcastStore.getState().setAutoLive(checked)
-            }
-          />
+          <Select value={autoMode} onValueChange={(v) => useBroadcastStore.getState().setAutoMode(v as AutoMode)}>
+            <SelectTrigger size="sm" className="text-xs" aria-label="Auto: where heard verses go by themselves"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="manual">Off</SelectItem>
+              <SelectItem value="bible">Bible feeds only</SelectItem>
+              <SelectItem value="auto">On</SelectItem>
+            </SelectContent>
+          </Select>
         </label>
         <span aria-hidden className="mx-2 h-4 w-px bg-border" />
         <label

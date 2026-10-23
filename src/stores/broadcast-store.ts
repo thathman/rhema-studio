@@ -28,7 +28,12 @@ import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/
 import { useMediaStore } from "@/stores/media-store"
 import { feedFrame, sourceOf, type LiveSources, type SourceId } from "@/lib/live-sources"
 import { normalizeScene, sceneClock, sceneFrame } from "@/lib/scenes"
+import { useSettingsStore } from "@/stores/settings-store"
 import type { Scene, SceneFrame } from "@/types"
+
+/** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
+export type AutoMode = "manual" | "auto" | "bible"
+export const autoModeOf = (s: { autoLive: boolean; autoBibleFeeds: boolean }): AutoMode => (s.autoLive ? "auto" : s.autoBibleFeeds ? "bible" : "manual")
 
 /** The program (what is on air and what Restore and Back return to), with the rundown's place in it. */
 export interface ProgramSnapshot {
@@ -113,8 +118,8 @@ interface BroadcastState {
   clearSource: (id: SourceId) => void
   /** Put a cleared source back on. */
   restoreSource: (id: SourceId) => void
-  /** Activate a source without changing the program (a heard verse while a song is up, C11). */
-  activateSource: (value: VerseRenderData, itemId?: string | null) => void
+  /** Activate a source without changing the program (a heard verse while a song is up, C11). `by`: who (default: see currentActor). */
+  activateSource: (value: VerseRenderData, itemId?: string | null, by?: string) => void
   /** Congregation scenes (ARCH-002). Saved. */
   scenes: Scene[]
   /** Add or replace a scene (by id); outputs showing it redraw. */
@@ -191,6 +196,8 @@ interface BroadcastState {
   // When on, detections auto-present to the live output. When off, the live
   // output only changes via explicit presents (manual operator control).
   autoLive: boolean
+  /** Auto for the Bible feeds only: a heard verse activates the Bible source and never the main screens. Never on with autoLive. */
+  autoBibleFeeds: boolean
 
   // Designer state
   isDesignerOpen: boolean
@@ -218,7 +225,7 @@ interface BroadcastState {
   setActiveTheme: (id: string) => void
   setLive: (live: boolean) => void
   /** `goLive` puts the output on air in the same update as the verse, so no stale frame shows first. */
-  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean; follow?: boolean }) => void
+  setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean; follow?: boolean; by?: string }) => void
   setPresentWarning: (warning: string | null) => void
   setStageMessage: (message: string) => void
   /** Off puts back the program from before rehearsal, unless `keepRehearsed` (a deliberate go-live). */
@@ -228,6 +235,8 @@ interface BroadcastState {
   /** Put the held content back on air (or off air, as it was) and forget it. */
   releaseHeld: () => boolean
   setAutoLive: (auto: boolean) => void
+  /** Heard verses: wait for the operator, go live by themselves, or reach the Bible feeds only. */
+  setAutoMode: (mode: AutoMode) => void
   syncBroadcastOutput: () => void
   syncBroadcastOutputFor: (outputId: string) => void
 
@@ -421,19 +430,41 @@ function resyncThemeOutputs(themeId: string | null): void {
 
 let activations = 0
 
+/** Who the remote command being carried out came from (a joined desk, a phone); see actingAs. */
+let remoteActor: string | undefined
+
+/**
+ * Carry out `fn` for whoever sent a remote command: the sources it activates are recorded as theirs
+ * ("by Femi's laptop"), not as the operator's at this desk. Presents read it as they start.
+ */
+export function actingAs<T>(by: string | undefined, fn: () => T): T {
+  const was = remoteActor
+  remoteActor = by?.trim().slice(0, 60) || was
+  try {
+    return fn()
+  } finally {
+    remoteActor = was
+  }
+}
+
+/** Who is activating now: a remote command's sender, else the operator at this desk (Settings → Operator name). */
+export function currentActor(): string | undefined {
+  return remoteActor ?? (useSettingsStore.getState().operatorName.trim() || undefined)
+}
+
 /**
  * The adapter from the program to the sources (ADR 0001): what goes on air activates its source,
  * Clear turns that source off and Restore back on. Other sources are left as they are. Nothing
  * here runs in rehearsal, so the real sources never see what was rehearsed.
  */
-function noteSources(): void {
+function noteSources(by = currentActor()): void {
   const s = useBroadcastStore.getState()
   if (s.rehearsal || !s.liveVerse) return
   const id = sourceOf(s.liveVerse)
   const cur = s.sources[id]
   let sources = s.sources
   if (s.isLive) {
-    if (!cur || cur.value !== s.liveVerse) sources = { ...sources, [id]: { value: s.liveVerse, itemId: s.liveItemId, revision: ++activations, activatedAt: Date.now(), on: true } }
+    if (!cur || cur.value !== s.liveVerse) sources = { ...sources, [id]: { value: s.liveVerse, itemId: s.liveItemId, revision: ++activations, activatedAt: Date.now(), ...(by ? { by } : {}), on: true } }
     else if (!cur.on) sources = { ...sources, [id]: { ...cur, on: true } }
   } else if (cur?.on && cur.value === s.liveVerse) {
     sources = { ...sources, [id]: { ...cur, on: false } }
@@ -565,6 +596,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   // Off until the operator turns it on (PRD FR-01: speech suggestions are proposals unless an
   // automation is explicitly enabled; AI-001 "no AI output auto-live"). A saved choice is kept.
   autoLive: false,
+  autoBibleFeeds: false,
   isDesignerOpen: false,
   editingThemeId: null,
   liveDesign: false,
@@ -824,7 +856,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       presentWarning: null,
       ...(opts.goLive ? { isLive: true, cleared: false } : {}),
     })
-    noteSources()
+    noteSources(opts.by)
     get().syncBroadcastOutput()
   },
   setPresentWarning: (presentWarning) => set({ presentWarning }),
@@ -934,7 +966,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     get().syncBroadcastOutput()
     return true
   },
-  setAutoLive: (autoLive) => set({ autoLive }),
+  setAutoLive: (autoLive) => set({ autoLive, autoBibleFeeds: false }),
+  setAutoMode: (mode) => set({ autoLive: mode === "auto", autoBibleFeeds: mode === "bible" }),
   clearSource: (id) => {
     const s = get()
     const cur = s.sources[id]
@@ -970,11 +1003,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   releaseScene: (outputId) => {
     if (get().outputs.find((o) => o.id === outputId)?.sceneId) get().updateOutput(outputId, { sceneId: undefined })
   },
-  activateSource: (value, itemId = null) => {
+  activateSource: (value, itemId = null, by = currentActor()) => {
     const s = get()
     if (s.rehearsal) return
     const id = sourceOf(value)
-    set({ sources: { ...s.sources, [id]: { value, itemId, revision: ++activations, activatedAt: Date.now(), on: true } } })
+    set({ sources: { ...s.sources, [id]: { value, itemId, revision: ++activations, activatedAt: Date.now(), ...(by ? { by } : {}), on: true } } })
     get().syncBroadcastOutput()
   },
 
@@ -1125,6 +1158,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
       const main = patch.outputs.find((o) => o.id === MAIN_OUTPUT_ID)
       if (main) patch.activeThemeId = main.themeId
       if (typeof autoLive === "boolean") patch.autoLive = autoLive
+      // Its own key, so a build without "Bible feeds only" reads that choice as Auto off (the safe side).
+      if ((await store.get("autoBibleFeeds")) === true && !patch.autoLive) patch.autoBibleFeeds = true
       const ltStyles = (await store.get("lowerThirdStyles")) as LowerThirdStyle[] | undefined
       if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
       patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
@@ -1144,6 +1179,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.activeThemeId !== prevState.activeThemeId ||
           state.outputs !== prevState.outputs ||
           state.autoLive !== prevState.autoLive ||
+          state.autoBibleFeeds !== prevState.autoBibleFeeds ||
           state.lowerThirdStyles !== prevState.lowerThirdStyles ||
           state.tickerStyle !== prevState.tickerStyle ||
           state.stageStyle !== prevState.stageStyle ||
@@ -1198,6 +1234,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     // Legacy mirror of the main output's theme; older builds still read it.
     await store.set("activeThemeId", state.activeThemeId)
     await store.set("autoLiveOptIn", state.autoLive)
+    await store.set("autoBibleFeeds", state.autoBibleFeeds)
     await store.set("lowerThirdStyles", state.lowerThirdStyles)
     await store.set("tickerStyle", state.tickerStyle)
     await store.set("stageStyle", state.stageStyle)

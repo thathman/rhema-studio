@@ -3,7 +3,7 @@ import { useServiceOffset } from "@/stores/service-offset-store"
 import { useEffect } from "react"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { actingAs, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { pushRemoteKeys, useSettingsStore } from "@/stores/settings-store"
 import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
@@ -55,11 +55,12 @@ export function useRemoteControl() {
           }
         }),
       )
+      // Each command is carried out for whoever sent it, so a source it activates says "by" them.
       const register = async (event: string, handler: () => void) => {
         keep(
-          await listen(event, () => {
+          await listen<string>(event, (e) => {
             if (cancelled) return
-            handler()
+            actingAs(senderOf(parsePayload(e.payload)), handler)
           }),
         )
       }
@@ -115,7 +116,7 @@ export function useRemoteControl() {
             if (cancelled) return
             const p = parsePayload(e.payload)
             if (!p) return
-            handler(p)
+            actingAs(senderOf(p), () => handler(p))
           }),
         )
       }
@@ -175,7 +176,7 @@ export function useRemoteControl() {
         if (cancelled) return
         const id = parsePayload(event.payload)?.id
         if (typeof id === "string") {
-          runMacro(id)
+          actingAs(senderOf(parsePayload(event.payload)), () => runMacro(id))
         }
       })
       keep(uMacro)
@@ -216,7 +217,7 @@ export function useRemoteControl() {
         const payload = parsePayload(event.payload)
         const active = payload?.active as boolean | undefined
         if (active === undefined) return
-        remoteActions.toggleOnAir(active)
+        actingAs(senderOf(payload), () => remoteActions.toggleOnAir(active))
       })
       keep(u5)
 
@@ -278,6 +279,11 @@ function syncStatusSnapshot(force = false) {
   invoke("update_remote_status", snapshot).catch(() => {
     // Silently ignore — HTTP server may not be running
   })
+}
+
+/** Who sent a remote command: the host adds the paired device's name ("by"); older senders are "a remote". */
+function senderOf(p: Record<string, unknown> | null): string {
+  return typeof p?.by === "string" && p.by.trim() ? p.by.trim().slice(0, 60) : "a remote"
 }
 
 /**
