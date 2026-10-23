@@ -13,6 +13,7 @@ import { useMediaStore } from "@/stores/media-store"
 
 import { GO_LIVE_CUES, isImageItem, isSlideItem, isSongItem, type GoLiveCue, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
 import { CUE_ACTIONS } from "@/lib/cues"
+import { formatDuration, parseDuration } from "@/lib/run-of-show"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSoundStore } from "@/stores/sound-store"
 
@@ -105,21 +106,11 @@ export function PlannedMinutes({ item }: { item: QueueItem }) {
   return (
     <div className="ml-7 grid grid-cols-[5rem_minmax(0,1fr)_6.5rem] gap-2 py-1 pl-2 text-xs">
       <label className="min-w-0">
-        <span className={label}>Minutes</span>
-        <Input
-          type="number"
-          inputMode="decimal"
-          min={0}
-          max={600}
-          step={0.5}
-          aria-label={`Planned minutes for ${item.reference}`}
-          value={item.planned_minutes ?? ""}
-          placeholder="—"
-          className="h-7 [appearance:textfield] text-xs tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          onChange={(e) => {
-            const n = Number(e.target.value)
-            useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, planned_minutes: e.target.value === "" || !(n > 0) ? null : Math.min(600, n) }))
-          }}
+        <span className={label} title="35, 4:30 (min:sec), 1:10:00 or 1h10">Time</span>
+        <DurationInput
+          aria-label={`Planned time for ${item.reference}`}
+          minutes={item.planned_minutes ?? null}
+          onChange={(m) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, planned_minutes: m }))}
         />
       </label>
       <label className="min-w-0">
@@ -367,5 +358,35 @@ export function TimedAdvance({ item }: { item: QueueItem }) {
         </span>
       </span>
     </label>
+  )
+}
+
+/**
+ * A planned time typed as "35", "4:30", "1:10:00" or "1h10" (#196); applied on Enter or leaving the
+ * field, written back the same way. Anything else is shown as a mistake and not applied.
+ */
+export function DurationInput({ minutes, onChange, ...rest }: { minutes: number | null; onChange: (m: number | null) => void; "aria-label": string }) {
+  const [text, setText] = useState<string | null>(null)
+  const shown = text ?? (minutes ? formatDuration(minutes) : "")
+  const bad = text !== null && text.trim() !== "" && parseDuration(text) === null
+  const apply = () => {
+    if (text === null) return
+    if (text.trim() === "") onChange(null)
+    else if (!bad) onChange(parseDuration(text))
+    if (!bad) setText(null)
+  }
+  return (
+    <Input
+      {...rest}
+      inputMode="text"
+      value={shown}
+      placeholder="—"
+      aria-invalid={bad || undefined}
+      title={bad ? "Type minutes (35), min:sec (4:30), h:mm:ss (1:10:00) or 1h10" : undefined}
+      className={cn("h-7 text-xs tabular-nums", bad && "border-destructive")}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={apply}
+      onKeyDown={(e) => { if (e.key === "Enter") apply(); if (e.key === "Escape") setText(null) }}
+    />
   )
 }
