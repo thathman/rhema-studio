@@ -8,7 +8,8 @@ export interface JournalEntry {
   at: number
   /** Monotonic ms, for durations (immune to clock changes). */
   mono: number
-  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing"
+  /** "event": a run-of-show event started (the event clock, ADR 0001); the others are what the screens and desk did. */
+  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing" | "event"
   /** Reference, title or message text. */
   label: string
   itemId?: string | null
@@ -29,7 +30,7 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
     .filter((e) => e.kind === "live" || e.kind === "quick" || e.kind === "restore")
     .map((e) => {
       const i = entries.indexOf(e)
-      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing")
+      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event")
       return { entry: e, itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }
@@ -38,6 +39,21 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
 export function actualByItem(entries: JournalEntry[], nowMono: number): Map<string, number> {
   const out = new Map<string, number>()
   for (const d of actualDurations(entries, nowMono)) if (d.itemId) out.set(d.itemId, (out.get(d.itemId) ?? 0) + d.ms)
+  return out
+}
+
+/** When each run-of-show event first started (wall clock ms), from the event clock's entries (C03). */
+export function eventStarts(entries: JournalEntry[]): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const e of entries) if (e.kind === "event" && e.itemId && !out.has(e.itemId)) out.set(e.itemId, e.at)
+  return out
+}
+
+/** How long each event ran: until the next event started, the last one until `nowMono`. */
+export function eventTimes(entries: JournalEntry[], nowMono: number): Map<string, number> {
+  const out = new Map<string, number>()
+  const starts = entries.filter((e) => e.kind === "event" && e.itemId)
+  starts.forEach((e, i) => out.set(e.itemId!, (out.get(e.itemId!) ?? 0) + Math.max(0, (starts[i + 1]?.mono ?? nowMono) - e.mono)))
   return out
 }
 
@@ -65,7 +81,7 @@ export function formatJournal(title: string, entries: JournalEntry[], nowMono: n
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
     const d = durations.find((x) => x.entry === e)
-    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer" }[e.kind]
+    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
     lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}`)
   }

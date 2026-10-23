@@ -77,6 +77,7 @@ An item can also have an **end by** time (Prepare, beside its planned minutes: "
 
 
 - **Timer**: monotonic (ignores clock changes); amber under two minutes, red when over. Planned minutes per item give "n min late/early".
+- **The event clock** (Production → Timekeeper): which event of the run of show is happening, kept apart from the screens. **Follows the screens** (default): an item's event starts when its content goes on air. **I start each event**: only Start / Back one move it, so a timekeeper can run the times while others show verses and songs out of order. Timing, the stage finish line and each item's message and cue follow it; the service log records each event start.
 - **Message stage**: a framed banner on stage outputs only. Clear it from the same control.
 - **Rehearsal**: freezes every output at what it shows. Turning it off puts back the program, lower third, ticker, stage message and service timer as they were (nothing rehearsed is shown or logged); **Show this live** leaves rehearsal and puts the rehearsed screens on air (the approval question applies), everything else still coming back. A loop or timed move running on air waits through rehearsal and carries on after.
 - **Design → Themes → Live edit**: off by default, so editing a theme the screens use changes nothing on air until you save. On, the screens using that theme follow your edits (the header says how many); it turns off when you leave the theme.

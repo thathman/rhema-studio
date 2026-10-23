@@ -15,6 +15,8 @@ import { HoldControl } from "@/studio/present/service-timer"
 import { AuxTimersPanel } from "@/studio/present/aux-timers"
 import type { ReadinessCheck } from "@/studio/readiness"
 import { SceneComposer } from "@/studio/production/scene-composer"
+import { useEventClock } from "@/stores/event-clock-store"
+import { useQueueStore } from "@/stores/queue-store"
 
 type Tab = "timekeeper" | "screens" | "health" | "programs" | "cameras" | "operators"
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -131,6 +133,7 @@ function Timekeeper() {
         <HoldControl />
       </Card>
       <Card kicker="Planned vs expected" title="The run of show" badge={<Button size="sm" variant="ghost" onClick={() => useShellStore.getState().setWorkspace("prepare")}>Edit run of show</Button>}>
+        <EventClockBar />
         {!timing ? (
           <p className="text-xs text-muted-foreground">Give the main service a start time in Prepare to see planned and expected times here.</p>
         ) : (
@@ -141,7 +144,7 @@ function Timekeeper() {
                 <li key={e.id} className="flex items-baseline gap-3 py-1.5">
                   <span className="w-12 shrink-0 font-mono text-muted-foreground tabular-nums">{hhmm(e.plannedStart)}</span>
                   <span className="min-w-0 flex-1 truncate font-medium">{e.label}</span>
-                  {e.state === "live" && <Badge tone="live">Live</Badge>}
+                  {e.state === "live" && <Badge tone="live">Now</Badge>}
                   {e.state === "done" && <span className="text-muted-foreground">done</span>}
                   {e.state === "upcoming" && off !== 0 && <span className={cn("tabular-nums", off > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>→ {hhmm(e.expectedStart)}</span>}
                   {e.squeezed && <span className="font-semibold text-destructive">cut short</span>}
@@ -209,6 +212,37 @@ function Health() {
         ))}
       </ul>
     </Card>
+  )
+}
+
+/**
+ * The event clock (ADR 0001, C03): which event is happening, apart from what the screens show. It
+ * follows the screens by default; the timekeeper can run it instead, starting each event without
+ * changing any screen.
+ */
+function EventClockBar() {
+  const mode = useEventClock((s) => s.mode)
+  const currentId = useEventClock((s) => s.currentId)
+  const items = useQueueStore((s) => s.items)
+  const current = items.find((i) => i.id === currentId)
+  const at = current ? items.indexOf(current) : -1
+  const next = items[at + 1]
+  return (
+    <div role="group" aria-label="Event clock" className="mb-3 flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-2.5 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">Now: {current ? current.reference : "no event yet"}</span>
+        <span className="flex-1" />
+        <select aria-label="What starts each event" value={mode} onChange={(e) => useEventClock.getState().setMode(e.target.value as "screens" | "own")} className="h-7 rounded-md border border-input bg-card px-1.5">
+          <option value="screens">Follows the screens</option>
+          <option value="own">I start each event</option>
+        </select>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" disabled={at <= 0} onClick={() => useEventClock.getState().previous()}>Back one</Button>
+        <Button size="sm" disabled={!next} onClick={() => useEventClock.getState().next()}>{next ? `Start ${next.reference}` : "Last event"}</Button>
+        <span className="text-muted-foreground">{mode === "screens" ? "Each item's event starts when it goes on air; you can also move it on here." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
+      </div>
+    </div>
   )
 }
 

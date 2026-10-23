@@ -951,6 +951,14 @@ report), but launching it cannot.
 | 10cs.5 | Black, Back; Back to its own feed; Restore. | Black covers the scene; Back returns it; the output goes to full frame and Restore takes the scene again. | Unverified |
 | 10cs.6 | Quit and reopen Rhema. | The scenes are kept; the projector shows the scene it showed. | Unverified |
 
+### 10ct. The event clock (ADR 0001, ARCH-003, #246 C03)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ct.1 | A service with a start time; show the first item, then the second. Production → Timekeeper. | "Now" names the second item; the run of show marks it Now; the log has EVENT lines for both. | Unverified |
+| 10ct.2 | Choose "I start each event". Show a hymn from the Library and a quick screen. | "Now" does not move; Start (next) moves it without changing any screen or NDI feed; the next item's stage message appears as its event starts. | Unverified |
+| 10ct.3 | Rehearsal on; show items; Rehearsal off. | The event clock does not move; no EVENT lines from rehearsal. | Unverified |
+
 ### 10cn. Numbered books and the item fields (owner reports)
 
 | # | Steps | Expected | Result |

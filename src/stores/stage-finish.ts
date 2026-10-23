@@ -1,7 +1,8 @@
-import { actualByItem, firstOnAir } from "@/lib/journal"
+import { eventStarts, eventTimes } from "@/lib/journal"
 import { clockText } from "@/lib/run-of-show"
 import { serviceTiming } from "@/lib/timing-engine"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow } from "@/stores/timer-store"
@@ -20,9 +21,9 @@ export function updateStageFinish() {
   const t = serviceTiming({
     items: q.items,
     headers: q.headers,
-    firstOnAir: firstOnAir(entries),
-    onAirMs: actualByItem(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)),
-    liveItemId: b.isLive ? b.liveItemId : null,
+    firstOnAir: eventStarts(entries),
+    onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)),
+    liveItemId: useEventClock.getState().currentId,
     now: Math.max(Date.now(), entries.at(-1)?.at ?? 0),
   })
   const end = t ? new Date(t.expectedEnd) : null
@@ -35,5 +36,5 @@ export function updateStageFinish() {
 
 useQueueStore.subscribe((s, prev) => { if (s.items !== prev.items || s.headers !== prev.headers) updateStageFinish() })
 useJournalStore.subscribe((s, prev) => { if (s.entries !== prev.entries) updateStageFinish() })
-useBroadcastStore.subscribe((s, prev) => { if (s.isLive !== prev.isLive || s.liveItemId !== prev.liveItemId) updateStageFinish() })
+useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId) updateStageFinish() })
 setInterval(updateStageFinish, 15_000)
