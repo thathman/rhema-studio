@@ -54,6 +54,10 @@ fn settings(dir: &Path) -> Value {
 }
 
 struct Server {
+    /// Where drafts are saved (`ai-drafts`), if the data folder is known.
+    dir: Option<PathBuf>,
+    /// The assistant, as it named itself in `initialize`, for the drafts' provenance.
+    client: Value,
     content: Option<ContentDb>,
     bible: Option<BibleDb>,
     enabled: bool,
@@ -79,7 +83,7 @@ impl Server {
             problem = Some("no Rhema services found on this computer yet".into());
         }
         let bible = bible_path().and_then(|p| BibleDb::open(&p).ok());
-        Self { content, bible, enabled, church, problem }
+        Self { dir, client: Value::Null, content, bible, enabled, church, problem }
     }
 }
 
@@ -99,8 +103,45 @@ fn tools() -> Value {
         { "name": "rhema_get_service", "description": "One service's run of show in order: its phases (pre-service loop, warm-up, main service with its start time, post-service loop) and groups, and each item's kind, title or reference, planned minutes and notes.", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }, "annotations": ro },
         { "name": "rhema_search_songs", "description": "Search the church's song library and hymn book by title, other titles, hymn number or a line: title, other titles, numbers, authors, licence, languages. Lyrics are not returned.", "inputSchema": { "type": "object", "properties": { "query": { "type": "string" }, "kind": { "type": "string", "enum": ["any", "song", "hymn"] }, "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIST } }, "required": ["query"] }, "annotations": ro },
         { "name": "rhema_list_translations", "description": "The Bible editions installed on this computer (abbreviation, title, language).", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
+        { "name": "rhema_validate_service_draft", "description": "Check a proposed service without saving it: every song and hymn is matched to the church's library (by id, exact title, other title or hymn number), every Scripture reference is looked up in the installed editions, and anything not found is listed as missing. Returns errors to fix, warnings, the planned minutes and what was found.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": ro },
+        { "name": "rhema_create_service_draft", "description": "Save a checked proposed service as a draft for the church to review in Rhema → Prepare → AI drafts. It does not change any saved service, approve anything or put anything on screen; people open it, edit it and save it themselves. Fails with the same errors as the check.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } },
         { "name": "rhema_lookup_bible_reference", "description": "The exact text of a Bible reference from an installed edition (e.g. \"Romans 8:28\", \"1 Corinthians 13:4-7\", \"Psalm 23\"). Always use this for Scripture; never quote verses from memory.", "inputSchema": { "type": "object", "properties": { "reference": { "type": "string" }, "translation": { "type": "string", "description": "An installed abbreviation, e.g. KJV; default: the first English edition." } }, "required": ["reference"] }, "annotations": ro }
     ])
+}
+
+/// The shape of a proposed service (one JSON Schema for both draft tools).
+fn draft_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["title", "phases"],
+        "properties": {
+            "title": { "type": "string" },
+            "date": { "type": "string", "description": "YYYY-MM-DD" },
+            "assumptions": { "type": "array", "items": { "type": "string" }, "description": "What you assumed (length of the sermon, who leads), for the church to check." },
+            "phases": { "type": "array", "items": {
+                "type": "object", "required": ["name", "items"],
+                "properties": {
+                    "name": { "type": "string" },
+                    "role": { "type": "string", "enum": ["pre", "warmup", "main", "post"], "description": "pre-service loop, warm-up (timed to end at the start), main service, post-service loop" },
+                    "rule": { "type": "string", "enum": ["loop", "auto_once", "manual"] },
+                    "starts_at": { "type": "string", "description": "HH:MM; give it for the main service" },
+                    "items": { "type": "array", "items": {
+                        "type": "object", "required": ["kind"],
+                        "properties": {
+                            "kind": { "type": "string", "enum": ["song", "hymn", "bible", "slide"] },
+                            "title": { "type": "string", "description": "song or hymn title (or hymn number), or a slide's title" },
+                            "song_id": { "type": "string", "description": "from rhema_search_songs" },
+                            "reference": { "type": "string", "description": "for bible: e.g. Romans 8:28" },
+                            "translation": { "type": "string" },
+                            "text": { "type": "string", "description": "a slide's words (announcements, prayer points); never song lyrics" },
+                            "planned_minutes": { "type": "number" },
+                            "notes": { "type": "string" }
+                        }
+                    } }
+                }
+            } }
+        }
+    })
 }
 
 fn call(s: &Server, name: &str, a: &Value) -> Value {
@@ -116,7 +157,7 @@ fn call(s: &Server, name: &str, a: &Value) -> Value {
             text(&json!({
                 "church": s.church, "readOnly": true, "services": services, "songsAndHymns": songs,
                 "translations": translations.iter().map(|t| json!({ "abbreviation": t.abbreviation, "title": t.title, "language": t.language })).collect::<Vec<_>>(),
-                "rules": ["Nothing here can change Rhema, a service, a screen or a setting.", "Quote Scripture only from rhema_lookup_bible_reference.", "Song lyrics are not given out; refer to songs by title and number.", "Drafts for the church to review come in a later version."],
+                "rules": ["Nothing here can change a saved service, a song, a screen or a setting.", "A proposed service is saved only as a draft that people review, edit and save in Prepare.", "Quote Scripture only from rhema_lookup_bible_reference.", "Song lyrics are not given out; refer to songs by title and number, and list songs you cannot find."],
                 "problem": s.problem,
             }))
         }
@@ -165,6 +206,26 @@ fn call(s: &Server, name: &str, a: &Value) -> Value {
             Some(Ok(list)) => text(&json!({ "translations": list.iter().map(|t| json!({ "abbreviation": t.abbreviation, "title": t.title, "language": t.language })).collect::<Vec<_>>() })),
             _ => tool_error("no Bible editions found"),
         },
+        "rhema_validate_service_draft" | "rhema_create_service_draft" => {
+            let checked = crate::mcp_drafts::check(s.content.as_ref(), s.bible.as_ref(), a.get("draft").unwrap_or(&Value::Null));
+            if name == "rhema_validate_service_draft" {
+                return text(&checked.report);
+            }
+            let (Some(draft), Some(dir)) = (checked.draft, s.dir.as_deref()) else {
+                let mut r = tool_error("the draft was not saved: fix the errors first (rhema_validate_service_draft lists them)");
+                r["structuredContent"] = checked.report;
+                return r;
+            };
+            match crate::mcp_drafts::save(dir, &draft, &s.client) {
+                Ok(id) => {
+                    let mut report = checked.report;
+                    report["draftId"] = json!(id);
+                    report["next"] = json!("The church opens it in Rhema → Prepare → AI drafts, edits it and saves it; nothing is approved or shown until they do.");
+                    text(&report)
+                }
+                Err(e) => tool_error(&e),
+            }
+        }
         "rhema_lookup_bible_reference" => {
             let Some(b) = &s.bible else { return tool_error("no Bible editions found") };
             lookup(b, str_arg("reference"), str_arg("translation"))
@@ -222,17 +283,36 @@ fn parse_reference(input: &str) -> Option<(String, i32, Option<(i32, i32)>)> {
     Some((book_words.join(" "), chapter, verses))
 }
 
-fn lookup(b: &BibleDb, reference: &str, translation: &str) -> Value {
-    let Some((book, chapter, verses)) = parse_reference(reference) else {
-        return tool_error("not a Bible reference (e.g. \"Romans 8:28\", \"Psalm 23\")");
-    };
-    let Ok(translations) = b.list_translations() else { return tool_error("no Bible editions found") };
+/// A passage found in an installed edition.
+pub(crate) struct Passage {
+    pub translation: String,
+    pub book_name: String,
+    pub book_number: i32,
+    pub chapter: i32,
+    pub verses: Option<(i32, i32)>,
+    pub rows: Vec<rhema_bible::Verse>,
+}
+
+impl Passage {
+    pub fn reference(&self) -> String {
+        match self.verses {
+            Some((a, z)) if a == z => format!("{} {}:{a}", self.book_name, self.chapter),
+            Some((a, z)) => format!("{} {}:{a}-{z}", self.book_name, self.chapter),
+            None => format!("{} {}", self.book_name, self.chapter),
+        }
+    }
+}
+
+/// A typed reference in an installed edition (the first English one by default), or why not.
+pub(crate) fn find_passage(b: &BibleDb, reference: &str, translation: &str) -> Result<Passage, String> {
+    let (book, chapter, verses) = parse_reference(reference).ok_or("not a Bible reference (e.g. \"Romans 8:28\", \"Psalm 23\")")?;
+    let translations = b.list_translations().map_err(|_| "no Bible editions found")?;
     let t = if translation.is_empty() {
         translations.iter().find(|t| t.language == "en").or(translations.first())
     } else {
         translations.iter().find(|t| t.abbreviation.eq_ignore_ascii_case(translation))
     };
-    let Some(t) = t else { return tool_error("that edition is not installed (use rhema_list_translations)") };
+    let t = t.ok_or("that edition is not installed (use rhema_list_translations)")?;
     let books = b.list_books(t.id).unwrap_or_default();
     // "I Corinthians", "1 Cor", "First Corinthians" are one book: a leading numeral word becomes a digit.
     let key = |s: &str| {
@@ -253,37 +333,42 @@ fn lookup(b: &BibleDb, reference: &str, translation: &str) -> Value {
     };
     let want = key(&book);
     let found = books.iter().find(|x| key(&x.name) == want || key(&x.abbreviation) == want).or_else(|| books.iter().find(|x| key(&x.name).starts_with(&want) && want.len() >= 2));
-    let Some(found) = found else { return tool_error("no such book in that edition") };
+    let found = found.ok_or("no such book in that edition")?;
     let rows = match verses {
         Some((a, z)) => b.get_verse_range(t.id, found.book_number, chapter, a, z),
         None => b.get_chapter(t.id, found.book_number, chapter),
-    };
-    match rows {
-        Ok(v) if !v.is_empty() => {
-            let range = match verses {
-                Some((a, z)) if a == z => format!("{}:{a}", chapter),
-                Some((a, z)) => format!("{}:{a}-{z}", chapter),
-                None => chapter.to_string(),
-            };
-            text(&json!({ "reference": format!("{} {range}", found.name), "translation": t.abbreviation, "verses": v.iter().map(|x| json!({ "verse": x.verse, "text": x.text })).collect::<Vec<_>>() }))
-        }
-        Ok(_) => tool_error("that chapter or verse is not in this edition"),
-        Err(e) => tool_error(&format!("could not read the Bible: {e}")),
+    }
+    .map_err(|e| format!("could not read the Bible: {e}"))?;
+    if rows.is_empty() {
+        return Err("that chapter or verse is not in this edition".into());
+    }
+    Ok(Passage { translation: t.abbreviation.clone(), book_name: found.name.clone(), book_number: found.book_number, chapter, verses, rows })
+}
+
+fn lookup(b: &BibleDb, reference: &str, translation: &str) -> Value {
+    match find_passage(b, reference, translation) {
+        Ok(p) => text(&json!({ "reference": p.reference(), "translation": p.translation, "verses": p.rows.iter().map(|x| json!({ "verse": x.verse, "text": x.text })).collect::<Vec<_>>() })),
+        Err(e) => tool_error(&e),
     }
 }
 
 /// One JSON-RPC message in, at most one out (None for notifications).
-fn handle(s: &Server, msg: &Value) -> Option<Value> {
+fn handle(s: &mut Server, msg: &Value) -> Option<Value> {
     let id = msg.get("id").cloned()?;
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
     let result = match method {
-        "initialize" => json!({
+        "initialize" => {
+            if let Some(c) = params.get("clientInfo") {
+                s.client = json!({ "name": c.get("name").and_then(Value::as_str).unwrap_or("an assistant").chars().take(60).collect::<String>(), "version": c.get("version").and_then(Value::as_str).unwrap_or("").chars().take(30).collect::<String>() });
+            }
+            json!({
             "protocolVersion": params.get("protocolVersion").and_then(Value::as_str).unwrap_or("2025-06-18"),
             "capabilities": { "tools": { "listChanged": false } },
             "serverInfo": { "name": "rhema-studio", "title": "Rhema Studio", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "Read-only access to this church's Rhema Studio: services, songs and hymns, and the installed Bible editions. Quote Scripture only from rhema_lookup_bible_reference; refer to songs by title and number (lyrics are not available)."
-        }),
+            "instructions": "Access to this church's Rhema Studio: read its services, songs and hymns and the installed Bible editions, and propose a service as a draft for the church to review (check it with rhema_validate_service_draft, then rhema_create_service_draft). Quote Scripture only from rhema_lookup_bible_reference; refer to songs by title and number (lyrics are not available); list songs you cannot find rather than inventing them."
+            })
+        }
         "ping" => json!({}),
         "tools/list" => json!({ "tools": tools() }),
         "tools/call" => {
@@ -297,7 +382,7 @@ fn handle(s: &Server, msg: &Value) -> Option<Value> {
 
 /// Serve MCP on stdin/stdout until stdin closes. Logs go to stderr only.
 pub fn serve() {
-    let server = Server::open();
+    let mut server = Server::open();
     eprintln!("[rhema-mcp] ready (enabled: {}, services: {}, bible: {})", server.enabled, server.content.is_some(), server.bible.is_some());
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
@@ -311,7 +396,7 @@ pub fn serve() {
             Some(json!({ "jsonrpc": "2.0", "id": Value::Null, "error": { "code": -32600, "message": "message too large" } }))
         } else {
             match serde_json::from_str::<Value>(&line) {
-                Ok(msg) => handle(&server, &msg),
+                Ok(msg) => handle(&mut server, &msg),
                 Err(_) => Some(json!({ "jsonrpc": "2.0", "id": Value::Null, "error": { "code": -32700, "message": "parse error" } })),
             }
         };
@@ -328,7 +413,7 @@ mod tests {
     use super::*;
 
     fn off() -> Server {
-        Server { content: None, bible: None, enabled: false, church: String::new(), problem: None }
+        Server { dir: None, client: Value::Null, content: None, bible: None, enabled: false, church: String::new(), problem: None }
     }
 
     #[test]
@@ -345,19 +430,20 @@ mod tests {
 
     #[test]
     fn speaks_mcp_and_stays_off_until_allowed() {
-        let s = off();
-        let init = handle(&s, &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18" } })).unwrap();
+        let mut s = off();
+        let init = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18" } })).unwrap();
         assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
         assert!(init["result"]["capabilities"]["tools"].is_object());
-        assert!(handle(&s, &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none(), "notifications get no reply");
-        let list = handle(&s, &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
+        assert!(handle(&mut s, &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).is_none(), "notifications get no reply");
+        let list = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).unwrap();
         let names: Vec<&str> = list["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"rhema_lookup_bible_reference") && names.contains(&"rhema_get_service"));
-        assert!(list["result"]["tools"].as_array().unwrap().iter().all(|t| t["annotations"]["readOnlyHint"] == true));
-        let call = handle(&s, &json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": "rhema_list_services", "arguments": {} } })).unwrap();
+        // Everything reads, except saving a draft for review (it writes only a draft file).
+        assert!(list["result"]["tools"].as_array().unwrap().iter().all(|t| (t["annotations"]["readOnlyHint"] == true) != (t["name"] == "rhema_create_service_draft")));
+        let call = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": "rhema_list_services", "arguments": {} } })).unwrap();
         assert_eq!(call["result"]["isError"], true);
         assert!(call["result"]["content"][0]["text"].as_str().unwrap().contains("Settings → AI assistants"));
-        let unknown = handle(&s, &json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/write" })).unwrap();
+        let unknown = handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/write" })).unwrap();
         assert_eq!(unknown["error"]["code"], -32601);
     }
 
@@ -384,7 +470,7 @@ mod tests {
             let db = ContentDb::open(&path).unwrap();
             db.create_program("Thanksgiving Service", Some("2026-11-01")).unwrap();
         }
-        let s = Server { content: Some(ContentDb::open_read_only(&path).unwrap()), bible: None, enabled: true, church: "CAC".into(), problem: None };
+        let s = Server { dir: None, client: Value::Null, content: Some(ContentDb::open_read_only(&path).unwrap()), bible: None, enabled: true, church: "CAC".into(), problem: None };
         let r = call(&s, "rhema_list_services", &json!({}));
         assert_eq!(r["isError"], false);
         assert_eq!(r["structuredContent"]["services"][0]["title"], "Thanksgiving Service");

@@ -9,6 +9,7 @@ import { ServiceBar } from "@/studio/prepare/service-bar"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { ItemEditor } from "@/studio/prepare/item-editor"
 import { AddItems } from "@/studio/prepare/add-items"
+import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { RULE_LABEL, defaultPhases, sectionSummaries, type PhaseRole } from "@/lib/run-of-show"
@@ -54,6 +55,7 @@ export function PrepareWorkspace() {
               </div>
             </PopoverContent>
           </Popover>
+          <AiDrafts />
           <AddItems />
           <Button onClick={() => useShellStore.getState().setWorkspace("present")} disabled={count === 0}><MonitorPlayIcon /> Present service</Button>
         </div>

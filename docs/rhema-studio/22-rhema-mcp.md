@@ -1,8 +1,7 @@
 # Rhema MCP (issue #252) — what is built
 
 AI assistants that speak the Model Context Protocol can read this church's Rhema Studio to help
-plan a service. This is the first, read-only part (MCP-001); creating drafts for the church to
-review comes next.
+plan a service. MCP-001 reads; MCP-002 lets an assistant propose a whole service as a **draft** that people review.
 
 ## How it runs
 
@@ -39,9 +38,19 @@ review comes next.
 | `rhema_search_songs` | Library songs and hymn-book hymns (kind `song` / `hymn`) by title, number or words, without lyrics |
 | `rhema_list_translations` | Installed Bible editions |
 | `rhema_lookup_bible_reference` | Exact verse text for "Romans 8:28", "1 Cor 13:4-7", "Psalm 23" (ranges up to 50 verses) |
+| `rhema_validate_service_draft` | Checks a proposed service without saving: songs and hymns matched to the library (id, exact title, other title, hymn number), references looked up in the installed editions, missing items listed, errors to fix, planned minutes |
+| `rhema_create_service_draft` | Saves a checked proposal as `ai-drafts/<id>.json` in the data folder (never the services database), with the assistant's name and the time; at most 50 wait at once |
 
-## Next (MCP-002)
+## Drafts (MCP-002)
 
-A draft-writing tool that turns an assistant's proposed run of show into a **draft** in Prepare,
-marked "AI-assisted", with every item linked to library content or flagged as missing, for the
-church to review, edit and approve. No tool will ever approve, take anything live or change OBS.
+- A proposal has a title, a date, assumptions and phases (pre-service loop, warm-up, main service
+  with its start time, post-service loop) of items: `song`, `hymn`, `bible`, `slide`. The assistant
+  cannot invent content: a song or hymn not in the library becomes a **missing** placeholder, a
+  reference must exist in an installed edition, and slides carry only the assistant's own words
+  (announcements, prayer points), never lyrics.
+- **Prepare → AI drafts** lists what is waiting (who proposed it, when, items, minutes, what is
+  missing, assumptions). **Open as a new service** puts it in the rundown as an unsaved service,
+  asking first if the rundown has items; every item is marked "prepared by AI draft · <assistant>",
+  missing ones say what to source. People edit it and save it as a service; approval is the
+  ordinary approval. Nothing is saved, approved, shown or sent to OBS by opening a draft.
+- The only file the MCP server writes is the draft; it still cannot change a saved service.
