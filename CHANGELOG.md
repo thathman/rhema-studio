@@ -6,6 +6,8 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+- Design → Themes at 1024–1400 px: the preview chips (Bible, two languages, Song…) scroll inside their group instead of pushing past the zoom controls; the decorative pointer and Grid marks hide (found by the responsive sweep at 1024 and 1366, UX-12).
+
 ### Independent live sources (ARCH-001, ADR 0001)
 - Bible, Songs, Hymns, Slides, Pictures and quick screens each keep their own live value. An output can follow chosen sources (Outputs → edit → "What this output follows"): a "Rhema Bible | Lower Third" NDI feed set to Bible keeps Romans 8:28, in its own look, while a hymn is on the projector, and takes the next verse as soon as it is shown. Outputs left on "Everything put on air" behave exactly as before.
 - Present → Live shows the sources the feeds follow, each with its own take-off and Restore; Clear and Restore on the main controls still act on what the main screens show. Black and Logo cover every feed; Back returns each to its own source. The ticker stays independent. Rehearsal never changes a source.

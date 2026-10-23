@@ -390,15 +390,16 @@ export function DesignCanvas() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-foreground">
+      <div className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b border-border bg-card px-3 text-foreground">
         {/* ponytail: was a button with no action; kept as a decorative mark */}
-        <MousePointer2Icon aria-hidden className="size-3.5 text-muted-foreground" />
-        <div className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+        <MousePointer2Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground max-[1400px]:hidden" />
+        <div className="flex shrink-0 items-center gap-1.5 text-[0.6875rem] text-muted-foreground max-[1400px]:hidden">
           <Grid3X3Icon className="size-3" />
           <span>Grid</span>
         </div>
         {/* Preview content: two languages by default, so second-language styling is visible while editing. */}
-        <div role="radiogroup" aria-label="Preview" className="ml-3 flex rounded-md border border-border/60 p-0.5">
+        {/* On a narrow window the chips scroll inside their group rather than past the zoom controls. */}
+        <div role="radiogroup" aria-label="Preview" className="ml-3 flex min-w-0 shrink overflow-x-auto rounded-md border border-border/60 p-0.5 [scrollbar-width:none] max-[1400px]:ml-0">
           {PREVIEW_TABS.map(([value, label]) => (
             <button
               key={value}
@@ -419,7 +420,7 @@ export function DesignCanvas() {
           ))}
         </div>
         <div className="flex-1" />
-        <SearchIcon aria-hidden className="size-3.5 text-muted-foreground" />
+        <SearchIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-12 text-center text-[0.6875rem] font-medium tabular-nums text-muted-foreground">
           {zoomLevel}%
         </span>
