@@ -49,7 +49,7 @@ export interface CameraSource {
   name: string
   /** What the operator called it, e.g. "Pulpit". */
   label: string
-  /** The secret in its camera-page link; a new one closes the old link. */
+  /** The secret in its camera-page link, and its password in the camera router; a new one closes the old link. */
   token: string
 }
 
@@ -147,9 +147,6 @@ interface SettingsState {
   /** Start the camera router with Rhema while any camera is added (never when none is). */
   cameraRouterAuto: boolean
   setCameraRouterAuto: (on: boolean) => void
-  /** The password cameras publish with (made by Rhema; kept in the system keychain). */
-  cameraPassword: string
-  setCameraPassword: (password: string) => void
 
   setRemoteSecret: (secret: string) => void
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
@@ -207,8 +204,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCameras: (cameras) => set({ cameras }),
   cameraRouterAuto: true,
   setCameraRouterAuto: (cameraRouterAuto) => set({ cameraRouterAuto }),
-  cameraPassword: "",
-  setCameraPassword: (cameraPassword) => set({ cameraPassword }),
 
   setRemoteListeners: (patch) => set((s) => ({ remoteListeners: { ...s.remoteListeners, ...patch } })),
   setRemoteAuthRequired: (remoteAuthRequired) => {
@@ -272,7 +267,6 @@ function acceptable(key: string, value: unknown): boolean {
     case "joinAddress":
     case "joinName":
     case "joinToken":
-    case "cameraPassword":
     case "churchFolder":
     case "cloudSpeechConsentAt":
       return typeof value === "string"
@@ -335,7 +329,6 @@ const PERSISTED_KEYS = [
   "obs",
   "cameras",
   "cameraRouterAuto",
-  "cameraPassword",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",
@@ -354,8 +347,8 @@ const PERSISTED_KEYS = [
 // file's copies are blanked; `secretsInKeychain: true` in the file says so.
 // Without a keychain the file keeps the values, as before.
 
-type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken" | "cameraPassword"
-const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken", "cameraPassword"]
+type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken"
+const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken"]
 const KEYCHAIN_TIMEOUT_MS = 5000
 
 function readSecret(s: SettingsState, name: SecretName): string {

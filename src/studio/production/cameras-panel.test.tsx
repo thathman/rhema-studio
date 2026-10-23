@@ -22,7 +22,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { Scene } from "@/types"
 
 const PORTS = { webrtc: 8889, webrtcUdp: 8189, rtsp: 8554, rtmp: 1935, srt: 8890, api: 9997 }
-const router = (patch: Record<string, unknown> = {}) => ({ installed: true, running: true, wanted: true, lanAddress: "192.168.1.20", ports: PORTS, publishUser: "rhema", restarts: 0, error: null, paths: [], ...patch })
+const router = (patch: Record<string, unknown> = {}) => ({ installed: true, running: true, wanted: true, lanAddress: "192.168.1.20", ports: PORTS, restarts: 0, error: null, paths: [], ...patch })
 const flush = () => act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve() })
 
 async function mount() {
@@ -44,7 +44,7 @@ beforeEach(() => {
   for (const k of Object.keys(answers)) delete answers[k]
   answers.get_http_status = { running: true, lan: true, port: 8080, tls_port: 8081 }
   answers.camera_router_status = router()
-  useSettingsStore.setState({ cameras: [], cameraPassword: "", cameraRouterAuto: true })
+  useSettingsStore.setState({ cameras: [], cameraRouterAuto: true })
   useBroadcastStore.setState({ scenes: [] })
 })
 
@@ -58,7 +58,6 @@ describe("Cameras panel (#209)", () => {
     const [cam] = useSettingsStore.getState().cameras
     expect(cam).toMatchObject({ name: "pulpit", label: "Pulpit" })
     expect(cam.token).toMatch(/^[0-9a-f]{32}$/)
-    expect(useSettingsStore.getState().cameraPassword).toMatch(/^[0-9a-f]{32}$/)
     const text = el.textContent ?? ""
     expect(text).toContain(`https://192.168.1.20:8081/camera?name=pulpit&k=${cam.token}&label=Pulpit`)
     expect(text).toContain("http://192.168.1.20:8889/pulpit/whep")
@@ -66,15 +65,29 @@ describe("Cameras panel (#209)", () => {
     expect(text).toContain("Sending")
     expect(text).toContain("watched by 2")
     expect(el.querySelector('img[alt="QR code of the Pulpit camera page"]')).toBeTruthy()
+    // A camera app signs in as this camera only, with its own secret.
+    expect(text).toContain(`rtmp://192.168.1.20:1935/pulpit?user=cam-pulpit&pass=${cam.token}`)
+    expect(text).toContain(`srt://192.168.1.20:8890?streamid=publish:pulpit:cam-pulpit:${cam.token}&pkt_size=1316`)
   })
 
-  it("turns the router on with the church's camera password, and off", async () => {
+  it("New link gives the camera a new secret, which the router and listener are told", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }] })
+    const stop = startCameras()
+    await flush()
+    const el = await mount()
+    await act(async () => button(el, "New link")!.click())
+    const token = useSettingsStore.getState().cameras[0].token
+    expect(token).toMatch(/^[0-9a-f]{32}$/)
+    expect(token).not.toBe("a".repeat(32))
+    expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "pulpit", token }] })
+    stop()
+  })
+
+  it("turns the router on, and off", async () => {
     answers.camera_router_status = router({ running: false, wanted: false })
     const el = await mount()
     await act(async () => button(el, "Turn on")!.click())
-    const start = calls.find((c) => c.cmd === "camera_router_start")
-    expect(start?.args.password).toMatch(/^[0-9a-f]{32}$/)
-    expect(start?.args.password).toBe(useSettingsStore.getState().cameraPassword)
+    expect(calls.some((c) => c.cmd === "camera_router_start")).toBe(true)
     // Once running, the same switch turns it off.
     answers.camera_router_status = router()
     const again = await mount()
@@ -137,7 +150,10 @@ describe("cameras (#209)", () => {
     expect(calls.find((c) => c.cmd === "cameras_set")?.args).toEqual({ cameras: [] })
     useSettingsStore.setState({ cameras: [{ name: "wide", label: "Wide", token: "w".repeat(32) }] })
     expect(calls.filter((c) => c.cmd === "cameras_set").at(-1)?.args).toEqual({ cameras: [{ name: "wide", token: "w".repeat(32) }] })
-    expect(calls.some((c) => c.cmd === "camera_router_start")).toBe(true)
+    await flush()
+    // The list reaches the router before it starts.
+    const order = calls.map((c) => c.cmd).filter((c) => c === "cameras_set" || c === "camera_router_start")
+    expect(order.slice(-2)).toEqual(["cameras_set", "camera_router_start"])
     useSettingsStore.setState({ cameras: [] })
     expect(calls.some((c) => c.cmd === "camera_router_stop")).toBe(true)
     stop()

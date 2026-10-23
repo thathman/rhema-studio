@@ -4,6 +4,9 @@
 //! http from an https page, and the router wants Rhema's publish password), so its WHIP requests
 //! come here and are passed on to the router on this computer. Only the signalling passes
 //! through Rhema; the video flows straight from the phone to the router.
+//!
+//! Each camera publishes as its own router user (`cam-<name>`, its link's secret as the password),
+//! allowed to send to its own name only; a new link or removing the camera closes that door.
 
 use std::collections::HashMap;
 use std::sync::{Arc, PoisonError, RwLock};
@@ -15,13 +18,14 @@ use axum::response::{IntoResponse, Response};
 /// A WHIP offer or ICE patch is a few kilobytes; anything near this is not one.
 const MAX_BODY: usize = 64 * 1024;
 
-/// Where the router listens for WHIP and how Rhema signs in to publish.
-#[derive(Clone)]
+/// A camera's router user is this and its name (never `any`, which the router reads as "anyone").
+pub const PUBLISH_PREFIX: &str = "cam-";
+
+/// Where the router listens for WHIP.
+#[derive(Clone, Debug)]
 pub struct RouterTarget {
     /// e.g. `http://127.0.0.1:8889`
     pub base: String,
-    pub user: String,
-    pub pass: String,
 }
 
 /// The cameras the operator added (name and the secret in its camera-page link) and the running
@@ -32,7 +36,7 @@ pub struct CameraHub {
     router: RwLock<Option<RouterTarget>>,
 }
 
-// Never print the publish password (HttpConfig is Debug).
+// Never print a camera's secret (HttpConfig is Debug).
 impl std::fmt::Debug for CameraHub {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let n = self.cameras.read().unwrap_or_else(PoisonError::into_inner).len();
@@ -66,6 +70,14 @@ impl CameraHub {
         *self.router.write().unwrap_or_else(PoisonError::into_inner) = target;
     }
 
+    /// The cameras now (name, secret), for the router's settings.
+    #[must_use]
+    pub fn list(&self) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = self.cameras.read().unwrap_or_else(PoisonError::into_inner).iter().map(|(n, t)| (n.clone(), t.clone())).collect();
+        v.sort();
+        v
+    }
+
     pub(crate) fn knows(&self, name: &str, token: &str) -> bool {
         self.cameras.read().unwrap_or_else(PoisonError::into_inner).get(name).is_some_and(|t| crate::command::same_key(token, t))
     }
@@ -75,9 +87,12 @@ impl CameraHub {
     }
 
     /// Pass one WHIP request (POST the offer; PATCH ICE; DELETE to hang up) to the router, signed
-    /// in as Rhema, and hand back its answer. The session address in `Location` is rewritten to
+    /// in as that camera, and hand back its answer. The session address in `Location` is rewritten to
     /// this route so the page's next request comes here too.
     pub(crate) async fn forward(&self, method: Method, name: &str, session: Option<&str>, headers: &HeaderMap, body: Bytes) -> Response {
+        let Some(token) = self.cameras.read().unwrap_or_else(PoisonError::into_inner).get(name).cloned() else {
+            return StatusCode::FORBIDDEN.into_response();
+        };
         let Some(router) = self.router() else {
             return (StatusCode::SERVICE_UNAVAILABLE, "The camera router is off. Turn it on in Rhema: Production, Cameras.").into_response();
         };
@@ -97,7 +112,7 @@ impl CameraHub {
         let Ok(m) = reqwest::Method::from_bytes(method.as_str().as_bytes()) else {
             return StatusCode::METHOD_NOT_ALLOWED.into_response();
         };
-        let mut req = client.request(m, url).basic_auth(&router.user, Some(&router.pass)).body(body.to_vec());
+        let mut req = client.request(m, url).basic_auth(format!("{PUBLISH_PREFIX}{name}"), Some(&token)).body(body.to_vec());
         for h in ["content-type", "if-match"] {
             if let Some(v) = headers.get(h).and_then(|v| v.to_str().ok()) {
                 req = req.header(h, v);
@@ -111,10 +126,11 @@ impl CameraHub {
             }
         };
         let status = resp.status().as_u16();
-        // The router refused Rhema's own password: say so plainly, and never ask the phone to sign in.
+        // The router refused the camera's sign-in (it may still be taking in a new link): say so
+        // plainly, and never ask the phone to sign in itself.
         if status == 401 || status == 403 {
-            log::warn!("camera {name}: the router refused Rhema's publish password");
-            return (StatusCode::BAD_GATEWAY, "The camera router refused Rhema's password. Turn the router off and on again in Rhema.").into_response();
+            log::warn!("camera {name}: the router refused its sign-in");
+            return (StatusCode::BAD_GATEWAY, "The camera router refused this camera. Try again in a moment; if it keeps happening, turn the router off and on in Rhema.").into_response();
         }
         let mut out = HeaderMap::new();
         for h in ["content-type", "etag", "accept-patch"] {

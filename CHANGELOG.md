@@ -8,7 +8,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Production → Cameras: add a camera (Pulpit, Choir…), scan its QR code with a phone on the church Wi-Fi, allow the camera and press Start camera; no app to buy and nothing on the internet.
 - The camera router (MediaMTX) comes inside Rhema, starts by itself while cameras are added and stops with Rhema; each camera is sent once and shared by Rhema's scenes and TVs (WHEP) and OBS (RTSP).
 - "Use in a scene…" puts a camera into a scene; each card shows the OBS address, how many screens watch it, and addresses for free camera apps (RTMP/SRT).
-- Sending needs the church's camera password (kept in the keychain; phones never see it); watching is open on the church network for now.
+- Each camera sends as itself, to its own name only; New link or removing a camera disconnects whoever still sends with the old link. Watching is open on the church network for now; only Rhema can reach the router's controls.
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 

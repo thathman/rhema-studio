@@ -45,8 +45,9 @@ itself; the scene shows its background (or your "camera not playing" words) mean
 
 A free camera app (Moblin on iPhone, StreamCaster on Android) or a hardware encoder can send
 instead of the camera page. Open "Using a camera app instead" on the camera's card for the RTMP
-and SRT addresses. They carry the church's camera password: give them only to the people running
-the cameras. Send H.264 video without B-frames so screens and TVs can play it.
+and SRT addresses. They carry that camera's own password (the same secret as its link): give them
+only to the person running that camera. Send H.264 video without B-frames so screens and TVs can
+play it.
 
 ## Ports and security
 
@@ -56,13 +57,18 @@ the cameras. Send H.264 video without B-frames so screens and TVs can play it.
 | 8189 (UDP) | The camera video itself (WebRTC) | Phones, Rhema, TVs |
 | 8554 (TCP) | RTSP | OBS |
 | 1935 (TCP), 8890 (UDP) | RTMP, SRT | Camera apps and encoders |
-| 9997 (TCP) | The router's status | This computer only |
+| 9997 (TCP) | The router's control API (status, disconnecting a camera) | Rhema only: this computer, a password made afresh each run, no web page |
 
-- **Sending needs the church's camera password.** Rhema makes it the first time a camera is added
-  and keeps it in the system keychain with the other keys. A phone using the camera page never sees
-  it: the page's link carries that camera's own secret, Rhema checks it and signs in to the router
-  for it. **New link** on a card makes a new secret (the old QR code stops working); removing a
-  camera closes its link at once.
+- **Each camera sends as itself, to its own name only.** Its password is the secret in its link
+  (made by Rhema, kept with the camera in Rhema's settings): the pulpit camera's link cannot send as
+  the choir. The camera page goes through Rhema, which checks the secret and signs in for it.
+  **New link** on a card makes a new secret, and **removing** a camera deletes it: the old QR code,
+  link and app addresses stop working at once, and a phone or app still sending with them is
+  disconnected.
+- **The router's control API answers only Rhema:** from this computer, with a user and password
+  Rhema makes afresh each time it starts the router (kept in memory and handed to the router as it
+  starts; never written to a file or the log), and to no web page (no browser origin is allowed). Nothing else on the computer or
+  the network can change the router's settings through it.
 - **Watching is open on the church network** for now: any device on the Wi-Fi that knows a camera's
   name can watch it (as with most local cameras). Keep cameras on the church's private network,
   not a guest network open to visitors. Per-camera watch passwords are a later step.

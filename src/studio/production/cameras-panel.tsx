@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
 import { newLayer } from "@/lib/scenes"
-import { cameraName, cameraPageUrl, cameraPassword, newCameraSecret, routerStatus, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
+import { cameraName, cameraPageUrl, newCameraSecret, routerStatus, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type CameraSource } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
@@ -135,7 +135,6 @@ function AddCamera({ phonePage, http }: { phonePage: number | null; http: HttpSt
     if (!text) return
     const s = useSettingsStore.getState()
     const cam: CameraSource = { name: cameraName(text, s.cameras.map((c) => c.name)), label: text.slice(0, 40), token: newCameraSecret() }
-    cameraPassword()
     s.setCameras([...s.cameras, cam])
     setLabel("")
   }
@@ -173,7 +172,6 @@ function Copyable({ label, value }: { label: string; value: string }) {
 function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource; host: string | null; router: RouterStatus | null; path: RouterPath | undefined; phonePage: number | null }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
-  const password = useSettingsStore((s) => s.cameraPassword)
   const link = host && phonePage ? cameraPageUrl(host, phonePage, cam) : null
   const [qr, setQr] = useState<{ url: string; data: string } | null>(null)
   useEffect(() => {
@@ -229,18 +227,18 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
             )}
             {rtsp && <Copyable label="For OBS (Media Source, untick Local File)" value={rtsp} />}
             {!host && <p className="text-muted-foreground">Addresses appear once the camera router is on and this computer is on the network.</p>}
-            {host && ports && password && (
+            {host && ports && (
               <details className="text-muted-foreground">
                 <summary className="cursor-pointer">Using a camera app instead (Moblin, StreamCaster, an encoder)</summary>
                 <div className="mt-2 flex flex-col gap-2">
-                  <Copyable label="RTMP" value={rtmpUrl(host, ports, cam.name, router?.publishUser ?? "rhema", password)} />
-                  <Copyable label="SRT" value={srtUrl(host, ports, cam.name, router?.publishUser ?? "rhema", password)} />
-                  <p>These carry the church's camera password: give them only to the people running the cameras. Use H.264 video without B-frames so screens and TVs can play it.</p>
+                  <Copyable label="RTMP" value={rtmpUrl(host, ports, cam)} />
+                  <Copyable label="SRT" value={srtUrl(host, ports, cam)} />
+                  <p>These carry this camera's own password (the same as its link): give them only to the person running this camera; New link changes it. Use H.264 video without B-frames so screens and TVs can play it.</p>
                 </div>
               </details>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={renew} title="The old QR code and link stop working">New link</Button>
+              <Button size="sm" variant="ghost" onClick={renew} title="The old QR code, link and app addresses stop working, and a phone sending with them is disconnected">New link</Button>
               <span className="flex-1" />
               <ConfirmDelete label={`Remove ${cam.label} camera`} verb="Remove" onConfirm={remove} />
             </div>

@@ -988,7 +988,8 @@ report), but launching it cannot.
 | 10do.6 | OBS: Media Source, Local File off, the card's RTSP address. Cut in Rhema to another scene. | OBS shows the camera; Rhema's cut does not change OBS; "watched by 2" while both watch. | Unverified |
 | 10do.7 | A Google TV browser feed showing the camera scene. | The TV plays the camera (no sound). | Unverified |
 | 10do.8 | Turn the phone's Wi-Fi off for 20 s, then on. | The page says Reconnecting, then Live again by itself; the scene shows its background meanwhile. | Unverified |
-| 10do.9 | New link on the card; reload the phone page. Remove the camera. | The old page says the link is no longer valid; after Remove the router stops (no other cameras). | Unverified |
+| 10do.9 | While the phone sends, press New link on the card. Then Remove the camera. | Within about 2 s the card stops saying Sending; the phone page soon says the link is no longer valid; after Remove the router stops (no other cameras). | Unverified |
+| 10do.12 | In Safari on this Mac open `http://127.0.0.1:9997/v3/paths/list`. | It asks for a password (or says unauthorised); nothing is listed. | Unverified |
 | 10do.10 | With the hand-started MediaMTX still running, Turn on. | The card says port 8889 is already in use; nothing crashes. | Unverified |
 | 10do.11 | Quit Rhema. | No `mediamtx` process is left running; the log (Settings → Diagnostics) shows the router's lines and no password. | Unverified |
 

@@ -1202,7 +1202,7 @@ mod tests {
         assert!(off.contains("503"), "{off}");
 
         let (router, seen) = fake_router().await;
-        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}"), user: "rhema".into(), pass: "s3cretpass".into() }));
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}") }));
         // Without the secret nothing reaches the router.
         assert!(send("POST", "/api/v1/camera/pulpit/whip", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
         assert!(send("POST", "/api/v1/camera/pulpit/whip?k=wrong", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
@@ -1221,7 +1221,7 @@ mod tests {
         assert!(send("DELETE", "/api/v1/camera/pulpit/whip/bad%2Fid?k=0123456789abcdef", "", "").await.contains("404"));
 
         let seen = seen.lock().unwrap().clone();
-        let basic = "Basic cmhlbWE6czNjcmV0cGFzcw=="; // rhema:s3cretpass
+        let basic = "Basic Y2FtLXB1bHBpdDowMTIzNDU2Nzg5YWJjZGVm"; // cam-pulpit:<its secret>: each camera signs in as itself
         assert_eq!(seen, vec![
             format!("POST /pulpit/whip auth={basic} type=application/sdp if-match=- body=v=0 offer"),
             format!("PATCH /pulpit/whip/5e55-10n auth={basic} type=application/trickle-ice-sdpfrag if-match=\"x1\" body=a=candidate:1"),

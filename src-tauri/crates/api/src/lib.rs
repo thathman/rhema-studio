@@ -14,7 +14,7 @@ pub mod http;
 pub mod osc;
 pub mod tls;
 
-pub use cameras::{new_camera_hub, valid_camera_name, CameraHub, RouterTarget, SharedCameras};
+pub use cameras::{new_camera_hub, valid_camera_name, CameraHub, RouterTarget, SharedCameras, PUBLISH_PREFIX};
 pub use coerce::{coerce_bool, coerce_f32_normalized, coerce_string, parse_osc};
 pub use command::RemoteCommand;
 pub use dispatch::{CommandDispatcher, CommandSink};

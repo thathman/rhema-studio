@@ -32,7 +32,6 @@ export interface RouterStatus {
   wanted: boolean
   lanAddress: string | null
   ports: RouterPorts
-  publishUser: string
   restarts: number
   error: string | null
   paths: RouterPath[]
@@ -46,7 +45,7 @@ export function cameraName(label: string, taken: string[]): string {
   return name
 }
 
-/** A camera page secret, or the router's publish password: 32 hex characters from the system's random source. */
+/** A camera's secret (in its page link, and its password in the router): 32 hex characters from the system's random source. */
 export const newCameraSecret = newFeedToken
 
 /** The page a phone opens to send its camera (https: a browser lets only a secure page use the camera). */
@@ -64,26 +63,22 @@ export function rtspUrl(host: string, ports: RouterPorts, name: string): string 
   return `rtsp://${host}:${ports.rtsp}/${name}`
 }
 
+/** A camera's user in the router (as rhema_api::PUBLISH_PREFIX): it may send to its own name only. */
+export function publishUser(name: string): string {
+  return `cam-${name}`
+}
+
 /** For a camera app or encoder instead of the camera page (Moblin, StreamCaster, OBS itself). */
-export function rtmpUrl(host: string, ports: RouterPorts, name: string, user: string, password: string): string {
-  return `rtmp://${host}:${ports.rtmp}/${name}?user=${user}&pass=${password}`
+export function rtmpUrl(host: string, ports: RouterPorts, cam: CameraSource): string {
+  return `rtmp://${host}:${ports.rtmp}/${cam.name}?user=${publishUser(cam.name)}&pass=${cam.token}`
 }
 
-export function srtUrl(host: string, ports: RouterPorts, name: string, user: string, password: string): string {
-  return `srt://${host}:${ports.srt}?streamid=publish:${name}:${user}:${password}&pkt_size=1316`
-}
-
-/** The church's camera password, made once (kept in the keychain with the other secrets). */
-export function cameraPassword(): string {
-  const s = useSettingsStore.getState()
-  if (s.cameraPassword) return s.cameraPassword
-  const made = newCameraSecret()
-  s.setCameraPassword(made)
-  return made
+export function srtUrl(host: string, ports: RouterPorts, cam: CameraSource): string {
+  return `srt://${host}:${ports.srt}?streamid=publish:${cam.name}:${publishUser(cam.name)}:${cam.token}&pkt_size=1316`
 }
 
 export function startRouter(): Promise<void> {
-  return invoke<void>("camera_router_start", { password: cameraPassword() })
+  return invoke<void>("camera_router_start")
 }
 
 export function stopRouter(): Promise<void> {
@@ -96,13 +91,16 @@ export function routerStatus(): Promise<RouterStatus | null> {
 
 let lastSent = ""
 
-/** The camera list (names and link secrets) to the listener that serves the camera page. */
-function syncList(cameras: CameraSource[]) {
+/**
+ * The camera list (names and secrets) to the listener that serves the camera page and to the
+ * router's settings; a removed camera or a new link also disconnects whoever sends with the old one.
+ */
+function syncList(cameras: CameraSource[]): Promise<unknown> {
   const list = cameras.map((c) => ({ name: c.name, token: c.token }))
   const key = JSON.stringify(list)
-  if (key === lastSent) return
+  if (key === lastSent) return Promise.resolve()
   lastSent = key
-  void invoke("cameras_set", { cameras: list }).catch(() => {})
+  return invoke("cameras_set", { cameras: list }).catch(() => {})
 }
 
 /**
@@ -116,18 +114,18 @@ export function startCameras(): () => void {
   void hydrateSettings().then(() => {
     if (stopped) return
     const s = useSettingsStore.getState()
-    syncList(s.cameras)
+    const listed = syncList(s.cameras)
     if (s.cameraRouterAuto && s.cameras.length > 0) {
-      startRouter().catch((e) => {
+      listed.then(startRouter).catch((e) => {
         const why = e instanceof Error ? e.message : String(e)
         if (!/not installed/i.test(why)) toast.error("The camera router did not start", { description: `${why} See Production → Cameras.` })
       })
     }
     off = useSettingsStore.subscribe((now, prev) => {
       if (now.cameras === prev.cameras) return
-      syncList(now.cameras)
+      const listed = syncList(now.cameras)
       if (now.cameras.length === 0 && prev.cameras.length > 0) void stopRouter().catch(() => {})
-      else if (now.cameraRouterAuto && now.cameras.length > 0 && prev.cameras.length === 0) void startRouter().catch(() => {})
+      else if (now.cameraRouterAuto && now.cameras.length > 0 && prev.cameras.length === 0) void listed.then(startRouter).catch(() => {})
     })
   })
   return () => {
