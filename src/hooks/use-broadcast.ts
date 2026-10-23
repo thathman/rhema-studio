@@ -93,6 +93,11 @@ export interface PresentOptions {
    * else reaches the screen first.
    */
   follow?: boolean
+  /**
+   * Activate the Bible source only (ADR 0001, C11): the feeds that follow Bible take the verse and
+   * the program on the main screens is left alone (a verse heard while a song is up).
+   */
+  sourceOnly?: boolean
 }
 
 /** Data-URL fill for a background picture, or null (missing file → no background, text still shows). */
@@ -145,7 +150,7 @@ export type PresentOutcome = "presented" | "superseded" | "empty" | "missing_tra
  * only the preview unless the Auto toggle is on.
  */
 export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Promise<PresentOutcome> {
-  if (!opts.follow && reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
+  if (!opts.follow && !opts.sourceOnly && reachesScreen(opts) && approvalHolds(() => void presentVerse(verse, opts))) return "held_for_approval"
   if (!opts.follow) presentSeq += 1
   const ticket = presentSeq
   const followTicket = opts.follow ? ++followSeq : 0
@@ -233,6 +238,11 @@ export async function presentVerse(verse: Verse, opts: PresentOptions = {}): Pro
   const data = renderEntries.length > 1
     ? toDualVerseRenderData(renderEntries)
     : toVerseRenderData(renderEntries[0]?.verse ?? verseToPresent, renderEntries[0]?.translation ?? "KJV")
+  if (opts.sourceOnly) {
+    useBroadcastStore.getState().activateSource({ ...data, ...layer, content: "bible" }, opts.itemId ?? null)
+    mark(`presentVerse end ${ref} (Bible source only)`)
+    return "presented"
+  }
   useBroadcastStore
     .getState()
     .setLiveVerse(

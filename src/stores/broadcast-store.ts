@@ -24,6 +24,7 @@ import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
+import { feedFrame, sourceOf, type LiveSources, type SourceId } from "@/lib/live-sources"
 
 /** The program (what is on air and what Restore and Back return to), with the rundown's place in it. */
 export interface ProgramSnapshot {
@@ -89,6 +90,14 @@ interface BroadcastState {
   liveItemId: string | null
   /** Set while a quick screen is up; what Back returns to. */
   heldLive: HeldLive | null
+  /** Each kind of content's active value (ADR 0001). Session state, never changed in rehearsal. */
+  sources: LiveSources
+  /** Take one source off (kept for Restore); the program goes off air too if it was showing it. */
+  clearSource: (id: SourceId) => void
+  /** Put a cleared source back on. */
+  restoreSource: (id: SourceId) => void
+  /** Activate a source without changing the program (a heard verse while a song is up, C11). */
+  activateSource: (value: VerseRenderData, itemId?: string | null) => void
   /**
    * Clear took content off air. Until something goes live again, browsing (a verse
    * clicked, Verse +/−) changes only the preview, so Restore brings back what was cleared.
@@ -377,6 +386,30 @@ function resyncThemeOutputs(themeId: string | null): void {
   for (const o of s.outputs) if (themeIdsOf(o).includes(themeId)) s.syncBroadcastOutputFor(o.id)
 }
 
+let activations = 0
+
+/**
+ * The adapter from the program to the sources (ADR 0001): what goes on air activates its source,
+ * Clear turns that source off and Restore back on. Other sources are left as they are. Nothing
+ * here runs in rehearsal, so the real sources never see what was rehearsed.
+ */
+function noteSources(): void {
+  const s = useBroadcastStore.getState()
+  if (s.rehearsal || !s.liveVerse) return
+  const id = sourceOf(s.liveVerse)
+  const cur = s.sources[id]
+  let sources = s.sources
+  if (s.isLive) {
+    if (!cur || cur.value !== s.liveVerse) sources = { ...sources, [id]: { value: s.liveVerse, itemId: s.liveItemId, revision: ++activations, activatedAt: Date.now(), on: true } }
+    else if (!cur.on) sources = { ...sources, [id]: { ...cur, on: true } }
+  } else if (cur?.on && cur.value === s.liveVerse) {
+    sources = { ...sources, [id]: { ...cur, on: false } }
+  }
+  // A quick screen lasts until something else is shown.
+  if (id !== "quick" && sources.quick?.on) sources = { ...sources, quick: { ...sources.quick, on: false } }
+  if (sources !== s.sources) useBroadcastStore.setState({ sources })
+}
+
 function recordFrame(id: string, frame: OutputFrame): void {
   const prev = useBroadcastStore.getState().outputFrames[id]
   if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.ticker === frame.ticker && prev.stage === frame.stage) return
@@ -443,6 +476,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveSlide: null,
   liveItemId: null,
   heldLive: null,
+  sources: {},
   cleared: false,
   stageMessage: "",
   lowerThird: null,
@@ -568,7 +602,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const output = s.outputs.find((o) => o.id === outputId)
     if (!output) return
     // The look for what is on air: this output's theme for that kind of content, else its main theme.
-    const themeId = themeIdFor(output, s.isLive ? s.liveVerse?.content : null)
+    const shown = feedFrame(s, output.shows)
+    const themeId = themeIdFor(output, shown?.content)
     const saved = s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
     if (!saved) return
     // A theme open in the Designer shows on its congregation outputs as edited, for presents too
@@ -599,7 +634,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       }).catch(() => {})
       return
     }
-    const verse = s.isLive ? forOutputLanguage(s.liveVerse, output.language) : null
+    const verse = shown ? forOutputLanguage(shown, output.language) : null
     const overlay = output.lowerThirds ? overlayFor(s.lowerThird, verse) : null
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
@@ -638,7 +673,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
-    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -709,6 +744,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setLive: (isLive) => {
     const s = get()
     set({ isLive, cleared: isLive ? false : s.cleared || (s.isLive && s.liveVerse !== null) })
+    noteSources()
     get().syncBroadcastOutput()
   },
   setLiveVerse: (liveVerse, source = null, opts = {}) => {
@@ -727,6 +763,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       presentWarning: null,
       ...(opts.goLive ? { isLive: true, cleared: false } : {}),
     })
+    noteSources()
     get().syncBroadcastOutput()
   },
   setPresentWarning: (presentWarning) => set({ presentWarning }),
@@ -746,6 +783,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
+    noteSources()
     get().syncBroadcastOutput()
   },
   setLowerThird: (lt) => {
@@ -823,10 +861,39 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // Back to off air with content that was cleared (before or during the quick screen): keep it for Restore.
       cleared: !!held.wasCleared || (held.wasLive && !get().isLive),
     })
+    noteSources()
+    if (!get().isLive) {
+      // Back to off air: the quick screen is over for the feeds too.
+      const q = get().sources.quick
+      if (q?.on) set({ sources: { ...get().sources, quick: { ...q, on: false } } })
+    }
     get().syncBroadcastOutput()
     return true
   },
   setAutoLive: (autoLive) => set({ autoLive }),
+  clearSource: (id) => {
+    const s = get()
+    const cur = s.sources[id]
+    if (!cur?.on) return
+    if (s.isLive && s.liveVerse === cur.value) return get().setLive(false)
+    set({ sources: { ...s.sources, [id]: { ...cur, on: false } } })
+    get().syncBroadcastOutput()
+  },
+  restoreSource: (id) => {
+    const s = get()
+    const cur = s.sources[id]
+    if (!cur || cur.on || s.rehearsal) return
+    if (!s.isLive && s.cleared && s.liveVerse === cur.value) return get().setLive(true)
+    set({ sources: { ...s.sources, [id]: { ...cur, on: true } } })
+    get().syncBroadcastOutput()
+  },
+  activateSource: (value, itemId = null) => {
+    const s = get()
+    if (s.rehearsal) return
+    const id = sourceOf(value)
+    set({ sources: { ...s.sources, [id]: { value, itemId, revision: ++activations, activatedAt: Date.now(), on: true } } })
+    get().syncBroadcastOutput()
+  },
 
   // Designer
   setDesignerOpen: (isDesignerOpen) => {

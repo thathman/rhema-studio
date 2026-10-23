@@ -927,6 +927,16 @@ report), but launching it cannot.
 | 10cq.3 | Design → Themes: edit the theme the projector uses (font size). | The projector and NDI do not change; "Live edit off" shows in the header. | Unverified |
 | 10cq.4 | Turn Live edit on, then change the colour; turn it off. | The header says how many screens it touches; they follow the edit while on and go back to the saved look when off. Leaving Design turns it off. | Unverified |
 
+### 10cr. Independent live sources (ADR 0001, ARCH-001)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cr.1 | Outputs: add NDI "Rhema Bible \| Lower Third", follows Bible only, a lower-third look for Bible; and NDI "Rhema Lyrics", follows Songs and Hymns. Receive both in OBS. | Both senders appear in OBS with those names. | Unverified |
+| 10cr.2 | Show Romans 8:28, then a hymn verse. | The projector shows the hymn; the Bible feed keeps Romans 8:28 in its lower-third look; the Lyrics feed shows the hymn. Present → Live → Sources lists Bible and Hymns. | Unverified |
+| 10cr.3 | Next verse (Romans 8:29) from Quick find, then Clear on the main controls. | The Bible feed takes 8:29 at once; Clear blanks the projector and the Lyrics feed only; Restore brings the hymn back. | Unverified |
+| 10cr.4 | Black, then Back. | Every feed goes black (keyed: transparent); Back returns each to its own source. | Unverified |
+| 10cr.5 | Listening and Auto on, a hymn up; say "Romans 8:31". | The projector keeps the hymn; the Bible feed shows 8:31; the verse waits in the preview. | Unverified |
+
 ### 10cn. Numbered books and the item fields (owner reports)
 
 | # | Steps | Expected | Result |
