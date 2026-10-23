@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.45 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.46 · **Updated:** 2026-10-23 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -10,6 +10,22 @@
 - Every issue/PR should include: task IDs, affected FRs, change scope, migration/security/license notes, tests and screenshots, performance and offline impact, rollback plan, acceptance checklist.
 - Do not conflate **in PR** with **done**. GitHub Issues are enabled (2026-10-20): #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 owner decision on bundled translations, #34 owner decision on the Canva relay, #35 CV-004/005 Brand Kit and templates, #36 MD-002 video, #37 MD-004 lower thirds, #38 PT-003 cues, #39 QA-005 migration matrix. This file stays the master queue; link new issues here as they are opened.
 - Track separate **code quality** vs **volunteer UX acceptance**. An intuitive app is not established merely by unit tests.
+
+## Owner-approved production contracts — 2026-10-23
+
+**Architecture approval is not implementation acceptance.** See [#243](https://github.com/thathman/rhema-studio/issues/243) for owner-ratified requirements and [#246](https://github.com/thathman/rhema-studio/issues/246) for 18 cross-feature integration contracts and tests. These tasks extend, not duplicate, already merged features.
+
+| Task | P | State | Depends on | Acceptance |
+|---|---|---|---|---|
+| ARCH-001 Independent Live Source buses and NDI/feed variants for Bible, Hymns, Songs, Slides and Ticker | P0 | DESIGN | Existing outputs, #243/#246 | Activate Scripture once, all configured Bible fullscreen/lower-third variants update while unrelated lyrics, song/hymn/ticker/camera remain unchanged; old saved output names work |
+| ARCH-002 Solo Main congregation Scene Composer and scoped source/scene lifecycle | P0 | DESIGN | ARCH-001 | From main alone create/add/place/bind/pin a scene source; Preview/Take to sanctuary, without changing OBS or private stage |
+| ARCH-003 Isolated rehearsal, design drafts, scoped cues and event/source/timer separation | P0 | DESIGN | ARCH-001 | Rehearsal exit doesn't unexpectedly Take; no live draft leakage; timekeeper Start doesn't change Bible/scene without authorized cue |
+| ARCH-004 Optional Host/Join authority, delegation, scoped handoff and accurate receiver state | P1 | DESIGN | ARCH-001–003, #162/#197 | Fully operable with zero volunteers; disconnected operator cannot block host; joined client can exercise only assigned scoped controls |
+| ARCH-005 Production confidence across OBS NDI, local cameras, Google TV, stage, signage and audio | P1 | DESIGN | ARCH-002–004, #198/#208/#209 | Real LAN/hardware source health, physical render acknowledgment, scoped Black/Restore, offline failure/recovery |
+| COMMS-001 Rhema Comms notices, action requests and full-duplex PTT with speaking indicators and paired phones | P1 | DESIGN | ARCH-004, #251 | Multiple simultaneous talkers audible; private messaging; no leakage to OBS/PA/auto-Bible; one-computer service independent |
+| MCP-001 Opt-in Rhema MCP external AI service-draft tools | P1 | DESIGN | Shared event schema, #252 | Compatible AI creates a validated fully editable timed draft with hymns/songs/Scripture, no ability to approve/Take Live |
+
+**Implementation sequence:** ARCH-001 → ARCH-002/003 → ARCH-004 → ARCH-005; COMMS-001 and MCP-001 can follow supported shared infrastructure. Scope remains subject to acceptance and release gates; design state does not imply any merged code.
 
 ## Current active work
 
@@ -186,13 +202,13 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 
 ## Roll-up / near-term sequence
 
-1. **Integration gate:** ST-005 → ST-006 → ST-007 (PR #3, #1, #2; #4 separate). Verify actual desktop and Windows before approval. Avoid accidental squash/stack duplication.
-2. **Content foundation:** ST-008, SO-001 → SO-010, SV-001 → SV-005. No complicated media project before a real song-to-Live flow works.
-3. **Production reliability:** MD-001 → MD-006, OP-001 → OP-005, PT-001 → PT-005. Parallelize visuals only across non-conflicting boundaries.
-4. **Design and remote prep:** CV-001 → CV-005, CL-001 → CL-006; a Canva export and approved service must be fully usable offline.
-5. **Expansion:** signage, engagement, archive, AI. Only promote into a release after the gates in RELEASE-PLAN.md.
+1. **Approved core architecture:** ARCH-001 and ARCH-003 contracts first, with source/scene isolation and regression tests on Solo Main. Preserve NDI variants, existing content and data migrations; see #243/#246.
+2. **Visual composition:** ARCH-002 scene placeholders/composer and output variant mapping on one machine; then OBS NDI/browser compatibility and actual receiver evidence.
+3. **Optional collaborative operation:** ARCH-004 Host/Join and remote role views over the same host data with visible takeover and audit, never mandatory volunteers.
+4. **Production routing and validation:** ARCH-005 local camera relay, independent congregation 1080p30, Google TV/OBS workflows and hardware/Windows/recovery gates.
+5. **New optional integrations:** COMMS-001 notices then full-duplex PTT/phone; MCP-001 AI-assisted draft authoring and human review. Keep Canva/speech-provider decisions separate.
 
-**Changes to task status:** maintain a brief revision history below (date, task IDs, PR/issue, verified evidence). Start with explicit PR links and no speculative completion claims.
+**Historical original milestone order was completed or partially superseded** by later merged work. Do not re-run completed PRs #1/#2/#3 or treat the first implementation slices as fully accepted.
 
 ## Revision history
 
