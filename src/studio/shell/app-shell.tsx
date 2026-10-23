@@ -36,6 +36,7 @@ import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
+import "@/stores/stage-time-warnings"
 import "@/stores/stage-finish"
 import "@/lib/app-tick"
 

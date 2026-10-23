@@ -61,6 +61,20 @@ export function StageDesigner() {
               </label>
             ))}
           </fieldset>
+          <fieldset className="flex flex-col gap-1.5 text-xs">
+            <legend className="mb-1 text-muted-foreground">Time warnings (a message on the stage while the timer runs)</legend>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" className="size-4" checked={style.warnAtMinutes > 0} onChange={(e) => patch({ warnAtMinutes: e.target.checked ? 5 : 0 })} />
+              At
+              <input type="number" aria-label="Minutes left for the warning" min={1} max={30} disabled={style.warnAtMinutes === 0} value={style.warnAtMinutes || 5} onChange={(e) => patch({ warnAtMinutes: Math.min(30, Math.max(1, Math.round(Number(e.target.value) || 1))) })} className="h-6 w-12 rounded border border-border bg-background px-1 tabular-nums" />
+              minutes left
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" className="size-4" checked={style.warnWhenOver} onChange={(e) => patch({ warnWhenOver: e.target.checked })} />
+              When the time is up
+            </label>
+            <span className="text-muted-foreground">Only the stage sees it; a message you sent is never covered, and nothing else changes.</span>
+          </fieldset>
           <div>
             <Button size="xs" variant="outline" onClick={() => useBroadcastStore.getState().saveStageStyle(DEFAULT_STAGE_STYLE)}>Back to the built-in look</Button>
           </div>

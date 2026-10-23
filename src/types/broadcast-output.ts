@@ -184,6 +184,10 @@ export interface StageStyle {
   showBand: boolean
   /** When the service is expected to end. */
   showFinish: boolean
+  /** A message on the stage as the timer reaches this many minutes left (0: none), #196 R6. */
+  warnAtMinutes: number
+  /** A message on the stage as the timer's time is up. */
+  warnWhenOver: boolean
 }
 
 export interface BroadcastOutputNdiSettings {

@@ -5,6 +5,10 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Time warnings on the stage (#196 R6)
+
+- **Branch / PR:** `pt-009/stage-time-warnings`. `StageStyle.warnAtMinutes` (0–30) and `warnWhenOver`; `stage-time-warnings.ts` watches the timer's ticks and sends one stage message as each is crossed (per timer run; not when started past it; never in rehearsal; never over a person's message). Stage designer: Time warnings.
+- **Tests:** `stage-time-warnings.test.ts`. Desktop: acceptance 10df.
 ## 2026-10-23 — The service log survives a crash (#196 R3, #246)
 
 - **Branch / PR:** `pt-008/journal-recovery`. `live-recovery.ts`: the journal (entries, `startItemIds`) kept in `recovery.json` under `journal`, 3 s after it changes; `restoreJournal` after an unclean exit, once, if under 6 h old, before anything this run logged already (a scene put back at start-up), rebasing `mono` from `at` on this run's clock, with a recovery line.
