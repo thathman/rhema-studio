@@ -183,6 +183,7 @@ pub fn run() {
             commands::join::join_me,
             commands::join::join_command,
             commands::join::join_voice,
+            commands::cameras::whep_offer,
             commands::join::join_connect,
             commands::join::join_disconnect,
             commands::content::content_list_programs,

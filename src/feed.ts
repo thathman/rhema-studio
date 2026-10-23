@@ -7,6 +7,7 @@ import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
+import { syncCameras, WhepPlayer } from "@/lib/whep"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, SceneFrame, StagePayload, Ticker } from "@/types"
 
@@ -33,6 +34,13 @@ const canvas = document.getElementById("feed") as HTMLCanvasElement
 const ctx = canvas.getContext("2d")!
 const layers = new Map<string, HTMLCanvasElement>()
 let frame: Frame | null = null
+/** Cameras in the scene (WHEP from the church network's relay; MediaMTX allows a page to ask). */
+const cameras = new Map<string, WhepPlayer>()
+const whep = async (url: string, sdp: string) => {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/sdp" }, body: sdp })
+  if (!r.ok) throw new Error(String(r.status))
+  return r.text()
+}
 /** Host time minus this machine's, from the latest frame (clock layers count by the host). */
 let offset = 0
 let ticking = false
@@ -60,6 +68,7 @@ function draw() {
     drawScene(ctx, width, height, f.scene, {
       now: Date.now() + offset,
       imageCache: themeImageCache(),
+      camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
       layerCanvas: (id) => {
         let c = layers.get(id)
         if (!c) layers.set(id, (c = document.createElement("canvas")))
@@ -94,7 +103,7 @@ function draw() {
 /** The ticker crawls and a lower third fades in: keep drawing while either moves. */
 function animate() {
   const f = frame
-  const moving = !!f && !f.off && (!!fade || (!!f.ticker && !f.ticker.pausedAt) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1))
+  const moving = !!f && !f.off && (!!fade || [...cameras.values()].some((p) => p.ready) || (!!f.ticker && !f.ticker.pausedAt) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1))
   draw()
   if (moving) requestAnimationFrame(animate)
   else ticking = false
@@ -122,6 +131,7 @@ function show(next: Frame) {
   lastFade = next.scene?.fadeMs ?? 0
   frame = next.theme ? { ...next, theme: normalizeTheme(next.theme), scene: next.scene ? { ...next.scene, layers: next.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } : undefined } : next
   if (frame.theme) preloadThemeImages(frame.theme, draw)
+  syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, () => { if (!ticking) { ticking = true; requestAnimationFrame(animate) } })
   for (const l of frame.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, draw)
   if (!ticking) {
     ticking = true

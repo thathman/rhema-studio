@@ -13,6 +13,8 @@ export interface SceneDrawOptions {
   preview?: boolean
   /** Wall-clock ms, for clock layers (default: now). */
   now?: number
+  /** A camera layer's video, when it is playing (outputs only). */
+  camera?: (layerId: string) => HTMLVideoElement | null
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
@@ -53,6 +55,15 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
         const cw = r.w / scale, ch = r.h / scale
         ctx.drawImage(img, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
       }
+    } else if (l.kind === "camera" && opts.camera) {
+      const v = opts.camera(l.id)
+      if (v && v.videoWidth > 0) {
+        const s = source(l, v.videoWidth, v.videoHeight)
+        // Cover the box, keeping the camera's shape (like a picture).
+        const scale = Math.max(r.w / s.sw, r.h / s.sh)
+        const cw = r.w / scale, ch = r.h / scale
+        ctx.drawImage(v, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
+      }
     } else if (l.kind === "clock" && l.theme && l.clock) {
       // The time fills its box in the look's text style; whatever is behind shows around it.
       const text = clockText(l.clock, opts.now ?? Date.now())
@@ -80,7 +91,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
         ctx.drawImage(lc, s.sx, s.sy, s.sw, s.sh, r.x, r.y, r.w, r.h)
       }
     }
-    if (opts.preview && (l.label || l.kind === "camera")) {
+    if (opts.preview && l.label) {
       ctx.globalAlpha = 1
       ctx.setLineDash([Math.max(6, width / 160), Math.max(4, width / 240)])
       ctx.lineWidth = Math.max(2, width / 480)

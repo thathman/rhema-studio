@@ -127,7 +127,7 @@ function describe(l: SceneLayer): string {
   if (l.kind === "feed") return l.shows?.length ? l.shows.map((k) => CONTENT_NAMES[k]).join(" + ") + (l.held ? " · held" : "") : "whatever is on air" + (l.held ? " · held" : "")
   if (l.kind === "color") return "colour"
   if (l.kind === "picture") return "picture"
-  return "camera (planned)"
+  return l.cameraUrl ? "camera" : "camera (no stream yet)"
 }
 
 function swap<T>(a: T[], i: number, j: number): T[] {
@@ -141,7 +141,7 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
 }
 
 function AddLayer({ onAdd }: { onAdd: (kind: SceneLayerKind) => void }) {
-  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["clock", "Clock"], ["camera", "Camera (planned)"]]
+  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["clock", "Clock"], ["camera", "Camera"]]
   return (
     <div role="group" aria-label="Add a layer" className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Add</span>
@@ -347,7 +347,13 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
           </label>
         </>
       )}
-      {layer.kind === "camera" && <p className="rounded-md bg-muted px-2 py-1.5 text-muted-foreground">Cameras on the church network are planned (issue #209). This keeps the camera's place in the scene; outputs show the background there until then.</p>}
+      {layer.kind === "camera" && (
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[0.625rem] text-muted-foreground">Stream address (WHEP)</span>
+          <input aria-label="Camera stream address" value={layer.cameraUrl ?? ""} placeholder="http://192.168.1.10:8889/pulpit/whep" onChange={(e) => onChange({ cameraUrl: e.target.value.trim() || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
+          <span className="text-muted-foreground">A camera relayed on the church network (MediaMTX: http://&lt;its computer&gt;:8889/&lt;camera&gt;/whep). Each screen plays it directly, without sound; until it connects the scene's background shows there. Only addresses on the church network are used.</span>
+        </label>
+      )}
       <div className="grid grid-cols-4 gap-1.5">
         <Num label="Left %" value={b.x} max={100 - b.w} onChange={(x) => onChange({ box: { ...b, x } })} />
         <Num label="Top %" value={b.y} max={100 - b.h} onChange={(y) => onChange({ box: { ...b, y } })} />

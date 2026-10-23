@@ -18,7 +18,7 @@ export interface SceneCrop {
 
 /**
  * feed: live content (the sources it follows) in an approved look; color and picture: a
- * background; camera: a camera input (placeholder until cameras arrive, issue #209); clock: the
+ * background; camera: a camera on the church network (a WHEP stream, e.g. from MediaMTX; #209); clock: the
  * service timer in a look (a countdown before the service).
  */
 export type SceneLayerKind = "feed" | "color" | "picture" | "camera" | "clock"
@@ -41,6 +41,8 @@ export interface SceneLayer {
   kind: SceneLayerKind
   /** feed: the live sources it follows; absent = whatever is put on air (the program). */
   shows?: ContentType[]
+  /** camera: its stream on the church network (WHEP, e.g. http://192.168.1.10:8889/pulpit/whep). */
+  cameraUrl?: string
   /** clock: what it shows: the service timer (absent), the time of day, or a countdown to `until`. */
   clockShows?: "timer" | "time" | "until"
   /** clock "until": the time of day counted down to, "HH:MM" (e.g. the service start). */
@@ -86,6 +88,8 @@ export interface SceneLayerFrame {
   color?: string
   imageUrl?: string | null
   clock?: SceneClock | null
+  /** camera: its WHEP stream address. */
+  cameraUrl?: string
   /** Shown in the composer's preview only (e.g. "Camera — planned"). */
   label?: string
 }
