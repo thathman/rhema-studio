@@ -47,6 +47,7 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
+    --color-primary-text: var(--primary-text);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -119,6 +120,8 @@
     --popover-foreground: #202a32;
     --primary: #256d68;
     --primary-foreground: #ffffff;
+    /* Teal for text and links on cards and the page (selected tabs, teal labels); --primary is for fills behind white type. */
+    --primary-text: #256d68;
     --secondary: #eef0ee;
     --secondary-foreground: #202a32;
     --muted: #eef0ee;
@@ -206,6 +209,8 @@
     --popover-foreground: #e6ecee;
     --primary: #2b7a74;
     --primary-foreground: #ffffff;
+    /* Lighter than --primary: the button teal is too dark to read as text on dark cards. */
+    --primary-text: #5fb3a8;
     --secondary: #22313a;
     --secondary-foreground: #e6ecee;
     --muted: #22313a;

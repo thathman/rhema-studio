@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Rehearsal keeps every screen's scene; clearer teal text in dark mode (#246, #215)
+- A scene taken during rehearsal (Production → Programs, the Present Scenes strip or a joined Screens desk) no longer appears on the real screens when rehearsal ends: each screen gets back exactly the scene it had before, also after **Show this live**.
+- The Present Scenes strip now works in rehearsal for practice: a Take shows in Rhema, marked "In rehearsal", while the screens keep their scene. Take in Production → Programs is not red during rehearsal.
+- Teal text in dark mode (the selected Production and Design tab, links, teal labels) is a lighter teal that reads clearly on dark cards; teal buttons are unchanged.
+- Help sentences in Settings are 12 px instead of 11 px.
 ### Bring in a previous installation, test a screen, see the setup status (#298)
 - The setup's welcome adds **Bring in a previous installation**: Rhema looks inside a backup file first and shows what it holds (how many services and songs, the newest service) before anything is replaced, and replaces only after **Restore this backup**; what is here now is kept as a snapshot. A service file or the church folder only ever adds. It says plainly that settings, outputs, looks, the Brand Kit and keys are not in a backup yet.
 - Setup → Screens: **Test this screen** shows a test pattern (bars, the output's name and size, "TEST – not on air") on that one output only, after you confirm, and asks again if something is on air or an NDI receiver or feed page is watching. **End test** (or leaving the step) puts back exactly what the output would be showing. Browser feeds say "Shown on 1 page" or "Connected, not shown".

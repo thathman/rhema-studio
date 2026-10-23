@@ -9,8 +9,8 @@ import type { BroadcastOutput, Scene } from "@/types"
 
 const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "congregation"
 
-/** Why scene buttons wait in rehearsal: the screens are frozen, and a Take would reach them when it ends. */
-export const SCENES_REHEARSAL_REASON = "Rehearsal is on: the screens are frozen. Leave rehearsal to change a screen's scene."
+/** What a scene Take does in rehearsal: like Show live there, it stays in the app and is undone when rehearsal ends. */
+export const SCENES_REHEARSAL_NOTE = "Rehearsal: a Take here is practice. The screens keep their scene, and it comes back when rehearsal ends."
 
 /**
  * Scenes in Present (ADR 0001): change what a congregation screen is arranged to show (camera and
@@ -82,9 +82,11 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
   const restorable = back ? scenes.find((s) => s.id === back) : undefined
   const b = useBroadcastStore.getState
 
-  const takeReason = rehearsal ? SCENES_REHEARSAL_REASON : !picked ? "Pick a scene above first" : picked.id === showing?.id ? `${output.name} already shows ${picked.name}` : null
-  const ownReason = rehearsal ? SCENES_REHEARSAL_REASON : !showing ? `${output.name} already shows its own feed` : null
-  const restoreReason = rehearsal ? SCENES_REHEARSAL_REASON : showing ? `${output.name} shows ${showing.name}: Restore is for after Back to its own feed` : !restorable ? `${output.name} has not shown a scene yet` : null
+  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id ? `${output.name} already shows ${picked.name}` : null
+  const ownReason = !showing ? `${output.name} already shows its own feed` : null
+  const restoreReason = showing ? `${output.name} shows ${showing.name}: Restore is for after Back to its own feed` : !restorable ? `${output.name} has not shown a scene yet` : null
+  // In rehearsal the scene on a screen is the rehearsal's, never called on air.
+  const onAirWord = rehearsal ? "In rehearsal" : "On air"
 
   return (
     <>
@@ -96,9 +98,9 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
               key={s.id}
               type="button"
               aria-pressed={s.id === pickedId}
-              aria-label={`${s.name}${onAir ? ", on air" : ""}`}
+              aria-label={`${s.name}${onAir ? `, ${onAirWord.toLowerCase()}` : ""}`}
               onClick={() => setPickedId(s.id === pickedId ? null : s.id)}
-              title={onAir ? `${s.name} is on ${output.name}` : `Pick ${s.name}, then Take scene`}
+              title={onAir ? `${s.name} is on ${output.name}${rehearsal ? " in rehearsal" : ""}` : `Pick ${s.name}, then Take scene`}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 rounded-md border p-1 pr-2 text-left text-[0.6875rem] outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 s.id === pickedId ? "border-primary bg-primary/10 text-foreground" : "border-border hover:bg-muted"
@@ -107,7 +109,7 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
               <SceneThumb scene={s} output={output} />
               <span className="flex max-w-28 flex-col leading-tight">
                 <span className="truncate font-semibold">{s.name}</span>
-                {onAir && <span className="text-[0.625rem] font-bold tracking-wide text-live-pulse uppercase">On air</span>}
+                {onAir && <span className={cn("text-[0.625rem] font-bold tracking-wide uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{onAirWord}</span>}
               </span>
             </button>
           )
@@ -118,7 +120,7 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
           icon={<LayersIcon />}
           label={picked ? `Take scene ${picked.name} to ${output.name}` : "Take scene"}
           text="Take scene"
-          title={picked ? `Arrange ${output.name} as ${picked.name}. What is live stays live.` : "Take scene"}
+          title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Arrange ${output.name} as ${picked.name}. What is live stays live.`) : "Take scene"}
           reason={takeReason}
           onClick={() => {
             if (!picked) return
@@ -144,10 +146,12 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
           onClick={() => restorable && b().takeScene(output.id, restorable.id)}
         />
         <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground">
+          {rehearsal && "Rehearsal · "}
           {showing ? <>Shows <strong className="font-semibold text-foreground">{showing.name}</strong></> : "Shows its own feed"}
           {covered && ` · ${covered === "black" ? "Black" : "Logo"} covers it`}
         </span>
       </div>
+      {rehearsal && <p className="text-xs text-tone-amber-foreground">{SCENES_REHEARSAL_NOTE}</p>}
     </>
   )
 }
@@ -170,7 +174,7 @@ function SceneAction({ icon, label, text, title, reason, onClick, primary }: { i
         onClick={off ? undefined : onClick}
         className={cn(
           "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 [&_svg]:size-3.5",
-          primary ? "border-primary/70 bg-card text-primary hover:bg-primary/10 aria-disabled:hover:bg-card" : "border-border bg-card text-foreground hover:bg-muted aria-disabled:hover:bg-card"
+          primary ? "border-primary/70 bg-card text-primary-text hover:bg-primary/10 aria-disabled:hover:bg-card" : "border-border bg-card text-foreground hover:bg-muted aria-disabled:hover:bg-card"
         )}
       >
         {icon}

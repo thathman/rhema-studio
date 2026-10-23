@@ -100,7 +100,7 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
           </SelectContent>
         </Select>
         <button type="button" aria-pressed={favouritesOnly} onClick={() => setFavouritesOnly(!favouritesOnly)} className={cn("flex items-center gap-1 rounded-full border px-2.5 py-0.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5", favouritesOnly ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
-          <HeartIcon className={cn(favouritesOnly && "fill-current text-primary")} /> Favourites
+          <HeartIcon className={cn(favouritesOnly && "fill-current text-primary-text")} /> Favourites
         </button>
       </div>
       {groups.length === 0 ? (
@@ -145,7 +145,7 @@ function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook;
         <div className="flex items-start gap-2">
           <h4 className="min-w-0 flex-1 text-xs leading-snug font-semibold">{look.name}</h4>
           <button type="button" aria-pressed={favourite} aria-label={favourite ? `Remove ${look.name} from favourites` : `Add ${look.name} to favourites`} onClick={onFavourite} className="-m-1 rounded p-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5">
-            <HeartIcon className={cn(favourite && "fill-current text-primary")} />
+            <HeartIcon className={cn(favourite && "fill-current text-primary-text")} />
           </button>
         </div>
         <p className="text-[0.6875rem] text-muted-foreground">{LAYOUT_NAMES[look.layout]} · {CONTENT_LABELS[look.content]} · {BACKGROUND_NAMES[look.background]} · {look.aspect}</p>

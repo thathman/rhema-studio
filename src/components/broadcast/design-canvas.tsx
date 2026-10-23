@@ -457,7 +457,7 @@ export function DesignCanvas() {
         <span className="mx-2">·</span>
         <span>
           {selectedElement ? (
-            <>Editing: <span className="font-medium text-primary">{elementLabel}</span></>
+            <>Editing: <span className="font-medium text-primary-text">{elementLabel}</span></>
           ) : (
             "Click frame to select"
           )}

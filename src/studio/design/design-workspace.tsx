@@ -71,7 +71,7 @@ export function DesignWorkspace() {
             onClick={() => setTab(id)}
             className={cn(
               "-mb-px shrink-0 border-b-[3px] px-3 py-2.5 text-xs font-bold whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
+              tab === id ? "border-primary text-primary-text" : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
             {label}

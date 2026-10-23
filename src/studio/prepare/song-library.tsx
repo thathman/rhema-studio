@@ -119,7 +119,7 @@ export function SongLibrary({ layout = "list", newRequest = 0 }: { layout?: "lis
                 <span className="flex items-center gap-1.5 text-xs font-semibold">
                   <MusicIcon className="size-3 text-muted-foreground" aria-hidden />
                   <span className="truncate">{song.title}</span>
-                  {isChoir(song.tags) && <span className="rounded bg-primary/10 px-1 text-[0.6875rem] font-medium text-primary">Choir</span>}
+                  {isChoir(song.tags) && <span className="rounded bg-primary/10 px-1 text-[0.6875rem] font-medium text-primary-text">Choir</span>}
                   {song.numbers.map((n) => (
                     <span key={n} className="rounded border border-border px-1 text-[0.6875rem] font-normal text-muted-foreground">{n}</span>
                   ))}

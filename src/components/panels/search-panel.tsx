@@ -609,7 +609,7 @@ export function SearchPanel() {
                         onClick={() => handleQuickVerseClick(verse)}
                         className="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
                       >
-                        <span className="shrink-0 font-semibold text-primary w-6 text-right">
+                        <span className="shrink-0 font-semibold text-primary-text w-6 text-right">
                           {verse.verse}
                         </span>
                         <span className="flex-1 text-muted-foreground line-clamp-1">
@@ -743,7 +743,7 @@ export function SearchPanel() {
                       : "border border-transparent hover:bg-muted/50"
                   )}
                 >
-                  <span className="w-6 shrink-0 text-right text-sm font-semibold text-primary">
+                  <span className="w-6 shrink-0 text-right text-sm font-semibold text-primary-text">
                     {verse.verse}
                   </span>
                   <p className="flex-1 text-sm leading-relaxed text-foreground/80">

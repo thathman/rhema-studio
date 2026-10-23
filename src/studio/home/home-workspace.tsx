@@ -73,7 +73,7 @@ export function HomeWorkspace() {
             <p className="text-[0.625rem] font-bold tracking-[0.18em] text-muted-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? `This service · ${current.title}` : "No service open"}</p>
             <h2 id="quick" className="mt-2 text-2xl leading-[1.05] font-bold tracking-[-0.045em]">
               Beautiful worship.
-              <span className="block font-[Georgia,serif] font-bold text-primary italic">Without the chaos.</span>
+              <span className="block font-[Georgia,serif] font-bold text-primary-text italic">Without the chaos.</span>
             </h2>
             <p className="mt-3 max-w-[590px] text-[0.8125rem] text-muted-foreground">
               {items.length === 0

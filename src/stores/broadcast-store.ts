@@ -54,6 +54,27 @@ export interface RehearsalReturn extends ProgramSnapshot {
   ticker: Ticker | null
   stageMessage: string
   timer: TimerState
+  /** Each output's scene (by output id; an output not listed showed its own feed). */
+  outputScenes: Record<string, string>
+  /** The scene each output's Restore offered. */
+  sceneReturn: Record<string, string>
+}
+
+/** The outputs as the real screens have them: in rehearsal, each with the scene it had before (what is saved). */
+export function outputsForScreens(s: { rehearsal: boolean; rehearsalReturn: RehearsalReturn | null; outputs: BroadcastOutput[] }): BroadcastOutput[] {
+  return s.rehearsal && s.rehearsalReturn ? withScenes(s.outputs, s.rehearsalReturn.outputScenes) : s.outputs
+}
+
+/** The outputs with these scenes on them (by output id); the rest back on their own feed. */
+function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>): BroadcastOutput[] {
+  return outputs.map((o) => {
+    const sceneId = scenes[o.id]
+    if (o.sceneId === sceneId) return o
+    const next: BroadcastOutput = { ...o }
+    if (sceneId) next.sceneId = sceneId
+    else delete next.sceneId
+    return next
+  })
 }
 
 /** The ticker the real screens show: in rehearsal, the one running before it. */
@@ -126,7 +147,7 @@ interface BroadcastState {
   saveScene: (scene: Scene) => void
   /** Remove a scene; outputs showing it go back to their own feed. */
   deleteScene: (id: string) => void
-  /** Take: put a scene on an output (its program). */
+  /** Take: put a scene on an output (its program). In rehearsal it stays in the app and is undone when rehearsal ends. */
   takeScene: (outputId: string, sceneId: string) => void
   /** Back to the output's own feed, full frame; Restore takes the scene again. */
   releaseScene: (outputId: string) => void
@@ -192,7 +213,8 @@ interface BroadcastState {
    * Rehearsal: everything works in the app (Preview, Live panel, rundown)
    * but no output window, NDI sender or stage screen receives anything.
    * Turning it off puts back the program as it was when rehearsal began (ADR 0001):
-   * only `keepRehearsed` sends what was rehearsed. Not persisted.
+   * only `keepRehearsed` sends what was rehearsed. Scenes taken in rehearsal always go back,
+   * like the lower third and ticker: a scene reaches a screen only by a Take outside rehearsal. Not persisted.
    */
   rehearsal: boolean
   /** The real program while rehearsal runs, put back when it ends. */
@@ -934,18 +956,21 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     if (rehearsal === s.rehearsal) return
     if (rehearsal) {
-      const { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, lowerThird, ticker, stageMessage } = s
-      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer } })
+      const { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, lowerThird, ticker, stageMessage, sceneReturn } = s
+      const outputScenes = Object.fromEntries(s.outputs.flatMap((o) => (o.sceneId ? [[o.id, o.sceneId]] : [])))
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, sceneReturn } })
       return
     }
     const back = s.rehearsalReturn
     if (back) {
-      const { activeIndex, lowerThird, ticker, stageMessage, timer, ...program } = back
-      // The lower third, ticker, stage message and timer always come back; the program too unless
-      // the operator chose Show this live.
+      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, sceneReturn, ...program } = back
+      // The lower third, ticker, stage message, timer and each screen's scene always come back
+      // (a scene deleted meanwhile leaves its screen on its own feed); the program too unless the
+      // operator chose Show this live.
       useTimerStore.setState({ timer })
       if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
-      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, rehearsal, rehearsalReturn: null })
+      const kept = Object.fromEntries(Object.entries(outputScenes).filter(([, id]) => s.scenes.some((x) => x.id === id)))
+      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept), sceneReturn, rehearsal, rehearsalReturn: null })
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
@@ -1315,7 +1340,8 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     const store = await getThemeStore()
     const customThemes = state.themes.filter((t) => !t.builtin)
     await store.set("customThemes", customThemes)
-    await store.set("outputs", state.outputs)
+    // Never a scene taken in rehearsal: a restart would put it on the screens.
+    await store.set("outputs", outputsForScreens(state))
     // Legacy mirror of the main output's theme; older builds still read it.
     await store.set("activeThemeId", state.activeThemeId)
     await store.set("autoLiveOptIn", state.autoLive)

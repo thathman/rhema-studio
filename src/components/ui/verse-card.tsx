@@ -33,7 +33,7 @@ function VerseCard({
       ) : (
         <>
           {reference && (
-            <p className="text-xs font-semibold uppercase tracking-[0.05em] text-primary text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.05em] text-primary-text text-center">
               {reference}
               {translation && ` (${translation})`}
             </p>
@@ -41,7 +41,7 @@ function VerseCard({
           {text && (
             <p className="mt-3 px-8 font-serif text-base leading-relaxed text-white/90 text-center">
               {verseNumber != null && (
-                <sup className="mr-0.5 align-super text-[0.6rem] text-primary/50">
+                <sup className="mr-0.5 align-super text-[0.6rem] text-primary-text/50">
                   {verseNumber}
                 </sup>
               )}
