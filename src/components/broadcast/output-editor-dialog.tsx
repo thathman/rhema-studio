@@ -662,9 +662,43 @@ export function FeedLink({ id, token, onRenew }: { id: string; token?: string; o
             <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(url).catch(() => {})}>Copy link</Button>
             <Button type="button" size="sm" variant="ghost" onClick={onRenew} title="The old link stops working when you save">New link</Button>
           </div>
+          {where?.lan && <ShowOnTv url={url} />}
         </>
       )}
       <p className="text-muted-foreground">OBS: add a Browser source with this link at the feed's size (1920×1080). Anyone with the link can watch this feed on the network; a new link closes the old one. Videos do not play in a browser feed.</p>
     </div>
+  )
+}
+
+/** Send this feed to a Google TV running Rhema Receiver (#198): the address and code it shows. */
+function ShowOnTv({ url }: { url: string }) {
+  const [address, setAddress] = useState("")
+  const [code, setCode] = useState("")
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const send = async () => {
+    setBusy(true)
+    setStatus(null)
+    try {
+      const name = await invoke<string>("tv_show", { address, code, url })
+      setStatus({ ok: true, text: `${name || "The TV"} is showing this feed. It shows it again by itself after a restart.` })
+      setCode("")
+    } catch (e) {
+      setStatus({ ok: false, text: String(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <fieldset className="flex flex-col gap-1.5 rounded-md border border-border p-2">
+      <legend className="px-1 font-medium">Show on a Google TV</legend>
+      <p className="text-muted-foreground">Open Rhema Receiver on the TV: it shows its address and a code.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input aria-label="TV address" placeholder="192.168.1.40" value={address} onChange={(e) => setAddress(e.target.value)} className="h-7 w-36 text-xs" />
+        <Input aria-label="Code on the TV" placeholder="Code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} className="h-7 w-20 text-xs tabular-nums" />
+        <Button type="button" size="sm" variant="outline" disabled={busy || !address.trim() || !code.trim()} onClick={() => void send()}>Show on TV</Button>
+      </div>
+      {status && <p role="status" className={cn(status.ok ? "text-muted-foreground" : "text-destructive")}>{status.text}</p>}
+    </fieldset>
   )
 }

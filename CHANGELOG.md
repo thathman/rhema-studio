@@ -4,6 +4,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Google TV receiver (#198)
+- **Rhema Receiver**, a small Android TV / Google TV app (`android-tv/`): shows one browser feed full screen. It shows its address and a code; Rhema sends the feed from the feed's settings → **Show on a Google TV**. It keeps the feed across restarts, keeps the last picture while Rhema or the network is gone and picks up again by itself, and says when the link was renewed. Five wrong codes lock it until OK is pressed on the TV.
+
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### Words while a camera is not playing (#213)

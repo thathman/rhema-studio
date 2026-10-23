@@ -976,6 +976,18 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dh. Google TV receiver (#198)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dh.1 | Install Rhema Receiver on a Google TV (`android-tv/build.sh`, `adb install`); open it. | Its address and a six-digit code, full screen. | Pass 2026-10-23, Chromecast with Google TV HD (Android 14, WebView 155): address and code shown. |
+| 10dh.2 | A browser feed on, a verse live. The feed's settings → Show on a Google TV: the TV's address and code. | The TV shows the feed full screen; Outputs says 1 page, showing the latest. | Pass 2026-10-23 (feed sent to the TV's endpoint over adb reverse, QA build): verse drawn, host 1 watching, frame acknowledged. Through the new form: SHOW_RESULT. |
+| 10dh.3 | Show five verses in turn, one in Yorùbá. | Each on the TV within a second; diacritics right. | Pass 2026-10-23: 0.3–1.0 s from going live to the TV's drawn acknowledgement; Yorùbá correct. |
+| 10dh.4 | Turn the ticker on for the feed. | It crawls smoothly at the bottom. | Pass 2026-10-23: about 60 fps (719 frames in ~10 s, no missed vsyncs, 3 % janky; 99th percentile 38 ms). |
+| 10dh.5 | Force-stop the app and open it again; then cut the TV off from Rhema for 20 s. | It opens the same feed by itself; while cut off it keeps the last picture; it picks up again. | Pass 2026-10-23: back on its own after restart; last verse kept for 20 s; the next verse drawn 0.65 s after going live once reconnected. |
+| 10dh.6 | Send five wrong codes, then the right one; press OK on the remote. | Locked after five; OK shows a new code; the right new code works. | Pass 2026-10-23: locked after five (the right code refused too); OK shows a new code (after a fix: the page had been taking OK). |
+| 10dh.7 | A real church network: the TV and Rhema on the same Wi-Fi, no adb. | As 10dh.2 over the network. | Unverified (this Mac's firewall would ask about incoming connections for a test build). |
+
 ### 10df. Time warnings on the stage (#196 R6)
 
 | # | Step | Expected | Result |

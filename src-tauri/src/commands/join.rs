@@ -205,9 +205,46 @@ fn sse_data(message: &str) -> Option<String> {
     (event == "live" && !data.is_empty()).then(|| data.join("\n"))
 }
 
+/// The port Rhema Receiver (the Google TV app, #198) listens on for a screen to show.
+const TV_PORT: u16 = 8095;
+
+/// A TV's address as shown on its screen; the port may be left out.
+fn tv_url(address: &str) -> Result<String, String> {
+    let a = address.trim();
+    base_url(&if a.contains(':') { a.to_string() } else { format!("{a}:{TV_PORT}") })
+}
+
+#[derive(Deserialize)]
+struct TvReply {
+    ok: bool,
+    name: Option<String>,
+    error: Option<String>,
+}
+
+/// Give a Rhema Receiver a feed to show (#198): its address and the code on its screen, so only
+/// someone who can see the TV assigns it. The TV keeps showing it after a restart.
+#[tauri::command]
+pub async fn tv_show(address: String, code: String, url: String) -> Result<String, String> {
+    let r = client(Some(Duration::from_secs(10)))?
+        .post(format!("{}/show", tv_url(&address)?))
+        .json(&serde_json::json!({ "code": code.trim(), "url": url }))
+        .send()
+        .await
+        .map_err(|_| "Could not reach the TV: is Rhema Receiver open on it, on the same network?".to_string())?;
+    let reply: TvReply = r.json().await.map_err(|e| format!("The TV's answer was not understood: {e}"))?;
+    if reply.ok { Ok(reply.name.unwrap_or_default()) } else { Err(reply.error.unwrap_or_else(|| "The TV refused".into())) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tv_address_may_leave_out_the_port() {
+        assert_eq!(tv_url("192.168.3.37").unwrap(), "http://192.168.3.37:8095");
+        assert_eq!(tv_url(" 192.168.3.37:9000 ").unwrap(), "http://192.168.3.37:9000");
+        assert!(tv_url("http://x").is_err());
+    }
 
     #[test]
     fn addresses_are_host_and_port_only() {

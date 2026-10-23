@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Google TV receiver (#198 Phase B start)
+
+- **Main checked:** 0a68c8a. Owner gave adb access to a Chromecast with Google TV HD (no browser; WebView 155; 32-bit; 1.4 GB).
+- **Branch / PR:** `op-007/tv-receiver`. `android-tv/`: Rhema Receiver, Java + WebView, built by `build.sh` with the SDK tools (no Gradle). Shows one browser feed full screen; address + six-digit code until assigned; `POST :8095/show {code,url}` (feed links only; five wrong codes lock until OK on the remote; new code after each use); keeps the feed across restarts; keeps the last picture and retries while Rhema is gone; says when the link was renewed (403). Host: `tv_show` (join.rs) and "Show on a Google TV" in the feed's settings.
+- **Tests:** Rust `a_tv_address_may_leave_out_the_port`. Desktop + TV: acceptance 10dh (feed, Yorùbá, ticker ~60 fps, restart, host loss, lock).
+- **Toolchain (owner approved):** Temurin JDK 17 in `~/.local/jdk`, Android SDK (platform 34, build-tools 34) in `~/.local/android-sdk`.
+- **Next:** feed → TV latency (0.3–1.0 s, mostly on the TV); cameras (WHEP) on the TV; discovery so no address is typed.
+
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.
