@@ -89,9 +89,9 @@ timing engine will follow an explicit current event, not "whatever is on air".
 | --- | --- | --- | --- |
 | C01 | Designer drafts reach live outputs | Drafts stay in the Designer unless Live edit is on; Live edit shows how many screens it touches and ends with editing. Saving remains the normal way to change a look on air. | **Done (this slice)** |
 | C02 | Rehearsal leaks into production | Rehearsal snapshots the real program (and the rundown position) and restores it on exit; Show this live is the deliberate path, behind the approval gate. Nothing rehearsed is logged as aired; go-live cues do not fire on exit. | **Done (this slice)**; timers/cues inside rehearsal: next |
-| C07 | One global live | Per-source state with `shows` on outputs; legacy adapter. | Next slice (Milestone A/B) |
-| C05 | Ambiguous Restore | Restore is per source; Back releases an override to exactly what it covered. | With C07 |
-| C11 | Auto Bible affects unrelated outputs | Auto activates only the `bible` source; feeds bound to other sources are untouched. Default stays off. | With C07 |
+| C07 | One global live | Per-source state with `shows` on outputs; legacy adapter. | **Done (ARCH-001 slice 1)**: `src/lib/live-sources.ts`, `sources` in the store |
+| C05 | Ambiguous Restore | Restore is per source; Back releases an override to exactly what it covered. | **Done** for sources (`clearSource`/`restoreSource`, Present → Live → Sources); the main Clear/Restore keeps acting on the program |
+| C11 | Auto Bible affects unrelated outputs | Auto activates only the `bible` source while a song, hymn, slide or quick screen is on the program; feeds bound to other sources are untouched. Default stays off. | **Done** (`presentVerse(…, { sourceOnly })`) |
 | C03 | Event timing follows content | An explicit current event in Live State drives timing and go-live cues; activation no longer implies an event start. | Milestone D |
 | C04 | Unscoped cues/macros | Each cue step declares its domain (source, program, override, timer, rehearsal); impact preview before running. | After C07 |
 | C09 | Approval vs live overrides | The approval gate covers first go-live of a service revision and rehearsal results; spontaneous Scripture and camera operations by the operator are never held. | Unchanged; documented |

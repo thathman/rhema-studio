@@ -5,6 +5,16 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-001 slice 1: independent live sources
+
+- **Main checked:** `f079203` (#254 merged after CI green and review).
+- **Branch / PR:** `milestone-a/live-sources` (ARCH-001; ADR 0001 C05, C07, C11).
+- **Behaviour:** `src/lib/live-sources.ts` (`sourceOf`, `feedFrame`); store `sources` kept by an adapter from the program (`noteSources`: what goes on air activates its source, Clear/Restore toggle it, other sources untouched, nothing in rehearsal); `BroadcastOutput.shows` (absent = legacy latest-wins); `clearSource`, `restoreSource`, `activateSource`; Black/Logo override every feed; quick screens only on legacy feeds; Auto with a non-Bible program activates the Bible source only. UI: Outputs → "What this output follows"; Present → Live → Sources strip (only when an output follows chosen sources).
+- **Tests:** `src/studio/live-sources-contracts.test.ts` (11; 9 failed first), strip test; full vitest 686, typecheck, eslint.
+- **Decisions:** an output *is* the feed (no new entity; NDI names and themes unchanged); songs and hymns are separate sources, a lyrics feed follows the newer; the main Clear acts on the program and turns off only that source; quick screens other than Black/Logo do not reach source-bound feeds.
+- **Remaining for ARCH-001:** stage display following a chosen source; journal entries tagged with the source; remote/phone view of sources; OBS hardware check (10cr).
+- **Next:** ARCH-003 rest (scoped cue steps C04, rehearsal pauses timed moves and loops), then ARCH-002 Scene Composer.
+
 ## 2026-10-23 — Milestone A, slice 1: ADR 0001 and live safety
 
 - **Main checked:** `077d454` (CI green). Open PRs before this: #4 only (speech; CONFLICTING with main, owner decision ST-004).

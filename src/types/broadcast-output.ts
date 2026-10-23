@@ -206,6 +206,11 @@ export interface BroadcastOutput {
   language?: BroadcastOutputLanguage
   /** Show the operator's lower third (name / title band) on this output, over whatever else it shows. */
   lowerThirds?: boolean
+  /**
+   * The live sources this output follows (ADR 0001), e.g. ["bible"] for a Bible lower-third feed.
+   * Absent: whatever was put on air last, as before.
+   */
+  shows?: ContentType[]
   signage?: SignageSettings
   themeId: string
   /**

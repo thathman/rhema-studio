@@ -6,6 +6,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Independent live sources (ARCH-001, ADR 0001)
+- Bible, Songs, Hymns, Slides, Pictures and quick screens each keep their own live value. An output can follow chosen sources (Outputs → edit → "What this output follows"): a "Rhema Bible | Lower Third" NDI feed set to Bible keeps Romans 8:28, in its own look, while a hymn is on the projector, and takes the next verse as soon as it is shown. Outputs left on "Everything put on air" behave exactly as before.
+- Present → Live shows the sources the feeds follow, each with its own take-off and Restore; Clear and Restore on the main controls still act on what the main screens show. Black and Logo cover every feed; Back returns each to its own source. The ticker stays independent. Rehearsal never changes a source.
+- Auto (heard verses) while a song, hymn or slide is up: the verse goes to the feeds that follow Bible and waits in the preview, instead of replacing the song on the projector (#246 C11).
+
 ### Live safety (Milestone A, ADR 0001)
 - Leaving rehearsal puts back exactly what was on air (and the rundown's place); nothing rehearsed reaches the screens, NDI or the service log, and go-live cues do not fire. **Show this live** (next to the Rehearsal chip) is the deliberate way to put what you rehearsed on screen; the approval question applies to it. The cue step "Rehearsal off" now means the same as the chip (#246 C02).
 - Design → Themes edits stay in the Designer: the screens using the theme change only when you save, or while **Live edit** is on (it says how many screens it touches and turns off when you leave the theme) (#246 C01).
