@@ -33,7 +33,7 @@ impl Role {
     pub fn allows(self, cmd: &RemoteCommand) -> bool {
         match cmd {
             // Production notices and the talk channel are for everyone on the team (Rhema Comms, #251).
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave => true,
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => true,
             RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
             RemoteCommand::BibleActivate(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
             RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => matches!(self, Role::Present | Role::Configure) || (self == Role::Bible && id == "bible"),

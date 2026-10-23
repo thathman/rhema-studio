@@ -48,6 +48,17 @@ pub enum RemoteCommand {
     VoiceTalk(bool),
     /// This desk left the talk channel; the host drops its connection at once.
     VoiceLeave,
+    /// Talk channels (Comms C4): which channels this desk listens to, and whom it talks to.
+    VoiceChannels(VoiceChannelsIn),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoiceChannelsIn {
+    /// Channels heard besides All crew: "production", "stage".
+    #[serde(default)]
+    pub listen: Vec<String>,
+    /// "all", "production", "stage", or "to:<name>" for one person.
+    pub talk: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,6 +130,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::NoticeAck(a) => write!(f, "notice_ack({} {})", a.id, a.state),
             RemoteCommand::VoiceTalk(on) => write!(f, "voice_talk({on})"),
             RemoteCommand::VoiceLeave => write!(f, "voice_leave"),
+            RemoteCommand::VoiceChannels(c) => write!(f, "voice_channels({} {:?})", c.talk, c.listen),
         }
     }
 }
@@ -395,6 +407,7 @@ mod tests {
             RemoteCommand::NoticeAck(NoticeAckIn { id: "n1".into(), state: "seen".into() }),
             RemoteCommand::VoiceTalk(true),
             RemoteCommand::VoiceLeave,
+            RemoteCommand::VoiceChannels(VoiceChannelsIn { listen: vec!["stage".into()], talk: "production".into() }),
         ];
 
         for cmd in &cmds {
@@ -416,11 +429,13 @@ mod tests {
                 RemoteCommand::AddToQueue => {}
                 RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => {}
                 RemoteCommand::BibleActivate(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
-                RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave => {}
+                RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 27);
+        assert_eq!(cmds.len(), 28);
+        let ch: RemoteCommand = serde_json::from_str(r#"{"command":"voice_channels","value":{"listen":["stage"],"talk":"to:Ade bible"}}"#).unwrap();
+        assert!(matches!(ch, RemoteCommand::VoiceChannels(VoiceChannelsIn { ref talk, .. }) if talk == "to:Ade bible"));
         let talk: RemoteCommand = serde_json::from_str(r#"{"command":"voice_talk","value":true}"#).unwrap();
         assert_eq!(talk, RemoteCommand::VoiceTalk(true));
         let leave: RemoteCommand = serde_json::from_str(r#"{"command":"voice_leave"}"#).unwrap();

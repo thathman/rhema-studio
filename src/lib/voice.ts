@@ -10,8 +10,30 @@ import { create } from "zustand"
  * actually audible is measured here. The intercom has its own microphone stream and audio graph:
  * nothing reaches the outputs, NDI, the sound player, listening or any recording.
  */
+/** Talk channels besides All crew (Comms C4). Everyone is always in All crew. */
+export const CHANNELS = [{ id: "production", name: "Production" }, { id: "stage", name: "Stage & worship" }] as const
+export const CHANNEL_IDS: readonly string[] = CHANNELS.map((c) => c.id)
+/** The main desk, as a talk target ("to:host"). */
+export const HOST = "host"
+
+/** Where a voice goes: "all", a channel id, or "to:<name>" (one person; "to:host" for the main desk). */
+export function talkName(talk: string, hostName = "Main desk"): string {
+  if (talk === "all") return "All crew"
+  if (talk.startsWith("to:")) return talk === `to:${HOST}` ? hostName : talk.slice(3)
+  return CHANNELS.find((c) => c.id === talk)?.name ?? talk
+}
+
+/** Whether `from` (talking to `talk`) is heard by a listener named `to` who listens to `listen`. */
+export function hears(talk: string, to: string, listen: readonly string[]): boolean {
+  if (talk === "all") return true
+  if (talk.startsWith("to:")) return talk.slice(3) === to
+  return listen.includes(talk)
+}
+
 export interface VoicePerson {
   name: string
+  /** Whom they talk to ("all", a channel, "to:<name>"). */
+  talk?: string
   /** Talk held. */
   talking: boolean
   /** Actually audible now. */
@@ -26,9 +48,12 @@ interface VoiceState {
   micError: string | null
   /** How loud the main desk hears the crew, 0–1. */
   volume: number
+  /** The main desk's channels (besides All crew) and whom it talks to. */
+  hostListen: string[]
+  hostTalkTo: string
 }
 
-export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, volume: 1 }))
+export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, volume: 1, hostListen: [...CHANNEL_IDS], hostTalkTo: "all" }))
 
 /** How loud the main desk hears the crew (its own output only). */
 export function setVoiceVolume(v: number): void {
@@ -70,12 +95,61 @@ interface Peer {
   talking: boolean
   /** Keeps WebKit pulling the remote track (it can stay silent in WebAudio otherwise). */
   sink: HTMLAudioElement | null
+  listen: string[]
+  talkTo: string
 }
 
 let ctx: AudioContext | null = null
 let monitor: GainNode | null = null
 const peers = new Map<string, Peer>()
 let hostMic: { stream: MediaStream; gate: GainNode; analyser: AnalyserNode } | null = null
+/** One gain per speaker → listener ("a>b"); 1 when the speaker's talk reaches that listener. */
+const routes = new Map<string, GainNode>()
+
+/**
+ * Wire every speaker to every listener through its own gain and set each by the talk rules: All
+ * crew reaches everyone, a channel its listeners, "to:<name>" only that person. Nobody hears
+ * themselves. Called whenever someone joins, leaves or changes channels.
+ */
+function rewire() {
+  if (!ctx) return
+  const v = useVoice.getState()
+  const ends = new Map<string, { source: AudioNode | null; sink: AudioNode; listen: readonly string[]; talk: string }>()
+  if (monitor) ends.set(HOST, { source: hostMic?.gate ?? null, sink: monitor, listen: v.hostListen, talk: v.hostTalkTo })
+  for (const [name, p] of peers) ends.set(name, { source: p.analyser, sink: p.mix, listen: p.listen, talk: p.talkTo })
+  for (const [key, g] of routes) {
+    const [from, to] = key.split(">")
+    if (!ends.get(from)?.source || !ends.has(to)) {
+      g.disconnect()
+      routes.delete(key)
+    }
+  }
+  for (const [from, a] of ends) {
+    if (!a.source) continue
+    for (const [to, b] of ends) {
+      if (from === to) continue
+      const key = `${from}>${to}`
+      let g = routes.get(key)
+      if (!g) {
+        g = ctx.createGain()
+        a.source.connect(g)
+        g.connect(b.sink)
+        routes.set(key, g)
+      }
+      g.gain.value = hears(a.talk, to, b.listen) ? 1 : 0
+    }
+  }
+}
+
+/** The main desk's channels and talk target. */
+export function setHostChannels(listen: string[], talkTo: string): void {
+  useVoice.setState({ hostListen: listen.filter((c) => CHANNEL_IDS.includes(c)), hostTalkTo: validTalk(talkTo) })
+  rewire()
+}
+
+function validTalk(t: string): string {
+  return t === "all" || CHANNEL_IDS.includes(t) || (t.startsWith("to:") && t.length > 3) ? t.slice(0, 84) : "all"
+}
 
 /**
  * The intercom's audio graph, running. A new context starts suspended, and WebKit leaves a stream
@@ -93,7 +167,7 @@ async function audio(): Promise<AudioContext> {
 }
 
 function publishPeers() {
-  useVoice.setState({ peers: [...peers.entries()].map(([name, p]) => ({ name, talking: p.talking, speaking: !!useVoice.getState().peers.find((x) => x.name === name)?.speaking })) })
+  useVoice.setState({ peers: [...peers.entries()].map(([name, p]) => ({ name, talk: p.talkTo, talking: p.talking, speaking: !!useVoice.getState().peers.find((x) => x.name === name)?.speaking })) })
 }
 
 function drop(name: string) {
@@ -101,8 +175,10 @@ function drop(name: string) {
   if (!p) return
   peers.delete(name)
   p.voice?.disconnect()
+  p.analyser?.disconnect()
   p.sink?.pause()
   p.pc.close()
+  rewire()
   publishPeers()
 }
 
@@ -112,10 +188,9 @@ async function answer(id: string, by: string, sdp: string) {
   drop(by) // a desk that reconnects replaces its old connection
   const pc = new RTCPeerConnection({ iceServers: [] })
   const mix = a.createMediaStreamDestination()
-  const peer: Peer = { pc, mix, voice: null, analyser: null, talking: false, sink: null }
-  hostMic?.gate.connect(mix)
-  for (const other of peers.values()) other.voice?.connect(mix)
+  const peer: Peer = { pc, mix, voice: null, analyser: null, talking: false, sink: null, listen: [...CHANNEL_IDS], talkTo: "all" }
   peers.set(by, peer)
+  rewire()
   pc.ontrack = (e) => {
     const stream = e.streams[0] ?? new MediaStream([e.track])
     peer.sink = new Audio()
@@ -125,13 +200,15 @@ async function answer(id: string, by: string, sdp: string) {
     const voice = a.createMediaStreamSource(stream)
     const analyser = a.createAnalyser()
     analyser.fftSize = 1024
-    // Through the analyser to the monitor: WebKit only keeps processing nodes that reach the output,
-    // and a meter off to the side reads stale levels (found on the desktop).
+    // The meter feeds the routes; it also reaches the output (silently) because WebKit only keeps
+    // processing nodes that do, and a meter off to the side reads stale levels (found on the desktop).
     voice.connect(analyser)
-    analyser.connect(monitor!)
-    for (const [name, other] of peers) if (name !== by) voice.connect(other.mix)
+    const silent = a.createGain()
+    silent.gain.value = 0
+    analyser.connect(silent).connect(a.destination)
     peer.voice = voice
     peer.analyser = analyser
+    rewire()
   }
   // A desk that left or lost the network: gone at once on failure, after 5 s of silence otherwise.
   pc.onconnectionstatechange = () => {
@@ -166,8 +243,8 @@ export async function hostTalk(on: boolean, stream?: MediaStream): Promise<void>
       const silent = a.createGain()
       silent.gain.value = 0
       analyser.connect(silent).connect(a.destination)
-      for (const p of peers.values()) gate.connect(p.mix)
       hostMic = { stream: s, gate, analyser }
+      rewire()
       useVoice.setState({ micError: null })
     } catch (e) {
       useVoice.setState({ micError: `The microphone is not available: ${e instanceof Error ? e.message : String(e)}` })
@@ -195,6 +272,19 @@ export function startVoiceHub(): () => void {
     listen<string>("remote:voice_leave", (e) => {
       try {
         drop((JSON.parse(e.payload) as { by: string }).by)
+      } catch {
+        // ignore
+      }
+    }),
+    listen<string>("remote:voice_channels", (e) => {
+      try {
+        const p = JSON.parse(e.payload) as { by: string; listen: string[]; talk: string }
+        const peer = peers.get(p.by)
+        if (!peer) return
+        peer.listen = (Array.isArray(p.listen) ? p.listen : []).filter((c) => CHANNEL_IDS.includes(c))
+        peer.talkTo = validTalk(String(p.talk))
+        rewire()
+        publishPeers()
       } catch {
         // ignore
       }
@@ -266,6 +356,11 @@ export class TalkClient {
     await gathered(pc)
     const sdp = await invoke<string>("join_voice", { address: this.address, token: this.token, sdp: pc.localDescription!.sdp })
     await pc.setRemoteDescription({ type: "answer", sdp })
+  }
+
+  /** Channels heard besides All crew, and whom to talk to ("all", a channel, "to:<name>"). */
+  channels(listen: string[], talk: string): void {
+    void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_channels", value: { listen, talk } } }).catch(() => {})
   }
 
   /** Hold or let go of Talk; everyone sees it. */
