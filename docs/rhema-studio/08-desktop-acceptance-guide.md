@@ -981,6 +981,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dr. Ticker, lower third and logo in scenes; scene presets (#243)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dr.1 | Design → Brand Kit: choose a logo. Production → Programs → New from **Welcome**. | The preview shows the logo top centre, a dashed "Countdown to the service · choose the time to count down to" and a dashed "Ticker · shows when the ticker runs" along the bottom. Set the clock's time 10 minutes ahead. | Unverified |
+| 10dr.2 | The main output has its own ticker switched on (Edit output). Present → Ticker: type two announcements and Take. Take the Welcome scene to the main output. | The ticker crawls in the scene's band only, at the usual speed; there is no second ticker band across the screen. **Back to its own feed**: the full-screen ticker returns. | Unverified |
+| 10dr.3 | Same with the main output sent over NDI (watch in an NDI viewer or OBS) and as a browser feed. | Each shows one ticker, in the scene's box, moving smoothly. | Unverified |
+| 10dr.4 | Hide the ticker layer (eye) and Save. | No ticker on the output at all while the scene is up; the ticker is still running in Present. | Unverified |
+| 10dr.5 | Add a **Lower third** layer, drag it into the right half and Save; show a lower third (Present → Lower third). Then switch the output's ticker and lower-third settings off and on. | The band appears at the bottom of the right half, coming in as usual, and only there. The layer keeps showing it whatever the output's switches. Clear the lower third: the box is empty. | Unverified |
+| 10dr.6 | Design → Brand Kit: change the logo. | The logo on the scene on air changes within a moment. | Unverified |
+| 10dr.7 | New from **Full camera**, **Camera in a corner** and **Sermon split**. | One camera full frame; on-air content with a small camera top right; a camera on the left and the verse on the right, neither squashed. | Unverified |
+| 10dr.8 | On a scene: **Save as preset**, name "Sunday split". Start a new scene from it under **Your presets**; rename it with the pencil; quit and reopen Rhema. | The new scene has the same arrangement (no held verse). The renamed preset is still listed after restart; the bin (Delete) removes it. | Unverified |
+| 10dr.9 | Scenes saved by the previous build. | They load and look exactly as before. | Unverified |
 ### 10dp. Activate on Bible feeds only, and who activated each source (#243)
 
 | # | Step | Expected | Result |

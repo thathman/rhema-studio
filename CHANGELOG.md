@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Ticker, lower third and logo in scenes; more scene presets (#243)
+- Production → Programs: a scene can now place the **Ticker**, the **Lower third** and the church **Logo** (from Design → Brand Kit) in boxes of their own. The ticker and lower third follow what is running, and show nothing while nothing is.
+- A scene with its own ticker (or lower third) owns it: while that scene is up, the output shows it only in the scene's box, never also across the whole screen.
+- New ready-made scenes: **Full camera**, **Camera in a corner**, **Sermon split** (camera left, verse right) and **Welcome** (logo, a countdown to the service, the ticker). The four existing ones are unchanged.
+- **Save as preset** keeps a scene's arrangement as your own preset, listed under "Your presets" in the new-scene menu, where it can be renamed or deleted. Saved scenes from earlier builds load unchanged.
 ### The main desk can take back control; desks stay on one service (#243, #246)
 - Production → Operators and Settings → Remote: **Take back control** pauses a joined desk or phone without unpairing it; **Give control back** ends it. Both go in the service log ("Main desk took back control from Desk C").
 - A paused desk shows "Paused by the main desk", still sees the service and keeps Talk and notices; its other buttons wait.

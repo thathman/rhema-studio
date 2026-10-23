@@ -18,7 +18,7 @@ import "./broadcast-fonts.css"
 import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, NdiConfigEventPayload, SceneFrame, StagePayload, Ticker } from "@/types"
-import { drawScene } from "@/lib/scene-renderer"
+import { drawScene, sceneMoving, sceneOverlay, sceneTicker } from "@/lib/scene-renderer"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -40,6 +40,8 @@ let backingPlayer: VideoPlayer | null = null
 // The ticker's video backing, and whether its frame loop is running.
 let tickerPlayer: VideoPlayer | null = null
 let tickerRunning = false
+// A ticker or lower third moving in a scene's box redraws the whole frame (on a screen; NDI is paced).
+let sceneRunning = false
 // The frame rate the Rust pacer drives this window at (0 = off); see set_output_pace.
 let paceFps = 0
 /** Cameras on the church network in the scene up (OP-009): one WHEP player per camera layer. */
@@ -86,7 +88,10 @@ interface BroadcastPayload {
   sentAt?: number
   /** This output plays videos' sound. */
   sound?: boolean
-  /** A congregation scene (ARCH-002): drawn instead of `verse`, under the lower third and ticker. */
+  /**
+   * A congregation scene (ARCH-002): drawn instead of `verse`, under the lower third and ticker. A
+   * scene with its own ticker or lower-third layer arrives without `ticker` / `overlay` (it owns them).
+   */
   scene?: SceneFrame
 }
 
@@ -159,6 +164,8 @@ function BroadcastCanvas() {
             imageCache: themeImageCache(),
             layerCanvas: sceneLayerCanvas,
             camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
+            tickerVideo: tickerPlayer?.element() ?? null,
+            lowerThirdVideo: backingPlayer?.element() ?? null,
             image: (url) => {
               const img = themeImageCache().get(url)
               if (!img) void loadThemeImage(url).then(() => { redrawRef.current?.(); pushNdiBurstRef.current?.() })
@@ -385,7 +392,7 @@ function BroadcastCanvas() {
     const motion = (): "ticker" | "full" | null => {
       const d = latestData.current
       if (!d || stageRef.current) return null
-      if (fadeFrom || cameraPlaying() || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
+      if (fadeFrom || cameraPlaying() || sceneMoving(d.scene, Date.now()) || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
       return d.ticker && !d.ticker.pausedAt ? "ticker" : null
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
@@ -433,6 +440,17 @@ function BroadcastCanvas() {
       draw()
       syncPace()
     }
+    // A ticker or lower third moving in a scene's box, on a screen; over NDI the pacer draws it.
+    const animateScene = () => {
+      if (!sceneRunning) return
+      if (ndiConfigRef.current.active || stageRef.current || !sceneMoving(latestData.current?.scene, Date.now())) {
+        sceneRunning = false
+        draw()
+        return
+      }
+      draw()
+      requestAnimationFrame(animateScene)
+    }
     // A scene fade on a screen; over NDI the pacer draws it.
     const animateFade = () => {
       if (ndiConfigRef.current.active) return
@@ -478,22 +496,27 @@ function BroadcastCanvas() {
       // A new screen clears the operator's warning, so a failure to draw it must be reported again.
       frameFailing = false
       videoPlayer?.sync(event.payload.verse?.video)
-      const ov = event.payload.overlay
+      // The lower third and ticker over the whole frame, or in a scene's own boxes.
+      const ov = event.payload.overlay ?? sceneOverlay(event.payload.scene)
       backingPlayer?.sync(ov?.backing?.kind === "video" ? { url: ov.backing.url, fit: "cover", loop: true, sound: false, name: "lower third", token: 0 } : undefined)
       if (ov?.backing?.kind === "picture") void loadThemeImage(ov.backing.url).then(() => { draw(); pushNdiBurstRef.current?.() })
-      if (ov && entranceProgress(ov, Date.now()) < 1) animateOverlay()
+      if (event.payload.overlay && entranceProgress(event.payload.overlay, Date.now()) < 1) animateOverlay()
       if (fadeFrom) {
         animateFade()
         // A covered or locked window gets no animation frames: still end on the new picture.
         const ends = fadeStart + fadeMs
         setTimeout(() => { if (fadeFrom && performance.now() >= ends) { fadeFrom = null; draw(); pushNdiBurstRef.current?.() } }, fadeMs + 50)
       }
-      const tk = event.payload.ticker
+      const tk = event.payload.ticker ?? sceneTicker(event.payload.scene)
       tickerVideo.sync(tk?.backing?.kind === "video" ? { url: tk.backing.url, fit: "cover", loop: true, sound: false, name: "ticker", token: 0 } : undefined)
       if (tk?.backing?.kind === "picture") void loadThemeImage(tk.backing.url)
-      if (tk && !tk.pausedAt && !tickerRunning && !ndiConfigRef.current.active) {
+      if (event.payload.ticker && !event.payload.ticker.pausedAt && !tickerRunning && !ndiConfigRef.current.active) {
         tickerRunning = true
         tickTicker()
+      }
+      if (sceneMoving(event.payload.scene, Date.now()) && !sceneRunning && !ndiConfigRef.current.active) {
+        sceneRunning = true
+        animateScene()
       }
       syncPace()
       preloadThemeAssets(event.payload.theme)

@@ -1,6 +1,6 @@
 import "./broadcast-fonts.css"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { drawScene } from "@/lib/scene-renderer"
+import { drawScene, sceneMoving, sceneOverlay, sceneTicker } from "@/lib/scene-renderer"
 import { drawStage } from "@/lib/stage-canvas"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
@@ -75,7 +75,8 @@ function placeCameras() {
 }
 /**
  * The ticker crawls on a strip of its own over the canvas: moving it redraws the band only, not
- * the whole picture every frame (a Google TV dropped camera frames that way, #198).
+ * the whole picture every frame (a Google TV dropped camera frames that way, #198). A scene with a
+ * ticker layer owns the ticker (the frame then has none): it moves in its box, in the canvas.
  */
 const strip = document.getElementById("ticker") as HTMLCanvasElement
 const sctx = strip.getContext("2d")!
@@ -162,10 +163,10 @@ function draw() {
   }
 }
 
-/** The ticker crawls and a lower third fades in: keep drawing while either moves. */
+/** The ticker crawls and a lower third fades in (over the frame or in a scene's box): keep drawing while either moves. */
 function animate() {
   const f = frame
-  const picture = !!f && !f.off && (!!fade || [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1))
+  const picture = !!f && !f.off && (!!fade || [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1) || sceneMoving(f.scene, Date.now() + offset))
   const crawl = !!f && !f.off && !!f.ticker && !f.ticker.pausedAt
   if (picture) draw()
   drawStrip()
@@ -198,6 +199,8 @@ function show(next: Frame) {
   syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, () => { placeCameras(); draw(); if (!ticking) { ticking = true; requestAnimationFrame(animate) } })
   placeCameras()
   for (const l of frame.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, draw)
+  // Pictures behind a scene's own ticker or lower third.
+  for (const b of [sceneTicker(frame.scene)?.backing, sceneOverlay(frame.scene)?.backing]) if (b?.kind === "picture") void loadThemeImage(b.url).then(draw)
   draw()
   drawStrip()
   if (!ticking) {

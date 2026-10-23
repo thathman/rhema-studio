@@ -27,9 +27,9 @@ import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from 
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 import { feedFrame, sourceOf, type LiveSources, type SourceId } from "@/lib/live-sources"
-import { normalizeScene, sceneClock, sceneFrame } from "@/lib/scenes"
+import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
-import type { Scene, SceneFrame } from "@/types"
+import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -132,6 +132,12 @@ interface BroadcastState {
   releaseScene: (outputId: string) => void
   /** The scene an output last showed, for Restore. Session state. */
   sceneReturn: Record<string, string>
+  /** The church's own scene presets (arrangements saved from scenes), beside the built-in ones. Saved. */
+  scenePresets: Scene[]
+  /** Save a scene's arrangement as a preset (replacing one of the same name). */
+  saveScenePreset: (scene: Scene, name: string) => void
+  renameScenePreset: (id: string, name: string) => void
+  deleteScenePreset: (id: string) => void
   /**
    * Clear took content off air. Until something goes live again, browsing (a verse
    * clicked, Verse +/−) changes only the preview, so Restore brings back what was cleared.
@@ -405,7 +411,13 @@ function syncTickerOutputs(): void {
   // Rehearsal's ticker stays in the app (signage would otherwise show it).
   if (s.rehearsal) return
   // Never the stage; signage (the foyer) when it is turned on there.
-  for (const o of s.outputs) if (o.ticker && o.role !== "stage") s.syncBroadcastOutputFor(o.id)
+  for (const o of s.outputs) if ((o.ticker || showsSceneWith(o, "ticker")) && o.role !== "stage") s.syncBroadcastOutputFor(o.id)
+}
+
+/** The output shows a scene with a layer of this kind (a ticker, lower third or logo in its own box). */
+function showsSceneWith(o: BroadcastOutput, kind: SceneLayerKind): boolean {
+  const scene = o.sceneId && (o.role ?? "congregation") === "congregation" ? useBroadcastStore.getState().scenes.find((x) => x.id === o.sceneId) : undefined
+  return !!scene?.layers.some((l) => l.kind === kind)
 }
 
 // Which ticker a signage output last showed, by identity (a ticker can carry a picture as a large data URL).
@@ -558,6 +570,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   sources: {},
   scenes: [],
   sceneReturn: {},
+  scenePresets: [],
   cleared: false,
   stageMessage: "",
   lowerThird: null,
@@ -720,9 +733,13 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }
     // A scene is the output's program, unless Black or Logo covers every screen.
     if (scene && !(s.isLive && s.liveVerse?.screen)) {
-      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()) }, output, scene)
-      const overlay = output.lowerThirds ? overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null) : null
-      const ticker = output.ticker ? tickerForScreens(s) : null
+      // A scene with a ticker or lower-third layer owns it: drawn in its box, never also over the whole frame.
+      const owns = sceneOwns(scene)
+      const liveOverlay = overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null)
+      const liveTicker = tickerForScreens(s)
+      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl }, output, scene)
+      const overlay = output.lowerThirds && !owns.lowerThird ? liveOverlay : null
+      const ticker = output.ticker && !owns.ticker ? liveTicker : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
       deliver(outputId, { theme, verse: null, overlay, ticker, scene: frame, sound: false })
       return
@@ -886,7 +903,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     // A strip that follows what is live has no words of its own.
     const clean = lt && (lt.follow || lt.line1.trim() || lt.line2.trim()) ? { ...lt, line1: lt.line1.trim(), line2: lt.line2.trim(), shownAt: Date.now() } : null
     set({ lowerThird: clean })
-    for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+    for (const o of get().outputs) if ((o.lowerThirds || showsSceneWith(o, "lowerThird")) && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
   },
   saveLowerThirdStyle: (style, backing) => {
     const styles = get().lowerThirdStyles
@@ -896,7 +913,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const lt = get().lowerThird
     if (lt?.style?.id === style.id) {
       set({ lowerThird: { ...lt, style, ...(backing !== undefined ? { backing } : {}) } })
-      for (const o of get().outputs) if (o.lowerThirds && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+      for (const o of get().outputs) if ((o.lowerThirds || showsSceneWith(o, "lowerThird")) && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
     }
   },
   setTickerItems: (tickerItems) => {
@@ -1003,6 +1020,18 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   releaseScene: (outputId) => {
     if (get().outputs.find((o) => o.id === outputId)?.sceneId) get().updateOutput(outputId, { sceneId: undefined })
   },
+  saveScenePreset: (scene, name) => {
+    const n = name.trim().slice(0, 80)
+    if (!n) return
+    const same = get().scenePresets.find((p) => p.name.toLowerCase() === n.toLowerCase())
+    const preset = { ...presetFromScene(scene, n), ...(same ? { id: same.id, createdAt: same.createdAt } : {}) }
+    set({ scenePresets: same ? get().scenePresets.map((p) => (p.id === same.id ? preset : p)) : [...get().scenePresets, preset] })
+  },
+  renameScenePreset: (id, name) => {
+    const n = name.trim().slice(0, 80)
+    if (n) set({ scenePresets: get().scenePresets.map((p) => (p.id === id ? { ...p, name: n, updatedAt: Date.now() } : p)) })
+  },
+  deleteScenePreset: (id) => set({ scenePresets: get().scenePresets.filter((p) => p.id !== id) }),
   activateSource: (value, itemId = null, by = currentActor()) => {
     const s = get()
     if (s.rehearsal) return
@@ -1166,6 +1195,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
       patch.stageStyle = normalizeStageStyle((await store.get("stageStyle")) as Partial<StageStyle> | undefined)
       const scenes = await store.get("scenes")
       if (Array.isArray(scenes)) patch.scenes = scenes.map(normalizeScene).filter((x): x is Scene => x !== null)
+      const scenePresets = await store.get("scenePresets")
+      if (Array.isArray(scenePresets)) patch.scenePresets = scenePresets.map(normalizeScene).filter((x): x is Scene => x !== null)
       const items = await store.get("tickerItems")
       if (Array.isArray(items)) patch.tickerItems = items.filter((i): i is string => typeof i === "string")
       patch.tickerPresets = normalizePresets(await store.get("tickerPresets"))
@@ -1185,7 +1216,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.stageStyle !== prevState.stageStyle ||
           state.tickerItems !== prevState.tickerItems ||
           state.tickerPresets !== prevState.tickerPresets ||
-          state.scenes !== prevState.scenes
+          state.scenes !== prevState.scenes ||
+          state.scenePresets !== prevState.scenePresets
         if (!changed) return
         if (saveTimer) clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
@@ -1241,6 +1273,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("tickerItems", state.tickerItems)
     await store.set("tickerPresets", state.tickerPresets)
     await store.set("scenes", state.scenes)
+    await store.set("scenePresets", state.scenePresets)
     await store.save()
   } catch {
     console.warn("[broadcast] Failed to persist themes")
@@ -1287,4 +1320,10 @@ useTimerStore.subscribe((s, prev) => {
     const scene = o.sceneId ? b.scenes.find((x) => x.id === o.sceneId) : undefined
     if (scene?.layers.some((l) => l.kind === "clock" && l.visible)) b.syncBroadcastOutputFor(o.id)
   }
+})
+// A logo layer shows the Brand Kit logo: a new logo reaches the scenes on air.
+useSettingsStore.subscribe((s, prev) => {
+  if (s.brandKit.logoUrl === prev.brandKit.logoUrl) return
+  const b = useBroadcastStore.getState()
+  for (const o of b.outputs) if (showsSceneWith(o, "logo")) b.syncBroadcastOutputFor(o.id)
 })
