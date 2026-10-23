@@ -8,6 +8,7 @@ import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useNotices, type Notice } from "@/stores/notices-store"
 import { monotonicNow } from "@/stores/timer-store"
 
 /**
@@ -29,6 +30,8 @@ export interface LiveStateV1 {
   /** Congregation scenes and outputs, for a screens operator. */
   scenes: { id: string; name: string }[]
   outputs: { id: string; name: string; sceneId: string | null }[]
+  /** Production notices (Rhema Comms), newest first; each desk shows those for it. */
+  notices: Notice[]
 }
 
 export function buildLiveState(now = Date.now()): LiveStateV1 {
@@ -54,6 +57,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     stageMessage: b.stageMessage,
     scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
+    notices: useNotices.getState().notices.slice(0, 50),
   }
 }
 
@@ -99,6 +103,7 @@ export function startLiveStatePublisher(): () => void {
     useQueueStore.subscribe((s, p) => { if (s.items !== p.items || s.headers !== p.headers) soon() }),
     useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries) soon() }),
     useServiceStore.subscribe((s, p) => { if (s.current !== p.current) soon() }),
+    useNotices.subscribe((s, p) => { if (s.notices !== p.notices) soon() }),
   ]
   soon()
   return () => subs.forEach((u) => u())

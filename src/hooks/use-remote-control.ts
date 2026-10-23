@@ -10,6 +10,7 @@ import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { activateBibleReference } from "@/lib/bible-activate"
+import { useNotices } from "@/stores/notices-store"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 const noteRemote = (event: string) => useJournalStore.getState().add({ kind: "remote", label: event.replace("remote:", "") })
@@ -93,6 +94,24 @@ export function useRemoteControl() {
         const output = b.outputs.find((o) => o.id === p.output && (o.role ?? "congregation") === "congregation")
         if (output && typeof p.scene === "string") b.takeScene(output.id, p.scene)
       })
+      // Production notices (Rhema Comms): who sent it comes from the host, not the message.
+      keep(
+        await listen<string>(REMOTE_EVENTS.notice_send, (e) => {
+          if (cancelled) return
+          const p = parsePayload(e.payload)
+          if (!p || typeof p.text !== "string" || typeof p.by !== "string") return
+          const items = useQueueStore.getState().items
+          const ev = typeof p.event === "string" ? items.find((i) => i.id === p.event) : undefined
+          useNotices.getState().send({ from: p.by, to: typeof p.to === "string" ? p.to : "all", priority: typeof p.priority === "string" ? p.priority : "normal", text: p.text, event: ev ? { id: ev.id, title: ev.reference } : null })
+        }),
+      )
+      keep(
+        await listen<string>(REMOTE_EVENTS.notice_ack, (e) => {
+          if (cancelled) return
+          const p = parsePayload(e.payload)
+          if (p && typeof p.id === "string" && typeof p.state === "string" && typeof p.by === "string") useNotices.getState().answer(p.id, p.by, p.state)
+        }),
+      )
       await withPayload(REMOTE_EVENTS.release_scene, (p) => { if (typeof p.output === "string") useBroadcastStore.getState().releaseScene(p.output) })
 
       // remote:paired — a device completed pairing; remember its token hash

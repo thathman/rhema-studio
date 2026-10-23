@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — COMMS-001 C1: production notices (#251)
+
+- **Branch / PR:** `comms-001/notices`.
+- **Behaviour:** commands `notice_send {text, to, priority, event}` and `notice_ack {id, state}` (all roles); `CommandDispatcher::dispatch_as` stamps the sender with the key's own name (HTTP), "a remote" otherwise; `src/stores/notices-store.ts` (last 100, 280 characters, answers once per person, `isFor`); Live State v1 carries the last 50; `src/studio/notices-panel.tsx` shared by the main desk's bell (unread count, red when urgent) and the joined desk's Notices section; never on outputs or in the journal.
+- **Tests:** rhema-api 130 (sender stamping, bounds); `src/studio/notices.test.tsx`; pinned event names; full vitest 716. Desktop (QA build, Intel Mac): curl as the paired Timekeeper sent an urgent notice to the main desk; the bell showed it; a forged sender in the request was ignored (the key's name is used); Ready on the main desk reached the Live State; the service log stayed clean. Real data 6/6, WebKit restored.
+- **Next:** C2 action requests (a notice that opens the item, verse or scene it is about on the recipient's desk), then the speaking/PTT phases.
+
 ## 2026-10-23 — MCP-002: AI service drafts for review
 
 - **Branch / PR:** `mcp-002/drafts` (stacked on #262).

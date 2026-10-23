@@ -445,7 +445,7 @@ async fn command_handler<S: CommandSink + 'static>(
         log::warn!("HTTP command refused: too many from {}", peer.ip());
         return (StatusCode::TOO_MANY_REQUESTS, Json(CommandResponse { success: false, error: Some("too many commands; slow down".into()) }));
     }
-    match check_key(&state.keys, presented_key(&headers)) {
+    let by = match check_key(&state.keys, presented_key(&headers)) {
         Err(reason) => {
             log::warn!("HTTP command refused: {reason}");
             return (
@@ -466,13 +466,14 @@ async fn command_handler<S: CommandSink + 'static>(
                 Json(CommandResponse { success: false, error: Some(why.into()) }),
             );
         }
-        Ok(_) => {}
-    }
+        Ok(Some(entry)) => entry.name,
+        Ok(None) => "an open remote".to_string(),
+    };
     if request.id.as_deref().is_some_and(|id| !state.recent.first_time(id)) {
         log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
         return (StatusCode::OK, Json(CommandResponse { success: true, error: None }));
     }
-    match CommandDispatcher::dispatch(&request.command, &*state.sink) {
+    match CommandDispatcher::dispatch_as(&request.command, &*state.sink, &by) {
         Ok(()) => (
             StatusCode::OK,
             Json(CommandResponse {

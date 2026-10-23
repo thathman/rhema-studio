@@ -35,6 +35,8 @@ export const REMOTE_EVENTS = {
   restore_source: "remote:restore_source",
   take_scene: "remote:take_scene",
   release_scene: "remote:release_scene",
+  notice_send: "remote:notice_send",
+  notice_ack: "remote:notice_ack",
 } as const
 
 /** Emitted by the backend when a device completes pairing: `{ name, hash }`. Not a command. */

@@ -22,11 +22,26 @@ pub trait CommandSink: Send + Sync {
 pub struct CommandDispatcher;
 
 impl CommandDispatcher {
+    /// Like `dispatch`, naming who sent it (the paired device's name) for the commands that
+    /// carry a sender: production notices and their answers (Rhema Comms, #251).
+    pub fn dispatch_as(cmd: &RemoteCommand, sink: &dyn CommandSink, by: &str) -> Result<(), CommandError> {
+        let by: String = by.chars().take(60).collect();
+        match cmd {
+            RemoteCommand::NoticeSend(n) => sink.emit_event("remote:notice_send", &serde_json::json!({
+                "text": n.text.chars().take(280).collect::<String>(), "to": n.to.as_deref().unwrap_or("all"),
+                "priority": if n.priority.as_deref() == Some("urgent") { "urgent" } else { "normal" }, "event": n.event, "by": by,
+            }).to_string()),
+            RemoteCommand::NoticeAck(a) => sink.emit_event("remote:notice_ack", &serde_json::json!({ "id": a.id, "state": a.state, "by": by }).to_string()),
+            other => Self::dispatch(other, sink),
+        }
+    }
+
     pub fn dispatch(
         cmd: &RemoteCommand,
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {
@@ -242,6 +257,24 @@ mod tests {
             assert_eq!(event, name);
             assert!(payload.contains(has), "{payload}");
         }
+    }
+
+    #[test]
+    fn notices_carry_who_sent_them() {
+        let sink = MockSink::new();
+        let n = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "x".repeat(400), to: Some("present".into()), priority: Some("urgent".into()), event: Some("sermon".into()) });
+        CommandDispatcher::dispatch_as(&n, &sink, "Femi's laptop").unwrap();
+        let (event, payload) = sink.last_event();
+        assert_eq!(event, "remote:notice_send");
+        let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(v["by"], "Femi's laptop");
+        assert_eq!(v["to"], "present");
+        assert_eq!(v["priority"], "urgent");
+        assert_eq!(v["text"].as_str().unwrap().chars().count(), 280);
+        CommandDispatcher::dispatch(&RemoteCommand::NoticeAck(crate::command::NoticeAckIn { id: "n1".into(), state: "ready".into() }), &sink).unwrap();
+        let (event, payload) = sink.last_event();
+        assert_eq!(event, "remote:notice_ack");
+        assert!(payload.contains("a remote") && payload.contains("ready"));
     }
 
     #[test]
