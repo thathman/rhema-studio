@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-002: clock layer in scenes
+
+- **Branch / PR:** `arch-002/clock-layer`.
+- **Behaviour:** scene layer kind `clock` (`SceneClock {mode, at, text}`; `sceneClock`/`clockText` in `lib/scenes.ts`): the frame carries the countdown's end (or the count-up's start) as wall time; outputs, browser feeds and the composer work out the time. Frames are resent only when the timer object changes (start, pause, reset, minutes), not on its ticks. A running clock asks the Rust pacer for 1 frame a second (display and NDI), since WebKit held a locked screen's timers back ~15 s (found on the desktop). Drawn straight into its box in the look's text style, sized to fill it.
+- **Tests:** `scene-contracts.test.ts` (still / down / up, stops at 0:00, normalize keeps clocks, no resend on ticks); vitest 724.
+- **Desktop:** see acceptance 10cx (projector canvas frames in local `qa-screenshots/clock-layer/`). Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — Phone remote: live sources and notices (ARCH-001 leftover; Comms paired phones, text)
 
 - **Branch / PR:** `arch-001/phone-sources`.
