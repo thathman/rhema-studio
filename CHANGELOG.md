@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### A compact transport bar in Present (#299)
+- Present's Previous / Next, the verse steps, Take live, Clear and Restore sit in one slim bar instead of a large boxed strip; every button and keyboard shortcut does exactly what it did before.
+- **Show live is now called Take live.** Beside it, the bar says what is in Preview and where it goes (the main screens and how many outputs are on, the Live panel only when no screen is on, or this console only in rehearsal).
+- A control that cannot act now says why when you point at it or reach it with the keyboard (for example "Nothing in Preview" or "Nothing was cleared to bring back").
+- On a small or half-size window the bar puts Take live on its own row and turns the other buttons into icons with tooltips, without a sideways scroll.
+
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### Words while a camera is not playing (#213)

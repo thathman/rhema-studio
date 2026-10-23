@@ -62,7 +62,7 @@ Flow (Scenario A):
 2. Operator presses **Next** → item 1 presents; live panel shows "LIVE Psalm 23:1".
 3. **Next** again → item 2. **Previous** → back.
 4. Pastor reads an unplanned verse (Scenario B): operator types "jn 3 16" in Quick find →
-   preview shows it → **Show live** → it is live; rundown is untouched.
+   preview shows it → **Take live** → it is live; rundown is untouched.
 5. Worship leader repeats a chorus (Scenario C, verses today): **Previous**.
 6. **Clear** blanks the output; **Restore** brings the last live item back.
 

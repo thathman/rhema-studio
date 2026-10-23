@@ -190,7 +190,7 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-[0.6875rem] text-muted-foreground">Enter previews the first result; Show live puts it on screen.</p>
+            <p className="mt-2 text-[0.6875rem] text-muted-foreground">Enter previews the first result; Take live puts it on screen.</p>
           </li>
         )}
         {busy && results.length === 0 && (

@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — A compact transport bar in Present (#299 UX15-2)
+
+- **Branch / PR:** `ux15-2/present-transport`. The boxed strip in `present-workspace.tsx` becomes `present/transport-bar.tsx`: left Previous / Next (with the "Next: Chorus" hint) and Previous / Next verse; middle one **Take live** (was "Show live"; still `presentActions.showLive` → `remoteActions.sendToLive`) with what is in Preview and where it goes; right Clear / Restore. Layout by container query on the bar's own width (58 / 46 / 32 rem), so it collapses to icons with tooltips and puts Take live on its own row on a half-size window. A control that cannot act stays focusable with `aria-disabled`, a tooltip and an `aria-describedby` reason; a click does nothing. Take live now waits for something in Preview (it was a no-op before, but could still raise the approval question).
+- **Unchanged:** every keyboard shortcut (`present-keys.ts` and the Standard view's listener are untouched; Take live has no key, as before), quick screens (Black stays in One-touch moments), auto-live, rehearsal, the toolbar's name for the tour. "Show live" copy renamed to Take live in Quick find, Team, Settings → Display Mode, the Live panel's Auto tooltip, the cue list and the tour (the Detections list's own button is left as it is).
+- **Tests:** `transport-bar.test.tsx` (each button reaches the same `remoteActions` verb; every control that cannot act gives a reason and does nothing; exactly one Take live and its target text, rehearsal included). Desktop: acceptance 10dj (1280×720, 1024×600, half-size).
+- **Next:** UX15-3 built-in looks.
+
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.

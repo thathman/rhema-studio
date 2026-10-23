@@ -49,7 +49,7 @@ Progressive disclosure rules:
 │      ││ 3 Rom 8:28          │   "Selected, not     │   cleared)     │
 │      ││                     │    live" caption      │                │
 │      ││─────────────────────┴──────────────────────┴────────────────│
-│      ││ [◀ Previous]  [Next ▶]   [Show live]  [Clear]  [Restore]     │
+│      ││ [◀][Next ▶][«][»] │ [Take live] Jn 3:16 → │ [Clear][Restore] │
 │      ││─────────────────────────────────────────────────────────────│
 │      ││ Quick find  ▸ type "jn 3 16" or a word …                     │
 └──────┘└─────────────────────────────────────────────────────────────┘
@@ -60,8 +60,11 @@ Properties:
 - **Current / next** are read straight from the rundown's active index.
 - **Preview vs Live** are two canvases side by side with explicit captions. Live has the
   red "LIVE" word plus a dot plus a coloured top edge (never colour alone).
-- **Show live** is the only button that changes the output. It is large and separated by
-  whitespace from Clear.
+- **Take live** (called Show live before #299) is the only button that changes the output. It is
+  the one teal button in the middle of the transport bar, with what is in Preview and where it goes
+  beside it, separated from Clear and Restore. A control that cannot act says why (tooltip and
+  screen-reader description). The bar collapses to icons with tooltips on a narrow window, and
+  Black stays in One-touch moments, apart from routine transport.
 - **Clear** hides the output but remembers what was live; **Restore** brings it back.
   Clear is reversible, so it needs no confirmation dialog.
 - **Quick find** is one input: references ("jn 3 16", "1 sam 17"), later hymn numbers
@@ -118,7 +121,7 @@ independent of UI theme.
 
 | Rule | Prevents |
 |---|---|
-| Selecting an item previews it; only **Show live** / Enter / `remoteActions.sendToLive` presents | "I clicked a verse and it went on the screen" |
+| Selecting an item previews it; only **Take live** / `remoteActions.sendToLive` presents | "I clicked a verse and it went on the screen" |
 | Live indicator shows the reference text, not just a colour | Operator unsure what the congregation sees |
 | Next/Previous act on the rundown and present immediately (they are deliberate verbs) | Two-step "select then show" during fast worship |
 | Clear keeps the last live item; Restore is one click | Panic after an accidental Clear |
@@ -143,8 +146,8 @@ independent of UI theme.
 - Rundown empty: "Nothing in the service yet. Find a passage below or open Prepare."
 - No outputs on air: "Live output is not on a screen yet." + button "Open outputs".
 - Listening off (Standard view): small grey chip "Listening off" with a tooltip, not an error.
-- Copy uses plain words: "Show live", "Clear", "Outputs", "Service". Not "Program",
-  "Take", "Bus", "PGM/PVW".
+- Copy uses plain words: "Take live", "Clear", "Outputs", "Service". Not "Program",
+  "Bus", "PGM/PVW". ("Take live" replaced "Show live" at the owner's request, #299.)
 
 ## 8. Component inventory for the foundation
 
