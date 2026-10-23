@@ -161,9 +161,23 @@ Prepare → **Hymn book** lists the Christ Apostolic Church Gospel Hymn Book in 
 - **On screen** a hymn is a bilingual song: each verse with its chorus, both languages styled by the theme's first/second language settings, the footer "<title> · CAC Gospel Hymn Book 245". An output set to one language shows only that one. Quick find also finds `CAC 245`.
 - Hymns never appear in the Songs tab, its count or its export.
 
+## Your desk (the foot of the sidebar)
+
+The bottom of the sidebar shows who is at this computer: your initials, your name (or **Add your name**) and what this computer is to the team: **Main desk**, or, while it has joined another Rhema, the role the host gave it ("Bible desk · joined …"). Click it (or Tab to it and press Enter) for the Desk menu:
+
+- **Your name:** type it and press Enter (or click away). Escape puts back what was there. It is the same name as Team → Your name.
+- **Appearance:** Light, Dark or System (follows the computer). The whole studio changes at once; Present's live console stays dark.
+- **Settings** (also ⌘, / Ctrl+,), **Complete setup** (the setup steps for this church), **Keyboard shortcuts**, **Help and the tour**, **Diagnostics**, and **About Rhema Studio** with the version.
+
+With a narrow window the sidebar shows only icons; the desk is then your initials, with the same menu.
+
+## Speech recognition and the Deepgram key
+
+Settings → Speech Recognition is the one place for the cloud speech key: choose **Cloud (Deepgram)**, type or paste the key and **Save**. The eye button shows or hides it, **Clear** removes it, and typing a new one and saving replaces it. It is kept in the system keychain where the computer has one. There is no separate Cloud keys page any more; an old link to it opens Speech Recognition.
+
 ## Who did what
 
-Team → Your name is optional and local. When set it is written on every change (saves, approvals, imports) in the content database's audit table and at the top of the saved service log.
+Team → Your name (or your name in the Desk menu) is optional and local. When set it is written on every change (saves, approvals, imports) in the content database's audit table and at the top of the saved service log.
 
 ## Diagnostics
 

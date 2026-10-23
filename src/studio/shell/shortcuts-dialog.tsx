@@ -5,11 +5,11 @@ const GROUPS: ReadonlyArray<readonly [string, ReadonlyArray<readonly [string, st
   ["Present", [["→ or Page Down", "Next (a song's next slide, then the next item)"], ["← or Page Up", "Previous"], ["Shift+→ / Shift+←", "The next or previous verse of the live passage"], ["Esc", "Clear (takes it off the screens; Restore brings it back)"], ["Shift+Esc", "Restore"]]],
 ]
 
-/** The keyboard shortcuts (top bar ⓘ). Present's keys never act while typing or with a dialog open. */
-export function ShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+/** The keyboard shortcuts (top bar ⓘ, Desk menu). Present's keys never act while typing or with a dialog open. */
+export function ShortcutsDialog({ open, onOpenChange, onCloseAutoFocus }: { open: boolean; onOpenChange: (open: boolean) => void; onCloseAutoFocus?: (e: Event) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>A presenter clicker's Page Up and Page Down work as Previous and Next. Present's keys never act while you are typing.</DialogDescription>

@@ -28,10 +28,9 @@ const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
 const SETTINGS: ReadonlyArray<readonly [SettingsSection, string, string]> = [
   ["bible", "Bible and languages", "translations second language yoruba"],
   ["audio", "Audio", "microphone input level"],
-  ["speech", "Speech recognition", "listening detection transcript"],
+  ["speech", "Speech recognition", "listening detection transcript deepgram cloud key api keys whisper"],
   ["display", "Display", "live behaviour"],
   ["remote", "Remote control", "osc http stream deck phone"],
-  ["api-keys", "Keys", "deepgram cloud"],
   ["diagnostics", "Diagnostics", "logs support export"],
   ["help", "Help", "tour shortcuts about"],
 ]

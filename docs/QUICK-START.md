@@ -4,6 +4,8 @@ For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; on
 
 ## Before the service (Prepare, 10 minutes)
 
+First time at this computer? Click **Add your name** at the bottom of the sidebar and type your name (Enter saves). The same menu switches Light, Dark or System and opens Settings, setup and help.
+
 1. **Home** tells you if anything is wrong: Bible loaded, theme chosen, an output on a screen, songs and pictures all present, fonts installed. Fix the amber lines first; the Fix button takes you there.
 2. **Prepare → New service** (or Copy last week's). Give it a date.
 3. Add items in the order of the service:

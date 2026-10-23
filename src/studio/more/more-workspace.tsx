@@ -67,7 +67,7 @@ export function MoreWorkspace() {
     {
       title: "App",
       rows: [
-        { icon: <SettingsIcon />, label: "Settings", detail: "Audio, speech, display, API keys, diagnostics", onClick: () => openSettings() },
+        { icon: <SettingsIcon />, label: "Settings", detail: "Audio, speech (and the Deepgram key), display, diagnostics", onClick: () => openSettings() },
       ],
     },
   ]

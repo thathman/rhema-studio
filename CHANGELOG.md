@@ -6,6 +6,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Your desk at the foot of the sidebar; Cloud keys folded into Speech (#299)
+- The sidebar's bottom shows who is at this computer and whether it is the main desk or joined to a host; click it to type your name in place, switch Light, Dark or System at once, or open Settings, setup, shortcuts, help and About.
+- The "Local-first workspace / Works offline" card is gone, and Light or dark moved out of Settings into this menu.
+- Settings no longer has a Cloud keys page: the Deepgram key lives only in Speech Recognition, now with Show, Clear and Replace. Old links to Cloud keys open Speech Recognition.
+
 ### Words while a camera is not playing (#213)
 - A scene's camera layer can show words of your own ("Camera back shortly") in its box while the camera is not connected or has dropped, instead of the background.
 
