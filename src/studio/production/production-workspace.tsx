@@ -1,13 +1,17 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useState } from "react"
-import { CheckIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, GlobeIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RadioIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { elapsedMs, formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
 import { resetTimerLogged } from "@/lib/timer-reset"
 import { openSettings } from "@/lib/settings-dialog"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
+import { attention, showing, useFeedHealthStore } from "@/lib/show-health"
+import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
+import { CONTENT_NAMES } from "@/lib/content-names"
+import type { BroadcastOutput, BroadcastOutputStatus, Scene } from "@/types"
 import { useJournalStore } from "@/stores/journal-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
@@ -163,30 +167,53 @@ function Timekeeper() {
   )
 }
 
+/**
+ * Where everything goes (#213 show health): each output with what it is, what it shows now, what
+ * it follows and how its signal is doing; what needs attention first.
+ */
 function Screens() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const status = useBroadcastStore((s) => s.outputStatus)
+  const frames = useBroadcastStore((s) => s.outputFrames)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const feeds = useFeedHealthStore()
   const openOutputs = useShellStore((s) => s.openOutputs)
+  const needs = attention(outputs, status, feeds)
   return (
-    <Card kicker="Outputs" title="Screens and NDI senders" badge={<Button size="sm" onClick={openOutputs}><MonitorIcon /> Open outputs</Button>}>
-      <ul className="flex flex-col divide-y divide-border">
-        {outputs.map((o) => {
-          const st = status[o.id]
-          const on = outputOnAir(o, st)
-          return (
-            <li key={o.id} className="flex flex-wrap items-center gap-3 py-2.5 text-xs">
-              <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4"><MonitorIcon /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-semibold">{o.name}</span>
-                <span className="block text-muted-foreground">{o.type === "ndi" ? `NDI · ${o.ndi.sourceName}` : o.windowed ? "In a window" : "Display"} · {o.role ?? "congregation"}{o.ticker ? " · ticker" : ""}{o.lowerThirds ? " · lower thirds" : ""}</span>
-              </span>
-              {st?.ndiError ? <Badge tone="warn">{st.ndiError}</Badge> : <Badge tone={on ? "ok" : "off"}>{on ? "On" : "Off"}</Badge>}
-              {o.type === "ndi" && on && typeof st?.ndiReceivers === "number" && <span className="text-muted-foreground">{st.ndiReceivers} {st.ndiReceivers === 1 ? "receiver" : "receivers"}</span>}
+    <Card kicker="Outputs" title="Screens, NDI senders and browser feeds" badge={<Button size="sm" onClick={openOutputs}><MonitorIcon /> Open outputs</Button>}>
+      {needs.length > 0 && (
+        <ul aria-label="Needs attention" className="mb-2 flex flex-col gap-1">
+          {needs.map((n) => (
+            <li key={n.outputId + n.text} className={cn("flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs", n.level === "high" ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-border bg-muted text-foreground")}>
+              <TriangleAlertIcon className="size-3.5 shrink-0" /> {n.text}
             </li>
-          )
-        })}
+          ))}
+        </ul>
+      )}
+      <ul className="flex flex-col divide-y divide-border">
+        {outputs.map((o) => <ScreenRow key={o.id} output={o} status={status[o.id]} frame={frames[o.id]} scenes={scenes} />)}
       </ul>
     </Card>
+  )
+}
+
+function ScreenRow({ output: o, status: st, frame, scenes }: { output: BroadcastOutput; status: BroadcastOutputStatus | undefined; frame: OutputFrame | undefined; scenes: Scene[] }) {
+  const on = outputOnAir(o, st)
+  const feed = useFeedHealth(o.id, o.type === "browser" && on)
+  const kind = o.type === "ndi" ? `NDI · ${o.ndi.sourceName}` : o.type === "browser" ? "Browser feed" : o.windowed ? "In a window" : "Display"
+  const follows = o.shows?.length ? `follows ${o.shows.map((k) => CONTENT_NAMES[k]).join(", ")}` : null
+  return (
+    <li className="flex flex-wrap items-center gap-3 py-2.5 text-xs">
+      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4">{o.type === "browser" ? <GlobeIcon /> : o.type === "ndi" ? <RadioIcon /> : <MonitorIcon />}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">{o.name}</span>
+        <span className="block text-muted-foreground">{kind} · {o.role ?? "congregation"}{follows ? ` · ${follows}` : ""}{o.ticker ? " · ticker" : ""}{o.lowerThirds ? " · lower thirds" : ""}</span>
+        <span className="block truncate">Showing: {showing(o, frame, scenes, on)}</span>
+      </span>
+      {st?.ndiError ? <Badge tone="warn">{st.ndiError}</Badge> : <Badge tone={on ? "ok" : "off"}>{on ? "On" : "Off"}</Badge>}
+      {o.type === "ndi" && on && typeof st?.ndiReceivers === "number" && <span className="text-muted-foreground">{st.ndiReceivers} {st.ndiReceivers === 1 ? "receiver" : "receivers"}</span>}
+      {o.type === "browser" && on && feedHealthLabel(feed) && <span className={cn(feed?.behind ? "text-destructive" : "text-muted-foreground")}>{feedHealthLabel(feed)}</span>}
+    </li>
   )
 }
 
