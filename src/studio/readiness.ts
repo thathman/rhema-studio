@@ -1,3 +1,7 @@
+import { serviceTiming } from "@/lib/timing-engine"
+import { clockMinutes, clockText, type OutlineHeader } from "@/lib/run-of-show"
+import type { QueueItem } from "@/types"
+
 export type ReadinessStatus = "ok" | "warn" | "info"
 export type ReadinessFix = "outputs" | "prepare" | "settings"
 
@@ -52,6 +56,10 @@ export interface ReadinessInput {
   missingTranslations?: string[]
   /** Items of a kind this version cannot show or save. */
   unsupportedItems?: number
+  /** The run of show's plan (#196, #213 preflight): absent when the service has no phases. */
+  timing?: { startSet: boolean; plannedEnd: string | null; overruns: Array<{ item: string; endsAt: string; endBy: string; minutes: number }> }
+  /** Scenes with a camera layer that has no stream address (it shows the scene's background). */
+  camerasWithoutAddress?: string[]
 }
 
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
@@ -133,6 +141,32 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
     ...(i.unknownLicenceSongs
       ? [{ id: "licence", status: "info" as const, label: `${i.unknownLicenceSongs} song${i.unknownLicenceSongs === 1 ? "" : "s"} in the service ${i.unknownLicenceSongs === 1 ? "has" : "have"} no licence recorded`, detail: "Not a blocker. Open the song in Prepare → Songs to record it.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
+    ...(i.timing && !i.timing.startSet
+      ? [{ id: "timing-start", status: "info" as const, label: "The main service has no start time", detail: "Set it in Prepare → Run of show to see when each item is expected and when the service ends.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      : i.timing?.overruns.length
+        ? [{ id: "timing-end-by", status: "warn" as const, label: `The plan runs past ${i.timing.overruns.length === 1 ? "an end-by time" : `${i.timing.overruns.length} end-by times`}`, detail: i.timing.overruns.map((o) => `${o.item} is planned to end at ${o.endsAt}, ${o.minutes} min after its end by ${o.endBy}`).join("; ") + ". Shorten something before it, or move the end by.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+        : i.timing?.plannedEnd
+          ? [{ id: "timing", status: "ok" as const, label: `Planned to end at ${i.timing.plannedEnd}` }]
+          : []),
+    ...(i.camerasWithoutAddress?.length
+      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "It shows the scene's background instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Production → Programs." }]
+      : []),
   ]
   return { ready: checks.every((c) => c.status !== "warn"), checks }
 }
+
+/** The plan's end and any item planned past its end by (nothing that happened, only the plan). */
+export function planCheck(items: QueueItem[], headers: OutlineHeader[]): NonNullable<ReadinessInput["timing"]> | undefined {
+  const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
+  if (!main) return undefined
+  if (clockMinutes(main.starts_at) === null) return { startSet: false, plannedEnd: null, overruns: [] }
+  const t = serviceTiming({ items, headers, firstOnAir: new Map(), onAirMs: new Map(), liveItemId: null, now: Date.now() })
+  if (!t) return undefined
+  const hm = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+  return {
+    startSet: true,
+    plannedEnd: hm(t.plannedEnd),
+    overruns: t.events.filter((e) => e.hardStop !== null && e.plannedEnd > e.hardStop + 30_000).map((e) => ({ item: e.label, endsAt: hm(e.plannedEnd), endBy: hm(e.hardStop!), minutes: Math.round((e.plannedEnd - e.hardStop!) / 60_000) })),
+  }
+}
+

@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Readiness checks the plan and cameras (#213 preflight, #196)
+
+- **Branch / PR:** `sh-002/preflight-timing-cameras`. `readiness.ts`: `planCheck` (the timing engine on the plan alone: planned end, items planned more than 30 s past their end by) and checks `timing-start` (info), `timing-end-by` (warn), `timing` (ok), `cameras` (info); `use-readiness.ts` feeds them.
+- **Tests:** `readiness.test.ts` (+2). vitest 743. Desktop: checked with the combined QA build (Pass 2026-10-23 (combined QA build), on Home: no start time → info; an item planned to end 30 min after its end by → warning naming it and both times; a camera layer with no address → info. ("Planned to end at …" is listed only when nothing needs attention.)).
+
 ## 2026-10-23 — Time warnings on the stage (#196 R6)
 
 - **Branch / PR:** `pt-009/stage-time-warnings`. `StageStyle.warnAtMinutes` (0–30) and `warnWhenOver`; `stage-time-warnings.ts` watches the timer's ticks and sends one stage message as each is crossed (per timer run; not when started past it; never in rehearsal; never over a person's message). Stage designer: Time warnings.

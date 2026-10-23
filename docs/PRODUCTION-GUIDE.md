@@ -9,6 +9,7 @@ For the person running outputs, OBS and the stage screen. The volunteer guide (`
   - **Stage**: plain high-contrast text — the live words in every language, NEXT, the operator's note, key and tempo for a song, the timer, and any message you send.
   - **Signage**: library pictures on a loop (so many seconds each) for a foyer screen, optionally only on set days and times (local clock; outside the window the theme background shows). Nothing in the service changes it: going live, Clear, rehearsal and theme edits leave it alone.
 - Removing one output never touches another. Home lists every output as on/off and warns when only the stage is on.
+- Home's readiness also checks the plan (#213 preflight): "Planned to end at 12:40", a warning when an item is planned past its **end by** ("Sermon is planned to end at 10:55, 5 min after its end by 10:50"), a note when the main service has no start time, and a note for a scene whose camera layer has no stream address.
 - A theme's **logo** draws in a corner; it is hidden on transparent (OBS) themes unless you tick "Show on transparent".
 
 ## OBS and NDI
