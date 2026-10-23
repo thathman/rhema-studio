@@ -2,6 +2,7 @@ import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { feedUrl } from "@/lib/browser-feeds"
 import { newFeedToken } from "@/lib/output-on-air"
 import { invoke } from "@tauri-apps/api/core"
+import QRCode from "qrcode"
 import { Fragment, useEffect, useState } from "react"
 import { GlobeIcon, MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
@@ -624,7 +625,7 @@ function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: 
 }
 
 /** A browser feed's link (ARCH-002): what to paste into OBS Browser Source or a TV's browser. */
-function FeedLink({ id, token, onRenew }: { id: string; token?: string; onRenew: () => void }) {
+export function FeedLink({ id, token, onRenew }: { id: string; token?: string; onRenew: () => void }) {
   const [where, setWhere] = useState<{ host: string | null; port: number | null; lan: boolean } | null>(null)
   useEffect(() => {
     void (async () => {
@@ -634,6 +635,15 @@ function FeedLink({ id, token, onRenew }: { id: string; token?: string; onRenew:
     })()
   }, [])
   const url = token && where?.host && where.port ? feedUrl(where.host, where.port, id, token) : null
+  // A TV or tablet opens it by scanning, instead of typing a long link (#198).
+  const [code, setCode] = useState<{ url: string; data: string } | null>(null)
+  useEffect(() => {
+    if (!url || !where?.lan) return
+    let live = true
+    void QRCode.toDataURL(url, { errorCorrectionLevel: "M", margin: 1, width: 256 }).then((data) => { if (live) setCode({ url, data }) }).catch(() => {})
+    return () => { live = false }
+  }, [url, where?.lan])
+  const qr = code && code.url === url && where?.lan ? code.data : null
   return (
     <div className="flex flex-col gap-2 text-xs">
       {!where?.port && <p className="text-muted-foreground">Start the HTTP listener on the church network (Settings → Remote control) to give this feed a link.</p>}
@@ -642,6 +652,12 @@ function FeedLink({ id, token, onRenew }: { id: string; token?: string; onRenew:
       {url && (
         <>
           <code className="block overflow-x-auto rounded-md border border-border bg-muted px-2 py-1.5 select-all">{url}</code>
+          {qr && (
+            <div className="flex items-center gap-3">
+              <img src={qr} alt="QR code of this feed's link" className="size-28 rounded-md bg-white p-1" />
+              <p className="text-muted-foreground">Scan with a TV, tablet or phone on the church Wi-Fi to open this feed full screen in its browser.</p>
+            </div>
+          )}
           <div className="flex gap-2">
             <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(url).catch(() => {})}>Copy link</Button>
             <Button type="button" size="sm" variant="ghost" onClick={onRenew} title="The old link stops working when you save">New link</Button>

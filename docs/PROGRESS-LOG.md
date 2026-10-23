@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Browser feed QR code (#198)
+
+- **Branch / PR:** `arch-002/feed-qr`. `FeedLink` (output editor) draws a QR code of the LAN link with the existing `qrcode` package; none when the listener is on this computer only.
+- **Tests:** `src/studio/feed-link.test.tsx` (LAN link and QR; loopback: link, no QR). Not checked on the desktop: opening the QA listener to the network can raise a macOS firewall prompt.
+
 ## 2026-10-23 — COMMS-001 C3: full-duplex Push-to-Talk (LAN)
 
 - **Branch / PR:** `comms-003/voice`. ADR 0002 (`docs/rhema-studio/22-adr-0002-comms-voice.md`).
