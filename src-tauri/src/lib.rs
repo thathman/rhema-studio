@@ -104,6 +104,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .manage(commands::app_close::UnsavedWork::default())
+        .manage(commands::app_close::LastExit::default())
         .manage(commands::store_check::DamagedStoreFiles::default())
         .manage(commands::join::JoinRuntime::default())
         .on_window_event(commands::app_close::on_window_event)
@@ -162,6 +163,7 @@ pub fn run() {
             commands::remote::remote_set_keys,
             commands::remote::remote_pair_start,
             commands::app_close::set_unsaved_work,
+            commands::app_close::last_exit_unclean,
             commands::store_check::damaged_store_files,
             commands::secrets::secrets_get,
             commands::secrets::secrets_set,
@@ -260,6 +262,7 @@ pub fn run() {
                     // A damaged settings/themes file is set aside before the window reads it.
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
                     let moved = commands::store_check::set_aside_damaged(&dir, now);
+                    commands::app_close::mark_running(&app.state::<commands::app_close::LastExit>(), &dir);
                     for (name, aside, recovered) in &moved {
                         log::error!("{name} was damaged; set aside as {aside} (last good copy restored: {recovered})");
                     }
