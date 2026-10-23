@@ -17,6 +17,8 @@ interface JoinState {
   /** The name and role the host gives this computer. */
   me: { name: string; role: string } | null
   live: LiveStateV1 | null
+  /** This desk's monotonic time when `live` arrived: a running timer counts on from it (no clock skew). */
+  receivedAt: number
   pair: (address: string, code: string, name: string) => Promise<void>
   connect: () => Promise<void>
   leave: (forget?: boolean) => Promise<void>
@@ -31,7 +33,7 @@ async function listenOnce() {
   await listen<string>("join:live", (e) => {
     try {
       const live = JSON.parse(e.payload) as LiveStateV1
-      if (live?.v === 1) useJoin.setState({ live, status: "connected", error: null })
+      if (live?.v === 1) useJoin.setState({ live, receivedAt: performance.now(), status: "connected", error: null })
     } catch {
       // A snapshot this build cannot read: keep the last one.
     }
@@ -52,6 +54,7 @@ export const useJoin = create<JoinState>((set, get) => ({
   error: null,
   me: null,
   live: null,
+  receivedAt: 0,
   pair: async (address, code, name) => {
     set({ status: "connecting", error: null })
     try {

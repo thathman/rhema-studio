@@ -41,6 +41,9 @@ impl CommandDispatcher {
             RemoteCommand::VoiceTalk(on) => sink.emit_event("remote:voice_talk", &serde_json::json!({ "on": on, "by": by }).to_string()),
             RemoteCommand::VoiceLeave => sink.emit_event("remote:voice_leave", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::EventOffset(m) => sink.emit_event("remote:event_offset", &serde_json::json!({ "minutes": (*m).clamp(-30, 30), "by": by }).to_string()),
+            RemoteCommand::TimerStart => sink.emit_event("remote:timer_start", &serde_json::json!({ "by": by }).to_string()),
+            RemoteCommand::TimerPause => sink.emit_event("remote:timer_pause", &serde_json::json!({ "by": by }).to_string()),
+            RemoteCommand::TimerAdjust(m) => sink.emit_event("remote:timer_adjust", &serde_json::json!({ "minutes": (*m).clamp(-10, 10), "by": by }).to_string()),
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "by": by }).to_string()),
             other => {
                 let done = Self::dispatch(other, sink);
@@ -59,7 +62,7 @@ impl CommandDispatcher {
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::EventOffset(_) => Self::dispatch_as(cmd, sink, "a remote"),
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {
@@ -262,6 +265,8 @@ mod tests {
         let (name, payload) = sink.last_event();
         assert_eq!(name, "remote:event_offset");
         assert_eq!(payload, r#"{"by":"Timekeeper","minutes":30}"#, "one step is at most 30 minutes, with who sent it");
+        CommandDispatcher::dispatch_as(&RemoteCommand::TimerAdjust(-25), &sink, "Timekeeper").unwrap();
+        assert_eq!(sink.last_event(), ("remote:timer_adjust".to_string(), r#"{"by":"Timekeeper","minutes":-10}"#.to_string()));
     }
 
     #[test]

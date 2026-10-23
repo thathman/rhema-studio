@@ -11,7 +11,8 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useNotices, type Notice } from "@/stores/notices-store"
 import { useServiceOffset } from "@/stores/service-offset-store"
 import { useVoice, type VoicePerson } from "@/lib/voice"
-import { monotonicNow } from "@/stores/timer-store"
+import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { elapsedMs } from "@/lib/timer"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -30,6 +31,8 @@ export interface LiveStateV1 {
   /** offsetMinutes: the shared running-late offset and who set it (#196). */
   timing: { plannedEnd: number; expectedEnd: number; lateMs: number; offsetMinutes?: number; offsetBy?: string | null } | null
   stageMessage: string
+  /** The service timer (#196 R5) when this was sent: a desk counts on from when it arrived. */
+  timer?: { durationMs: number; elapsedMs: number; running: boolean }
   /** Congregation scenes and outputs, for a screens operator. */
   scenes: { id: string; name: string }[]
   outputs: { id: string; name: string; sceneId: string | null }[]
@@ -60,6 +63,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     rundown: q.items.map((i) => ({ id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null })),
     timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by } : null,
     stageMessage: b.stageMessage,
+    timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null } })(),
     scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
     notices: useNotices.getState().notices.slice(0, 50),
@@ -111,6 +115,7 @@ export function startLiveStatePublisher(): () => void {
     useServiceStore.subscribe((s, p) => { if (s.current !== p.current) soon() }),
     useNotices.subscribe((s, p) => { if (s.notices !== p.notices) soon() }),
     useServiceOffset.subscribe(() => soon()),
+    useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
   ]
   soon()

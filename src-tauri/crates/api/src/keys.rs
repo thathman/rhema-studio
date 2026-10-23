@@ -34,7 +34,7 @@ impl Role {
         match cmd {
             // Production notices and the talk channel are for everyone on the team (Rhema Comms, #251).
             RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => true,
-            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
+            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
             RemoteCommand::BibleActivate(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
             RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => matches!(self, Role::Present | Role::Configure) || (self == Role::Bible && id == "bible"),
             RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => matches!(self, Role::Present | Role::Configure | Role::Screens),
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn timekeeper_moves_only_the_event_clock() {
-        for cmd in [RemoteCommand::EventNext, RemoteCommand::EventPrev, RemoteCommand::EventStart("sermon".into()), RemoteCommand::EventOffset(5)] {
+        for cmd in [RemoteCommand::EventNext, RemoteCommand::EventPrev, RemoteCommand::EventStart("sermon".into()), RemoteCommand::EventOffset(5), RemoteCommand::TimerStart, RemoteCommand::TimerAdjust(1)] {
             assert!(Role::Timekeeper.allows(&cmd));
             assert!(Role::Present.allows(&cmd));
             assert!(Role::Configure.allows(&cmd));

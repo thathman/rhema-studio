@@ -1,3 +1,4 @@
+import { useTimerStore } from "@/stores/timer-store"
 import { useServiceOffset } from "@/stores/service-offset-store"
 import { useEffect } from "react"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
@@ -93,6 +94,20 @@ export function useRemoteControl() {
           useServiceOffset.getState().adjust(p.minutes, typeof p.by === "string" ? p.by : undefined)
         }),
       )
+      // The service timer from a Timekeeper desk (#196 R5), each in the log with who.
+      const byOf = (p: Record<string, unknown> | null | undefined) => (typeof p?.by === "string" && p.by ? `${p.by}: ` : "")
+      for (const [event, run] of [
+        [REMOTE_EVENTS.timer_start, (p) => { if (useTimerStore.getState().timer.startedAt !== null) return; useTimerStore.getState().start(); useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer started` }) }],
+        [REMOTE_EVENTS.timer_pause, (p) => { if (useTimerStore.getState().timer.startedAt === null) return; useTimerStore.getState().pause(); useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer paused` }) }],
+        [REMOTE_EVENTS.timer_adjust, (p) => {
+          const m = typeof p?.minutes === "number" ? Math.trunc(p.minutes) : 0
+          if (!m) return
+          useTimerStore.getState().adjustMinutes(m)
+          useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer corrected by ${m > 0 ? "+" : "−"}${Math.abs(m)} min` })
+        }],
+      ] as const satisfies ReadonlyArray<readonly [string, (p: Record<string, unknown> | null | undefined) => void]>) {
+        keep(await listen<string>(event, (e) => { if (!cancelled) run(parsePayload(e.payload)) }))
+      }
       // Delegated operators (Host/Join): the Bible source, any source's take-off, congregation scenes.
       const withPayload = async (event: string, handler: (p: Record<string, unknown>) => void) => {
         keep(

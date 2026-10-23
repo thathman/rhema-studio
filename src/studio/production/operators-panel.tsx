@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { formatMs } from "@/lib/timer"
 import { openSettings } from "@/lib/settings-dialog"
 import { useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
@@ -199,6 +200,7 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
         <Button size="sm" variant="outline" disabled={at <= 0 || status !== "connected"} onClick={() => void send({ command: "event_prev" })}>Back one</Button>
         <Button size="sm" disabled={!next || status !== "connected"} onClick={() => void send({ command: "event_next" })}>{next ? `Start ${next.reference}` : "Last event"}</Button>
       </div>
+      <DeskTimer live={live} />
       <ol aria-label="The host's run of show" className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
         {live.rundown.map((r) => (
           <li key={r.id} className={cn("flex items-center gap-2 px-2.5 py-1.5", r.id === live.event.currentId && "bg-primary/10 font-semibold")}>
@@ -210,6 +212,36 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
       </ol>
       <p className="text-muted-foreground">The event clock on the host {live.event.mode === "own" ? "is run by the timekeeper" : "follows its screens; starting an event here moves it too"}. Nothing here changes a screen.</p>
     </section>
+  )
+}
+
+/** The host's service timer (#196 R5): counting on from when the state arrived; Start / Pause / ±1 min. */
+function DeskTimer({ live }: { live: LiveStateV1 }) {
+  const status = useJoin((s) => s.status)
+  const receivedAt = useJoin((s) => s.receivedAt)
+  const [now, setNow] = useState(() => performance.now())
+  const t = live.timer
+  useEffect(() => {
+    if (!t?.running) return
+    const id = setInterval(() => setNow(performance.now()), 500)
+    return () => clearInterval(id)
+  }, [t?.running])
+  if (!t) return null
+  const elapsed = t.elapsedMs + (t.running ? Math.max(0, now - receivedAt) : 0)
+  const left = t.durationMs ? t.durationMs - elapsed : null
+  const send = useJoin.getState().send
+  const off = status !== "connected"
+  return (
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="The host's service timer">
+      <span className={cn("font-mono text-lg font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid")} role="timer">
+        {left === null ? formatMs(elapsed) : left < 0 ? `+${formatMs(-left)}` : formatMs(left)}
+      </span>
+      <span className="text-muted-foreground">{left === null ? "elapsed" : left < 0 ? "over" : "left"}{t.running ? "" : " · paused"}</span>
+      <span className="flex-1" />
+      <Button size="sm" disabled={off} onClick={() => void send({ command: t.running ? "timer_pause" : "timer_start" })}>{t.running ? "Pause" : "Start"}</Button>
+      <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "timer_adjust", value: -1 })}>−1 min</Button>
+      <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "timer_adjust", value: 1 })}>+1 min</Button>
+    </div>
   )
 }
 

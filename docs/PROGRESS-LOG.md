@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — The service timer from a Timekeeper desk (#196 R5)
+
+- **Branch / PR:** `pt-010/remote-timer` (on `pt-006/shared-offset`). Remote commands `timer_start`, `timer_pause`, `timer_adjust` (±10 a step; Timekeeper/Present/Configure; with who) → the timer store and a log line. `LiveStateV1.timer` (length, elapsed, running) published on each timer change; the desk (`DeskTimer`) counts on from when the state arrived (`useJoin.receivedAt`, no clock skew between computers).
+- **Tests:** rhema-api (serde, the ±10 clamp with who, roles); remote-events list. Desktop: acceptance 10de.3.
+
 ## 2026-10-23 — Running late, shared by every desk (#196)
 
 - **Branch / PR:** `pt-006/shared-offset`. `service-offset-store.ts` (minutes, by; −120…+240; logged; zero for another service) replaces Prepare's local `delay`; used by `useServiceTiming`, `stage-finish`, `live-state` (`timing.offsetMinutes`, `offsetBy`). Remote command `event_offset` (Timekeeper/Present/Configure, ±30 a step, with who). Production Timekeeper "Running" row; ClockDesk ±5.
