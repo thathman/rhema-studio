@@ -980,9 +980,9 @@ report), but launching it cannot.
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10de.1 | A service with a main phase start time. Production → Timekeeper → +5 min twice; look at Prepare → Run of show, the stage finish line and the service log. | "running 10 min late" everywhere; expected times 10 min later, the plan unchanged; two log lines with who. | OFFSET_RESULT |
-| 10de.2 | A joined Timekeeper desk: −5 min. | The host's offset moves to +5; the log names the desk. | OFFSET_REMOTE_RESULT |
-| 10de.3 | The joined Timekeeper desk: Start the timer, +1 min, Pause. | The host's timer starts, gains a minute and pauses; the desk's timer follows; three log lines naming the desk. | RT_RESULT |
+| 10de.1 | A service with a main phase start time. Production → Timekeeper → +5 min twice; look at Prepare → Run of show, the stage finish line and the service log. | "running 10 min late" everywhere; expected times 10 min later, the plan unchanged; two log lines with who. | Pass 2026-10-23 (combined QA build): +5 twice → "running 10 min late (Tolu)"; stage finish 10:52, 10 min late; two log lines naming Tolu. |
+| 10de.2 | A joined Timekeeper desk: −5 min. | The host's offset moves to +5; the log names the desk. | Pass 2026-10-23 (combined QA build): Desk C (Present role) −5 → +5 by Desk C; log "Desk C: running 5 min late (−5 min)". |
+| 10de.3 | The joined Timekeeper desk: Start the timer, +1 min, Pause. | The host's timer starts, gains a minute and pauses; the desk's timer follows; three log lines naming the desk. | Pass 2026-10-23 (combined QA build): start, +1 min, pause from Desk C over HTTP (200 each): the host's timer ran, gained a minute and paused at 62 s; three log lines naming Desk C. (The desk's own timer view not checked on a second machine.) |
 
 ### 10dc. Cameras in scenes (OP-009, #209)
 
