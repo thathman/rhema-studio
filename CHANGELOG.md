@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Show health in Production → Screens (#213)
+- Each output shows what it is showing now and how its signal is doing; a "Needs attention" list puts the serious problems first. Browser feeds are no longer listed as displays.
+
 ### The service log names who did what (#246)
 - Each command from a paired device shows its name in the service log ("next · by Femi's laptop"), and each scene taken to an output or released is a SCENE line.
 

@@ -975,6 +975,13 @@ report), but launching it cannot.
 | 10cu.11 | Three desks: B hears Production, C unticks it. A talks to Production, then Only C. | First only B hears A, then only C. | Verified on the Intel Mac (2026-10-23, test tones over the real listener, ADR 0002 §2a); not yet with headsets |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10db. Show health (#213)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10db.1 | Projector and a browser feed (following Bible) on, a verse live, no page open on the feed. Production → Screens. | Each row: kind, role, follows, "Showing: Romans 8:28"; Needs attention: "<feed>: no page is showing it". | Verified on the Intel Mac (2026-10-23, QA build, read through the bridge) |
+| 10db.2 | An NDI output on with OBS closed; then open OBS on it. | "no NDI receiver is watching it", then gone. | Unverified |
+
 ### 10da. Recovery after an unexpected close (#246)
 
 | # | Step | Expected | Result |

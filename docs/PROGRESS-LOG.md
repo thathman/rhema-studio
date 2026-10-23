@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Show health (#213 P1, first slice)
+
+- **Branch / PR:** `show-health`.
+- **Behaviour:** `src/lib/show-health.ts` (`attention`, `showing`, `useFeedHealthStore`); Production → Screens rows with kind (browser feeds fixed), role, follows, showing now and signal; Needs attention list (NDI failing, NDI with no receiver, feed behind, feed with no page), real signals only.
+- **Tests:** `src/studio/show-health.test.ts`; vitest green. Desktop: acceptance 10db.1. Real data 6/6, WebKit restored.
+- **Not in reach yet (#213):** cameras, TV receivers, A/V alignment, LAN-off lab: need cameras / MediaMTX / a Google TV (owner).
+
 ## 2026-10-23 — Execution history: who did it, and scene takes (#246 C17)
 
 - **Branch / PR:** `history/scenes-actors`.
