@@ -19,6 +19,27 @@ pub trait CommandSink: Send + Sync {
     }
 }
 
+/// A sink that adds `"by"` (the sender) to every frontend event it carries.
+struct Signed<'a> {
+    inner: &'a dyn CommandSink,
+    by: &'a str,
+}
+
+impl CommandSink for Signed<'_> {
+    fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+        match serde_json::from_str::<serde_json::Value>(payload) {
+            Ok(serde_json::Value::Object(mut m)) => {
+                m.insert("by".into(), self.by.into());
+                self.inner.emit_event(event, &serde_json::Value::Object(m).to_string())
+            }
+            _ => self.inner.emit_event(event, payload),
+        }
+    }
+    fn invoke_backend(&self, action: &str, args: &str) -> Result<(), CommandError> {
+        self.inner.invoke_backend(action, args)
+    }
+}
+
 /// Routes `RemoteCommand` variants to the correct sink method.
 ///
 /// Frontend-bound (`emit_event`): Next, Prev, Theme, Opacity, `OnAir`,
@@ -27,8 +48,8 @@ pub trait CommandSink: Send + Sync {
 pub struct CommandDispatcher;
 
 impl CommandDispatcher {
-    /// Like `dispatch`, naming who sent it (the paired device's name) for the commands that
-    /// carry a sender: production notices and their answers (Rhema Comms, #251).
+    /// Like `dispatch`, naming who sent it (the paired device's name): in production notices and
+    /// their answers (Rhema Comms, #251), and as `"by"` in every other command's event.
     pub fn dispatch_as(cmd: &RemoteCommand, sink: &dyn CommandSink, by: &str) -> Result<(), CommandError> {
         let by: String = by.chars().take(60).collect();
         match cmd {
@@ -46,7 +67,9 @@ impl CommandDispatcher {
             RemoteCommand::TimerAdjust(m) => sink.emit_event("remote:timer_adjust", &serde_json::json!({ "minutes": (*m).clamp(-10, 10), "by": by }).to_string()),
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "by": by }).to_string()),
             other => {
-                let done = Self::dispatch(other, sink);
+                // Who sent it rides along in the command's own event, so the host can say who
+                // activated a source ("Bible · Romans 8:28 · by Femi's laptop").
+                let done = Self::dispatch(other, &Signed { inner: sink, by: &by });
                 // The service log's record of it, with who sent it (#246 C17): one self-contained
                 // event, so concurrent requests can never swap their names.
                 if done.is_ok() {
@@ -300,9 +323,15 @@ mod tests {
         CommandDispatcher::dispatch_as(&RemoteCommand::BibleActivate("Psalm 23:1".into()), &sink, "Femi's laptop").unwrap();
         let ev = sink.events.lock().unwrap()[before..].to_vec();
         assert_eq!(ev[0].0, "remote:bible_activate");
+        // The command itself names who sent it, so the host can record who activated the Bible.
+        let cmd: serde_json::Value = serde_json::from_str(&ev[0].1).unwrap();
+        assert_eq!((cmd["reference"].as_str(), cmd["by"].as_str()), (Some("Psalm 23:1"), Some("Femi's laptop")));
         assert_eq!(ev[1].0, "remote:audit");
         let audit: serde_json::Value = serde_json::from_str(&ev[1].1).unwrap();
         assert_eq!((audit["command"].as_str(), audit["by"].as_str()), (Some("bible_activate(Psalm 23:1)"), Some("Femi's laptop")));
+        CommandDispatcher::dispatch_as(&RemoteCommand::VerseNext, &sink, "Femi's laptop").unwrap();
+        let all = sink.events.lock().unwrap().clone();
+        assert_eq!(all[all.len() - 2], ("remote:verse_next".to_string(), r#"{"by":"Femi's laptop"}"#.to_string()));
         assert_eq!(v["to"], "present");
         assert_eq!(v["priority"], "urgent");
         assert_eq!(v["text"].as_str().unwrap().chars().count(), 280);

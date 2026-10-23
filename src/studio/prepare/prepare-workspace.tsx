@@ -72,7 +72,7 @@ export function PrepareWorkspace() {
           <Button
             onClick={() => useShellStore.getState().setWorkspace("present")}
             disabled={count === 0}
-            title="Open this same service in the live console. Nothing goes live until you press Show live there."
+            title="Open this same service in the live console. Nothing goes live until you press Take live there."
           >
             <MonitorPlayIcon /> Present service
           </Button>

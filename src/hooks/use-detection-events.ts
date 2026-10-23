@@ -8,7 +8,7 @@ import {
   useQueueStore,
 } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
-import { presentVerse } from "@/hooks/use-broadcast"
+import { presentVerse, type PresentOptions } from "@/hooks/use-broadcast"
 import { mark } from "@/lib/latency-marks"
 import { bibleScope } from "@/lib/bible-activate"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -55,8 +55,9 @@ export function useDetectionEvents(): void {
         verse: advance.verse,
         text: advance.verse_text,
       }
-      if (useBroadcastStore.getState().autoLive && advance.confidence >= confidenceLevel(useSettingsStore.getState().confidenceThreshold) && !approvalWouldHold()) {
-        void presentVerse(advanceVerse, bibleScope())
+      const auto = autoTarget(advance.confidence)
+      if (auto) {
+        void presentVerse(advanceVerse, auto)
       } else {
         bibleActions.selectVerse(advanceVerse)
       }
@@ -67,6 +68,19 @@ export function useDetectionEvents(): void {
       })
     }
   })
+}
+
+/**
+ * Where Auto sends a heard verse that is confident enough, or null (it waits in the preview).
+ * Auto: the screens (only the Bible feeds while a song or slide is up, C11), unless the service is
+ * waiting for approval. Bible feeds only: the Bible source and never the main screens.
+ */
+function autoTarget(confidence: number): PresentOptions | null {
+  const { autoLive, autoBibleFeeds } = useBroadcastStore.getState()
+  if (!autoLive && !autoBibleFeeds) return null
+  if (confidence < confidenceLevel(useSettingsStore.getState().confidenceThreshold)) return null
+  if (autoBibleFeeds) return { sourceOnly: true, by: "Auto" }
+  return approvalWouldHold() ? null : { ...bibleScope(), by: "Auto" }
 }
 
 /** Heard verses from the detection pipeline: preview or auto-live, and the queue (exported for tests). */
@@ -96,8 +110,9 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
     // Auto puts a heard verse on air only when it is confident enough (the remote
     // "confidence" setting); a weaker one waits in the preview like any other.
     // Never the approval question for a heard verse: if the service is waiting for approval it waits in the preview.
-    if (useBroadcastStore.getState().autoLive && directHit.confidence >= confidenceLevel(useSettingsStore.getState().confidenceThreshold) && !approvalWouldHold()) {
-      void presentVerse(detectedVerse, bibleScope())
+    const auto = autoTarget(directHit.confidence)
+    if (auto) {
+      void presentVerse(detectedVerse, auto)
     } else {
       bibleActions.selectVerse(detectedVerse)
     }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { MusicIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { MusicIcon, PlusIcon, RadioTowerIcon, SearchIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -9,7 +9,8 @@ import { resolveQuickFind } from "@/lib/quick-find-resolver"
 import { songQueueItem } from "@/lib/lyrics"
 import { fuzzySongs } from "@/lib/fuzzy"
 import { bibleActions } from "@/hooks/use-bible"
-import { useBibleStore, useQueueStore } from "@/stores"
+import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
+import { activateOnBibleFeeds, bibleFeedCount } from "@/lib/bible-activate"
 import { useSongStore } from "@/stores/song-store"
 import { presentActions } from "@/studio/present-actions"
 import { useShellStore } from "@/studio/shell-store"
@@ -33,6 +34,8 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
   const selected = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
   const hymnbooks = useSongStore((s) => s.hymnbooks)
+  // Outputs that follow Bible: then a verse can go to them alone ("Activate on Bible feeds").
+  const bibleFeeds = useBroadcastStore((s) => (mode === "present" ? bibleFeedCount(s.outputs, s.scenes) : 0))
   useEffect(() => {
     void useSongStore.getState().loadHymnbooks().catch(() => {})
   }, [])
@@ -190,7 +193,7 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-[0.6875rem] text-muted-foreground">Enter previews the first result; Take live puts it on screen.</p>
+            <p className="mt-2 text-[0.6875rem] text-muted-foreground">Enter previews the first result; Take live puts it on screen.{bibleFeeds > 0 ? " Bible feeds sends a verse to the feeds that follow Bible only." : ""}</p>
           </li>
         )}
         {busy && results.length === 0 && (
@@ -239,6 +242,18 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
                   </>
                 )}
               </button>
+              {bibleFeeds > 0 && hit.kind === "verse" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="self-center"
+                  aria-label={`Activate ${hit.verse.book_name} ${hit.verse.chapter}:${hit.verse.verse} on Bible feeds`}
+                  title="Activate on Bible feeds: the feeds that follow Bible show it; the main screens keep what they show"
+                  onClick={() => { preview(hit); void activateOnBibleFeeds(hit.verse) }}
+                >
+                  <RadioTowerIcon /> Bible feeds
+                </Button>
+              )}
               {mode === "prepare" && (
                 <Button variant="outline" size="sm" className="self-center" onClick={() => add(hit)}>
                   <PlusIcon /> Add

@@ -7,6 +7,7 @@ import { openSettings } from "@/lib/settings-dialog"
 import { setDeskControl } from "@/lib/desk-control"
 import { useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
+import { activatedLabel } from "@/lib/live-sources"
 import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
@@ -168,7 +169,7 @@ function JoinedDesk() {
           <div className="rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-[#9fb2b0] uppercase">On the screens{live.program.rehearsal ? " · rehearsal" : ""}</p>
             <p className="truncate text-sm font-semibold">{live.program.onAir ? live.program.reference ?? "On air" : "Nothing on air"}</p>
-            {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => `${s.id} · ${s.reference}`).join("   ")}</p>}
+            {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [s.id, s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
           {desks.includes("clock") && <ClockDesk live={live} />}
           {desks.includes("bible") && <BibleDesk live={live} />}
@@ -275,7 +276,7 @@ function BibleDesk({ live }: { live: LiveStateV1 }) {
   const send = useJoin.getState().send
   return (
     <section aria-label="Bible desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-      <p className="font-semibold">Bible {bible ? <span className="font-normal text-muted-foreground">· {bible.reference}{bible.on ? "" : " (off)"}</span> : <span className="font-normal text-muted-foreground">· nothing yet</span>}</p>
+      <p className="font-semibold">Bible {bible ? <span className="font-normal text-muted-foreground">· {[bible.reference, activatedLabel(bible)].filter(Boolean).join(" · ")}{bible.on ? "" : " (off)"}</span> : <span className="font-normal text-muted-foreground">· nothing yet</span>}</p>
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (reference.trim()) void send({ command: "bible_activate", value: reference.trim() }) }}>
         <input aria-label="Bible reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Romans 8:28" maxLength={120} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
         <Button size="sm" type="submit" disabled={!ok || !reference.trim()}>Activate</Button>

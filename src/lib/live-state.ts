@@ -26,7 +26,8 @@ export interface LiveStateV1 {
   /** The service open on the host (#246 C16): a desk tags each command with its id, so the host refuses one meant for another service. id and revision are absent from older hosts. */
   service: { id?: string; title: string; revision?: number } | null
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
-  sources: { id: string; reference: string; on: boolean; revision: number }[]
+  /** Each live source; `activatedAt` and `by` (who activated it) are absent from older hosts. */
+  sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string }[]
   event: { mode: "screens" | "own"; currentId: string | null }
   rundown: { id: string; reference: string; plannedMinutes: number | null }[]
   /** offsetMinutes: the shared running-late offset and who set it (#196). */
@@ -60,7 +61,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     program: { onAir: b.isLive, reference: b.isLive ? (b.liveVerse?.reference || null) : null, rehearsal: b.rehearsal },
     sources: [...CONTENT_TYPES, "quick" as const].flatMap((id) => {
       const s = b.sources[id]
-      return s ? [{ id, reference: s.value.reference, on: s.on, revision: s.revision }] : []
+      return s ? [{ id, reference: s.value.reference, on: s.on, revision: s.revision, activatedAt: s.activatedAt, ...(s.by ? { by: s.by } : {}) }] : []
     }),
     event: { mode: clock.mode, currentId: clock.currentId },
     rundown: q.items.map((i) => ({ id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null })),

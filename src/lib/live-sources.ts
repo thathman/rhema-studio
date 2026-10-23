@@ -14,6 +14,8 @@ export interface LiveSource {
   /** Activation order across all sources: higher is newer. */
   revision: number
   activatedAt: number
+  /** Who activated it: the operator's name, a joined desk or phone, or "Auto"; absent when not known (older snapshots). */
+  by?: string
   /** Off: cleared, the value kept for Restore. */
   on: boolean
 }
@@ -42,4 +44,10 @@ export function feedFrame(s: { isLive: boolean; liveVerse: VerseRenderData | nul
     if (x?.on && (!best || x.revision > best.revision)) best = x
   }
   return best?.value ?? null
+}
+
+/** "by Tolu 10:42": who activated a source and when, for the strip and joined desks. */
+export function activatedLabel(src: { by?: string; activatedAt?: number }): string {
+  const at = typeof src.activatedAt === "number" && src.activatedAt > 0 ? new Date(src.activatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""
+  return [src.by ? `by ${src.by}` : "", at].filter(Boolean).join(" ")
 }

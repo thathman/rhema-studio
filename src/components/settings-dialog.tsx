@@ -1,5 +1,5 @@
 import { AboutNotices } from "@/components/about-notices"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
 import { AssistantsSection } from "@/components/settings/assistants-section"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
@@ -372,8 +372,8 @@ function SpeechSection() {
 
 function DisplayModeSection() {
   // The same switch as Auto on the Live panel in Present → Advanced (FR-01: off until turned on).
-  const autoLive = useBroadcastStore((s) => s.autoLive)
-  const setAutoLive = useBroadcastStore((s) => s.setAutoLive)
+  const mode = useBroadcastStore(autoModeOf)
+  const setAutoMode = useBroadcastStore((s) => s.setAutoMode)
 
   return (
     <div className="flex flex-col gap-6">
@@ -384,13 +384,13 @@ function DisplayModeSection() {
         </label>
 
         <RadioGroup
-          value={autoLive ? "auto" : "manual"}
-          onValueChange={(v) => setAutoLive(v === "auto")}
+          value={mode}
+          onValueChange={(v) => setAutoMode(v as AutoMode)}
           className="gap-3"
         >
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
-              autoLive ? "hover:border-muted-foreground/25" : ""
+              mode !== "manual" ? "hover:border-muted-foreground/25" : ""
             }`}
           >
             <RadioGroupItem value="manual" className="mt-0.5" />
@@ -404,14 +404,28 @@ function DisplayModeSection() {
 
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
-              !autoLive ? "hover:border-muted-foreground/25" : ""
+              mode !== "bible" ? "hover:border-muted-foreground/25" : ""
+            }`}
+          >
+            <RadioGroupItem value="bible" className="mt-0.5" />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-foreground">Bible feeds only</span>
+              <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
+                The most confident verse heard goes to the feeds that follow Bible (an NDI or browser Bible feed for OBS, a scene's Bible box) by itself, and waits in the preview. The projector and other main screens never change without Take live.
+              </p>
+            </div>
+          </label>
+
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-data-[state=checked]:border-primary/50 has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:ring-1 has-data-[state=checked]:ring-primary/20 ${
+              mode !== "auto" ? "hover:border-muted-foreground/25" : ""
             }`}
           >
             <RadioGroupItem value="auto" className="mt-0.5" />
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
-                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Take live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live panel in Present's Advanced view.
+                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Take live. Present shows "Auto-live on" while it is listening. Same as Auto on the Live panel in Present → Advanced view.
               </p>
             </div>
           </label>
