@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.46 · **Updated:** 2026-10-23 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.47 · **Updated:** 2026-10-23 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -11,23 +11,26 @@
 - Do not conflate **in PR** with **done**. GitHub Issues are enabled (2026-10-20): #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 owner decision on bundled translations, #34 owner decision on the Canva relay, #35 CV-004/005 Brand Kit and templates, #36 MD-002 video, #37 MD-004 lower thirds, #38 PT-003 cues, #39 QA-005 migration matrix. This file stays the master queue; link new issues here as they are opened.
 - Track separate **code quality** vs **volunteer UX acceptance**. An intuitive app is not established merely by unit tests.
 
-## Verified implementation checkpoint — 2026-10-23
-**Main `f63abc8c`**. Merged code is not production acceptance. See `docs/PROGRESS-LOG.md` and CHANGELOG for native/automated test evidence.
+## Verified implementation checkpoint — 2026-10-23 (rev 0.47)
 
-| Workstream | Actual code status | Next gate |
-|---|---|---|
-| ARCH-001 independent Bible/Songs/Hymns sources | **MERGED first slices** #255/#267/#269 | Verify OBS/NDI variants physically |
-| ARCH-002 congregation scene composer, clock, fades and browser feeds | **MERGED first slices** #257/#265/#268/#271–#273 | Real local camera sources and Google TV |
-| ARCH-003 safe rehearsal, source/event clock and crash recovery | **MERGED first slices** #254/#256/#259/#275 | Physical power/failure, rehearsals, outputs |
-| ARCH-004 shared Host/Join and delegated roles | **MERGED first slices** #260/#261 | Real multicomputer, failure/permissions |
-| ARCH-005 receiver and show health, actor/source history | **PARTIAL MERGED** #271/#275; **IN PR** #276 actor logging and #277 show routing/attention | Real OBS, cameras, TV/A-V and validation of both PRs |
-| COMMS-001 notices, requests, mixed PTT, talk channels | **MERGED first slices** #264/#266/#270/#274 | Real headset and secure phone microphone |
-| MCP-001/002 external AI service draft interface | **MERGED first slices** #262/#263 | Actual connected assistant and review |
-| OP-007/008/009 browser/Google TV + local phone camera | **Browser graphics MERGED**, physical video **NOT BUILT** | Independent camera/TV stream and latency |
-| ST-004 speech delta | **Open, diverged PR #4** | Rebase with provider/licensing checks |
-| Release | **NO-GO** | Windows, projector/OBS/TV and owner tests |
+**Main `8c66cb1f`**, latest merged [PR #286](https://github.com/thathman/rhema-studio/pull/286). Status derives from GitHub merged PRs, `CHANGELOG.md` and `docs/PROGRESS-LOG.md`; unit/QA tests cannot establish physical acceptance.
 
-**Branches:** 254 retained; most earlier ARCH/MCP branches have zero commits ahead of main. `history/scenes-actors` 2 ahead (now PR #276); old docs #253 diverged/58 behind before today's reconciliation; feature speech #4 diverged. C4 branch `comms-004/channels` was merged as PR #274.
+| Workstream | State | Evidence of code integrated | Outstanding acceptance |
+|---|---|---|---|
+| ARCH-001 Independent Bible/Songs/Hymns live sources and followers | **MERGED, not accepted** | #255, #267, #269 | Verify actual NDI/OBS Bible full-screen vs lower third, Lyrics/Ticker isolation and real TVs |
+| ARCH-002 Congregation Scene Composer and LAN graphics | **MERGED first slices** | #257, #265, #268, #271–#273, #279 (service clock, time-of-day, target countdown, scene fades, QR and ACK) | Real live camera video, layouts on TV, audio/latency and connect/reconnect |
+| ARCH-003 Isolated draft/rehearsal, event timing, recovery | **MERGED first slices** | #254, #256, #259, #275, #281 audit fixes | Physical power/network/rehearsal recovery, migration and display safety |
+| ARCH-004 Host/Join and optional scoped operators | **MERGED first slices** | #260, #261, #276 actor-aware log | Real second/third computers, permission and takeover drills |
+| ARCH-005 Production show-health and output confidence | **MERGED initial monitoring** | #271/browser renderer ACK, #277 Screens/attention order, #276 logs, #281 safeguards | Physical NDI, TV, moving camera signal, A/V checks on real LAN |
+| COMMS-001 LAN notices, requests and multi-speaker PTT | **MERGED C1–C4 first slices** | #264, #266, #270, #274, #284–#286 with local HTTPS option | Actual phone/headset/microphone Wi-Fi; secure local-CA user flow; jitter/echo, channel priority/revocation |
+| COMMS-005 Failure and recovery manual | **MERGED documentation** | #282 | Train volunteers/verify failure drills on physical setup |
+| MCP-001/002/003 AI-assisted service planning | **MERGED initial interface** | #262, #263, #283 (prompts/list/revise drafts) | Actual external AI assistant creates/edits valid Run of Show, rights/permissions and operator review |
+| PT-006 Production timing | **MERGED first slices** | #227–#234, #250, #268, #279 | Clock/scene, midnight/DST, real multi-operator timing rehearsal |
+| OP-007/008/009 Browser receiver + independent sanctuary video | **BROWSER GRAPHICS MERGED; real camera/video outstanding** | #265, #271, #272; UI camera placeholders #257 | MediaMTX/phone/IP ingest publish-once, Google TV native decoding, 1080p30 and audio tests |
+| ST-004 Yorùbá speech/OpenAI provider | **OPEN / DIVERGED** | [#4](https://github.com/thathman/rhema-studio/pull/4) not merged | Reconcile speech feature, dependencies, provider tests and licences |
+| ST-006/QA-001 Release eligibility | **NO-GO** | CI and isolated Intel Mac builds/QA | Windows installer on real machine, OBS/projector/stage, actual phones/TVs, novice and owner acceptance |
+
+**Active review:** [#278](https://github.com/thathman/rhema-studio/pull/278) documentation update (this branch) and [#4](https://github.com/thathman/rhema-studio/pull/4) speech. Most retained implementation branches are already merged; archived branch names do **not** imply pending changes. Do not revive stale PR #253.
 
 ## Current active work
 
@@ -202,16 +205,19 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 | QA-009 CI status gates and no-skipped-test claims | P0 | MERGED | ST-001,ST-003 | PR CI runs are real; document limits and Windows manual builds |
 | QA-010 Backup/restore incident rehearsal | P0 | MERGED (runbook #59) / MERGED (drill run on the owner's Intel Mac with two profiles and a disk-image USB stick: R1–R5 pass, 2026-10-21) / BACKLOG (two physical laptops and a real USB pull, #62) | ST-008 | `docs/rhema-studio/14-backup-restore-rehearsal.md`: five-step drill (approve + service file + backup → standby open/restore → restore approved → USB pulled), all rows unverified until performed |
 
-## Roll-up / near-term sequence — updated 2026-10-23
-1. Review #276 actor-aware service execution log; resolve outdated speech PR #4 separately; avoid merging obsolete #253.
-2. Verify NDI fullscreen/lower-third Bible/lyrics/ticker in actual OBS and independently rendered sanctuary/browser outputs, receiver ACK and crash recovery.
-3. Implement local phone/IP camera router/fanout and validate OBS 720p30 vs sanctuary 1080p30 and physical Google TV decoding/audio, WAN disconnected.
-4. Test multiple host/join computers, permissions and fallback; real headset PTT and safe paired phone HTTPS microphone.
-5. Test actual MCP-capable AI assistant creating a validated, editable service draft and human approval. Release only after Windows and owner acceptance.
+## Roll-up / near-term sequence — verified after PR #286
+
+1. **Prove the core architectural promise on actual equipment:** Bible/Song/Hymn independent active sources, full-screen and lower-third browser/NDI feeds in OBS, sanctuary scene composition and no unintended changes to ticker/cameras/private stage. Record hardware, actual frame rates, lag and failure behavior.
+2. **Build the still-missing local video layer:** phone/IP-camera publisher → one local relay → independent OBS and Sanctuary consumers; Google TV receiver with real camera moving video and synchronized graphics at measured 1080p30 before considering 1080p60.
+3. **Finish Comms acceptance rather than adding more mockups:** turn on optional HTTPS deliberately, validate secure phone pairing and CA trust on a real phone, headphones/mic/echo/jitter and revocation/priority across two+ devices. Audit certificate-private-key storage and avoid encouraging casual installation of a local CA without privacy/security guidance.
+4. **Validate shared host under failure:** multiple real computers, role-scoped Take, main-machine fallback, event/scene log attribution, receiver frame ACK, WAN unplugged, crash recovery and rehearsals.
+5. **Exercise MCP from a real external assistant** using the service template/Bible/hymn library, validate/revise a complete timed draft, review/import it via Prepare without live side effects.
+6. **Release-readiness:** Windows installation, projection/OBS and screenreader/novice tests, documentation screenshots and owner review. Keep production release NO-GO until acceptance evidence is recorded.
 
 ## Revision history
 
-- **2026-10-23 (rev 0.46):** Reconciled main f63abc8c, #254–#275 merges including #274, outstanding #276/#4 and branch checks; no release claims.
+- **2026-10-23 (rev 0.47):** Reconciled latest main 8c66cb1f (#286): merged show health/actor history (#276/#277), timing (#279), safety review (#281), failure guide (#282), MCP prompts/revision (#283), phone PTT/voice diagnostics/optional LAN HTTPS (#284–#286). Kept physical camera/TV/OBS/headset/Windows acceptance open.
+- **2026-10-23 (rev 0.46):** Reconciled main f63abc8c, #254–#275 merges including #274, historical #276/#4 branch checks; no release claims.
 
 - **2026-10-21 (rev 0.43):** PRs #111–#122 merged; stale "later" notes in done criteria replaced with the PRs that did the work.
 - **2026-10-21 (rev 0.42):** PRs #96–#110 merged (see DEVELOPMENT-STATUS); QA-001 unsigned installer artifact built from `main`.
