@@ -977,8 +977,8 @@ report), but launching it cannot.
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10cw.1 | Two stage outputs: "Pulpit" following Bible, "Band" following everything. Put Romans 8:28 live, then a hymn verse. | Pulpit keeps Romans 8:28; Band shows the hymn; the projector shows the hymn. | Unverified |
-| 10cw.2 | With the hymn up, take the Bible source off and put it back (Production → sources), then Keep log. | The log has the hymn "· Hymns", then "Bible off: Romans 8:28" and "Bible back: Romans 8:28". | Unverified |
+| 10cw.1 | Two stage outputs: "Pulpit" following Bible, "Band" following everything. Put Romans 8:28 live, then a hymn verse. | Pulpit keeps Romans 8:28; Band shows the hymn; the projector shows the hymn. | Verified on the Intel Mac (2026-10-23, two windowed stage outputs): with the hymn on air, Pulpit showed Romans 8:28 (KJV) and Band "Amazing grace, how sweet the sound" |
+| 10cw.2 | With the hymn up, take the Bible source off and put it back (Production → sources), then Keep log. | The log has the hymn "· Hymns", then "Bible off: Romans 8:28" and "Bible back: Romans 8:28". | Verified on the Intel Mac (2026-10-23, the store's Clear and Restore of the Bible source via the QA bridge; the log entries were live Bible, live Hymns, Bible off, Bible back); the Production buttons themselves not pressed |
 
 ### 10cv. Browser feeds (ARCH-002, #198)
 
