@@ -974,6 +974,14 @@ report), but launching it cannot.
 | 10cu.10 | Two joined computers with headsets and the main desk: each joins the talk channel; two hold Talk together, then all three. | Everyone hears the others while talking, nobody is cut off, no one hears their own voice back; the green marks follow who is speaking; nothing reaches the projector, PA, OBS or NDI. | Partly verified on the Intel Mac (2026-10-23): three test desks with tones over the real listener in one QA window (see ADR 0002 §5: full duplex, no self-echo, marks, leaving, 201–204 ms); real microphones, headsets, echo and two computers not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10cz. Scene transitions (ARCH-002)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cz.1 | Two scenes, Blue (Cut) and Red (Fade 1 s); Take Blue, then Take Red, watching the projector. | Blue cross-fades to red over a second. | Verified on the Intel Mac (2026-10-23, windowed projector, canvas read): blue (0,0,255), just after the Take (63,0,192), then red (255,0,0); with the screen locked the fade still ended on red |
+| 10cz.2 | With Red up, press Black. | Black at once, no fade. | Unverified |
+| 10cz.3 | The same scene on an NDI output in OBS. | The fade is smooth in OBS. | Unverified |
+
 ### 10cx. Clock layer (ARCH-002)
 
 | # | Step | Expected | Result |

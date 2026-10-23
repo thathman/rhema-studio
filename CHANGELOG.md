@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Scene transitions (ARCH-002)
+- A scene can come on air with a cross-fade (0.3, 0.5 or 1 s) instead of a cut, on screens, NDI and browser feeds alike; releasing it fades the same way. Black and Logo always cut. Existing scenes keep cutting.
+
 ### Browser feed health (#246, receiver trust)
 - A browser feed's card says whether anyone is watching it and whether the page shows the latest frame: each page tells Rhema which frame it drew. "Behind" shows in red after 3 seconds.
 
