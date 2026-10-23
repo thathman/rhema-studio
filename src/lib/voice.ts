@@ -77,14 +77,18 @@ let monitor: GainNode | null = null
 const peers = new Map<string, Peer>()
 let hostMic: { stream: MediaStream; gate: GainNode; analyser: AnalyserNode } | null = null
 
-function audio(): AudioContext {
+/**
+ * The intercom's audio graph, running. A new context starts suspended, and WebKit leaves a stream
+ * source made while suspended silent for good (found on the desktop: the first desk was never heard).
+ */
+async function audio(): Promise<AudioContext> {
   if (!ctx) {
     ctx = new AudioContext()
     monitor = ctx.createGain()
     monitor.gain.value = useVoice.getState().volume
     monitor.connect(ctx.destination)
   }
-  if (ctx.state === "suspended") void ctx.resume().catch(() => {})
+  if (ctx.state !== "running") await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
   return ctx
 }
 
@@ -104,7 +108,7 @@ function drop(name: string) {
 
 /** A desk's offer: answer it with what that desk should hear. */
 async function answer(id: string, by: string, sdp: string) {
-  const a = audio()
+  const a = await audio()
   drop(by) // a desk that reconnects replaces its old connection
   const pc = new RTCPeerConnection({ iceServers: [] })
   const mix = a.createMediaStreamDestination()
@@ -127,8 +131,11 @@ async function answer(id: string, by: string, sdp: string) {
     peer.voice = voice
     peer.analyser = analyser
   }
+  // A desk that left or lost the network: gone at once on failure, after 5 s of silence otherwise.
   pc.onconnectionstatechange = () => {
-    if ((pc.connectionState === "failed" || pc.connectionState === "closed") && peers.get(by)?.pc === pc) drop(by)
+    const state = pc.connectionState
+    if ((state === "failed" || state === "closed") && peers.get(by)?.pc === pc) drop(by)
+    else if (state === "disconnected") setTimeout(() => { if (pc.connectionState === "disconnected" && peers.get(by)?.pc === pc) drop(by) }, 5000)
   }
   await pc.setRemoteDescription({ type: "offer", sdp })
   const tr = pc.getTransceivers().find((t) => t.receiver.track.kind === "audio")
@@ -145,7 +152,7 @@ async function answer(id: string, by: string, sdp: string) {
 export async function hostTalk(on: boolean, stream?: MediaStream): Promise<void> {
   if (on && !hostMic) {
     try {
-      const a = audio()
+      const a = await audio()
       const s = stream ?? (await navigator.mediaDevices.getUserMedia(MIC))
       const gate = a.createGain()
       gate.gain.value = 0
