@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — MCP-001: the read-only Rhema MCP server (#252)
+
+- **Main checked:** `f55eab9` (#260 merged). #261 (Bible and Screens roles) open.
+- **Branch / PR:** `mcp-001/read-only`.
+- **Behaviour:** `Rhema --mcp` serves MCP (JSON-RPC over stdio) before any window or single-instance handling; opt-in via `mcpEnabled`; `ContentDb::open_read_only` (read-only flag, refuses newer schemas) and the immutable Bible database; tools `rhema_get_capabilities`, `rhema_list_services`, `rhema_get_service`, `rhema_search_songs` (no lyrics), `rhema_list_translations`, `rhema_lookup_bible_reference` (numbered books normalised, ranges bounded). Settings → AI assistants (switch, configuration with this app's path, privacy note). Docs: `docs/rhema-studio/22-rhema-mcp.md`.
+- **Tests:** content `read_only` 1; app `mcp` 4 (protocol and opt-in, reading services, real KJV John 3:16 and 1 Cor 13:4-7 when the Bible database is present, reference parsing); Settings section 1; full vitest 714. Real binary over stdio (QA build, scratch copy of the QA profile): off → every tool refuses with the Settings hint; on → capabilities, services, KJV Romans 8:28, OYCB Psalm 23 with Yorùbá diacritics intact, songs and hymns without lyrics. Found and fixed: a database the updated app has not opened yet is now refused with "open Rhema once" instead of a raw SQL error.
+- **Next:** MCP-002 draft-writing (an AI draft in Prepare for review, provenance, missing items), then Comms notices (#251).
 ## 2026-10-23 — ARCH-004 slice 2: Bible and Screens operators
 
 - **Branch / PR:** `arch-004/operator-roles` (stacked on #260).

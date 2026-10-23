@@ -9,6 +9,7 @@ type SettingsSection =
   | "display"
   | "api-keys"
   | "remote"
+  | "assistants"
   | "diagnostics"
   | "help"
 

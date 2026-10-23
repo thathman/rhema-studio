@@ -100,6 +100,9 @@ interface SettingsState {
   /** The church's own cues (PT-003): named, ordered steps from the cue action registry. */
   customMacros: CustomMacro[]
   setCustomMacros: (macros: CustomMacro[]) => void
+  /** Rhema MCP (#252): AI assistants may read services, songs and the Bible through `Rhema --mcp`. Off by default. */
+  mcpEnabled: boolean
+  setMcpEnabled: (on: boolean) => void
   /** Shared key for OSC/HTTP control; blank means nothing authenticates. */
   remoteSecret: string
   /** Host/Join (ARCH-004): the host this computer joins ("address:port"), the name it paired as, and its token (kept in the keychain). */
@@ -163,6 +166,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   openedPackages: [],
   openedFrom: {},
   commentsSeen: [],
+  mcpEnabled: false,
+  setMcpEnabled: (mcpEnabled) => set({ mcpEnabled }),
   remoteSecret: "",
   joinAddress: "",
   joinName: "",
@@ -244,6 +249,7 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "object" && value !== null && typeof o.enabled === "boolean" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
     }
     case "remoteAuthRequired":
+    case "mcpEnabled":
     case "requireApproval":
     case "autoMode":
     case "onboardingComplete":
@@ -285,6 +291,7 @@ const PERSISTED_KEYS = [
   "openedFrom",
   "commentsSeen",
   "remoteSecret",
+  "mcpEnabled",
   "joinAddress",
   "joinName",
   "joinToken",
