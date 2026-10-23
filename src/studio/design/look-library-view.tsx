@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ask } from "@tauri-apps/plugin-dialog"
-import { HeartIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
+import { HeartIcon, MoreHorizontalIcon, PaletteIcon, PencilIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useBroadcastStore } from "@/stores"
+import { useBroadcastStore, useSettingsStore } from "@/stores"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { LOWER_THIRDS } from "@/lib/builtin-themes"
 import { SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
 import { LIBRARY_LOOKS, LOOK_FAMILIES } from "@/lib/look-library-data"
-import { adoptLook, CONTENT_LABELS, filterLooks, LAYOUT_NAMES, readLookFavourites, resetCopy, themeUsedBy, writeLookFavourites, type LibraryLook, type LookBackground, type LookFamilyId, type LookLayout } from "@/lib/look-library"
+import { adoptLook, brandable, CONTENT_LABELS, filterLooks, LAYOUT_NAMES, lookLanguages, readLookFavourites, resetCopy, showsTwoLanguages, themeUsedBy, writeLookFavourites, type LibraryLook, type LookBackground, type LookFamilyId, type LookLanguage, type LookLayout } from "@/lib/look-library"
+import { hasChurchColours, type BrandKit } from "@/lib/brand-kit"
 import { mayLeaveThemeDraft } from "@/lib/theme-draft"
 import { drawScene } from "@/lib/scene-renderer"
 import { drawStage } from "@/lib/stage-canvas"
@@ -51,6 +52,7 @@ const themeLook = (id: string | undefined) => {
 
 const LAYOUTS: ReadonlyArray<LookLayout | "all"> = ["all", "fullscreen", "lower-third", "ticker", "scene", "stage"]
 const BACKGROUNDS: ReadonlyArray<readonly [LookBackground | "all", string]> = [["all", "Any"], ["dark", "Dark"], ["light", "Light"], ["transparent", "Transparent"]]
+const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]> = [["all", "Any language"], ["yo", "Yorùbá"], ["en", "English"], ["both", "Both together"]]
 
 const storage = typeof localStorage === "undefined" ? null : localStorage
 
@@ -62,9 +64,10 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
   const [layout, setLayout] = useState<LookLayout | "all">("all")
   const [family, setFamily] = useState<LookFamilyId | "all">("all")
   const [background, setBackground] = useState<LookBackground | "all">("all")
+  const [language, setLanguage] = useState<LookLanguage | "both" | "all">("all")
   const [favouritesOnly, setFavouritesOnly] = useState(false)
   const [favourites, setFavourites] = useState(() => readLookFavourites(storage))
-  const looks = useMemo(() => filterLooks(LIBRARY_LOOKS, { layout, family, background, favouritesOnly, favourites }), [layout, family, background, favouritesOnly, favourites])
+  const looks = useMemo(() => filterLooks(LIBRARY_LOOKS, { layout, family, background, language, favouritesOnly, favourites }), [layout, family, background, language, favouritesOnly, favourites])
   const groups = LOOK_FAMILIES.map((f) => ({ family: f, looks: looks.filter((l) => l.family === f.id) })).filter((g) => g.looks.length > 0)
 
   const toggleFavourite = (id: string) => {
@@ -73,7 +76,7 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
     setFavourites(next)
     writeLookFavourites(storage, next)
   }
-  const clear = () => { setLayout("all"); setFamily("all"); setBackground("all"); setFavouritesOnly(false) }
+  const clear = () => { setLayout("all"); setFamily("all"); setBackground("all"); setLanguage("all"); setFavouritesOnly(false) }
 
   return (
     <div className="flex flex-col gap-5">
@@ -90,6 +93,11 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Background">
           {BACKGROUNDS.map(([b, label]) => (
             <Chip key={b} on={background === b} onClick={() => setBackground(b)}>{b === "all" ? "Any background" : label}</Chip>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Language">
+          {LANGUAGES.map(([l, label]) => (
+            <Chip key={l} on={language === l} onClick={() => setLanguage(l)}>{label}</Chip>
           ))}
         </div>
         <Select value={family} onValueChange={(v) => setFamily(v as LookFamilyId | "all")}>
@@ -135,6 +143,12 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
 
 const BACKGROUND_NAMES: Record<LookBackground, string> = { dark: "Dark", light: "Light", transparent: "Transparent (keyed)" }
 
+/** The card's language line: two at once, either one, or English only. */
+function languageWords(look: LibraryLook): string {
+  if (showsTwoLanguages(look, LIBRARY_LOOKS)) return "Yorùbá and English together"
+  return lookLanguages(look, LIBRARY_LOOKS).includes("yo") ? "Yorùbá or English" : "English"
+}
+
 function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook; favourite: boolean; onFavourite: () => void; onOpen: (tab: DesignTab, id?: string) => void }) {
   const themes = useBroadcastStore((s) => s.themes)
   const copies = look.kind === "theme" ? themes.filter((t) => t.libraryLookId === look.id) : []
@@ -148,16 +162,36 @@ function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook;
             <HeartIcon className={cn(favourite && "fill-current text-primary")} />
           </button>
         </div>
-        <p className="text-[0.6875rem] text-muted-foreground">{LAYOUT_NAMES[look.layout]} · {CONTENT_LABELS[look.content]} · {BACKGROUND_NAMES[look.background]} · {look.aspect}</p>
+        <p className="text-[0.6875rem] text-muted-foreground">{LAYOUT_NAMES[look.layout]} · {CONTENT_LABELS[look.content]} · {BACKGROUND_NAMES[look.background]} · {look.aspect} · {languageWords(look)}</p>
         <p className="text-xs text-muted-foreground">{look.purpose}</p>
         {copies.length > 0 && <p className="text-[0.6875rem] text-muted-foreground">In your themes: {copies.map((c) => c.name).join(", ")}</p>}
         <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
           <Button size="xs" onClick={() => void addLook(look, false, onOpen)} title="Add your own copy to your looks"><PlusIcon /> Use</Button>
           {look.kind !== "scene" && <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title="Add your own copy and open it to edit"><PencilIcon /> Use and edit</Button>}
+          {brandable(look) && <ChurchColoursButton look={look} onOpen={onOpen} />}
           {copies.length > 0 && look.kind === "theme" && <ResetMenu look={look} copies={copies} />}
         </div>
       </div>
     </li>
+  )
+}
+
+/**
+ * Use with church colours: the copy takes the Brand Kit's colours and fonts. Before the church has
+ * set any, it says where to set them instead.
+ */
+function ChurchColoursButton({ look, onOpen }: { look: LibraryLook; onOpen: (tab: DesignTab, id?: string) => void }) {
+  const kit = useSettingsStore((s) => s.brandKit)
+  const applied = useBroadcastStore((s) => s.themes.some((t) => t.brandManaged))
+  const ready = applied || hasChurchColours(kit)
+  const click = () => {
+    if (ready) return void addLook(look, false, onOpen, kit)
+    toast("Set your church colours in Design → Brand Kit first.", { description: "Then this adds a copy of the look in those colours and fonts.", action: { label: "Open Brand Kit", onClick: () => onOpen("brand") } })
+  }
+  return (
+    <Button size="xs" variant="outline" onClick={click} title={ready ? "Add your own copy in your Brand Kit colours and fonts" : "Set your church colours in Design → Brand Kit"}>
+      <PaletteIcon /> Use with church colours
+    </Button>
   )
 }
 
@@ -195,14 +229,17 @@ async function reset(copy: BroadcastTheme, look: Extract<LibraryLook, { kind: "t
   toast(`“${copy.name}” is back to the library look.`)
 }
 
-/** Add the look's copies to the church's looks; with `edit`, open the copy too. Never touches an output. */
-async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab, id?: string) => void) {
+/**
+ * Add the look's copies to the church's looks; with `edit`, open the copy too; with `brand`, the
+ * copies take the church's colours and fonts. Never touches an output or the library look.
+ */
+async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab, id?: string) => void, brand?: BrandKit) {
   if (look.kind === "ticker" && !(await confirm(`Use “${look.name}” as your ticker look?`, "It replaces your ticker's look. A ticker running now keeps its look until you start it again."))) return
   if (look.kind === "stage" && !(await confirm(`Use “${look.name}” on the stage display?`, "It replaces your stage look, and stage screens show it straight away. The congregation never sees the stage display."))) return
   if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
   const s = useBroadcastStore.getState()
   const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
-  const added = adoptLook(look, { takenNames: taken, library: LIBRARY_LOOKS })
+  const added = adoptLook(look, { takenNames: taken, library: LIBRARY_LOOKS, brand })
   for (const t of added.themes) useBroadcastStore.getState().saveTheme(t)
   if (added.lowerThirdStyle) useBroadcastStore.getState().saveLowerThirdStyle(added.lowerThirdStyle)
   // Only the saved look: the ticker on air keeps the look it started with.
@@ -211,6 +248,7 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
   if (added.scene) useBroadcastStore.getState().saveScene(added.scene)
 
   const choose = { label: "Choose for a screen", onClick: () => useShellStore.getState().openOutputs() }
+  const keptNote = keptColours(added.kept)
   switch (look.kind) {
     case "theme": {
       const copy = added.themes[0]
@@ -218,12 +256,12 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
         useBroadcastStore.getState().startEditing(copy.id)
         onOpen("themes")
       }
-      toast(`Added “${copy.name}” to your themes.`, { description: "Choose it for an output in the output's settings; nothing on the screens has changed.", action: choose })
+      toast(`Added “${copy.name}” to your themes.`, { description: `${keptNote}Choose it for an output in the output's settings; nothing on the screens has changed.`, action: choose })
       return
     }
     case "lower-third":
       if (edit) onOpen("lower-thirds", added.lowerThirdStyle?.id)
-      toast(`Added “${added.lowerThirdStyle?.name}” to your lower-third styles.`, { description: "Pick it when you show a name in Present. A band on air now keeps its look." })
+      toast(`Added “${added.lowerThirdStyle?.name}” to your lower-third styles.`, { description: `${keptNote}Pick it when you show a name in Present. A band on air now keeps its look.` })
       return
     case "ticker":
       if (edit) onOpen("ticker")
@@ -234,9 +272,16 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
       toast(`The stage display now uses “${look.name}”.`)
       return
     case "scene":
-      toast(`Added the scene “${added.scene?.name}”${added.themes.length ? ` and its look “${added.themes.map((t) => t.name).join("”, “")}”` : ""}.`, { description: "Set its camera and take it in Production → Programs; nothing is on air yet." })
+      toast(`Added the scene “${added.scene?.name}”${added.themes.length ? ` and its look “${added.themes.map((t) => t.name).join("”, “")}”` : ""}.`, { description: `${keptNote}Set its camera and take it in Production → Programs; nothing is on air yet.` })
       return
   }
+}
+
+/** Which of the look's own colours a church-colour copy kept, and why; empty when none. */
+function keptColours(kept: { text: boolean; accent: boolean } | undefined): string {
+  if (!kept || (!kept.text && !kept.accent)) return ""
+  const which = kept.text && kept.accent ? "text and accent colours" : kept.text ? "text colour" : "accent colour"
+  return `Kept the look's own ${which}: your church's would be hard to read on this background. `
 }
 
 async function confirm(title: string, message: string): Promise<boolean> {

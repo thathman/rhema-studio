@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Church colours on library looks, a language filter, ready-made feeds (#299)
+- Design → Library: **Use with church colours** adds a copy of a look in your Brand Kit's colours and fonts. The library look and every look a screen uses stay as they were. If your colour would be hard to read on that look, the copy keeps the look's own colour and the message says so.
+- Before the Brand Kit has your colours, the button says where to set them (Design → Brand Kit).
+- The Library filters by language: **Yorùbá**, **English**, or **Both together** (looks that show a verse or song in two languages at once). Each card says which.
+- Production → Screens: **Add a ready-made feed** adds "Rhema Bible | Full", "Rhema Bible | Lower third", "Rhema Lyrics | Full", "Rhema Lyrics | Lower third" or "Rhema Ticker | Alpha" as NDI or a browser feed. It is a new output, off, and no other output changes. If a feed with that name is already there, you are told and no second one is added.
+
 ### Phone cameras through Rhema's own camera router (#209)
 - Production → Cameras: add a camera (Pulpit, Choir…), scan its QR code with a phone on the church Wi-Fi, allow the camera and press Start camera; no app to buy and nothing on the internet.
 - The camera router (MediaMTX) comes inside Rhema, starts by itself while cameras are added and stops with Rhema; each camera is sent once and shared by Rhema's scenes and TVs (WHEP) and OBS (RTSP).

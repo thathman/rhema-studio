@@ -8,6 +8,7 @@ import { monitorProblems } from "@/lib/monitor-health"
 import { contentStatus } from "@/lib/song-files"
 import { useMonitorStore } from "@/stores/monitor-store"
 import { allSignageIds } from "@/lib/signage"
+import { tickerOnly } from "@/lib/feed-presets"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
@@ -122,7 +123,8 @@ export function useReadiness() {
     timing: planCheck(items, headers),
     camerasWithoutAddress: scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !l.cameraUrl)).map((sc) => sc.name),
     signage: outputs
-      .filter((o) => o.role === "signage")
+      // A ticker feed (Rhema Ticker | Alpha) has no pictures on purpose.
+      .filter((o) => o.role === "signage" && !tickerOnly(o, allSignageIds(o.signage).length, themes.find((t) => t.id === o.themeId)))
       .map((o) => {
         const ids = allSignageIds(o.signage)
         return { name: o.name, total: ids.length, missing: mediaLoaded ? ids.filter((id) => !mediaAssets.find((a) => a.id === id)?.present).length : 0 }

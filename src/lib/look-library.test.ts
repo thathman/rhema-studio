@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { LIBRARY_LOOKS, LOOK_FAMILIES } from "@/lib/look-library-data"
-import { adoptLook, filterLooks, readLookFavourites, resetCopy, sourceLook, themeUsedBy, uniqueName, writeLookFavourites, type LibraryLook } from "@/lib/look-library"
+import { adoptLook, brandable, filterLooks, lookLanguages, readLookFavourites, resetCopy, showsTwoLanguages, sourceLook, themeUsedBy, uniqueName, writeLookFavourites, type LibraryLook } from "@/lib/look-library"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import { normalizeLowerThirdStyle } from "@/lib/lower-third-style"
 import { normalizeTickerStyle } from "@/lib/ticker"
 import { normalizeStageStyle } from "@/lib/stage-style"
 import { normalizeScene } from "@/lib/scenes"
-import { BRAND_FONTS } from "@/lib/brand-kit"
+import { BRAND_FONTS, CAMERA_GROUND, contrastRatio, defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
 import { BUNDLED_FONTS } from "@/lib/fonts"
 import type { BroadcastOutput } from "@/types"
 
@@ -179,5 +179,101 @@ describe("reset and use", () => {
     m.set("rhema-studio.look-favourites", "{not json")
     expect(readLookFavourites(storage).size).toBe(0)
     expect(readLookFavourites(null).size).toBe(0)
+  })
+})
+
+describe("language filter (#299)", () => {
+  const filter = (language: "en" | "yo" | "both") => filterLooks(LIBRARY_LOOKS, { layout: "all", family: "all", background: "all", language })
+
+  it("Both keeps the looks that show two languages at once", () => {
+    const both = filter("both")
+    expect(both.length).toBeGreaterThan(0)
+    // Every theme look has a second-language style; name bands and tickers show one line.
+    for (const l of of("theme")) expect(both.includes(l), l.id).toBe(true)
+    for (const l of [...of("lower-third"), ...of("ticker")]) expect(both.includes(l), l.id).toBe(false)
+    expect(both.some((l) => l.id === "look-clean-scene-bible")).toBe(true)
+    expect(both.some((l) => l.id === "look-contrast-stage")).toBe(true)
+  })
+
+  it("a theme without a second-language style is not bilingual", () => {
+    const look = of("theme")[0]
+    const single = { ...look, theme: { ...look.theme, secondaryVerseText: undefined } }
+    expect(showsTwoLanguages(single)).toBe(false)
+  })
+
+  it("Yorùbá leaves out looks with English words built in; English keeps them", () => {
+    const yo = filter("yo").map((l) => l.id)
+    const en = filter("en").map((l) => l.id)
+    expect(en).toHaveLength(LIBRARY_LOOKS.length)
+    expect(yo).not.toContain("look-classic-ticker")
+    expect(yo).toContain("look-contemporary-ticker")
+    expect(yo).toContain("look-classic-bible-full")
+    expect(lookLanguages(LIBRARY_LOOKS.find((l) => l.id === "look-clean-ticker")!)).toEqual(["en"])
+  })
+
+  it("a look in a font Rhema does not bundle is not offered for Yorùbá", () => {
+    const look = of("theme")[0]
+    const system = { ...look, theme: { ...look.theme, verseText: { ...look.theme.verseText, fontFamily: "Some System Font" } } }
+    expect(lookLanguages(system)).toEqual(["en"])
+    expect(showsTwoLanguages(system)).toBe(false)
+  })
+})
+
+describe("Use with church colours (#299)", () => {
+  const kit: BrandKit = { ...defaultBrandKit(), churchName: "Grace Chapel", colors: { primary: "#003366", accent: "#ffcc00", text: "#ffffff", background: "#001122" }, fonts: { heading: "Inter Variable", body: "Geist Variable" } }
+  const look = LIBRARY_LOOKS.find((l) => l.id === "look-classic-bible-full") as Extract<LibraryLook, { kind: "theme" }>
+
+  it("the copy takes the Brand Kit colours and fonts; the library look and the builtins stay as they were", () => {
+    const library = structuredClone(LIBRARY_LOOKS)
+    const builtins = structuredClone(BUILTIN_THEMES)
+    const added = adoptLook(look, { newId: ids, now: 3, brand: kit })
+    const copy = added.themes[0]
+    expect(copy.id).not.toBe(look.id)
+    expect(copy).toMatchObject({ builtin: false, libraryLookId: look.id, name: "Classic · Scripture · Grace Chapel" })
+    expect(copy.brandManaged).toBeUndefined() // a hand copy: Brand Kit Apply never rewrites it
+    expect(copy.verseText).toMatchObject({ color: "#ffffff", fontFamily: "Geist Variable" })
+    expect(copy.secondaryVerseText).toMatchObject({ color: "#ffcc00", fontFamily: "Geist Variable" })
+    expect(copy.reference).toMatchObject({ color: "#ffcc00", fontFamily: "Inter Variable" })
+    expect(copy.verseNumbers.color).toBe("#ffcc00")
+    // The look's background and layout stay.
+    expect(copy.background).toEqual(look.theme.background)
+    expect(copy.layout).toEqual(look.theme.layout)
+    expect(added.kept).toEqual({ text: false, accent: false })
+    expect(LIBRARY_LOOKS).toEqual(library)
+    expect(BUILTIN_THEMES).toEqual(builtins)
+  })
+
+  it("keeps the look's own colour when the church's would not read on it", () => {
+    // Navy words on the Classic look's navy page would not read.
+    const dark: BrandKit = { ...kit, colors: { ...kit.colors, text: "#14202b", accent: "#1a2a3a" } }
+    const added = adoptLook(look, { newId: ids, brand: dark })
+    const copy = added.themes[0]
+    expect(added.kept).toEqual({ text: true, accent: true })
+    expect(copy.verseText.color).toBe(look.theme.verseText.color)
+    expect(copy.reference.color).toBe(look.theme.reference.color)
+    // Fonts still change.
+    expect(copy.verseText.fontFamily).toBe("Geist Variable")
+    // A keyed look without a band is judged against the camera picture.
+    const words = LIBRARY_LOOKS.find((l) => l.id === "look-contemporary-bible-l3") as Extract<LibraryLook, { kind: "theme" }>
+    const keyed = adoptLook(words, { newId: ids, brand: { ...kit, colors: { ...kit.colors, text: "#222222" } } })
+    expect(contrastRatio("#222222", CAMERA_GROUND)).toBeLessThan(4.5)
+    expect(keyed.kept?.text).toBe(true)
+    expect(keyed.themes[0].verseText.color).toBe(words.theme.verseText.color)
+  })
+
+  it("a scene's layer looks and a name band take the colours too; tickers and the stage look are not offered", () => {
+    const scene = LIBRARY_LOOKS.find((l) => l.id === "look-clean-scene-bible")!
+    const s = adoptLook(scene, { newId: ids, library: LIBRARY_LOOKS, brand: kit })
+    expect(s.themes[0].reference.color).toBe("#ffcc00")
+    expect(s.scene?.name).toBe("Clean · Camera and scripture · Grace Chapel")
+    const band = of("lower-third")[0]
+    const l3 = adoptLook(band, { newId: ids, brand: kit }).lowerThirdStyle!
+    expect(l3).toMatchObject({ fontFamily: "Inter Variable", line1: { color: "#ffffff" }, line2: { color: "#ffcc00" }, accent: { color: "#ffcc00" } })
+    expect(band.style.line1.color).not.toBe("#ffffff")
+    expect(of("ticker").some(brandable)).toBe(false)
+    expect(of("stage").some(brandable)).toBe(false)
+    // Asked anyway, the ticker look is copied as the library has it.
+    const t = of("ticker")[0]
+    expect(adoptLook(t, { brand: kit }).tickerStyle).toEqual(t.style)
   })
 })

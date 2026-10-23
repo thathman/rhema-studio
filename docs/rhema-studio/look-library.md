@@ -10,6 +10,15 @@ were made for Rhema: no picture, template or font was copied from anywhere else.
   (Design → Lower thirds), or a scene (Production → Programs). Nothing on the screens changes until you
   choose the copy for an output in its settings, or take the scene (ADR 0001: no look goes live by itself).
 - **Use and edit** does the same and opens the copy to change.
+- **Use with church colours** (themes, name bands, camera scenes) adds the copy in the Brand Kit's colours
+  and fonts: the words in its text colour and body font; the reference, second language and verse numbers
+  in its accent; the reference in its heading font; a name band's bar in the accent. The look's background
+  and layout stay. Each colour must read at 4.5:1 on what the words sit on (the look's band, else its
+  background, else, for a keyed look, the camera picture taken as dark); one that would not is left as the
+  look has it, and the message says so. The copy's name ends with the church name. The library look,
+  the built-in themes and every look a screen uses are never changed, and Brand Kit Apply never rewrites
+  the copy. Until the Brand Kit has the church's colours, the button points to Design → Brand Kit. The
+  ticker and stage looks are not offered: using one replaces the church's single look.
 - The ticker and the stage display each have one look for the church. Using a ticker look replaces it,
   and a ticker running now keeps its look until you start it again. Using a stage look asks first,
   because stage screens show it straight away (the congregation never sees the stage display).
@@ -17,7 +26,14 @@ were made for Rhema: no picture, template or font was copied from anywhere else.
   the library look (its name stays); a copy an output or a scene on air uses cannot be reset.
 - The heart marks a favourite on this computer; **Favourites** shows only those.
 - Filters: layout (Full screen, Lower third, Ticker, Camera scene, Stage), background (Dark, Light,
-  Transparent) and family. Every look is 16:9 and shows two languages when the content has them.
+  Transparent), language and family. Every look is 16:9.
+- Language: **Yorùbá** keeps looks that read right in Yorùbá (their fonts carry the dotted letters and tone
+  marks, and they have no English words built in: the tickers tagged NOTICES, UPDATES, THIS WEEK and
+  NOTICE are English only); **English** keeps every look; **Both together** keeps looks that show two
+  languages at once: themes with a second-language style (a bilingual verse or song slide gets its own
+  block), the stage display and camera scenes whose look does. Name bands and tickers show one line of
+  words, in whichever language you type. A look's `languages` metadata sets this when it is not the
+  default.
 
 A **look** is how words appear; a **scene** arranges layers (a camera, a live source) and names the look
 each layer shows in; an **output** (a projector, an NDI sender, a browser feed) chooses its look or takes a
@@ -69,5 +85,7 @@ Theme Designer, a made-up speaker name and church notices.
   `builtin-banner-split`) are not part of the library and are unchanged.
 - `src/lib/look-library.test.ts` checks that every look normalizes unchanged, uses bundled fonts only, and
   that Use adds copies with new ids and leaves outputs as they were.
-- Not yet: 9:16 looks, a language filter, Brand Kit colours applied to library looks, and Design →
-  "Used on" (UX15-4).
+- Not yet: 9:16 looks, and church colours on the ticker and stage looks.
+- Ready-made feeds (Production → Screens → Add a ready-made feed) are in `src/lib/feed-presets.ts`: each
+  makes a new output with its own id, `shows`, a built-in look (Classic Dark full screen, Lower Thirds
+  keyed) and its NDI source name, off, and refuses a name an output already has.

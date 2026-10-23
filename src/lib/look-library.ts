@@ -3,6 +3,8 @@ import type { BroadcastOutput, LowerThirdStyle, StageStyle, TickerStyle } from "
 import type { Scene, SceneBox, SceneLayerKind } from "@/types/scene"
 import { themeIdsOf } from "@/lib/output-themes"
 import { newLayer } from "@/lib/scenes"
+import { brandLowerThirdStyle, brandTheme, type BrandKit } from "@/lib/brand-kit"
+import { BUNDLED_FONTS } from "@/lib/fonts"
 
 /**
  * The built-in look library (#299 UX15-3). A library look is never edited or
@@ -19,6 +21,8 @@ export type LookLayout = "fullscreen" | "lower-third" | "ticker" | "scene" | "st
 export type LookContent = "bible" | "lyrics" | "speaker" | "announcements" | "stage"
 /** What is behind the words: a dark or light ground, or nothing (keyed over a camera). */
 export type LookBackground = "dark" | "light" | "transparent"
+/** A language a look reads right in: English, or Yorùbá (its dotted letters and tone marks). */
+export type LookLanguage = "en" | "yo"
 
 export interface LookFamily {
   id: LookFamilyId
@@ -45,6 +49,11 @@ interface LookMeta {
   content: LookContent
   background: LookBackground
   aspect: "16:9"
+  /**
+   * The languages it reads right in. Absent: worked out from its fonts (every bundled font carries
+   * Yorùbá's letters). Set it when a look has words of one language built in (a ticker's "NOTICES" tag).
+   */
+  languages?: readonly LookLanguage[]
 }
 
 export type LibraryLook =
@@ -74,18 +83,77 @@ export interface LookFilter {
   layout: LookLayout | "all"
   family: LookFamilyId | "all"
   background: LookBackground | "all"
+  /** "both": looks that show two languages at once (a bilingual verse or song). Absent: any. */
+  language?: LookLanguage | "both" | "all"
   /** Only the favourites (ids in `favourites`). */
   favouritesOnly?: boolean
   favourites?: ReadonlySet<string>
 }
 
-/** The looks a filter keeps, in library order. */
+/** The looks a filter keeps, in library order. `looks` is the whole library (a scene's layers name looks in it). */
 export function filterLooks(looks: readonly LibraryLook[], f: LookFilter): LibraryLook[] {
+  const language = f.language ?? "all"
   return looks.filter((l) =>
     (f.layout === "all" || l.layout === f.layout) &&
     (f.family === "all" || l.family === f.family) &&
     (f.background === "all" || l.background === f.background) &&
+    (language === "all" || (language === "both" ? showsTwoLanguages(l, looks) : lookLanguages(l, looks).includes(language))) &&
     (!f.favouritesOnly || (f.favourites?.has(l.id) ?? false)))
+}
+
+/** The fonts a look's words use; a scene's are its layers' looks'. */
+function lookFonts(look: LibraryLook, library: readonly LibraryLook[]): string[] {
+  switch (look.kind) {
+    case "theme":
+      return [look.theme.verseText.fontFamily, look.theme.reference.fontFamily, ...(look.theme.secondaryVerseText ? [look.theme.secondaryVerseText.fontFamily] : [])]
+    case "lower-third":
+    case "ticker":
+      // null: the theme's verse font.
+      return look.style.fontFamily ? [look.style.fontFamily] : []
+    case "stage":
+      return []
+    case "scene":
+      return layerLooks(look, library).flatMap((l) => lookFonts(l, library))
+  }
+}
+
+const layerLooks = (look: Extract<LibraryLook, { kind: "scene" }>, library: readonly LibraryLook[]) =>
+  look.scene.layers.flatMap((l) => library.filter((x) => x.id === l.lookId))
+
+/**
+ * The languages a look reads right in: its own `languages` when set, else English always and
+ * Yorùbá when every font it uses is one Rhema bundles (each carries Yorùbá's dotted letters and
+ * tone marks; a system font may not).
+ */
+export function lookLanguages(look: LibraryLook, library: readonly LibraryLook[] = []): LookLanguage[] {
+  if (look.languages) return [...look.languages]
+  const bundled = new Set<string>(BUNDLED_FONTS)
+  return lookFonts(look, library).every((f) => bundled.has(f)) ? ["en", "yo"] : ["en"]
+}
+
+/**
+ * Shows two languages at once: a theme with a style for the second language (a bilingual verse
+ * or song slide gets its own block), the stage display (it shows every line live), or a scene
+ * whose layer looks do. Name bands and tickers show one line of words, in whichever language.
+ */
+export function showsTwoLanguages(look: LibraryLook, library: readonly LibraryLook[] = []): boolean {
+  const langs = lookLanguages(look, library)
+  if (!langs.includes("en") || !langs.includes("yo")) return false
+  switch (look.kind) {
+    case "theme":
+      return !!look.theme.secondaryVerseText
+    case "stage":
+      return true
+    case "scene":
+      return layerLooks(look, library).some((l) => showsTwoLanguages(l, library))
+    default:
+      return false
+  }
+}
+
+/** The library looks "Use with church colours" works for: ones Use copies (not the church's one ticker or stage look). */
+export function brandable(look: LibraryLook): boolean {
+  return look.kind === "theme" || look.kind === "lower-third" || look.kind === "scene"
 }
 
 /** `name`, or `name 2`, `name 3`… when one of `taken` already has it. */
@@ -105,6 +173,8 @@ export interface AdoptedLook {
   /** Replaces the church's one stage look. */
   stageStyle?: StageStyle
   scene?: Scene
+  /** With church colours: a look's own text or accent colour was kept, because the church's would not read on it. */
+  kept?: { text: boolean; accent: boolean }
 }
 
 interface AdoptOptions {
@@ -114,6 +184,11 @@ interface AdoptOptions {
   takenNames?: readonly string[]
   /** Every library look, for a scene's layer looks. */
   library?: readonly LibraryLook[]
+  /**
+   * "Use with church colours": the copies take the Brand Kit's colours and fonts (only the copies;
+   * the library look is never changed). Only for looks `brandable` allows.
+   */
+  brand?: BrandKit
 }
 
 const randomId = () => crypto.randomUUID()
@@ -131,16 +206,29 @@ export function adoptLook(look: LibraryLook, opts: AdoptOptions = {}): AdoptedLo
   const newId = opts.newId ?? randomId
   const now = opts.now ?? Date.now()
   const taken = [...(opts.takenNames ?? [])]
+  const brand = opts.brand && brandable(look) ? opts.brand : undefined
+  // A church-colour copy says so in its name, so it is easy to tell from a plain one.
+  const suffix = brand ? ` · ${brand.churchName.trim() || "Church colours"}` : ""
   const name = (n: string) => {
-    const unique = uniqueName(n, taken)
+    const unique = uniqueName(n + suffix, taken)
     taken.push(unique)
     return unique
   }
+  const kept = { text: false, accent: false }
+  const branded = <T>(value: T, paint: (v: T, kit: BrandKit) => { value: T; keptText: boolean; keptAccent: boolean }): T => {
+    if (!brand) return value
+    const out = paint(value, brand)
+    kept.text ||= out.keptText
+    kept.accent ||= out.keptAccent
+    return out.value
+  }
+  const theme = (source: BroadcastTheme, lookId: string, n: string) => branded(copyTheme(source, lookId, name(n), newId(), now), brandTheme)
+  const withKept = (a: AdoptedLook): AdoptedLook => (brand ? { ...a, kept } : a)
   switch (look.kind) {
     case "theme":
-      return { themes: [copyTheme(look.theme, look.id, name(look.name), newId(), now)] }
+      return withKept({ themes: [theme(look.theme, look.id, look.name)] })
     case "lower-third":
-      return { themes: [], lowerThirdStyle: { ...structuredClone(look.style), id: newId(), name: name(look.name) } }
+      return withKept({ themes: [], lowerThirdStyle: branded({ ...structuredClone(look.style), id: newId(), name: name(look.name) }, brandLowerThirdStyle) })
     case "ticker":
       return { themes: [], tickerStyle: structuredClone(look.style) }
     case "stage":
@@ -153,7 +241,7 @@ export function adoptLook(look: LibraryLook, opts: AdoptOptions = {}): AdoptedLo
         if (!l.lookId || copied.has(l.lookId)) continue
         const source = (opts.library ?? []).find((x) => x.id === l.lookId)
         if (source?.kind !== "theme") continue
-        const t = copyTheme(source.theme, source.id, name(source.name), newId(), now)
+        const t = theme(source.theme, source.id, source.name)
         themes.push(t)
         copied.set(l.lookId, t.id)
       }
@@ -164,7 +252,7 @@ export function adoptLook(look: LibraryLook, opts: AdoptOptions = {}): AdoptedLo
         ...(l.shows ? { shows: [...l.shows] } : {}),
         ...(l.lookId && copied.has(l.lookId) ? { themeId: copied.get(l.lookId) } : {}),
       }))
-      return { themes, scene: { id: newId(), name: name(look.name), background: look.scene.background, layers, createdAt: now, updatedAt: now } }
+      return withKept({ themes, scene: { id: newId(), name: name(look.name), background: look.scene.background, layers, createdAt: now, updatedAt: now } })
     }
   }
 }

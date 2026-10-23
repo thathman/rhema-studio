@@ -1,5 +1,7 @@
 import { ndiFrameRateToNumber, ndiResolutionDimensions } from "@/lib/broadcast-output-control"
 import { CONTENT_NAMES } from "@/lib/content-names"
+import { tickerOnly } from "@/lib/feed-presets"
+import { allSignageIds } from "@/lib/signage"
 import type { BroadcastOutput, BroadcastTheme, Scene } from "@/types"
 
 /** How an output leaves this computer, in a word: a display, NDI or a browser feed (#299 UX15-4). */
@@ -21,8 +23,8 @@ export function outputDestination(o: BroadcastOutput, monitorLabel?: string): st
 }
 
 /** What it follows: everything put on air, or only chosen live sources (ADR 0001). */
-export function outputFollows(o: BroadcastOutput): string {
-  if (o.role === "signage") return "Nothing in the service (its own picture loop)"
+export function outputFollows(o: BroadcastOutput, theme?: BroadcastTheme): string {
+  if (o.role === "signage") return tickerOnly(o, allSignageIds(o.signage).length, theme) ? "The news ticker from Present" : "Nothing in the service (its own picture loop)"
   return o.shows?.length ? o.shows.map((k) => CONTENT_NAMES[k]).join(", ") : "Everything put on air"
 }
 
@@ -33,7 +35,10 @@ export function outputFollows(o: BroadcastOutput): string {
  */
 export function outputPresentation(o: BroadcastOutput, scenes: Scene[], theme?: BroadcastTheme): string {
   if (o.role === "stage") return "Stage display (words, next, note, timer)"
-  if (o.role === "signage") return o.ticker ? "Signage loop · ticker" : "Signage loop"
+  if (o.role === "signage") {
+    if (tickerOnly(o, allSignageIds(o.signage).length, theme)) return "Ticker only · transparent, for keying"
+    return o.ticker ? "Signage loop · ticker" : "Signage loop"
+  }
   const scene = o.sceneId ? scenes.find((s) => s.id === o.sceneId) : undefined
   const parts = [scene ? `Scene: ${scene.name}` : "Full screen"]
   if (o.lowerThirds) parts.push("lower thirds")
