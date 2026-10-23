@@ -8,6 +8,12 @@ import { create } from "zustand"
  */
 export type NoticeTo = "all" | "host" | "timekeeper" | "bible" | "screens" | "present"
 export type NoticeAnswer = "seen" | "ready" | "unable"
+/**
+ * An action request (Comms C2): what the recipient is asked to do. It is only offered on their desk
+ * as one button; nothing runs until they press it. bible: a reference; scene: a scene id; event: a
+ * run-of-show item id.
+ */
+export interface NoticeAction { kind: "bible" | "scene" | "event"; value: string }
 
 export interface Notice {
   id: string
@@ -17,6 +23,7 @@ export interface Notice {
   text: string
   /** The run-of-show event it is about. */
   event?: { id: string; title: string } | null
+  action?: NoticeAction | null
   at: number
   answers: { by: string; state: NoticeAnswer; at: number }[]
 }
@@ -29,7 +36,7 @@ interface NoticesState {
   notices: Notice[]
   /** Notices this desk has read (ids), for the unread count. */
   read: string[]
-  send: (n: { from: string; to?: string; priority?: string; text: string; event?: { id: string; title: string } | null }) => Notice | null
+  send: (n: { from: string; to?: string; priority?: string; text: string; event?: { id: string; title: string } | null; action?: unknown }) => Notice | null
   answer: (id: string, by: string, state: string) => void
   markRead: (ids: string[]) => void
 }
@@ -37,7 +44,7 @@ interface NoticesState {
 export const useNotices = create<NoticesState>((set, get) => ({
   notices: [],
   read: [],
-  send: ({ from, to, priority, text, event }) => {
+  send: ({ from, to, priority, text, event, action }) => {
     const body = text.trim().slice(0, 280)
     if (!body) return null
     const notice: Notice = {
@@ -47,6 +54,7 @@ export const useNotices = create<NoticesState>((set, get) => ({
       priority: priority === "urgent" ? "urgent" : "normal",
       text: body,
       event: event ?? null,
+      action: asAction(action),
       at: Date.now(),
       answers: [],
     }
@@ -65,4 +73,23 @@ export const useNotices = create<NoticesState>((set, get) => ({
 /** Whether a notice is for a desk with this role ("host" for the main desk). */
 export function isFor(n: Notice, role: string): boolean {
   return n.to === "all" || n.to === role || (role === "configure" && n.to === "present")
+}
+
+/** A well-formed action request, or null (it may come from another computer). */
+export function asAction(a: unknown): NoticeAction | null {
+  if (!a || typeof a !== "object") return null
+  const { kind, value } = a as Record<string, unknown>
+  if ((kind !== "bible" && kind !== "scene" && kind !== "event") || typeof value !== "string" || !value.trim()) return null
+  return { kind, value: value.trim().slice(0, 120) }
+}
+
+/**
+ * The congregation outputs a "take this scene" request switches: those already showing a scene (the
+ * program), else the main output, else the first.
+ */
+export function sceneTargets(outputs: { id: string; sceneId?: string | null }[]): string[] {
+  const showing = outputs.filter((o) => o.sceneId).map((o) => o.id)
+  if (showing.length) return showing
+  const main = outputs.find((o) => o.id === "main") ?? outputs[0]
+  return main ? [main.id] : []
 }

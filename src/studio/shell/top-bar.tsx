@@ -4,7 +4,9 @@ import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { NoticesPanel } from "@/studio/notices-panel"
-import { useNotices } from "@/stores/notices-store"
+import { sceneTargets, useNotices, type NoticeAction } from "@/stores/notices-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
+import { activateBibleReference } from "@/lib/bible-activate"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -50,6 +52,8 @@ function HostNotices() {
   const current = useEventClock((s) => s.currentId)
   const event = useQueueStore((s) => s.items.find((i) => i.id === current))
   const me = operator ? `${operator} (main desk)` : "Main desk"
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const rundown = useQueueStore((s) => s.items)
   const unread = notices.filter((n) => n.from !== me && (n.to === "host" || n.to === "all") && !read.includes(n.id))
   return (
     <Popover onOpenChange={(o) => { if (o) useNotices.getState().markRead(notices.map((n) => n.id)) }}>
@@ -68,9 +72,22 @@ function HostNotices() {
           eventTitle={event?.reference ?? null}
           onSend={(n) => useNotices.getState().send({ ...n, from: me, event: event ? { id: event.id, title: event.reference } : null })}
           onAnswer={(id, state) => useNotices.getState().answer(id, me, state)}
+          onAction={runNoticeAction}
+          scenes={scenes}
+          rundown={rundown}
         />
         <button type="button" className="mt-2 text-[0.6875rem] text-muted-foreground underline" onClick={() => useShellStore.getState().goTo("team")}>Team activity: approvals and comments</button>
       </PopoverContent>
     </Popover>
   )
+}
+
+/** Do what an action request asks, on the main desk, when its button is pressed (Comms C2). */
+function runNoticeAction(a: NoticeAction) {
+  if (a.kind === "bible") void activateBibleReference(a.value)
+  else if (a.kind === "event") useEventClock.getState().start(a.value)
+  else {
+    const b = useBroadcastStore.getState()
+    for (const id of sceneTargets(b.outputs.filter((o) => (o.role ?? "congregation") === "congregation"))) b.takeScene(id, a.value)
+  }
 }

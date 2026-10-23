@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Action requests (Rhema Comms C2, #251)
+- A notice can ask for something: to show a verse, take a scene or start a run-of-show item. The recipient gets one button for it on their desk; nothing runs until they press it, it runs with their own permissions, and pressing it answers Ready.
+
 ### Browser feeds (ARCH-002, #198)
 - A new kind of output, **Browser Feed**: an output drawn by a web page on the church network, for OBS (Browser source) or a TV's browser, with no window or NDI sender on this computer. It is drawn by the same code as the other outputs, so its looks, scenes, chosen sources, lower third and ticker look the same, and a keyed look stays transparent in OBS. Outputs → edit shows its link (copy it, or make a new one, which closes the old). It needs the HTTP listener on the network; videos do not play in a browser feed.
 
