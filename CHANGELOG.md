@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### AI drafts can suggest a look and a scene per item (MCP-004, #252)
+- New MCP tool `rhema_list_looks_and_scenes`; draft items may carry `suggested_look` / `suggested_scene`, checked against the church's names and shown in Prepare → AI drafts for people to apply. They are never stored in the service.
+
 ### Cameras in scenes (OP-009, #209)
 - A scene's Camera layer now plays a camera on the church network (WHEP, as MediaMTX offers each camera it relays), on screens, NDI outputs and browser feeds, with words layered over it. Only church-network addresses are used.
 

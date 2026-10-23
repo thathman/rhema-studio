@@ -105,6 +105,7 @@ fn tools() -> Value {
         { "name": "rhema_list_translations", "description": "The Bible editions installed on this computer (abbreviation, title, language).", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_validate_service_draft", "description": "Check a proposed service without saving it: every song and hymn is matched to the church's library (by id, exact title, other title or hymn number), every Scripture reference is looked up in the installed editions, and anything not found is listed as missing. Returns errors to fix, warnings, the planned minutes and what was found.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": ro },
         { "name": "rhema_create_service_draft", "description": "Save a checked proposed service as a draft for the church to review in Rhema → Prepare → AI drafts. It does not change any saved service, approve anything or put anything on screen; people open it, edit it and save it themselves. Fails with the same errors as the check.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } },
+        { "name": "rhema_list_looks_and_scenes", "description": "The church's looks (how words appear: built-in and its own, from Design) and congregation scenes (layouts), by name, so a draft can suggest them per item. Suggestions are shown to the reviewer; nothing is applied.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_list_service_drafts", "description": "The drafts waiting for the church to review in Prepare → AI drafts (newest first): id, title, date, number of items, when made or revised, by which assistant.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_update_service_draft", "description": "Replace a waiting draft with a revised one (same id; checked like rhema_create_service_draft). It still only waits for people to review; whatever they already saved from it is not changed. Fails if the draft is not waiting any more.", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" }, "draft": draft_schema() }, "required": ["id", "draft"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false } },
         { "name": "rhema_lookup_bible_reference", "description": "The exact text of a Bible reference from an installed edition (e.g. \"Romans 8:28\", \"1 Corinthians 13:4-7\", \"Psalm 23\"). Always use this for Scripture; never quote verses from memory.", "inputSchema": { "type": "object", "properties": { "reference": { "type": "string" }, "translation": { "type": "string", "description": "An installed abbreviation, e.g. KJV; default: the first English edition." } }, "required": ["reference"] }, "annotations": ro }
@@ -137,7 +138,9 @@ fn draft_schema() -> Value {
                             "translation": { "type": "string" },
                             "text": { "type": "string", "description": "a slide's words (announcements, prayer points); never song lyrics" },
                             "planned_minutes": { "type": "number" },
-                            "notes": { "type": "string" }
+                            "notes": { "type": "string" },
+                            "suggested_look": { "type": "string", "description": "a look name from rhema_list_looks_and_scenes (a suggestion the reviewer sees; not applied)" },
+                            "suggested_scene": { "type": "string", "description": "a scene name from rhema_list_looks_and_scenes (a suggestion the reviewer sees; not applied)" }
                         }
                     } }
                 }
@@ -209,7 +212,8 @@ fn call(s: &Server, name: &str, a: &Value) -> Value {
             _ => tool_error("no Bible editions found"),
         },
         "rhema_validate_service_draft" | "rhema_create_service_draft" => {
-            let checked = crate::mcp_drafts::check(s.content.as_ref(), s.bible.as_ref(), a.get("draft").unwrap_or(&Value::Null));
+            let looks = s.dir.as_deref().map(crate::mcp_drafts::Looks::read);
+            let checked = crate::mcp_drafts::check_with(s.content.as_ref(), s.bible.as_ref(), looks.as_ref(), a.get("draft").unwrap_or(&Value::Null));
             if name == "rhema_validate_service_draft" {
                 return text(&checked.report);
             }
@@ -228,12 +232,17 @@ fn call(s: &Server, name: &str, a: &Value) -> Value {
                 Err(e) => tool_error(&e),
             }
         }
+        "rhema_list_looks_and_scenes" => {
+            let l = s.dir.as_deref().map(crate::mcp_drafts::Looks::read).unwrap_or_default();
+            text(&json!({ "looks": l.looks, "scenes": l.scenes }))
+        }
         "rhema_list_service_drafts" => match s.dir.as_deref() {
             Some(dir) => text(&json!({ "drafts": crate::mcp_drafts::list(dir) })),
             None => tool_error("the data folder is not available"),
         },
         "rhema_update_service_draft" => {
-            let checked = crate::mcp_drafts::check(s.content.as_ref(), s.bible.as_ref(), a.get("draft").unwrap_or(&Value::Null));
+            let looks = s.dir.as_deref().map(crate::mcp_drafts::Looks::read);
+            let checked = crate::mcp_drafts::check_with(s.content.as_ref(), s.bible.as_ref(), looks.as_ref(), a.get("draft").unwrap_or(&Value::Null));
             let (Some(draft), Some(dir)) = (checked.draft, s.dir.as_deref()) else {
                 let mut r = tool_error("the draft was not saved: fix the errors first (rhema_validate_service_draft lists them)");
                 r["structuredContent"] = checked.report;

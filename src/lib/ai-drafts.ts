@@ -11,6 +11,9 @@ export interface AiDraftItem {
   status: "found" | "missing"
   planned_minutes?: number | null
   notes?: string | null
+  /** The assistant's suggestions for how it looks (shown in review; never stored in the service). */
+  suggested_look?: string | null
+  suggested_scene?: string | null
   song?: { id: string; title: string; primary_language: string; languages: string[]; hymn?: boolean }
   reference?: string
   translation?: string

@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
+
+- **Branch / PR:** `mcp-004/look-suggestions`. `mcp_drafts.rs`: `Looks` (built-in names plus `broadcast-themes.json` custom looks and scenes, read-only), `check_with` keeps `suggested_look` / `suggested_scene` (80 chars) and warns on unknown names; `mcp.rs`: `rhema_list_looks_and_scenes`, schema fields. Review shows them per item; `draftToRundown` does not carry them (decision: suggestions, not a data-model change).
+- **Tests:** Rust `suggested_looks_and_scenes_are_kept_and_checked_against_the_church_s`; `builtin-looks.test.ts` keeps the Rust list equal to `BUILTIN_THEMES`. Desktop: `Rhema --mcp` (QA build, QA profile) over stdio: the tool is listed and names the 4 built-in looks, the profile's 7 own looks and 5 scenes; a draft with an unknown look and scene got both warnings; a known look typed in capitals was saved as the church spells it (that last part found here and fixed).
+
 ## 2026-10-23 — Cameras in scenes (OP-009, #209)
 
 - **Branch / PR:** `op-009/whep-cameras`. `SceneLayer.cameraUrl` (WHEP), `src/lib/whep.ts` (`WhepPlayer`, `syncCameras`: receive-only, muted, retry every 4 s), drawn by `drawScene` (cover, crop); output windows signal through `whep_offer` (Rust, church-network addresses only: the windows' CSP keeps them from other hosts); browser feed pages fetch the WHEP address directly; a playing camera is drawn by the frame pacer at 30 fps on screens too.

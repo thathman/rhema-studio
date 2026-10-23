@@ -37,7 +37,33 @@ pub struct Checked {
 /// Check a proposed service. Songs and hymns are matched to the library by id or exact title (or a
 /// hymn number); Scripture is looked up in the installed editions; anything not found is kept as
 /// a "missing" item for people to source, never invented.
+/// The church's looks (built-in and its own) and scenes, for suggestions in a draft (MCP-004).
+#[derive(Default)]
+pub struct Looks {
+    pub looks: Vec<String>,
+    pub scenes: Vec<String>,
+}
+
+/// Built-in looks (src/lib/builtin-themes.ts; a frontend test keeps the two lists the same).
+pub const BUILTIN_LOOKS: [&str; 4] = ["Classic Dark", "Modern Light", "Lower Thirds", "Banner Split"];
+
+impl Looks {
+    /// From the app's saved looks file (`broadcast-themes.json`), read-only.
+    pub fn read(dir: &Path) -> Self {
+        let v: Value = std::fs::read_to_string(dir.join("broadcast-themes.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+        let names = |k: &str| v[k].as_array().map(|a| a.iter().filter_map(|x| x["name"].as_str().map(|s| s.chars().take(80).collect::<String>())).collect::<Vec<_>>()).unwrap_or_default();
+        let mut looks: Vec<String> = BUILTIN_LOOKS.iter().map(|s| (*s).to_string()).collect();
+        looks.extend(names("customThemes"));
+        Self { looks, scenes: names("scenes") }
+    }
+}
+
 pub fn check(content: Option<&ContentDb>, bible: Option<&BibleDb>, input: &Value) -> Checked {
+    check_with(content, bible, None, input)
+}
+
+/// `looks`: when known, suggested looks and scenes are checked against them (warnings only).
+pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: Option<&Looks>, input: &Value) -> Checked {
     let mut errors: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let title = short(input.get("title"), 120).unwrap_or_default();
@@ -98,7 +124,20 @@ pub fn check(content: Option<&ContentDb>, bible: Option<&BibleDb>, input: &Value
                 }
             }
             let notes = short(it.get("notes"), 500);
-            let base = json!({ "planned_minutes": planned, "notes": notes });
+            // Suggestions only: shown to the reviewer, never stored in the service (MCP-004).
+            let mut look = short(it.get("suggested_look"), 80);
+            let mut scene = short(it.get("suggested_scene"), 80);
+            if let Some(l) = looks {
+                // Known names are kept as the church spells them; unknown ones are warned about.
+                for (value, names, what) in [(&mut look, &l.looks, "looks"), (&mut scene, &l.scenes, "scenes")] {
+                    let Some(x) = value.clone() else { continue };
+                    match names.iter().find(|n| n.to_lowercase() == x.to_lowercase()) {
+                        Some(n) => *value = Some(n.clone()),
+                        None => warnings.push(format!("{at}: \"{x}\" is not one of the church's {what} (rhema_list_looks_and_scenes)")),
+                    }
+                }
+            }
+            let base = json!({ "planned_minutes": planned, "notes": notes, "suggested_look": look, "suggested_scene": scene });
             let item = match kind.as_str() {
                 "song" | "hymn" => {
                     let wanted = short(it.get("title"), 120).unwrap_or_default();
@@ -341,6 +380,22 @@ mod tests {
         assert_eq!(saved["status"], "awaiting review");
         assert_eq!(saved["client"]["name"], "Claude");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn suggested_looks_and_scenes_are_kept_and_checked_against_the_church_s() {
+        let looks = Looks { looks: BUILTIN_LOOKS.iter().map(|s| (*s).to_string()).chain(["Thanksgiving gold".to_string()]).collect(), scenes: vec!["Bible and lyrics".into()] };
+        let c = check_with(None, None, Some(&looks), &json!({ "title": "Sunday", "phases": [{ "name": "Main", "role": "main", "starts_at": "10:00", "items": [
+            { "kind": "slide", "title": "Welcome", "suggested_look": "thanksgiving GOLD", "suggested_scene": "Bible and lyrics" },
+            { "kind": "slide", "title": "Notices", "suggested_look": "Neon party", "suggested_scene": "Camera only" },
+        ] }] }));
+        let items = &c.draft.as_ref().unwrap()["phases"][0]["items"];
+        assert_eq!(items[0]["suggested_look"], "Thanksgiving gold", "kept as the church spells it");
+        assert_eq!(items[0]["suggested_scene"], "Bible and lyrics");
+        let warnings: Vec<String> = c.report["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_string()).collect();
+        assert!(warnings.iter().any(|w| w.contains("\"Neon party\" is not one of the church's looks")), "{warnings:?}");
+        assert!(warnings.iter().any(|w| w.contains("\"Camera only\" is not one of the church's scenes")));
+        assert!(!warnings.iter().any(|w| w.contains("thanksgiving GOLD")), "names match whatever the case");
     }
 
     #[test]

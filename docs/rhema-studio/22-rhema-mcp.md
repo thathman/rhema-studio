@@ -40,6 +40,7 @@ plan a service. MCP-001 reads; MCP-002 lets an assistant propose a whole service
 | `rhema_lookup_bible_reference` | Exact verse text for "Romans 8:28", "1 Cor 13:4-7", "Psalm 23" (ranges up to 50 verses) |
 | `rhema_validate_service_draft` | Checks a proposed service without saving: songs and hymns matched to the library (id, exact title, other title, hymn number), references looked up in the installed editions, missing items listed, errors to fix, planned minutes |
 | `rhema_create_service_draft` | Saves a checked proposal as `ai-drafts/<id>.json` in the data folder (never the services database), with the assistant's name and the time; at most 50 wait at once |
+| `rhema_list_looks_and_scenes` | The church's looks (built-in and its own, from Design) and congregation scenes, by name, for suggestions in a draft (MCP-004) |
 | `rhema_list_service_drafts` | The drafts waiting for review: id, title, date, items, made / revised, by which assistant (MCP-003) |
 | `rhema_update_service_draft` | Replaces a waiting draft with a revised one (same id, checked like create, `updated_at` set); refused once people removed it; services people already saved from it are never touched (MCP-003) |
 
@@ -65,4 +66,9 @@ Ready-made requests an assistant offers (in Claude Desktop, under the + / prompt
   asking first if the rundown has items; every item is marked "prepared by AI draft · <assistant>",
   missing ones say what to source. People edit it and save it as a service; approval is the
   ordinary approval. Nothing is saved, approved, shown or sent to OBS by opening a draft.
+- **Look and scene suggestions (MCP-004):** any item may carry `suggested_look` and
+  `suggested_scene`, names from `rhema_list_looks_and_scenes`. The check warns when the church has no
+  look or scene by that name. Prepare → AI drafts shows them beside the item ("Welcome (look:
+  Thanksgiving gold, scene: Bible and lyrics)") for people to apply by hand; they are never stored in
+  the service, so nothing about the screens changes by opening a draft.
 - The only file the MCP server writes is the draft; it still cannot change a saved service.
