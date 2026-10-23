@@ -4,6 +4,8 @@ import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { NoticesPanel } from "@/studio/notices-panel"
+import { TalkButton } from "@/studio/talk"
+import { hostTalk, setVoiceVolume, useVoice } from "@/lib/voice"
 import { sceneTargets, useNotices, type NoticeAction } from "@/stores/notices-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { activateBibleReference } from "@/lib/bible-activate"
@@ -34,6 +36,7 @@ export function TopBar({ title }: { title: string }) {
           <kbd className="ml-auto rounded-[5px] border border-border bg-muted px-[5px] py-px font-sans text-[0.625rem] max-[600px]:hidden">⌘ K</kbd>
         </button>
         <button type="button" className={ICON} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcuts(true)}><InfoIcon /></button>
+        <HostTalk />
         <HostNotices />
         <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-tone-green px-2.5 py-[7px] text-[0.6875rem] font-bold text-tone-green-foreground max-[600px]:hidden" title="Services, songs and Bibles are on this computer: no internet needed on Sunday">
           <span aria-hidden className="size-1.5 rounded-full bg-[#2da78a]" /> Offline-ready
@@ -90,4 +93,22 @@ function runNoticeAction(a: NoticeAction) {
     const b = useBroadcastStore.getState()
     for (const id of sceneTargets(b.outputs.filter((o) => (o.role ?? "congregation") === "congregation"))) b.takeScene(id, a.value)
   }
+}
+
+/** The main desk's Talk (Rhema Comms voice): hold to talk; who is speaking shows beside it. */
+function HostTalk() {
+  const peers = useVoice((s) => s.peers)
+  const talking = useVoice((s) => s.hostTalking)
+  const micError = useVoice((s) => s.micError)
+  const volume = useVoice((s) => s.volume)
+  if (peers.length === 0 && !talking) return null
+  const speaking = peers.filter((p) => p.speaking).map((p) => p.name)
+  return (
+    <div className="flex items-center gap-1.5 max-[450px]:hidden">
+      {speaking.length > 0 && <span aria-live="polite" className="max-w-48 truncate rounded-full border border-confidence-high px-2 py-0.5 text-[0.6875rem] font-semibold">{speaking.join(", ")}</span>}
+      <TalkButton compact talking={talking} onTalk={(on) => void hostTalk(on)} />
+      <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVoiceVolume(Number(e.target.value))} aria-label="Crew volume" title="How loud you hear the crew" className="w-16 accent-primary" />
+      {micError && <span role="alert" className="sr-only">{micError}</span>}
+    </div>
+  )
 }

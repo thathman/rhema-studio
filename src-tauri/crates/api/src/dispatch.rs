@@ -38,6 +38,8 @@ impl CommandDispatcher {
                 "action": n.action.as_ref().filter(|a| matches!(a.kind.as_str(), "bible" | "scene" | "event")).map(|a| serde_json::json!({ "kind": a.kind, "value": a.value.chars().take(120).collect::<String>() })),
             }).to_string()),
             RemoteCommand::NoticeAck(a) => sink.emit_event("remote:notice_ack", &serde_json::json!({ "id": a.id, "state": a.state, "by": by }).to_string()),
+            RemoteCommand::VoiceTalk(on) => sink.emit_event("remote:voice_talk", &serde_json::json!({ "on": on, "by": by }).to_string()),
+            RemoteCommand::VoiceLeave => sink.emit_event("remote:voice_leave", &serde_json::json!({ "by": by }).to_string()),
             other => Self::dispatch(other, sink),
         }
     }
@@ -47,7 +49,7 @@ impl CommandDispatcher {
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) => Self::dispatch_as(cmd, sink, "a remote"),
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {

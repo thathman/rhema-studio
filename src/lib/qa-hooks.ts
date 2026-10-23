@@ -3,6 +3,7 @@
  * by acceptance scripts only when the bridge has switched QA mode on in this
  * window. Normal runs never set `__RHEMA_QA__`, so this returns nothing.
  */
+import { useVoice, hostTalk, TalkClient, setVoiceVolume } from "@/lib/voice"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -29,6 +30,6 @@ window.__rhemaQa = () =>
     ? {
         bible: useBibleStore, broadcast: useBroadcastStore, queue: useQueueStore, service: useServiceStore, songs: useSongStore,
         settings: useSettingsStore, media: useMediaStore, journal: useJournalStore, gate: useApprovalGateStore, shell: useShellStore,
-        present: presentActions, remote: remoteActions, eventClock: useEventClock,
+        present: presentActions, remote: remoteActions, eventClock: useEventClock, voice: { useVoice, hostTalk, TalkClient, setVoiceVolume },
       }
     : undefined

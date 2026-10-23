@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
 import { startLiveStatePublisher } from "@/lib/live-state"
 import { startBrowserFeeds } from "@/lib/browser-feeds"
+import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
 // Items' go-live messages and cues run from the operator's window only.
 import "@/stores/on-live-cues"
@@ -82,6 +83,8 @@ export function AppShell() {
   useEffect(() => startLiveStatePublisher(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
   useEffect(() => startBrowserFeeds(), [])
+  // The talk channel's hub (Rhema Comms voice): answers desks that join it.
+  useEffect(() => startVoiceHub(), [])
   // openSettings(section) from anywhere: the Settings page, at that section.
   const settingsAsked = useSettingsDialogStore((s) => s.isOpen)
   useEffect(() => {

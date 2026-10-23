@@ -6,6 +6,7 @@ import { openSettings } from "@/lib/settings-dialog"
 import { useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { NoticesPanel } from "@/studio/notices-panel"
+import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 
@@ -148,6 +149,10 @@ function JoinedDesk() {
           {desks.includes("clock") && <ClockDesk live={live} />}
           {desks.includes("bible") && <BibleDesk live={live} />}
           {desks.includes("scenes") && <ScenesDesk live={live} />}
+          <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+            <p className="font-semibold">Talk</p>
+            <JoinedTalk people={(live.voice ?? []).filter((p) => p.name !== me?.name)} />
+          </section>
           <section aria-label="Notices desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
             <p className="font-semibold">Notices</p>
             <NoticesPanel

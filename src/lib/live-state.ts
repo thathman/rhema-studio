@@ -9,6 +9,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useNotices, type Notice } from "@/stores/notices-store"
+import { useVoice, type VoicePerson } from "@/lib/voice"
 import { monotonicNow } from "@/stores/timer-store"
 
 /**
@@ -32,6 +33,8 @@ export interface LiveStateV1 {
   outputs: { id: string; name: string; sceneId: string | null }[]
   /** Production notices (Rhema Comms), newest first; each desk shows those for it. */
   notices: Notice[]
+  /** The talk channel (Rhema Comms voice): who is in it, holding Talk, audible now. */
+  voice?: VoicePerson[]
 }
 
 export function buildLiveState(now = Date.now()): LiveStateV1 {
@@ -58,6 +61,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
     notices: useNotices.getState().notices.slice(0, 50),
+    voice: voiceCrew(),
   }
 }
 
@@ -104,7 +108,16 @@ export function startLiveStatePublisher(): () => void {
     useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries) soon() }),
     useServiceStore.subscribe((s, p) => { if (s.current !== p.current) soon() }),
     useNotices.subscribe((s, p) => { if (s.notices !== p.notices) soon() }),
+    useVoice.subscribe(() => soon()),
   ]
   soon()
   return () => subs.forEach((u) => u())
+}
+
+/** The talk channel as joined desks see it: the main desk first (when it talks), then each desk. */
+function voiceCrew(): VoicePerson[] {
+  const v = useVoice.getState()
+  const operator = useSettingsStore.getState().operatorName.trim()
+  const host = v.hostTalking || v.hostSpeaking ? [{ name: operator ? `${operator} (main desk)` : "Main desk", talking: v.hostTalking, speaking: v.hostSpeaking }] : []
+  return [...host, ...v.peers]
 }
