@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Built-in look library (#299)
+- Design → Library: ready-made looks in six families (Church Classic, Broadcast Clean, Contemporary, Warm Editorial, High Contrast, Seasonal) for Bible and songs full screen, keyed lower thirds, speaker names, the ticker, the stage display and camera scenes, each with a drawn preview in English and Yorùbá.
+- Filter by layout, family and background; mark favourites. **Use** adds your own editable copy (a camera scene brings its look too); nothing on a screen changes until you choose the copy for an output. A copy can be reset to the library look.
+- All original and offline, in the fonts Rhema already ships; the four built-in themes are unchanged.
 ### Output cards instead of the Output looks table (#299)
 - Design → Output looks (the wide table of every output against every kind of content) is gone. Design → **Used on…** lists, for each look, the outputs that use it, with **Open output** to change it there.
 - Production → Screens shows each output as a card: where it goes (monitor, NDI name, browser feed), what it follows, how it presents it (full screen, a scene, lower thirds, ticker, keyed), its look with a small preview, and its signal; **Edit output** opens its settings.

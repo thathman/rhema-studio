@@ -203,6 +203,8 @@ export interface BroadcastTheme {
   logo?: ThemeLogo | null
   /** Generated and kept in step by the Church Brand Kit; set false after a hand edit to detach. */
   brandManaged?: boolean
+  /** The Design → Library look this theme was copied from (Reset puts it back as that look has it). */
+  libraryLookId?: string
   transition: {
     type: "fade" | "slide" | "scale" | "none"
     duration: number

@@ -49,12 +49,12 @@ export function Colour({ value, onChange, label }: { value: string; onChange: (c
  * behind the band, an accent and how it comes on. Edits apply as you make
  * them, to the band on air too when it uses the style.
  */
-export function LowerThirdDesigner() {
+export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
   const styles = useBroadcastStore((s) => s.lowerThirdStyles)
   const outputs = useBroadcastStore((s) => s.outputs)
   const themes = useBroadcastStore((s) => s.themes)
   const assets = useMediaStore((s) => s.assets)
-  const [selectedId, setSelectedId] = useState(() => useBroadcastStore.getState().lowerThirdStyles[0]?.id ?? "")
+  const [selectedId, setSelectedId] = useState(() => initialId ?? useBroadcastStore.getState().lowerThirdStyles[0]?.id ?? "")
   const [sample, setSample] = useState<Sample>("name")
   const style = styles.find((x) => x.id === selectedId) ?? styles[0]
   const output = outputs.find((o) => o.lowerThirds) ?? outputs.find((o) => o.id === MAIN_OUTPUT_ID)

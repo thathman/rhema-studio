@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Built-in look library (#299 UX15-3)
+
+- **Branch / PR:** `ux15-3/look-library`. `src/lib/look-library-data.ts`: 49 original looks in six families (themes, lower-third styles, ticker and stage styles, camera-scene templates whose feed layers name a library theme). `src/lib/look-library.ts`: metadata (layout, content, background, aspect), `filterLooks`, `adoptLook` (copies with new ids, never outputs), `resetCopy`/`themeUsedBy`, per-computer favourites. Design → Library tab (`look-library-view.tsx`) draws previews with the output renderers. Themes gain optional `libraryLookId` (Reset); the four builtins are untouched. Ticker Use saves only the church's ticker look (the one on air keeps its own until restarted); stage Use asks first. Docs: `docs/rhema-studio/look-library.md`.
+- **Tests:** `look-library.test.ts` (18: builtin ids, unique ids, core presets per family, every look normalizes unchanged, bundled fonts only, no pictures, filters, Use adds copies and leaves outputs as they were, scenes get their own looks, Reset, favourites). Desktop: acceptance 10dk.
+- **Next:** Brand Kit variants of library looks, 9:16 and a language filter (#299 §3), Design → "Used on" with the Output looks retirement (UX15-4).
 ## 2026-10-23 — Output cards instead of the Output looks table (#299 UX15-4)
 
 - **Branch / PR:** `ux15-4/output-cards`. Design's `outputs` tab (`OutputLooks` matrix) replaced by `used-on` (`UsedOn`: each look → `themeUses()` outputs, main look or kinds; **Open output** → `shellStore.editOutput(id)`, which opens the outputs dialog with that output's editor). `DesignTab` keeps `"outputs"` and `designTabOf()` sends it to `used-on` (`openDesign`, `setDesignTab`); Settings → Screens and global search point at Used on…. Production → Screens: `ScreenRow` → `OutputInspector` cards (`output-summary.ts`: transport, destination, follows, presentation, look thumbnail, language, now, signal; **Edit output**). Output editor: `themeFor` behind **Advanced: content-specific looks** (`ContentLooks`, count in the summary); main theme labelled "Look (main theme)".
