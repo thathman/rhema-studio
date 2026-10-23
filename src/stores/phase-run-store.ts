@@ -126,8 +126,10 @@ export const usePhaseRun = create<PhaseRunState>((set, get) => ({
 useBroadcastStore.subscribe((s, prev) => {
   const run = usePhaseRun.getState().run
   if (s.rehearsal !== prev.rehearsal) {
-    // Leaving rehearsal ends a run started there; a run on air carries on (a step due meanwhile runs now).
+    // Leaving rehearsal ends a run started there. A run on air carries on (a step due meanwhile runs
+    // now), unless Show this live put something else up: that is the operator taking over.
     if (!s.rehearsal && run?.rehearsal) usePhaseRun.getState().stop()
+    else if (!s.rehearsal && run?.itemId && (!s.isLive || s.liveItemId !== run.itemId)) usePhaseRun.getState().stop()
     else if (!s.rehearsal) catchUpPhaseRun()
     return
   }

@@ -78,7 +78,13 @@ export const useTimedAdvance = create<TimedAdvanceState>((set) => ({
 // A new item on air, off air, or a phase starting or stopping: the pending move is looked at again.
 useBroadcastStore.subscribe((s, prev) => {
   if (s.rehearsal !== prev.rehearsal) {
-    if (!s.rehearsal) catchUpTimedAdvance()
+    // After rehearsal: the move on air is made if it came due; Show this live put up something
+    // else, so the move is looked at again for it.
+    if (!s.rehearsal) {
+      const r = s.rehearsalReturn ?? prev.rehearsalReturn
+      if (r && (r.liveItemId !== s.liveItemId || r.isLive !== s.isLive)) reconsider()
+      else catchUpTimedAdvance()
+    }
     return
   }
   if (s.rehearsal) return

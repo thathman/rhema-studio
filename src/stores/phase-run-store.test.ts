@@ -118,6 +118,17 @@ describe("a phase running by itself in Present", () => {
     expect(presented).toEqual(["a", "b"])
   })
 
+  it("Show this live with something else is the operator taking over: the loop on air stops", async () => {
+    usePhaseRun.getState().start("pre")
+    await flush()
+    useBroadcastStore.getState().setRehearsal(true)
+    useBroadcastStore.setState({ liveItemId: "m" })
+    useBroadcastStore.getState().setRehearsal(false, { keepRehearsed: true })
+    expect(usePhaseRun.getState().run).toBeNull()
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(presented).toEqual(["a"])
+  })
+
   it("a loop started in rehearsal belongs to it and ends with it", async () => {
     useBroadcastStore.getState().setRehearsal(true)
     usePhaseRun.getState().start("pre")
