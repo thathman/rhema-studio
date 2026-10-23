@@ -121,5 +121,6 @@ content routing (lyrics vs stage).
 | Verse not in translation (F) | nothing changes live; preview shows empty text | pick another translation |
 | Accidental Clear (F) | live panel dimmed with "Cleared" caption | **Restore** |
 | App reload mid-service (F, existing) | outputs re-sync on `broadcast:output-ready` | automatic |
+| Rhema closed unexpectedly mid-service (F: crash, forced quit, power) | on the next start, a banner: "Rhema closed unexpectedly at 10:42 during …; on the screens then: …" | **Put back on the screens** (program, sources, outputs and their scenes, the event; logged RECOVERED) or **Not now**; nothing returns on its own |
 | Missing media before service (P) | Home readiness lists the file and the item | relink or remove |
 | Remote edit while live (P) | banner "Updated service available" | operator chooses when to load |

@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Recovery after an unexpected close (#246 live safety)
+
+- **Branch / PR:** `live-recovery`.
+- **Behaviour:** Rust `running.lock` in the app data folder (made at start, removed on the clean close path), `last_exit_unclean`; `src/lib/live-recovery.ts` keeps `recovery.json` (program, sources, outputs on, scenes, event; not in rehearsal; big pictures by name only) and offers it after an unclean exit when under 6 h old and something was up; `RecoveryBanner` (Put back / Not now); journal kind `recovery`.
+- **Tests:** `app_close` lock test (Rust); `src/studio/live-recovery.test.ts` (snapshot, offer rules, put back, log). Desktop: acceptance 10da. Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — ARCH-002: scene transitions
 
 - **Branch / PR:** `arch-002/scene-fade`.
