@@ -346,6 +346,10 @@ export class TalkClient {
   private pc: RTCPeerConnection | null = null
   private mic: MediaStreamTrack | null = null
   private player: HTMLAudioElement | null = null
+  /** Talk is this gate (0 / 1) between the microphone and what is sent. */
+  private ctx: AudioContext | null = null
+  private gate: GainNode | null = null
+  private talking = false
   /** What this desk hears (the host's mix of everyone else). */
   remote: MediaStream | null = null
 
@@ -361,10 +365,20 @@ export class TalkClient {
   async join(stream?: MediaStream): Promise<void> {
     const s = stream ?? (await navigator.mediaDevices.getUserMedia(MIC))
     this.mic = s.getAudioTracks()[0]
-    this.mic.enabled = false
+    // Talk opens a gain, not the track: WebKit's sender came back later and later each time a
+    // disabled track was enabled again (1.4 s by the fourth press, measured on the desktop).
+    // Released, it sends silence, as a disabled track would.
+    const ctx = new AudioContext()
+    this.ctx = ctx
+    if (ctx.state !== "running") await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
+    const gate = ctx.createGain()
+    gate.gain.value = 0
+    this.gate = gate
+    const out = ctx.createMediaStreamDestination()
+    ctx.createMediaStreamSource(s).connect(gate).connect(out)
     const pc = new RTCPeerConnection({ iceServers: [] })
     this.pc = pc
-    pc.addTransceiver(this.mic, { direction: "sendrecv", streams: [s] })
+    pc.addTransceiver(out.stream.getAudioTracks()[0], { direction: "sendrecv", streams: [out.stream] })
     pc.ontrack = (e) => {
       this.remote = e.streams[0] ?? new MediaStream([e.track])
       this.player = new Audio()
@@ -384,8 +398,10 @@ export class TalkClient {
 
   /** Hold or let go of Talk; everyone sees it. */
   talk(on: boolean): void {
-    if (!this.mic || this.mic.enabled === on) return
-    this.mic.enabled = on
+    if (!this.gate || !this.ctx || this.talking === on) return
+    this.talking = on
+    // A few milliseconds' ramp: no click.
+    this.gate.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.005)
     void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_talk", value: on } }).catch(() => {})
   }
 
@@ -404,8 +420,11 @@ export class TalkClient {
     this.player?.pause()
     this.mic?.stop()
     this.pc?.close()
+    void this.ctx?.close().catch(() => {})
     this.pc = null
     this.mic = null
+    this.ctx = null
+    this.gate = null
     this.remote = null
   }
 }
