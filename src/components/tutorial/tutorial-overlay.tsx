@@ -11,6 +11,7 @@ import { TUTORIAL_STEPS, type TourPlace } from "./tutorial-steps"
 import { TutorialTooltip } from "./tutorial-tooltip"
 import { useTheme } from "@/components/theme-provider"
 import { useShellStore } from "@/studio/shell-store"
+import { useSetupLaunch } from "@/studio/setup/setup-launch"
 
 export function TutorialOverlay() {
   const [isHydrated, setIsHydrated] = useState(false)
@@ -44,14 +45,21 @@ export function TutorialOverlay() {
     })
   }, [])
 
+  // The tour comes after the first-install setup (#298): it waits for that decision, and does not
+  // start by itself once the setup opened or was used (the setup's Finish offers the tour).
+  const setupChecked = useSetupLaunch((s) => s.checked)
+  const setupAutoOpened = useSetupLaunch((s) => s.autoOpened)
+  const setupUsed = useSettingsStore((s) => !!s.setup.dismissedAt)
+  const setupOpen = useShellStore((s) => s.setupOpen)
+  const tourMayStart = setupChecked && !setupAutoOpened && !setupUsed && !setupOpen
   useEffect(() => {
-    if (isHydrated && !onboardingComplete) {
+    if (isHydrated && !onboardingComplete && tourMayStart) {
       const timer = setTimeout(() => {
         useTutorialStore.getState().startTutorial()
       }, 500)
       return () => clearTimeout(timer)
     }
-  }, [isHydrated, onboardingComplete])
+  }, [isHydrated, onboardingComplete, tourMayStart])
 
   // Each step opens its workspace first (and the Present view it shows), then the tour
   // moves on; when it ends, what was on screen before comes back.

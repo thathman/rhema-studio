@@ -23,10 +23,11 @@ import { AuxTimersPanel } from "@/studio/present/aux-timers"
 import type { ReadinessCheck } from "@/studio/readiness"
 import { SceneComposer } from "@/studio/production/scene-composer"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
+import { useProductionTab, type ProductionTab } from "@/studio/production/production-tab"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 
-type Tab = "timekeeper" | "screens" | "health" | "programs" | "cameras" | "operators"
+type Tab = ProductionTab
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["timekeeper", "Timekeeper"],
   ["screens", "Screens"],
@@ -64,7 +65,14 @@ function Badge({ tone, children }: { tone: "ok" | "warn" | "live" | "off"; child
  * #208, #209) and say so rather than offer controls that do nothing.
  */
 export function ProductionWorkspace() {
-  const [tab, setTab] = useState<Tab>("timekeeper")
+  const requested = useProductionTab((s) => s.requested)
+  const [own, setOwn] = useState<Tab>("timekeeper")
+  // A page that sent the operator here at a tab (the setup's Join choice) wins until a tab is clicked.
+  const tab = requested ?? own
+  const setTab = (t: Tab) => {
+    useProductionTab.setState({ requested: null })
+    setOwn(t)
+  }
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-[29px] pt-[26px] pb-16 max-[1200px]:px-5">
