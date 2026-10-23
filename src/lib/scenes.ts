@@ -83,7 +83,9 @@ export function normalizeScene(raw: unknown): Scene | null {
   const layers = (Array.isArray(s.layers) ? s.layers : []).flatMap((l): SceneLayer[] => {
     if (!l || typeof l !== "object" || typeof l.id !== "string" || !KINDS.includes(l.kind)) return []
     const shows = Array.isArray(l.shows) ? l.shows.filter((k): k is ContentType => (CONTENT_TYPES as readonly string[]).includes(k)) : undefined
-    return [{ ...l, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    const clockShows = l.clockShows === "time" || l.clockShows === "until" ? l.clockShows : undefined
+    const until = typeof l.until === "string" && /^\d{1,2}:\d{2}$/.test(l.until) ? l.until : undefined
+    return [{ ...l, clockShows, until, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) }
 }
@@ -95,6 +97,21 @@ interface LiveState {
   themes: BroadcastTheme[]
   /** The service timer for clock layers; absent or null: not set. */
   clock?: SceneClock | null
+  /** Wall-clock ms for "count down to a time" (default: now). */
+  now?: number
+}
+
+/**
+ * A countdown to a time of day ("10:00", the service start): today's, or tomorrow's once today's
+ * is more than 12 hours gone. It stops at 0:00 on the screens.
+ */
+export function untilClock(until: string | undefined, now: number): SceneClock | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(until ?? "")
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null
+  const d = new Date(now)
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0)
+  if (now - d.getTime() > 12 * 3_600_000) d.setDate(d.getDate() + 1)
+  return { mode: "down", at: d.getTime(), text: "" }
 }
 
 /** The service timer as a clock layer shows it; null when there is nothing to show. */
@@ -107,6 +124,7 @@ export function sceneClock(t: TimerState, mono: number, wall: number): SceneCloc
 
 /** The time a clock layer shows now; a countdown stops at 0:00 for the congregation. */
 export function clockText(c: SceneClock, wall: number): string {
+  if (c.mode === "time") return new Date(wall).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
   if (c.mode === "down") return formatMs(Math.max(0, c.at - wall + 999))
   if (c.mode === "up") return formatMs(Math.max(0, wall - c.at))
   return c.text
@@ -136,7 +154,8 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
       if (l.kind === "picture") return { ...base, imageUrl: l.imageUrl ?? null, ...(preview && !l.imageUrl ? { label: "Choose a picture" } : {}) }
       if (l.kind === "clock") {
         const theme = s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0]
-        return { ...base, theme, clock: s.clock ?? null, ...(preview && !s.clock ? { label: `${l.name} · set the service timer in Present` } : {}) }
+        const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : (s.clock ?? null)
+        return { ...base, theme, clock, ...(preview && !clock ? { label: l.clockShows === "until" ? `${l.name} · choose the time to count down to` : `${l.name} · set the service timer in Present` } : {}) }
       }
       return { ...base, ...(preview ? { label: `${l.name} · cameras are planned (#209)` } : {}) }
     }),
