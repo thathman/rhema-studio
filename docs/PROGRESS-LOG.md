@@ -11,7 +11,9 @@ periodic review, so feature PRs leave those files alone.
 - **Branch / PR:** `op-007/tv-receiver`. `android-tv/`: Rhema Receiver, Java + WebView, built by `build.sh` with the SDK tools (no Gradle). Shows one browser feed full screen; address + six-digit code until assigned; `POST :8095/show {code,url}` (feed links only; five wrong codes lock until OK on the remote; new code after each use); keeps the feed across restarts; keeps the last picture and retries while Rhema is gone; says when the link was renewed (403). Host: `tv_show` (join.rs) and "Show on a Google TV" in the feed's settings.
 - **Tests:** Rust `a_tv_address_may_leave_out_the_port`. Desktop + TV: acceptance 10dh (feed, Yorùbá, ticker ~60 fps, restart, host loss, lock).
 - **Toolchain (owner approved):** Temurin JDK 17 in `~/.local/jdk`, Android SDK (platform 34, build-tools 34) in `~/.local/android-sdk`.
-- **Next:** feed → TV latency (0.3–1.0 s, mostly on the TV); cameras (WHEP) on the TV; discovery so no address is typed.
+- **Cameras on the TV:** iPad (Larix, RTMP then SRT) and an Android phone's Chrome (MediaMTX's WHIP page) → MediaMTX on the Mac → TV over WHEP, with the lower third and ticker. Feed page: cameras as `<video>` under the canvas (`cameraBelow` cut-out in `drawScene`), ticker on its own strip canvas, the picture redrawn only when it changes. Measured on the TV (debug build, WebView stats): 30 fps, 0 dropped, buffer 64–79 ms; janky frames 0.3 %. About 1 s iPad → TV over RTMP/SRT; WebRTC from the phone felt faster (owner).
+- **Owner decisions:** MediaMTX ships inside Rhema (no separate install); cameras join from a browser page (VDO.Ninja-like, but local), not a paid app.
+- **Next:** bundle MediaMTX (pinned, checksummed download → Tauri sidecar, config written and supervised by Rhema); the Rhema camera page (https with Rhema's CA, QR to join); discovery so no address is typed.
 
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 

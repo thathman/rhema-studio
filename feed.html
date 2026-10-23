@@ -4,10 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Rhema feed</title>
-  <style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}canvas{width:100vw;height:100vh;object-fit:contain;display:block}</style>
+  <style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}canvas{position:relative;width:100vw;height:100vh;object-fit:contain;display:block}#cameras{position:fixed;inset:0;overflow:hidden}#ticker{position:fixed}#ticker[hidden]{display:none}</style>
 </head>
 <body>
+  <div id="cameras"></div>
   <canvas id="feed" aria-label="Rhema feed"></canvas>
+  <canvas id="ticker" hidden></canvas>
   <script type="module" src="/src/feed.ts"></script>
 </body>
 </html>

@@ -15,6 +15,8 @@ export interface SceneDrawOptions {
   now?: number
   /** A camera layer's video, when it is playing (outputs only). */
   camera?: (layerId: string) => HTMLVideoElement | null
+  /** The page shows this playing camera itself, under the canvas: leave its box see-through. */
+  cameraBelow?: (layerId: string) => boolean
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
@@ -72,7 +74,11 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
       const v = opts.camera?.(l.id) ?? null
       // Not playing (not connected yet, or dropped): its fallback words, if it has them (#213).
       if ((!v || v.videoWidth === 0) && l.fallback && !opts.preview) fitText(ctx, l.fallback, r, l.theme)
-      else if (v && v.videoWidth > 0) {
+      else if (v && v.videoWidth > 0 && opts.cameraBelow?.(l.id)) {
+        // Cut its box out of whatever is below, as much as the layer is opaque.
+        ctx.globalCompositeOperation = "destination-out"
+        ctx.fillRect(r.x, r.y, r.w, r.h)
+      } else if (v && v.videoWidth > 0) {
         const s = source(l, v.videoWidth, v.videoHeight)
         // Cover the box, keeping the camera's shape (like a picture).
         const scale = Math.max(r.w / s.sw, r.h / s.sh)
