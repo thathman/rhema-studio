@@ -625,6 +625,8 @@ interface RemoteStatus {
   port: number | null
   /** HTTP only: the running server accepts other devices (not just this computer). */
   lan?: boolean
+  /** HTTP only: the https port for phone pages, when https is on. */
+  tls_port?: number | null
 }
 
 interface CommandLogEntry {
@@ -643,6 +645,7 @@ function RemoteControlSection() {
   // Applies to both listeners at their next start.
   const remoteLan = saved.lan
   const setRemoteLan = (lan: boolean) => setListeners({ lan })
+  const remoteHttps = saved.https ?? false
   const remoteSecret = useSettingsStore((s) => s.remoteSecret)
   const setRemoteSecret = useSettingsStore((s) => s.setRemoteSecret)
   const remoteDevices = useSettingsStore((s) => s.remoteDevices)
@@ -658,8 +661,9 @@ function RemoteControlSection() {
   const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pairQr, setPairQr] = useState<{ host: string; url: string; image: string } | null>(null)
   /** Rebuild the code for another address (a VPN or second network card can make the guess wrong). */
-  const showPairQr = async (host: string, code: string, port: number) => {
-    const url = `http://${host}:${port}/remote#code=${code}`
+  const showPairQr = async (host: string, code: string, port: number, tlsPort?: number | null) => {
+    // With https on, the phone opens the secure page, so it can talk too.
+    const url = tlsPort ? `https://${host}:${tlsPort}/remote#code=${code}` : `http://${host}:${port}/remote#code=${code}`
     setPairQr({ host, url, image: await qrDataUrl(url) })
   }
   const startPairing = async () => {
@@ -673,7 +677,7 @@ function RemoteControlSection() {
       // server accepts other devices (asked from the server; the tickbox may have changed since).
       const status = await invoke<RemoteStatus>("get_http_status").catch(() => null)
       const ip = status?.lan ? await invoke<string | null>("remote_lan_address").catch(() => null) : null
-      if (status?.lan && status.port) await showPairQr(ip ?? "", code, status.port)
+      if (status?.lan && status.port) await showPairQr(ip ?? "", code, status.port, status.tls_port)
       if (pairTimer.current) clearTimeout(pairTimer.current)
       pairTimer.current = setTimeout(() => setPairCode(null), 120_000)
     } catch (e) {
@@ -779,7 +783,7 @@ function RemoteControlSection() {
         setHttpError(null)
       } else {
         const port = parseInt(httpPort) || 8080
-        const boundPort = await invoke<number>("start_http", { port, lan: remoteLan })
+        const boundPort = await invoke<number>("start_http", { port, lan: remoteLan, https: remoteHttps })
         setHttpPort(String(boundPort))
         setListeners({ http: true, httpPort: boundPort })
         setHttpError(null)
@@ -797,6 +801,15 @@ function RemoteControlSection() {
           Accept commands from other devices on this network
           <span className="block text-[0.6875rem] text-muted-foreground">
             Anyone on the network can then send commands, unless a key is set or devices are paired below. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
+          </span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-xs">
+        <input type="checkbox" className="mt-0.5" checked={remoteHttps} onChange={(e) => setListeners({ https: e.target.checked })} disabled={httpStatus.running} />
+        <span>
+          Secure page for phones (https)
+          <span className="block text-[0.6875rem] text-muted-foreground">
+            A phone can talk in the crew's talk channel only from a secure page. With this on, the phone page is also served over https on the next port ({(Number(httpPort) || 8080) + 1}), with a certificate this computer makes for itself. Each phone either accepts its browser's warning once, or installs this computer's certificate (the link appears below once the listener runs) to trust it. Nothing goes outside the church network. Takes effect when the HTTP listener is started.
           </span>
         </span>
       </label>
@@ -959,6 +972,11 @@ function RemoteControlSection() {
         {httpStatus.running && httpStatus.port && (
           <p className="text-[0.6875rem] text-muted-foreground">
             Serving on http://localhost:{httpStatus.port}/api/v1/
+          </p>
+        )}
+        {httpStatus.running && httpStatus.tls_port && (
+          <p className="text-[0.6875rem] text-muted-foreground">
+            Secure phone page on port {httpStatus.tls_port} (https). To trust it on a phone instead of accepting the warning, open <code>http://&lt;this laptop&gt;:{httpStatus.port}/rhema-ca.pem</code> on the phone and install the certificate.
           </p>
         )}
         <p className="text-[0.6875rem] text-muted-foreground">

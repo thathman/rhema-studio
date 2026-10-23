@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use rhema_api::{
     close_pairing, hash_key, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet, Role,
@@ -216,6 +216,8 @@ pub struct HttpRuntime {
     feeds: SharedFeeds,
     /// Rhema Comms voice offers waiting for this window's answer.
     voice: SharedVoice,
+    /// The https port for phone pages, when https is on.
+    tls_port: Option<u16>,
 }
 
 impl HttpRuntime {
@@ -223,6 +225,7 @@ impl HttpRuntime {
         Self {
             handle: None,
             bound_port: None,
+            tls_port: None,
             lan: false,
             status: new_shared_status(),
             live: new_live_hub(),
@@ -250,6 +253,7 @@ pub async fn start_http(
     remote: State<'_, RemoteKeys>,
     port: Option<u16>,
     lan: Option<bool>,
+    https: Option<bool>,
 ) -> Result<u16, String> {
     let (status, live, feeds, voice, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
@@ -260,14 +264,28 @@ pub async fn start_http(
         return Err("HTTP API server is already running".into());
     }
 
+    let port = port.unwrap_or(8080);
+    // https beside it (the next port) for phone pages, when asked; a failure leaves http alone.
+    let tls = if https.unwrap_or(false) {
+        match phone_tls(&app, port.saturating_add(1)) {
+            Ok(t) => Some(t),
+            Err(e) => {
+                log::warn!("https for phone pages not started: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
     let config = HttpConfig {
-        port: port.unwrap_or(8080),
+        port,
         host: bind_host(lan).into(),
         keys: remote.keys.clone(),
         pairing: remote.pairing.clone(),
         live,
         feeds,
         voice,
+        tls,
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -281,6 +299,7 @@ pub async fn start_http(
         let mut runtime = state.lock().map_err(|e| e.to_string())?;
         runtime.handle = Some(result.handle);
         runtime.bound_port = Some(bound_port);
+        runtime.tls_port = result.tls_port;
         runtime.lan = bind_host(lan) != "127.0.0.1";
     }
 
@@ -297,6 +316,7 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
         Some(mut handle) => {
             handle.stop();
             runtime.bound_port = None;
+            runtime.tls_port = None;
             log::info!("HTTP API server stopped");
             Ok(())
         }
@@ -315,7 +335,45 @@ pub async fn get_http_status(
         running: runtime.handle.as_ref().is_some_and(rhema_api::HttpHandle::is_active),
         lan: runtime.lan,
         port: runtime.bound_port,
+        tls_port: runtime.tls_port,
     })
+}
+
+/// The local CA (made once, kept in the app's data folder, its key readable only by this user) and
+/// a certificate for this computer's current addresses, for the https listener (#251).
+fn phone_tls(app: &AppHandle, port: u16) -> Result<rhema_api::TlsListener, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("tls");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let (cert_path, key_path) = (dir.join("rhema-ca.pem"), dir.join("rhema-ca.key"));
+    let ca = match (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path)) {
+        (Ok(cert), Ok(key)) => rhema_api::tls::Pem { cert, key },
+        _ => {
+            let ca = rhema_api::tls::make_ca()?;
+            std::fs::write(&cert_path, &ca.cert).map_err(|e| e.to_string())?;
+            write_private(&key_path, &ca.key)?;
+            ca
+        }
+    };
+    let mut names = vec!["127.0.0.1".to_string(), "localhost".to_string()];
+    if let Some(ip) = remote_lan_address() {
+        names.insert(0, ip);
+    }
+    let server = rhema_api::tls::make_server(&ca, &names)?;
+    Ok(rhema_api::TlsListener { port, server, ca_cert: ca.cert })
+}
+
+fn write_private(path: &std::path::Path, text: &str) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path).map_err(|e| e.to_string())?;
+        f.write_all(text.as_bytes()).map_err(|e| e.to_string())
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, text).map_err(|e| e.to_string())
+    }
 }
 
 /// The app's Live State for joined devices (a JSON snapshot; the server passes it on unread).
@@ -404,6 +462,8 @@ pub struct HttpStatus {
     pub port: Option<u16>,
     /// Reachable from other devices (bound to 0.0.0.0).
     pub lan: bool,
+    /// The https port for phone pages, when https is on.
+    pub tls_port: Option<u16>,
 }
 
 /// Where the listeners bind: the whole network (default, what existing setups

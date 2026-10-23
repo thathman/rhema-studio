@@ -274,7 +274,7 @@ function parsePayload(raw: unknown): Record<string, unknown> | null {
 
 export async function restartRemoteListeners(): Promise<void> {
   const settings = useSettingsStore.getState()
-  const { osc, http, oscPort, httpPort, lan } = settings.remoteListeners
+  const { osc, http, oscPort, httpPort, lan, https } = settings.remoteListeners
   if (!osc && !http) return
   // Never open the whole network by itself: a listener that accepts other devices starts again
   // only when a key, paired devices or required sign-in protect it (NFR-06).
@@ -292,7 +292,7 @@ export async function restartRemoteListeners(): Promise<void> {
       // Already running (the window reloaded; listeners outlive it): nothing to do.
       const status = await invoke<{ running: boolean }>(cmd === "start_osc" ? "get_osc_status" : "get_http_status").catch(() => null)
       if (status?.running) return
-      await invoke<number>(cmd, { port, lan })
+      await invoke<number>(cmd, cmd === "start_http" ? { port, lan, https: !!https } : { port, lan })
     } catch (e) {
       toast.error(`${label} could not start again`, { description: `${e instanceof Error ? e.message : String(e)}. Start it in Settings → Remote.` })
     }

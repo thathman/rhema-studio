@@ -36,6 +36,16 @@ pub struct HttpConfig {
     pub feeds: SharedFeeds,
     /// Rhema Comms voice: offers waiting for the host window's answer.
     pub voice: SharedVoice,
+    /// Opt-in https beside the http port, for phone pages (a phone's microphone needs a secure page).
+    pub tls: Option<TlsListener>,
+}
+
+/// The https listener: its port, this computer's certificate and the local CA that signed it.
+#[derive(Debug, Clone)]
+pub struct TlsListener {
+    pub port: u16,
+    pub server: crate::tls::Pem,
+    pub ca_cert: String,
 }
 
 impl Default for HttpConfig {
@@ -48,6 +58,7 @@ impl Default for HttpConfig {
             live: new_live_hub(),
             feeds: new_feed_hub(),
             voice: new_voice_hub(),
+            tls: None,
         }
     }
 }
@@ -236,6 +247,8 @@ impl Drop for HttpHandle {
 pub struct HttpStartResult {
     pub handle: HttpHandle,
     pub bound_port: u16,
+    /// The https port, when https is on.
+    pub tls_port: Option<u16>,
 }
 
 /// Shared state for axum route handlers.
@@ -325,6 +338,14 @@ where
         .route("/api/v1/control", post(command_handler::<S>))
         .layer(CorsLayer::permissive())
         .with_state(state);
+    // The local CA's certificate (public): a phone installs it to trust the https page.
+    let app = match config.tls.as_ref() {
+        Some(t) => {
+            let ca = t.ca_cert.clone();
+            app.route("/rhema-ca.pem", get(move || async move { ([(axum::http::header::CONTENT_TYPE, "application/x-x509-ca-cert"), (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"rhema-ca.pem\"")], ca) }))
+        }
+        None => app,
+    };
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await.map_err(|e| {
         CommandError::DispatchFailed(format!("Failed to bind HTTP on {bind_addr}: {e}"))
@@ -333,6 +354,10 @@ where
     let bound_port = listener.local_addr().map(|a| a.port()).unwrap_or(config.port);
 
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
+    let tls_port = match config.tls.as_ref() {
+        Some(t) => Some(serve_tls(t, &config.host, app.clone(), shutdown_tx.subscribe()).await?),
+        None => None,
+    };
 
     tokio::spawn(async move {
         log::info!("HTTP API server started on {bind_addr} (port {bound_port})");
@@ -357,7 +382,44 @@ where
             shutdown_tx: Some(shutdown_tx),
         },
         bound_port,
+        tls_port,
     })
+}
+
+/// Serve the same routes over https on the TLS port until shutdown. Each connection carries its
+/// peer address, as on http, so the key checks and the loopback rule behave the same.
+async fn serve_tls(t: &TlsListener, host: &str, app: Router, mut shutdown_rx: watch::Receiver<bool>) -> Result<u16, CommandError> {
+    let config = crate::tls::server_config(&t.server, &t.ca_cert).map_err(|e| CommandError::DispatchFailed(format!("https: {e}")))?;
+    let acceptor = tokio_rustls::TlsAcceptor::from(config);
+    let addr: SocketAddr = format!("{host}:{}", t.port).parse().map_err(|e| CommandError::DispatchFailed(format!("Invalid https address: {e}")))?;
+    let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| CommandError::DispatchFailed(format!("Failed to bind https on {addr}: {e}")))?;
+    let port = listener.local_addr().map(|a| a.port()).unwrap_or(t.port);
+    tokio::spawn(async move {
+        log::info!("HTTPS (phone pages) on {addr} (port {port})");
+        loop {
+            let (stream, peer) = tokio::select! {
+                r = listener.accept() => match r { Ok(x) => x, Err(_) => continue },
+                _ = shutdown_rx.changed() => break,
+            };
+            let acceptor = acceptor.clone();
+            let app = app.clone();
+            tokio::spawn(async move {
+                // A slow or failed handshake costs only its own task.
+                let Ok(Ok(tls)) = tokio::time::timeout(std::time::Duration::from_secs(10), acceptor.accept(stream)).await else { return };
+                let svc = tower::ServiceBuilder::new()
+                    .map_request(move |mut req: axum::http::Request<hyper::body::Incoming>| {
+                        req.extensions_mut().insert(ConnectInfo(peer));
+                        req
+                    })
+                    .service(app);
+                let _ = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                    .serve_connection_with_upgrades(hyper_util::rt::TokioIo::new(tls), hyper_util::service::TowerToHyperService::new(svc))
+                    .await;
+            });
+        }
+        log::info!("HTTPS (phone pages) stopped");
+    });
+    Ok(port)
 }
 
 // --- Route handlers ---
@@ -928,6 +990,37 @@ mod tests {
         fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
             Ok(())
         }
+    }
+
+    #[tokio::test]
+    async fn https_serves_the_same_api_trusted_through_the_local_ca() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let ca = crate::tls::make_ca().unwrap();
+        let server = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let tls_port = result.tls_port.expect("https port");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // A client that trusts only the local CA (as a phone that installed it).
+        let mut roots = rustls::RootCertStore::empty();
+        use rustls::pki_types::pem::PemObject;
+        for c in rustls::pki_types::CertificateDer::pem_slice_iter(ca.cert.as_bytes()) {
+            roots.add(c.unwrap()).unwrap();
+        }
+        let client = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider())).with_safe_default_protocol_versions().unwrap().with_root_certificates(roots).with_no_client_auth();
+        let tcp = tokio::net::TcpStream::connect(("127.0.0.1", tls_port)).await.unwrap();
+        let name = rustls::pki_types::ServerName::try_from("127.0.0.1").unwrap();
+        let mut tls = tokio_rustls::TlsConnector::from(Arc::new(client)).connect(name, tcp).await.expect("the chain checks");
+        tls.write_all(b"GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut out = Vec::new();
+        let _ = tls.read_to_end(&mut out).await;
+        let text = String::from_utf8_lossy(&out);
+        assert!(text.contains("200 OK") && text.contains("rhema"), "{text}");
+        // The CA's certificate is there to install, over plain http too.
+        let ca_page = raw_http_request(result.bound_port, "GET", "/rhema-ca.pem", None).await;
+        assert!(ca_page.contains("200 OK") && ca_page.contains("BEGIN CERTIFICATE"), "{ca_page}");
+        let mut h = result.handle;
+        h.stop();
     }
 
     #[tokio::test]
