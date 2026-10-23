@@ -976,6 +976,13 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dd. Priority talk and revoking a talking device (Rhema Comms C4, #251)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dd.1 | Two joined desks in the talk channel, one talking. On the main desk, Talk to → All crew, priority; hold Talk; let go. | While the main desk talks, the other voice is much quieter for everyone and the main desk is clear; letting go brings it back. | Pass 2026-10-23 (combined QA build): Desk B heard Desk A at −28 dB; −41 dB while the main desk talked on priority (−13 dB, the ×0.2 duck); the main desk at −28 dB; Desk A back to −28 dB on release. |
+| 10dd.2 | Settings → Remote: revoke a desk that is in the talk channel. | It leaves the crew list at once and hears nothing more. | Pass 2026-10-23 (combined QA build): crew Desk A, B, C → Desk A, B as soon as Desk C's key was revoked. |
+
 ### 10dc. Cameras in scenes (OP-009, #209)
 
 | # | Step | Expected | Result |

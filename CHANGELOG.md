@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Priority talk; a revoked device leaves the talk channel (Rhema Comms C4, #251)
+- The main desk's Talk to has **All crew, priority**: while it holds Talk, everyone else is turned down for every listener.
+- Revoking a paired device in Settings → Remote drops it from the talk channel at once.
 ### AI drafts can suggest a look and a scene per item (MCP-004, #252)
 - New MCP tool `rhema_list_looks_and_scenes`; draft items may carry `suggested_look` / `suggested_scene`, checked against the church's names and shown in Prepare → AI drafts for people to apply. They are never stored in the service.
 
