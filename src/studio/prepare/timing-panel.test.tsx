@@ -44,5 +44,15 @@ describe("run of show timing: actual times", () => {
     expect(text).toContain("10:19")
     expect(text).toContain("planned 10:13")
     expect(text).toContain("6 min late")
+
+    // The same as a table: plan, actual, expected and offset per item.
+    const table = [...el.querySelectorAll("button")].find((b) => b.textContent === "Table")!
+    await act(async () => table.click())
+    const rows = [...document.querySelectorAll("tbody tr")].map((r) => [...r.querySelectorAll("td")].map((c) => c.querySelector("input")?.value ?? c.textContent))
+    expect(rows).toEqual([
+      ["Welcome", "10:00", "10:03", "3", "10:04 · 5:00", "", "+4 min", "", "Done"],
+      ["Reading", "10:03", "10:13", "10", "10:09 · 0:00", "10:09–10:19", "+6 min", "", "On now"],
+    ])
+    expect(document.querySelector("tfoot")?.textContent).toContain("ends 10:19")
   })
 })
