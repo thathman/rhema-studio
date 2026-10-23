@@ -32,6 +32,8 @@ pub struct HttpConfig {
     pub pairing: PairingWindow,
     /// The host's Live State for joined devices (Host/Join, ARCH-004).
     pub live: SharedLive,
+    /// Browser feeds: outputs drawn by a web page on the LAN (OBS Browser Source, a TV's browser).
+    pub feeds: SharedFeeds,
 }
 
 impl Default for HttpConfig {
@@ -42,8 +44,62 @@ impl Default for HttpConfig {
             keys: new_key_set(),
             pairing: new_pairing_window(),
             live: new_live_hub(),
+            feeds: new_feed_hub(),
         }
     }
+}
+
+/// Browser feeds (ARCH-002): for each output of type "browser", its secret and the frame it shows
+/// now, streamed to the feed page. The app keeps the list in step with its outputs; the server
+/// never reads a frame.
+#[derive(Debug, Default)]
+pub struct FeedHub {
+    feeds: std::sync::RwLock<std::collections::HashMap<String, Feed>>,
+}
+
+#[derive(Debug)]
+struct Feed {
+    token: String,
+    current: Option<String>,
+    tx: broadcast::Sender<String>,
+}
+
+impl FeedHub {
+    /// Replace the list of feeds (id, secret); frames of feeds that stay are kept.
+    pub fn set(&self, list: &[(String, String)]) {
+        let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+        feeds.retain(|id, f| list.iter().any(|(i, t)| i == id && *t == f.token));
+        for (id, token) in list {
+            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, tx: broadcast::channel(16).0 });
+        }
+    }
+
+    /// The frame a feed shows now; unknown feeds are ignored.
+    pub fn publish(&self, id: &str, json: String) {
+        let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(f) = feeds.get_mut(id) {
+            f.current = Some(json.clone());
+            let _ = f.tx.send(json);
+        }
+    }
+
+    /// The feed's current frame and a receiver for the next ones, if the secret matches.
+    fn follow(&self, id: &str, token: &str) -> Option<(Option<String>, broadcast::Receiver<String>)> {
+        let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let f = feeds.get(id)?;
+        crate::command::same_key(token, &f.token).then(|| (f.current.clone(), f.tx.subscribe()))
+    }
+
+    fn knows(&self, id: &str, token: &str) -> bool {
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| crate::command::same_key(token, &f.token))
+    }
+}
+
+pub type SharedFeeds = Arc<FeedHub>;
+
+#[must_use]
+pub fn new_feed_hub() -> SharedFeeds {
+    Arc::new(FeedHub::default())
 }
 
 /// The host's Live State (ADR 0001): the app publishes a JSON snapshot whenever it changes; joined
@@ -109,6 +165,7 @@ pub struct HttpStartResult {
 /// Shared state for axum route handlers.
 struct AppState<S: CommandSink> {
     live: SharedLive,
+    feeds: SharedFeeds,
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
     keys: KeySet,
@@ -163,6 +220,7 @@ where
 
     let state = Arc::new(AppState {
         live: config.live.clone(),
+        feeds: config.feeds.clone(),
         sink,
         status,
         keys: config.keys.clone(),
@@ -179,6 +237,9 @@ where
         .route("/api/v1/me", get(me_handler::<S>))
         .route("/api/v1/live", get(live_handler::<S>))
         .route("/api/v1/live/events", get(live_events_handler::<S>))
+        .route("/feed/{id}", get(feed_page_handler::<S>))
+        .route("/api/v1/feed/{id}/events", get(feed_events_handler::<S>))
+        .route("/assets/{*path}", get(asset_handler::<S>))
         .route("/remote", get(remote_page))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
@@ -423,6 +484,69 @@ async fn live_events_handler<S: CommandSink + 'static>(
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
 }
 
+type Query = axum::extract::Query<std::collections::HashMap<String, String>>;
+
+/// `GET /feed/{id}?k=<secret>`: the browser feed page (the app's own `feed.html`).
+async fn feed_page_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    axum::extract::Query(q): Query,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    if !state.feeds.knows(&id, q.get("k").map_or("", String::as_str)) {
+        return (StatusCode::FORBIDDEN, "This feed's link is not valid (copy it again from Rhema → Outputs).").into_response();
+    }
+    match state.sink.asset("feed.html") {
+        Some((bytes, _)) => ([(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8"), (axum::http::header::CACHE_CONTROL, "no-store")], bytes).into_response(),
+        None => (StatusCode::NOT_FOUND, "The feed page is not in this build.").into_response(),
+    }
+}
+
+/// `GET /assets/…`: the feed page's scripts, styles and fonts (built code only, no data).
+async fn asset_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    axum::extract::Path(path): axum::extract::Path<String>,
+) -> axum::response::Response {
+    if path.contains("..") {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match state.sink.asset(&format!("assets/{path}")) {
+        Some((bytes, mime)) => ([(axum::http::header::CONTENT_TYPE, mime), (axum::http::header::CACHE_CONTROL, "public, max-age=3600".to_string())], bytes).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// `GET /api/v1/feed/{id}/events?k=<secret>`: the feed's frames as server-sent events.
+async fn feed_events_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    axum::extract::Query(q): Query,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let Some((first, rx)) = state.feeds.follow(&id, q.get("k").map_or("", String::as_str)) else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let stream = futures_util::stream::unfold((rx, first), |(mut rx, first)| async move {
+        if let Some(json) = first {
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").data(json)), (rx, None)));
+        }
+        loop {
+            match rx.recv().await {
+                Ok(json) => return Some((Ok(Event::default().event("frame").data(json)), (rx, None))),
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                Err(broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
+}
+
 /// The key a request carries, from `X-Rhema-Key` or `Authorization: Bearer`.
 fn presented_key(headers: &HeaderMap) -> Option<&str> {
     if let Some(v) = headers.get("x-rhema-key").and_then(|v| v.to_str().ok()) {
@@ -629,6 +753,47 @@ mod tests {
         assert!(stream.contains("text/event-stream"), "{stream}");
         assert!(stream.contains("event: live") && stream.contains("Opening prayer") && stream.contains("Sermon"), "{stream}");
 
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    struct PageSink;
+    impl CommandSink for PageSink {
+        fn emit_event(&self, _e: &str, _p: &str) -> Result<(), CommandError> { Ok(()) }
+        fn invoke_backend(&self, _a: &str, _p: &str) -> Result<(), CommandError> { Ok(()) }
+        fn asset(&self, path: &str) -> Option<(Vec<u8>, String)> {
+            match path {
+                "feed.html" => Some((b"<html>feed page</html>".to_vec(), "text/html".into())),
+                "assets/feed.js" => Some((b"console.log(1)".to_vec(), "text/javascript".into())),
+                _ => None,
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_browser_feed_needs_its_own_secret_and_streams_its_frames() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        feeds.publish("l3", r#"{"verse":"Romans 8:28"}"#.into());
+        feeds.publish("other", "{}".into()); // not a feed: ignored
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(get_with(port, "/feed/l3?k=wrong", "", None).await.contains("403"));
+        assert!(get_with(port, "/feed/nope?k=s3cret", "", None).await.contains("403"));
+        assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("feed page"));
+        assert!(get_with(port, "/assets/feed.js", "", None).await.contains("console.log"));
+        assert!(get_with(port, "/assets/../secret", "", None).await.contains("404"));
+        assert!(get_with(port, "/api/v1/feed/l3/events?k=wrong", "", None).await.contains("403"));
+        let handle = tokio::spawn(async move { get_with(port, "/api/v1/feed/l3/events?k=s3cret", "", Some(380)).await });
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        feeds.publish("l3", r#"{"verse":"Romans 8:29"}"#.into());
+        let stream = handle.await.unwrap();
+        assert!(stream.contains("event: frame") && stream.contains("8:28") && stream.contains("8:29"), "{stream}");
+        // A new secret (the link was renewed) closes the old link.
+        feeds.set(&[("l3".into(), "n3w".into())]);
+        assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("403"));
         let mut h = result.handle;
         h.stop();
     }

@@ -5,7 +5,7 @@
  */
 export interface DisplayOutputRef {
   name: string
-  type: "display" | "ndi"
+  type: "display" | "ndi" | "browser"
   monitorIndex: number
   monitorName?: string | null
 }

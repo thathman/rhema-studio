@@ -31,6 +31,8 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, "index.html"),
         broadcast: path.resolve(__dirname, "broadcast-output.html"),
+        // Browser feeds (ARCH-002): served by the LAN listener from the built app.
+        feed: path.resolve(__dirname, "feed.html"),
       },
     },
   },

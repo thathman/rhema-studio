@@ -173,6 +173,8 @@ pub fn run() {
             commands::ai_drafts::ai_drafts_list,
             commands::ai_drafts::ai_draft_delete,
             commands::remote::publish_live_state,
+            commands::remote::feeds_set,
+            commands::remote::feed_publish,
             commands::join::join_pair,
             commands::join::join_me,
             commands::join::join_command,

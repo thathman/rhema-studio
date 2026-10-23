@@ -13,7 +13,7 @@ export interface ReadinessCheck {
 export interface OutputHealth {
   name: string
   role: "congregation" | "stage" | "signage"
-  kind: "display" | "ndi"
+  kind: "display" | "ndi" | "browser"
   on: boolean
   /** Why the output is not really delivering (NDI frames failing), when known. */
   error?: string | null

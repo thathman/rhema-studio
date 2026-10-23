@@ -1,3 +1,4 @@
+import { outputOnAir } from "@/lib/output-on-air"
 import { useEffect, useRef, useState } from "react"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -49,7 +50,7 @@ export function useReadiness() {
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
-  const onAir = outputs.filter((o) => outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive).length
+  const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
   const songs = useSongStore((s) => s.songs)
   const missing = useSongStore((s) => s.missing)
   const songIds = [...new Set(items.filter(isSongItem).map((i) => i.song.song_id))]
@@ -98,7 +99,7 @@ export function useReadiness() {
       name: o.name,
       role: o.role ?? "congregation",
       kind: o.type,
-      on: Boolean(outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive),
+      on: outputOnAir(o, outputStatus[o.id]),
       error: outputStatus[o.id]?.ndiError ?? null,
       receivers: outputStatus[o.id]?.ndiReceivers ?? null,
     })),

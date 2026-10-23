@@ -1,3 +1,4 @@
+import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect } from "react"
@@ -64,7 +65,7 @@ export function PresentWorkspace() {
   const setOverride = useBibleStore((s) => s.setOverrideServiceTranslations)
   const activeAbbrev = useBibleStore((s) => s.translations.find((t) => t.id === s.activeTranslationId)?.abbreviation ?? "active")
   const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
-  const onAir = outputs.filter((o) => outputStatus[o.id]?.previewOpen || outputStatus[o.id]?.ndiActive).length
+  const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
 
   return (
     <div className="flex h-full flex-col">

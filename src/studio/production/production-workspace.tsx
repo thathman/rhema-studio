@@ -1,3 +1,4 @@
+import { outputOnAir } from "@/lib/output-on-air"
 import { useState } from "react"
 import { CheckIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -171,7 +172,7 @@ function Screens() {
       <ul className="flex flex-col divide-y divide-border">
         {outputs.map((o) => {
           const st = status[o.id]
-          const on = Boolean(st?.previewOpen || st?.ndiActive)
+          const on = outputOnAir(o, st)
           return (
             <li key={o.id} className="flex flex-wrap items-center gap-3 py-2.5 text-xs">
               <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4"><MonitorIcon /></span>

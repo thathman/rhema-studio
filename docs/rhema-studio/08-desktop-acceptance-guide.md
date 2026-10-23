@@ -972,6 +972,14 @@ report), but launching it cannot.
 | 10cu.8 | Joined desk (any role): send "Pulpit mic is ready" to the main desk, urgent. Main desk: open the bell, answer Ready. | The bell shows 1 in red; the notice names the joined device; the joined desk shows "Main desk: Ready"; no screen, stage or NDI feed changes; the service log has no notice text. | Verified on the Intel Mac (2026-10-23, curl as the paired Timekeeper key): the bell read "Notices: 1 new", the notice named "Femi timekeeper" although the request claimed another sender, Ready on the main desk reached the Live State, nothing in the service log |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10cv. Browser feeds (ARCH-002, #198)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cv.1 | HTTP listener on the network. Outputs: add a Browser Feed following Bible with a lower-third look; copy its link; turn it on. Open the link in a browser on another computer and in OBS (Browser source 1920×1080). | Both show the verse in its look; OBS keys it over the camera; a new verse appears within a moment. | Partly verified on the Intel Mac (2026-10-23, loopback): Chrome drew Romans 8:28 in the Lower Thirds look on a transparent page from the served link; a hymn going live left the Bible feed on Romans 8:28; a wrong secret got 403. OBS and another computer not yet tried |
+| 10cv.2 | New link, save; reload the old link. | The old link answers "not valid"; the new one works. | Unverified |
+| 10cv.3 | Turn the feed off. | The page goes empty; nothing more is sent. | Unverified |
+
 ### 10cn. Numbered books and the item fields (owner reports)
 
 | # | Steps | Expected | Result |

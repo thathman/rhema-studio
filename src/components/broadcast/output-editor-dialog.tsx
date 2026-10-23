@@ -1,6 +1,9 @@
 import { resolveMonitorIndex } from "@/lib/monitor-health"
+import { feedUrl } from "@/lib/browser-feeds"
+import { newFeedToken } from "@/lib/output-on-air"
+import { invoke } from "@tauri-apps/api/core"
 import { Fragment, useEffect, useState } from "react"
-import { MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
+import { GlobeIcon, MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
 import {
   Dialog,
@@ -71,6 +74,12 @@ const TYPE_OPTIONS: Array<{
     description:
       "Network video source for OBS, vMix or TriCaster — supports alpha.",
     icon: RadioIcon,
+  },
+  {
+    value: "browser",
+    label: "Browser Feed",
+    description: "A web page on the church network: OBS Browser Source or a TV's browser; transparent where the look is keyed.",
+    icon: GlobeIcon,
   },
 ]
 
@@ -176,7 +185,7 @@ export function OutputEditorDialog({
             <span className="text-xs text-muted-foreground">
               Broadcast type
             </span>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {TYPE_OPTIONS.map(({ value, label, description, icon: Icon }) => (
                 <button
                   key={value}
@@ -283,10 +292,12 @@ export function OutputEditorDialog({
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">
             <span className="text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
-              {form.type === "display" ? "Display settings" : "NDI settings"}
+              {form.type === "display" ? "Display settings" : form.type === "browser" ? "Browser feed" : "NDI settings"}
             </span>
 
-            {form.type === "display" ? (
+            {form.type === "browser" ? (
+              <FeedLink id={form.id} token={form.feedToken} onRenew={() => patch({ feedToken: newFeedToken() })} />
+            ) : form.type === "display" ? (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <span
@@ -603,6 +614,36 @@ function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: 
           <p className="text-[0.6875rem] text-muted-foreground">No day ticked means every day. An end earlier than the start runs past midnight. A time that cannot be read keeps the loop on.</p>
         </div>
       )}
+    </div>
+  )
+}
+
+/** A browser feed's link (ARCH-002): what to paste into OBS Browser Source or a TV's browser. */
+function FeedLink({ id, token, onRenew }: { id: string; token?: string; onRenew: () => void }) {
+  const [where, setWhere] = useState<{ host: string | null; port: number | null; lan: boolean } | null>(null)
+  useEffect(() => {
+    void (async () => {
+      const http = await invoke<{ running: boolean; lan: boolean; port: number | null }>("get_http_status").catch(() => null)
+      const host = http?.lan ? await invoke<string | null>("remote_lan_address").catch(() => null) : "127.0.0.1"
+      setWhere({ host, port: http?.running ? http.port : null, lan: !!http?.lan })
+    })()
+  }, [])
+  const url = token && where?.host && where.port ? feedUrl(where.host, where.port, id, token) : null
+  return (
+    <div className="flex flex-col gap-2 text-xs">
+      {!where?.port && <p className="text-muted-foreground">Start the HTTP listener on the church network (Settings → Remote control) to give this feed a link.</p>}
+      {where?.port && !where.lan && <p className="text-muted-foreground">The listener is on this computer only: only a browser here can open the link. Turn on the network in Settings → Remote control for OBS or a TV.</p>}
+      {!token && <p className="text-muted-foreground">Save this output to make its link.</p>}
+      {url && (
+        <>
+          <code className="block overflow-x-auto rounded-md border border-border bg-muted px-2 py-1.5 select-all">{url}</code>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(url).catch(() => {})}>Copy link</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={onRenew} title="The old link stops working when you save">New link</Button>
+          </div>
+        </>
+      )}
+      <p className="text-muted-foreground">OBS: add a Browser source with this link at the feed's size (1920×1080). Anyone with the link can watch this feed on the network; a new link closes the old one. Videos do not play in a browser feed.</p>
     </div>
   )
 }

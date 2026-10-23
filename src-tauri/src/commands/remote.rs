@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use rhema_api::{
     close_pairing, hash_key, new_key_set, new_pairing_window, open_pairing, CommandError, CommandSink, HttpConfig, HttpHandle, KeyEntry, KeySet, Role,
-    OscConfig, OscHandle, PairingWindow, SharedLive, SharedStatus, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
+    OscConfig, OscHandle, PairingWindow, SharedFeeds, SharedLive, SharedStatus, new_feed_hub, new_live_hub, new_shared_status, start_http_server, start_osc_listener,
 };
 
 /// Who may send remote commands, shared by both listeners so a revoke takes
@@ -74,6 +74,11 @@ struct TauriSink {
 }
 
 impl CommandSink for TauriSink {
+    fn asset(&self, path: &str) -> Option<(Vec<u8>, String)> {
+        let asset = self.app.asset_resolver().get(path.to_string())?;
+        Some((asset.bytes().to_vec(), asset.mime_type().to_string()))
+    }
+
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         self.app
             .emit(event, payload.to_string())
@@ -207,6 +212,8 @@ pub struct HttpRuntime {
     status: SharedStatus,
     /// The Live State joined devices follow (Host/Join); kept across restarts of the listener.
     live: SharedLive,
+    /// Browser feeds (outputs of type "browser"); kept across restarts of the listener.
+    feeds: SharedFeeds,
 }
 
 impl HttpRuntime {
@@ -217,6 +224,7 @@ impl HttpRuntime {
             lan: false,
             status: new_shared_status(),
             live: new_live_hub(),
+            feeds: new_feed_hub(),
         }
     }
 
@@ -240,9 +248,9 @@ pub async fn start_http(
     port: Option<u16>,
     lan: Option<bool>,
 ) -> Result<u16, String> {
-    let (status, live, already_running) = {
+    let (status, live, feeds, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
-        (runtime.shared_status(), runtime.live.clone(), runtime.handle.is_some())
+        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.handle.is_some())
     };
 
     if already_running {
@@ -255,6 +263,7 @@ pub async fn start_http(
         keys: remote.keys.clone(),
         pairing: remote.pairing.clone(),
         live,
+        feeds,
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -314,6 +323,32 @@ pub fn publish_live_state(state: State<'_, Mutex<HttpRuntime>>, json: String) ->
     }
     let live = state.lock().map_err(|e| e.to_string())?.live.clone();
     live.publish(json);
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+pub struct FeedEntry {
+    id: String,
+    token: String,
+}
+
+/// The browser feeds (outputs of type "browser") and their secrets, kept in step with the outputs.
+#[tauri::command]
+pub fn feeds_set(state: State<'_, Mutex<HttpRuntime>>, feeds: Vec<FeedEntry>) -> Result<(), String> {
+    let hub = state.lock().map_err(|e| e.to_string())?.feeds.clone();
+    hub.set(&feeds.into_iter().filter(|f| f.token.len() >= 16).map(|f| (f.id, f.token)).collect::<Vec<_>>());
+    Ok(())
+}
+
+/// The frame a browser feed shows now (the same payload an output window gets).
+#[tauri::command]
+pub fn feed_publish(state: State<'_, Mutex<HttpRuntime>>, id: String, json: String) -> Result<(), String> {
+    // Theme pictures travel inside the frame; anything near this is a bug, not a service.
+    if json.len() > 24 * 1024 * 1024 {
+        return Err("feed frame too large".into());
+    }
+    let hub = state.lock().map_err(|e| e.to_string())?.feeds.clone();
+    hub.publish(&id, json);
     Ok(())
 }
 
