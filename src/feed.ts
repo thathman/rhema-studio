@@ -73,19 +73,45 @@ function draw() {
   if (f.overlay && f.verse?.screen !== "black") {
     drawLowerThird(ctx, width, height, f.overlay, f.theme.verseText?.fontFamily, { imageCache: themeImageCache(), progress: entranceProgress(f.overlay, Date.now()), reserveBottom: tickerReserve(f.ticker, height) })
   }
+  // A scene change fading (as on the output windows).
+  if (fade) {
+    const p = (performance.now() - fade.start) / fade.ms
+    if (p >= 1) fade = null
+    else {
+      ctx.globalAlpha = 1 - p
+      ctx.drawImage(fade.from, 0, 0, width, height)
+      ctx.globalAlpha = 1
+    }
+  }
   if (f.ticker && f.verse?.screen !== "black") drawTicker(ctx, width, height, f.ticker, f.theme.verseText?.fontFamily, { imageCache: themeImageCache(), now: Date.now() })
 }
 
 /** The ticker crawls and a lower third fades in: keep drawing while either moves. */
 function animate() {
   const f = frame
-  const moving = !!f && !f.off && ((!!f.ticker && !f.ticker.pausedAt) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1))
+  const moving = !!f && !f.off && (!!fade || (!!f.ticker && !f.ticker.pausedAt) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1))
   draw()
   if (moving) requestAnimationFrame(animate)
   else ticking = false
 }
 
+let fade: { from: HTMLCanvasElement; start: number; ms: number } | null = null
+let lastKey: string | null = null
+let lastFade = 0
+
 function show(next: Frame) {
+  // A Take or release fades when the scene says so; Black and Logo always cut.
+  const key = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
+  const ms = next.scene?.fadeMs ?? lastFade
+  if (lastKey !== null && key !== lastKey && ![key, lastKey].some((k) => k === "screen" || k === "off") && ms > 0 && canvas.width > 0) {
+    const from = document.createElement("canvas")
+    from.width = canvas.width
+    from.height = canvas.height
+    from.getContext("2d")?.drawImage(canvas, 0, 0)
+    fade = { from, start: performance.now(), ms }
+  } else if (key === "screen" || key === "off") fade = null
+  lastKey = key
+  lastFade = next.scene?.fadeMs ?? 0
   frame = next.theme ? { ...next, theme: normalizeTheme(next.theme), scene: next.scene ? { ...next.scene, layers: next.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } : undefined } : next
   if (frame.theme) preloadThemeImages(frame.theme, draw)
   for (const l of frame.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, draw)

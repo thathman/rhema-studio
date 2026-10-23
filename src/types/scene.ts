@@ -63,6 +63,8 @@ export interface Scene {
   /** "transparent" or a colour. */
   background: string
   layers: SceneLayer[]
+  /** How it comes on air when taken (and goes when released): a cut, or a cross-fade of this many ms. Absent: a cut. */
+  fadeMs?: number
   createdAt: number
   updatedAt: number
 }
@@ -88,4 +90,6 @@ export interface SceneFrame {
   sceneId: string
   background: string
   layers: SceneLayerFrame[]
+  /** Cross-fade to and from this scene, in ms (0 or absent: cut). */
+  fadeMs?: number
 }
