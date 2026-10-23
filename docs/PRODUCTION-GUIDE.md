@@ -90,6 +90,22 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 - **Talk channels and private calls:** everyone is always in **All crew**; each joined desk also hears **Production** and **Stage & worship** unless it unticks them (Hear). **Talk to** picks where your voice goes: All crew, a channel, or **Only…** one person (a private call; the main desk too). The main desk hears every channel and has its own Talk to beside its microphone button. The crew list shows where each person is talking ("→ Production").
 - If the network drops, the joined computer says *Reconnecting…* and catches up by itself; the host carries on. **Leave** stops following; **Forget this host** also drops its key (revoke the device on the host to be sure).
 
+## When something fails
+
+The main computer never depends on anyone else: everything on the screens can be done from it alone, whatever happens to the network, the joined desks or the talk channel.
+
+| What fails | What keeps working | What you see | What to do |
+|---|---|---|---|
+| The network, or the HTTP listener stops | Every screen, output and timer on the main computer | Joined desks say **Reconnecting…** and their buttons stop; phones say no answer | Nothing on the main desk. Joined desks come back by themselves and catch up (notices included: the main desk keeps the last 100 for the service) |
+| A joined computer or phone dies | Everything; nothing it did is undone | It disappears from the talk channel and its notices stop | Carry on from the main desk; Settings → Remote → revoke it if it is lost |
+| The talk channel drops | Screens, outputs, notices | The crew list empties or a desk shows its error | Use **notices** and the **stage message** meanwhile; join the talk channel again |
+| A TV or OBS browser page sticks | Every other output | Production → Screens: **behind: not showing the latest** in red | Reload that page; if the link was shared, **New link** in the output's settings |
+| An NDI sender fails | Every other output | Production → Screens: **Needs attention** names it | Outputs → turn it off and on; check OBS |
+| A projector is unplugged, or the display sleeps | Every other output | The output is reported off (macOS lists no monitor while the display sleeps) | Plug it back or wake the display; turn the output on again |
+| Rhema itself closes unexpectedly | Nothing until it starts again | On the next start: **Rhema closed unexpectedly…** | **Put back on the screens** (or **Not now**); check the screens, then carry on |
+
+Black and Logo always work from the main desk and cover every screen and feed, whatever else is happening. The service log keeps what happened, with who did it.
+
 ## Timing and the stage
 
 The service timer (Present header) also shows, once items have planned minutes and the timer runs, the planned end time and, when the service is a minute or more off plan, when it now looks like ending ("Planned end 12:30 · now about 12:41"). If the timer was started late, "Correct the timer" moves it by a minute either way; each correction is a line in the service log.
