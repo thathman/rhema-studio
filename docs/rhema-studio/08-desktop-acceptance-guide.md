@@ -964,8 +964,8 @@ report), but launching it cannot.
 | # | Step | Expected | Result |
 |---|---|---|---|
 | 10cu.1 | Host: HTTP listener on the network; Pair a device. Second computer: Production → Operators → Join with the address and code. | The host lists the device; the joined desk shows the host's service, Now, the run of show and what is on its screens within a second of each change. | Unverified (two computers) |
-| 10cu.2 | Host: set the device to Timekeeper. Joined desk: Start (next event), Back one, Start on a chosen row. | The host's event clock moves each time; no screen or NDI feed changes; the host's log has the remote commands. | Unverified |
-| 10cu.3 | Joined (Timekeeper): try a screen command (e.g. curl `next` with its key). | Refused by the host (403). | Unverified |
+| 10cu.2 | Host: set the device to Timekeeper. Joined desk: Start (next event), Back one, Start on a chosen row. | The host's event clock moves each time; no screen or NDI feed changes; the host's log has the remote commands. | Verified on the Intel Mac over loopback (2026-10-23): curl as a Timekeeper and the app joining itself through Production → Operators; the stream carried each change with the window hidden; not yet with two computers |
+| 10cu.3 | Joined (Timekeeper): try a screen command (e.g. curl `next` with its key). | Refused by the host (403). | Verified on the Intel Mac (403, "this device keeps time: it may move the event clock, not the screens"); no key: 401 |
 | 10cu.4 | Pull the joined computer's network cable for 30 s, then plug it back. | The desk says Reconnecting…, then shows the current state; the host's service never paused. | Unverified |
 | 10cu.5 | Revoke the device on the host. | The joined desk says Refused: pair again. | Unverified |
 
