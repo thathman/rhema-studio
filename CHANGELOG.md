@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Cameras in scenes (OP-009, #209)
+- A scene's Camera layer now plays a camera on the church network (WHEP, as MediaMTX offers each camera it relays), on screens, NDI outputs and browser feeds, with words layered over it. Only church-network addresses are used.
+
 ### Secure phone page (https) for talking from phones (#251)
 - Settings → Remote → **Secure page for phones (https)**: the phone page is also served over https on the next port with a certificate this computer makes for itself, so phones can join the talk channel on the church Wi-Fi. Each phone accepts the warning once, or installs this computer's certificate (`/rhema-ca.pem`) to trust it. Off by default.
 

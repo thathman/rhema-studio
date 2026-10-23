@@ -976,6 +976,14 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dc. Cameras in scenes (OP-009, #209)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dc.1 | A camera relayed by MediaMTX on the church network. Production → Programs: "Camera with the Bible", the camera layer's stream address `http://<relay>:8889/<camera>/whep`; Take it to the projector; put a verse live. | The camera fills the screen, the verse over it; it keeps moving. | Verified on the Intel Mac (2026-10-23) with a stand-in WHEP camera (headless Chrome's fake camera behind a small WHEP endpoint, not MediaMTX): the projector showed the moving camera with Romans 8:28 over it; the pacer drew 30 frames a second |
+| 10dc.2 | Stop the camera, then start it again. | The scene's background, then the camera again within a few seconds. | Partly: the player retried every 4 s while the stand-in had no publisher and played again once it came back |
+| 10dc.3 | The same scene on an NDI output in OBS, and on a browser feed (Google TV). | The camera in both. | Unverified |
+
 ### 10db. Show health (#213)
 
 | # | Step | Expected | Result |
