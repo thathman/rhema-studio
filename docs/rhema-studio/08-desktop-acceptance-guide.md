@@ -998,6 +998,7 @@ report), but launching it cannot.
 | 10da.1 | A verse on air on the projector; force quit Rhema (Activity Monitor). Start it again. | A banner: closed unexpectedly at …, Romans 8:28, 1 output on; nothing on the screens yet. | Verified on the Intel Mac (2026-10-23, QA build, `kill -9`): banner text as expected, nothing live before choosing |
 | 10da.2 | Put back on the screens. | The verse is on air again on the projector (in its scene if it had one); the log says RECOVERED. | Verified (same run, display awake): program back, projector on showing its scene, log RECOVERED; with the display asleep the projector could not open (macOS reported no monitors) and Rhema said so |
 | 10da.3 | Quit normally (Cmd+Q or the close button), start again. | No banner. | Verified (same build, the close path) |
+| 10da.4 | Start two run-of-show events a few minutes apart, then force quit; start again (wait 4 s after the last change). | The service log is back with both events, their actual times as before, and a line "Service log kept from before Rhema closed unexpectedly at …"; nothing on the screens. | JR_RESULT |
 
 ### 10cz. Scene transitions (ARCH-002)
 
