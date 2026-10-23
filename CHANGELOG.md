@@ -6,6 +6,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### The event clock (ARCH-003, #246 C03)
+- Which event is happening is now its own record, apart from what the screens show. Production → Timekeeper shows **Now** with **Start (next event)** and **Back one**, and a choice: **Follows the screens** (the default: an item's event starts when its content goes on air, as before) or **I start each event** (showing a verse, a song or a quick screen never moves the clock; the timekeeper does). Nothing here changes a screen.
+- Timing (planned, expected, actual, the stage display's finish line) and each item's message and cue follow the event clock. The service log records each event start ("EVENT …") separately from what was shown; rehearsal and quick screens never start an event; opening another service starts its clock afresh.
+
 ### Congregation Scene Composer (ARCH-002)
 - Production → Programs is the Scene Composer: arrange live content (each layer following its own sources, in a look from Design, or held), colours, Library pictures and camera places (cameras planned, #209) on one frame; drag to move, drag the corner to resize, arrow keys to nudge; box, crop and opacity in numbers too. Ready-made arrangements: Full screen, Bible and lyrics, Lyrics on a picture, Camera with the Bible.
 - **Take** puts the scene on a congregation output (saving it first); **Back to its own feed** and **Restore** follow. Each layer keeps following its source, so the next verse or line appears in its place without another Take; OBS feeds and other outputs are untouched; Black still covers everything. Edits stay in the composer until Save or Take.

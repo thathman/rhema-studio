@@ -10,6 +10,7 @@ import { TimingPanel } from "./timing-panel"
 import { useQueueStore } from "@/stores/queue-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useEventClock } from "@/stores/event-clock-store"
 import type { QueueItem } from "@/types"
 
 const slide = (id: string, planned_minutes: number): QueueItem =>
@@ -25,11 +26,12 @@ describe("run of show timing: actual times", () => {
     })
     useJournalStore.setState({
       entries: [
-        { at: at(10, 4), mono: 0, kind: "live", label: "Welcome", itemId: "Welcome" },
-        { at: at(10, 9), mono: 300_000, kind: "live", label: "Reading", itemId: "Reading" },
+        { at: at(10, 4), mono: 0, kind: "event", label: "Welcome", itemId: "Welcome" },
+        { at: at(10, 9), mono: 300_000, kind: "event", label: "Reading", itemId: "Reading" },
       ],
     })
     useBroadcastStore.setState({ isLive: true, liveItemId: "Reading" })
+    useEventClock.setState({ currentId: "Reading" })
     const el = document.createElement("div")
     await act(async () => createRoot(el).render(<TimingPanel />))
     const text = el.textContent ?? ""

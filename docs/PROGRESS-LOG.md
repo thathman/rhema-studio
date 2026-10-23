@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-003 slice 3: the event clock (C03)
+
+- **Branch / PR:** `arch-003/event-clock` (stacked on #257 → #256).
+- **Behaviour:** `src/stores/event-clock-store.ts` (mode "screens" default / "own", `currentId`, start/next/previous; a start is a journal "event" entry; no starts in rehearsal or from quick screens; reset when another service opens). `journal.ts`: `eventStarts`, `eventTimes`, "event" kept out of screen durations, EVENT in the text log. Timing (`use-service-timing`, `stage-finish`) and item cues (`on-live-cues`) follow the event clock. Production → Timekeeper: event clock bar. QA bridge exposes `eventClock`.
+- **Tests:** `src/studio/event-clock-contracts.test.ts` (4, written first); timing tests seed event entries; full vitest 706.
+- **Decisions:** "Follows the screens" is the default so a one-person desk works exactly as before; item cues are event cues (same moment in the default mode).
+- **Next:** merge the stack (#256, #257, #258, this); then Milestone D's scope-aware cue execution per event, or MCP-001's read-only server.
+
 ## 2026-10-23 — ARCH-002 slice 1: Congregation Scene Composer
 
 - **Main checked:** `49b41e0`; #256 (ARCH-003 slice 2) open, its Rust job re-run after a slow package mirror (CI step limit raised to 20 min in this branch).

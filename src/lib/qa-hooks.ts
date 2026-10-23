@@ -12,6 +12,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
+import { useEventClock } from "@/stores/event-clock-store"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
 import { remoteActions } from "@/lib/remote-actions"
@@ -28,6 +29,6 @@ window.__rhemaQa = () =>
     ? {
         bible: useBibleStore, broadcast: useBroadcastStore, queue: useQueueStore, service: useServiceStore, songs: useSongStore,
         settings: useSettingsStore, media: useMediaStore, journal: useJournalStore, gate: useApprovalGateStore, shell: useShellStore,
-        present: presentActions, remote: remoteActions,
+        present: presentActions, remote: remoteActions, eventClock: useEventClock,
       }
     : undefined

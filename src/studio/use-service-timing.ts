@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
-import { actualByItem, firstOnAir } from "@/lib/journal"
+import { eventStarts, eventTimes } from "@/lib/journal"
 import { serviceTiming } from "@/lib/timing-engine"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow } from "@/stores/timer-store"
@@ -14,15 +14,16 @@ export function useServiceTiming(adjustMinutes = 0) {
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
   const entries = useJournalStore((s) => s.entries)
-  const liveItemId = useBroadcastStore((s) => (s.isLive ? s.liveItemId : null))
+  // The event happening now, from the event clock (C03), not whatever is on the screens.
+  const liveItemId = useEventClock((s) => s.currentId)
   const [now, setNow] = useState(() => monotonicNow())
   const [wall, setWall] = useState(() => Date.now())
   useEffect(() => {
     const t = setInterval(() => { setNow(monotonicNow()); setWall(Date.now()) }, 15_000)
     return () => clearInterval(t)
   }, [])
-  const first = firstOnAir(entries)
-  const onAir = actualByItem(entries, Math.max(now, entries.at(-1)?.mono ?? 0))
+  const first = eventStarts(entries)
+  const onAir = eventTimes(entries, Math.max(now, entries.at(-1)?.mono ?? 0))
   const timing = serviceTiming({ items, headers, firstOnAir: first, onAirMs: onAir, liveItemId, now: Math.max(wall, entries.at(-1)?.at ?? 0), adjustMinutes })
   return { timing, first, onAir }
 }
