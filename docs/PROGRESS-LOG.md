@@ -5,6 +5,15 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-003 slice 2: rehearsal sandbox, scoped cues
+
+- **Main checked:** `49b41e0` (#255 merged after CI green and review).
+- **Branch / PR:** `milestone-a/rehearsal-sandbox` (ARCH-003; ADR 0001 C02 rest, C04).
+- **Behaviour:** `RehearsalReturn` adds lower third, ticker, stage message and timer to the snapshot, always restored (Show this live keeps only the program); `tickerForScreens` keeps rehearsal's ticker off signage; the journal drops entries during rehearsal except rehearsal on/off; phase runs carry `rehearsal` and wait while the app is not where they started, catching up on exit, sandbox runs stop on exit; timed moves wait in rehearsal and catch up; `CueScope` on every cue action and `cueImpact` shown under each cue and in the new-cue form.
+- **Tests:** `src/studio/rehearsal-sandbox.test.ts` (4) and new runner tests (3), written first (6 failed); full vitest 693.
+- **Decisions:** Show this live applies the program only; aux timers are not yet in the sandbox (rehearsal edits to them stay; small).
+- **Next:** ARCH-002 Scene Composer (congregation scenes in the main app), starting with the scene model and Take on native outputs.
+
 ## 2026-10-23 — ARCH-001 slice 1: independent live sources
 
 - **Main checked:** `f079203` (#254 merged after CI green and review).

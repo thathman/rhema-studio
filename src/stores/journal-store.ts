@@ -25,7 +25,11 @@ export const useJournalStore = create<JournalState>((set) => ({
   startItemIds: null,
   added: 0,
   keptAt: 0,
-  add: (entry) => set((s) => ({ entries: [...s.entries, { ...entry, at: Date.now(), mono: monotonicNow() }].slice(-2000), added: s.added + 1 })),
+  // Rehearsal is a sandbox (ADR 0001): only its start and end are part of the service's history.
+  add: (entry) => {
+    if (entry.kind !== "rehearsal" && useBroadcastStore.getState().rehearsal) return
+    set((s) => ({ entries: [...s.entries, { ...entry, at: Date.now(), mono: monotonicNow() }].slice(-2000), added: s.added + 1 }))
+  },
   clear: () => set((s) => ({ entries: [], startItemIds: null, keptAt: s.added })),
 }))
 

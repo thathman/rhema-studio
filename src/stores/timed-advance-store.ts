@@ -10,7 +10,8 @@ import { useHold } from "@/stores/hold-store"
  * Timed moves in the service (issue #193): an item marked to move on by itself goes to the next
  * item of its phase after its planned minutes, but only while the operator has timed moves on in
  * Present (off at every start). Never across a phase, never inside a phase that runs by itself,
- * and anything the operator does to what is live cancels the pending move.
+ * and anything the operator does to what is live cancels the pending move. Rehearsal neither makes
+ * nor cancels a move on air: it waits and is made after rehearsal if it came due (ADR 0001).
  */
 interface TimedAdvanceState {
   on: boolean
@@ -46,8 +47,8 @@ function reconsider() {
   if (!next) return
   const go = () => {
     timer = null
-    // On hold: the move waits and is made at Resume.
-    if (useHold.getState().hold) return
+    // On hold or in rehearsal: the move waits and is made at Resume or after rehearsal.
+    if (useHold.getState().hold || useBroadcastStore.getState().rehearsal) return
     move = null
     useTimedAdvance.setState({ dueAt: null })
     const b = useBroadcastStore.getState()
@@ -60,7 +61,7 @@ function reconsider() {
 /** On the app's tick: make a move whose timer is late (held back while the window is hidden). */
 export function catchUpTimedAdvance(now = Date.now()) {
   const due = useTimedAdvance.getState().dueAt
-  if (!move || due === null || now < due || useHold.getState().hold) return
+  if (!move || due === null || now < due || useHold.getState().hold || useBroadcastStore.getState().rehearsal) return
   if (timer) clearTimeout(timer)
   move()
 }
@@ -76,6 +77,11 @@ export const useTimedAdvance = create<TimedAdvanceState>((set) => ({
 
 // A new item on air, off air, or a phase starting or stopping: the pending move is looked at again.
 useBroadcastStore.subscribe((s, prev) => {
+  if (s.rehearsal !== prev.rehearsal) {
+    if (!s.rehearsal) catchUpTimedAdvance()
+    return
+  }
+  if (s.rehearsal) return
   if (s.liveItemId !== prev.liveItemId || s.isLive !== prev.isLive) reconsider()
 })
 usePhaseRun.subscribe((s, prev) => {

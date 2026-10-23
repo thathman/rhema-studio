@@ -926,6 +926,9 @@ report), but launching it cannot.
 | 10cq.2 | Rehearsal on; show Romans 8:28; press "Show this live". | Romans 8:28 reaches every output; the log has "LIVE Romans 8:28". | Unverified |
 | 10cq.3 | Design → Themes: edit the theme the projector uses (font size). | The projector and NDI do not change; "Live edit off" shows in the header. | Unverified |
 | 10cq.4 | Turn Live edit on, then change the colour; turn it off. | The header says how many screens it touches; they follow the edit while on and go back to the saved look when off. Leaving Design turns it off. | Unverified |
+| 10cq.5 | Lower third "Pastor Tolu" and the ticker on air. Rehearsal on: a different lower third, stop the ticker, a stage message, reset the timer. Rehearsal off. | Screens, NDI and signage never change; afterwards "Pastor Tolu", the ticker and the timer are as before; the log has rehearsal on/off only. | Unverified |
+| 10cq.6 | Start the pre-service loop. Rehearsal on, show something else for longer than a loop step; Rehearsal off. | The loop keeps running (Present still shows it), its screens never change during rehearsal, and it moves on right after. | Unverified |
+| 10cq.7 | Present → Cues: read the line under "Start the service". | "Leaves rehearsal: the real program comes back · Changes the service timer · Puts a screen over what the main screens show". | Unverified |
 
 ### 10cr. Independent live sources (ADR 0001, ARCH-001)
 

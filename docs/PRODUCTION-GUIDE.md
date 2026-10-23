@@ -71,7 +71,7 @@ An item can also have an **end by** time (Prepare, beside its planned minutes: "
 
 - **Timer**: monotonic (ignores clock changes); amber under two minutes, red when over. Planned minutes per item give "n min late/early".
 - **Message stage**: a framed banner on stage outputs only. Clear it from the same control.
-- **Rehearsal**: freezes every output at what it shows. Turning it off puts back the program as it was (nothing rehearsed is shown); **Show this live** leaves rehearsal and puts what you rehearsed on the screens (the approval question applies).
+- **Rehearsal**: freezes every output at what it shows. Turning it off puts back the program, lower third, ticker, stage message and service timer as they were (nothing rehearsed is shown or logged); **Show this live** leaves rehearsal and puts the rehearsed screens on air (the approval question applies), everything else still coming back. A loop or timed move running on air waits through rehearsal and carries on after.
 - **Design → Themes → Live edit**: off by default, so editing a theme the screens use changes nothing on air until you save. On, the screens using that theme follow your edits (the header says how many); it turns off when you leave the theme.
 
 ## Data safety

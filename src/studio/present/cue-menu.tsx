@@ -3,7 +3,7 @@ import { ListChecksIcon, PlayIcon, PlusIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { allMacros, CUE_ACTIONS, macroIdFor, MACROS, runSteps, type CueId } from "@/lib/cues"
+import { allMacros, CUE_ACTIONS, cueImpact, macroIdFor, MACROS, runSteps, type CueId } from "@/lib/cues"
 import { useSettingsStore } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 
@@ -44,6 +44,7 @@ export function CueMenu() {
               <ol className="mt-1 flex flex-wrap gap-1 text-[0.6875rem] text-muted-foreground">
                 {m.steps.map((s, i) => <li key={`${s}-${i}`} className="rounded border border-border px-1.5">{i + 1}. {CUE_ACTIONS[s].label}</li>)}
               </ol>
+              {m.steps.length > 0 && <p className="mt-1 text-[0.6875rem] text-muted-foreground">{cueImpact(m.steps).join(" · ")}</p>}
             </li>
           ))}
         </ul>
@@ -91,6 +92,7 @@ function NewCue({ taken, onDone }: { taken: string[]; onDone: () => void }) {
         <Button type="button" size="sm" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" size="sm" disabled={!label.trim() || steps.length === 0}>Save cue</Button>
       </div>
+      {steps.length > 0 && <p className="text-muted-foreground">It will: {cueImpact(steps).join(" · ")}</p>}
       <p className="text-muted-foreground">Saved on this computer. A Stream Deck or OSC controller can run it by its id, shown after saving.</p>
     </form>
   )

@@ -17,6 +17,7 @@ import { buildStagePayload } from "@/lib/stage"
 import { applyStageStyle, DEFAULT_STAGE_STYLE, normalizeStageStyle } from "@/lib/stage-style"
 import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
 import { forOutputLanguage } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
@@ -37,6 +38,19 @@ export interface ProgramSnapshot {
   heldLive: HeldLive | null
   cleared: boolean
   activeIndex: number | null
+}
+
+/** Rehearsal's sandbox (ADR 0001): the program plus what always comes back as it was. */
+export interface RehearsalReturn extends ProgramSnapshot {
+  lowerThird: LowerThird | null
+  ticker: Ticker | null
+  stageMessage: string
+  timer: TimerState
+}
+
+/** The ticker the real screens show: in rehearsal, the one running before it. */
+export function tickerForScreens(s: { rehearsal: boolean; rehearsalReturn: RehearsalReturn | null; ticker: Ticker | null }): Ticker | null {
+  return s.rehearsal ? (s.rehearsalReturn?.ticker ?? null) : s.ticker
 }
 
 /** What was live before a quick screen took over, so Back can return to it. */
@@ -156,7 +170,7 @@ interface BroadcastState {
    */
   rehearsal: boolean
   /** The real program while rehearsal runs, put back when it ends. */
-  rehearsalReturn: ProgramSnapshot | null
+  rehearsalReturn: RehearsalReturn | null
   /** Why the last present did not reach the output; cleared by the next successful present. */
   presentWarning: string | null
   // When on, detections auto-present to the live output. When off, the live
@@ -298,7 +312,7 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   signageLast.set(output.id, index)
   signageLastList.set(output.id, listKey)
   // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
-  const ticker = output.ticker ? useBroadcastStore.getState().ticker : null
+  const ticker = output.ticker ? tickerForScreens(useBroadcastStore.getState()) : null
   const stamp = `${listKey}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}:${tickerKey(ticker)}`
   if (signageEmitted.get(output.id) === stamp) {
     ensureSignageTicker()
@@ -362,6 +376,8 @@ export interface OutputFrame {
 /** Send the ticker (on, changed or off) to the outputs that show it. */
 function syncTickerOutputs(): void {
   const s = useBroadcastStore.getState()
+  // Rehearsal's ticker stays in the app (signage would otherwise show it).
+  if (s.rehearsal) return
   // Never the stage; signage (the foyer) when it is turned on there.
   for (const o of s.outputs) if (o.ticker && o.role !== "stage") s.syncBroadcastOutputFor(o.id)
 }
@@ -638,7 +654,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const overlay = output.lowerThirds ? overlayFor(s.lowerThird, verse) : null
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
-    const ticker = output.ticker ? s.ticker : null
+    const ticker = output.ticker ? tickerForScreens(s) : null
     recordFrame(outputId, { theme, verse, overlay, ticker })
     void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", {
       theme,
@@ -771,15 +787,18 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const s = get()
     if (rehearsal === s.rehearsal) return
     if (rehearsal) {
-      const { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared } = s
-      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex } })
+      const { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, lowerThird, ticker, stageMessage } = s
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer } })
       return
     }
-    const back = opts.keepRehearsed ? null : s.rehearsalReturn
+    const back = s.rehearsalReturn
     if (back) {
-      const { activeIndex, ...program } = back
-      useQueueStore.setState({ activeIndex })
-      set({ ...program, rehearsal, rehearsalReturn: null })
+      const { activeIndex, lowerThird, ticker, stageMessage, timer, ...program } = back
+      // The lower third, ticker, stage message and timer always come back; the program too unless
+      // the operator chose Show this live.
+      useTimerStore.setState({ timer })
+      if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
+      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, rehearsal, rehearsalReturn: null })
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
