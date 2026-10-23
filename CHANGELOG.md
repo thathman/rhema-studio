@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Clock layer in scenes (ARCH-002)
+- A congregation scene can have a **Clock**: the service timer in a look's text style, filling its box, for a countdown before the service. Screens and browser feeds count it themselves (one frame a second), so it keeps time with the window covered and adds no traffic while it runs.
+
 ### Phone remote: live sources and notices (ARCH-001, Rhema Comms #251)
 - The phone remote lists each live source with what it shows, and **Take off** / **Put back** for it, within its role.
 - Paired phones get production notices: those for their role and everyone's, answered Seen / Ready / Unable, and a message box to the main desk. The host names the phone.

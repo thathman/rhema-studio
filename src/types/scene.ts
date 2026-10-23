@@ -18,9 +18,21 @@ export interface SceneCrop {
 
 /**
  * feed: live content (the sources it follows) in an approved look; color and picture: a
- * background; camera: a camera input (placeholder until cameras arrive, issue #209).
+ * background; camera: a camera input (placeholder until cameras arrive, issue #209); clock: the
+ * service timer in a look (a countdown before the service).
  */
-export type SceneLayerKind = "feed" | "color" | "picture" | "camera"
+export type SceneLayerKind = "feed" | "color" | "picture" | "camera" | "clock"
+
+/**
+ * A clock as an output draws it: counting down to `at`, up from `at` (wall-clock ms), or still at
+ * `text` (paused or not started). The output works out the time itself, so frames are sent only
+ * when the timer starts, stops or changes.
+ */
+export interface SceneClock {
+  mode: "down" | "up" | "still"
+  at: number
+  text: string
+}
 
 export interface SceneLayer {
   id: string
@@ -28,7 +40,7 @@ export interface SceneLayer {
   kind: SceneLayerKind
   /** feed: the live sources it follows; absent = whatever is put on air (the program). */
   shows?: ContentType[]
-  /** feed: the look (an approved theme); absent = the output's own looks. */
+  /** feed, clock: the look (an approved theme); absent = the output's own looks. */
   themeId?: string
   /** color: the fill. */
   color?: string
@@ -66,6 +78,7 @@ export interface SceneLayerFrame {
   verse?: VerseRenderData | null
   color?: string
   imageUrl?: string | null
+  clock?: SceneClock | null
   /** Shown in the composer's preview only (e.g. "Camera — planned"). */
   label?: string
 }

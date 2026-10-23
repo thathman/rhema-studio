@@ -1,4 +1,5 @@
 import { renderVerse } from "@/lib/verse-renderer"
+import { clockText } from "@/lib/scenes"
 import type { SceneFrame, SceneLayerFrame } from "@/types"
 
 export interface SceneDrawOptions {
@@ -10,6 +11,8 @@ export interface SceneDrawOptions {
   imageCache?: Map<string, HTMLImageElement>
   /** The composer's preview: placeholders and labels; an output never draws them. */
   preview?: boolean
+  /** Wall-clock ms, for clock layers (default: now). */
+  now?: number
 }
 
 function rect(l: SceneLayerFrame, width: number, height: number) {
@@ -50,6 +53,18 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
         const cw = r.w / scale, ch = r.h / scale
         ctx.drawImage(img, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
       }
+    } else if (l.kind === "clock" && l.theme && l.clock) {
+      // The time fills its box in the look's text style; whatever is behind shows around it.
+      const text = clockText(l.clock, opts.now ?? Date.now())
+      const vt = l.theme.verseText
+      const family = vt?.fontFamily ? `"${vt.fontFamily}", sans-serif` : "sans-serif"
+      ctx.font = `${vt?.fontWeight ?? 600} 100px ${family}`
+      const size = Math.max(8, Math.min(r.h * 0.8, (100 * r.w * 0.9) / Math.max(1, ctx.measureText(text).width)))
+      ctx.font = `${vt?.fontWeight ?? 600} ${Math.floor(size)}px ${family}`
+      ctx.fillStyle = vt?.color ?? "#ffffff"
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2)
     } else if (l.kind === "feed" && l.theme && l.verse) {
       const lc = opts.layerCanvas(l.id)
       const { width: tw, height: th } = l.theme.resolution

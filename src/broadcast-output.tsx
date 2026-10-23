@@ -368,8 +368,11 @@ function BroadcastCanvas() {
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
     // something moves, a pacer in Rust sends `broadcast:pace` at the NDI rate and each one draws a frame.
+    // A running clock layer needs one frame a second, on a screen too (a covered or locked screen's
+    // timers are held back for many seconds).
+    const clockRunning = () => !stageRef.current && !!latestData.current?.scene?.layers.some((l) => l.kind === "clock" && l.clock && l.clock.mode !== "still")
     const syncPace = () => {
-      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : 0
+      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : clockRunning() ? 1 : 0
       if (fps === paceFps) return
       paceFps = fps
       void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})

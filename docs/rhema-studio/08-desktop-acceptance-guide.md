@@ -973,6 +973,14 @@ report), but launching it cannot.
 | 10cu.9 | Main desk: send the Bible desk "Next reading", Ask to show a verse: Romans 8:28. Bible desk: press "Show Romans 8:28". Then ask a Timekeeper to show a verse and press it there. | Nothing shows until the Bible desk presses; then Romans 8:28 is on the Bible source and the notice reads "Ready". The Timekeeper's press is refused by the host. | Partly verified on the Intel Mac (2026-10-23, loopback): a paired Timekeeper key's request to the main desk carried "Show Romans 8:28" (an unknown kind was dropped); pressing it in the bell put Romans 8:28 (KJV) on the Bible source and answered Ready; the Timekeeper key's own `bible_activate` got 403. Two computers not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10cx. Clock layer (ARCH-002)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cx.1 | Production → Programs: a scene with a Clock layer in a look; Take it to the projector. Present → timer: 20 min, Start. | The projector shows 20:00, then counts down each second, filling the clock's box in the look's text. | Verified on the Intel Mac (2026-10-23, windowed projector, frames read from its canvas): 20:00 still, then 19:34 → 19:29 over about six seconds |
+| 10cx.2 | Lock the screen for a minute (or cover the projector window), then look. | Still the right time; it never jumped. | Partly verified: before the fix a locked screen held the clock back ~15 s, which is why it now uses the frame pacer; the fixed build was checked with the screen awake only |
+| 10cx.3 | An NDI output with the same scene, watched in OBS. | Counts each second. | Unverified |
+
 ### 10cy. Phone remote: sources and notices
 
 | # | Step | Expected | Result |
