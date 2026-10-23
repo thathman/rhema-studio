@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useEventClock } = await import("@/stores/event-clock-store")
 const { useJournalStore } = await import("@/stores/journal-store")
-const { takeSnapshot, worthOffering, putBack, useRecovery } = await import("@/lib/live-recovery")
+const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal } = await import("@/lib/live-recovery")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
 /** Recovery after an unexpected close (#246): offered, never automatic; puts back what was up. */
@@ -58,5 +58,24 @@ describe("live recovery", () => {
     const before = useBroadcastStore.getState().sources
     await putBack({ ...takeSnapshot(), liveVerse: null, sources: {}, trimmed: true, outputsOn: [], eventId: null })
     expect(useBroadcastStore.getState().sources).toBe(before)
+  })
+
+  it("brings back the service log after a crash, with durations still adding up", () => {
+    const at = 1_000_000_000
+    const kept = { v: 1 as const, at: at + 600_000, startItemIds: ["a", "b"], entries: [
+      { at, mono: 5, kind: "event" as const, label: "Welcome", itemId: "a" },
+      { at: at + 240_000, mono: 240_005, kind: "event" as const, label: "Sermon", itemId: "b" },
+    ] }
+    expect(restoreJournal(kept, at + 700_000, 1_000)).toBe(true)
+    const { entries, startItemIds } = useJournalStore.getState()
+    expect(startItemIds).toEqual(["a", "b"])
+    expect(entries.map((e) => e.kind)).toEqual(["event", "event", "recovery"])
+    // Rebased on this run's clock: 4 min apart as before.
+    expect(entries[1].mono - entries[0].mono).toBe(240_000)
+    expect(entries[0].mono).toBe(at - (at + 700_000 - 1_000))
+    // Never over a log that has begun, never an old one.
+    expect(restoreJournal(kept, at + 700_000, 1_000)).toBe(false)
+    useJournalStore.setState({ entries: [] })
+    expect(restoreJournal(kept, at + 7 * 3_600_000, 1_000)).toBe(false)
   })
 })

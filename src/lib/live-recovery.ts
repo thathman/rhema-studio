@@ -8,6 +8,8 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
+import { monotonicNow } from "@/stores/timer-store"
+import type { JournalEntry } from "@/lib/journal"
 import type { VerseRenderData } from "@/types"
 
 /**
@@ -37,6 +39,29 @@ const FRESH_MS = 6 * 60 * 60 * 1000
 const MAX_CHARS = 400_000
 
 export const useRecovery = create<{ offer: LiveSnapshot | null }>(() => ({ offer: null }))
+
+/** The service log as kept for recovery (#196 R3): what happened, and when, survives a crash. */
+export interface KeptJournal {
+  v: 1
+  at: number
+  entries: JournalEntry[]
+  startItemIds: string[] | null
+}
+
+/**
+ * The service log from the run that closed unexpectedly, back in this run: history only, nothing
+ * goes on a screen. Its monotonic times are rebased on this run's clock from their wall-clock
+ * times, so the actual durations still add up. Only into an empty log, and only if recent.
+ */
+export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.now(), nowMono = monotonicNow()): boolean {
+  const j = useJournalStore.getState()
+  if (!kept || kept.v !== 1 || !kept.entries?.length || now - kept.at >= FRESH_MS || now < kept.at || j.entries.length) return false
+  const base = now - nowMono
+  const entries = kept.entries.map((e) => ({ ...e, mono: e.at - base }))
+  useJournalStore.setState({ entries, startItemIds: kept.startItemIds, added: j.added + entries.length })
+  j.add({ kind: "recovery", label: `Service log kept from before Rhema closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
+  return true
+}
 
 export function takeSnapshot(now = Date.now()): LiveSnapshot {
   const b = useBroadcastStore.getState()
@@ -96,12 +121,22 @@ function save(evenInRehearsal = false) {
 
 const soon = () => { if (!timer) timer = setTimeout(save, 1000) }
 
+let journalTimer: ReturnType<typeof setTimeout> | null = null
+function saveJournal() {
+  journalTimer = null
+  if (!store) return
+  const { entries, startItemIds } = useJournalStore.getState()
+  const kept: KeptJournal = { v: 1, at: Date.now(), entries, startItemIds }
+  void store.set("journal", kept).then(() => store?.save()).catch(() => {})
+}
+
 /** Read the last snapshot (offer it after an unclean exit), then keep it up to date. */
 export async function startLiveRecovery(): Promise<() => void> {
   try {
     store = await load("recovery.json", { autoSave: false, defaults: {} })
-    const [unclean, snap] = await Promise.all([invoke<boolean>("last_exit_unclean"), store.get<LiveSnapshot>("snapshot")])
+    const [unclean, snap, kept] = await Promise.all([invoke<boolean>("last_exit_unclean"), store.get<LiveSnapshot>("snapshot"), store.get<KeptJournal>("journal")])
     if (unclean && worthOffering(snap)) useRecovery.setState({ offer: snap })
+    if (unclean) restoreJournal(kept)
   } catch {
     // Not under Tauri, or the file is unreadable: nothing to offer.
   }
@@ -118,6 +153,8 @@ export async function startLiveRecovery(): Promise<() => void> {
     }),
     useEventClock.subscribe((s, p) => { if (s.currentId !== p.currentId) soon() }),
     useRecovery.subscribe((s, p) => { if (p.offer && !s.offer) soon() }),
+    // The log, a few seconds after it changes (and when it is cleared for another service).
+    useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries && !journalTimer) journalTimer = setTimeout(saveJournal, 3000) }),
   ]
   return () => offs.forEach((off) => off())
 }
