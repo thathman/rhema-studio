@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { MicIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { TalkClient, type VoicePerson } from "@/lib/voice"
+import { CHANNELS, CHANNEL_IDS, HOST, TalkClient, talkName, type VoicePerson } from "@/lib/voice"
 import { useSettingsStore } from "@/stores/settings-store"
 
 /**
@@ -55,6 +55,17 @@ export function TalkButton({ onTalk, talking, disabled, className, compact }: { 
   )
 }
 
+/** Whom to talk to: All crew, a channel, or one person (a private call). */
+export function TalkTo({ value, onChange, people, compact }: { value: string; onChange: (talk: string) => void; people: { key: string; name: string }[]; compact?: boolean }) {
+  return (
+    <select aria-label="Talk to" title="Whom you talk to" value={value} onChange={(e) => onChange(e.target.value)} className={cn("rounded-md border border-input bg-card px-1.5 text-xs", compact ? "h-8 max-w-28" : "h-9")}>
+      <option value="all">All crew</option>
+      {CHANNELS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      {people.length > 0 && <optgroup label="Only…">{people.map((p) => <option key={p.key} value={`to:${p.key}`}>{p.name}</option>)}</optgroup>}
+    </select>
+  )
+}
+
 /** Who is in the talk channel: speaking (heard now), Talk held, or listening. */
 export function Crew({ people }: { people: VoicePerson[] }) {
   if (people.length === 0) return <p className="text-xs text-muted-foreground">No one else is in the talk channel yet.</p>
@@ -64,6 +75,7 @@ export function Crew({ people }: { people: VoicePerson[] }) {
         <li key={p.name} className={cn("flex items-center gap-1.5 rounded-full border px-2 py-0.5", p.speaking ? "border-confidence-high text-foreground" : "border-border text-muted-foreground")}>
           <span aria-hidden className={cn("size-2 rounded-full", p.speaking ? "bg-confidence-high" : p.talking ? "bg-on-air" : "bg-muted-foreground/40")} />
           {p.name}
+          {p.talk && p.talk !== "all" && <span className="text-muted-foreground">→ {talkName(p.talk)}</span>}
           <span className="sr-only">{p.speaking ? "speaking" : p.talking ? "holding Talk" : "listening"}</span>
         </li>
       ))}
@@ -77,7 +89,14 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
   const [state, setState] = useState<"off" | "joining" | "on">("off")
   const [talking, setTalking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [talk, setTalk] = useState("all")
+  const [listen, setListen] = useState<string[]>([...CHANNEL_IDS])
   useEffect(() => () => client.current?.leave(), [])
+  const route = (l: string[], t: string) => {
+    setListen(l)
+    setTalk(t)
+    client.current?.channels(l, t)
+  }
   const join = async () => {
     const { joinAddress, joinToken } = useSettingsStore.getState()
     setError(null)
@@ -86,6 +105,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
     try {
       await c.join()
       client.current = c
+      c.channels(listen, talk)
       setState("on")
     } catch (e) {
       c.leave()
@@ -99,6 +119,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
         {state === "on" ? (
           <>
             <TalkButton talking={talking} onTalk={(on) => { client.current?.talk(on); setTalking(on) }} />
+            <TalkTo value={talk} onChange={(t) => route(listen, t)} people={[{ key: HOST, name: "The main desk" }, ...people.filter((p) => !/\(main desk\)$|^Main desk$/.test(p.name)).map((p) => ({ key: p.name, name: p.name }))]} />
             <Button size="sm" variant="ghost" onClick={() => { client.current?.leave(); client.current = null; setState("off"); setTalking(false) }}>Leave the talk channel</Button>
           </>
         ) : (
@@ -106,6 +127,17 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
         )}
       </div>
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+      {state === "on" && (
+        <fieldset className="flex flex-wrap items-center gap-3 text-xs">
+          <legend className="sr-only">Channels you hear</legend>
+          <span className="text-muted-foreground">Hear: All crew,</span>
+          {CHANNELS.map((c) => (
+            <label key={c.id} className="flex items-center gap-1">
+              <input type="checkbox" checked={listen.includes(c.id)} onChange={(e) => route(e.target.checked ? [...listen, c.id] : listen.filter((x) => x !== c.id), talk)} /> {c.name}
+            </label>
+          ))}
+        </fieldset>
+      )}
       <Crew people={people} />
       <p className="text-[0.6875rem] text-muted-foreground">Everyone can talk at once. Crew voices stay on this computer's headset: never on a screen, the PA, OBS, recordings or listening.</p>
     </div>

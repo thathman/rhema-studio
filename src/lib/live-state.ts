@@ -118,6 +118,6 @@ export function startLiveStatePublisher(): () => void {
 function voiceCrew(): VoicePerson[] {
   const v = useVoice.getState()
   const operator = useSettingsStore.getState().operatorName.trim()
-  const host = v.hostTalking || v.hostSpeaking ? [{ name: operator ? `${operator} (main desk)` : "Main desk", talking: v.hostTalking, speaking: v.hostSpeaking }] : []
+  const host = v.hostTalking || v.hostSpeaking ? [{ name: operator ? `${operator} (main desk)` : "Main desk", talk: v.hostTalkTo, talking: v.hostTalking, speaking: v.hostSpeaking }] : []
   return [...host, ...v.peers]
 }

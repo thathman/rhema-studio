@@ -4,8 +4,8 @@ import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { NoticesPanel } from "@/studio/notices-panel"
-import { TalkButton } from "@/studio/talk"
-import { hostTalk, setVoiceVolume, useVoice } from "@/lib/voice"
+import { TalkButton, TalkTo } from "@/studio/talk"
+import { hostTalk, setHostChannels, setVoiceVolume, useVoice } from "@/lib/voice"
 import { sceneTargets, useNotices, type NoticeAction } from "@/stores/notices-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { activateBibleReference } from "@/lib/bible-activate"
@@ -101,12 +101,14 @@ function HostTalk() {
   const talking = useVoice((s) => s.hostTalking)
   const micError = useVoice((s) => s.micError)
   const volume = useVoice((s) => s.volume)
+  const talkTo = useVoice((s) => s.hostTalkTo)
   if (peers.length === 0 && !talking) return null
   const speaking = peers.filter((p) => p.speaking).map((p) => p.name)
   return (
     <div className="flex items-center gap-1.5 max-[450px]:hidden">
       {speaking.length > 0 && <span aria-live="polite" className="max-w-48 truncate rounded-full border border-confidence-high px-2 py-0.5 text-[0.6875rem] font-semibold">{speaking.join(", ")}</span>}
       <TalkButton compact talking={talking} onTalk={(on) => void hostTalk(on)} />
+      <TalkTo compact value={talkTo} onChange={(t) => setHostChannels(useVoice.getState().hostListen, t)} people={peers.map((p) => ({ key: p.name, name: p.name }))} />
       <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVoiceVolume(Number(e.target.value))} aria-label="Crew volume" title="How loud you hear the crew" className="w-16 accent-primary" />
       {micError && <span role="alert" className="sr-only">{micError}</span>}
     </div>
