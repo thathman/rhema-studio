@@ -4,6 +4,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The run of show as a table (#196)
+- Prepare → Timing → **Table**: every item of the main service with its plan start and end, its time (typed in place: 35, 4:30, 1:10:00, 1h10), when it actually went up and for how long, when it is now expected, how far off the plan it is, its end by (locked) and Done / On now / Cut short. A total line above each group and for the whole service.
+
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### Words while a camera is not playing (#213)

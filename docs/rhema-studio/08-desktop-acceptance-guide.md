@@ -278,6 +278,7 @@ report), but launching it cannot.
 |---|---|---|---|
 | 10m.1 | Two congregation outputs; set one to "First language only" and the other to "Second language only" (More → Outputs → edit). Go live with a verse that has a second translation, then a bilingual song. | The first output shows only English, the second only Yoruba, same passage and slide; the operator preview still shows both. | Verified on the Intel Mac |
 | 10m.2 | Go live with a verse that has no second translation on the "Second language only" output. | The verse is shown in its first language; the output never goes blank. | Verified on the Intel Mac |
+
 ### 10n. One service as a file (CL-003)
 
 | # | Steps | Expected | Result |
@@ -291,6 +292,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10o.1 | Settings → Remote: untick "Accept commands from other devices on this network", start HTTP. From another device on the LAN, `curl http://<laptop-ip>:8080/...`; from the laptop, `curl http://127.0.0.1:8080/...`. | The LAN request is refused (connection refused); the local one works. Re-tick, restart: both work. | Unverified |
+
 ### 10p. Approve a service (CL-002)
 
 | # | Steps | Expected | Result |
@@ -394,6 +396,7 @@ report), but launching it cannot.
 | 10ac.1 | Outputs: turn on "Show lower thirds" for the NDI stream (transparent theme), leave it off for the projector. Present → Lower third: "Pastor Tolu" / "Senior Pastor" → Show. | The band appears on the stream (keyable in OBS over the camera), not on the projector or the stage screen. | Verified on the Intel Mac |
 | 10ac.2 | With the band up: show a verse, Next, Clear, Restore, a video, a quick screen. | The band stays on the stream through all of it, above everything; the projector never shows it. | Unverified |
 | 10ac.3 | Hide. Then turn lower thirds off for the stream while a band is up. | Hide removes it at once; switching the output off removes it from that output at once. | Verified on the Intel Mac |
+
 ### 10ad. Monitors (OP-004)
 
 | # | Steps | Expected | Result |
@@ -412,6 +415,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ae.1 | Projector (both languages), stream (first language only, lower thirds on), stage, signage loop. Go live with a bilingual verse and show a lower third; open Outputs (Present header chip). | Each card shows what that output shows: the projector both languages without the band, the stream English only with the band, the stage card "Stage display", the signage card its current picture. Cards of outputs that are off are dimmed and empty. | Unverified |
+
 ### 10ag. OBS connection (AR-002)
 
 | # | Steps | Expected | Result |
@@ -432,6 +436,7 @@ report), but launching it cannot.
 | # | Steps | Expected | Result |
 |---|---|---|---|
 | 10ai.1 | A verse live on the projector (themed background) and the stream (transparent theme). Press Black, then Logo, then Technical issue, then Back. | Black: projector solid black, stream shows nothing over the camera. Logo: each output shows its own theme's logo large and centred (nothing on a theme without a logo; on the stream only if "Show on transparent" is on). Technical issue: the two lines (and Yorùbá when a Yorùbá Bible is in use). Back: the verse returns. | Verified on the Intel Mac |
+
 ### 10aj. Remote command rate limit (NFR-06)
 
 | # | Steps | Expected | Result |
@@ -976,12 +981,20 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dg. The run of show as a table (#196)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dg.1 | A service with a main phase start time and two groups. Prepare → Timing → Table. | Every item of the main service with plan start/end, time, expected and offset; a total line above each group and for the service; a lock and the time on items with an end by. | TABLE_RESULT |
+| 10dg.2 | In the table, type 1h10 in an item's Time, then Enter. Show two items live a few minutes apart. | The plan moves on from that item; the shown items get Actual (when and how long), Done / On now, and their offset. | TABLE2_RESULT |
+
 ### 10df. Time warnings on the stage (#196 R6)
 
 | # | Step | Expected | Result |
 |---|---|---|---|
 | 10df.1 | Design → Stage display: tick "At 1 minutes left" and "When the time is up". Timer 2 min, Start; watch the stage display. | After a minute "1 minute left" on the stage, a minute later "Time is up"; the projector unchanged; both in the service log as messages. | Pass 2026-10-23 (combined QA build): "1 minute left", then "Time is up" on the stage display, each logged once. |
 | 10df.2 | Send your own stage message, then let a warning come due. | Your message stays. | Pass 2026-10-23 (combined QA build): "Wrap up after this point" stayed when the 1-minute warning came due. |
+
 ### 10de. Running late, shared by every desk (#196)
 
 | # | Step | Expected | Result |
@@ -989,6 +1002,7 @@ report), but launching it cannot.
 | 10de.1 | A service with a main phase start time. Production → Timekeeper → +5 min twice; look at Prepare → Run of show, the stage finish line and the service log. | "running 10 min late" everywhere; expected times 10 min later, the plan unchanged; two log lines with who. | Pass 2026-10-23 (combined QA build): +5 twice → "running 10 min late (Tolu)"; stage finish 10:52, 10 min late; two log lines naming Tolu. |
 | 10de.2 | A joined Timekeeper desk: −5 min. | The host's offset moves to +5; the log names the desk. | Pass 2026-10-23 (combined QA build): Desk C (Present role) −5 → +5 by Desk C; log "Desk C: running 5 min late (−5 min)". |
 | 10de.3 | The joined Timekeeper desk: Start the timer, +1 min, Pause. | The host's timer starts, gains a minute and pauses; the desk's timer follows; three log lines naming the desk. | Pass 2026-10-23 (combined QA build): start, +1 min, pause from Desk C over HTTP (200 each): the host's timer ran, gained a minute and paused at 62 s; three log lines naming Desk C. (The desk's own timer view not checked on a second machine.) |
+
 ### 10dd. Priority talk and revoking a talking device (Rhema Comms C4, #251)
 
 | # | Step | Expected | Result |
