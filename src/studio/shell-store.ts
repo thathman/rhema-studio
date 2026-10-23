@@ -77,6 +77,9 @@ interface ShellState extends ShellPrefs {
   setPresentView: (view: PresentView) => void
   openOutputs: () => void
   setOutputsDialogOpen: (open: boolean) => void
+  /** The first-install setup (#298), also opened from the Desk menu (#299): global like the outputs dialog. */
+  setupOpen: boolean
+  setSetupOpen: (open: boolean) => void
 }
 
 // ponytail: localStorage like ThemeProvider; per-machine UI convenience, not content.
@@ -102,6 +105,8 @@ export const useShellStore = create<ShellState>((set) => ({
   setPresentView: (presentView) => set({ presentView }),
   openOutputs: () => set({ outputsDialogOpen: true }),
   setOutputsDialogOpen: (outputsDialogOpen) => set({ outputsDialogOpen }),
+  setupOpen: false,
+  setSetupOpen: (setupOpen) => set({ setupOpen }),
 }))
 
 useShellStore.subscribe((state, prev) => {
