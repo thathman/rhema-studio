@@ -454,7 +454,12 @@ async fn command_handler<S: CommandSink + 'static>(
             );
         }
         Ok(Some(entry)) if !entry.role.allows(&request.command) => {
-            let why = if entry.role == crate::keys::Role::Timekeeper { "this device keeps time: it may move the event clock, not the screens" } else { "this device may present but not change settings" };
+            let why = match entry.role {
+                crate::keys::Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
+                crate::keys::Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
+                crate::keys::Role::Screens => "this device runs the congregation screens: it may take and release scenes only",
+                _ => "this device may present but not change settings",
+            };
             log::warn!("HTTP command refused for {}: {why}", entry.name);
             return (
                 StatusCode::FORBIDDEN,

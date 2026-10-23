@@ -6,6 +6,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Operator roles: Bible and Screens (ARCH-004)
+- Two more roles for a joined computer (Settings → Remote control): **Bible** types a reference and activates it (every feed that follows Bible takes it; the main screens too unless a song, hymn or slide is up), steps the passage, and takes the Bible off or back; **Screens** takes a scene to a congregation output or sends it back to its own feed. Each joined desk shows only its part; **Present** shows all three.
+- The same commands for Stream Deck and OSC: `/rhema/bible_activate <reference>`, `/rhema/clear_source <id>`, `/rhema/restore_source <id>`, `/rhema/take_scene <output> <scene>`, `/rhema/release_scene <output>`. Auto (heard verses) and these share one rule for when a verse may change the main screens.
+
 ### Host and join (ARCH-004, #162)
 - Production → Operators: this computer can **host** the service (every control stays here, with or without anyone joined) or **join** another Rhema on the church network with its pairing code. A joined computer follows the host's screens, live sources, run of show, event clock and timing as they change, and does what its role allows.
 - New role **Timekeeper** (Settings → Remote control → a paired device): it may only move the event clock (Start the next event, Back one, start a chosen event), never a screen. The same commands work from OSC (`/rhema/event_next`, `/rhema/event_prev`, `/rhema/event_start <item id>`) and the HTTP API.

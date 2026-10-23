@@ -31,6 +31,22 @@ pub enum RemoteCommand {
     EventNext,
     EventPrev,
     EventStart(String),
+    /// Activate the Bible source with a typed reference ("Romans 8:28", "jn 3 16"): every feed that
+    /// follows Bible takes it; the main screens too unless a song, hymn or slide is up (ADR 0001).
+    BibleActivate(String),
+    /// Take one live source off its feeds ("bible", "song", "hymn", "slide", "picture"), or put it back.
+    ClearSource(String),
+    RestoreSource(String),
+    /// Put a scene on a congregation output, or send the output back to its own feed.
+    TakeScene(SceneTake),
+    ReleaseScene(String),
+}
+
+/// Which scene goes on which output (ids, as the host's Live State lists them).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SceneTake {
+    pub output: String,
+    pub scene: String,
 }
 
 impl fmt::Display for RemoteCommand {
@@ -54,6 +70,11 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::EventNext => write!(f, "event_next"),
             RemoteCommand::EventPrev => write!(f, "event_prev"),
             RemoteCommand::EventStart(id) => write!(f, "event_start({id})"),
+            RemoteCommand::BibleActivate(r) => write!(f, "bible_activate({r})"),
+            RemoteCommand::ClearSource(id) => write!(f, "clear_source({id})"),
+            RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
+            RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
+            RemoteCommand::ReleaseScene(o) => write!(f, "release_scene({o})"),
         }
     }
 }
@@ -321,6 +342,11 @@ mod tests {
             RemoteCommand::EventNext,
             RemoteCommand::EventPrev,
             RemoteCommand::EventStart("x".into()),
+            RemoteCommand::BibleActivate("John 3:16".into()),
+            RemoteCommand::ClearSource("bible".into()),
+            RemoteCommand::RestoreSource("bible".into()),
+            RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
+            RemoteCommand::ReleaseScene("main".into()),
         ];
 
         for cmd in &cmds {
@@ -341,10 +367,13 @@ mod tests {
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
                 RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => {}
+                RemoteCommand::BibleActivate(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 18);
+        assert_eq!(cmds.len(), 23);
+        let take: RemoteCommand = serde_json::from_str(r#"{"command":"take_scene","value":{"output":"main","scene":"s1"}}"#).unwrap();
+        assert_eq!(take, RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s1".into() }));
     }
 
     #[test]

@@ -110,6 +110,22 @@ pub fn parse_osc(address: &str, args: &[OscType]) -> Result<RemoteCommand, Comma
         "/rhema/verse_prev" => Ok(RemoteCommand::VersePrev),
         "/rhema/event_next" => Ok(RemoteCommand::EventNext),
         "/rhema/event_prev" => Ok(RemoteCommand::EventPrev),
+        "/rhema/bible_activate" | "/rhema/clear_source" | "/rhema/restore_source" | "/rhema/release_scene" => {
+            let arg = args.first().ok_or_else(|| CommandError::MissingArgument { address: address.into() })?;
+            let v = coerce_string(arg)?;
+            Ok(match address {
+                "/rhema/bible_activate" => RemoteCommand::BibleActivate(v),
+                "/rhema/clear_source" => RemoteCommand::ClearSource(v),
+                "/rhema/restore_source" => RemoteCommand::RestoreSource(v),
+                _ => RemoteCommand::ReleaseScene(v),
+            })
+        }
+        "/rhema/take_scene" => {
+            let (Some(o), Some(s)) = (args.first(), args.get(1)) else {
+                return Err(CommandError::MissingArgument { address: address.into() });
+            };
+            Ok(RemoteCommand::TakeScene(crate::command::SceneTake { output: coerce_string(o)?, scene: coerce_string(s)? }))
+        }
         "/rhema/event_start" => {
             let arg = args.first().ok_or_else(|| CommandError::MissingArgument {
                 address: address.into(),
@@ -338,6 +354,9 @@ mod tests {
         assert_eq!(parse_osc("/rhema/event_prev", &[]).unwrap(), RemoteCommand::EventPrev);
         assert_eq!(parse_osc("/rhema/event_start", &[OscType::String("sermon".into())]).unwrap(), RemoteCommand::EventStart("sermon".into()));
         assert!(parse_osc("/rhema/event_start", &[]).is_err());
+        assert_eq!(parse_osc("/rhema/bible_activate", &[OscType::String("Romans 8:28".into())]).unwrap(), RemoteCommand::BibleActivate("Romans 8:28".into()));
+        assert_eq!(parse_osc("/rhema/take_scene", &[OscType::String("main".into()), OscType::String("split".into())]).unwrap(), RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "split".into() }));
+        assert!(parse_osc("/rhema/take_scene", &[OscType::String("main".into())]).is_err());
     }
 
     #[test]

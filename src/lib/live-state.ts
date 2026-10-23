@@ -26,6 +26,9 @@ export interface LiveStateV1 {
   rundown: { id: string; reference: string; plannedMinutes: number | null }[]
   timing: { plannedEnd: number; expectedEnd: number; lateMs: number } | null
   stageMessage: string
+  /** Congregation scenes and outputs, for a screens operator. */
+  scenes: { id: string; name: string }[]
+  outputs: { id: string; name: string; sceneId: string | null }[]
 }
 
 export function buildLiveState(now = Date.now()): LiveStateV1 {
@@ -49,6 +52,8 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     rundown: q.items.map((i) => ({ id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null })),
     timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs } : null,
     stageMessage: b.stageMessage,
+    scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
+    outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
   }
 }
 
@@ -88,7 +93,7 @@ export function refreshLiveState(now = Date.now()): void {
 export function startLiveStatePublisher(): () => void {
   const subs = [
     useBroadcastStore.subscribe((s, p) => {
-      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage) soon()
+      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage || s.scenes !== p.scenes || s.outputs !== p.outputs) soon()
     }),
     useEventClock.subscribe(soon),
     useQueueStore.subscribe((s, p) => { if (s.items !== p.items || s.headers !== p.headers) soon() }),

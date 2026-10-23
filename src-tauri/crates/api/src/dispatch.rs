@@ -57,6 +57,11 @@ impl CommandDispatcher {
                 let payload = serde_json::json!({ "id": id }).to_string();
                 sink.emit_event("remote:event_start", &payload)
             }
+            RemoteCommand::BibleActivate(reference) => sink.emit_event("remote:bible_activate", &serde_json::json!({ "reference": reference }).to_string()),
+            RemoteCommand::ClearSource(id) => sink.emit_event("remote:clear_source", &serde_json::json!({ "id": id }).to_string()),
+            RemoteCommand::RestoreSource(id) => sink.emit_event("remote:restore_source", &serde_json::json!({ "id": id }).to_string()),
+            RemoteCommand::TakeScene(t) => sink.emit_event("remote:take_scene", &serde_json::json!({ "output": t.output, "scene": t.scene }).to_string()),
+            RemoteCommand::ReleaseScene(output) => sink.emit_event("remote:release_scene", &serde_json::json!({ "output": output }).to_string()),
             RemoteCommand::Show => sink.invoke_backend("show_broadcast", "{}"),
             RemoteCommand::Hide => sink.invoke_backend("hide_broadcast", "{}"),
             RemoteCommand::Confidence(val) => {
@@ -220,6 +225,23 @@ mod tests {
         let (name, payload) = sink.last_event();
         assert_eq!(name, "remote:event_start");
         assert!(payload.contains("sermon"));
+    }
+
+    #[test]
+    fn dispatch_operator_commands_emit_events() {
+        let sink = MockSink::new();
+        for (cmd, name, has) in [
+            (RemoteCommand::BibleActivate("Romans 8:28".into()), "remote:bible_activate", "Romans 8:28"),
+            (RemoteCommand::ClearSource("bible".into()), "remote:clear_source", "bible"),
+            (RemoteCommand::RestoreSource("hymn".into()), "remote:restore_source", "hymn"),
+            (RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "split".into() }), "remote:take_scene", "split"),
+            (RemoteCommand::ReleaseScene("main".into()), "remote:release_scene", "main"),
+        ] {
+            CommandDispatcher::dispatch(&cmd, &sink).unwrap();
+            let (event, payload) = sink.last_event();
+            assert_eq!(event, name);
+            assert!(payload.contains(has), "{payload}");
+        }
     }
 
     #[test]

@@ -10,7 +10,7 @@ import {
 import { bibleActions } from "@/hooks/use-bible"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { mark } from "@/lib/latency-marks"
-import { sourceOf } from "@/lib/live-sources"
+import { bibleScope } from "@/lib/bible-activate"
 import { useSettingsStore } from "@/stores/settings-store"
 import { confidenceLevel } from "@/lib/confidence"
 import { approvalWouldHold } from "@/stores/approval-gate-store"
@@ -56,7 +56,7 @@ export function useDetectionEvents(): void {
         text: advance.verse_text,
       }
       if (useBroadcastStore.getState().autoLive && advance.confidence >= confidenceLevel(useSettingsStore.getState().confidenceThreshold) && !approvalWouldHold()) {
-        void presentVerse(advanceVerse, autoScope())
+        void presentVerse(advanceVerse, bibleScope())
       } else {
         bibleActions.selectVerse(advanceVerse)
       }
@@ -97,7 +97,7 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
     // "confidence" setting); a weaker one waits in the preview like any other.
     // Never the approval question for a heard verse: if the service is waiting for approval it waits in the preview.
     if (useBroadcastStore.getState().autoLive && directHit.confidence >= confidenceLevel(useSettingsStore.getState().confidenceThreshold) && !approvalWouldHold()) {
-      void presentVerse(detectedVerse, autoScope())
+      void presentVerse(detectedVerse, bibleScope())
     } else {
       bibleActions.selectVerse(detectedVerse)
     }
@@ -167,13 +167,4 @@ export function handleVerseDetections(detections: DetectionResult[]): void {
       })
     }
   }
-}
-
-/**
- * Auto changes the Bible source only (ADR 0001, C11): while a song, hymn, slide or quick screen is
- * on the main screens, a heard verse goes to the feeds that follow Bible and waits in the preview.
- */
-function autoScope(): { sourceOnly?: boolean } {
-  const { isLive, liveVerse } = useBroadcastStore.getState()
-  return isLive && liveVerse && sourceOf(liveVerse) !== "bible" ? { sourceOnly: true } : {}
 }

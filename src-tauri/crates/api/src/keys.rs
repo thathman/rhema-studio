@@ -14,8 +14,9 @@ use crate::command::{same_key, RemoteCommand};
 /// What a key may do. `Present` is the volunteer's set (move through the
 /// service, show/hide, the event clock); `Configure` adds theme, opacity,
 /// confidence and the on-air switch; `Timekeeper` may only move the event
-/// clock (Host/Join, ARCH-004), never a screen. Existing entries without a role
-/// are `Configure`, as before.
+/// clock (Host/Join, ARCH-004), never a screen; `Bible` activates, steps and
+/// clears the Bible source only; `Screens` takes scenes to congregation outputs.
+/// Existing entries without a role are `Configure`, as before.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -23,14 +24,19 @@ pub enum Role {
     #[default]
     Configure,
     Timekeeper,
+    Bible,
+    Screens,
 }
 
 impl Role {
     #[must_use]
     pub fn allows(self, cmd: &RemoteCommand) -> bool {
         match cmd {
-            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => true,
-            _ if self == Role::Timekeeper => false,
+            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
+            RemoteCommand::BibleActivate(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
+            RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => matches!(self, Role::Present | Role::Configure) || (self == Role::Bible && id == "bible"),
+            RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => matches!(self, Role::Present | Role::Configure | Role::Screens),
+            _ if matches!(self, Role::Timekeeper | Role::Bible | Role::Screens) => false,
             RemoteCommand::Theme(_) | RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_) | RemoteCommand::OnAir(_) => self == Role::Configure,
             RemoteCommand::Next
             | RemoteCommand::Prev
@@ -221,6 +227,24 @@ mod tests {
             assert!(!Role::Timekeeper.allows(&cmd), "{cmd}");
         }
         assert_eq!(serde_json::to_string(&Role::Timekeeper).unwrap(), "\"timekeeper\"");
+    }
+
+    #[test]
+    fn bible_and_screens_operators_do_only_their_part() {
+        let take = RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "s".into() });
+        for cmd in [RemoteCommand::BibleActivate("John 3:16".into()), RemoteCommand::VerseNext, RemoteCommand::ClearSource("bible".into()), RemoteCommand::RestoreSource("bible".into())] {
+            assert!(Role::Bible.allows(&cmd), "{cmd}");
+            assert!(!Role::Screens.allows(&cmd), "{cmd}");
+        }
+        for cmd in [RemoteCommand::ClearSource("hymn".into()), RemoteCommand::Next, RemoteCommand::Show, take.clone(), RemoteCommand::EventNext, RemoteCommand::OnAir(false)] {
+            assert!(!Role::Bible.allows(&cmd), "{cmd}");
+        }
+        assert!(Role::Screens.allows(&take) && Role::Screens.allows(&RemoteCommand::ReleaseScene("main".into())));
+        for cmd in [RemoteCommand::Next, RemoteCommand::EventNext, RemoteCommand::BibleActivate("x".into()), RemoteCommand::Macro("x".into())] {
+            assert!(!Role::Screens.allows(&cmd), "{cmd}");
+        }
+        assert!(Role::Present.allows(&take) && Role::Present.allows(&RemoteCommand::ClearSource("hymn".into())));
+        assert!(!Role::Timekeeper.allows(&RemoteCommand::BibleActivate("x".into())));
     }
 
     #[test]
