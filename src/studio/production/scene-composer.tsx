@@ -184,7 +184,7 @@ function swap<T>(a: T[], i: number, j: number): T[] {
 }
 
 function IconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
-  return <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick} className="flex size-6 items-center justify-center rounded hover:bg-muted disabled:opacity-30 [&_svg]:size-3.5">{children}</button>
+  return <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick} className="flex size-8 items-center justify-center rounded hover:bg-muted disabled:opacity-30 [&_svg]:size-3.5">{children}</button>
 }
 
 function AddLayer({ onAdd }: { onAdd: (kind: SceneLayerKind) => void }) {

@@ -125,7 +125,8 @@
     --muted-foreground: #5f6b72;
     --accent: #e4f0eb;
     --accent-foreground: #1f5e59;
-    --destructive: #c34b4d;
+    /* Signal red as text (Delete, errors): a shade under the live red so it reads on the stone page. */
+    --destructive: #bb4547;
     --border: #e2e4e1;
     --input: #d6dad6;
     --ring: #256d68;
@@ -289,6 +290,23 @@
   html {
     @apply font-sans;
     }
+}
+
+/*
+ * A 44 px touch target around a small control without making it look bigger: an invisible
+ * box centred on it takes the click. Keep other controls clear of that box.
+ */
+@utility touch-hit {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
 }
 
 /* Smooth spotlight morph between tutorial steps */

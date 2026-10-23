@@ -56,13 +56,13 @@ export function AuxTimersPanel() {
             <li key={t.id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs">
               <span className="min-w-0 flex-1 truncate font-medium">{t.label}</span>
               <span className={cn("w-14 text-right font-semibold tabular-nums", toneClass(timerTone(t.timer, now)))}>{formatMs(remainingMs(t.timer, now))}</span>
-              <Button size="icon-xs" variant="outline" aria-label={`${on ? "Pause" : "Start"} ${t.label}`} onClick={() => useAuxTimers.getState().toggle(t.id)}>{on ? <PauseIcon /> : <PlayIcon />}</Button>
-              <Button size="icon-xs" variant="ghost" aria-label={`Reset ${t.label}`} onClick={() => useAuxTimers.getState().reset(t.id)}><RotateCcwIcon /></Button>
+              <Button size="icon-xs" variant="outline" className="size-8" aria-label={`${on ? "Pause" : "Start"} ${t.label}`} onClick={() => useAuxTimers.getState().toggle(t.id)}>{on ? <PauseIcon /> : <PlayIcon />}</Button>
+              <Button size="icon-xs" variant="ghost" className="size-8" aria-label={`Reset ${t.label}`} onClick={() => useAuxTimers.getState().reset(t.id)}><RotateCcwIcon /></Button>
               <label className="flex items-center gap-1 text-[0.6875rem] text-muted-foreground">
                 <Switch checked={t.onStage} onCheckedChange={(v) => useAuxTimers.getState().setOnStage(t.id, v)} aria-label={`Show ${t.label} on the stage display`} />
                 On stage
               </label>
-              <Button size="icon-xs" variant="ghost" aria-label={`Remove ${t.label}`} onClick={() => useAuxTimers.getState().remove(t.id)}><XIcon /></Button>
+              <Button size="icon-xs" variant="ghost" className="size-8" aria-label={`Remove ${t.label}`} onClick={() => useAuxTimers.getState().remove(t.id)}><XIcon /></Button>
             </li>
           )
         })}

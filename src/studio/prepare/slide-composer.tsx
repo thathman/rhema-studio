@@ -116,11 +116,11 @@ export function SlideComposer() {
       {mode === "qr" && (
         <div className="flex flex-col gap-1">
           <Input aria-label="Link" placeholder="https://… (giving, sign-up, bulletin)" value={link} onChange={(e) => { setLink(e.target.value); preview(title, body, when, where, "qr", e.target.value) }} className="h-9" />
-          <p className="text-[0.6875rem] text-muted-foreground">{link.trim() && !safeLink(link) ? "Only a full http(s) address can be shown as a code." : "The code and the address are shown together on a white panel, so people see where it goes. Works offline; nothing is tracked. The preview shows the words; the code itself appears on the output. A background picture is not used on this slide."}</p>
+          <p className="text-xs text-muted-foreground">{link.trim() && !safeLink(link) ? "Only a full http(s) address can be shown as a code." : "The code and the address are shown together on a white panel, so people see where it goes. Works offline; nothing is tracked. The preview shows the words; the code itself appears on the output. A background picture is not used on this slide."}</p>
         </div>
       )}
       {mode === "reading" && (
-        <p className="text-[0.6875rem] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {body.trim() && !hasReadingMarks(body) ? "No parts marked yet: start the leader's lines with L: and the congregation's with P: (or All:)." : "One slide per exchange; \"Leader:\" and \"All:\" show where each part starts. The preview shows the first slide."}
         </p>
       )}

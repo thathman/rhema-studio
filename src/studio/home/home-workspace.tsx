@@ -68,7 +68,6 @@ export function HomeWorkspace() {
 
         {/* The approved hero (issue #215): a flat, editorial welcome with Sunday's readiness on a note. */}
         <section aria-labelledby="quick" className="relative grid grid-cols-[minmax(0,1.25fr)_290px] overflow-hidden rounded-[22px] border border-border bg-[#eeede6] dark:bg-card max-[1100px]:grid-cols-1">
-          <span aria-hidden className="pointer-events-none absolute -right-40 -bottom-56 h-[420px] w-[620px] rotate-[-22deg] rounded-[120px] bg-[radial-gradient(circle_at_30%_30%,rgb(255_255_255/0.32),transparent_60%),linear-gradient(135deg,rgb(37_109_104/0.08),rgb(37_109_104/0.04))] dark:bg-[linear-gradient(135deg,rgb(127_196_184/0.10),rgb(127_196_184/0.03))]" />
           <div className="relative min-w-0 px-[34px] pt-[34px] pb-7">
             <p className="text-[0.625rem] font-bold tracking-[0.18em] text-muted-foreground uppercase">{comingUp ? `Coming up · ${comingUp}` : current ? `This service · ${current.title}` : "No service open"}</p>
             <h2 id="quick" className="mt-2 text-2xl leading-[1.05] font-bold tracking-[-0.045em]">

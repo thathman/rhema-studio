@@ -181,6 +181,10 @@ The bottom of the sidebar shows who is at this computer: your initials, your nam
 
 With a narrow window the sidebar shows only icons; the desk is then your initials, with the same menu.
 
+## Finding a setting
+
+Settings has a **Search settings** box at the top of its list. Type a word you see on the setting or one you would use for it ("gain", "microphone", "deepgram", "pair", "yoruba"): only the sections that hold it stay in the list, each naming the matching settings, and the matches are highlighted when you open one. Enter opens the first; Esc empties the box. Light and dark are not in Settings: they are under Appearance in the Desk menu.
+
 ## Speech recognition and the Deepgram key
 
 Settings → Speech Recognition is the one place for the cloud speech key: choose **Cloud (Deepgram)**, type or paste the key and **Save**. The eye button shows or hides it, **Clear** removes it, and typing a new one and saving replaces it. It is kept in the system keychain where the computer has one. There is no separate Cloud keys page any more; an old link to it opens Speech Recognition.

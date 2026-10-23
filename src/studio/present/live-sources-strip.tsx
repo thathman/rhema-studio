@@ -18,11 +18,11 @@ export function LiveSourcesStrip() {
   if (followed.size === 0) return null
   const rows = CONTENT_TYPES.filter((k) => followed.has(k) && sources[k])
   return (
-    <div role="group" aria-label="Live sources" className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-border px-3 py-2">
+    <div role="group" aria-label="Live sources" className="flex shrink-0 flex-wrap items-center gap-x-1.5 gap-y-3 border-t border-border px-3 py-2.5">
       <span className="text-[0.625rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">Sources</span>
       {rows.length === 0 && <span className="text-[0.6875rem] text-muted-foreground">Nothing live for the feeds yet</span>}
       {autoBibleFeeds && (
-        <button type="button" onClick={() => useBroadcastStore.getState().setAutoMode("manual")} title="Auto, Bible feeds only: a verse heard while listening goes to the feeds that follow Bible, never the main screens. Click to turn off." className="rounded-full bg-tone-amber px-2 py-0.5 text-[0.6875rem] font-medium text-tone-amber-foreground outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/50">
+        <button type="button" onClick={() => useBroadcastStore.getState().setAutoMode("manual")} title="Auto, Bible feeds only: a verse heard while listening goes to the feeds that follow Bible, never the main screens. Click to turn off." className="touch-hit rounded-full bg-tone-amber px-2 py-0.5 text-[0.6875rem] font-medium text-tone-amber-foreground outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/50">
           Auto: Bible feeds
         </button>
       )}
@@ -44,14 +44,15 @@ export function LiveSourcesStrip() {
   )
 }
 
+/** Take a source off its feeds, or restore it: small to look at, a 44 px target to press. */
 function SourceButton({ id, on, disabled, label }: { id: SourceId; on: boolean; disabled: boolean; label: string }) {
   const b = useBroadcastStore.getState()
   return on ? (
-    <button type="button" disabled={disabled} onClick={() => b.clearSource(id)} aria-label={`Take ${label} off its feeds`} title="Take it off the feeds that follow it (Restore brings it back)" className="flex size-5 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40 [&_svg]:size-3">
+    <button type="button" disabled={disabled} onClick={() => b.clearSource(id)} aria-label={`Take ${label} off its feeds`} title="Take it off the feeds that follow it (Restore brings it back)" className="touch-hit flex size-5 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40 [&_svg]:size-3">
       <XIcon />
     </button>
   ) : (
-    <button type="button" disabled={disabled} onClick={() => b.restoreSource(id)} aria-label={`Restore ${label} on its feeds`} title="Put it back on the feeds that follow it" className="flex size-5 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40 [&_svg]:size-3">
+    <button type="button" disabled={disabled} onClick={() => b.restoreSource(id)} aria-label={`Restore ${label} on its feeds`} title="Put it back on the feeds that follow it" className="touch-hit flex size-5 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40 [&_svg]:size-3">
       <RotateCcwIcon />
     </button>
   )

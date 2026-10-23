@@ -93,7 +93,7 @@ export function ProductionWorkspace() {
               role="tab"
               aria-selected={tab === id}
               onClick={() => setTab(id)}
-              className={cn("-mb-px border-b-[3px] px-3 py-2.5 text-[0.6875rem] font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
+              className={cn("-mb-px min-h-11 border-b-[3px] px-3.5 py-2.5 text-[0.6875rem] font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}
             >
               {label}
             </button>
@@ -131,7 +131,7 @@ function Timekeeper() {
         <div className="rounded-[10px] bg-[#182c32] px-[22px] py-5 text-[#eef6f0]">
           <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-[#b8cec6] uppercase">{timer.durationMs > 0 ? "Remaining" : "Elapsed"}</p>
           <p className={cn("font-mono text-[clamp(2.375rem,4.1vw,4rem)] leading-[1.15] font-semibold tracking-[-0.055em] tabular-nums", tone === "over" && "text-[#ff9b9d]", tone === "warn" && "text-[#ffd27a]")} role="timer">{formatMs(shown)}</p>
-          <p className="text-[0.6875rem] text-[#b8cec6]">The same timer as Present; the stage display shows it.</p>
+          <p className="text-xs text-[#b8cec6]">The same timer as Present; the stage display shows it.</p>
         </div>
         <dl className="grid grid-cols-3 gap-2 text-center">
           {[["Planned finish", timing ? hhmm(timing.plannedEnd) : "—"], ["Projected", timing ? hhmm(timing.expectedEnd) : "—"], ["Offset", timing ? (late === 0 ? "On time" : `${late > 0 ? "+" : "−"}${Math.abs(late)} min`) : "—"]].map(([k, v]) => (

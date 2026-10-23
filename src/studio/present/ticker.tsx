@@ -58,7 +58,7 @@ export function TickerControl() {
             rows={4}
             className="text-xs"
           />
-          <p className="mt-1 text-[0.6875rem] text-muted-foreground">One announcement per line.</p>
+          <p className="mt-1 text-xs text-muted-foreground">One announcement per line.</p>
           <TickerPresets />
           <TickerPreview />
           <div className="mt-2 flex items-center gap-2">
