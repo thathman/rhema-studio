@@ -36,12 +36,11 @@ import { useAudioTest } from "@/hooks/use-audio-test"
 import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
-import { useSettingsDialogStore } from "@/lib/settings-dialog"
+import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dialog"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { qrDataUrl } from "@/lib/qr-bulletin"
-import { MonitorIcon, MoonIcon, PaletteIcon, SparklesIcon, SunIcon } from "lucide-react"
-import { useTheme } from "@/components/theme-provider"
+import { EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
 
@@ -49,22 +48,10 @@ import type { DeviceInfo } from "@/types/audio"
 /*  Nav definition                                                            */
 /* -------------------------------------------------------------------------- */
 
-type NavSection =
-  | "screens"
-  | "appearance"
-  | "audio"
-  | "speech"
-  | "bible"
-  | "display"
-  | "api-keys"
-  | "remote"
-  | "assistants"
-  | "diagnostics"
-  | "help"
+type NavSection = SettingsSection
 
 const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
   { name: "Outputs", id: "screens", icon: <MonitorIcon strokeWidth={2} /> },
-  { name: "Light or dark", id: "appearance", icon: <SunIcon strokeWidth={2} /> },
   {
     name: "Audio",
     id: "audio",
@@ -94,11 +81,6 @@ const navItems: { name: string; id: NavSection; icon: React.ReactNode }[] = [
     name: "AI assistants",
     id: "assistants",
     icon: <SparklesIcon strokeWidth={2} />,
-  },
-  {
-    name: "Cloud keys",
-    id: "api-keys",
-    icon: <KeyIcon strokeWidth={2} />,
   },
   {
     name: "Diagnostics",
@@ -268,6 +250,7 @@ function SpeechSection() {
 
   const [keyValue, setKeyValue] = useState(deepgramApiKey ?? "")
   const [saved, setSaved] = useState(false)
+  const [showKey, setShowKey] = useState(false)
 
   const handleSaveKey = () => {
     setDeepgramApiKey(keyValue || null)
@@ -345,12 +328,22 @@ function SpeechSection() {
           </div>
           <div className="flex gap-2">
             <Input
-              type="password"
+              type={showKey ? "text" : "password"}
+              aria-label="Deepgram API key"
+              autoComplete="off"
               placeholder="Enter your Deepgram API key..."
               value={keyValue}
               onChange={(e) => setKeyValue(e.target.value)}
               className="flex-1 text-xs"
             />
+            <Button size="sm" variant="outline" aria-pressed={showKey} aria-label={showKey ? "Hide the key" : "Show the key"} title={showKey ? "Hide the key" : "Show the key"} onClick={() => setShowKey(!showKey)}>
+              {showKey ? <EyeOffIcon className="size-3" /> : <EyeIcon className="size-3" />}
+            </Button>
+            {deepgramApiKey && (
+              <Button size="sm" variant="outline" onClick={() => { setDeepgramApiKey(null); setKeyValue(""); setShowKey(false) }}>
+                Clear
+              </Button>
+            )}
             <Button size="sm" onClick={handleSaveKey}>
               {saved ? (
                 <>
@@ -363,7 +356,7 @@ function SpeechSection() {
             </Button>
           </div>
           <p className="text-[0.6875rem] text-muted-foreground">
-            Required for live transcription. Get a key at{" "}
+            Required for live transcription. To replace the key, type the new one and Save. It is kept in the system keychain where there is one. Get a key at{" "}
             <span className="text-primary">deepgram.com</span>
           </p>
         </div>
@@ -428,55 +421,17 @@ function DisplayModeSection() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Section: API Keys                                                         */
-/* -------------------------------------------------------------------------- */
-
-function ApiKeysSection() {
-  const { deepgramApiKey, sttProvider } = useSettingsStore()
-
-  return (
-    <div className="flex flex-col gap-6">
-      {/* Deepgram key status (configured in Speech Recognition section) */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Deepgram API Key
-          </label>
-          {deepgramApiKey ? (
-            <Badge variant="outline" className="text-[0.6875rem]">
-              Key configured
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[0.6875rem] text-muted-foreground">
-              Not set
-            </Badge>
-          )}
-        </div>
-        <p className="text-[0.6875rem] text-muted-foreground">
-          {sttProvider === "whisper"
-            ? "Not required when using local Whisper. "
-            : "Required for cloud transcription. "}
-          Configure in the Speech Recognition section.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-/* -------------------------------------------------------------------------- */
 /*  Section titles                                                            */
 /* -------------------------------------------------------------------------- */
 
 const sectionTitles: Record<NavSection, string> = {
   assistants: "AI assistants (MCP)",
   screens: "Screens and NDI",
-  appearance: "Appearance",
   audio: "Audio",
   speech: "Speech Recognition",
   bible: "Bible Translation",
   display: "Heard verses",
   remote: "Remote Control",
-  "api-keys": "Cloud keys",
   diagnostics: "Diagnostics",
   help: "Help",
 }
@@ -1119,13 +1074,11 @@ function StatusDot({ running }: { running: boolean }) {
 const sectionComponents: Record<NavSection, React.FC> = {
   assistants: AssistantsSection,
   screens: ScreensSection,
-  appearance: AppearanceSection,
   audio: AudioSection,
   speech: SpeechSection,
   bible: BibleSection,
   display: DisplayModeSection,
   remote: RemoteControlSection,
-  "api-keys": ApiKeysSection,
   diagnostics: DiagnosticsSection,
   help: HelpSection,
 }
@@ -1139,9 +1092,8 @@ const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
   { title: "Bible and languages", ids: ["bible"] },
   { title: "Screens and NDI", ids: ["screens"] },
   { title: "Live behaviour", ids: ["display"] },
-  { title: "Microphone and speech", ids: ["audio", "speech", "api-keys"] },
+  { title: "Microphone and speech", ids: ["audio", "speech"] },
   { title: "Studio connections", ids: ["remote", "assistants"] },
-  { title: "Appearance", ids: ["appearance"] },
   { title: "Diagnostics and support", ids: ["diagnostics", "help"] },
 ]
 
@@ -1200,21 +1152,6 @@ function ScreensSection() {
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => useShellStore.getState().openOutputs()}><MonitorIcon /> Open outputs</Button>
         <Button variant="outline" onClick={() => useShellStore.getState().openDesign("outputs")}><PaletteIcon /> Which look each shows (Design)</Button>
-      </div>
-    </div>
-  )
-}
-
-/** Appearance: light or dark for planning (Present is always dark). */
-function AppearanceSection() {
-  const { theme, setTheme } = useTheme()
-  return (
-    <div className="flex max-w-xl flex-col gap-3 text-sm">
-      <p className="text-muted-foreground">How Rhema looks while you plan. The live console in Present is always dark, so it stays calm in a dim room.</p>
-      <div role="radiogroup" aria-label="Appearance" className="flex gap-2">
-        {(["light", "dark"] as const).map((t) => (
-          <Button key={t} role="radio" aria-checked={theme === t} variant={theme === t ? "default" : "outline"} onClick={() => setTheme(t)}>{t === "light" ? <SunIcon /> : <MoonIcon />} {t === "light" ? "Light" : "Dark"}</Button>
-        ))}
       </div>
     </div>
   )

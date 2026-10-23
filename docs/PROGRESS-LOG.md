@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Desk menu; Cloud keys folded into Speech (#299 UX15-1)
+
+- **Branch / PR:** `ux15-1/desk-menu`. `src/studio/shell/desk-menu.tsx`: the sidebar footer is one Desk button (initials, `operatorName` or "Add your name", "Main desk" or the joined role and host from `useJoin`) opening a Popover: name saved on Enter/blur/close (Escape reverts), Light/Dark/System through the existing `useTheme`, Settings, Complete setup (`setSetupOpen(true)`, #298's wizard), Keyboard shortcuts (`ShortcutsDialog`, focus back on the desk), Help, Diagnostics, About (version). The Local-first card and the footer Settings button are gone; Cmd/Ctrl+, unchanged. Settings: `api-keys` and `appearance` sections removed; `openSettings`/`setActiveSection` map `api-keys` → `speech`; Speech's Deepgram key gains Show/Hide and Clear (store and keychain code untouched); Find anything's "Keys" entry folded into Speech recognition.
+- **Tests:** `desk-menu.test.tsx` (name in place on Enter and blur; Complete setup; Settings; Light/Dark/System; joined role), `settings-dialog.test.ts` (the redirect). Desktop: acceptance 10di (unverified).
+- **Next:** UX15-2 (Present transport). The top bar's "Offline-ready" chip is a separate element and was left for a later slice.
 ## 2026-10-23 — A compact transport bar in Present (#299 UX15-2)
 
 - **Branch / PR:** `ux15-2/present-transport`. The boxed strip in `present-workspace.tsx` becomes `present/transport-bar.tsx`: left Previous / Next (with the "Next: Chorus" hint) and Previous / Next verse; middle one **Take live** (was "Show live"; still `presentActions.showLive` → `remoteActions.sendToLive`) with what is in Preview and where it goes; right Clear / Restore. Layout by container query on the bar's own width (58 / 46 / 32 rem), so it collapses to icons with tooltips and puts Take live on its own row on a half-size window. A control that cannot act stays focusable with `aria-disabled`, a tooltip and an `aria-describedby` reason; a click does nothing. Take live now waits for something in Preview (it was a no-op before, but could still raise the approval question).

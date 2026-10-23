@@ -21,7 +21,7 @@ export const TUTORIAL_STEPS: Step[] = [
   at({ workspace: "home" }, {
     target: 'nav[aria-label="Workspaces"]',
     title: "Your studio",
-    content: "Home checks you are ready. Prepare builds the service. Present runs it. Production keeps time and watches the screens. Under Your church: the library, the design of your screens, your team and past services. Settings is at the bottom.",
+    content: "Home checks you are ready. Prepare builds the service. Present runs it. Production keeps time and watches the screens. Under Your church: the library, the design of your screens, your team and past services. At the bottom is your desk: click your name for Light or dark, Settings and help.",
     placement: "right",
   }),
   at({ workspace: "home" }, {
@@ -99,7 +99,7 @@ export const TUTORIAL_STEPS: Step[] = [
   at({ workspace: "production" }, {
     target: 'nav[aria-label="Workspaces"]',
     title: "Library, Design, Team and Archive",
-    content: "Songs, pictures and backups live in the Library. Design sets how everything looks (each language of a bilingual screen can be styled on its own). Settings, at the bottom, has Bible translations, audio and remotes, and can restart this tour.",
+    content: "Songs, pictures and backups live in the Library. Design sets how everything looks (each language of a bilingual screen can be styled on its own). Settings (in your desk menu at the bottom, or ⌘,) has Bible translations, audio and remotes, and can restart this tour.",
     placement: "right",
   }),
 ]

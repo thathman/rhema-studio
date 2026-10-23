@@ -23,7 +23,6 @@ import { ArchiveWorkspace } from "@/studio/archive/archive-workspace"
 import { ProductionWorkspace } from "@/studio/production/production-workspace"
 import { TeamWorkspace } from "@/studio/team/team-workspace"
 import { openSettings } from "@/lib/settings-dialog"
-import { useSettingsStore } from "@/stores/settings-store"
 import { Sidebar } from "@/studio/shell/sidebar"
 import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-items"
 import { cn } from "@/lib/utils"
@@ -62,7 +61,6 @@ export function AppShell() {
   const outputsOpen = useShellStore((s) => s.outputsDialogOpen)
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
-  const operatorName = useSettingsStore((s) => s.operatorName)
   const church = useMemo(() => churchItems(), [])
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
@@ -159,7 +157,6 @@ export function AppShell() {
         workspace={workspace}
         isLive={isLive}
         church={church}
-        operatorName={operatorName}
         onWorkspace={(w) => void go(w)}
         onSettings={() => openSettings()}
       />

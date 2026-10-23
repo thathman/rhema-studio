@@ -981,6 +981,24 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10di. Desk menu; Cloud keys folded into Speech (#299 UX15-1)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10di.1 | Window wider than 1180 px. Look at the bottom of the sidebar. | No "Local-first workspace / Works offline" card and no separate Settings button; one desk row: initials (or a person icon), your name or "Add your name", and "Main desk". | Unverified |
+| 10di.2 | With no name set: click the desk row. | The Desk menu opens beside the sidebar with the cursor already in "Your name". Type "Tolu Adeyemi", press Enter. | Unverified |
+| 10di.3 | Look at the desk row; open Team. | The row shows "TA" and "Tolu Adeyemi"; Team → Your name shows the same. Quit and reopen Rhema: still there. | Unverified |
+| 10di.4 | Open the menu, change the name to "Femi", press Escape. Open again, change it to "Femi", click outside. | Escape: the menu stays open and the box goes back to "Tolu Adeyemi" (Escape again closes it). Clicking outside: "Femi" is saved. | Unverified |
+| 10di.5 | In the menu: Dark, then Light, then System; then go to Present. | Home/Prepare switch at once each time (System follows macOS); the choice survives a restart; Present's live console stays dark in all three. | Unverified |
+| 10di.6 | In the menu: Settings. Then press ⌘, from Home. | Settings opens both ways; the desk row is highlighted while on Settings. | Unverified |
+| 10di.7 | In the menu: Keyboard shortcuts, then close it with Escape. | The shortcuts list opens; after closing, focus is back on the desk row (Enter reopens the menu). | Unverified |
+| 10di.8 | In the menu: Complete setup. | The setup steps open (needs #298's wizard on the build; without it nothing visible happens and the menu just closes). | Unverified |
+| 10di.9 | In the menu: Help and the tour; Diagnostics; About Rhema Studio. | Settings → Help, Settings → Diagnostics, Settings → Help (with the version, which also shows beside About in the menu). | Unverified |
+| 10di.10 | Narrow the window below 1180 px. Hover the desk avatar; Tab to it and press Enter; use Tab inside the menu; press Escape. | Only the avatar shows; its tooltip gives the name and "Main desk"; the menu opens from the keyboard, every item is reachable with Tab, Escape closes it and focus returns to the avatar. | Unverified |
+| 10di.11 | Join another Rhema (Production → Operators → Join a host) as a Bible device. Look at the desk row; then Leave. | While joined: "Bible desk · joined <host church or address>"; after leaving: "Main desk". | Unverified |
+| 10di.12 | Settings: look down the left list. | No "Cloud keys" and no "Light or dark"; Microphone and speech has Audio and Speech Recognition only. | Unverified |
+| 10di.13 | Settings → Speech Recognition, Cloud (Deepgram) chosen, a key already saved before this build. | The key is still there ("Key configured"); the eye button shows and hides it; typing a new key and Save replaces it; Clear removes it (Key configured disappears); Whisper still works with no key. Put the real key back afterwards. | Unverified |
+| 10di.14 | ⌘K, type "deepgram" (or "keys"). | "Speech recognition" is offered and opens Settings → Speech Recognition. | Unverified |
 ### 10dj. Present's compact transport bar (#299 UX15-2)
 
 | # | Step | Expected | Result |
