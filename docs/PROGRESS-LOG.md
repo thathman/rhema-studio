@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — MCP-002: AI service drafts for review
+
+- **Branch / PR:** `mcp-002/drafts` (stacked on #262).
+- **Behaviour:** `src-tauri/src/mcp_drafts.rs` (`check`: titles, dates, HH:MM, roles once each, kinds, minutes 0–240, at most 200 items, songs matched by id / exact title / other title / number, references via `mcp::find_passage`, missing placeholders; `save`: `ai-drafts/<uuid>.json`, atomic write, at most 50 waiting, client name from `initialize`); tools `rhema_validate_service_draft`, `rhema_create_service_draft` (only non-read-only tool); app commands `ai_drafts_list`, `ai_draft_delete` (UUID ids only); `src/lib/ai-drafts.ts` (`draftToRundown`); Prepare → AI drafts dialog (asks before replacing a rundown; opens unsaved).
+- **Tests:** app `mcp` 6 (incl. a Thanksgiving draft against the real KJV and named mistakes); `ai-drafts.test.ts`, `ai-drafts.test.tsx`; full vitest 716.
+- **Desktop end-to-end (QA build, Intel Mac, scratch QA profile):** a stdio session as "Claude" validated then created a Thanksgiving draft (Amazing Grace, the CAC hymn "Now thank we all our God", KJV Psalm 100:1-5, slides; 47 min); Prepare → AI drafts listed it and Open as a new service loaded all five items marked "AI draft · Claude" with Warm-up and Main service 10:00; nothing saved or approved. Window capture failed that run (bridge evidence only). Real data 6/6, WebKit restored.
+- **Next:** Comms notices (#251) on the Host/Join channel.
+
 ## 2026-10-23 — MCP-001: the read-only Rhema MCP server (#252)
 
 - **Main checked:** `f55eab9` (#260 merged). #261 (Bible and Screens roles) open.

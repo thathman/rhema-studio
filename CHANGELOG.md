@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### AI service drafts (#252, MCP-002)
+- An assistant connected to Rhema can now propose a whole service: phases, timings, songs and hymns from your library, Scripture from your Bible editions, slides with its own words. Rhema checks every item (songs it cannot find are kept as "Missing" placeholders, never invented) and saves it as a draft. **Prepare → AI drafts** lists them; **Open as a new service** puts one in the rundown, unsaved, each item marked as the assistant's, for you to edit, source what is missing and save. Nothing is approved or shown by the assistant.
+
 ### Rhema MCP for AI assistants (#252, read-only)
 - Settings → AI assistants: an assistant that supports MCP (Claude Desktop or Claude Code, for example) can read this church's services and their run of show, the song library and hymn book (titles, numbers, authors, licences; never lyrics) and the installed Bible editions, to help plan a service. Off by default; read-only (nothing it does can change a service, a song, a setting or a screen); Scripture comes only from the installed editions. The assistant starts Rhema in the background (`Rhema --mcp`); Settings shows the exact configuration to paste.
 
