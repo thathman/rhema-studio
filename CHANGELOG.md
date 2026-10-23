@@ -6,6 +6,8 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Running late, shared by every desk (#196)
+- Prepare's ±5 min now moves the service's one running-late offset, which Production's Timekeeper and a joined Timekeeper desk move too (remote command `event_offset`). The stage finish, the Live State and every desk follow it; each change is logged with who made it.
 ### Priority talk; a revoked device leaves the talk channel (Rhema Comms C4, #251)
 - The main desk's Talk to has **All crew, priority**: while it holds Talk, everyone else is turned down for every listener.
 - Revoking a paired device in Settings → Remote drops it from the talk channel at once.

@@ -5,6 +5,10 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Running late, shared by every desk (#196)
+
+- **Branch / PR:** `pt-006/shared-offset`. `service-offset-store.ts` (minutes, by; −120…+240; logged; zero for another service) replaces Prepare's local `delay`; used by `useServiceTiming`, `stage-finish`, `live-state` (`timing.offsetMinutes`, `offsetBy`). Remote command `event_offset` (Timekeeper/Present/Configure, ±30 a step, with who). Production Timekeeper "Running" row; ClockDesk ±5.
+- **Tests:** `service-offset-store.test.ts`; rhema-api (serde, dispatch with who and the 30 min clamp, roles). Desktop: acceptance 10de.
 ## 2026-10-23 — Priority talk; a revoked device leaves the talk channel (Rhema Comms C4, #251)
 
 - **Branch / PR:** `comms-005/priority-revoke`. `voice.ts`: talk target `priority` (main desk only; heard by all); while the main desk holds Talk on it, every other speaker's gain for every listener is 0.2 (`rewire` on Talk and release). The hub drops a peer whose device is no longer paired (settings subscription).

@@ -30,6 +30,7 @@ export const REMOTE_EVENTS = {
   event_next: "remote:event_next",
   event_prev: "remote:event_prev",
   event_start: "remote:event_start",
+  event_offset: "remote:event_offset",
   bible_activate: "remote:bible_activate",
   clear_source: "remote:clear_source",
   restore_source: "remote:restore_source",

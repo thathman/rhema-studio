@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useServiceOffset } from "@/stores/service-offset-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useQueueStore } from "@/stores"
@@ -37,10 +38,10 @@ function lateness(minutes: number): string {
 export function TimingPanel() {
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
-  const [delay, setDelay] = useState(0)
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
   const total = formatMinutes(plannedTotalMs(items))
-  const { timing, first, onAir } = useServiceTiming(delay)
+  const { timing, first, onAir } = useServiceTiming()
+  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main desk"
   const range = main ? phaseRange(items.length, headers, main.id) : null
   const began = range ? Math.min(...items.slice(range.start, range.end).map((i) => first.get(i.id) ?? Infinity)) : Infinity
   const plannedStart = clockMinutes(main?.starts_at)
@@ -82,9 +83,9 @@ export function TimingPanel() {
                 </p>
               )}
               <div className="flex items-center justify-between gap-2" role="group" aria-label="Running late or early">
-                <Button size="xs" variant="outline" onClick={() => setDelay((d) => d - 5)}>−5 min</Button>
+                <Button size="xs" variant="outline" onClick={() => useServiceOffset.getState().adjust(-5, me)}>−5 min</Button>
                 <span className={cn("text-xs font-semibold", lateMinutes > 0 ? "text-confidence-mid" : "text-muted-foreground")} role="status">{lateMinutes === 0 ? "On schedule" : lateness(lateMinutes)}</span>
-                <Button size="xs" variant="outline" onClick={() => setDelay((d) => d + 5)}>+5 min</Button>
+                <Button size="xs" variant="outline" onClick={() => useServiceOffset.getState().adjust(5, me)}>+5 min</Button>
               </div>
               <ol className="min-h-0 overflow-y-auto border-t border-border pt-2" aria-label="Planned times">
                 {plan.rows.map((r, k) => (

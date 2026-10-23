@@ -1,3 +1,4 @@
+import { useServiceOffset } from "@/stores/service-offset-store"
 import { useEffect } from "react"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
@@ -81,6 +82,15 @@ export function useRemoteControl() {
           const id = parsePayload(event.payload)?.id
           if (typeof id !== "string") return
           useEventClock.getState().start(id)
+        }),
+      )
+      // Running late or early, from a joined Timekeeper desk or a Stream Deck (#196): logged with who.
+      keep(
+        await listen<string>(REMOTE_EVENTS.event_offset, (event) => {
+          if (cancelled) return
+          const p = parsePayload(event.payload)
+          if (typeof p?.minutes !== "number") return
+          useServiceOffset.getState().adjust(p.minutes, typeof p.by === "string" ? p.by : undefined)
         }),
       )
       // Delegated operators (Host/Join): the Bible source, any source's take-off, congregation scenes.

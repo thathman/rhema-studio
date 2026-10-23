@@ -1,3 +1,5 @@
+import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useState } from "react"
 import { CheckIcon, GlobeIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RadioIcon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react"
@@ -136,6 +138,7 @@ function Timekeeper() {
           <Button variant="outline" onClick={() => correct(1)}>+1 min</Button>
           <Button variant="outline" onClick={() => resetTimerLogged()}><RotateCcwIcon /> Reset</Button>
         </div>
+        <RunningLate />
         <HoldControl />
       </Card>
       <Card kicker="Planned vs expected" title="The run of show" badge={<Button size="sm" variant="ghost" onClick={() => useShellStore.getState().setWorkspace("prepare")}>Edit run of show</Button>}>
@@ -281,5 +284,20 @@ function Planned({ title, issue, text }: { title: string; issue: number; text: s
       <p className="max-w-3xl text-xs text-muted-foreground">{text}</p>
       <p className="text-xs">Planned in issue #{issue}. Nothing on this tab controls anything yet.</p>
     </Card>
+  )
+}
+
+/** The service's shared running-late offset (#196): the same one Prepare and a Timekeeper desk move. */
+function RunningLate() {
+  const { minutes, by } = useServiceOffset()
+  const me = useSettingsStore((s) => s.operatorName.trim()) || "Main desk"
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Running late or early">
+      <span className="font-semibold">Running</span>
+      <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(-5, me)}>−5 min</Button>
+      <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(5, me)}>+5 min</Button>
+      {minutes !== 0 && <Button size="sm" variant="ghost" onClick={() => useServiceOffset.getState().reset(me)}>On schedule</Button>}
+      <span className="text-muted-foreground" role="status">{offsetWords(minutes)}{minutes !== 0 && by ? ` (${by})` : ""}; moves only what is expected, not the plan or the screens.</span>
+    </div>
   )
 }

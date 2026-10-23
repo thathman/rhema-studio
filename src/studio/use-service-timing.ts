@@ -1,3 +1,4 @@
+import { useServiceOffset } from "@/stores/service-offset-store"
 import { useEffect, useState } from "react"
 import { eventStarts, eventTimes } from "@/lib/journal"
 import { serviceTiming } from "@/lib/timing-engine"
@@ -10,7 +11,9 @@ import { monotonicNow } from "@/stores/timer-store"
  * The run of show's timing for any view (issue #196): one engine, the same numbers in Prepare
  * and Present. Looks again every 15 s, since the live item's time and what is expected move on.
  */
-export function useServiceTiming(adjustMinutes = 0) {
+export function useServiceTiming() {
+  // The shared running-late offset (#196): the same everywhere.
+  const adjustMinutes = useServiceOffset((s) => s.minutes)
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
   const entries = useJournalStore((s) => s.entries)
