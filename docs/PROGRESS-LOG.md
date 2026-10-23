@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — ARCH-001 leftovers: stage follows a source; journal source tags
+
+- **Branch / PR:** `arch-001/stage-follows`.
+- **Behaviour:** the stage payload uses the output's `feedFrame` (its chosen sources, else the program); the Outputs editor offers "What this output follows" for stage outputs too. Journal entries carry `source` (program entries: their content type's name, shown as "· Hymns" in the log); a new `source` kind records a source changing beside the program (on, off, back), skipped when the source's value is the program itself.
+- **Tests:** `src/studio/source-followers.test.ts` (stage following Bible vs everything, fails without the change; the log's entries and text); vitest 722.
+- **Desktop (QA build, Intel Mac):** two windowed stage outputs; with the hymn on air "Pulpit stage" (following Bible) showed Romans 8:28 (KJV) and "Band stage" the hymn line; the journal read live Bible / live Hymns / Bible off / Bible back. Screenshots in the local `qa-screenshots/stage-follows/` (not committed). Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — COMMS-001 C2: action requests
 
 - **Branch / PR:** `comms-002/action-requests`.
