@@ -68,8 +68,8 @@ export const TUTORIAL_STEPS: Step[] = [
   }),
   at({ workspace: "present", presentView: "standard" }, {
     target: '[role="toolbar"][aria-label="Presentation controls"]',
-    title: "Next, Clear, Restore",
-    content: "Next and Previous step through slides and items (arrow keys or a clicker work too). Clear (Esc) takes the screen off; Restore brings it back.",
+    title: "Next, Take live, Clear",
+    content: "Next and Previous step through slides and items (arrow keys or a clicker work too). Take live puts the preview on the screens; the words beside it say what and where. Clear (Esc) takes the screen off; Restore brings it back.",
     placement: "top",
   }),
   at({ workspace: "present", presentView: "standard" }, {

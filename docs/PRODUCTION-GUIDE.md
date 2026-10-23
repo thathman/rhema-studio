@@ -144,7 +144,7 @@ Archive → Song usage: choose a date range (default: the last six months), Show
 
 ## Speech recognition and Auto
 
-While Rhema listens, verses it hears in the sermon appear in the preview and the detections list; the operator presents them. With a service open, a heard verse that is already in the service makes that item flash; it does not move Next and is not added to the service (add it from the detections list if you want it kept). Without a service open, heard verses collect in the list as before. **Auto** (the switch on the Live panel in Present → Production, or Settings → Display Mode → Heard verses) makes heard verses replace what is on screen without Show live. It starts off, also after updating from a build where it was on by default: turn it on again if your church relies on it; while it is on and Rhema is listening, Present shows "Auto-live on" in the header, and clicking it turns Auto off.
+While Rhema listens, verses it hears in the sermon appear in the preview and the detections list; the operator presents them. With a service open, a heard verse that is already in the service makes that item flash; it does not move Next and is not added to the service (add it from the detections list if you want it kept). Without a service open, heard verses collect in the list as before. **Auto** (the switch on the Live panel in Present → Production, or Settings → Display Mode → Heard verses) makes heard verses replace what is on screen without Take live. It starts off, also after updating from a build where it was on by default: turn it on again if your church relies on it; while it is on and Rhema is listening, Present shows "Auto-live on" in the header, and clicking it turns Auto off.
 
 ## Translations
 

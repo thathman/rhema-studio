@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### A compact transport bar in Present (#299)
+- Present's Previous / Next, the verse steps, Take live, Clear and Restore sit in one slim bar instead of a large boxed strip; every button and keyboard shortcut does exactly what it did before.
+- **Show live is now called Take live.** Beside it, the bar says what is in Preview and where it goes (the main screens and how many outputs are on, the Live panel only when no screen is on, or this console only in rehearsal).
+- A control that cannot act now says why when you point at it or reach it with the keyboard (for example "Nothing in Preview" or "Nothing was cleared to bring back").
+- On a small or half-size window the bar puts Take live on its own row and turns the other buttons into icons with tooltips, without a sideways scroll.
 ### Google TV receiver (#198)
 - **Rhema Receiver**, a small Android TV / Google TV app (`android-tv/`): shows one browser feed full screen. It shows its address and a code; Rhema sends the feed from the feed's settings → **Show on a Google TV**. It keeps the feed across restarts, keeps the last picture while Rhema or the network is gone and picks up again by itself, and says when the link was renewed. Five wrong codes lock it until OK is pressed on the TV.
 - Browser feeds play a scene's cameras as video under the picture and crawl the ticker on a strip of its own, instead of redrawing the whole picture every frame: smooth on a Google TV with a camera, a lower third and the ticker together.

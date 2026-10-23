@@ -2,7 +2,7 @@ import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect } from "react"
-import { ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, LayoutGridIcon, LayoutPanelLeftIcon, MonitorIcon, RotateCcwIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { ArrowUpIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, LayoutGridIcon, LayoutPanelLeftIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dashboard } from "@/components/layout/dashboard"
 import { PreviewPanel } from "@/components/panels/preview-panel"
@@ -26,25 +26,7 @@ import { TickerRow } from "@/studio/present/ticker"
 import { ObsChip } from "@/studio/present/obs-chip"
 import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
-import { useSongStore } from "@/stores/song-store"
-import { buildSlides } from "@/lib/lyrics"
-import { isSongItem } from "@/types"
-
-/** "Next: Chorus" while a song is live, else the keyboard hint. */
-function useNextHint(): string {
-  const liveSlide = useBroadcastStore((s) => s.liveSlide)
-  const items = useQueueStore((s) => s.items)
-  const saved = useSongStore((s) => (liveSlide ? s.songs[liveSlide.songId] : undefined))
-  // The song as it went live: what Next steps through.
-  const song = liveSlide?.song ?? saved
-  if (!liveSlide || !song) return "→ / PgDn"
-  const item = items.find((i) => i.id === liveSlide.itemId)
-  if (!item || !isSongItem(item)) return "→ / PgDn"
-  // The arrangement the song went live with: the one Next steps through.
-  const arrangement = liveSlide.arrangementId !== undefined ? liveSlide.arrangementId : item.song.arrangement_id
-  const next = buildSlides(song, arrangement, liveSlide.languages ?? item.song.languages)[liveSlide.index + 1]
-  return next ? `Next: ${next.sectionLabel}` : "→ / PgDn"
-}
+import { TransportBar } from "@/studio/present/transport-bar"
 
 export function PresentWorkspace() {
   const view = useShellStore((s) => s.presentView)
@@ -127,7 +109,7 @@ export function PresentWorkspace() {
             <StatusChip
               tone="warn"
               label="Auto-live on"
-              title="Verses heard in the sermon replace what is on screen without Show live. Click to turn off (also the Auto switch on the Live panel in Production view)."
+              title="Verses heard in the sermon replace what is on screen without Take live. Click to turn off (also the Auto switch on the Live panel in Production view)."
               onClick={() => useBroadcastStore.getState().setAutoLive(false)}
             />
           )}
@@ -169,11 +151,8 @@ export function PresentWorkspace() {
 
 function StandardView() {
   const isLive = useBroadcastStore((s) => s.isLive)
-  const hasLiveItem = useBroadcastStore((s) => s.liveVerse !== null)
   const count = useQueueStore((s) => s.items.length)
   const hasTimedItems = useQueueStore((s) => s.items.some((i) => i.auto_advance))
-  const canRestore = !isLive && hasLiveItem
-  const nextHint = useNextHint()
   const held = useBroadcastStore((s) => s.heldLive !== null)
   const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
   const service = useServiceStore((s) => s.current)
@@ -219,19 +198,7 @@ function StandardView() {
         <LiveOutputPanel />
       </div>
 
-      <div className="col-span-2 flex flex-wrap items-center gap-2.5 rounded-xl border border-border bg-surface-elevated p-2.5 max-[1200px]:col-span-1" role="toolbar" aria-label="Presentation controls">
-        <BigButton icon={<ChevronLeftIcon />} label="Previous" iconOnly title="Previous (← / PgUp)" onClick={presentActions.prev} disabled={count === 0} className="w-[var(--control-height)] min-w-0 px-0" />
-        <BigButton icon={<ChevronRightIcon />} label="Next" hint={nextHint} onClick={presentActions.next} disabled={count === 0} className="min-w-32 max-[1400px]:min-w-0" />
-        <span className="flex gap-2" role="group" aria-label="Continue the reading">
-          <BigButton icon={<ChevronsLeftIcon />} label="Verse −" iconOnly onClick={presentActions.versePrev} disabled={!hasLiveItem} title="Verse −: present the verse before the live one (Shift+←)" className="w-[var(--control-height)] min-w-0 px-0" />
-          <BigButton icon={<ChevronsRightIcon />} label="Verse +" iconOnly onClick={presentActions.verseNext} disabled={!hasLiveItem} title="Verse +: present the next verse of the live passage (Shift+→)" className="w-[var(--control-height)] min-w-0 px-0" />
-        </span>
-        <span className="ml-auto flex gap-2">
-          <BigButton icon={<MonitorIcon />} label="Show live" hint="present the preview" tone="take" onClick={presentActions.showLive} className="min-w-36 uppercase tracking-wide max-[1400px]:min-w-0" />
-          <BigButton icon={<SquareIcon />} label="Clear" hint="Esc" tone="danger" onClick={presentActions.clear} disabled={!isLive} className="min-w-0" />
-          <BigButton icon={<RotateCcwIcon />} label="Restore" hint="Shift+Esc" onClick={presentActions.restore} disabled={!canRestore} className="min-w-0" />
-        </span>
-      </div>
+      <TransportBar className="col-span-2 max-[1200px]:col-span-1" />
 
       <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:col-span-1">
         <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" data-tour="quick-find">

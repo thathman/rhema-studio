@@ -981,6 +981,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dj. Present's compact transport bar (#299 UX15-2)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dj.1 | Window 1280×720, Present → Standard, a service open, nothing previewed. Look at the bar under Preview and Live. | One slim row, no box around it: ‹ Next (with "→ / PgDn") « » │ **Take live** (teal) "Nothing in Preview" │ Clear Restore. Take live, the verse steps, Clear and Restore are dimmed; pointing at each says why (e.g. "Nothing in Preview: click a running-order item or find a verse first"). No sideways scroll. | Unverified |
+| 10dj.2 | Click a running-order item, then Take live. | Beside Take live: the item, then "→ the main screens · N outputs on" (or "the Live panel only: no screen is on"). Take live puts it on the screens exactly as Show live did, with the approval question when the service is unapproved and Team asks first. | Unverified |
+| 10dj.3 | With a verse live: Next verse, Previous verse, Next, Previous, then the keys Shift+→, Shift+←, →, ←, PgDn, PgUp. | Each button does what its key does, as before. A song live: Next's hint reads "Next: Chorus". | Unverified |
+| 10dj.4 | Clear, then Restore; then Esc and Shift+Esc. | Clear takes it off (Restore then lights; Clear says "Already cleared"), Restore brings it back (Restore says "Already on the screens"); the keys do the same. | Unverified |
+| 10dj.5 | Tab into the bar with the keyboard; reach a dimmed control. | Focus ring visible on each control; a screen reader reads its name and the reason it cannot act. Arrow keys still step the service (no roving inside the bar). | Unverified |
+| 10dj.6 | Rehearsal on, then preview something. | Beside Take live: "→ this console only (rehearsal)". | Unverified |
+| 10dj.7 | Window 1024×600. | The bar fits one row; the labels Next / Clear / Restore stay, the Next hint and "Previous" text give way (tooltips keep them); Preview and Live are not squeezed by the bar. | Unverified |
+| 10dj.8 | A narrow half-size window (about 700×700, or half the screen). | Take live and its target line take the first row; the step and Clear/Restore buttons sit underneath as icons with tooltips; nothing is cut off and nothing scrolls sideways. | Unverified |
+| 10dj.9 | Quick screens: Black, then Back. | Black is still only in One-touch moments (not in the transport bar) and behaves as before. | Unverified |
 ### 10dh. Google TV receiver (#198)
 
 | # | Step | Expected | Result |

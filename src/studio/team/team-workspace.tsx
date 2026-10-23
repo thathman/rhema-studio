@@ -70,7 +70,7 @@ export function TeamWorkspace() {
               <input type="checkbox" className="mt-1" checked={requireApproval} onChange={(e) => useSettingsStore.getState().setRequireApproval(e.target.checked)} />
               <span>
                 Ask before showing an unapproved service
-                <span className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Show live asks first. Quick screens and rehearsal are never held.</span>
+                <span className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Take live asks first. Quick screens and rehearsal are never held.</span>
               </span>
             </label>
           </section>

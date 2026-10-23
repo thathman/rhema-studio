@@ -403,7 +403,7 @@ function DisplayModeSection() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Wait for me (recommended)</span>
               <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
-                A verse heard while listening goes to the preview and the detections list. It reaches the screen only when you press Show live.
+                A verse heard while listening goes to the preview and the detections list. It reaches the screen only when you press Take live.
               </p>
             </div>
           </label>
@@ -417,7 +417,7 @@ function DisplayModeSection() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-foreground">Auto</span>
               <p className="text-[0.6875rem] leading-relaxed text-muted-foreground">
-                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Show live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live panel in Present → Production.
+                While the output is on air, the most confident verse heard (at least 80% sure, or the level a remote control set) replaces what is on screen without Take live. Present shows "Auto-live on" while it is listening. Same as the Auto switch on the Live panel in Present → Production.
               </p>
             </div>
           </label>

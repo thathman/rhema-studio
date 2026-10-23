@@ -44,7 +44,7 @@ export function LiveOutputPanel() {
       <PanelHeader title="Live">
         <label
           className="flex items-center gap-2"
-          title="Auto: while on air, a verse heard while listening goes live without Show live. While a song, hymn or slide is up it goes only to the feeds that follow Bible and waits in the preview here. Off (the default): heard verses wait in the preview."
+          title="Auto: while on air, a verse heard while listening goes live without Take live. While a song, hymn or slide is up it goes only to the feeds that follow Bible and waits in the preview here. Off (the default): heard verses wait in the preview."
         >
           <span className={cn("text-xs font-medium transition-colors", autoLive ? "text-foreground" : "text-muted-foreground")}>
             Auto
