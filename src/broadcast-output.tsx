@@ -394,7 +394,9 @@ function BroadcastCanvas() {
     // timers are held back for many seconds).
     const clockRunning = () => !stageRef.current && !!latestData.current?.scene?.layers.some((l) => l.kind === "clock" && l.clock && l.clock.mode !== "still")
     const syncPace = () => {
-      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : clockRunning() ? 1 : 0
+      // A camera moves with every frame: the pacer draws it on screens too (a covered or locked
+      // window gets no animation frames). A running clock needs one a second.
+      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() ? 30 : clockRunning() ? 1 : 0
       if (fps === paceFps) return
       paceFps = fps
       void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})
@@ -427,21 +429,7 @@ function BroadcastCanvas() {
       const ov = latestData.current?.overlay
       if (ov && entranceProgress(ov, Date.now()) < 1) requestAnimationFrame(animateOverlay)
     }
-    // A camera on a screen moves with every frame; over NDI the pacer draws it.
-    let cameraLoop = false
-    const animateCameras = () => {
-      if (ndiConfigRef.current.active || !cameraPlaying() || stageRef.current) {
-        cameraLoop = false
-        return
-      }
-      draw()
-      requestAnimationFrame(animateCameras)
-    }
     const camerasChanged = () => {
-      if (!cameraLoop && cameraPlaying()) {
-        cameraLoop = true
-        requestAnimationFrame(animateCameras)
-      }
       draw()
       syncPace()
     }

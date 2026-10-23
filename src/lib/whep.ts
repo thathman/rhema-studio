@@ -23,6 +23,9 @@ export class WhepPlayer {
     this.video = document.createElement("video")
     this.video.muted = true
     this.video.playsInline = true
+    // The first frame (and a new size) is when it can be drawn: say so.
+    this.video.addEventListener("loadeddata", () => this.onChange())
+    this.video.addEventListener("resize", () => this.onChange())
     void this.connect()
   }
 
