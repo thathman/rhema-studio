@@ -89,6 +89,14 @@ phone). Text notices and action requests already work on phones without it.
   that first in the physical rehearsal (#251). If it does, candidates are resetting a desk's
   connection when its delay grows (the host can see it in `getStats`) and sending without WebAudio
   on the desk side.
+- **Where it builds up (measured 2026-10-23):** in the receiver's jitter buffer. Its delay grew
+  323 → 1222 ms against a 40 ms target while WebRTC kept dropping samples to catch up
+  (`removedSamplesForAcceleration` rising): audio arrives faster than the receiving side plays it
+  out, about 10% slow, far beyond clock drift; consistent with the locked screen throttling WebKit's
+  playout. A second consumer of a remote track (a muted `<audio>` element) made it grow from the
+  first seconds; with WebAudio alone a direct loop held ~121 ms (jitter buffer ~45 ms) for four
+  rounds before growing. The hub no longer adds that element; desks still hear everyone (three-desk
+  test). Across processes (headless Chrome as a phone → the QA host) the same build-up showed.
 
 ## 5. Verification
 

@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Voice: one consumer per remote track; where the delay builds up
+
+- **Branch / PR:** `voice/one-consumer`. The host hub no longer plays each desk's track into a muted `<audio>` element; WebAudio is its only consumer.
+- **Measured:** the delay builds up in the receiver's jitter buffer (target 40 ms, actual 323 → 1222 ms, samples dropped to catch up): playout ~10% slower than real time with the screen locked. With the extra element it grew from the start; without, a direct loop held ~121 ms for four rounds. Three-desk test unchanged (full duplex, no self-echo). Needs the unlocked two-computer rehearsal (ADR 0002 §4). Real data 6/6, WebKit restored.
+
 ## 2026-10-23 — Phone Talk (Comms C4)
 
 - **Branch / PR:** `comms-004/phone-talk`. `remote.html` Talk: join (getUserMedia, offer to `/api/v1/voice` with the phone's key), hold to talk (pointer; release, blur, hidden page and leaving stop it), leave; a note where the page is not secure.
