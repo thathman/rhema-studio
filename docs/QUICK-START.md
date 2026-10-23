@@ -8,9 +8,12 @@ On a new install Rhema opens **Welcome to Rhema Studio** once. Choose:
 
 - **Set up this computer as the main desk** (recommended): the church's name, your name, then optional steps for the brand, the Bible, screens and connections. Every field saves as you type; **Skip** passes an optional step; **Finish later** stops anywhere and Rhema picks up at the same step next time.
 - **Join an existing church host**: opens Production → Operators to pair with the main desk.
+- **Bring in a previous installation**: services and songs from a Rhema backup file, a service file or the church folder. Rhema shows what a backup holds (how many services and songs, the newest one) before anything is replaced, and replaces only when you press **Restore this backup**; what was here is kept as a snapshot. Settings, outputs, looks and keys are not in a backup yet, so the steps after it set them up again.
 - **Use Rhema now, finish later**: go straight to Home.
 
-Nothing in the setup turns on a screen, a microphone or a listener, and no internet or cloud key is needed. Until the church's name, your name and a Bible are in place, Home shows a small **Finish church setup** card (Continue, Remind me tomorrow, or hide it). Features you do not use, such as NDI, OBS or cloud speech, are listed as **Not using** and never count against you.
+In **Screens**, **Test this screen** checks an output that is on: after you confirm, that one output shows bars, its name and size and "TEST – not on air" until you press **End test** (it asks again if something is on air or a stream or TV is watching). Browser feeds say whether a page really shows them ("Shown on 1 page") or not ("Connected, not shown").
+
+Nothing in the setup turns on a screen, a microphone or a listener, and no internet or cloud key is needed. Until the church's name, your name and a Bible are in place, Home shows a small **Finish church setup** card (Continue, Remind me tomorrow, or hide it). Features you do not use, such as NDI, OBS or cloud speech, are listed as **Not using** and never count against you. **Setup status** (Desk menu, or the Home card) shows the church's setup, the equipment that is switched on and this service side by side, each item with a link to fix it.
 
 ## Before the service (Prepare, 10 minutes)
 

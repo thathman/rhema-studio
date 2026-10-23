@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Bring in a previous installation, test a screen, see the setup status (#298)
+- The setup's welcome adds **Bring in a previous installation**: Rhema looks inside a backup file first and shows what it holds (how many services and songs, the newest service) before anything is replaced, and replaces only after **Restore this backup**; what is here now is kept as a snapshot. A service file or the church folder only ever adds. It says plainly that settings, outputs, looks, the Brand Kit and keys are not in a backup yet.
+- Setup → Screens: **Test this screen** shows a test pattern (bars, the output's name and size, "TEST – not on air") on that one output only, after you confirm, and asks again if something is on air or an NDI receiver or feed page is watching. **End test** (or leaving the step) puts back exactly what the output would be showing. Browser feeds say "Shown on 1 page" or "Connected, not shown".
+- **Setup status** (Desk menu, with "Complete" or "Needs 2", and Home's setup card): the church's setup, the equipment that is switched on, and this service as three separate cards; each item opens the page that fixes it, and unused features say "Not using".
+- The setup reopens at the step it was left on; if a required name was cleared since, it starts at that step instead.
 ### Phone cameras through Rhema's own camera router (#209)
 - Production → Cameras: add a camera (Pulpit, Choir…), scan its QR code with a phone on the church Wi-Fi, allow the camera and press Start camera; no app to buy and nothing on the internet.
 - The camera router (MediaMTX) comes inside Rhema, starts by itself while cameras are added and stops with Rhema; each camera is sent once and shared by Rhema's scenes and TVs (WHEP) and OBS (RTSP).
