@@ -16,7 +16,8 @@ import { normalizeTheme } from "@/lib/theme-migrations"
 import "./broadcast-fonts.css"
 import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
-import type { LowerThird, NdiConfigEventPayload, StagePayload, Ticker } from "@/types"
+import type { LowerThird, NdiConfigEventPayload, SceneFrame, StagePayload, Ticker } from "@/types"
+import { drawScene } from "@/lib/scene-renderer"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -74,6 +75,19 @@ interface BroadcastPayload {
   sentAt?: number
   /** This output plays videos' sound. */
   sound?: boolean
+  /** A congregation scene (ARCH-002): drawn instead of `verse`, under the lower third and ticker. */
+  scene?: SceneFrame
+}
+
+// A canvas per scene layer, where its look is drawn whole before it is placed.
+const sceneLayerCanvases = new Map<string, HTMLCanvasElement>()
+function sceneLayerCanvas(id: string): HTMLCanvasElement {
+  let c = sceneLayerCanvases.get(id)
+  if (!c) {
+    c = document.createElement("canvas")
+    sceneLayerCanvases.set(id, c)
+  }
+  return c
 }
 
 function BroadcastCanvas() {
@@ -94,6 +108,8 @@ function BroadcastCanvas() {
   // When the push in flight started: a reply that never comes must not stop NDI for good.
   const pushStartedRef = useRef(0)
   const pushNdiBurstRef = useRef<(() => void) | null>(null)
+  // A scene picture that finishes loading redraws through this (draw cannot name itself).
+  const redrawRef = useRef<(() => void) | null>(null)
 
   const logDebug = useCallback((message: string, meta?: unknown) => {
     if (!import.meta.env.DEV) return
@@ -126,12 +142,23 @@ function BroadcastCanvas() {
     const { theme, verse } = data
     const { width, height } = theme.resolution
     const ok = paintFrame(canvas, scratchCanvas, width, height, (fctx) => {
-      const result = renderVerse(fctx, theme, verse, {
-        scale: 1,
-        imageCache: themeImageCache(),
-        video: videoPlayer?.element() ?? null,
-        videoState: videoPlayer?.state(),
-      })
+      const scene = data.scene
+      const result = scene
+        ? (drawScene(fctx, width, height, scene, {
+            imageCache: themeImageCache(),
+            layerCanvas: sceneLayerCanvas,
+            image: (url) => {
+              const img = themeImageCache().get(url)
+              if (!img) void loadThemeImage(url).then(() => { redrawRef.current?.(); pushNdiBurstRef.current?.() })
+              return img ?? null
+            },
+          }), true)
+        : renderVerse(fctx, theme, verse, {
+            scale: 1,
+            imageCache: themeImageCache(),
+            video: videoPlayer?.element() ?? null,
+            videoState: videoPlayer?.state(),
+          })
       if (!result) {
         fctx.fillStyle = "#000"
         fctx.fillRect(0, 0, width, height)
@@ -164,6 +191,10 @@ function BroadcastCanvas() {
     if (ok !== !frameFailing) void getCurrentWebviewWindow().emitTo("main", ok ? "broadcast:render-recovered" : "broadcast:render-error", { outputId: OUTPUT_ID }).catch(() => {})
     frameFailing = !ok
   }, [logDebug])
+
+  useEffect(() => {
+    redrawRef.current = draw
+  }, [draw])
 
   /** Only the ticker moved: put back its band from the last frame and draw the ticker there. Returns its rows. */
   const drawTickerBand = useCallback((): { y: number; height: number } | null => {
@@ -385,7 +416,9 @@ function BroadcastCanvas() {
       latestData.current = {
         ...event.payload,
         theme: normalizeTheme(event.payload.theme),
+        ...(event.payload.scene ? { scene: { ...event.payload.scene, layers: event.payload.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } } : {}),
       }
+      for (const l of latestData.current.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, () => { draw(); pushNdiBurstRef.current?.() })
       // A new screen clears the operator's warning, so a failure to draw it must be reported again.
       frameFailing = false
       videoPlayer?.sync(event.payload.verse?.video)

@@ -62,6 +62,13 @@ Prepare → Pictures → "Import pictures or videos…" takes MP4, MOV, M4V and 
 
 Prepare → Slides → "QR link": type a full `https://…` address (giving, sign-up, the bulletin). The code is drawn in the app, offline, on a white panel with the address printed beside it, so people see where it goes; nothing is tracked. Only plain http(s) links are accepted. The preview shows the words; the code appears on the outputs.
 
+## Scenes for the congregation (Production → Programs)
+
+- A scene places live content, colours, Library pictures and camera places on one frame. Each live layer follows chosen sources (Bible, Songs, Hymns, Slides, Pictures) or whatever is on air, in a look from Design (or the output's own looks). **Hold what it shows now** keeps a layer on one verse while the rest follows; **Follow live again** releases it.
+- Arrange: drag a layer to move it, drag its corner to resize, arrow keys to nudge (Shift for 5%). Box, crop and opacity can be typed. Layers draw bottom first; reorder them in the list.
+- **Take** puts the scene on the chosen congregation output (it saves first). **Back to its own feed** returns the output to full frame; **Restore** takes the scene again. Taking a scene changes no other output (OBS feeds stay as they are), and a new verse never changes which scene is up. Black and Logo cover every screen and feed, scenes included.
+- Edits stay in the composer until Save or Take. Cameras are planned (#209): a camera layer keeps the camera's place and shows the background there until then.
+
 ## Timing and the stage
 
 The service timer (Present header) also shows, once items have planned minutes and the timer runs, the planned end time and, when the service is a minute or more off plan, when it now looks like ending ("Planned end 12:30 · now about 12:41"). If the timer was started late, "Correct the timer" moves it by a minute either way; each correction is a line in the service log.

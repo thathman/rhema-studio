@@ -26,6 +26,8 @@ import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from 
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
 import { feedFrame, sourceOf, type LiveSources, type SourceId } from "@/lib/live-sources"
+import { normalizeScene, sceneFrame } from "@/lib/scenes"
+import type { Scene, SceneFrame } from "@/types"
 
 /** The program (what is on air and what Restore and Back return to), with the rundown's place in it. */
 export interface ProgramSnapshot {
@@ -112,6 +114,18 @@ interface BroadcastState {
   restoreSource: (id: SourceId) => void
   /** Activate a source without changing the program (a heard verse while a song is up, C11). */
   activateSource: (value: VerseRenderData, itemId?: string | null) => void
+  /** Congregation scenes (ARCH-002). Saved. */
+  scenes: Scene[]
+  /** Add or replace a scene (by id); outputs showing it redraw. */
+  saveScene: (scene: Scene) => void
+  /** Remove a scene; outputs showing it go back to their own feed. */
+  deleteScene: (id: string) => void
+  /** Take: put a scene on an output (its program). */
+  takeScene: (outputId: string, sceneId: string) => void
+  /** Back to the output's own feed, full frame; Restore takes the scene again. */
+  releaseScene: (outputId: string) => void
+  /** The scene an output last showed, for Restore. Session state. */
+  sceneReturn: Record<string, string>
   /**
    * Clear took content off air. Until something goes live again, browsing (a verse
    * clicked, Verse +/−) changes only the preview, so Restore brings back what was cleared.
@@ -370,6 +384,8 @@ export interface OutputFrame {
   ticker?: Ticker | null
   /** Stage outputs: the thumbnail says "Stage display" instead of a frame. */
   stage?: boolean
+  /** The scene it shows, when it shows one. */
+  scene?: SceneFrame
 }
 
 /** Keep what an output was last sent, for the multiview. Skips the write when nothing changed. */
@@ -428,7 +444,7 @@ function noteSources(): void {
 
 function recordFrame(id: string, frame: OutputFrame): void {
   const prev = useBroadcastStore.getState().outputFrames[id]
-  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.ticker === frame.ticker && prev.stage === frame.stage) return
+  if (prev && prev.theme === frame.theme && prev.verse === frame.verse && prev.overlay === frame.overlay && prev.ticker === frame.ticker && prev.stage === frame.stage && !prev.scene && !frame.scene) return
   useBroadcastStore.setState((s) => ({ outputFrames: { ...s.outputFrames, [id]: frame } }))
 }
 
@@ -493,6 +509,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveItemId: null,
   heldLive: null,
   sources: {},
+  scenes: [],
+  sceneReturn: {},
   cleared: false,
   stageMessage: "",
   lowerThird: null,
@@ -619,7 +637,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (!output) return
     // The look for what is on air: this output's theme for that kind of content, else its main theme.
     const shown = feedFrame(s, output.shows)
-    const themeId = themeIdFor(output, shown?.content)
+    const scene = output.sceneId && (output.role ?? "congregation") === "congregation" ? s.scenes.find((x) => x.id === output.sceneId) : undefined
+    const themeId = themeIdFor(output, scene ? null : shown?.content)
     const saved = s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
     if (!saved) return
     // A theme open in the Designer shows on its congregation outputs as edited, for presents too
@@ -648,6 +667,15 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
         }), finish: s.stageFinish, aux: s.stageAux }, s.stageStyle),
       }).catch(() => {})
+      return
+    }
+    // A scene is the output's program, unless Black or Logo covers every screen.
+    if (scene && !(s.isLive && s.liveVerse?.screen)) {
+      const frame = sceneFrame(s, output, scene)
+      const overlay = output.lowerThirds ? overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null) : null
+      const ticker = output.ticker ? tickerForScreens(s) : null
+      recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
+      void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", { theme, verse: null, overlay, ticker, scene: frame, sound: false }).catch(() => {})
       return
     }
     const verse = shown ? forOutputLanguage(shown, output.language) : null
@@ -689,7 +717,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
-    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -906,6 +934,25 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({ sources: { ...s.sources, [id]: { ...cur, on: true } } })
     get().syncBroadcastOutput()
   },
+  saveScene: (scene) => {
+    const s = get()
+    const at = s.scenes.findIndex((x) => x.id === scene.id)
+    const next = { ...scene, updatedAt: Date.now() }
+    set({ scenes: at < 0 ? [...s.scenes, next] : s.scenes.map((x, i) => (i === at ? next : x)) })
+    for (const o of get().outputs) if (o.sceneId === scene.id) get().syncBroadcastOutputFor(o.id)
+  },
+  deleteScene: (id) => {
+    set({ scenes: get().scenes.filter((x) => x.id !== id) })
+    for (const o of get().outputs) if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
+  },
+  takeScene: (outputId, sceneId) => {
+    if (!get().scenes.some((x) => x.id === sceneId)) return
+    set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId } })
+    get().updateOutput(outputId, { sceneId })
+  },
+  releaseScene: (outputId) => {
+    if (get().outputs.find((o) => o.id === outputId)?.sceneId) get().updateOutput(outputId, { sceneId: undefined })
+  },
   activateSource: (value, itemId = null) => {
     const s = get()
     if (s.rehearsal) return
@@ -1065,6 +1112,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
       if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
       patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
       patch.stageStyle = normalizeStageStyle((await store.get("stageStyle")) as Partial<StageStyle> | undefined)
+      const scenes = await store.get("scenes")
+      if (Array.isArray(scenes)) patch.scenes = scenes.map(normalizeScene).filter((x): x is Scene => x !== null)
       const items = await store.get("tickerItems")
       if (Array.isArray(items)) patch.tickerItems = items.filter((i): i is string => typeof i === "string")
       patch.tickerPresets = normalizePresets(await store.get("tickerPresets"))
@@ -1082,7 +1131,8 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.tickerStyle !== prevState.tickerStyle ||
           state.stageStyle !== prevState.stageStyle ||
           state.tickerItems !== prevState.tickerItems ||
-          state.tickerPresets !== prevState.tickerPresets
+          state.tickerPresets !== prevState.tickerPresets ||
+          state.scenes !== prevState.scenes
         if (!changed) return
         if (saveTimer) clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
@@ -1136,6 +1186,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("stageStyle", state.stageStyle)
     await store.set("tickerItems", state.tickerItems)
     await store.set("tickerPresets", state.tickerPresets)
+    await store.set("scenes", state.scenes)
     await store.save()
   } catch {
     console.warn("[broadcast] Failed to persist themes")

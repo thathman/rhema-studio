@@ -50,6 +50,22 @@ The legacy program (`liveVerse` and friends) stays as the **compatibility adapte
 the source for the item's kind and the legacy program in one update. Remote commands, cues, keyboard
 shortcuts and the phone remote keep calling the same actions.
 
+### Scenes as built (ARCH-002 slice 1)
+
+- `Scene` (`src/types/scene.ts`): a name, a background (a colour or transparent) and layers, bottom first.
+  A layer is a **feed** (the sources it follows, or the program; a look from Design or the output's own
+  looks; Follow Live or a held copy), a **colour**, a **picture** (from the Library, kept as a data URL so
+  outputs need nothing else) or a **camera** place (planned, #209: outputs draw the background there). Each
+  has a box and crop in %, opacity and visibility. Saved with the outputs; `normalizeScene` makes a
+  damaged or newer file safe.
+- **Program:** `BroadcastOutput.sceneId`. `takeScene` / `releaseScene` (back to the output's own feed) /
+  Restore (the scene it last showed). Only congregation outputs take scenes; Black and Logo cover them.
+- **Drawing:** `drawScene` (`src/lib/scene-renderer.ts`) draws each feed layer's look whole and then
+  crops and scales it into its box, so a transparent look stays keyed; the output window and the
+  composer's preview use the same code. The lower third and ticker still draw over the whole frame.
+- **Composer:** Production → Programs. Edits stay in the composer until Save or Take, so a scene on air
+  never changes while it is arranged.
+
 ## 3. Action semantics
 
 | Action | Scope | Meaning |

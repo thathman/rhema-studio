@@ -940,6 +940,17 @@ report), but launching it cannot.
 | 10cr.4 | Black, then Back. | Every feed goes black (keyed: transparent); Back returns each to its own source. | Unverified |
 | 10cr.5 | Listening and Auto on, a hymn up; say "Romans 8:31". | The projector keeps the hymn; the Bible feed shows 8:31; the verse waits in the preview. | Unverified |
 
+### 10cs. Congregation Scene Composer (ADR 0001, ARCH-002)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10cs.1 | Production → Programs → New from "Bible and lyrics". Show Romans 8:28, then a hymn verse. | The preview shows the verse on the left and the hymn on the right at once. | Unverified |
+| 10cs.2 | Take it to the projector output. Show Romans 8:29. | The projector shows the scene; the verse changes in its box without another Take; the NDI feeds for OBS are unchanged. | Unverified |
+| 10cs.3 | Drag the Bible layer, resize it from the corner, set a lower-third look, Save. | The projector follows only after Save; transparent looks stay keyed in their box. | Unverified |
+| 10cs.4 | Hold the Bible layer; show the next verse; Follow live again. | The held verse stays until released, then the newest shows. | Unverified |
+| 10cs.5 | Black, Back; Back to its own feed; Restore. | Black covers the scene; Back returns it; the output goes to full frame and Restore takes the scene again. | Unverified |
+| 10cs.6 | Quit and reopen Rhema. | The scenes are kept; the projector shows the scene it showed. | Unverified |
+
 ### 10cn. Numbered books and the item fields (owner reports)
 
 | # | Steps | Expected | Result |
