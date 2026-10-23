@@ -180,6 +180,7 @@ pub fn run() {
             commands::remote::voice_answer,
             commands::remote::feed_status,
             commands::join::join_pair,
+            commands::join::tv_show,
             commands::join::join_me,
             commands::join::join_command,
             commands::join::join_voice,

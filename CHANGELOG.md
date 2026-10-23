@@ -4,6 +4,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Google TV receiver (#198)
+- **Rhema Receiver**, a small Android TV / Google TV app (`android-tv/`): shows one browser feed full screen. It shows its address and a code; Rhema sends the feed from the feed's settings → **Show on a Google TV**. It keeps the feed across restarts, keeps the last picture while Rhema or the network is gone and picks up again by itself, and says when the link was renewed. Five wrong codes lock it until OK is pressed on the TV.
+- Browser feeds play a scene's cameras as video under the picture and crawl the ticker on a strip of its own, instead of redrawing the whole picture every frame: smooth on a Google TV with a camera, a lower third and the ticker together.
 ### The run of show as a table (#196)
 - Prepare → Timing → **Table**: every item of the main service with its plan start and end, its time (typed in place: 35, 4:30, 1:10:00, 1h10), when it actually went up and for how long, when it is now expected, how far off the plan it is, its end by (locked) and Done / On now / Cut short. A total line above each group and for the whole service.
 

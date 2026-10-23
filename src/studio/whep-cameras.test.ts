@@ -51,6 +51,25 @@ describe("cameras on the church network (OP-009)", () => {
     expect(said).toEqual([])
   })
 
+  it("a camera the page shows under the canvas is cut out, not copied in (#198)", async () => {
+    const { drawScene } = await import("@/lib/scene-renderer")
+    const scene = newScene("Camera", SCENE_PRESETS[0])
+    scene.layers = [newLayer("camera", { cameraUrl: "http://10.0.0.5:8889/a/whep" })]
+    const frame = sceneFrame({ isLive: false, liveVerse: null, sources: {}, themes: [] }, {} as never, normalizeScene(JSON.parse(JSON.stringify(scene)))!)
+    const calls: string[] = []
+    const ctx = new Proxy({} as Record<string, unknown>, {
+      get: (t, k) => (k in t ? t[k as string] : (...a: unknown[]) => calls.push(`${String(k)}${k === "fillRect" ? `:${t.globalCompositeOperation ?? "source-over"}:${a.join(",")}` : ""}`)),
+      set: (t, k, v) => { t[k as string] = v; return true },
+    }) as never
+    const opts = { image: () => null, layerCanvas: () => document.createElement("canvas"), camera: () => ({ videoWidth: 640, videoHeight: 360 }) }
+    drawScene(ctx, 1920, 1080, frame, { ...opts, cameraBelow: () => true } as never)
+    expect(calls.filter((c) => c.startsWith("fillRect:destination-out"))).toEqual(["fillRect:destination-out:0,0,1920,1080"])
+    expect(calls).not.toContain("drawImage")
+    calls.length = 0
+    drawScene(ctx, 1920, 1080, frame, opts as never)
+    expect(calls).toContain("drawImage")
+  })
+
   it("one player per camera layer: started, kept, restarted when its address changes, stopped when gone", async () => {
     vi.stubGlobal("RTCPeerConnection", FakePC)
     const offers: string[] = []

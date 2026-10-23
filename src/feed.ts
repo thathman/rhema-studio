@@ -41,6 +41,68 @@ const whep = async (url: string, sdp: string) => {
   if (!r.ok) throw new Error(String(r.status))
   return r.text()
 }
+/**
+ * Cameras play as video elements under the canvas, which leaves their boxes see-through: the TV's
+ * own video path shows them, instead of the page copying every camera frame into the canvas (a
+ * Google TV managed ~39 fps that way, #198). A cropped camera is still drawn into the canvas.
+ */
+const below = document.getElementById("cameras") as HTMLDivElement
+const shownBelow = (id: string) => {
+  const l = frame?.scene?.layers.find((x) => x.id === id)
+  return !!l && !l.crop && !!cameras.get(id)?.ready
+}
+/** Where the canvas's picture is on screen (object-fit: contain). */
+function onScreen(width: number, height: number) {
+  const scale = Math.min(innerWidth / width, innerHeight / height)
+  return { scale, ox: (innerWidth - width * scale) / 2, oy: (innerHeight - height * scale) / 2 }
+}
+function placeCameras() {
+  const f = frame
+  const keep = new Set<HTMLVideoElement>()
+  if (f?.theme && f.scene && !f.off) {
+    const { width, height } = f.theme.resolution
+    const { scale, ox, oy } = onScreen(width, height)
+    for (const l of f.scene.layers) {
+      const p = cameras.get(l.id)
+      if (l.kind !== "camera" || !p || !shownBelow(l.id)) continue
+      const v = p.video
+      Object.assign(v.style, { position: "absolute", objectFit: "cover", left: `${ox + (width * scale * l.box.x) / 100}px`, top: `${oy + (height * scale * l.box.y) / 100}px`, width: `${(width * scale * l.box.w) / 100}px`, height: `${(height * scale * l.box.h) / 100}px` })
+      if (v.parentElement !== below) below.appendChild(v)
+      keep.add(v)
+    }
+  }
+  for (const v of [...below.querySelectorAll("video")]) if (!keep.has(v)) v.remove()
+}
+/**
+ * The ticker crawls on a strip of its own over the canvas: moving it redraws the band only, not
+ * the whole picture every frame (a Google TV dropped camera frames that way, #198).
+ */
+const strip = document.getElementById("ticker") as HTMLCanvasElement
+const sctx = strip.getContext("2d")!
+function drawStrip() {
+  const f = frame
+  if (!f?.ticker || f.off || !f.theme || f.role === "stage" || f.verse?.screen === "black") {
+    strip.hidden = true
+    return
+  }
+  const { width, height } = f.theme.resolution
+  const h = Math.round((height * f.ticker.style.height) / 100)
+  const y = f.ticker.style.position === "top" ? 0 : height - h
+  if (strip.width !== width || strip.height !== h) {
+    strip.width = width
+    strip.height = h
+  }
+  const { scale, ox, oy } = onScreen(width, height)
+  Object.assign(strip.style, { left: `${ox}px`, top: `${oy + y * scale}px`, width: `${width * scale}px`, height: `${h * scale}px` })
+  strip.hidden = false
+  sctx.setTransform(1, 0, 0, 1, 0, -y)
+  sctx.clearRect(0, y, width, h)
+  drawTicker(sctx, width, height, f.ticker, f.theme.verseText?.fontFamily, { imageCache: themeImageCache(), now: Date.now() })
+  sctx.setTransform(1, 0, 0, 1, 0, 0)
+}
+
+addEventListener("resize", () => { placeCameras(); draw(); drawStrip() })
+
 /** Host time minus this machine's, from the latest frame (clock layers count by the host). */
 let offset = 0
 let ticking = false
@@ -69,6 +131,7 @@ function draw() {
       now: Date.now() + offset,
       imageCache: themeImageCache(),
       camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
+      cameraBelow: shownBelow,
       layerCanvas: (id) => {
         let c = layers.get(id)
         if (!c) layers.set(id, (c = document.createElement("canvas")))
@@ -97,15 +160,16 @@ function draw() {
       ctx.globalAlpha = 1
     }
   }
-  if (f.ticker && f.verse?.screen !== "black") drawTicker(ctx, width, height, f.ticker, f.theme.verseText?.fontFamily, { imageCache: themeImageCache(), now: Date.now() })
 }
 
 /** The ticker crawls and a lower third fades in: keep drawing while either moves. */
 function animate() {
   const f = frame
-  const moving = !!f && !f.off && (!!fade || [...cameras.values()].some((p) => p.ready) || (!!f.ticker && !f.ticker.pausedAt) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1))
-  draw()
-  if (moving) requestAnimationFrame(animate)
+  const picture = !!f && !f.off && (!!fade || [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)) || (!!f.overlay && entranceProgress(f.overlay, Date.now()) < 1))
+  const crawl = !!f && !f.off && !!f.ticker && !f.ticker.pausedAt
+  if (picture) draw()
+  drawStrip()
+  if (picture || crawl) requestAnimationFrame(animate)
   else ticking = false
 }
 
@@ -131,8 +195,11 @@ function show(next: Frame) {
   lastFade = next.scene?.fadeMs ?? 0
   frame = next.theme ? { ...next, theme: normalizeTheme(next.theme), scene: next.scene ? { ...next.scene, layers: next.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } : undefined } : next
   if (frame.theme) preloadThemeImages(frame.theme, draw)
-  syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, () => { if (!ticking) { ticking = true; requestAnimationFrame(animate) } })
+  syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, () => { placeCameras(); draw(); if (!ticking) { ticking = true; requestAnimationFrame(animate) } })
+  placeCameras()
   for (const l of frame.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, draw)
+  draw()
+  drawStrip()
   if (!ticking) {
     ticking = true
     requestAnimationFrame(animate)
