@@ -197,7 +197,7 @@ export function CommentsEditor({ item }: { item: QueueItem }) {
           Comment
         </Button>
       </div>
-      {!me && <p className="text-[0.6875rem] text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
+      {!me && <p className="text-xs text-muted-foreground">Set your name in Team so the team knows who wrote it.</p>}
     </div>
   )
 }

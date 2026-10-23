@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Searchable Settings, bigger touch targets, calmer surfaces (#215)
+- Settings has a **Search settings** box above its list: type "gain", "deepgram" or "pair" and only the sections that hold it stay, each naming the matching settings; Enter opens the first and the matches are highlighted in it; Esc clears.
+- Settings' list sits under five headings: Bible and languages, Display and output, Microphone and speech, Connections, Data and diagnostics. Every section and setting is where it was.
+- Easier to press: the take-off and Restore buttons in Present → Live → Sources, the Production tabs, and the small icon buttons in Present and the scene editor take a bigger click without looking bigger. Help sentences in Present, Prepare, Design, Production and the Desk menu that were 10–11 px are now 12 px.
+- The Home welcome card and the song library tiles are flat (no decorative gradients), and red text on the stone page is a shade deeper so it reads clearly; a test now checks every text colour pair in light, dark and the live console.
+
 ### The main desk can take back control; desks stay on one service (#243, #246)
 - Production → Operators and Settings → Remote: **Take back control** pauses a joined desk or phone without unpairing it; **Give control back** ends it. Both go in the service log ("Main desk took back control from Desk C").
 - A paused desk shows "Paused by the main desk", still sees the service and keeps Talk and notices; its other buttons wait.

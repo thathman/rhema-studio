@@ -21,7 +21,7 @@ function VerseCard({
     <div
       data-slot="verse-card"
       className={cn(
-        "w-full aspect-video overflow-hidden rounded-lg bg-gradient-to-br from-[oklch(0.18_0.02_260)] via-[oklch(0.15_0.01_240)] to-[oklch(0.12_0.02_220)] flex flex-col items-center justify-center",
+        "w-full aspect-video overflow-hidden rounded-lg bg-[#111b21] flex flex-col items-center justify-center",
         className
       )}
       {...props}

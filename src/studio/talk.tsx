@@ -143,7 +143,7 @@ export function JoinedTalk({ people }: { people: VoicePerson[] }) {
         </fieldset>
       )}
       <Crew people={people} />
-      <p className="text-[0.6875rem] text-muted-foreground">Everyone can talk at once. Crew voices stay on this computer's headset: never on a screen, the PA, OBS, recordings or listening.</p>
+      <p className="text-xs text-muted-foreground">Everyone can talk at once. Crew voices stay on this computer's headset: never on a screen, the PA, OBS, recordings or listening.</p>
     </div>
   )
 }

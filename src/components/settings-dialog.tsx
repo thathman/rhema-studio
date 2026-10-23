@@ -37,11 +37,12 @@ import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dialog"
+import { markSearchHits, searchSettings, searchWords } from "@/lib/settings-search"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { qrDataUrl } from "@/lib/qr-bulletin"
 import { setDeskControl } from "@/lib/desk-control"
-import { EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SparklesIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
 
@@ -1105,21 +1106,41 @@ const sectionComponents: Record<NavSection, React.FC> = {
 /*  Settings page                                                             */
 /* -------------------------------------------------------------------------- */
 
-/** The sections under the redesign's headings (ids unchanged, so openSettings("remote") still lands right). */
+/** The sections under five headings (ids unchanged, so openSettings("remote") still lands right). */
 const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
   { title: "Bible and languages", ids: ["bible"] },
-  { title: "Screens and NDI", ids: ["screens"] },
-  { title: "Live behaviour", ids: ["display"] },
+  { title: "Display and output", ids: ["screens", "display"] },
   { title: "Microphone and speech", ids: ["audio", "speech"] },
-  { title: "Studio connections", ids: ["remote", "assistants"] },
-  { title: "Diagnostics and support", ids: ["diagnostics", "help"] },
+  { title: "Connections", ids: ["remote", "assistants"] },
+  { title: "Data and diagnostics", ids: ["diagnostics", "help"] },
 ]
 
-/** Settings as a page: the sections down the side, the chosen one beside them. */
+const SEARCHABLE = navItems.map((n) => ({ id: n.id, name: n.name, title: sectionTitles[n.id] }))
+
+/** Settings as a page: a search and the sections down the side, the chosen one beside them. */
 export function SettingsPage() {
   const activeSection = useSettingsDialogStore((s) => s.activeSection)
   const setActiveSection = useSettingsDialogStore((s) => s.setActiveSection)
   const ActiveContent = sectionComponents[activeSection]
+  const [query, setQuery] = useState("")
+  const hits = searchSettings(query, SEARCHABLE)
+  const found = new Map(hits.map((h) => [h.id, h.labels]))
+  const groups = GROUPS.map((g) => ({ ...g, ids: g.ids.filter((id) => found.has(id)) })).filter((g) => g.ids.length > 0)
+  const searching = query.trim() !== ""
+  const content = useRef<HTMLDivElement>(null)
+
+  // Marks the labels in the open section that hold the search, and keeps marking as it loads (devices, translations).
+  useEffect(() => {
+    const box = content.current
+    if (!box) return
+    const words = searchWords(query)
+    markSearchHits(box, words)
+    if (words.length === 0) return
+    const watch = new MutationObserver(() => markSearchHits(box, words))
+    watch.observe(box, { childList: true, subtree: true, characterData: true })
+    return () => watch.disconnect()
+  }, [query, activeSection])
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 px-8 pt-6 pb-4 max-[1200px]:px-5">
@@ -1129,12 +1150,39 @@ export function SettingsPage() {
       </header>
       <div className="grid min-h-0 flex-1 grid-cols-[255px_minmax(0,1fr)] gap-5 px-8 pb-6 max-[1200px]:grid-cols-[220px_minmax(0,1fr)] max-[1200px]:px-5">
         <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto rounded-lg border border-border bg-card p-1.5">
-          <p className="px-4 pt-3.5 pb-2 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preferences</p>
-          {GROUPS.map((g) => (
+          <div role="search" className="relative px-1.5 pt-1.5 pb-1">
+            <SearchIcon aria-hidden className="pointer-events-none absolute top-1/2 left-4 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              aria-label="Search settings"
+              aria-describedby="settings-search-hint"
+              placeholder="Search settings"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && hits[0]) {
+                  e.preventDefault()
+                  setActiveSection(hits[0].id)
+                } else if (e.key === "Escape" && query) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setQuery("")
+                }
+              }}
+              className="h-9 pl-8 text-xs"
+            />
+            <span id="settings-search-hint" className="sr-only">Enter opens the first match. Escape clears the search.</span>
+          </div>
+          <p role="status" className={searching ? "px-3 pt-1 pb-2 text-xs text-muted-foreground" : "sr-only"}>
+            {!searching ? "" : hits.length === 0 ? "Nothing in Settings matches. Light and dark are under Appearance in the Desk menu, at the foot of the sidebar." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}. Enter opens the first.`}
+          </p>
+          {!searching && <p className="px-4 pt-2.5 pb-2 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preferences</p>}
+          {groups.map((g) => (
             <div key={g.title} className="mb-3">
               <p className="px-3 pt-1.5 pb-1 text-[0.625rem] font-semibold text-muted-foreground">{g.title}</p>
               {g.ids.map((id) => {
                 const item = navItems.find((n) => n.id === id)!
+                const labels = found.get(id) ?? []
                 return (
                   <button
                     key={id}
@@ -1144,7 +1192,10 @@ export function SettingsPage() {
                     className={`flex w-full items-center gap-2.5 rounded-md px-[13px] py-2.5 text-left text-xs font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4 ${id === activeSection ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                   >
                     {item.icon}
-                    <span className="truncate">{item.name}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate">{item.name}</span>
+                      {labels.length > 0 && <span className="block truncate text-[0.6875rem] font-normal">{labels.slice(0, 2).join(" · ")}</span>}
+                    </span>
                   </button>
                 )
               })}
@@ -1153,7 +1204,7 @@ export function SettingsPage() {
         </nav>
         <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
           <h2 className="shrink-0 px-[30px] pt-[26px] pb-2 text-[1.5625rem] font-bold tracking-[-0.035em]">{sectionTitles[activeSection]}</h2>
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[30px] pt-2 pb-[30px]">
+          <div ref={content} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[30px] pt-2 pb-[30px] [&_[data-search-hit]]:rounded-sm [&_[data-search-hit]]:bg-accent [&_[data-search-hit]]:text-accent-foreground [&_[data-search-hit]]:shadow-[0_0_0_3px_var(--accent)]">
             <ActiveContent />
           </div>
         </section>

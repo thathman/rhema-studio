@@ -41,7 +41,7 @@ export function TickerDesigner() {
             {/* The preview stays in view beside the settings on a wide window. */}
             <div className="flex min-w-0 flex-col gap-3 xl:sticky xl:top-0">
           {theme && <CanvasVerse theme={theme} verse={{ reference: "", segments: [] }} ticker={preview} />}
-          {style.background.kind === "video" && <p className="text-[0.6875rem] text-muted-foreground">The video plays behind the band on the outputs; this preview shows its shade only.</p>}
+          {style.background.kind === "video" && <p className="text-xs text-muted-foreground">The video plays behind the band on the outputs; this preview shows its shade only.</p>}
             </div>
             <div className="flex min-w-0 flex-col gap-3">
           <Row label="Position">

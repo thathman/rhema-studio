@@ -77,7 +77,7 @@ function NewCue({ taken, onDone }: { taken: string[]; onDone: () => void }) {
           {steps.map((s, i) => (
             <li key={`${s}-${i}`} className="flex items-center gap-2">
               <span className="flex-1">{i + 1}. {CUE_ACTIONS[s].label}</span>
-              <Button type="button" size="icon-xs" variant="ghost" aria-label={`Remove step ${i + 1}`} onClick={() => setSteps(steps.filter((_, j) => j !== i))}><XIcon /></Button>
+              <Button type="button" size="icon-xs" variant="ghost" className="size-8" aria-label={`Remove step ${i + 1}`} onClick={() => setSteps(steps.filter((_, j) => j !== i))}><XIcon /></Button>
             </li>
           ))}
         </ol>

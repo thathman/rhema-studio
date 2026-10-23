@@ -133,15 +133,15 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
               </button>
               {mode === "prepare" && (
                 <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                  <Button variant="ghost" size="icon-xs" aria-label="Move up" disabled={index === 0}
+                  <Button variant="ghost" size="icon-xs" className="size-8" aria-label="Move up" disabled={index === 0}
                     onClick={() => useQueueStore.getState().reorderItems(index, index - 1)}>
                     <ArrowUpIcon />
                   </Button>
-                  <Button variant="ghost" size="icon-xs" aria-label="Move down" disabled={index === items.length - 1}
+                  <Button variant="ghost" size="icon-xs" className="size-8" aria-label="Move down" disabled={index === items.length - 1}
                     onClick={() => useQueueStore.getState().reorderItems(index, index + 1)}>
                     <ArrowDownIcon />
                   </Button>
-                  <Button variant="ghost" size="icon-xs" aria-label={`Remove ${item.reference}`}
+                  <Button variant="ghost" size="icon-xs" className="size-8" aria-label={`Remove ${item.reference}`}
                     onClick={(e) => {
                       keepFocusInList(e.currentTarget, 'button[aria-label^="Remove "]')
                       useQueueStore.getState().removeItem(item.id)

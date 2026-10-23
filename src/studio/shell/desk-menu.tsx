@@ -142,7 +142,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               />
             </div>
           </div>
-          <p className="-mt-1 text-[0.6875rem] text-muted-foreground">
+          <p className="-mt-1 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">{role}</span> · on this computer. Your name goes on the service log, approvals and notices.
           </p>
 
@@ -165,7 +165,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-[0.625rem] text-muted-foreground">Present stays dark, so the live console is calm in a dim room.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Present stays dark, so the live console is calm in a dim room.</p>
           </div>
 
           <div className="-mx-1 flex flex-col border-t border-border pt-2">

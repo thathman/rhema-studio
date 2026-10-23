@@ -981,6 +981,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dt. Searchable Settings, touch targets and flat surfaces (#215)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dt.1 | Open Settings. Look at the left list. | A **Search settings** box at the top; the sections under Bible and languages, Display and output, Microphone and speech, Connections, Data and diagnostics; every old section is still there. | Unverified |
+| 10dt.2 | Type `gain`. Then press Enter. | Only Audio stays, with "Input Gain" under it; "1 section matches"; Enter opens Audio and "Input Gain" is highlighted. | Unverified |
+| 10dt.3 | Type `deepgram`, Enter (Cloud chosen). Then `pair`, then `yoruba`. | Speech Recognition opens with "Cloud (Deepgram)" and "Deepgram API Key" highlighted; `pair` leaves Remote Control; `yoruba` leaves Bible. | Unverified |
+| 10dt.4 | Type `dark mode`. Then press Esc. Tab from the box through the list. | "Nothing in Settings matches" pointing to Appearance in the Desk menu; Esc empties the box and every section comes back; Tab reaches each section with a visible focus ring. | Unverified |
+| 10dt.5 | Present with an output that follows Bible: show a verse so Live → Sources lists it. Click a little beside the round × (not on it), then Restore the same way. With a touchscreen, tap it. | The click just outside the × still takes it off; Restore brings it back; the × looks the same size as before. | Unverified |
+| 10dt.6 | Production: click the tabs; in Present's rundown (Prepare mode) and an extra countdown, use the move, reset and remove buttons. | Each tab is a comfortable 44 px tall; the small icon buttons are easier to hit and their icons look the same. | Unverified |
+| 10dt.7 | Home (light and dark), Prepare → Songs. | The welcome card is flat (no shine in its corner); song tiles are flat slate, teal and ink with white titles. | Unverified |
+| 10dt.8 | Light mode: find red text on the page (a Delete or an error). Present: the LIVE marks. | The red reads clearly on the stone page; LIVE red is unchanged. | Unverified |
+
 ### 10dp. Activate on Bible feeds only, and who activated each source (#243)
 
 | # | Step | Expected | Result |

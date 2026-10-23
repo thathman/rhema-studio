@@ -41,7 +41,7 @@ export function StageDesigner() {
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)]">
         <div className="flex min-w-0 flex-col gap-2 xl:sticky xl:top-0">
           <canvas ref={canvas} width={1280} height={720} className="aspect-video w-full rounded-lg border border-border" role="img" aria-label="Stage display preview: a verse live, the timer, a note and what is next" />
-          <p className="text-[0.6875rem] text-muted-foreground">A sample service. Messages you send from Present appear boxed under the top line.</p>
+          <p className="text-xs text-muted-foreground">A sample service. Messages you send from Present appear boxed under the top line.</p>
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           <Row label="Background"><Colour label="Background colour" value={style.background} onChange={(background) => patch({ background })} /></Row>

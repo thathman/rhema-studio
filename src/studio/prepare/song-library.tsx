@@ -169,7 +169,8 @@ function SongCard({ song, selected, onEdit, onAdd }: { song: SongSummary; select
         title="Click to preview"
         className={cn(
           "flex aspect-[1.7] items-center justify-center px-6 text-center text-[1.4375rem] leading-tight font-medium text-white outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-          choir ? "bg-[linear-gradient(130deg,#152538,#324d76)]" : hymn ? "bg-[linear-gradient(135deg,#1d3f3b,#4f8073)]" : "bg-[linear-gradient(145deg,#294b46,#79a38b)]",
+          // Flat ink tiles (#215): slate blue for choir, deep teal for hymns, neutral ink for songs.
+          choir ? "bg-[#22334a]" : hymn ? "bg-[#1f3f3b]" : "bg-[#28363b]",
         )}
       >
         <span className="line-clamp-3">{song.title}</span>

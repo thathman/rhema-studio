@@ -110,7 +110,7 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
               ))}
             </div>
             {theme && <CanvasVerse theme={theme} verse={SAMPLES[sample].verse ?? { reference: "", segments: [] }} overlay={preview} />}
-            {style.background.kind === "video" && <p className="text-[0.6875rem] text-muted-foreground">The video plays behind the band on the outputs; this preview shows its shade only.</p>}
+            {style.background.kind === "video" && <p className="text-xs text-muted-foreground">The video plays behind the band on the outputs; this preview shows its shade only.</p>}
             </div>
             <div className="flex min-w-0 flex-col gap-3">
 
