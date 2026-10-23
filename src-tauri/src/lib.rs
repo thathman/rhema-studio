@@ -176,6 +176,7 @@ pub fn run() {
             commands::remote::feeds_set,
             commands::remote::feed_publish,
             commands::remote::voice_answer,
+            commands::remote::feed_status,
             commands::join::join_pair,
             commands::join::join_me,
             commands::join::join_command,

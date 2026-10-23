@@ -105,9 +105,18 @@ const key = new URLSearchParams(location.search).get("k") ?? ""
 // EventSource reconnects by itself; the host sends the current frame first.
 const events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
 events.addEventListener("frame", (e) => {
+  const ev = e as MessageEvent<string>
   try {
-    show(JSON.parse((e as MessageEvent<string>).data) as Frame)
+    show(JSON.parse(ev.data) as Frame)
   } catch {
-    // A frame this page cannot read: keep the last one.
+    // A frame this page cannot read: keep the last one (and do not say it was drawn).
+    return
+  }
+  // Tell the host this frame is on this screen (receiver trust), after it is drawn.
+  const seq = Number(ev.lastEventId)
+  if (Number.isFinite(seq) && seq > 0) {
+    requestAnimationFrame(() => {
+      void fetch(`/api/v1/feed/${encodeURIComponent(id)}/ack?k=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seq }) }).catch(() => {})
+    })
   }
 })

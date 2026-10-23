@@ -6,6 +6,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### Browser feed health (#246, receiver trust)
+- A browser feed's card says whether anyone is watching it and whether the page shows the latest frame: each page tells Rhema which frame it drew. "Behind" shows in red after 3 seconds.
+
 ### Browser feed QR code (#198)
 - A browser feed's settings show a QR code of its link when the listener is on the church network, so a TV, tablet or phone opens the feed by scanning instead of typing.
 

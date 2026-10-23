@@ -63,8 +63,23 @@ pub struct FeedHub {
 #[derive(Debug)]
 struct Feed {
     token: String,
-    current: Option<String>,
-    tx: broadcast::Sender<String>,
+    /// The frame shown now, with its number.
+    current: Option<(u64, String)>,
+    seq: u64,
+    tx: broadcast::Sender<(u64, String)>,
+    /// The newest frame a page said it drew, and when (receiver trust, #246 item 9).
+    acked: u64,
+    acked_at: Option<std::time::Instant>,
+}
+
+/// A browser feed's health for the operator: pages following it, and whether one drew the latest frame.
+#[derive(Debug, Clone, Serialize)]
+pub struct FeedStatus {
+    pub watching: usize,
+    pub seq: u64,
+    pub acked: u64,
+    /// Milliseconds since a page last said it drew a frame; None if none has.
+    pub acked_ago_ms: Option<u64>,
 }
 
 impl FeedHub {
@@ -73,7 +88,7 @@ impl FeedHub {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         feeds.retain(|id, f| list.iter().any(|(i, t)| i == id && *t == f.token));
         for (id, token) in list {
-            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, tx: broadcast::channel(16).0 });
+            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None });
         }
     }
 
@@ -81,13 +96,40 @@ impl FeedHub {
     pub fn publish(&self, id: &str, json: String) {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(f) = feeds.get_mut(id) {
-            f.current = Some(json.clone());
-            let _ = f.tx.send(json);
+            f.seq += 1;
+            f.current = Some((f.seq, json.clone()));
+            let _ = f.tx.send((f.seq, json));
         }
     }
 
+    /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent).
+    fn ack(&self, id: &str, token: &str, seq: u64) -> bool {
+        let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(f) = feeds.get_mut(id).filter(|f| crate::command::same_key(token, &f.token)) else {
+            return false;
+        };
+        if seq <= f.seq && seq >= f.acked {
+            f.acked = seq;
+            f.acked_at = Some(std::time::Instant::now());
+        }
+        true
+    }
+
+    /// How the feed is doing, for the output card.
+    #[must_use]
+    pub fn status(&self, id: &str) -> Option<FeedStatus> {
+        let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let f = feeds.get(id)?;
+        Some(FeedStatus {
+            watching: f.tx.receiver_count(),
+            seq: f.seq,
+            acked: f.acked,
+            acked_ago_ms: f.acked_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
+        })
+    }
+
     /// The feed's current frame and a receiver for the next ones, if the secret matches.
-    fn follow(&self, id: &str, token: &str) -> Option<(Option<String>, broadcast::Receiver<String>)> {
+    fn follow(&self, id: &str, token: &str) -> Option<(Option<(u64, String)>, broadcast::Receiver<(u64, String)>)> {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let f = feeds.get(id)?;
         crate::command::same_key(token, &f.token).then(|| (f.current.clone(), f.tx.subscribe()))
@@ -276,6 +318,7 @@ where
         .route("/feed/{id}", get(feed_page_handler::<S>))
         .route("/api/v1/feed/{id}/events", get(feed_events_handler::<S>))
         .route("/api/v1/voice", post(voice_handler::<S>))
+        .route("/api/v1/feed/{id}/ack", post(feed_ack_handler::<S>))
         .route("/assets/{*path}", get(asset_handler::<S>))
         .route("/remote", get(remote_page))
         // Undocumented alias for the path the code shipped with before #146.
@@ -595,6 +638,25 @@ async fn voice_handler<S: CommandSink + 'static>(
     }
 }
 
+#[derive(Deserialize)]
+struct FeedAck {
+    seq: u64,
+}
+
+/// `POST /api/v1/feed/{id}/ack?k=<secret>`: the page drew frame `seq` (receiver trust).
+async fn feed_ack_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    axum::extract::Query(q): Query,
+    Json(ack): Json<FeedAck>,
+) -> StatusCode {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS;
+    }
+    if state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN }
+}
+
 /// `GET /api/v1/feed/{id}/events?k=<secret>`: the feed's frames as server-sent events.
 async fn feed_events_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
@@ -609,12 +671,13 @@ async fn feed_events_handler<S: CommandSink + 'static>(
         return StatusCode::FORBIDDEN.into_response();
     };
     let stream = futures_util::stream::unfold((rx, first), |(mut rx, first)| async move {
-        if let Some(json) = first {
-            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").data(json)), (rx, None)));
+        // The frame's number is the event id: the page acknowledges it once drawn.
+        if let Some((seq, json)) = first {
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None)));
         }
         loop {
             match rx.recv().await {
-                Ok(json) => return Some((Ok(Event::default().event("frame").data(json)), (rx, None))),
+                Ok((seq, json)) => return Some((Ok(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None))),
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
                 Err(broadcast::error::RecvError::Closed) => return None,
             }
@@ -899,11 +962,21 @@ mod tests {
         assert!(get_with(port, "/assets/feed.js", "", None).await.contains("console.log"));
         assert!(get_with(port, "/assets/../secret", "", None).await.contains("404"));
         assert!(get_with(port, "/api/v1/feed/l3/events?k=wrong", "", None).await.contains("403"));
-        let handle = tokio::spawn(async move { get_with(port, "/api/v1/feed/l3/events?k=s3cret", "", Some(380)).await });
+        let handle = tokio::spawn(async move { get_with(port, "/api/v1/feed/l3/events?k=s3cret", "", Some(392)).await });
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        assert_eq!(feeds.status("l3").unwrap().watching, 1, "the page following it");
         feeds.publish("l3", r#"{"verse":"Romans 8:29"}"#.into());
         let stream = handle.await.unwrap();
         assert!(stream.contains("event: frame") && stream.contains("8:28") && stream.contains("8:29"), "{stream}");
+        assert!(stream.contains("id: 1") && stream.contains("id: 2"), "frames carry their number: {stream}");
+        // Receiver trust: the page says which frame it drew; only with the secret, never ahead.
+        let ack = |k: &'static str, seq: u64| async move { raw_http_request_with(port, "POST", &format!("/api/v1/feed/l3/ack?k={k}"), Some(&format!(r#"{{"seq":{seq}}}"#)), "").await };
+        assert!(ack("wrong", 2).await.contains("403"));
+        assert!(ack("s3cret", 2).await.contains("204"));
+        assert!(ack("s3cret", 9).await.contains("204"));
+        let st = feeds.status("l3").unwrap();
+        assert_eq!((st.seq, st.acked), (2, 2), "a frame never sent is not acknowledged");
+        assert!(st.acked_ago_ms.is_some());
         // A new secret (the link was renewed) closes the old link.
         feeds.set(&[("l3".into(), "n3w".into())]);
         assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("403"));
