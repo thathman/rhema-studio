@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Phone remote: live sources and notices (ARCH-001 leftover; Comms paired phones, text)
+
+- **Branch / PR:** `arch-001/phone-sources`.
+- **Behaviour:** `remote.html` reads `/api/v1/live` and `/api/v1/me` with the phone's key; lists live sources with Take off / Put back (`clear_source` / `restore_source`, the host's role checks apply); shows the notices for the phone's role (plus everyone's and its own) with Seen / Ready / Unable (`notice_ack`) and a message box to the main desk (`notice_send`). DOM built with textContent only.
+- **Tests:** `src/studio/phone-remote.test.ts` loads the real page in jsdom with a mocked computer (rows, Bearer key, the four commands); rhema-api phone page test; vitest green.
+- **Desktop:** acceptance 10cy (headless Chrome at 390 px against the QA build; screenshots in local `qa-screenshots/phone-remote/`). Real data 6/6, WebKit restored.
+- **Blocker for phone voice (C4):** browsers give the microphone only to secure pages; the phone page is plain HTTP on the LAN. Needs an owner decision on HTTPS with a local certificate (see ADR 0002 draft in the voice PR).
+
 ## 2026-10-23 — ARCH-001 leftovers: stage follows a source; journal source tags
 
 - **Branch / PR:** `arch-001/stage-follows`.
