@@ -5,6 +5,10 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Priority talk; a revoked device leaves the talk channel (Rhema Comms C4, #251)
+
+- **Branch / PR:** `comms-005/priority-revoke`. `voice.ts`: talk target `priority` (main desk only; heard by all); while the main desk holds Talk on it, every other speaker's gain for every listener is 0.2 (`rewire` on Talk and release). The hub drops a peer whose device is no longer paired (settings subscription).
+- **Tests:** `talk.test.tsx` (priority heard by all, its name). Desktop: acceptance 10dd. Real data 6/6, WebKit restored.
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
 - **Branch / PR:** `mcp-004/look-suggestions`. `mcp_drafts.rs`: `Looks` (built-in names plus `broadcast-themes.json` custom looks and scenes, read-only), `check_with` keeps `suggested_look` / `suggested_scene` (80 chars) and warns on unknown names; `mcp.rs`: `rhema_list_looks_and_scenes`, schema fields. Review shows them per item; `draftToRundown` does not carry them (decision: suggestions, not a data-model change).
