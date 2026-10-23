@@ -976,6 +976,13 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10de. Running late, shared by every desk (#196)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10de.1 | A service with a main phase start time. Production → Timekeeper → +5 min twice; look at Prepare → Run of show, the stage finish line and the service log. | "running 10 min late" everywhere; expected times 10 min later, the plan unchanged; two log lines with who. | OFFSET_RESULT |
+| 10de.2 | A joined Timekeeper desk: −5 min. | The host's offset moves to +5; the log names the desk. | OFFSET_REMOTE_RESULT |
+
 ### 10dc. Cameras in scenes (OP-009, #209)
 
 | # | Step | Expected | Result |

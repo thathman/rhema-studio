@@ -5,6 +5,10 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Running late, shared by every desk (#196)
+
+- **Branch / PR:** `pt-006/shared-offset`. `service-offset-store.ts` (minutes, by; −120…+240; logged; zero for another service) replaces Prepare's local `delay`; used by `useServiceTiming`, `stage-finish`, `live-state` (`timing.offsetMinutes`, `offsetBy`). Remote command `event_offset` (Timekeeper/Present/Configure, ±30 a step, with who). Production Timekeeper "Running" row; ClockDesk ±5.
+- **Tests:** `service-offset-store.test.ts`; rhema-api (serde, dispatch with who and the 30 min clamp, roles). Desktop: acceptance 10de.
 ## 2026-10-23 — Look and scene suggestions in AI drafts (MCP-004, #252)
 
 - **Branch / PR:** `mcp-004/look-suggestions`. `mcp_drafts.rs`: `Looks` (built-in names plus `broadcast-themes.json` custom looks and scenes, read-only), `check_with` keeps `suggested_look` / `suggested_scene` (80 chars) and warns on unknown names; `mcp.rs`: `rhema_list_looks_and_scenes`, schema fields. Review shows them per item; `draftToRundown` does not carry them (decision: suggestions, not a data-model change).
