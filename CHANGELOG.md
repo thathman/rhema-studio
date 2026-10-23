@@ -6,6 +6,8 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
+### The service log survives Rhema closing unexpectedly (#196, #246)
+- The log (and each item's actual times) is kept as it changes and comes back by itself after a crash; nothing goes on a screen.
 ### Planned time typed as 35, 4:30 or 1:10:00 (#196)
 - An item's planned time takes minutes, min:sec, h:mm:ss or "1h10", and is written back the same way; a mistake is marked and not applied.
 ### The service timer from a Timekeeper desk (#196 R5)

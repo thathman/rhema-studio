@@ -5,6 +5,11 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — The service log survives a crash (#196 R3, #246)
+
+- **Branch / PR:** `pt-008/journal-recovery`. `live-recovery.ts`: the journal (entries, `startItemIds`) kept in `recovery.json` under `journal`, 3 s after it changes; `restoreJournal` after an unclean exit, once, if under 6 h old, before anything this run logged already (a scene put back at start-up), rebasing `mono` from `at` on this run's clock, with a recovery line.
+- The service timer is in the snapshot (length, elapsed, running; saved when it starts, pauses, resets or is corrected) and Put back restores it, counting the time Rhema was closed, unless a timer was started since.
+- **Tests:** `live-recovery.test.ts` (restored after a start-up entry, durations kept, only once, never an old log; the timer). Desktop: acceptance 10da.4–5 passed on the combined QA build after the start-up fix. Real data unchanged, WebKit restored.
 ## 2026-10-23 — Planned time as typed (#196 R4)
 
 - **Branch / PR:** `pt-007/duration-entry`. `run-of-show.ts`: `parseDuration` / `formatDuration` (to the second, ≤ 600 min); Prepare's planned-time field is a `DurationInput` (applied on Enter / blur, Escape undoes, a mistake is marked).
