@@ -42,6 +42,9 @@ describe("phone remote: live sources", () => {
     ;(document.getElementById("noticeForm") as HTMLFormElement).requestSubmit()
     await vi.waitFor(() => expect(sent.filter((s) => s.url === "/api/v1/command")).toHaveLength(4))
     expect(sent.filter((s) => s.url === "/api/v1/command")[3].body).toMatchObject({ command: "notice_send", value: { text: "Doors are open", to: "host" } })
+    // Not a secure page (plain http on the network): talking is explained, not offered.
+    expect(document.getElementById("talkNote")!.textContent).toContain("needs a secure page")
+    expect((document.getElementById("talkJoin") as HTMLButtonElement).hidden).toBe(true)
     vi.unstubAllGlobals()
   })
 })

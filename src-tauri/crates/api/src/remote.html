@@ -43,6 +43,9 @@
   #noticeForm { display:flex; gap:8px; margin-bottom:12px; }
   #noticeForm input { flex:1; min-width:0; }
   #noticeForm button { min-height:48px; padding:0 16px; }
+  #talkHold { width:100%; min-height:110px; font-size:22px; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #talkHold.on { background:var(--live); border-color:var(--live); color:#fff; }
+  #talkJoin { width:100%; min-height:52px; margin-bottom:10px; }
   .forget { background:none; border:none; min-height:44px; color:var(--muted); font-weight:400; width:100%; margin-top:16px; }
 </style>
 </head>
@@ -68,6 +71,10 @@
       <button data-cmd="show">Back on air</button>
       <button class="big clear" data-cmd="hide">Clear screen</button>
     </div>
+    <h2>Talk</h2>
+    <p id="talkNote"></p>
+    <button id="talkJoin" type="button">Join the talk channel</button>
+    <button id="talkHold" type="button" hidden aria-pressed="false">Hold to talk</button>
     <h2>Notices</h2>
     <form id="noticeForm"><input id="noticeText" maxlength="280" placeholder="Message to the main desk" aria-label="Message to the main desk"><button type="submit">Send</button></form>
     <div id="notices" aria-live="polite"></div>
@@ -224,6 +231,77 @@
     await send("notice_send", e.submitter || $("noticeForm").querySelector("button"), { text, to: "host" })
     $("noticeText").value = ""
   })
+  // Talk (Rhema Comms): this phone in the crew's talk channel. Browsers give the microphone only to
+  // a secure page (https, or this computer itself); elsewhere the button says so. Talk is held, never
+  // latched: letting go, leaving the page or locking the phone stops it.
+  let pc = null, mic = null, player = null
+  const canTalk = window.isSecureContext && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function" && typeof RTCPeerConnection === "function"
+  if (!canTalk) {
+    $("talkNote").textContent = "Talking from this phone needs a secure page (https). Notices and the other buttons work as usual."
+    $("talkJoin").hidden = true
+  }
+  const gathered = (c) => new Promise((done) => {
+    if (c.iceGatheringState === "complete") return done()
+    c.addEventListener("icegatheringstatechange", () => { if (c.iceGatheringState === "complete") done() })
+    setTimeout(done, 3000)
+  })
+  function talk(on) {
+    if (!mic || mic.enabled === on) return
+    mic.enabled = on
+    $("talkHold").classList.toggle("on", on)
+    $("talkHold").setAttribute("aria-pressed", String(on))
+    $("talkHold").textContent = on ? "Talking…" : "Hold to talk"
+    post("voice_talk", pressId(), on).catch(() => {})
+  }
+  function leaveTalk() {
+    talk(false)
+    if (pc) post("voice_leave", pressId()).catch(() => {})
+    if (player) player.pause()
+    if (mic) mic.stop()
+    if (pc) pc.close()
+    pc = mic = player = null
+    $("talkJoin").textContent = "Join the talk channel"
+    $("talkHold").hidden = true
+  }
+  async function joinTalk() {
+    const btn = $("talkJoin")
+    btn.disabled = true
+    say("Joining the talk channel…")
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      mic = s.getAudioTracks()[0]
+      mic.enabled = false
+      pc = new RTCPeerConnection({ iceServers: [] })
+      pc.addTransceiver(mic, { direction: "sendrecv", streams: [s] })
+      pc.ontrack = (e) => {
+        player = new Audio()
+        player.srcObject = e.streams[0] || new MediaStream([e.track])
+        player.play().catch(() => {})
+      }
+      await pc.setLocalDescription(await pc.createOffer())
+      await gathered(pc)
+      const r = await fetch("/api/v1/voice", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + get() }, body: JSON.stringify({ sdp: pc.localDescription.sdp }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.sdp) throw new Error(j.error || "The computer did not let this phone join (" + r.status + ")")
+      await pc.setRemoteDescription({ type: "answer", sdp: j.sdp })
+      btn.textContent = "Leave the talk channel"
+      $("talkHold").hidden = false
+      say("")
+    } catch (e) {
+      leaveTalk()
+      say(e && e.name === "NotAllowedError" ? "The microphone was not allowed. Allow it for this page to talk." : (e && e.message) || "Could not join the talk channel.", true)
+    } finally {
+      btn.disabled = false
+    }
+  }
+  $("talkJoin").addEventListener("click", () => (pc ? leaveTalk() : joinTalk()))
+  const hold = $("talkHold")
+  hold.addEventListener("pointerdown", (e) => { if (hold.setPointerCapture) hold.setPointerCapture(e.pointerId); talk(true) })
+  for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => talk(false))
+  hold.addEventListener("contextmenu", (e) => e.preventDefault())
+  window.addEventListener("blur", () => talk(false))
+  window.addEventListener("pagehide", leaveTalk)
+  document.addEventListener("visibilitychange", () => { if (document.hidden) talk(false) })
   document.addEventListener("visibilitychange", poll)
   show(); poll()
 })()
