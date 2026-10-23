@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The main desk can take back control; desks stay on one service (#243, #246)
+- Production → Operators and Settings → Remote: **Take back control** pauses a joined desk or phone without unpairing it; **Give control back** ends it. Both go in the service log ("Main desk took back control from Desk C").
+- A paused desk shows "Paused by the main desk", still sees the service and keeps Talk and notices; its other buttons wait.
+- A desk still looking at another service cannot change this one: the host refuses it and the desk refreshes. Phones and scripts that do not say which service they mean work as before.
+
 - The run of show keeps its times on the right day around midnight: a 23:30 watchnight still running at 00:10 starts last night (not tonight, which made every time wrong); "end by 00:15" after a 23:50 start is that night's (not this morning's, which squeezed everything); a 00:30 warm-up arms at 23:00; times are resolved by calendar day, so a clock change keeps the local time (#250, PT-006, #196).
 
 ### Words while a camera is not playing (#213)

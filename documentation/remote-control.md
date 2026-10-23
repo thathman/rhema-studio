@@ -333,6 +333,10 @@ curl -X POST http://localhost:8080/api/v1/command \
 }
 ```
 
+Optional fields: `"id"` (one per press; a retry with the same id is not repeated) and `"service"` (the id of the service the sender is looking at, `""` for none). A command without `service` is accepted as always.
+
+Other refusals, with the reason in `error`: `401` (missing or wrong key), `403` (the device's role does not allow it), `423` ("The main desk has taken back control": the host has paused this device; talk and notices still work), `409` ("That desk is looking at a different service; it will refresh": `service` is not the one open on the host), `429` (too many).
+
 A rejected command returns `500` with the reason attached:
 
 ```json

@@ -976,6 +976,16 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dq. The main desk takes back control; one service at a time (#243, #246)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dq.1 | Host and a joined desk (role Bible). Host: Production → Operators → **Take back control** beside the desk. | The row shows Paused; the service log has "Main desk took back control from <desk>"; the joined desk shows "Paused by the main desk" within a second and its Bible buttons are greyed. | Unverified |
+| 10dq.2 | While paused, on the joined desk: watch the host change the verse; hold Talk; send a notice to the main desk. | The desk follows the host's screens; Talk is heard on the host; the notice arrives. | Unverified |
+| 10dq.3 | While paused, send a command with the desk's key from a terminal (`curl -H "X-Rhema-Key: …" -d '{"command":"verse_next"}' …/api/v1/command`). | Refused with 423 "The main desk has taken back control"; nothing on any screen changes. | Unverified |
+| 10dq.4 | Host: Settings → Remote → the same device → **Give control back**. Joined desk: Next verse. | Paused clears on both; the log has "Main desk gave control back to <desk>"; Next verse works. Restart the host: the pause (or not) is as it was left. | Unverified |
+| 10dq.5 | Joined desk following service A. Host: open service B, then at once press a button on the desk (or curl with `"service":"<A's id>"`). | Refused (409) if it arrives before the desk has caught up: the desk says the main desk is on a different service and refreshes to B; nothing changes on the host. The same command without `service` (phone page) works. | Unverified |
+
 ### 10df. Time warnings on the stage (#196 R6)
 
 | # | Step | Expected | Result |

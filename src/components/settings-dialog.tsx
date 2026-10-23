@@ -40,6 +40,7 @@ import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { qrDataUrl } from "@/lib/qr-bulletin"
+import { setDeskControl } from "@/lib/desk-control"
 import { MonitorIcon, MoonIcon, PaletteIcon, SparklesIcon, SunIcon } from "lucide-react"
 import { useTheme } from "@/components/theme-provider"
 import { useShellStore } from "@/studio/shell-store"
@@ -892,7 +893,10 @@ function RemoteControlSection() {
                   <option value="present">Present only</option>
                   <option value="configure">Present and change settings</option>
                 </select>
-                <span className="shrink-0 text-[0.6875rem] text-muted-foreground">paired {new Date(d.paired_at).toLocaleDateString()}</span>
+                <span className="shrink-0 text-[0.6875rem] text-muted-foreground">{d.paused === true ? "paused" : `paired ${new Date(d.paired_at).toLocaleDateString()}`}</span>
+                <Button size="sm" variant="outline" className="text-xs" aria-pressed={d.paused === true} aria-label={d.paused === true ? `Give control back to ${d.name}` : `Take back control from ${d.name}`} onClick={() => setDeskControl(d.hash, d.paused !== true)}>
+                  {d.paused === true ? "Give control back" : "Take back control"}
+                </Button>
                 <Button size="sm" variant="ghost" className="text-xs text-destructive" aria-label={`Revoke ${d.name}`} onClick={() => revokeRemoteDevice(d.hash)}>Revoke</Button>
               </li>
             ))}

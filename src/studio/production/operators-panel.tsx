@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatMs } from "@/lib/timer"
 import { openSettings } from "@/lib/settings-dialog"
+import { setDeskControl } from "@/lib/desk-control"
 import { useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { NoticesPanel } from "@/studio/notices-panel"
@@ -15,6 +16,17 @@ const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event 
 /** Which desks a role gets on a joined computer (the host checks every command again). */
 const DESKS: Record<string, readonly ("clock" | "bible" | "scenes")[]> = { timekeeper: ["clock"], bible: ["bible"], screens: ["scenes"], present: ["clock", "bible", "scenes"], configure: ["clock", "bible", "scenes"] }
 const hhmm = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+/** A joined desk may send commands: connected, and the main desk has not taken back control. */
+const useCanSend = () => useJoin((s) => s.status === "connected" && !s.paused)
+
+/** Take back control from a paired desk, or give it back (#243). Its pairing and role stay. */
+function DeskControlButton({ hash, name, paused }: { hash: string; name: string; paused: boolean }) {
+  return (
+    <Button size="xs" variant="outline" aria-pressed={paused} aria-label={paused ? `Give control back to ${name}` : `Take back control from ${name}`} onClick={() => setDeskControl(hash, !paused)}>
+      {paused ? "Give control back" : "Take back control"}
+    </Button>
+  )
+}
 
 /**
  * Operators (Host/Join, ARCH-004): this computer can host the service for other computers, or join
@@ -65,12 +77,15 @@ function HostCard() {
       <ul aria-label="Paired operators" className="flex flex-col divide-y divide-border rounded-md border border-border">
         {devices.length === 0 && <li className="px-2.5 py-2 text-muted-foreground">No one paired yet.</li>}
         {devices.map((d) => (
-          <li key={d.hash} className="flex items-center gap-2 px-2.5 py-1.5">
+          <li key={d.hash} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
             <span className="min-w-0 flex-1 truncate font-medium">{d.name}</span>
+            {d.paused === true && <span className="rounded-full bg-muted px-2 py-0.5 text-[0.625rem] font-bold text-muted-foreground uppercase">Paused</span>}
             <span className="text-muted-foreground">{ROLE_NAMES[d.role ?? "configure"]}</span>
+            <DeskControlButton hash={d.hash} name={d.name} paused={d.paused === true} />
           </li>
         ))}
       </ul>
+      <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Give control back when it may help again.</p>
       <div>
         <Button size="sm" variant="outline" onClick={() => openSettings("remote")}>Pair an operator, set roles…</Button>
       </div>
@@ -124,6 +139,8 @@ function JoinCard() {
 function JoinedDesk() {
   const status = useJoin((s) => s.status)
   const error = useJoin((s) => s.error)
+  const note = useJoin((s) => s.note)
+  const paused = useJoin((s) => s.paused)
   const me = useJoin((s) => s.me)
   const live = useJoin((s) => s.live)
   const address = useSettingsStore((s) => s.joinAddress)
@@ -139,6 +156,12 @@ function JoinedDesk() {
         <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave()}>Leave</Button>
         <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().leave(true)}>Forget this host</Button>
       </div>
+      {paused && (
+        <p role="status" className="rounded-md border border-border bg-muted px-2.5 py-2 font-semibold">
+          Paused by the main desk. <span className="font-normal text-muted-foreground">You still see the service and can talk and send notices; the controls come back when the main desk gives control back.</span>
+        </p>
+      )}
+      {note && <p role="status" className="text-muted-foreground">{note}</p>}
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {live && (
         <>
@@ -182,7 +205,7 @@ function JoinedDesk() {
 
 /** The event clock: Now, the run of show, Start / Back one (Timekeeper). */
 function ClockDesk({ live }: { live: LiveStateV1 }) {
-  const status = useJoin((s) => s.status)
+  const off = !useCanSend()
   const current = live.rundown.find((r) => r.id === live.event.currentId)
   const at = current ? live.rundown.indexOf(current) : -1
   const next = live.rundown[at + 1]
@@ -195,10 +218,10 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
         {live.timing && <span className={cn("tabular-nums", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>ends {hhmm(live.timing.expectedEnd)}{late !== 0 ? ` · ${Math.abs(late)} min ${late > 0 ? "late" : "early"}` : " · on time"}</span>}
         {live.timing?.offsetMinutes ? <span className="text-muted-foreground">({live.timing.offsetMinutes > 0 ? "+" : "−"}{Math.abs(live.timing.offsetMinutes)} min{live.timing.offsetBy ? ` by ${live.timing.offsetBy}` : ""})</span> : null}
         <span className="flex-1" />
-        <Button size="sm" variant="outline" disabled={status !== "connected"} onClick={() => void send({ command: "event_offset", value: -5 })}>−5 min</Button>
-        <Button size="sm" variant="outline" disabled={status !== "connected"} onClick={() => void send({ command: "event_offset", value: 5 })}>+5 min</Button>
-        <Button size="sm" variant="outline" disabled={at <= 0 || status !== "connected"} onClick={() => void send({ command: "event_prev" })}>Back one</Button>
-        <Button size="sm" disabled={!next || status !== "connected"} onClick={() => void send({ command: "event_next" })}>{next ? `Start ${next.reference}` : "Last event"}</Button>
+        <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "event_offset", value: -5 })}>−5 min</Button>
+        <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "event_offset", value: 5 })}>+5 min</Button>
+        <Button size="sm" variant="outline" disabled={at <= 0 || off} onClick={() => void send({ command: "event_prev" })}>Back one</Button>
+        <Button size="sm" disabled={!next || off} onClick={() => void send({ command: "event_next" })}>{next ? `Start ${next.reference}` : "Last event"}</Button>
       </div>
       <DeskTimer live={live} />
       <ol aria-label="The host's run of show" className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
@@ -206,7 +229,7 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
           <li key={r.id} className={cn("flex items-center gap-2 px-2.5 py-1.5", r.id === live.event.currentId && "bg-primary/10 font-semibold")}>
             <span className="min-w-0 flex-1 truncate">{r.reference}</span>
             {r.plannedMinutes ? <span className="text-muted-foreground tabular-nums">{r.plannedMinutes} min</span> : null}
-            {r.id !== live.event.currentId && status === "connected" && <Button size="xs" variant="ghost" onClick={() => void send({ command: "event_start", value: r.id })}>Start</Button>}
+            {r.id !== live.event.currentId && !off && <Button size="xs" variant="ghost" onClick={() => void send({ command: "event_start", value: r.id })}>Start</Button>}
           </li>
         ))}
       </ol>
@@ -217,7 +240,7 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
 
 /** The host's service timer (#196 R5): counting on from when the state arrived; Start / Pause / ±1 min. */
 function DeskTimer({ live }: { live: LiveStateV1 }) {
-  const status = useJoin((s) => s.status)
+  const off = !useCanSend()
   const receivedAt = useJoin((s) => s.receivedAt)
   const [now, setNow] = useState(() => performance.now())
   const t = live.timer
@@ -230,7 +253,6 @@ function DeskTimer({ live }: { live: LiveStateV1 }) {
   const elapsed = t.elapsedMs + (t.running ? Math.max(0, now - receivedAt) : 0)
   const left = t.durationMs ? t.durationMs - elapsed : null
   const send = useJoin.getState().send
-  const off = status !== "connected"
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="The host's service timer">
       <span className={cn("font-mono text-lg font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid")} role="timer">
@@ -247,11 +269,10 @@ function DeskTimer({ live }: { live: LiveStateV1 }) {
 
 /** The Bible source: type a reference and activate it; step through the passage; take it off (Bible operator). */
 function BibleDesk({ live }: { live: LiveStateV1 }) {
-  const status = useJoin((s) => s.status)
+  const ok = useCanSend()
   const [reference, setReference] = useState("")
   const bible = live.sources.find((s) => s.id === "bible")
   const send = useJoin.getState().send
-  const ok = status === "connected"
   return (
     <section aria-label="Bible desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
       <p className="font-semibold">Bible {bible ? <span className="font-normal text-muted-foreground">· {bible.reference}{bible.on ? "" : " (off)"}</span> : <span className="font-normal text-muted-foreground">· nothing yet</span>}</p>
@@ -271,11 +292,10 @@ function BibleDesk({ live }: { live: LiveStateV1 }) {
 
 /** Congregation scenes: which scene each output shows; Take or back to its own feed (Screens operator). */
 function ScenesDesk({ live }: { live: LiveStateV1 }) {
-  const status = useJoin((s) => s.status)
+  const ok = useCanSend()
   const [outputId, setOutputId] = useState(live.outputs[0]?.id ?? "")
   const output = live.outputs.find((o) => o.id === outputId) ?? live.outputs[0]
   const send = useJoin.getState().send
-  const ok = status === "connected"
   if (!output) return <p className="text-muted-foreground">The host has no congregation output.</p>
   return (
     <section aria-label="Scenes desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">

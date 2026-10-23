@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — The main desk takes back control; commands carry their service (#243, #246 C16)
+
+- **Branch / PR:** `arch-006/reclaim-and-service`. Rust API: `KeyEntry.paused` (serde default false, omitted when false); `RemoteCommand::is_comms` (notices, talk); a paused key's other commands get 423 "The main desk has taken back control" over HTTP (OSC drops them); `/api/v1/me` says `paused`; Live State, `/live/events` and `/voice` stay open. `LiveHub` reads `service.id` of each published Live State (null service = ""; no id = unknown, nothing refused); `/command` takes an optional `service`, and a non-comms command whose service differs gets 409 "That desk is looking at a different service; it will refresh". `join_command` takes `service` and marks 423/409 as `paused:` / `other-service:`. Frontend: `RemoteDevice.paused` (absent = not paused) pushed with `remote_set_keys`; `setDeskControl` (src/lib/desk-control.ts) logs each change; Live State `service: { id, title, revision }` and `paused: [names]`; the join store sends `service`, shows paused, and reconnects on 409.
+- **Behaviour:** Take back control / Give control back per device in Production → Operators and Settings → Remote; the paused desk keeps seeing the service, Talk and notices, its controls disabled.
+- **Tests:** rhema-api (+5: paused refused/read/talk over HTTP, service 409 and untagged, serde round trips, service read from Live State); app `join` (+2: body carries service, refusals marked); vitest `host-join.test.ts` (+4), `operator-roles.test.tsx` (+2).
+- **Next:** desktop acceptance 10dq (two computers). Not done: a revision check on commands (saving a service bumps its revision, so only the service id is compared); per-scope pausing.
+
 ## 2026-10-23 — Words while a camera is not playing (#213 fallback)
 
 - **Branch / PR:** `sh-003/camera-fallback`. `SceneLayer.cameraFallback` (≤120 chars) → frame `fallback` + the output's look; `drawScene` fits it in the camera's box (shared `fitText` with the clock) whenever the camera is not ready, outputs only. Composer field.

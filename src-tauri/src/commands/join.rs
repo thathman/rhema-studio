@@ -73,20 +73,43 @@ pub async fn join_me(address: String, token: String) -> Result<serde_json::Value
     r.json().await.map_err(|e| e.to_string())
 }
 
-/// Send one command (the host checks the key's role); `id` makes a retry harmless.
-#[tauri::command]
-pub async fn join_command(address: String, token: String, command: serde_json::Value) -> Result<(), String> {
-    let url = format!("{}/api/v1/command", base_url(&address)?);
+/// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this
+/// desk is looking at (#246 C16), so the host refuses it if it has moved to another one.
+fn command_body(command: serde_json::Value, service: Option<String>) -> serde_json::Value {
     let mut body = command;
     if let Some(o) = body.as_object_mut() {
         o.insert("id".into(), serde_json::Value::String(uuid::Uuid::new_v4().to_string()));
+        if let Some(s) = service {
+            o.insert("service".into(), serde_json::Value::String(s));
+        }
     }
+    body
+}
+
+/// What the desk is told when the host refuses. Two refusals start with a word the desk acts on:
+/// "paused:" (the main desk has taken back control, #243) and "other-service:" (the desk is looking
+/// at a different service and refreshes, #246 C16).
+fn refusal(status: u16, error: Option<String>) -> String {
+    let msg = error.unwrap_or_else(|| "The host refused".into());
+    match status {
+        423 => format!("paused: {msg}"),
+        409 => format!("other-service: {msg}"),
+        _ => msg,
+    }
+}
+
+/// Send one command (the host checks the key's role and the service).
+#[tauri::command]
+pub async fn join_command(address: String, token: String, command: serde_json::Value, service: Option<String>) -> Result<(), String> {
+    let url = format!("{}/api/v1/command", base_url(&address)?);
+    let body = command_body(command, service);
     let r = client(Some(Duration::from_secs(10)))?.post(url).header("X-Rhema-Key", token).json(&body).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
     if r.status().is_success() {
         return Ok(());
     }
+    let status = r.status().as_u16();
     let msg = r.json::<serde_json::Value>().await.ok().and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from));
-    Err(msg.unwrap_or_else(|| "The host refused".into()))
+    Err(refusal(status, msg))
 }
 
 /// Join the host's talk channel (Rhema Comms C3): send this desk's complete WebRTC offer, get the
@@ -216,6 +239,24 @@ mod tests {
         for bad in ["192.168.1.20", "http://x:80", "x:80/path", ":8080", "x:0", "x:port", "a b:80"] {
             assert!(base_url(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_command_carries_its_service_when_known() {
+        let tagged = command_body(serde_json::json!({ "command": "event_next" }), Some("s1".into()));
+        assert_eq!((tagged["command"].as_str(), tagged["service"].as_str()), (Some("event_next"), Some("s1")));
+        assert_eq!(tagged["id"].as_str().map(str::len), Some(36));
+        let untagged = command_body(serde_json::json!({ "command": "event_next" }), None);
+        assert!(untagged.get("service").is_none(), "an unknown service is left out, as before");
+        assert_eq!(command_body(serde_json::json!({ "command": "next" }), Some(String::new()))["service"], "", "no service open is said as \"\"");
+    }
+
+    #[test]
+    fn paused_and_other_service_refusals_are_marked_for_the_desk() {
+        assert_eq!(refusal(423, Some("The main desk has taken back control".into())), "paused: The main desk has taken back control");
+        assert_eq!(refusal(409, Some("That desk is looking at a different service; it will refresh".into())), "other-service: That desk is looking at a different service; it will refresh");
+        assert_eq!(refusal(403, Some("this device keeps time".into())), "this device keeps time");
+        assert_eq!(refusal(500, None), "The host refused");
     }
 
     #[test]

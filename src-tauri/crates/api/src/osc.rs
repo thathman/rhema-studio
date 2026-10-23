@@ -189,6 +189,10 @@ fn handle_message_from(msg: &OscMessage, sink: &dyn CommandSink, keys: &KeySet, 
     match parse_osc(&msg.addr, args) {
         Ok(cmd) => {
             if let Some(e) = entry {
+                if e.paused_for(&cmd) {
+                    log::warn!("OSC command refused for {}: {} ({})", msg.addr, crate::keys::PAUSED_MESSAGE, e.name);
+                    return;
+                }
                 if !e.role.allows(&cmd) {
                     log::warn!("OSC command refused for {}: {} may present but not change settings", msg.addr, e.name);
                     return;
@@ -299,7 +303,7 @@ mod tests {
     }
 
     fn keys_for_role_test(keys: &KeySet, token: &str) {
-        keys.write().unwrap().entries.push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present });
+        keys.write().unwrap().entries.push(KeyEntry { hash: crate::keys::hash_key(token), name: "phone".into(), role: crate::keys::Role::Present, paused: false });
     }
 
     #[test]
