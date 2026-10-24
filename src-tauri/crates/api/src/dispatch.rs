@@ -51,9 +51,17 @@ impl CommandDispatcher {
     /// Like `dispatch`, naming who sent it (the paired device's name): in production notices and
     /// their answers (Rhema Comms, #251), and as `"by"` in every other command's event.
     pub fn dispatch_as(cmd: &RemoteCommand, sink: &dyn CommandSink, by: &str) -> Result<(), CommandError> {
+        Self::dispatch_from(cmd, sink, by, None)
+    }
+
+    /// Like `dispatch_as`, with the sending key's id (its hash) for a production notice: the host
+    /// keeps it on the notice as `fromId`, so "sent by this desk" is decided by the key, never by a
+    /// name a desk could copy. Only the server sets it; nothing in a request can.
+    pub fn dispatch_from(cmd: &RemoteCommand, sink: &dyn CommandSink, by: &str, by_id: Option<&str>) -> Result<(), CommandError> {
         let by: String = by.chars().take(60).collect();
         match cmd {
             RemoteCommand::NoticeSend(n) => sink.emit_event("remote:notice_send", &serde_json::json!({
+                "byId": by_id,
                 "text": n.text.chars().take(280).collect::<String>(), "to": match &n.to {
                     None => serde_json::json!("all"),
                     Some(crate::command::NoticeTo::Group(g)) => serde_json::json!(g),
@@ -346,6 +354,9 @@ mod tests {
         let named = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "Mic 2 is yours".into(), to: Some(crate::command::NoticeTo::Named { name: " Ade's phone ".into() }), priority: None, event: None, action: None });
         CommandDispatcher::dispatch_as(&named, &sink, "Main").unwrap();
         assert_eq!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["to"], serde_json::json!({ "name": "Ade's phone" }), "one desk by name");
+        assert!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["byId"].is_null(), "no key, no id");
+        CommandDispatcher::dispatch_from(&named, &sink, "Ade's phone", Some("abc123")).unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["byId"], "abc123", "the sending key's id, from the server");
         CommandDispatcher::dispatch(&RemoteCommand::NoticeAck(crate::command::NoticeAckIn { id: "n1".into(), state: "ready".into() }), &sink).unwrap();
         let (event, payload) = sink.last_event();
         assert_eq!(event, "remote:notice_ack");

@@ -123,13 +123,18 @@ describe("production notices", () => {
     expect(asTarget({ name: "  Ade's phone " })).toEqual({ name: "Ade's phone" })
     expect(asTarget({ name: "  " })).toBe("all")
     expect(asTarget({ id: 3 })).toBe("all")
-    const n = useNotices.getState().send({ from: "Main desk", to: { name: "Ade's phone" }, text: "Mic 2 is yours" })!
-    expect(n.to).toEqual({ name: "Ade's phone" })
+    useSettingsStore.setState({ remoteDevices: [{ hash: "h-ade", name: "Ade's phone", role: "bible", paired_at: "" }] as never })
+    const n = useNotices.getState().send({ from: "Main desk", fromId: "host", to: { name: "ade's phone" }, text: "Mic 2 is yours" })!
+    // The host's server delivers it by the device's key, found from the name now, not by the name.
+    expect(n).toMatchObject({ to: { name: "ade's phone" }, toId: "h-ade", fromId: "host" })
+    expect(useNotices.getState().send({ from: "Main desk", to: { name: "Nobody" }, text: "x" })!.toId).toBeUndefined()
+    useNotices.setState({ notices: [n] })
+    useSettingsStore.setState({ remoteDevices: [] })
     expect([isFor(n, "bible", "ade's phone"), isFor(n, "bible", "Femi"), isFor(n, "bible")]).toEqual([true, false, false])
     const onSend = vi.fn()
     const el = document.createElement("div")
     await act(async () => createRoot(el).render(<NoticesPanel notices={useNotices.getState().notices} role="host" me="Main desk" people={["Ade's phone", "Femi"]} onSend={onSend} onAnswer={vi.fn()} onAction={vi.fn()} />))
-    expect(el.textContent).toContain("→ Ade's phone")
+    expect(el.textContent).toContain("→ ade's phone")
     const to = el.querySelector('[aria-label="Send to"]') as HTMLSelectElement
     expect([...to.querySelectorAll("optgroup option")].map((o) => o.textContent)).toEqual(["Ade's phone", "Femi"])
     await act(async () => {

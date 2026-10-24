@@ -75,7 +75,7 @@ function HostNotices() {
           role="host"
           me={me}
           eventTitle={event?.reference ?? null}
-          onSend={(n) => useNotices.getState().send({ ...n, from: me, event: event ? { id: event.id, title: event.reference } : null })}
+          onSend={(n) => useNotices.getState().send({ ...n, from: me, fromId: "host", event: event ? { id: event.id, title: event.reference } : null })}
           onAnswer={(id, state) => useNotices.getState().answer(id, me, state)}
           onAction={runNoticeAction}
           scenes={scenes}

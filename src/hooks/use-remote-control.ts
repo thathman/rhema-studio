@@ -134,7 +134,7 @@ export function useRemoteControl() {
         const output = b.outputs.find((o) => o.id === p.output && (o.role ?? "congregation") === "congregation")
         if (output && typeof p.scene === "string") b.takeScene(output.id, p.scene)
       })
-      // Production notices (Rhema Comms): who sent it comes from the host, not the message.
+      // Production notices (Rhema Comms): who sent it (name and key id) comes from the host's server, not the message.
       keep(
         await listen<string>(REMOTE_EVENTS.notice_send, (e) => {
           if (cancelled) return
@@ -142,7 +142,7 @@ export function useRemoteControl() {
           if (!p || typeof p.text !== "string" || typeof p.by !== "string") return
           const items = useQueueStore.getState().items
           const ev = typeof p.event === "string" ? items.find((i) => i.id === p.event) : undefined
-          useNotices.getState().send({ from: p.by, to: p.to ?? "all", priority: typeof p.priority === "string" ? p.priority : "normal", text: p.text, event: ev ? { id: ev.id, title: ev.reference } : null, action: p.action })
+          useNotices.getState().send({ from: p.by, ...(typeof p.byId === "string" && p.byId ? { fromId: p.byId } : {}), to: p.to ?? "all", priority: typeof p.priority === "string" ? p.priority : "normal", text: p.text, event: ev ? { id: ev.id, title: ev.reference } : null, action: p.action })
         }),
       )
       keep(

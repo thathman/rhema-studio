@@ -245,29 +245,39 @@ impl LiveHub {
 pub type SharedLive = Arc<LiveHub>;
 
 /// Production notices stay private to the people they are for (Rhema Comms, #251): a paired desk
-/// gets the Live State with only the notices addressed to everyone, to its role, to it by name, or
-/// sent by it. `None` is the main desk (this computer itself), which gets them all. A state this
-/// server cannot read, or one without notices, goes out as it is.
+/// gets the Live State with only the notices addressed to everyone, to its role, to its key (one
+/// person), or sent by its key. Who sent a notice and whom it is for by name are decided by key ids
+/// the host stamped (`fromId`, `toId`: the key's hash, "host" for the main desk), never by display
+/// names, which a desk could copy; the ids themselves are taken out before a desk sees them.
+/// `None` is the main desk (this computer itself), which gets them all. A state this server cannot
+/// read, or one without notices, goes out as it is.
 #[must_use]
 pub fn notices_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
     let Some(reader) = reader else { return json.to_string() };
     let Ok(mut v) = serde_json::from_str::<serde_json::Value>(json) else { return json.to_string() };
     let Some(list) = v.get_mut("notices").and_then(serde_json::Value::as_array_mut) else { return json.to_string() };
     list.retain(|n| notice_is_for(n, reader));
+    for n in list.iter_mut() {
+        if let Some(o) = n.as_object_mut() {
+            o.remove("fromId");
+            o.remove("toId");
+        }
+    }
     v.to_string()
 }
 
 /// The same rule as the desks' own (src/stores/notices-store.ts `isFor`): a Present-and-settings
-/// desk also gets what is sent to the Present desks.
+/// desk also gets what is sent to the Present desks. A notice without ids (from before them) is
+/// only for its group.
 fn notice_is_for(n: &serde_json::Value, reader: &crate::keys::KeyEntry) -> bool {
     let role = reader.role.as_str();
-    let same = |v: &serde_json::Value| v.as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case(reader.name.trim()));
-    if n.get("from").is_some_and(same) {
+    let mine = |field: &str| !reader.hash.is_empty() && n.get(field).and_then(serde_json::Value::as_str).is_some_and(|id| crate::command::same_key(id, &reader.hash));
+    if mine("fromId") {
         return true;
     }
     match n.get("to") {
         Some(serde_json::Value::String(to)) => to == "all" || to == role || (role == "configure" && to == "present"),
-        Some(serde_json::Value::Object(to)) => to.get("name").is_some_and(same),
+        Some(serde_json::Value::Object(_)) => mine("toId"),
         _ => false,
     }
 }
@@ -946,9 +956,10 @@ async fn command_handler<S: CommandSink + 'static>(
                 Json(CommandResponse { success: false, error: Some(why.into()) }),
             );
         }
-        Ok(Some(entry)) => entry.name,
-        Ok(None) => "an open remote".to_string(),
+        Ok(Some(entry)) => (entry.name, Some(entry.hash)),
+        Ok(None) => ("an open remote".to_string(), None),
     };
+    let (by, by_id) = by;
     // Several services must never share state (#246 C16): a desk still showing the 9 AM service
     // cannot move the 11 AM one. Crew talk is not about a service.
     if !request.command.is_comms() {
@@ -963,7 +974,7 @@ async fn command_handler<S: CommandSink + 'static>(
         log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
         return (StatusCode::OK, Json(CommandResponse { success: true, error: None }));
     }
-    match CommandDispatcher::dispatch_as(&request.command, &*state.sink, &by) {
+    match CommandDispatcher::dispatch_from(&request.command, &*state.sink, &by, by_id.as_deref()) {
         Ok(()) => (
             StatusCode::OK,
             Json(CommandResponse {
@@ -996,12 +1007,15 @@ mod tests {
 
     struct MockSink {
         commands: Mutex<Vec<String>>,
+        /// The last production notice's event, as the app would receive it.
+        notice: Mutex<Option<String>>,
     }
 
     impl MockSink {
         fn new() -> Self {
             Self {
                 commands: Mutex::new(Vec::new()),
+                notice: Mutex::new(None),
             }
         }
 
@@ -1011,7 +1025,10 @@ mod tests {
     }
 
     impl CommandSink for MockSink {
-        fn emit_event(&self, event: &str, _payload: &str) -> Result<(), CommandError> {
+        fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+            if event == "remote:notice_send" {
+                *self.notice.lock().unwrap() = Some(payload.to_string());
+            }
             // Commands only: the service log's record of each (remote:audit) is not a command.
             if event != "remote:audit" {
                 self.commands.lock().unwrap().push(event.to_string());
@@ -1126,18 +1143,24 @@ mod tests {
         h.stop();
     }
 
+    /// A paired key; its hash is its id (here a short stand-in per desk).
     fn desk(name: &str, role: crate::keys::Role) -> crate::keys::KeyEntry {
-        crate::keys::KeyEntry { hash: "h".into(), name: name.into(), role, paused: false }
+        let hash = match name.to_lowercase().as_str() {
+            "ade's phone" => "h-ade",
+            "femi" => "h-femi",
+            _ => "h-other",
+        };
+        crate::keys::KeyEntry { hash: hash.into(), name: name.into(), role, paused: false }
     }
 
     const NOTICES: &str = r#"{"v":1,"notices":[
-        {"id":"all","from":"Main desk","to":"all","text":"Doors open"},
-        {"id":"tk","from":"Main desk","to":"timekeeper","text":"Pastor has 5 minutes"},
-        {"id":"bb","from":"Main desk","to":"bible","text":"Romans next"},
-        {"id":"pr","from":"Main desk","to":"present","text":"Slides ready?"},
-        {"id":"host","from":"Femi","to":"host","text":"Running late"},
-        {"id":"ade","from":"Main desk","to":{"name":"Ade's phone"},"text":"Mic 2 is yours"},
-        {"id":"mine","from":"Ade's phone","to":"host","text":"Ready"}
+        {"id":"all","from":"Tolu (main desk)","fromId":"host","to":"all","text":"Doors open"},
+        {"id":"tk","from":"Tolu (main desk)","fromId":"host","to":"timekeeper","text":"Pastor has 5 minutes"},
+        {"id":"bb","from":"Tolu (main desk)","fromId":"host","to":"bible","text":"Romans next"},
+        {"id":"pr","from":"Tolu (main desk)","fromId":"host","to":"present","text":"Slides ready?"},
+        {"id":"host","from":"Femi","fromId":"h-femi","to":"host","text":"Running late"},
+        {"id":"ade","from":"Tolu (main desk)","fromId":"host","to":{"name":"Ade's phone"},"toId":"h-ade","text":"Mic 2 is yours"},
+        {"id":"mine","from":"Ade's phone","fromId":"h-ade","to":"host","text":"Ready"}
     ]}"#;
 
     fn ids(json: &str) -> Vec<String> {
@@ -1151,12 +1174,38 @@ mod tests {
         assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Ade's phone", Role::Bible)))), ["all", "bb", "ade", "mine"], "a Bible desk never gets the Timekeeper's");
         assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Femi", Role::Timekeeper)))), ["all", "tk", "host"], "its role's, and what it sent");
         assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Laptop", Role::Configure)))), ["all", "pr"], "Present and settings also gets the Present desks'");
-        assert_eq!(ids(&notices_for(NOTICES, Some(&desk("ade's PHONE", Role::Screens)))), ["all", "ade", "mine"], "names match as pairing keeps them unique (any case)");
+        assert_eq!(ids(&notices_for(NOTICES, Some(&desk("ade's PHONE", Role::Screens)))), ["all", "ade", "mine"], "by its key, whatever its role");
         assert_eq!(ids(&notices_for(NOTICES, None)).len(), 7, "the main desk sees every notice");
+        // The key ids never reach a desk.
+        assert!(!notices_for(NOTICES, Some(&desk("Ade's phone", Role::Bible))).contains("h-ade"));
+        assert!(notices_for(NOTICES, None).contains("fromId"), "the main desk's own copy is as published");
         // Nothing else in the state changes; a state without notices goes out as it is.
         let v: serde_json::Value = serde_json::from_str(&notices_for(NOTICES, Some(&desk("x", Role::Bible)))).unwrap();
         assert_eq!(v["v"], 1);
         assert_eq!(notices_for(r#"{"v":1,"now":"Sermon"}"#, Some(&desk("x", Role::Bible))), r#"{"v":1,"now":"Sermon"}"#);
+    }
+
+    #[test]
+    fn a_desk_named_like_the_main_desk_gets_none_of_its_private_notices() {
+        use crate::keys::{KeyEntry, Role};
+        // Paired before names were checked, or named to look like it: matched by key, not name.
+        let mimic = KeyEntry { hash: "h-mimic".into(), name: "Tolu (main desk)".into(), role: Role::Screens, paused: false };
+        assert_eq!(ids(&notices_for(NOTICES, Some(&mimic))), ["all"]);
+        let named_like_ade = KeyEntry { hash: "h-mimic".into(), name: "Ade's phone".into(), role: Role::Screens, paused: false };
+        assert_eq!(ids(&notices_for(NOTICES, Some(&named_like_ade))), ["all"], "a copied name gets neither Ade's notice nor what Ade sent");
+        // A key whose hash is literally "host" cannot exist (hashes are 64 hex characters), and an empty one matches nothing.
+        let empty = KeyEntry { hash: String::new(), name: "x".into(), role: Role::Screens, paused: false };
+        assert_eq!(ids(&notices_for(NOTICES, Some(&empty))), ["all"]);
+    }
+
+    #[test]
+    fn a_renamed_desk_keeps_what_it_sent_and_what_is_for_it() {
+        use crate::keys::{KeyEntry, Role};
+        let renamed = KeyEntry { hash: "h-ade".into(), name: "Ade at the back".into(), role: Role::Screens, paused: false };
+        assert_eq!(ids(&notices_for(NOTICES, Some(&renamed))), ["all", "ade", "mine"]);
+        // Notices from before ids: only their group; a name alone reaches no one.
+        let old = r#"{"v":1,"notices":[{"id":"o1","from":"Ade's phone","to":"host","text":"x"},{"id":"o2","from":"Main desk","to":{"name":"Ade's phone"},"text":"y"},{"id":"o3","from":"Main desk","to":"screens","text":"z"}]}"#;
+        assert_eq!(ids(&notices_for(old, Some(&renamed))), ["o3"]);
     }
 
     #[tokio::test]
@@ -1166,10 +1215,18 @@ mod tests {
         let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("bib", "Ade's phone", Role::Bible), entry("tim", "Femi", Role::Timekeeper)] }));
         let live = new_live_hub();
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
-        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let sink = Arc::new(MockSink::new());
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        live.publish(NOTICES.into());
+        live.publish(NOTICES.replace("h-ade", &hash_key("bib")).replace("h-femi", &hash_key("tim")));
+
+        // A notice sent with a key carries that key's id, stamped by the server; the body cannot say otherwise.
+        let sent = raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"notice_send","value":{"text":"Ready","to":"host","byId":"host","fromId":"host"}}"#), "X-Rhema-Key: bib\r\n").await;
+        assert!(sent.contains("200 OK"), "{sent}");
+        let event: serde_json::Value = serde_json::from_str(sink.notice.lock().unwrap().as_deref().unwrap()).unwrap();
+        assert_eq!(event["byId"], hash_key("bib"));
+        assert_eq!(event["by"], "Ade's phone");
 
         let bible = get_with(port, "/api/v1/live", "X-Rhema-Key: bib\r\n", None).await;
         assert!(bible.contains("Romans next") && bible.contains("Mic 2 is yours") && !bible.contains("Pastor has 5 minutes") && !bible.contains("Running late"), "{bible}");

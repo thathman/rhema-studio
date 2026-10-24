@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { useSettingsStore } from "@/stores/settings-store"
 
 /**
  * Production notices (Rhema Comms C1, #251): short private messages between the host desk and the
@@ -21,7 +22,15 @@ export interface NoticeAction { kind: "bible" | "scene" | "event"; value: string
 export interface Notice {
   id: string
   from: string
+  /**
+   * Who sent it, as the host knows it: the sending key's id (stamped by the host's server, never
+   * taken from a message) or "host" for the main desk. The server decides "sent by this desk" by it,
+   * not by the name. Absent on notices from before it.
+   */
+  fromId?: string
   to: NoticeTarget
+  /** For one person: that paired device's key id, found from the name when the notice is made. */
+  toId?: string
   priority: "normal" | "urgent"
   text: string
   /** The run-of-show event it is about. */
@@ -39,7 +48,7 @@ interface NoticesState {
   notices: Notice[]
   /** Notices this desk has read (ids), for the unread count. */
   read: string[]
-  send: (n: { from: string; to?: unknown; priority?: string; text: string; event?: { id: string; title: string } | null; action?: unknown }) => Notice | null
+  send: (n: { from: string; fromId?: string; to?: unknown; priority?: string; text: string; event?: { id: string; title: string } | null; action?: unknown }) => Notice | null
   answer: (id: string, by: string, state: string) => void
   markRead: (ids: string[]) => void
   /** Notices kept from the run that closed unexpectedly (src/lib/live-recovery.ts), behind any sent since. */
@@ -49,13 +58,18 @@ interface NoticesState {
 export const useNotices = create<NoticesState>((set, get) => ({
   notices: [],
   read: [],
-  send: ({ from, to, priority, text, event, action }) => {
+  send: ({ from, fromId, to, priority, text, event, action }) => {
     const body = text.trim().slice(0, 280)
     if (!body) return null
+    const target = asTarget(to)
+    // One person: the paired device of that name now, by its key (the host's server delivers by it).
+    const toId = typeof target === "object" ? useSettingsStore.getState().remoteDevices.find((d) => d.name.trim().toLowerCase() === target.name.toLowerCase())?.hash : undefined
     const notice: Notice = {
       id: crypto.randomUUID(),
       from: from.trim().slice(0, 60) || "Someone",
-      to: asTarget(to),
+      ...(fromId ? { fromId } : {}),
+      to: target,
+      ...(toId ? { toId } : {}),
       priority: priority === "urgent" ? "urgent" : "normal",
       text: body,
       event: event ?? null,
