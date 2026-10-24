@@ -1,23 +1,23 @@
 export const SITE = {
-  name: "Rhema",
-  legalName: "openbezal",
-  tagline: "Your Pastor speaks. Rhema finds the verse.",
+  name: "Rhema Studio",
+  legalName: "Rhema Studio contributors",
+  tagline: "Plan. Produce. Present. Together.",
   shortDescription:
-    "Real-time AI Bible verse detection for live sermons. Free, open-source, broadcast-ready via NDI.",
+    "Local-first church service planning, live Scripture and worship presentation, and broadcast production.",
   description:
-    "Rhema listens to a live sermon audio feed, transcribes speech in real time, detects Bible verse references (both explicit citations and quoted passages), and renders them as broadcast-ready overlays via NDI for live production.",
-  url: "https://openrhema.com",
+    "Rhema Studio helps church teams plan services, present Bible passages and songs, collaborate, and operate live congregation and broadcast graphics with local-first reliability.",
+  url: process.env.NEXT_PUBLIC_SITE_URL || "https://github.com/thathman/rhema-studio",
   locale: "en_US",
-  twitterHandle: "@openbezal",
+  twitterHandle: "",
   founded: "2025",
   category: "ChurchSoftware",
   operatingSystems: ["Windows", "macOS"],
   repo: {
-    owner: "openbezal",
-    name: "rhema",
-    url: "https://github.com/openbezal/rhema",
-    releases: "https://github.com/openbezal/rhema/releases",
-    latestRelease: "https://github.com/openbezal/rhema/releases/latest",
+    owner: "thathman",
+    name: "rhema-studio",
+    url: "https://github.com/thathman/rhema-studio",
+    releases: "https://github.com/thathman/rhema-studio/releases",
+    latestRelease: "https://github.com/thathman/rhema-studio/releases",
     // `/releases/latest` resolves to the newest published, non-prerelease
     // release, so these track each tagged release with no hand re-upload. The
     // release workflow ships a copy of each installer under these exact stable
@@ -25,22 +25,22 @@ export const SITE = {
     // with the `aliases` list in .github/workflows/build-release.yml or these
     // links 404.
     downloadWindows:
-      "https://github.com/openbezal/rhema/releases/latest/download/Rhema-windows-x64-setup.exe",
+      "https://github.com/thathman/rhema-studio/releases",
     // Apple Silicon only — the build matrix has no x86_64-apple-darwin target.
     downloadMac:
-      "https://github.com/openbezal/rhema/releases/latest/download/Rhema-macos-arm64.dmg",
+      "https://github.com/thathman/rhema-studio/releases",
     // AppImage runs on any distro without a package manager step, so it is the
     // one-click choice; .deb and .rpm stay on the release page.
     downloadLinux:
-      "https://github.com/openbezal/rhema/releases/latest/download/Rhema-linux-x86_64.AppImage",
-    discussions: "https://github.com/openbezal/rhema/discussions",
-    stars: { fallback: 221 },
+      "https://github.com/thathman/rhema-studio/releases",
+    discussions: "https://github.com/thathman/rhema-studio/discussions",
+    stars: { fallback: 0 },
   },
   socials: {
-    github: "https://github.com/openbezal/rhema",
-    twitter: "https://x.com/openbezal",
-    linkedin: "https://www.linkedin.com/company/openbezal",
-    email: "mailto:hello@openbezal.com",
+    github: "https://github.com/thathman/rhema-studio",
+    twitter: "",
+    linkedin: "",
+    email: "",
   },
   stats: {
     languages: "2+",
