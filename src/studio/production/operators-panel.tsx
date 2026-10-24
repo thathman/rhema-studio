@@ -210,12 +210,15 @@ function JoinedDesk() {
               eventTitle={live.rundown.find((r) => r.id === live.event.currentId)?.reference ?? null}
               onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
               onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
-              onAction={async (a) => {
-                // The host checks this desk's role for each, as for its own buttons; its refusal is the reason.
+              onAction={async (a, mode) => {
+                // The host checks this desk's role for each, as for its own buttons; its refusal is the
+                // reason. Preview puts a verse or a song in the main desk's Preview only.
+                if (a.kind === "camera") return null // answering is the action
                 const send = useJoin.getState().send
-                const results = a.kind === "bible" ? [await send({ command: "bible_activate", value: a.value })]
-                  : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
-                    : await Promise.all(sceneTargets(live.outputs).map((output) => send({ command: "take_scene", value: { output, scene: a.value } })))
+                const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
+                  : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
+                    : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
+                      : await Promise.all(sceneTargets(live.outputs).map((output) => send({ command: "take_scene", value: { output, scene: a.value } })))
                 if (results.length === 0) return "the host has no congregation output"
                 const refused = results.find((r) => !r.ok)
                 return refused && !refused.ok ? refused.error : null
@@ -223,6 +226,7 @@ function JoinedDesk() {
               scenes={live.scenes}
               rundown={live.rundown}
               people={live.crew ?? []}
+              cameras={live.sources.filter((s) => s.id.startsWith("camera:")).map((s) => s.reference ?? s.id.slice(7))}
             />
           </section>
         </>

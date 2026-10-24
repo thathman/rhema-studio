@@ -47,7 +47,9 @@ impl Role {
             // Production notices and the talk channel are for everyone on the team (Rhema Comms, #251).
             RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => true,
             RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
-            RemoteCommand::BibleActivate(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
+            RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
+            // Songs and hymns are the main screens' content: the Present desks only.
+            RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) => matches!(self, Role::Present | Role::Configure),
             RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => matches!(self, Role::Present | Role::Configure) || (self == Role::Bible && id == "bible"),
             RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => matches!(self, Role::Present | Role::Configure | Role::Screens),
             _ if matches!(self, Role::Timekeeper | Role::Bible | Role::Screens) => false,
@@ -314,7 +316,7 @@ mod tests {
     #[test]
     fn bible_and_screens_operators_do_only_their_part() {
         let take = RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "s".into() });
-        for cmd in [RemoteCommand::BibleActivate("John 3:16".into()), RemoteCommand::VerseNext, RemoteCommand::ClearSource("bible".into()), RemoteCommand::RestoreSource("bible".into())] {
+        for cmd in [RemoteCommand::BibleActivate("John 3:16".into()), RemoteCommand::BiblePreview("John 3:16".into()), RemoteCommand::VerseNext, RemoteCommand::ClearSource("bible".into()), RemoteCommand::RestoreSource("bible".into())] {
             assert!(Role::Bible.allows(&cmd), "{cmd}");
             assert!(!Role::Screens.allows(&cmd), "{cmd}");
         }
@@ -327,6 +329,11 @@ mod tests {
         }
         assert!(Role::Present.allows(&take) && Role::Present.allows(&RemoteCommand::ClearSource("hymn".into())));
         assert!(!Role::Timekeeper.allows(&RemoteCommand::BibleActivate("x".into())));
+        // A song or hymn asked for (Comms C2): the Present desks only.
+        for cmd in [RemoteCommand::SongShow("Amazing Grace".into()), RemoteCommand::SongPreview("Amazing Grace".into())] {
+            assert!(Role::Present.allows(&cmd) && Role::Configure.allows(&cmd), "{cmd}");
+            assert!(!Role::Bible.allows(&cmd) && !Role::Screens.allows(&cmd) && !Role::Timekeeper.allows(&cmd), "{cmd}");
+        }
     }
 
     #[test]

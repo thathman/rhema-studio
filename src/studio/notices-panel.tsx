@@ -1,17 +1,21 @@
-import { useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { NOTICE_TARGETS, TARGET_NAMES, isFor, targetName, type Notice, type NoticeAction, type NoticeAnswer, type NoticeTarget, type NoticeTo } from "@/stores/notices-store"
+import { NOTICE_TARGETS, TARGET_NAMES, canPreview, isFor, targetName, type ActionMode, type Notice, type NoticeAction, type NoticeAnswer, type NoticeTarget, type NoticeTo } from "@/stores/notices-store"
+import { useSongStore } from "@/stores/song-store"
 
 const ANSWER_NAMES: Record<NoticeAnswer, string> = { seen: "Seen", ready: "Ready", unable: "Unable" }
 const ago = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+
+/** Songs and hymns in this computer's library whose title matches, for asking for one by title. */
+const librarySongs = async (q: string) => (await useSongStore.getState().lookup(q, 8)).map((s) => ({ title: s.title, number: s.numbers[0] }))
 
 /**
  * Production notices (Rhema Comms C1, #251), the same on the main desk and on a joined desk: what
  * is for this desk (and what it sent), write one, and answer Seen / Ready / Unable. Private: nothing
  * here reaches a screen.
  */
-export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, eventTitle, scenes = [], rundown = [], people = [] }: {
+export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, eventTitle, scenes = [], rundown = [], people = [], cameras = [], findSongs = librarySongs }: {
   notices: Notice[]
   /** "host" on the main desk, else the joined desk's role. */
   role: string
@@ -20,14 +24,19 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
   onAnswer: (id: string, state: NoticeAnswer) => void
   /**
    * Do what an action request asks (Comms C2), on this desk, when its button is pressed: null when
-   * it was done, else why not (the host's reason, for a joined desk).
+   * it was done, else why not (the host's reason, for a joined desk). `mode`: Show, or Preview only
+   * for a verse or a song.
    */
-  onAction: (action: NoticeAction) => Promise<string | null> | string | null
+  onAction: (action: NoticeAction, mode: ActionMode) => Promise<string | null> | string | null
   /** Paired desks and people a notice can go to by name (besides the groups). */
   people?: string[]
   /** For writing and naming action requests. */
   scenes?: { id: string; name: string }[]
   rundown?: { id: string; reference: string }[]
+  /** Camera names to suggest for "camera ready". */
+  cameras?: string[]
+  /** Songs and hymns matching a title, to ask for one (this computer's library by default). */
+  findSongs?: (q: string) => Promise<{ title: string; number?: string }[]>
   /** The event happening now, attached to what this desk sends. */
   eventTitle?: string | null
 }) {
@@ -40,19 +49,33 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
   const [urgent, setUrgent] = useState(false)
   const [kind, setKind] = useState<"" | NoticeAction["kind"]>("")
   const [value, setValue] = useState("")
+  const [songs, setSongs] = useState<{ title: string; number?: string }[]>([])
+  const listId = useId()
   const action: NoticeAction | null = kind && value.trim() ? { kind, value: value.trim() } : null
+  // Asking for a song or hymn: the library's titles that match what is typed, shortly after typing stops.
+  useEffect(() => {
+    const q = value.trim()
+    if (kind !== "song" || q.length < 2) return
+    let gone = false
+    const t = setTimeout(() => void findSongs(q).then((found) => { if (!gone) setSongs(found) }).catch(() => {}), 200)
+    return () => { gone = true; clearTimeout(t) }
+  }, [kind, value, findSongs])
   const actionName = (a: NoticeAction) =>
-    a.kind === "bible" ? `Show ${a.value}`
-      : a.kind === "scene" ? `Take ${scenes.find((s) => s.id === a.value)?.name ?? "the scene"}`
-        : `Start ${rundown.find((r) => r.id === a.value)?.reference ?? "the item"}`
+    a.kind === "bible" || a.kind === "song" ? `Show ${a.value}`
+      : a.kind === "camera" ? `Is ${a.value} framed?`
+        : a.kind === "scene" ? `Take ${scenes.find((s) => s.id === a.value)?.name ?? "the scene"}`
+          : `Start ${rundown.find((r) => r.id === a.value)?.reference ?? "the item"}`
   const mine = notices.filter((n) => role === "host" || isFor(n, role, me) || n.from === me)
   const target: NoticeTarget = to.startsWith("name:") ? { name: to.slice(5) } : (to as NoticeTo)
-  /** Pressing it is the recipient's own act: Ready when it was done, Unable (and why) when not. */
-  const act = async (n: Notice) => {
+  /**
+   * Pressing it is the recipient's own act: Ready when it was done (for a joined desk, when the main
+   * desk accepted it), Unable (and why) when not.
+   */
+  const act = async (n: Notice, mode: ActionMode) => {
     setBusy(n.id)
-    const why = await Promise.resolve(onAction(n.action!)).catch((e: unknown) => String(e))
+    const why = await Promise.resolve(onAction(n.action!, mode)).catch((e: unknown) => String(e))
     setBusy(null)
-    setFailed((f) => ({ ...f, [n.id]: why ?? "" }))
+    setFailed((f) => ({ ...f, [n.id]: why ? `${mode === "preview" ? `“Preview ${n.action!.value}”` : `“${actionName(n.action!)}”`} was not done: ${why}` : "" }))
     onAnswer(n.id, why ? "unable" : "ready")
   }
   return (
@@ -85,10 +108,24 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
           <select aria-label="Ask them to" value={kind} onChange={(e) => { setKind(e.target.value as typeof kind); setValue("") }} className="h-8 rounded-md border border-input bg-card px-1.5">
             <option value="">Just a message</option>
             <option value="bible">Ask to show a verse</option>
+            <option value="song">Ask to show a song or hymn</option>
             {scenes.length > 0 && <option value="scene">Ask to take a scene</option>}
             {rundown.length > 0 && <option value="event">Ask to start an item</option>}
+            <option value="camera">Ask if a camera is ready</option>
           </select>
           {kind === "bible" && <input aria-label="Verse" value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Romans 8:28" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />}
+          {kind === "song" && (
+            <>
+              <input aria-label="Song or hymn" list={`${listId}-songs`} value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Title, from the library" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+              <datalist id={`${listId}-songs`}>{songs.map((s) => <option key={s.title} value={s.title}>{s.number ? `${s.title} · ${s.number}` : s.title}</option>)}</datalist>
+            </>
+          )}
+          {kind === "camera" && (
+            <>
+              <input aria-label="Camera" list={`${listId}-cameras`} value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Camera 2" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+              <datalist id={`${listId}-cameras`}>{cameras.map((c) => <option key={c} value={c} />)}</datalist>
+            </>
+          )}
           {kind === "scene" && (
             <select aria-label="Scene" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-1.5">
               <option value="">Choose a scene</option>
@@ -119,12 +156,14 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
                 <span className="text-muted-foreground">→ {targetName(n.to)} · {ago(n.at)}{n.event ? ` · ${n.event.title}` : ""}</span>
               </div>
               <p className="text-sm">{n.text}</p>
-              {n.action && !forMe && <p className="text-muted-foreground">Asks: {actionName(n.action)}</p>}
+              {n.action && (!forMe || n.action.kind === "camera") && <p className="text-muted-foreground">Asks: {actionName(n.action)}{forMe ? " Answer Ready when it is, or Unable." : ""}</p>}
               {n.answers.length > 0 && <p className="text-muted-foreground">{n.answers.map((a) => `${a.by}: ${ANSWER_NAMES[a.state]}`).join(" · ")}</p>}
-              {forMe && failed[n.id] && <p role="alert" className="text-destructive">{n.action ? `“${actionName(n.action)}” was not done` : "Not done"}: {failed[n.id]}. Answered Unable.</p>}
+              {forMe && failed[n.id] && <p role="alert" className="text-destructive">{failed[n.id]}. Answered Unable.</p>}
               {forMe && (
                 <div role="group" aria-label={`Answer ${n.from}`} className="flex flex-wrap gap-1">
-                  {n.action && <Button size="xs" disabled={busy === n.id} onClick={() => void act(n)}>{actionName(n.action)}</Button>}
+                  {n.action && n.action.kind !== "camera" && <Button size="xs" disabled={busy === n.id} onClick={() => void act(n, "show")}>{actionName(n.action)}</Button>}
+                  {/* Preview only: the main desk's Preview, nothing goes live. */}
+                  {n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main desk's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
                   {(["seen", "ready", "unable"] as const).map((s) => (
                     <Button key={s} size="xs" variant={answered?.state === s ? "default" : "outline"} onClick={() => onAnswer(n.id, s)}>{ANSWER_NAMES[s]}</Button>
                   ))}

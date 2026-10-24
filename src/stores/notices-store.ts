@@ -14,10 +14,19 @@ export type NoticeTarget = NoticeTo | { name: string }
 export type NoticeAnswer = "seen" | "ready" | "unable"
 /**
  * An action request (Comms C2): what the recipient is asked to do. It is only offered on their desk
- * as one button; nothing runs until they press it. bible: a reference; scene: a scene id; event: a
- * run-of-show item id.
+ * as a button; nothing runs until they press it. bible: a reference; song: a song or hymn's title
+ * in the library; scene: a scene id; event: a run-of-show item id; camera: a camera's name, asked
+ * whether it is framed (answering Ready or Unable is the action).
  */
-export interface NoticeAction { kind: "bible" | "scene" | "event"; value: string }
+export interface NoticeAction { kind: "bible" | "song" | "scene" | "event" | "camera"; value: string }
+export const ACTION_KINDS: readonly NoticeAction["kind"][] = ["bible", "song", "scene", "event", "camera"]
+/**
+ * How the recipient carries out a request that puts something on screen: Show (as the button says)
+ * or Preview (into the main desk's Preview only; nothing goes live).
+ */
+export type ActionMode = "show" | "preview"
+/** Requests that can go to Preview first: a verse, a song or hymn. A scene has no Preview: it is taken or not. */
+export const canPreview = (a: NoticeAction): boolean => a.kind === "bible" || a.kind === "song"
 
 export interface Notice {
   id: string
@@ -122,8 +131,9 @@ export function isFor(n: Notice, role: string, name?: string): boolean {
 export function asAction(a: unknown): NoticeAction | null {
   if (!a || typeof a !== "object") return null
   const { kind, value } = a as Record<string, unknown>
-  if ((kind !== "bible" && kind !== "scene" && kind !== "event") || typeof value !== "string" || !value.trim()) return null
-  return { kind, value: value.trim().slice(0, 120) }
+  const k = ACTION_KINDS.find((x) => x === kind)
+  if (!k || typeof value !== "string" || !value.trim()) return null
+  return { kind: k, value: value.trim().slice(0, 120) }
 }
 
 /**

@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core"
 import { presentVerse, type PresentOutcome } from "@/hooks/use-broadcast"
 import { sourceOf } from "@/lib/live-sources"
 import { parseTypedReference } from "@/lib/quick-search"
@@ -24,6 +25,22 @@ export async function activateBibleReference(reference: string): Promise<Present
   const verse = { id: 0, translation_id: useBibleStore.getState().activeTranslationId ?? 1, book_number: ref.book.book_number, book_name: ref.book.name, book_abbreviation: ref.book.abbreviation ?? "", chapter: ref.chapter, verse: ref.verse, text: "" }
   const scope = bibleScope()
   return presentVerse(verse, scope.sourceOnly ? scope : { goLive: true })
+}
+
+/**
+ * A typed reference put in Preview only (an action request answered Preview, Comms C2): the verse
+ * in the active translation is selected and the Bible panel goes to it; nothing goes live and no
+ * feed changes. "empty" when that verse has no text here; null when it is not a reference.
+ */
+export async function previewBibleReference(reference: string): Promise<"previewed" | "empty" | null> {
+  const bible = useBibleStore.getState()
+  const ref = parseTypedReference(reference, bible.books)
+  if (!ref) return null
+  const verse = await invoke<Verse | null>("get_verse", { translationId: bible.activeTranslationId ?? 1, bookNumber: ref.book.book_number, chapter: ref.chapter, verse: ref.verse }).catch(() => null)
+  if (!verse?.text?.trim()) return "empty"
+  useBibleStore.getState().selectVerse(verse)
+  useBibleStore.getState().setPendingNavigation({ bookNumber: verse.book_number, chapter: verse.chapter, verse: verse.verse })
+  return "previewed"
 }
 
 /**

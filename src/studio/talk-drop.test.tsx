@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { JoinedTalk, TalkDevices } from "./talk"
-import { TalkClient, canChooseTalkOutput, openTalkMic, startVoiceHub, useVoice, type TalkStatus } from "@/lib/voice"
+import { TalkClient, canChooseTalkOutput, openTalkMic, routeLevel, setHostChannels, startVoiceHub, useVoice, type TalkStatus } from "@/lib/voice"
 import { useSettingsStore } from "@/stores/settings-store"
 
 /** A stand-in for the browser's WebRTC connection: the test moves its state. */
@@ -224,6 +224,44 @@ describe("the main desk's view of a dropped desk", () => {
     // Another output chosen while the hub runs: used at once.
     useSettingsStore.setState({ talkOutputId: "" })
     expect(FakeContext.last!.setSinkId).toHaveBeenLastCalledWith("")
+    stop()
+  })
+
+  it("a private call reaches the desk it was chosen for by key, never a desk named like it (#251)", async () => {
+    const stop = startVoiceHub()
+    // Each desk as the host's server stamps it: its name, and its key id.
+    const join = async (by: string, byId: string) => {
+      handlers.get("remote:voice_offer")!({ payload: JSON.stringify({ id: byId, by, byId, sdp: "offer" }) })
+      await vi.advanceTimersByTimeAsync(10)
+      const pc = FakePC.all.at(-1)!
+      pc.ontrack?.({ streams: [{}], track: {} })
+      return pc
+    }
+    await join("Ade", "k-ade")
+    await join("\u0410de", "k-look") // a look-alike name (a Cyrillic "А")
+    await join("Femi", "k-femi")
+    expect(useVoice.getState().peers.map((p) => [p.id, p.name])).toEqual([["k-ade", "Ade"], ["k-look", "\u0410de"], ["k-femi", "Femi"]])
+    handlers.get("remote:voice_channels")!({ payload: JSON.stringify({ by: "Femi", byId: "k-femi", listen: [], talk: "to:Ade" }) })
+    expect([routeLevel("k-femi", "k-ade"), routeLevel("k-femi", "k-look"), routeLevel("k-femi", "host")]).toEqual([1, 0, 0])
+    // Talk events are matched by key too: a desk sending under another's name moves nobody else.
+    handlers.get("remote:voice_talk")!({ payload: JSON.stringify({ by: "Ade", byId: "k-look", on: true }) })
+    expect(useVoice.getState().peers.map((p) => p.talking)).toEqual([false, true, false])
+
+    // Ade leaves; a new key paired under the very same name joins: the call was for Ade's key.
+    handlers.get("remote:voice_leave")!({ payload: JSON.stringify({ by: "Ade", byId: "k-ade" }) })
+    await join("Ade", "k-new")
+    expect(routeLevel("k-femi", "k-new")).toBe(0)
+    // Ade back on the same key: heard again.
+    await join("Ade", "k-ade")
+    expect(routeLevel("k-femi", "k-ade")).toBe(1)
+
+    // The main desk picks a desk from its crew list by key; the name is for reading.
+    setHostChannels([], "to:\u0410de", "k-look")
+    expect(useVoice.getState()).toMatchObject({ hostTalkTo: "to:\u0410de", hostTalkToId: "k-look" })
+    // Revoking a key drops that desk from the channel, whatever its name.
+    useSettingsStore.setState({ remoteDevices: [{ hash: "k-look", name: "\u0410de", role: "present", paired_at: "" }] as never })
+    useSettingsStore.setState({ remoteDevices: [] })
+    expect(useVoice.getState().peers.map((p) => p.id)).toEqual(["k-femi", "k-new", "k-ade"])
     stop()
   })
 

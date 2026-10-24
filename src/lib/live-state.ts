@@ -185,10 +185,13 @@ function stateSourceRows(): LiveStateV1["sources"] {
   return rows
 }
 
-/** The talk channel as joined desks see it: the main desk first (when it talks), then each desk. */
+/**
+ * The talk channel as joined desks see it: the main desk first (when it talks), then each desk, by
+ * name only (the key ids the main desk routes by stay on it).
+ */
 function voiceCrew(): VoicePerson[] {
   const v = useVoice.getState()
   const operator = useSettingsStore.getState().operatorName.trim()
   const host = v.hostTalking || v.hostSpeaking ? [{ name: operator ? `${operator} (main desk)` : "Main desk", talk: v.hostTalkTo, talking: v.hostTalking, speaking: v.hostSpeaking }] : []
-  return [...host, ...v.peers]
+  return [...host, ...v.peers.map((p) => ({ name: p.name, talk: p.talk, talking: p.talking, speaking: p.speaking }))]
 }

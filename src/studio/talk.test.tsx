@@ -7,7 +7,7 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { TalkButton } from "./talk"
-import { hears, talkName } from "@/lib/voice"
+import { callTarget, hears, talkName } from "@/lib/voice"
 
 /** Hold to talk (Rhema Comms C3): talk only while held; letting go or leaving the window stops it. */
 describe("the Talk button", () => {
@@ -32,15 +32,29 @@ describe("the Talk button", () => {
   })
 
   it("talk channels: All crew reaches everyone, a channel its listeners, a private call one person", () => {
-    expect(hears("all", "Ade", [])).toBe(true)
-    expect(hears("production", "Ade", ["production"])).toBe(true)
-    expect(hears("production", "Femi", ["stage"])).toBe(false)
-    expect(hears("to:Ade", "Ade", [])).toBe(true)
-    expect(hears("to:Ade", "Femi", ["production", "stage"])).toBe(false)
-    expect(hears("to:host", "host", [])).toBe(true)
+    expect(hears("all", "k-ade", [])).toBe(true)
+    expect(hears("production", "k-ade", ["production"])).toBe(true)
+    expect(hears("production", "k-femi", ["stage"])).toBe(false)
+    // A private call reaches the key it was chosen for, never a name.
+    expect(hears("to:Ade", "k-ade", [], "k-ade")).toBe(true)
+    expect(hears("to:Ade", "k-femi", ["production", "stage"], "k-ade")).toBe(false)
+    expect(hears("to:Ade", "Ade", [], "k-ade")).toBe(false)
+    expect(hears("to:Ade", "k-ade", [])).toBe(false)
+    expect(hears("to:host", "host", [], "host")).toBe(true)
     expect([talkName("all"), talkName("stage"), talkName("to:Ade"), talkName("to:host", "Tolu (main desk)")]).toEqual(["All crew", "Stage & worship", "Ade", "Tolu (main desk)"])
     // Priority (the main desk): heard by everyone, like All crew.
     expect(hears("priority", "Femi", [])).toBe(true)
     expect(talkName("priority")).toBe("All crew (priority)")
+  })
+
+  it("a private call goes to the key of the one desk with exactly that name, or to nobody", () => {
+    const crew: [string, { name: string }][] = [["k-ade", { name: "Ade" }], ["k-look", { name: "\u0410de" }], ["k-femi", { name: "Femi" }]]
+    expect(callTarget("to:Ade", crew)).toBe("k-ade")
+    expect(callTarget("to:\u0410de", crew)).toBe("k-look")
+    expect(callTarget("to:ade", crew)).toBeUndefined()
+    expect(callTarget("to:host", crew)).toBe("host")
+    expect(callTarget("all", crew)).toBeUndefined()
+    // Two keys under the same name (a copied name): nobody, rather than the wrong person.
+    expect(callTarget("to:Ade", [...crew, ["k-copy", { name: "Ade" }]])).toBeUndefined()
   })
 })

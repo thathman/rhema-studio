@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Private calls by key; ask for a song, hymn or camera; Preview or Show (#251)
+- A private call in Talk (**Talk to → Only…**) now goes to the desk or phone you picked by its pairing key, not by its name. A desk paired under a name that looks the same (a copied name, a look-alike letter) never hears a call meant for someone else; if two desks have exactly the same name when you pick, nobody hears the call rather than the wrong one.
+- Action requests can now ask to **show a song or hymn** (type its title; Rhema suggests titles from the library) and ask **if a camera is ready** (the camera operator answers Ready or Unable).
+- For a verse or a song, the person asked can now press **Preview** instead of Show: it goes into the main desk's Preview only and nothing goes live. Either way the notice answers **Ready** only when the main desk accepted it.
+
 ### Notices: honest answers, private delivery, kept through a crash (#251)
 - Pressing the button on an action request ("Show Romans 8:28", "Take Sermon split") now answers **Ready** only when it really happened. If the main desk refused it (the desk's role does not allow it, the main desk has taken back control, or it moved to another service), the notice answers **Unable** and the desk shows the reason.
 - Each joined desk and phone now receives only the notices meant for it: those to everyone, to its role, to it by name, or that it sent. The main desk still sees them all. Before, every desk received every notice and only hid the others. Who sent a notice, and who one is for, is decided by each device's pairing key, not its name, so a desk named like the main desk or like someone else gets nothing extra; pairing no longer accepts a name ending in "(main desk)".

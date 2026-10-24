@@ -6,9 +6,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { NoticesPanel } from "@/studio/notices-panel"
 import { TalkButton, TalkTo } from "@/studio/talk"
 import { hostTalk, setHostChannels, setVoiceVolume, useVoice } from "@/lib/voice"
-import { sceneTargets, useNotices, type NoticeAction } from "@/stores/notices-store"
+import { sceneTargets, useNotices, type ActionMode, type NoticeAction } from "@/stores/notices-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
-import { activateBibleReference } from "@/lib/bible-activate"
+import { activateBibleReference, previewBibleReference } from "@/lib/bible-activate"
+import { songRequest } from "@/lib/song-request"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -58,6 +59,7 @@ function HostNotices() {
   const scenes = useBroadcastStore((s) => s.scenes)
   const rundown = useQueueStore((s) => s.items)
   const devices = useSettingsStore((s) => s.remoteDevices)
+  const cameras = useSettingsStore((s) => s.cameras)
   const people = devices.map((d) => d.name)
   const unread = notices.filter((n) => n.from !== me && (n.to === "host" || n.to === "all") && !read.includes(n.id))
   return (
@@ -81,6 +83,7 @@ function HostNotices() {
           scenes={scenes}
           rundown={rundown}
           people={people}
+          cameras={cameras.map((c) => c.label || c.name)}
         />
         <button type="button" className="mt-2 text-[0.6875rem] text-muted-foreground underline" onClick={() => useShellStore.getState().goTo("team")}>Team activity: approvals and comments</button>
       </PopoverContent>
@@ -98,9 +101,17 @@ const NOT_SHOWN: Record<string, string> = {
 
 /**
  * Do what an action request asks, on the main desk, when its button is pressed (Comms C2): null
- * when it was done, else why not, so the answer is Ready only when it really happened.
+ * when it was done, else why not, so the answer is Ready only when it really happened. A verse or
+ * a song can go to Preview only (`mode`), so nothing goes live until the operator shows it.
  */
-async function runNoticeAction(a: NoticeAction): Promise<string | null> {
+async function runNoticeAction(a: NoticeAction, mode: ActionMode = "show"): Promise<string | null> {
+  if (a.kind === "camera") return null // answering is the action
+  if (a.kind === "song") return songRequest(a.value, mode)
+  if (a.kind === "bible" && mode === "preview") {
+    const outcome = await previewBibleReference(a.value)
+    if (outcome === null) return "that is not a Bible reference"
+    return outcome === "previewed" ? null : NOT_SHOWN.empty
+  }
   if (a.kind === "bible") {
     const outcome = await activateBibleReference(a.value)
     if (outcome === null) return "that is not a Bible reference"
@@ -128,13 +139,24 @@ function HostTalk() {
   const micNote = useVoice((s) => s.micNote)
   const volume = useVoice((s) => s.volume)
   const talkTo = useVoice((s) => s.hostTalkTo)
+  const talkToId = useVoice((s) => s.hostTalkToId)
   if (peers.length === 0 && !talking) return null
   const speaking = peers.filter((p) => p.speaking).map((p) => p.name)
   return (
     <div className="flex items-center gap-1.5 max-[450px]:hidden">
       {speaking.length > 0 && <span aria-live="polite" className="max-w-48 truncate rounded-full border border-confidence-high px-2 py-0.5 text-[0.6875rem] font-semibold">{speaking.join(", ")}</span>}
       <TalkButton compact talking={talking} onTalk={(on) => void hostTalk(on)} />
-      <TalkTo compact priority value={talkTo} onChange={(t) => setHostChannels(useVoice.getState().hostListen, t)} people={peers.map((p) => ({ key: p.name, name: p.name }))} />
+      {/* A private call is chosen by the desk's key; its name is for reading only. */}
+      <TalkTo
+        compact
+        priority
+        value={talkTo.startsWith("to:") && talkToId ? `to:${talkToId}` : talkTo}
+        onChange={(t) => {
+          const p = peers.find((x) => x.id && `to:${x.id}` === t)
+          setHostChannels(useVoice.getState().hostListen, p ? `to:${p.name}` : t, p?.id)
+        }}
+        people={peers.map((p) => ({ key: p.id ?? p.name, name: p.name }))}
+      />
       <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVoiceVolume(Number(e.target.value))} aria-label="Crew volume" title="How loud you hear the crew" className="w-16 accent-primary" />
       {micError && <span role="alert" className="sr-only">{micError}</span>}
       {micNote && <span role="status" className="sr-only">{micNote}</span>}

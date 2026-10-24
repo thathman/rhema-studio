@@ -47,6 +47,13 @@ pub enum RemoteCommand {
     /// Activate the Bible source with a typed reference ("Romans 8:28", "jn 3 16"): every feed that
     /// follows Bible takes it; the main screens too unless a song, hymn or slide is up (ADR 0001).
     BibleActivate(String),
+    /// Put a typed reference in the host's Preview only (an action request answered with Preview,
+    /// Rhema Comms C2): nothing goes live until the main desk shows it.
+    BiblePreview(String),
+    /// A song or hymn from the host's library, by its title (an action request, Comms C2): shown
+    /// live from its first slide, or put in the host's Preview only.
+    SongShow(String),
+    SongPreview(String),
     /// Take one live source off its feeds ("bible", "song", "hymn", "slide", "picture"), or put it back.
     ClearSource(String),
     RestoreSource(String),
@@ -112,7 +119,8 @@ impl fmt::Display for NoticeTo {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoticeAction {
-    /// "bible" (a reference), "scene" (a scene id) or "event" (a run-of-show item id).
+    /// "bible" (a reference), "song" (a song or hymn title), "scene" (a scene id), "event" (a
+    /// run-of-show item id) or "camera" (a camera's name: is it framed? the answer is Ready or Unable).
     pub kind: String,
     pub value: String,
 }
@@ -169,6 +177,9 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::Hold(Some(r)) => write!(f, "hold({r})"),
             RemoteCommand::Resume => write!(f, "resume"),
             RemoteCommand::BibleActivate(r) => write!(f, "bible_activate({r})"),
+            RemoteCommand::BiblePreview(r) => write!(f, "bible_preview({r})"),
+            RemoteCommand::SongShow(t) => write!(f, "song_show({t})"),
+            RemoteCommand::SongPreview(t) => write!(f, "song_preview({t})"),
             RemoteCommand::ClearSource(id) => write!(f, "clear_source({id})"),
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
             RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
@@ -452,6 +463,9 @@ mod tests {
             RemoteCommand::Hold(Some("Waiting for the pastor".into())),
             RemoteCommand::Resume,
             RemoteCommand::BibleActivate("John 3:16".into()),
+            RemoteCommand::BiblePreview("John 3:16".into()),
+            RemoteCommand::SongShow("Amazing Grace".into()),
+            RemoteCommand::SongPreview("Amazing Grace".into()),
             RemoteCommand::ClearSource("bible".into()),
             RemoteCommand::RestoreSource("bible".into()),
             RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
@@ -481,12 +495,12 @@ mod tests {
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
                 RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => {}
-                RemoteCommand::BibleActivate(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
+                RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
                 RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 34);
+        assert_eq!(cmds.len(), 37);
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#).unwrap(), RemoteCommand::TimerAdjust(1));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_start"}"#).unwrap(), RemoteCommand::TimerStart);
         let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();

@@ -73,7 +73,7 @@ export function Crew({ people }: { people: VoicePerson[] }) {
   return (
     <ul aria-label="Talk channel" aria-live="polite" className="flex flex-wrap gap-1.5 text-xs">
       {people.map((p) => (
-        <li key={p.name} className={cn("flex items-center gap-1.5 rounded-full border px-2 py-0.5", p.speaking ? "border-confidence-high text-foreground" : "border-border text-muted-foreground")}>
+        <li key={p.id ?? p.name} className={cn("flex items-center gap-1.5 rounded-full border px-2 py-0.5", p.speaking ? "border-confidence-high text-foreground" : "border-border text-muted-foreground")}>
           <span aria-hidden className={cn("size-2 rounded-full", p.speaking ? "bg-confidence-high" : p.talking ? "bg-on-air" : "bg-muted-foreground/40")} />
           {p.name}
           {p.talk && p.talk !== "all" && <span className="text-muted-foreground">→ {talkName(p.talk)}</span>}
