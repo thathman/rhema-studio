@@ -69,6 +69,8 @@ export interface CameraSource {
   label: string
   /** The secret in its camera-page link, and its password in the camera router; a new one closes the old link. */
   token: string
+  /** Its backup camera's name (#213): Switch to backup puts that one in its scenes' camera places. */
+  backup?: string
 }
 
 function isCameraSource(c: unknown): c is CameraSource {

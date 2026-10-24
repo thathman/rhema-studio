@@ -13,6 +13,9 @@ import { useSettingsStore, type CameraSource } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { capacityLimits, useMachineInfo } from "@/lib/capacity"
 import { readMbps, WIFI_COMFORT_MBPS } from "@/lib/obs-companion"
+import { cameraMeasures } from "@/lib/show-health"
+import { measuredFps, playbackWords } from "@/lib/camera-playback"
+import { CameraControls, useObsProgramCameras, useScreenPlayback } from "@/studio/production/camera-controls"
 
 interface HttpStatus {
   running: boolean
@@ -64,6 +67,7 @@ export function CamerasPanel() {
   }
   const host = router?.lanAddress ?? null
   const phonePage = http?.running && http.lan && http.tls_port ? http.tls_port : null
+  const onObs = useObsProgramCameras(router)
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-3 lg:grid-cols-2">
@@ -74,7 +78,7 @@ export function CamerasPanel() {
       {cameras.length > 0 && (
         <ul aria-label="Cameras" className="flex flex-col gap-3">
           {cameras.map((c) => (
-            <CameraCard key={c.name} cam={c} host={host} router={router} path={router?.paths.find((p) => p.name === c.name)} phonePage={phonePage} />
+            <CameraCard key={c.name} cam={c} host={host} router={router} path={router?.paths.find((p) => p.name === c.name)} phonePage={phonePage} onObs={onObs.has(c.name)} />
           ))}
         </ul>
       )}
@@ -242,7 +246,8 @@ function CameraApp({ cam, link }: { cam: CameraSource; link: string | null }) {
   )
 }
 
-function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource; host: string | null; router: RouterStatus | null; path: RouterPath | undefined; phonePage: number | null }) {
+function CameraCard({ cam, host, router, path, phonePage, onObs }: { cam: CameraSource; host: string | null; router: RouterStatus | null; path: RouterPath | undefined; phonePage: number | null; onObs: boolean }) {
+  const screens = useScreenPlayback().filter((s) => s.camera === cam.name)
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const link = host && phonePage ? cameraPageUrl(host, phonePage, cam) : null
@@ -256,7 +261,8 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
   const ports = router?.ports
   const whep = host && ports ? whepUrl(host, ports, cam.name) : null
   const rtsp = host && ports ? rtspUrl(host, ports, cam.name) : null
-  const state = !router?.running ? null : path?.live ? "Sending" : "Waiting for the camera"
+  // Connected is not sending (#213): a camera the router has, but from which nothing arrives, is Frozen.
+  const state = !router?.running ? null : path?.live ? (path.frozen ? "Frozen" : "Sending") : "Waiting for the camera"
   const watching = path?.live ? path.readers : 0
   const remove = () => useSettingsStore.getState().setCameras(useSettingsStore.getState().cameras.filter((c) => c.name !== cam.name))
   const renew = () => useSettingsStore.getState().setCameras(useSettingsStore.getState().cameras.map((c) => (c.name === cam.name ? { ...c, token: newCameraSecret() } : c)))
@@ -271,7 +277,7 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
   }
   return (
     <li>
-      <Card kicker="Camera" title={cam.label} badge={state && <Tone tone={path?.live ? "ok" : "warn"}>{state}</Tone>}>
+      <Card kicker="Camera" title={cam.label} badge={state && <Tone tone={path?.live && !path.frozen ? "ok" : "warn"}>{state}</Tone>}>
         <div className="flex flex-wrap items-start gap-4">
           <div className="flex w-full max-w-[17rem] flex-col gap-2">
             {link && qr?.url === link ? (
@@ -282,7 +288,17 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
             <p className="text-muted-foreground">
               {link ? "Scan with the phone for this angle (on the church Wi-Fi), allow the camera and press Start camera. Keep the phone charging." : "The QR code appears once secure phone pages are on (Settings → Remote control)."}
             </p>
-            {path?.live && <p>{[path.tracks.join(", ") || "Video", path.width && path.height ? `${path.width}×${path.height}` : null, path.kbps ? `${(path.kbps / 1000).toFixed(1)} Mbit/s` : null].filter(Boolean).join(" · ")} · watched by {watching} {watching === 1 ? "screen or program" : "screens or programs"}</p>}
+            {path?.live && path.frozen && <p role="alert" className="font-semibold text-confidence-mid">Connected, but nothing has arrived for {Math.max(3, Math.round((path.dataAgeMs ?? 3000) / 1000))} s. Check the phone (is its camera app open and the screen on?), or press Retry.</p>}
+            {path?.live && <p>{[path.tracks.join(", ") || "Video", ...cameraMeasures({ width: path.width, height: path.height, kbps: path.kbps, fps: measuredFps(cam.name, screens), screens })].join(" · ")} · watched by {watching} {watching === 1 ? "screen or program" : "screens or programs"}</p>}
+            {onObs && <p><Tone tone="ok">On OBS</Tone> <span>On OBS's program now: the stream shows this camera too.</span></p>}
+            {screens.length > 0 && (
+              <ul aria-label={`How ${cam.label} plays on each screen`} className="flex flex-col gap-0.5">
+                {screens.map((s) => {
+                  const w = playbackWords(s)
+                  return <li key={`${s.outputId}|${s.where}`} className={cn(w.tone === "warn" ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{s.where}: {w.text}</li>
+                })}
+              </ul>
+            )}
             {path && <Watchers path={path} />}
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -313,6 +329,10 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
                 </div>
               </details>
             )}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[0.625rem] font-bold tracking-[0.06em] text-muted-foreground uppercase">If this camera fails</span>
+              <CameraControls cam={cam} chooseBackup />
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" onClick={renew} title="The old QR code, link and app addresses stop working, and a phone sending with them is disconnected">New link</Button>
               <span className="flex-1" />

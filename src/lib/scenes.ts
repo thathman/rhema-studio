@@ -1,6 +1,6 @@
 import { forOutputLanguage } from "@/lib/output-language"
 import { themeIdFor } from "@/lib/output-themes"
-import { cameraHidden, feedFrame, type LiveSources, type StateSources } from "@/lib/live-sources"
+import { cameraPathOf, cameraSourceId, feedFrame, withCameraPath, type LiveSources, type StateSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
 import { NO_SIGNALS } from "@/types/scene"
@@ -193,7 +193,14 @@ interface LiveState {
   logoUrl?: string | null
   /** A camera's name (Production → Cameras) for its stream address, for the colour bars' ident; absent: the layer's name. */
   cameraLabel?: (url: string) => string | undefined
+  /** A camera's backup camera (Production → Cameras), by the router's names (#213). */
+  cameraBackup?: (name: string) => string | undefined
+  /** What the router says of a camera that is down: not sending, frozen (connected, nothing arriving) or the router is off; undefined: sending, or not known. */
+  cameraDown?: (name: string) => CameraDown | undefined
 }
+
+/** A camera the router says cannot be shown now (#213). */
+export type CameraDown = "not-sending" | "frozen" | "router-off"
 
 /**
  * A countdown to a time of day ("10:00", the service start): today's, or tomorrow's once today's
@@ -266,7 +273,7 @@ export const FADES = (kind: SceneLayerKind) => kind !== "ticker" && kind !== "lo
  * The frame an output draws for a scene. `preview` adds labels for what the composer shows but an
  * output never draws (a camera that is not connected yet).
  */
-export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId" | "themeFor" | "language">, scene: Scene, preview = false): SceneFrame {
+export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId" | "themeFor" | "language" | "cameraFallback">, scene: Scene, preview = false): SceneFrame {
   // The ticker and lower third fall back to the output's verse font, as they do over the whole frame.
   const font = () => (s.themes.find((t) => t.id === output.themeId) ?? s.themes[0])?.verseText?.fontFamily
   return {
@@ -298,10 +305,47 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     // A camera: its stream, played by each output from the church network. One hidden from scenes
     // (Present → Sources) is not played: its box shows the fallback, the scene itself unchanged.
     // Until it sends, its box shows colour bars (with the camera's name, if asked), static, its words or nothing.
-    const noSignal = l.noSignal ?? "bars"
-    const fallback = noSignal === "words" && l.cameraFallback ? { fallback: l.cameraFallback, theme: s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0] } : {}
-    const ident = noSignal === "bars" && l.noSignalName ? { ident: (l.cameraUrl && s.cameraLabel?.(l.cameraUrl)) || l.name } : {}
-    const hidden = !!l.cameraUrl && cameraHidden(s.stateSources, l.cameraUrl)
-    return { ...base, ...(l.cameraUrl && !hidden ? { cameraUrl: l.cameraUrl } : {}), noSignal, ...fallback, ...ident, ...(preview ? { label: hidden ? `${l.name} · hidden from scenes` : l.cameraUrl ? `${l.name} · camera` : `${l.name} · choose a camera` } : {}) }
+    const play = cameraPlay(s, output, l)
+    const own = output.cameraFallback && output.cameraFallback.mode !== "camera" ? output.cameraFallback : undefined
+    const noSignal = own ? (own.mode as NonNullable<SceneLayer["noSignal"]>) : (l.noSignal ?? "bars")
+    const words = own ? own.words?.trim() : l.cameraFallback
+    const fallback = noSignal === "words" && words ? { fallback: words, theme: s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0] } : {}
+    const ident = noSignal === "bars" && (own ? own.name : l.noSignalName) ? { ident: (l.cameraUrl && s.cameraLabel?.(l.cameraUrl)) || l.name } : {}
+    const label = !l.cameraUrl ? `${l.name} · choose a camera` : play.instead ? `${l.name} · ${play.instead}` : play.url ? `${l.name} · camera` : `${l.name} · hidden from scenes`
+    return { ...base, ...(play.url ? { cameraUrl: play.url } : {}), noSignal, ...fallback, ...ident, ...(play.retry ? { retry: play.retry } : {}), ...(play.hold ? { hold: true } : {}), ...(play.stale ? { stale: true } : {}), ...(preview ? { label } : {}) }
   }
+}
+
+/**
+ * What a camera layer plays on one output (#213 operator controls): its camera; its backup while
+ * the operator switched to it; nothing while it is hidden from scenes; or this output's other
+ * camera while the one it would play is down (hidden, not sending or frozen) and that one sends.
+ * With the Retry count (a new one restarts the screens' readers), Freeze, and `stale` when the
+ * router says the camera it plays is connected but sending nothing (the screens then show the
+ * fallback, not a frozen picture passed off as live).
+ */
+export function cameraPlay(s: Pick<LiveState, "stateSources" | "cameraBackup" | "cameraDown" | "cameraLabel">, output: Pick<BroadcastOutput, "cameraFallback">, l: Pick<SceneLayer, "cameraUrl">): { url?: string; retry?: number; hold?: boolean; stale?: boolean; instead?: string } {
+  if (!l.cameraUrl) return {}
+  const name = cameraPathOf(l.cameraUrl)
+  const ctl = (n: string | null) => (n ? s.stateSources?.[cameraSourceId(n)] : undefined)
+  const own = ctl(name)
+  const called = (n: string) => s.cameraLabel?.(withCameraPath(l.cameraUrl!, n)) ?? n
+  const hidden = own?.on === false
+  const backup = own?.backup && name ? s.cameraBackup?.(name) : undefined
+  let url: string | undefined = hidden ? undefined : backup ? withCameraPath(l.cameraUrl, backup) : l.cameraUrl
+  let playing = hidden ? null : (backup ?? name)
+  let instead = hidden ? "hidden from scenes" : backup ? `on its backup (${called(backup)})` : undefined
+  const down = playing ? s.cameraDown?.(playing) : undefined
+  // This output's other camera, while the one it would play is down and that one is not.
+  const other = output.cameraFallback?.mode === "camera" ? output.cameraFallback.camera : undefined
+  if (other && name && other !== playing && (hidden || down) && !s.cameraDown?.(other) && ctl(other)?.on !== false) {
+    url = withCameraPath(l.cameraUrl, other)
+    playing = other
+    instead = `${called(other)} instead (this output's fallback)`
+  }
+  const now = ctl(playing)
+  const retry = (own?.retry ?? 0) + (playing && playing !== name ? (now?.retry ?? 0) : 0)
+  const hold = !!(own?.hold || (playing !== name && now?.hold))
+  const stale = !!playing && s.cameraDown?.(playing) === "frozen"
+  return { ...(url ? { url } : {}), ...(retry ? { retry } : {}), ...(hold && url ? { hold } : {}), ...(stale && url ? { stale } : {}), ...(instead ? { instead } : {}) }
 }

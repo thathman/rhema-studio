@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { toast } from "sonner"
 import { ObsClient, ObsRequestError } from "@/lib/obs"
 import { obsVideo, type ObsVideo } from "@/lib/program-names"
+import { programCameras } from "@/lib/obs-companion"
 import { useJournalStore } from "@/stores/journal-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type ObsSettings } from "@/stores/settings-store"
@@ -25,6 +26,11 @@ interface ObsState {
   studioMode: boolean | null
   /** OBS's output size and frame rate (the online program's format, #215 G5.1); null until OBS has answered. */
   video: ObsVideo | null
+  /**
+   * The church's cameras OBS's program shows now (#208 "Camera follows OBS"), found by the addresses
+   * of its Media Sources; null while OBS has not said. Information only: Rhema never acts on it.
+   */
+  programCameras: string[] | null
   connect: () => Promise<void>
   disconnect: () => void
   startRecording: () => Promise<void>
@@ -39,7 +45,7 @@ interface ObsState {
   switchProgram: (scene: string) => Promise<void>
 }
 
-const NO_SCENES = { scenes: [] as string[], program: null, preview: null, studioMode: null }
+const NO_SCENES = { scenes: [] as string[], program: null, preview: null, studioMode: null, programCameras: null }
 
 let client: ObsClient | null = null
 let poll: ReturnType<typeof setInterval> | null = null
@@ -88,9 +94,23 @@ async function loadScenes(): Promise<void> {
     if (epoch !== sceneEpoch) return void loadScenes()
     const studioMode = mode.studioModeEnabled === true
     useObsStore.setState({ scenes: sceneNames(list.scenes), program: list.currentProgramSceneName || null, preview: studioMode ? list.currentPreviewSceneName || null : null, studioMode })
+    void loadProgramCameras()
   } catch {
     // Unknown, not empty-and-sure: show nothing rather than a stale list.
     if (client === c) useObsStore.setState(NO_SCENES)
+  }
+}
+
+/** Which of the church's cameras OBS's program shows (on connect, a program change, and every 10 s). */
+async function loadProgramCameras(): Promise<void> {
+  const c = client
+  if (!c) return
+  const program = useObsStore.getState().program
+  try {
+    const cams = await programCameras((type, data) => c.request(type, data), program)
+    if (client === c && useObsStore.getState().program === program) useObsStore.setState({ programCameras: cams })
+  } catch {
+    if (client === c) useObsStore.setState({ programCameras: null })
   }
 }
 
@@ -114,6 +134,7 @@ function onSceneEvent(type: string, data: Record<string, unknown>): void {
     case "CurrentProgramSceneChanged":
       sceneEpoch++
       useObsStore.setState({ program: name })
+      void loadProgramCameras()
       break
     case "CurrentPreviewSceneChanged":
       sceneEpoch++
@@ -202,7 +223,12 @@ export const useObsStore = create<ObsState>((set, get) => ({
       // A newer connect (or a disconnect) happened while waiting: this one must not start a poll.
       if (client !== c) return
       if (poll) clearInterval(poll)
-      poll = setInterval(() => void refresh(), 2000)
+      let ticks = 0
+      poll = setInterval(() => {
+        void refresh()
+        // A source shown or hidden inside the program scene sends no scene event: look again now and then.
+        if (++ticks % 5 === 0) void loadProgramCameras()
+      }, 2000)
     } catch (e) {
       if (client !== c) return
       client = null

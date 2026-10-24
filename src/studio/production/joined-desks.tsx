@@ -89,7 +89,7 @@ export function CameraDesk({ live }: { live: LiveStateV1 }) {
   const ok = useCanSend()
   const [result, setResult] = useState<SendResult | null>(null)
   const cams = live.sources.filter((s) => s.id.startsWith("camera:"))
-  const STATE: Record<string, string> = { sending: "sending", "not-sending": "not sending", "router-off": "camera router off", hidden: "hidden from scenes" }
+  const STATE: Record<string, string> = { sending: "sending", frozen: "frozen (nothing arriving)", "not-sending": "not sending", "router-off": "camera router off", hidden: "hidden from scenes" }
   return (
     <section aria-label="Camera desk" className={box}>
       <p className="font-semibold">Cameras</p>

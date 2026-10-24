@@ -14,7 +14,7 @@ import { CONTENT_TYPES } from "@/types/broadcast"
 const ON = "flex items-center gap-1 rounded-full border border-live-pulse/40 bg-live-pulse/10 py-0.5 pr-0.5 pl-2.5 text-[0.6875rem]"
 const OFF = "flex items-center gap-1 rounded-full border border-border py-0.5 pr-0.5 pl-2.5 text-[0.6875rem] text-muted-foreground"
 
-const SENDING_WORDS = { sending: "Sending", "not-sending": "Not sending", "router-off": "Camera router off" } as const
+const SENDING_WORDS = { sending: "Sending", frozen: "Frozen: nothing arriving", "not-sending": "Not sending", "router-off": "Camera router off" } as const
 
 /**
  * What each live source holds (ADR 0001): the content the feeds follow (Romans 8:28 can stay on the

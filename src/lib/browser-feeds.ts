@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { newFeedToken } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import type { PageVideo } from "@/lib/camera-playback"
 
 /**
  * Browser feeds (ARCH-002): every output of type "browser" has a secret for its link, and the LAN
@@ -40,6 +41,8 @@ export interface FeedHealth {
   current: boolean
   /** The newest frame has not been drawn for a while (a page is stuck or too slow). */
   behind: boolean
+  /** Each page that plays cameras: how they really play there (#213); absent from an older build. */
+  video?: PageVideo[]
 }
 
 /** One poller per feed, shared by everything that shows its health (cards, Show health, Home). */
@@ -56,13 +59,13 @@ export function watchFeed(id: string): () => void {
     let alive = true
     let last = { seq: -1, behindSince: 0 }
     const ask = async () => {
-      const s = await invoke<{ watching: number; seq: number; acked: number } | null>("feed_status", { id }).catch(() => null)
+      const s = await invoke<{ watching: number; seq: number; acked: number; video?: PageVideo[] } | null>("feed_status", { id }).catch(() => null)
       if (!alive) return
       if (!s) return useFeedHealthStore.setState({ [id]: null })
       const current = s.acked >= s.seq
       const behindSince = current ? 0 : s.seq === last.seq && last.behindSince ? last.behindSince : Date.now()
       last = { seq: s.seq, behindSince }
-      useFeedHealthStore.setState({ [id]: { watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000 } })
+      useFeedHealthStore.setState({ [id]: { watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000, ...(s.video?.length ? { video: s.video } : {}) } })
     }
     void ask()
     const t = setInterval(() => void ask(), 2000)

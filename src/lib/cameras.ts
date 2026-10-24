@@ -31,6 +31,11 @@ export interface RouterPath {
   width?: number | null
   height?: number | null
   kbps?: number | null
+  /** The same in bytes a second; how long ago the router last received anything from it (ms); and
+   * Frozen: connected but nothing arriving for over 3 s (#213). Absent from an older build. */
+  bytesPerSec?: number | null
+  dataAgeMs?: number | null
+  frozen?: boolean
   /** Who reads it: Rhema screens, TVs, OBS here, OBS companions, by name; `remote` = over the network. */
   watchers?: { kind: string; name: string; remote: boolean }[]
   /** What each OBS companion said: on its program, in its preview, receiving it. */
@@ -135,22 +140,36 @@ export function routerStatus(): Promise<RouterStatus | null> {
 /** The router as Show health and Home last saw it (#213); `checked` false until the first answer. */
 export const useRouterHealth = create<{ status: RouterStatus | null; checked: boolean }>(() => ({ status: null, checked: false }))
 
-/** Whether a camera is sending, from what the router last said; null before the first answer. */
-export function cameraSending(health: { status: RouterStatus | null; checked: boolean }, name: string): "sending" | "not-sending" | "router-off" | null {
+/** Whether a camera is sending, from what the router last said (frozen: connected, nothing arriving); null before the first answer. */
+export function cameraSending(health: { status: RouterStatus | null; checked: boolean }, name: string): "sending" | "frozen" | "not-sending" | "router-off" | null {
   if (!health.checked) return null
   if (!health.status?.running) return "router-off"
-  return health.status.paths.some((p) => p.name === name && p.live) ? "sending" : "not-sending"
+  const p = health.status.paths.find((x) => x.name === name && x.live)
+  return !p ? "not-sending" : p.frozen ? "frozen" : "sending"
+}
+
+/**
+ * A camera that cannot be shown now, as the router last said (#213): not sending, frozen (connected,
+ * nothing arriving) or the router is off. Undefined while sending, before the first answer, or for
+ * a camera that is not one of Rhema's (`known`: the cameras in Production → Cameras).
+ */
+export function cameraDownState(health: { status: RouterStatus | null; checked: boolean }, name: string, known: readonly { name: string }[]): "not-sending" | "frozen" | "router-off" | undefined {
+  if (!health.checked || !known.some((c) => c.name === name)) return undefined
+  if (!health.status?.running) return "router-off"
+  const p = health.status.paths.find((x) => x.name === name)
+  if (!p?.live) return "not-sending"
+  return p.frozen ? "frozen" : undefined
 }
 
 let routerUsers = 0
 let routerTimer: ReturnType<typeof setInterval> | undefined
 
-/** Ask the router how its cameras are doing every 5 s while anything watches it; returns the stop. */
+/** Ask the router how its cameras are doing every 2 s (it looks every 2 s) while anything watches it; returns the stop. */
 export function watchRouter(): () => void {
   if (routerUsers++ === 0) {
     const look = () => void routerStatus().then((status) => { if (routerUsers > 0) useRouterHealth.setState({ status, checked: true }) })
     look()
-    routerTimer = setInterval(look, 5000)
+    routerTimer = setInterval(look, 2000)
   }
   let done = false
   return () => {

@@ -138,6 +138,12 @@ export interface SceneLayerFrame {
   noSignal?: NoSignal
   /** camera: the name the colour bars' ident shows (absent: no ident). */
   ident?: string
+  /** camera: the operator's Retry count for it (#213): a new count makes every screen start its reader again. */
+  retry?: number
+  /** camera: Freeze: screens hold the last frame. */
+  hold?: boolean
+  /** camera: the router says it is connected but sending nothing: screens show the fallback, not a stale frame. */
+  stale?: boolean
   /** ticker: the running ticker (null when none runs). */
   ticker?: Ticker | null
   /** lowerThird: the lower third on air (null when none is up). */

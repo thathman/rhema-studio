@@ -11,7 +11,7 @@ import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
-import { syncCameras, WhepPlayer } from "@/lib/whep"
+import { cameraReports, syncCameras, WhepPlayer } from "@/lib/whep"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, SceneFrame, StagePayload, Ticker } from "@/types"
 
@@ -342,6 +342,17 @@ setInterval(() => {
 }, 1000)
 const id = decodeURIComponent(location.pathname.split("/").pop() ?? "")
 const key = new URLSearchParams(location.search).get("k") ?? ""
+/** The newest frame this page drew (what it acknowledged). */
+let drawnSeq = 0
+const ack = (body: object) => fetch(`/api/v1/feed/${encodeURIComponent(id)}/ack?k=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {})
+/**
+ * While the scene plays cameras, tell the host every 2 s how they really play here (#213): frames a
+ * second, decoded and dropped, the last new frame's age. Measured on this screen, sent with the
+ * acknowledgement of the frame drawn last.
+ */
+setInterval(() => {
+  if (drawnSeq > 0 && cameras.size > 0) void ack({ seq: drawnSeq, video: cameraReports(cameras) })
+}, 2000)
 // EventSource reconnects by itself; the host sends the current frame first.
 const events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
 events.addEventListener("frame", (e) => {
@@ -356,7 +367,8 @@ events.addEventListener("frame", (e) => {
   const seq = Number(ev.lastEventId)
   if (Number.isFinite(seq) && seq > 0) {
     requestAnimationFrame(() => {
-      void fetch(`/api/v1/feed/${encodeURIComponent(id)}/ack?k=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seq }) }).catch(() => {})
+      drawnSeq = seq
+      void ack({ seq })
     })
   }
 })

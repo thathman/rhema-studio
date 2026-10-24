@@ -26,10 +26,10 @@ import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
-import { feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
+import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
-import { cameraLabelOf } from "@/lib/cameras"
+import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
 import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
 import type { CountdownTargets } from "@/lib/countdown"
 import { countdownFrame, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
@@ -156,6 +156,13 @@ interface BroadcastState {
   clearSource: (id: AnySourceId) => void
   /** Put a cleared source back on: the ticker runs again, the timer resumes, a camera is back in scenes. */
   restoreSource: (id: AnySourceId) => void
+  /**
+   * A camera's recovery controls (#213), on every screen whose scene has it: Retry (each screen
+   * starts its reader again), Switch to backup (its backup camera, chosen in Production → Cameras,
+   * plays in its place) and back, Freeze (hold the last frame) and Unfreeze. Recorded with who and
+   * when like any source; never in rehearsal.
+   */
+  cameraControl: (name: string, change: CameraChange) => void
   /** Activate a source without changing the program (a heard verse while a song is up, C11). `by`: who (default: see currentActor). */
   activateSource: (value: VerseRenderData, itemId?: string | null, by?: string) => void
   /** Congregation scenes (ARCH-002). Saved. */
@@ -586,7 +593,25 @@ function markSource(id: StateSourceId, on: boolean, extra: SourceExtra = {}): vo
   useBroadcastStore.setState(sourceMark(id, on, extra))
 }
 
-type SourceExtra = Pick<StateSource, "ticker" | "lowerThird" | "message">
+type SourceExtra = Pick<StateSource, "ticker" | "lowerThird" | "message" | "backup" | "hold" | "retry">
+
+export type CameraChange = "retry" | "backup" | "unbackup" | "freeze" | "unfreeze"
+
+/** A camera's controls kept across a hide and restore (and across one another). */
+function cameraExtras(cur: StateSource | undefined): SourceExtra {
+  return { ...(cur?.backup ? { backup: true } : {}), ...(cur?.hold ? { hold: true } : {}), ...(cur?.retry ? { retry: cur.retry } : {}) }
+}
+
+/** The controls after one change. */
+export function cameraControlled(cur: StateSource | undefined, change: CameraChange): SourceExtra {
+  const next = cameraExtras(cur)
+  if (change === "retry") next.retry = (cur?.retry ?? 0) + 1
+  if (change === "backup") next.backup = true
+  if (change === "unbackup") delete next.backup
+  if (change === "freeze") next.hold = true
+  if (change === "unfreeze") delete next.hold
+  return next
+}
 
 /** The same as a patch, to go with the change it records in one update (none in rehearsal). */
 function sourceMark(id: StateSourceId, on: boolean, extra: SourceExtra = {}): Pick<BroadcastState, "stateSources"> | Record<string, never> {
@@ -884,7 +909,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const owns = sceneOwns(scene)
       const liveOverlay = overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null)
       const liveTicker = tickerForScreens(s)
-      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras) }, output, scene)
+      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, output, scene)
       const overlay = followsLowerThird(output) && !owns.lowerThird ? liveOverlay : null
       const ticker = followsTicker(output) && !owns.ticker ? liveTicker : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
@@ -1203,7 +1228,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         if (useTimerStore.getState().timer.startedAt !== null) useTimerStore.getState().pause()
       } else if (s.stateSources[id]?.on !== false) {
         // A camera hidden from scenes: every scene with it shows its fallback there, the scenes unchanged.
-        markSource(id, false)
+        markSource(id, false, cameraExtras(s.stateSources[id]))
         get().syncBroadcastOutput()
       }
       return
@@ -1235,7 +1260,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       } else if (id === "timer") {
         if (useTimerStore.getState().timer.startedAt === null) useTimerStore.getState().start()
       } else {
-        markSource(id, true)
+        markSource(id, true, cameraExtras(cur))
         get().syncBroadcastOutput()
       }
       return
@@ -1244,6 +1269,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (!cur || cur.on || s.rehearsal) return
     if (!s.isLive && s.cleared && s.liveVerse === cur.value) return get().setLive(true)
     set({ sources: { ...s.sources, [id]: { ...cur, on: true } } })
+    get().syncBroadcastOutput()
+  },
+  cameraControl: (name, change) => {
+    const s = get()
+    if (s.rehearsal) return
+    const id = cameraSourceId(name)
+    const cur = s.stateSources[id]
+    markSource(id, cur?.on !== false, cameraControlled(cur, change))
     get().syncBroadcastOutput()
   },
   saveScene: (scene) => {
@@ -1638,6 +1671,18 @@ useBroadcastStore.subscribe((s, prev) => {
   lastSoundOutput = now
 })
 
+/** A camera's backup camera, by the router's names (#213). */
+function cameraBackup(name: string): string | undefined {
+  const cams = useSettingsStore.getState().cameras
+  const b = cams.find((c) => c.name === name)?.backup
+  return b && b !== name && cams.some((c) => c.name === b) ? b : undefined
+}
+
+/** What the router last said of a camera that cannot be shown (#213). */
+function cameraDown(name: string) {
+  return cameraDownState(useRouterHealth.getState(), name, useSettingsStore.getState().cameras)
+}
+
 /** The church's time zone when a build sets one (Setup), else "" (this computer's clock). */
 function churchZone(): string {
   const z = (useSettingsStore.getState().setup as { timeZone?: unknown }).timeZone
@@ -1701,6 +1746,19 @@ useTimerStore.subscribe((t, prev) => {
   }
   if (running !== (prev.timer.startedAt !== null) || !s.stateSources.timer) markSource("timer", running)
 })
+// A camera's backup (Production → Cameras) and what the router says of each camera (#213): the
+// scenes on air follow, so a frozen camera shows its fallback and an output's other camera steps in.
+let lastCameraKey = ""
+function syncCameraScenes(): void {
+  const b = useBroadcastStore.getState()
+  const cams = useSettingsStore.getState().cameras
+  const key = cams.map((c) => `${c.name}>${c.backup ?? ""}:${cameraDown(c.name) ?? "ok"}`).join(",")
+  if (key === lastCameraKey) return
+  lastCameraKey = key
+  for (const o of b.outputs) if (showsSceneWith(o, "camera")) b.syncBroadcastOutputFor(o.id)
+}
+useRouterHealth.subscribe(syncCameraScenes)
+useSettingsStore.subscribe((s, prev) => { if (s.cameras !== prev.cameras) syncCameraScenes() })
 // A logo layer shows the Brand Kit logo: a new logo reaches the scenes on air.
 useSettingsStore.subscribe((s, prev) => {
   if (s.brandKit.logoUrl === prev.brandKit.logoUrl) return

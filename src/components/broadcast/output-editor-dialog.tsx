@@ -37,6 +37,8 @@ import { withThemeFor } from "@/lib/output-themes"
 import { rememberTv } from "@/lib/show-health"
 import { CONTENT_NAMES, FEED_NAMES } from "@/lib/content-names"
 import { followsLowerThird, followsTicker } from "@/lib/live-sources"
+import { useSettingsStore } from "@/stores/settings-store"
+import type { OutputCameraFallback } from "@/types"
 import type {
   BroadcastOutput,
   BroadcastOutputType,
@@ -297,6 +299,7 @@ export function OutputEditorDialog({
                   <input type="checkbox" checked={followsTicker(form)} disabled={!!form.shows?.includes("ticker")} onChange={(e) => patch({ ticker: e.target.checked })} />
                   <span>Show the news ticker on this output <span className="text-muted-foreground">{form.shows?.includes("ticker") ? "(it follows the ticker, above)" : "(announcements crawling along the screen, from Present)"}</span></span>
                 </label>
+                <CameraFallbackChoice value={form.cameraFallback} onChange={(cameraFallback) => patch({ cameraFallback })} />
               </>
             )}
             {form.role === "stage" && (
@@ -551,6 +554,47 @@ export function OutputEditorDialog({
  * in blue…), behind an Advanced disclosure (#299 UX15-4). It shows what is already set, so nothing
  * saved is lost; the main look covers every kind left on "Same as the main look".
  */
+/**
+ * What a scene's camera box shows on this output while its camera is not sending, is hidden, or is
+ * frozen at the router (#213): the scene's own choice, or this output's own (colour bars, TV static,
+ * words, nothing, or another camera while that one sends).
+ */
+export function CameraFallbackChoice({ value, onChange }: { value: OutputCameraFallback | undefined; onChange: (v: OutputCameraFallback | undefined) => void }) {
+  const cameras = useSettingsStore((s) => s.cameras)
+  const mode = value?.mode ?? "scene"
+  const field = "h-8 rounded-md border border-input bg-card px-1.5 text-xs"
+  return (
+    <div role="group" aria-label="When a camera isn't sending" className="mt-2 flex flex-col gap-1.5 text-xs">
+      <label className="flex flex-col gap-0.5">
+        <span className="text-muted-foreground">When a camera isn't sending (scenes on this output)</span>
+        <select aria-label="When a camera isn't sending on this output" value={mode} onChange={(e) => onChange(e.target.value === "scene" ? undefined : { mode: e.target.value as OutputCameraFallback["mode"], ...(e.target.value === "camera" ? { camera: value?.camera ?? cameras[0]?.name } : {}), ...(e.target.value === "words" && value?.words ? { words: value.words } : {}) })} className={field}>
+          <option value="scene">As each scene says</option>
+          <option value="bars">Colour bars</option>
+          <option value="static">TV static</option>
+          <option value="words">Words</option>
+          <option value="none">Nothing (what is behind shows)</option>
+          <option value="camera" disabled={cameras.length < 2}>Another camera{cameras.length < 2 ? " (add a second camera first)" : ""}</option>
+        </select>
+      </label>
+      {mode === "bars" && (
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={!!value?.name} onChange={(e) => onChange({ mode: "bars", ...(e.target.checked ? { name: true } : {}) })} />
+          <span>Show the camera's name on the bars</span>
+        </label>
+      )}
+      {mode === "words" && <input aria-label="Words while a camera is not playing on this output" value={value?.words ?? ""} maxLength={120} placeholder="e.g. Camera back shortly" onChange={(e) => onChange({ mode: "words", ...(e.target.value ? { words: e.target.value } : {}) })} className="h-8 rounded-md border border-input bg-transparent px-2 text-xs" />}
+      {mode === "camera" && (
+        <select aria-label="The camera shown instead" value={value?.camera ?? ""} onChange={(e) => onChange({ mode: "camera", camera: e.target.value })} className={field}>
+          {cameras.map((c) => <option key={c.name} value={c.name}>{c.label}</option>)}
+        </select>
+      )}
+      <span className="text-muted-foreground">
+        {mode === "scene" ? "Each scene's camera keeps the choice made in the scene." : mode === "camera" ? "While the scene's camera is not sending, frozen or hidden, this output plays the chosen camera in its place (when that one sends); otherwise the scene's own choice shows." : "This output shows this instead of each scene's own choice; other outputs keep theirs."}
+      </span>
+    </div>
+  )
+}
+
 export function ContentLooks({ form, onChange }: { form: Pick<BroadcastOutput, "themeFor">; onChange: (themeFor: Partial<Record<ContentType, string>>) => void }) {
   const themes = useBroadcastStore((s) => s.themes)
   const set = CONTENT_TYPES.filter((c) => form.themeFor?.[c]).length

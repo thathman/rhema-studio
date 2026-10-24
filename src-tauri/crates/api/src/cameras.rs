@@ -100,6 +100,13 @@ pub struct CameraWatch {
     pub height: Option<u32>,
     /// What it sends, measured between two looks (kilobits a second).
     pub kbps: Option<u32>,
+    /// The same, in bytes a second (#213 signal truth).
+    pub bytes_per_sec: Option<u64>,
+    /// How long ago the router last received anything from it (ms): the bytes it counts grew then.
+    /// None until a second look, or when the router does not count them.
+    pub data_age_ms: Option<u64>,
+    /// Connected but sending nothing: the router has it as live, yet nothing arrived for over 3 s.
+    pub frozen: bool,
     pub watchers: Vec<Watcher>,
     /// What each OBS companion said about it.
     pub obs: Vec<ObsTally>,
