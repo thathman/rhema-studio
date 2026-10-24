@@ -29,7 +29,7 @@ export function SceneSheetButton({ output, scene }: { output: BroadcastOutput; s
         type="button"
         onClick={() => setOpen(true)}
         title={scene ? `Change ${scene.name}: its background, content box, lower third and camera` : "Make a basic scene without leaving Present"}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-semibold text-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5"
+        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-semibold text-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5"
       >
         {scene ? <PencilIcon /> : <PlusIcon />}
         {scene ? "Edit scene" : "New scene"}
