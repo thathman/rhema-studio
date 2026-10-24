@@ -4,7 +4,7 @@ import "./globals.css";
 import { SITE } from "./_lib/site";
 import { StructuredData } from "./_components/seo/structured-data";
 
-const TITLE = `${SITE.name} — AI Bible verse detection for live sermons`;
+const TITLE = `${SITE.name} — Church service production and presentation`;
 const OG_TITLE = `${SITE.name} — ${SITE.tagline}`;
 
 export const metadata: Metadata = {
@@ -58,8 +58,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: OG_TITLE,
     description: SITE.description,
-    site: SITE.twitterHandle,
-    creator: SITE.twitterHandle,
+    ...(SITE.twitterHandle ? { site: SITE.twitterHandle, creator: SITE.twitterHandle } : {}),
   },
   robots: {
     index: true,

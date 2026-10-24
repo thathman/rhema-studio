@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Rhema",
+  "productName": "Rhema Studio",
   "version": "0.3.2",
   "identifier": "com.openbezal.rhema",
   "build": {

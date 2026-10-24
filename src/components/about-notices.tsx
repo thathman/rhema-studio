@@ -13,8 +13,9 @@ export function AboutNotices() {
         Rhema Studio {version ? `v${version}` : ""}
       </p>
       <p>
-        Built on <span className="text-foreground">Rhema</span> by OpenBezal (MIT licence, © 2025 OpenBezal).
-        Rhema Studio keeps the upstream licence and attribution.
+        Developed and maintained by <span className="text-foreground">Rhema Studio contributors</span>.
+        Based on the original Rhema by OpenBezal (© 2025 OpenBezal, MIT).
+        The complete original licence and required notices remain included with the software.
       </p>
       <p className="mt-2">
         Yoruba scripture: <span className="text-foreground">Open Yoruba Contemporary Bible</span>, © 2009, 2017 by
