@@ -64,15 +64,19 @@ export interface KeptJournal {
 
 /**
  * The service log from the run that closed unexpectedly, back in this run: history only, nothing
- * goes on a screen. Its monotonic times are rebased on this run's clock from their wall-clock
- * times, so the actual durations still add up. Anything this run logged already (a scene put back
- * at start-up) stays, after them. Only once, and only if recent.
+ * goes on a screen. Its monotonic times are moved onto this run's clock all by the same amount,
+ * placed by the newest entry's wall-clock time, so the times between entries stay as measured and
+ * the actual durations still add up, even if the computer's clock was corrected during the service.
+ * Anything this run logged already (a scene put back at start-up) stays, after them. Only once,
+ * and only if recent.
  */
 export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.now(), nowMono = monotonicNow()): boolean {
   const j = useJournalStore.getState()
   if (!kept || kept.v !== 1 || !kept.entries?.length || now - kept.at >= FRESH_MS || now < kept.at || j.entries.some((e) => e.kind === "recovery")) return false
   const base = now - nowMono
-  const entries = kept.entries.map((e) => ({ ...e, mono: e.at - base }))
+  const last = kept.entries.at(-1)!
+  const shift = typeof last.mono === "number" ? last.at - base - last.mono : null
+  const entries = kept.entries.map((e) => ({ ...e, mono: shift !== null && typeof e.mono === "number" ? e.mono + shift : e.at - base }))
   useJournalStore.setState({ entries: capJournal([...entries, ...j.entries]), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length })
   j.add({ kind: "recovery", label: `Service log kept from before Rhema closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
   return true
