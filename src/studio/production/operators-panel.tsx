@@ -15,6 +15,8 @@ import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { deskFreshness, skewWords } from "@/lib/desk-freshness"
+import { backstageRows } from "@/lib/cuesheet"
+import { formatMinutes } from "@/lib/service-timing"
 
 const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event clock only)", bible: "Bible (the Bible source only)", screens: "Screens (congregation scenes only)", present: "Present", configure: "Present and settings" }
 /** Which desks a role gets on a joined computer (the host checks every command again). */
@@ -255,6 +257,7 @@ function JoinedDesk() {
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
           {desks.includes("bible") && <BibleDesk live={live} />}
           {desks.includes("scenes") && <ScenesDesk live={live} />}
+          <RunOfShowView live={live} stale={fresh.stale} />
           <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
             <p className="font-semibold">Talk</p>
             <JoinedTalk people={(live.voice ?? []).filter((p) => p.name !== me?.name)} />
@@ -321,6 +324,52 @@ function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
         ))}
       </ol>
       <p className="text-muted-foreground">The event clock on the host {live.event.mode === "own" ? "is run by the timekeeper" : "follows its screens; starting an event here moves it too"}. Nothing here changes a screen.</p>
+    </section>
+  )
+}
+
+const STATUS = { done: "Done", live: "On now", upcoming: "", skipped: "Skipped" } as const
+const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}${formatMinutes(Math.abs(m) * 60_000)}`)
+
+/**
+ * The backstage cuesheet (#196 R4): the host's run of show with its times, for every desk whatever
+ * its role. Read only: nothing here starts, moves or changes anything.
+ */
+function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
+  const rows = backstageRows(live.rundown)
+  const th = "px-1.5 py-1 text-left text-[0.625rem] font-semibold tracking-wide text-muted-foreground uppercase"
+  const td = "px-1.5 py-1 tabular-nums"
+  return (
+    <section aria-label="Run of show (read only)" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <p className="font-semibold">Run of show</p>
+        <span className="text-muted-foreground">read only</span>
+        {stale && <span className="font-semibold text-confidence-mid">may be out of date</span>}
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground">No times from the host yet: the main service needs a start time there (Prepare), or the host needs updating.</p>
+      ) : (
+        <div className={cn("max-h-80 overflow-auto", stale && "opacity-60")}>
+          <table className="w-full border-collapse">
+            <thead className="border-b border-border">
+              <tr><th className={th}>Item</th><th className={th}>Plan</th><th className={th}>Expected</th><th className={th}>Offset</th><th className={th}>End by</th><th className={th}>Status</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className={cn("border-t border-border/60", r.time.state === "live" && "bg-primary/10 font-semibold", r.time.state === "skipped" && "text-muted-foreground")}>
+                  <td className="max-w-40 truncate px-1.5 py-1">{r.label}</td>
+                  <td className={td}>{hhmm(r.time.plan[0])}–{hhmm(r.time.plan[1])}</td>
+                  <td className={td}>{r.time.state === "done" ? (r.time.actual !== undefined ? `ran ${hhmm(r.time.actual)}${r.time.ranMs !== undefined ? ` · ${formatMs(r.time.ranMs)}` : ""}` : "") : r.time.state === "skipped" ? "" : `${hhmm(r.time.expected[0])}–${hhmm(r.time.expected[1])}`}</td>
+                  <td className={cn(td, r.offsetMinutes !== null && r.offsetMinutes > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{r.offsetMinutes === null ? "" : offsetText(r.offsetMinutes)}</td>
+                  <td className={td}>{r.time.endBy !== undefined ? hhmm(r.time.endBy) : ""}</td>
+                  <td className={cn("px-1.5 py-1", r.time.cut && "font-semibold text-destructive")}>{r.time.cut ? "Cut short" : STATUS[r.time.state]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {live.timing && <p className="text-muted-foreground">Main service: planned to end {hhmm(live.timing.plannedEnd)}, now expected {hhmm(live.timing.expectedEnd)}.</p>}
     </section>
   )
 }

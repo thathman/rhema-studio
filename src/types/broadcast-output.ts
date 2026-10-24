@@ -1,4 +1,5 @@
 import type { ContentType, FeedSourceKind } from "./broadcast"
+import type { CountdownTo } from "./scene"
 import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
 /** display: a window on a monitor; ndi: an NDI sender; browser: a web page on the church network (OBS Browser Source, a TV's browser). */
@@ -188,6 +189,8 @@ export interface StageStyle {
   warnAtMinutes: number
   /** A message on the stage as the timer's time is up. */
   warnWhenOver: boolean
+  /** A countdown on the stage to the next item or a milestone (#196 R2); absent: none. */
+  countdown?: CountdownTo
 }
 
 export interface BroadcastOutputNdiSettings {

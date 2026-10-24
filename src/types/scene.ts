@@ -1,6 +1,12 @@
 import type { BroadcastTheme, ContentType, VerseRenderData } from "./broadcast"
 import type { LowerThird, Ticker } from "./broadcast-output"
 
+/**
+ * What a "time until" clock counts down to (#196 R2): the next item's expected start, the main
+ * service's expected end, or an item's "end by" (`endby:<item id>`).
+ */
+export type CountdownTo = "next" | "end" | `endby:${string}`
+
 /** A place in the frame, in % of its width and height (x/y = top-left). */
 export interface SceneBox {
   x: number
@@ -49,10 +55,12 @@ export interface SceneLayer {
   cameraUrl?: string
   /** camera: words shown in its box while the camera is not playing (#213 fallback); absent = the background. */
   cameraFallback?: string
-  /** clock: what it shows: the service timer (absent), the time of day, or a countdown to `until`. */
-  clockShows?: "timer" | "time" | "until"
+  /** clock: what it shows: the service timer (absent), the time of day, a countdown to `until`, or to the run of show's `countdownTo`. */
+  clockShows?: "timer" | "time" | "until" | "countdown"
   /** clock "until": the time of day counted down to, "HH:MM" (e.g. the service start). */
   until?: string
+  /** clock "countdown": the next item (absent too) or a milestone of the run of show (#196 R2). */
+  countdownTo?: CountdownTo
   /** feed, clock: the look (an approved theme); absent = the output's own looks. */
   themeId?: string
   /** color: the fill. */

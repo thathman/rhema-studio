@@ -1,7 +1,7 @@
 import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { outputOnAir } from "@/lib/output-on-air"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckIcon, GlobeIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RadioIcon, RotateCcwIcon, SettingsIcon, TriangleAlertIcon, TvIcon, VideoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -31,6 +31,8 @@ import { CamerasPanel } from "@/studio/production/cameras-panel"
 import { ReadyMadeFeeds } from "@/studio/production/ready-made-feeds"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { countdownLine, countdownTarget } from "@/lib/countdown"
+import { CountdownSelect } from "@/studio/production/countdown-select"
 
 type Tab = ProductionTab
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -177,10 +179,53 @@ function Timekeeper() {
           </ol>
         )}
       </Card>
-      <Card kicker="Independent" title="Other timers" className="lg:col-span-2">
+      <CountdownCard />
+      <Card kicker="Independent" title="Other timers">
         <AuxTimersPanel />
       </Card>
     </div>
+  )
+}
+
+const CHIME_MINUTES = [0, 1, 2, 3, 5, 10]
+
+/**
+ * Time until the next item or a milestone (#196 R2), the same moment the screens' and stage's
+ * countdowns use, and the chime on this computer (off unless turned on; never on the screens).
+ */
+function CountdownCard() {
+  const prefs = useSettingsStore((s) => s.timekeeperCountdown)
+  const targets = useBroadcastStore((s) => s.countdowns)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const set = useSettingsStore.getState().setTimekeeperCountdown
+  const target = countdownTarget(targets, prefs.to)
+  const line = target ? countdownLine(prefs.to, target, now) : null
+  return (
+    <Card kicker="Countdown" title="Time until" badge={prefs.chime ? <Badge tone="ok">Chime on</Badge> : undefined}>
+      <label className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-semibold">Count down to</span>
+        <CountdownSelect label="Count down to" value={prefs.to} onChange={(to) => set({ to: to ?? "next" })} className="min-w-0 flex-1" />
+      </label>
+      <div className="rounded-[10px] bg-[#182c32] px-[22px] py-4 text-[#eef6f0]">
+        <p className="truncate text-[0.625rem] font-extrabold tracking-[0.12em] text-[#b8cec6] uppercase">{line ? line.label : "Nothing to count down to"}</p>
+        <p className={cn("font-mono text-[clamp(2rem,3.4vw,3.25rem)] leading-[1.15] font-semibold tracking-[-0.055em] tabular-nums", line?.tone === "over" && "text-[#ff9b9d]", line?.tone === "warn" && "text-[#ffd27a]")} role="timer" aria-label="Time until">{line?.text ?? "—"}</p>
+        <p className="text-xs text-[#b8cec6]">{target ? `Expected at ${hhmm(target.at)}; moves as the service runs late or early.` : prefs.to === "next" ? "No next item: the last item is on, or the main service has no start time." : "That milestone is not in this run of show."}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Chime">
+        <label className="flex items-center gap-2 font-semibold">
+          <input type="checkbox" className="size-4" checked={prefs.chime} onChange={(e) => set({ chime: e.target.checked })} />
+          Chime on this computer
+        </label>
+        <select aria-label="When the chime sounds" value={prefs.chimeMinutes} disabled={!prefs.chime} onChange={(e) => set({ chimeMinutes: Number(e.target.value) })} className="h-7 rounded-md border border-input bg-card px-1.5">
+          {CHIME_MINUTES.map((m) => <option key={m} value={m}>{m === 0 ? "At zero only" : `${m} min before, and at zero`}</option>)}
+        </select>
+        <span className="basis-full text-muted-foreground">A short tone here only. The screens, the stage and the online feed never hear it.</span>
+      </div>
+    </Card>
   )
 }
 

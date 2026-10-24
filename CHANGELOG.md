@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Countdown to the next item or a milestone; the run of show on every desk (#196)
+- New clocks count down to **the next item** (when it is now expected to start) or to **a milestone**: the end of the main service, or an item's "end by". Use them in a scene's clock layer (Production → Programs → Clock → Shows), on the stage display (Design → Stage → Countdown) and in Production → Timekeeper. They move as the service runs late or early and count across midnight. On the congregation screens they stop at 0:00; the stage and Timekeeper say how far over it is.
+- Timekeeper can **chime** on this computer at a chosen number of minutes before, and again at zero. It is off until you turn it on, and the screens, stage and online feed never hear it.
+- Every joined desk, whatever its role, now has a read-only **Run of show**: each item's planned and expected times, how far off plan it is, its end by, and whether it is done, on now, skipped or cut short. Nothing on it can be pressed. A host that has not been updated sends no times, and the desk says so.
 ### Find the host instead of typing its address (#197)
 - **Join a host** (Production → Operators) now lists the Rhema hosts on the church network by name (the church name from the Brand Kit, or "Rhema · " and the computer's name). Pick one to fill in its address; **Find hosts** looks again. Typing the address still works.
 - A host announces itself only while its remote control accepts other devices on the network, never when it listens to this computer only, and stops when the listener stops or Rhema quits.

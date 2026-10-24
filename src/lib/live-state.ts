@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { eventStarts, eventTimes } from "@/lib/journal"
 import { CONTENT_TYPES } from "@/types/broadcast"
-import { serviceTiming } from "@/lib/timing-engine"
+import { serviceTiming, type EventState, type ServiceTiming } from "@/lib/timing-engine"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { cameraSourceId, tickerWords, timerWords } from "@/lib/live-sources"
 import { cameraSending, useRouterHealth } from "@/lib/cameras"
@@ -37,7 +37,8 @@ export interface LiveStateV1 {
    */
   sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string; state?: string }[]
   event: { mode: "screens" | "own"; currentId: string | null }
-  rundown: { id: string; reference: string; plannedMinutes: number | null }[]
+  /** Each item; `time` for those in the main service once it has a start time (#196 R4; absent from older hosts). */
+  rundown: { id: string; reference: string; plannedMinutes: number | null; time?: RundownTime }[]
   /** offsetMinutes: the shared running-late offset and who set it (#196). */
   timing: { plannedEnd: number; expectedEnd: number; lateMs: number; offsetMinutes?: number; offsetBy?: string | null } | null
   stageMessage: string
@@ -63,6 +64,38 @@ export interface LiveStateV1 {
   heartbeatMs?: number
 }
 
+/**
+ * An item's times in the run of show (#196 R4), host wall ms, for a desk's read-only cuesheet:
+ * planned and expected start and end, when it went on air (and for how long, once done), its
+ * state, its "end by" and whether that cuts it short.
+ */
+export interface RundownTime {
+  plan: [number, number]
+  expected: [number, number]
+  actual?: number
+  ranMs?: number
+  state: EventState
+  endBy?: number
+  cut?: true
+}
+
+/** The run of show's times by item id, as the Live State carries them. */
+export function rundownTimes(timing: ServiceTiming | null, onAirMs: Map<string, number>): Map<string, RundownTime> {
+  const out = new Map<string, RundownTime>()
+  for (const e of timing?.events ?? []) {
+    out.set(e.id, {
+      plan: [e.plannedStart, e.plannedEnd],
+      expected: [e.expectedStart, e.expectedEnd],
+      ...(e.actualStart !== null ? { actual: e.actualStart } : {}),
+      ...(e.state === "done" ? { ranMs: Math.round(onAirMs.get(e.id) ?? 0) } : {}),
+      state: e.state,
+      ...(e.hardStop !== null ? { endBy: e.hardStop } : {}),
+      ...(e.squeezed ? { cut: true as const } : {}),
+    })
+  }
+  return out
+}
+
 /** The host sends its Live State at least this often, changed or not (on the app's one-second tick). */
 export const LIVE_HEARTBEAT_MS = 2_000
 
@@ -71,7 +104,9 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
   const q = useQueueStore.getState()
   const clock = useEventClock.getState()
   const entries = useJournalStore.getState().entries
-  const timing = serviceTiming({ items: q.items, headers: q.headers, firstOnAir: eventStarts(entries), onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)), liveItemId: clock.currentId, now, adjustMinutes: useServiceOffset.getState().minutes })
+  const onAirMs = eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0))
+  const timing = serviceTiming({ items: q.items, headers: q.headers, firstOnAir: eventStarts(entries), onAirMs, liveItemId: clock.currentId, now, adjustMinutes: useServiceOffset.getState().minutes })
+  const times = rundownTimes(timing, onAirMs)
   const current = useServiceStore.getState().current
   return {
     v: 1,
@@ -87,7 +122,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
       ...stateSourceRows(),
     ],
     event: { mode: clock.mode, currentId: clock.currentId },
-    rundown: q.items.map((i) => ({ id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null })),
+    rundown: q.items.map((i) => { const time = times.get(i.id); return { id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null, ...(time ? { time } : {}) } }),
     timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by } : null,
     stageMessage: b.stageMessage,
     timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null } })(),
