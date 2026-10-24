@@ -106,7 +106,7 @@ export function ArchiveWorkspace() {
               <PackageBlock onClose={() => useShellStore.getState().goTo("prepare")} />
             </div>
           </Card>
-          <Card title="Backups" sub="Everything (services and songs) in one file, and back again.">
+          <Card title="Backups" sub="Services, songs, settings, outputs and looks in one file (no saved keys or passwords), and back again.">
             <DatabaseBlock />
           </Card>
         </div>

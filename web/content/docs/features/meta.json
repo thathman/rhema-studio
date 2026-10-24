@@ -8,10 +8,6 @@
     "theme-designer",
     "ndi-broadcast",
     "remote-control",
-    "queue-and-navigation",
-    "live-sources",
-    "scenes",
-    "browser-feeds-google-tv",
-    "desk-control"
+    "queue-and-navigation"
   ]
 }

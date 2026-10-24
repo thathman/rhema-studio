@@ -206,7 +206,7 @@ function Welcome({ onMain, onJoin, onRestore, onLater }: { onMain: () => void; o
   const choices = [
     { icon: <LaptopIcon />, title: "Set up this computer as the main desk", text: "This computer runs the service with every control. Volunteers, phones and other computers can join later; nobody else is needed.", note: "Recommended", onClick: onMain },
     { icon: <LinkIcon />, title: "Join an existing church host", text: "This computer follows another Rhema at your church. Opens Production → Operators to pair with it; nothing here is replaced.", onClick: onJoin },
-    { icon: <ArchiveRestoreIcon />, title: "Bring in a previous installation", text: "Services and songs from a backup file, a service file or the church folder. You see what comes in before anything here is replaced.", onClick: onRestore },
+    { icon: <ArchiveRestoreIcon />, title: "Bring in a previous installation", text: "Services, songs, settings and looks from a backup file, or services from a service file or the church folder. You see what comes in before anything here is replaced.", onClick: onRestore },
     { icon: <TimerIcon />, title: "Use Rhema now, finish later", text: "Start with the built-in looks. Home keeps a short reminder of what is left.", onClick: onLater },
   ]
   return (
