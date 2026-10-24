@@ -146,7 +146,7 @@ One computer, the **main desk** (the host), runs the service and keeps every con
 
 - **On the host:** Settings → Remote Control: start the HTTP listener and allow other devices on the network. Production → Operators → **Pair an operator, set roles…** gives a code, and sets each device's role.
 - **On the helping computer:** Production → Operators → **Join a host**: pick the host Rhema found (check its address matches the host's Settings), type the code and this computer's name, **Join**. The Desk menu then says what this desk may do, and **Leave this host** stops following.
-- **Roles:** **Timekeeper** (the event clock, running late, the timer, Hold), **Bible** (a reference, its verses, the Bible source), **Screens** (congregation scenes), **Present** (all of these and moving through the service), **Present and settings** (also looks and on-air settings). Notices and the talk channel are for every role. What each role may do, side by side: [main desk and volunteer desks](../web/content/docs/features/desk-control.mdx).
+- **Roles:** **Timekeeper** (the event clock, running late, the timer, Hold), **Bible** (a reference, its verses, the Bible source), **Screens** (congregation scenes), **Present** (all of these and moving through the service), **Present and settings** (also looks and on-air settings). Notices and the talk channel are for every role. What each role may do is listed in the [Production guide](PRODUCTION-GUIDE.md).
 - **Take back control** (Production → Operators, beside each desk) stops a desk's commands at once without unpairing it; **Give control back** ends it.
 - A joined desk that hears nothing from the host for 5 seconds says **Last update N s ago** and dims its clock; it reconnects by itself.
 
