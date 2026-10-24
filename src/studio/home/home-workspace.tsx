@@ -1,4 +1,5 @@
 import { useSettingsStore } from "@/stores/settings-store"
+import { openProductionTab } from "@/studio/production/production-tab"
 import { approvalState } from "@/lib/approval"
 import { ArrowRightIcon, BookOpenIcon, CalendarDaysIcon, CheckIcon, ChevronRightIcon, ImageIcon, InfoIcon, MonitorIcon, MusicIcon, PlayIcon, PlusIcon, PresentationIcon, TriangleAlertIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -33,6 +34,7 @@ export function HomeWorkspace() {
   const fix = (f: ReadinessFix) => {
     if (f === "outputs") openOutputs()
     else if (f === "prepare") setWorkspace("prepare")
+    else if (f === "cameras") openProductionTab("cameras")
     else openSettings("diagnostics")
   }
 

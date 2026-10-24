@@ -3,7 +3,7 @@ import { clockMinutes, clockText, type OutlineHeader } from "@/lib/run-of-show"
 import type { QueueItem } from "@/types"
 
 export type ReadinessStatus = "ok" | "warn" | "info"
-export type ReadinessFix = "outputs" | "prepare" | "settings"
+export type ReadinessFix = "outputs" | "prepare" | "settings" | "cameras"
 
 export interface ReadinessCheck {
   id: string
@@ -60,6 +60,10 @@ export interface ReadinessInput {
   timing?: { startSet: boolean; plannedEnd: string | null; overruns: Array<{ item: string; endsAt: string; endBy: string; minutes: number }> }
   /** Scenes with a camera layer that has no stream address (it shows the scene's background). */
   camerasWithoutAddress?: string[]
+  /** Cameras in a scene set on an output that the camera router says are not sending (#213). */
+  camerasNotSending?: Array<{ camera: string; outputs: string[]; onAir: boolean; routerOff: boolean }>
+  /** Browser feeds on air that no screen (TV, browser, OBS) is watching (#213). */
+  feedsUnwatched?: string[]
 }
 
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
@@ -150,6 +154,21 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           : []),
     ...(i.camerasWithoutAddress?.length
       ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "It shows the scene's background instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Production → Programs." }]
+      : []),
+    ...(i.camerasNotSending?.length
+      ? [{
+          id: "cameras-sending",
+          status: "warn" as const,
+          label: i.camerasNotSending.length === 1 ? `${i.camerasNotSending[0].camera} is not sending` : `${i.camerasNotSending.length} cameras are not sending: ${i.camerasNotSending.map((c) => c.camera).join(", ")}`,
+          detail: (i.camerasNotSending.some((c) => c.routerOff) ? "The camera router is not running. " : "")
+            + i.camerasNotSending.map((c) => `${c.camera}: in the scene on ${c.outputs.join(", ")}${c.onAir ? " (on air now)" : ""}`).join("; ")
+            + ". Until it sends, the scene shows its fallback words or background there. Check the phone is on the church Wi-Fi with the camera page open.",
+          fix: "cameras" as const,
+          fixLabel: "Open Cameras",
+        }]
+      : []),
+    ...(i.feedsUnwatched?.length
+      ? [{ id: "feeds-unwatched", status: "info" as const, label: `${i.feedsUnwatched.join(", ")}: no screen is watching`, detail: "The browser feed is on, but no TV, browser or OBS has it open. Show it on a Google TV, or open its link.", fix: "outputs" as const, fixLabel: "Open outputs" }]
       : []),
   ]
   return { ready: checks.every((c) => c.status !== "warn"), checks }

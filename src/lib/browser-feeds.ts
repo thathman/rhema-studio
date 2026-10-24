@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { newFeedToken } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
@@ -39,31 +39,56 @@ export interface FeedHealth {
   behind: boolean
 }
 
-/** What a browser feed's pages are doing, asked every 2 s while the feed is on (#246 item 9). */
-export function useFeedHealth(id: string, on: boolean): FeedHealth | null {
-  const [health, setHealth] = useState<FeedHealth | null>(null)
-  useEffect(() => {
-    if (!on) return
+/** One poller per feed, shared by everything that shows its health (cards, Show health, Home). */
+const watchers = new Map<string, { users: number; stop: () => void }>()
+
+/**
+ * Ask a feed's pages what they drew every 2 s while anything watches it (#246 item 9, #213 show
+ * health); the answer goes to useFeedHealthStore. Returns the stop for this watcher.
+ */
+export function watchFeed(id: string): () => void {
+  const running = watchers.get(id)
+  if (running) running.users++
+  else {
+    let alive = true
     let last = { seq: -1, behindSince: 0 }
     const ask = async () => {
       const s = await invoke<{ watching: number; seq: number; acked: number } | null>("feed_status", { id }).catch(() => null)
-      if (!s) return setHealth(null)
+      if (!alive) return
+      if (!s) return useFeedHealthStore.setState({ [id]: null })
       const current = s.acked >= s.seq
       const behindSince = current ? 0 : s.seq === last.seq && last.behindSince ? last.behindSince : Date.now()
       last = { seq: s.seq, behindSince }
-      const h = { watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000 }
-      setHealth(h)
-      useFeedHealthStore.setState({ [id]: h })
+      useFeedHealthStore.setState({ [id]: { watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000 } })
     }
     void ask()
     const t = setInterval(() => void ask(), 2000)
-    return () => {
-      clearInterval(t)
-      setHealth(null)
-      useFeedHealthStore.setState({ [id]: null })
+    watchers.set(id, {
+      users: 1,
+      stop: () => {
+        alive = false
+        clearInterval(t)
+        useFeedHealthStore.setState({ [id]: null })
+      },
+    })
+  }
+  let done = false
+  return () => {
+    if (done) return
+    done = true
+    const w = watchers.get(id)
+    if (w && --w.users === 0) {
+      w.stop()
+      watchers.delete(id)
     }
-  }, [id, on])
-  return health
+  }
+}
+
+/** What a browser feed's pages are doing, while the feed is on. */
+export function useFeedHealth(id: string, on: boolean): FeedHealth | null {
+  useEffect(() => (on ? watchFeed(id) : undefined), [id, on])
+  const health = useFeedHealthStore((s) => s[id] ?? null)
+  return on ? health : null
 }
 
 /** The output card's words for a feed's health. */

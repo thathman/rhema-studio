@@ -2,7 +2,7 @@ import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useState } from "react"
-import { CheckIcon, GlobeIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RadioIcon, RotateCcwIcon, SettingsIcon, TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, GlobeIcon, InfoIcon, MonitorIcon, PauseIcon, PlayIcon, RadioIcon, RotateCcwIcon, SettingsIcon, TriangleAlertIcon, TvIcon, VideoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { elapsedMs, formatMs, isRunning, remainingMs, timerTone } from "@/lib/timer"
@@ -10,11 +10,13 @@ import { resetTimerLogged } from "@/lib/timer-reset"
 import { openSettings } from "@/lib/settings-dialog"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
-import { attention, showing, useFeedHealthStore } from "@/lib/show-health"
+import { attention, cameraHealth, cameraStateWords, cameraWords, feedSummary, showing, tvCheckWords, useFeedHealthStore, type Attention, type CameraHealth } from "@/lib/show-health"
+import { useRouterHealth } from "@/lib/cameras"
+import { invoke } from "@tauri-apps/api/core"
 import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
 import { outputDestination, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
-import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, Scene } from "@/types"
+import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, ReceiverTv, Scene } from "@/types"
 import { useJournalStore } from "@/stores/journal-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
@@ -24,7 +26,7 @@ import { AuxTimersPanel } from "@/studio/present/aux-timers"
 import type { ReadinessCheck } from "@/studio/readiness"
 import { SceneComposer } from "@/studio/production/scene-composer"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
-import { useProductionTab, type ProductionTab } from "@/studio/production/production-tab"
+import { openProductionTab, useProductionTab, type ProductionTab } from "@/studio/production/production-tab"
 import { CamerasPanel } from "@/studio/production/cameras-panel"
 import { ReadyMadeFeeds } from "@/studio/production/ready-made-feeds"
 import { useEventClock } from "@/stores/event-clock-store"
@@ -192,24 +194,48 @@ function Screens() {
   const frames = useBroadcastStore((s) => s.outputFrames)
   const scenes = useBroadcastStore((s) => s.scenes)
   const themes = useBroadcastStore((s) => s.themes)
-  const feeds = useFeedHealthStore()
   const openOutputs = useShellStore((s) => s.openOutputs)
-  const needs = attention(outputs, status, feeds)
+  const needs = useNeeds()
   return (
     <Card kicker="Outputs" title="Screens, NDI senders and browser feeds" badge={<div className="flex flex-wrap justify-end gap-2"><ReadyMadeFeeds /><Button size="sm" onClick={openOutputs}><MonitorIcon /> Open outputs</Button></div>}>
-      {needs.length > 0 && (
-        <ul aria-label="Needs attention" className="mb-2 flex flex-col gap-1">
-          {needs.map((n) => (
-            <li key={n.outputId + n.text} className={cn("flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs", n.level === "high" ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-border bg-muted text-foreground")}>
-              <TriangleAlertIcon className="size-3.5 shrink-0" /> {n.text}
-            </li>
-          ))}
-        </ul>
-      )}
+      <NeedsAttention needs={needs} className="mb-2" />
       <ul aria-label="Outputs" className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {outputs.map((o) => <OutputInspector key={o.id} output={o} status={status[o.id]} frame={frames[o.id]} scenes={scenes} themes={themes} />)}
       </ul>
     </Card>
+  )
+}
+
+/** Every camera Rhema knows, with what the router last said (#213); undefined router: no answer yet. */
+function useCameraHealth(): CameraHealth[] {
+  const cameras = useSettingsStore((s) => s.cameras)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const status = useBroadcastStore((s) => s.outputStatus)
+  const router = useRouterHealth()
+  return cameraHealth(cameras, scenes, outputs, status, router.checked ? router.status : undefined)
+}
+
+/** What needs attention now: outputs, browser feeds and the cameras of scenes on air. */
+function useNeeds(): Attention[] {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const status = useBroadcastStore((s) => s.outputStatus)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const feeds = useFeedHealthStore()
+  const cameras = useCameraHealth()
+  return attention(outputs, status, feeds, { cameras, scenes })
+}
+
+function NeedsAttention({ needs, className }: { needs: Attention[]; className?: string }) {
+  if (needs.length === 0) return null
+  return (
+    <ul aria-label="Needs attention" className={cn("flex flex-col gap-1", className)}>
+      {needs.map((n) => (
+        <li key={n.outputId + n.text} className={cn("flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs", n.level === "high" ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-border bg-muted text-foreground")}>
+          <TriangleAlertIcon className="size-3.5 shrink-0" /> {n.text}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -269,7 +295,21 @@ const ICON: Record<ReadinessCheck["status"], React.ReactNode> = {
 
 function Health() {
   const { ready, checks, openOutputs, setWorkspace } = useReadiness()
-  const fix = (c: ReadinessCheck) => (c.fix === "outputs" ? openOutputs() : c.fix === "prepare" ? setWorkspace("prepare") : openSettings("diagnostics"))
+  const needs = useNeeds()
+  const fix = (c: ReadinessCheck) => (c.fix === "outputs" ? openOutputs() : c.fix === "prepare" ? setWorkspace("prepare") : c.fix === "cameras" ? openProductionTab("cameras") : openSettings("diagnostics"))
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <NeedsAttention needs={needs} />
+      <Preflight ready={ready} checks={checks} fix={fix} />
+      <div className="grid gap-[18px] lg:grid-cols-2">
+        <CamerasHealth />
+        <FeedsHealth />
+      </div>
+    </div>
+  )
+}
+
+function Preflight({ ready, checks, fix }: { ready: boolean; checks: ReadinessCheck[]; fix: (c: ReadinessCheck) => void }) {
   return (
     <Card kicker="Before the service" title="Sunday preflight" badge={<Badge tone={ready ? "ok" : "warn"}>{ready ? "Ready" : "Attention needed"}</Badge>}>
       <ul className="flex flex-col divide-y divide-border">
@@ -285,6 +325,114 @@ function Health() {
         ))}
       </ul>
     </Card>
+  )
+}
+
+/**
+ * Each camera as the camera router sees it (#213): not running, not sending, or sending (what and
+ * to how many), and the scenes and screens that use it. Real router answers only.
+ */
+function CamerasHealth() {
+  const cams = useCameraHealth()
+  const ours = cams.filter((c) => c.state !== "elsewhere")
+  const sending = ours.filter((c) => c.state === "sending").length
+  return (
+    <Card kicker="Signal" title="Cameras" badge={ours.length > 0 && <Badge tone={sending === ours.length ? "ok" : "warn"}>{sending} of {ours.length} sending</Badge>}>
+      {cams.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No cameras yet. Add a phone or camera for each angle in Production → Cameras.</p>
+      ) : (
+        <ul aria-label="Camera signals" className="flex flex-col divide-y divide-border">
+          {cams.map((c) => {
+            const bad = c.state === "not-sending" || c.state === "router-off"
+            return (
+              <li key={c.key} aria-label={c.label} className="flex items-start gap-3 py-2.5 text-xs">
+                <VideoIcon aria-hidden className={cn("mt-px size-4 shrink-0", c.state === "sending" ? "text-confidence-high" : bad && c.onAir.length > 0 ? "text-destructive" : "text-muted-foreground")} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{cameraWords(c.label)}</span>
+                  <span className={cn("block", bad && c.onAir.length > 0 ? "font-semibold text-destructive" : bad ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{cameraStateWords(c)}</span>
+                  <span className="block text-muted-foreground">
+                    {c.scenes.length === 0 ? "Not in a scene yet" : `In ${c.scenes.join(", ")}`}
+                    {c.onAir.length > 0 ? ` · on air on ${c.onAir.join(", ")}` : c.assigned.length > 0 ? ` · set on ${c.assigned.join(", ")}` : ""}
+                  </span>
+                </span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <div><Button size="sm" variant="outline" onClick={() => openProductionTab("cameras")}><VideoIcon /> Open Cameras</Button></div>
+    </Card>
+  )
+}
+
+/**
+ * Each browser feed and the screens watching it (#213): how many pages drew the latest frame, and
+ * the Google TVs it was sent to, each of which can be asked what it shows (Rhema Receiver 1.1).
+ */
+function FeedsHealth() {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const status = useBroadcastStore((s) => s.outputStatus)
+  const feeds = useFeedHealthStore()
+  const browser = outputs.filter((o) => o.type === "browser")
+  return (
+    <Card kicker="Signal" title="Browser feeds and Google TVs">
+      {browser.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No browser feeds. Add one in Outputs (Browser Feed) or with Ready-made feeds on the Screens tab.</p>
+      ) : (
+        <ul aria-label="Feed signals" className="flex flex-col divide-y divide-border">
+          {browser.map((o) => {
+            const on = outputOnAir(o, status[o.id])
+            const sum = feedSummary(feeds[o.id], on)
+            return (
+              <li key={o.id} aria-label={o.name} className="flex flex-col gap-1.5 py-2.5 text-xs">
+                <span className="flex items-start gap-3">
+                  <GlobeIcon aria-hidden className="mt-px size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 font-semibold">{o.name}</span>
+                  <span className={cn(sum.tone === "warn" ? "font-semibold text-confidence-mid" : sum.tone === "ok" ? "text-foreground" : "text-muted-foreground")}>{sum.text}</span>
+                </span>
+                {(o.tvs ?? []).length > 0 && (
+                  <ul aria-label={`Google TVs showing ${o.name}`} className="ml-7 flex flex-col gap-1">
+                    {o.tvs!.map((tv) => <TvRow key={tv.address} output={o} tv={tv} />)}
+                  </ul>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">A screen counts once its page shows the feed; Show on a Google TV (in the feed's output settings) adds the TV here.</p>
+    </Card>
+  )
+}
+
+function TvRow({ output, tv }: { output: BroadcastOutput; tv: ReceiverTv }) {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const [check, setCheck] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const ask = async () => {
+    setBusy(true)
+    try {
+      const reply = await invoke<{ name: string; feed: string | null; problem: string | null }>("tv_status", { address: tv.address })
+      setCheck(tvCheckWords(reply, output.id, outputs))
+    } catch (e) {
+      setCheck({ ok: false, text: String(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const forget = () => useBroadcastStore.getState().updateOutput(output.id, { tvs: (output.tvs ?? []).filter((t) => t.address !== tv.address) })
+  return (
+    <li className="flex flex-wrap items-center gap-2">
+      <TvIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0">
+        <span className="font-medium">{tv.name || "Google TV"}</span>
+        <span className="text-muted-foreground"> · {tv.address} · sent {hhmm(tv.sentAt)}</span>
+      </span>
+      <span className="flex-1" />
+      <Button size="sm" variant="outline" disabled={busy} onClick={() => void ask()} aria-label={`Check ${tv.name || tv.address}`}>Check TV</Button>
+      <Button size="sm" variant="ghost" onClick={forget} aria-label={`Forget ${tv.name || tv.address}`}>Forget</Button>
+      {check && <span role="status" className={cn("basis-full pl-5.5", check.ok ? "text-confidence-high" : "text-confidence-mid")}>{check.text}</span>}
+    </li>
   )
 }
 

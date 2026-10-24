@@ -28,6 +28,7 @@ export type {
   BroadcastOutputNdiSettings,
   BroadcastOutputStatus,
   BroadcastOutputType,
+  ReceiverTv,
 } from "./broadcast-output"
 export { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "./broadcast-output"
 export type {

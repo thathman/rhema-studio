@@ -239,6 +239,16 @@ export interface BroadcastOutput {
    */
   monitorName?: string | null
   ndi: BroadcastOutputNdiSettings
+  /** Browser feeds: the Google TVs Rhema sent this feed to (Show on a Google TV), to check on them in Show health (#213). */
+  tvs?: ReceiverTv[]
+}
+
+/** A Google TV running Rhema Receiver that was sent a feed: its name and the address on its screen. */
+export interface ReceiverTv {
+  name: string
+  address: string
+  /** When it was sent (wall-clock ms). */
+  sentAt: number
 }
 
 /** Runtime on-air state for an output, reconciled from the OS. */

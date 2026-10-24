@@ -168,4 +168,19 @@ describe("preflight: the plan and cameras (#213, #196)", () => {
     expect(r.ready).toBe(true)
     expect(r.checks.find((c) => c.id === "cameras")?.label).toBe("Pulpit camera + verse: a camera layer has no stream address")
   })
+
+  it("warns when a camera in a scene set on a screen is not sending, and notes a feed nobody watches (#213)", () => {
+    const r = computeReadiness({ ...good, camerasNotSending: [{ camera: "Pulpit camera", outputs: ["Main Display"], onAir: true, routerOff: false }], feedsUnwatched: ["Foyer TV"] })
+    expect(r.ready).toBe(false)
+    const cam = r.checks.find((c) => c.id === "cameras-sending")!
+    expect(cam).toMatchObject({ status: "warn", label: "Pulpit camera is not sending", fix: "cameras" })
+    expect(cam.detail).toContain("Main Display (on air now)")
+    expect(cam.detail).toContain("fallback words")
+    expect(r.checks.find((c) => c.id === "feeds-unwatched")).toMatchObject({ status: "info", label: "Foyer TV: no screen is watching" })
+    const two = computeReadiness({ ...good, camerasNotSending: [{ camera: "Pulpit camera", outputs: ["Main"], onAir: false, routerOff: true }, { camera: "Choir camera", outputs: ["Main"], onAir: false, routerOff: true }] })
+    expect(two.checks.find((c) => c.id === "cameras-sending")?.label).toBe("2 cameras are not sending: Pulpit camera, Choir camera")
+    expect(two.checks.find((c) => c.id === "cameras-sending")?.detail).toMatch(/^The camera router is not running\./)
+    expect(computeReadiness({ ...good, camerasNotSending: [], feedsUnwatched: [] }).ready).toBe(true)
+  })
 })
+

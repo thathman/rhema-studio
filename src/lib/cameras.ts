@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { create } from "zustand"
 import { toast } from "sonner"
 import { newFeedToken } from "@/lib/output-on-air"
 import { hydrateSettings, useSettingsStore, type CameraSource } from "@/stores/settings-store"
@@ -87,6 +88,30 @@ export function stopRouter(): Promise<void> {
 
 export function routerStatus(): Promise<RouterStatus | null> {
   return invoke<RouterStatus>("camera_router_status").catch(() => null)
+}
+
+/** The router as Show health and Home last saw it (#213); `checked` false until the first answer. */
+export const useRouterHealth = create<{ status: RouterStatus | null; checked: boolean }>(() => ({ status: null, checked: false }))
+
+let routerUsers = 0
+let routerTimer: ReturnType<typeof setInterval> | undefined
+
+/** Ask the router how its cameras are doing every 5 s while anything watches it; returns the stop. */
+export function watchRouter(): () => void {
+  if (routerUsers++ === 0) {
+    const look = () => void routerStatus().then((status) => { if (routerUsers > 0) useRouterHealth.setState({ status, checked: true }) })
+    look()
+    routerTimer = setInterval(look, 5000)
+  }
+  let done = false
+  return () => {
+    if (done) return
+    done = true
+    if (--routerUsers === 0) {
+      clearInterval(routerTimer)
+      useRouterHealth.setState({ status: null, checked: false })
+    }
+  }
 }
 
 let lastSent = ""

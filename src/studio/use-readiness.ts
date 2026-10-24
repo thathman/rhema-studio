@@ -18,6 +18,8 @@ import { isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
 import { themeIdsOf } from "@/lib/output-themes"
+import { useRouterHealth } from "@/lib/cameras"
+import { cameraHealth, cameraWords, useFeedHealthStore } from "@/lib/show-health"
 
 /**
  * Is the service ready? The readiness checks (FR-08) for any view: Home's "Your attention" and
@@ -49,6 +51,10 @@ export function useReadiness() {
     contentStatus().then((s) => { if (!cancelled) setContentError(s.available ? null : (s.error ?? null)) }).catch(() => {})
     return () => { cancelled = true }
   }, [])
+  // Cameras and browser feeds as the signal watch last saw them (#213; Home, Present, Production).
+  const cameras = useSettingsStore((s) => s.cameras)
+  const router = useRouterHealth()
+  const feeds = useFeedHealthStore()
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
@@ -122,6 +128,10 @@ export function useReadiness() {
     unsupportedItems: unsupportedItems.length,
     timing: planCheck(items, headers),
     camerasWithoutAddress: scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !l.cameraUrl)).map((sc) => sc.name),
+    camerasNotSending: cameraHealth(cameras, scenes, outputs, outputStatus, router.checked ? router.status : undefined)
+      .filter((c) => c.assigned.length > 0 && (c.state === "not-sending" || c.state === "router-off"))
+      .map((c) => ({ camera: cameraWords(c.label), outputs: c.assigned, onAir: c.onAir.length > 0, routerOff: c.state === "router-off" })),
+    feedsUnwatched: outputs.filter((o) => o.type === "browser" && outputOnAir(o, outputStatus[o.id]) && feeds[o.id]?.watching === 0).map((o) => o.name),
     signage: outputs
       // A ticker feed (Rhema Ticker | Alpha) has no pictures on purpose.
       .filter((o) => o.role === "signage" && !tickerOnly(o, allSignageIds(o.signage).length, themes.find((t) => t.id === o.themeId)))
