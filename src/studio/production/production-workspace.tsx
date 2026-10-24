@@ -28,6 +28,7 @@ import { SceneComposer } from "@/studio/production/scene-composer"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
 import { openProductionTab, useProductionTab, type ProductionTab } from "@/studio/production/production-tab"
 import { CamerasPanel } from "@/studio/production/cameras-panel"
+import { ObsPanel } from "@/studio/production/obs-panel"
 import { ReadyMadeFeeds } from "@/studio/production/ready-made-feeds"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -40,6 +41,7 @@ const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["screens", "Screens"],
   ["health", "Show health"],
   ["programs", "Programs"],
+  ["obs", "OBS"],
   ["cameras", "Cameras"],
   ["operators", "Operators"],
 ]
@@ -110,6 +112,7 @@ export function ProductionWorkspace() {
           {tab === "screens" && <Screens />}
           {tab === "health" && <Health />}
           {tab === "programs" && <SceneComposer />}
+          {tab === "obs" && <ObsPanel />}
           {tab === "cameras" && <CamerasPanel />}
           {tab === "operators" && <OperatorsPanel />}
         </div>

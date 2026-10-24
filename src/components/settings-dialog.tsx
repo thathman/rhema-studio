@@ -1262,7 +1262,7 @@ function ObsSettingsBlock() {
     <div className="flex flex-col gap-2 rounded-md border border-border p-3 text-xs">
       <label className="flex items-center gap-2 font-medium">
         <input type="checkbox" checked={obs.enabled} onChange={(e) => setObs({ enabled: e.target.checked })} />
-        Connect to OBS (recording status and marks)
+        Connect to OBS (recording status, marks and OBS's scenes)
       </label>
       <div className="flex flex-wrap items-center gap-2">
         <Input aria-label="OBS address" value={draft.host} onChange={(e) => setDraft({ ...draft, host: e.target.value })} placeholder="127.0.0.1" className="h-7 w-40 text-xs" />

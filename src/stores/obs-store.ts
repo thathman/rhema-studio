@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { toast } from "sonner"
 import { ObsClient, ObsRequestError } from "@/lib/obs"
 import { useJournalStore } from "@/stores/journal-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type ObsSettings } from "@/stores/settings-store"
 
 type Status = "off" | "connecting" | "connected" | "error"
@@ -13,13 +14,29 @@ interface ObsState {
   recording: { active: boolean; paused: boolean; timecode: string | null } | null
   /** false once OBS said it has no record chapters (needs OBS 30.2+). */
   chapters: boolean | null
+  /** OBS's own scenes, in OBS's order (top of its list first). Empty until OBS has answered. */
+  scenes: string[]
+  /** What OBS's program (the stream and recording) shows now, as OBS reports it. Never Rhema's congregation scenes. */
+  program: string | null
+  /** OBS's preview scene; only in Studio Mode. */
+  preview: string | null
+  /** OBS's Studio Mode; null until OBS has answered. */
+  studioMode: boolean | null
   connect: () => Promise<void>
   disconnect: () => void
   startRecording: () => Promise<void>
   stopRecording: () => Promise<void>
   /** Note a moment (sermon start/end…): in the service log with the recording time, and as a recording chapter where OBS supports it. */
   mark: (label: string) => Promise<void>
+  /** Studio Mode: put a scene in OBS's preview. Changes nothing on the stream. */
+  setPreview: (scene: string) => Promise<void>
+  /** Studio Mode: OBS's own transition, preview to program. */
+  take: () => Promise<void>
+  /** Outside Studio Mode: switch OBS's program straight to a scene. The panel asks first; this changes what the stream shows. */
+  switchProgram: (scene: string) => Promise<void>
 }
+
+const NO_SCENES = { scenes: [] as string[], program: null, preview: null, studioMode: null }
 
 let client: ObsClient | null = null
 let poll: ReturnType<typeof setInterval> | null = null
@@ -41,6 +58,84 @@ async function refresh(): Promise<void> {
   }
 }
 
+/** OBS's scene list as it sends it, put in OBS's own order: highest sceneIndex is the top of OBS's list. */
+export function sceneNames(list: unknown): string[] {
+  if (!Array.isArray(list)) return []
+  return list
+    .filter((x): x is { sceneName: string; sceneIndex?: number } => typeof x?.sceneName === "string")
+    .map((x, i) => ({ name: x.sceneName, at: typeof x.sceneIndex === "number" ? x.sceneIndex : i }))
+    .sort((a, b) => b.at - a.at)
+    .map((x) => x.name)
+}
+
+// Bumped by every scene event, so an answer that was overtaken by a change in OBS is asked again rather than shown.
+let sceneEpoch = 0
+
+/** Read OBS's scenes, program, preview and Studio Mode afresh (on connect, and when OBS says they changed). */
+async function loadScenes(): Promise<void> {
+  const c = client
+  if (!c) return
+  const epoch = sceneEpoch
+  try {
+    const [list, mode] = await Promise.all([
+      c.request<{ currentProgramSceneName?: string | null; currentPreviewSceneName?: string | null; scenes?: unknown }>("GetSceneList"),
+      c.request<{ studioModeEnabled?: boolean }>("GetStudioModeEnabled"),
+    ])
+    if (client !== c) return
+    if (epoch !== sceneEpoch) return void loadScenes()
+    const studioMode = mode.studioModeEnabled === true
+    useObsStore.setState({ scenes: sceneNames(list.scenes), program: list.currentProgramSceneName || null, preview: studioMode ? list.currentPreviewSceneName || null : null, studioMode })
+  } catch {
+    // Unknown, not empty-and-sure: show nothing rather than a stale list.
+    if (client === c) useObsStore.setState(NO_SCENES)
+  }
+}
+
+/** OBS's scene events: follow what OBS (or anyone else using it) changed. */
+function onSceneEvent(type: string, data: Record<string, unknown>): void {
+  const name = typeof data.sceneName === "string" ? data.sceneName : null
+  switch (type) {
+    case "CurrentProgramSceneChanged":
+      sceneEpoch++
+      useObsStore.setState({ program: name })
+      break
+    case "CurrentPreviewSceneChanged":
+      sceneEpoch++
+      if (useObsStore.getState().studioMode) useObsStore.setState({ preview: name })
+      break
+    case "SceneListChanged":
+      sceneEpoch++
+      useObsStore.setState({ scenes: sceneNames(data.scenes) })
+      break
+    case "StudioModeStateChanged":
+      sceneEpoch++
+      if (data.studioModeEnabled === true) {
+        useObsStore.setState({ studioMode: true })
+        void loadScenes() // the preview OBS opens Studio Mode with
+      } else {
+        useObsStore.setState({ studioMode: false, preview: null })
+      }
+      break
+    case "SceneNameChanged":
+    case "SceneCreated":
+    case "SceneRemoved":
+      sceneEpoch++
+      void loadScenes()
+      break
+  }
+}
+
+/** Rehearsal is a sandbox (#246) and OBS's program is the online stream: no scene change reaches OBS while practising. */
+export const OBS_REHEARSAL_REASON = "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise"
+
+function refusedInRehearsal(): boolean {
+  if (!useBroadcastStore.getState().rehearsal) return false
+  toast.info("OBS not changed", { description: OBS_REHEARSAL_REASON })
+  return true
+}
+
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
 function stopTimers(): void {
   if (poll) clearInterval(poll)
   poll = null
@@ -53,6 +148,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
   error: null,
   recording: null,
   chapters: null,
+  ...NO_SCENES,
 
   connect: async () => {
     const o = useSettingsStore.getState().obs
@@ -62,15 +158,16 @@ export const useObsStore = create<ObsState>((set, get) => ({
     const c = new ObsClient({
       url: url(o),
       password: o.password,
-      onEvent: (type) => {
+      onEvent: (type, data) => {
         // Pause/resume/start/stop: ask OBS for the full state rather than reading one flag.
         if (type === "RecordStateChanged") void refresh()
+        else if (client === c) onSceneEvent(type, data)
       },
       onClose: (reason) => {
         if (client !== c) return
         client = null
         stopTimers()
-        useObsStore.setState({ status: "error", error: reason, recording: null })
+        useObsStore.setState({ status: "error", error: reason, recording: null, ...NO_SCENES })
         // Try again quietly while the connection stays enabled.
         if (useSettingsStore.getState().obs.enabled) retry = setTimeout(() => void useObsStore.getState().connect(), 15_000)
       },
@@ -80,7 +177,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
       await c.connect()
       if (client !== c) return
       set({ status: "connected", error: null, recording: null })
-      await refresh()
+      await Promise.all([refresh(), loadScenes()])
       // A newer connect (or a disconnect) happened while waiting: this one must not start a poll.
       if (client !== c) return
       if (poll) clearInterval(poll)
@@ -88,7 +185,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     } catch (e) {
       if (client !== c) return
       client = null
-      set({ status: "error", error: e instanceof Error ? e.message : String(e), recording: null })
+      set({ status: "error", error: e instanceof Error ? e.message : String(e), recording: null, ...NO_SCENES })
       if (useSettingsStore.getState().obs.enabled) retry = setTimeout(() => void useObsStore.getState().connect(), 15_000)
     }
   },
@@ -98,7 +195,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     const c = client
     client = null
     c?.close()
-    set({ status: "off", error: null, recording: null, chapters: null })
+    set({ status: "off", error: null, recording: null, chapters: null, ...NO_SCENES })
   },
 
   startRecording: async () => {
@@ -141,6 +238,38 @@ export const useObsStore = create<ObsState>((set, get) => ({
       } else {
         toast.warning("OBS chapter not added", { description: e instanceof Error ? e.message : String(e) })
       }
+    }
+  },
+
+  // Scene changes happen only from these three, each a deliberate click; OBS's events then report the result.
+  setPreview: async (scene) => {
+    if (!client || get().studioMode !== true || refusedInRehearsal()) return
+    try {
+      await client.request("SetCurrentPreviewScene", { sceneName: scene })
+    } catch (e) {
+      toast.error("OBS did not change its preview", { description: errText(e) })
+    }
+  },
+
+  take: async () => {
+    const preview = get().preview
+    if (!client || get().studioMode !== true || !preview || refusedInRehearsal()) return
+    try {
+      await client.request("TriggerStudioModeTransition")
+      useJournalStore.getState().add({ kind: "obs", label: `OBS: took ${preview} to its program (from Rhema)` })
+    } catch (e) {
+      toast.error("OBS did not take the preview", { description: errText(e) })
+    }
+  },
+
+  switchProgram: async (scene) => {
+    // In Studio Mode the stream changes only through Take.
+    if (!client || get().studioMode !== false || refusedInRehearsal()) return
+    try {
+      await client.request("SetCurrentProgramScene", { sceneName: scene })
+      useJournalStore.getState().add({ kind: "obs", label: `OBS: switched its program to ${scene} (from Rhema)` })
+    } catch (e) {
+      toast.error("OBS did not switch scene", { description: errText(e) })
     }
   },
 }))

@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { useShellStore } from "@/studio/shell-store"
 
-export type ProductionTab = "timekeeper" | "screens" | "health" | "programs" | "cameras" | "operators"
+export type ProductionTab = "timekeeper" | "screens" | "health" | "programs" | "obs" | "cameras" | "operators"
 
 /** Another page asking Production to open at a tab (the setup's "Join an existing church host" opens Operators). */
 export const useProductionTab = create<{ requested: ProductionTab | null }>(() => ({ requested: null }))

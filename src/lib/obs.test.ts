@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { ObsClient, ObsRequestError, obsAuth } from "./obs"
+import { OBS_SUBSCRIPTIONS, ObsClient, ObsRequestError, obsAuth } from "./obs"
 
 /** A scripted stand-in for OBS's WebSocket server. */
 function fakeObs(opts: { password?: boolean; onRequest?: (type: string, data: unknown) => { ok: boolean; data?: unknown; code?: number } }) {
@@ -29,7 +29,7 @@ describe("obs-websocket client", () => {
     expect(await obsAuth("supersecretpassword", "lM1GncleQOaCu9lT1yeUZhFYnqhsLLP1G5lAGo3ixaI=", "+IxH4CnCiqpX1rM9scsNynZzbOe4KhDeYcTNS3PDaeY=")).toBe("1Ct943GAT+6YQUUX47Ia/ncufilbe6+oD6lY+5kaCu4=")
   })
 
-  it("identifies with authentication, subscribes to output events, and resolves requests", async () => {
+  it("identifies with authentication, subscribes to scene, output and studio-mode events, and resolves requests", async () => {
     const obs = fakeObs({ password: true, onRequest: (type) => (type === "GetRecordStatus" ? { ok: true, data: { outputActive: true, outputTimecode: "00:12:31.000" } } : { ok: false, code: 204 }) })
     const events: string[] = []
     const client = new ObsClient({ url: "ws://127.0.0.1:4455", password: "supersecretpassword", socket: () => obs.ws as unknown as WebSocket, onEvent: (t) => events.push(t) })
@@ -37,7 +37,8 @@ describe("obs-websocket client", () => {
     obs.hello()
     await connected
     const identify = obs.sent.find((m) => m.op === 1)
-    expect(identify?.d).toEqual({ rpcVersion: 1, eventSubscriptions: 64, authentication: "1Ct943GAT+6YQUUX47Ia/ncufilbe6+oD6lY+5kaCu4=" })
+    expect(OBS_SUBSCRIPTIONS).toBe(4 | 64 | 1024)
+    expect(identify?.d).toEqual({ rpcVersion: 1, eventSubscriptions: OBS_SUBSCRIPTIONS, authentication: "1Ct943GAT+6YQUUX47Ia/ncufilbe6+oD6lY+5kaCu4=" })
     expect(await client.request("GetRecordStatus")).toEqual({ outputActive: true, outputTimecode: "00:12:31.000" })
     await expect(client.request("CreateRecordChapter", { chapterName: "Sermon" })).rejects.toBeInstanceOf(ObsRequestError)
     obs.ws.onmessage?.({ data: JSON.stringify({ op: 5, d: { eventType: "RecordStateChanged", eventData: { outputActive: false } } }) })

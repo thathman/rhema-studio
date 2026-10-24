@@ -1103,6 +1103,23 @@ Needs two computers on the same network (the host and a joining computer). Some 
 | 10eh.7 | On the host stop the HTTP listener; untick "accept other devices" and start it again (this computer only). On the joiner press **Find hosts** each time. | No host is listed either time ("No host found…"); the address can still be typed. | Unverified |
 | 10eh.8 | Tick accept other devices again, tick https for phones, start the listener on port 9000; then quit Rhema on the host. Press **Find hosts** after each. | First it lists the host at :9000 (`dns-sd -L "CAC Ibadan" _rhema-host._tcp` shows `v=1 tls=9001`). After quitting, no host is listed. | Unverified |
 
+### 10ek. OBS's scenes, preview and Take in OBS (#197)
+
+Needs OBS 28 or later (with its WebSocket server on: Tools → WebSocket Server Settings) on this computer or another on the church network, with at least three scenes (e.g. Wide, Pulpit, Choir). Settings → Remote control → Connect to OBS with its address, port and password. Watch OBS's own window alongside Rhema.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ek.1 | Production → OBS, with OBS connected and Studio Mode off in OBS. | The tab sits right after Programs. "Connected"; OBS's scenes are listed in the same order as OBS's Scenes dock; the scene on OBS's program reads "Program" and appears under "On OBS's program". The words say these are OBS's scenes, separate from Rhema's congregation scenes. | Unverified |
+| 10ek.2 | In OBS, click another scene (outside Studio Mode); add a scene; rename one. | Within a second Rhema's Program mark moves to it; the new scene appears in its place; the renamed one shows its new name. | Unverified |
+| 10ek.3 | In Rhema press **Switch OBS to this scene…** on Pulpit, then **Cancel**. | A confirmation "This changes what the stream shows." appears; Cancel closes it and OBS does not change. | Unverified |
+| 10ek.4 | Press **Switch OBS to this scene…** on Pulpit again, then **Switch OBS**. | OBS's program changes to Pulpit; Rhema shows Pulpit as Program. Archive (service log) has "OBS: switched its program to Pulpit (from Rhema)". | Unverified |
+| 10ek.5 | Turn on Studio Mode in OBS. | Rhema says Studio Mode is on, shows OBS's preview scene, and each scene now has **Set as OBS preview** (no Switch buttons). | Unverified |
+| 10ek.6 | **Set as OBS preview** on Choir. | OBS's preview (left) shows Choir; OBS's program (the stream) does not change. Rhema marks Choir "Preview". | Unverified |
+| 10ek.7 | Press **Take in OBS: Choir**. | OBS runs its own transition (the one chosen in OBS); Choir is on OBS's program; Rhema follows. The service log has "OBS: took Choir to its program (from Rhema)". | Unverified |
+| 10ek.8 | Take a congregation scene from Production → Programs or Present, and show a verse and a song live. | OBS's program and preview do not change. | Unverified |
+| 10ek.9 | Quit OBS (or unplug the network to the OBS computer); then start it again. | Rhema shows "Not connected" with no scene list (no stale Program); within 15 seconds of OBS being back the list and Program return by themselves. | Unverified |
+| 10ek.10 | On a computer that joined this host (Production → Operators → Join), with its own OBS connection on, open Production → OBS. | It says OBS's scenes are changed from the main desk; no Switch, preview or Take buttons. | Unverified |
+| 10ek.11 | Turn rehearsal on (Present). In Production → OBS, Tab to **Set as OBS preview** / **Take in OBS** (Studio Mode) and **Switch OBS to this scene…** (Studio Mode off) and press each; with a screen reader, listen to the button. | The buttons can be focused but do nothing; the tab says "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise" and the screen reader reads it with the button. OBS does not change. Turn rehearsal off: they work again. | Unverified |
 ### 10em. AI assistants read services, songs and drafts as resources (#252)
 
 Settings → AI assistants on, at least one saved service with phases and groups, a few songs with lyrics, one AI draft waiting. An assistant (Claude Desktop) connected with `Rhema --mcp`, or the stdio check (`mcp-006-check.py <Rhema binary> <HOME>`).

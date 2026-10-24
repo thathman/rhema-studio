@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### OBS's scenes in Production; preview and Take in OBS (#197)
+- New **Production → OBS** tab (beside Programs) lists OBS's own scenes, in OBS's order, and shows which one is on OBS's program (the stream and recording) and, in Studio Mode, which is in OBS's preview. It follows OBS as it changes, including cuts made in OBS itself.
+- With Studio Mode on in OBS: **Set as OBS preview** on a scene, then **Take in OBS** to run OBS's own transition. With Studio Mode off: **Switch OBS to this scene…** asks first ("This changes what the stream shows") before anything changes.
+- This is OBS's program, kept apart from Rhema's congregation scenes: taking a scene to the screens, or a verse or song going live, never changes OBS. Scene changes made from Rhema go into the service log. While rehearsal is on these buttons do nothing and say why: OBS is the live stream. For now only the main desk changes OBS; a joined desk sees the list only.
 ### AI assistants can open the church's services, songs and drafts as documents (#252)
 - An assistant connected to Rhema (Settings → AI assistants) can now open read-only documents: the list of services, one service's run of show (phases, groups, items with planned minutes and finish-by times), the song and hymn titles, the installed Bibles, the looks and scenes, and the AI drafts waiting for review. In Claude Desktop they appear in the attach menu.
 - Song lyrics and slide text are never in them, and nothing in them can change a service or a screen.
