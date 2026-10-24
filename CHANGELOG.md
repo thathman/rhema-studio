@@ -5,9 +5,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 ## Unreleased
 
 ### Rhema finds Google TVs by itself (#198)
-- **Show on a Google TV** lists the TVs running Rhema Receiver on the church network, by name, as soon as it opens; **Find TVs** looks again. Pick one instead of typing its address (with one TV it is picked already).
-- The code on the TV's screen is still needed, and typing an address still works when a network blocks the search.
-- Rhema Receiver 1.1.0.0 tells the network it is there under the TV's name and shows that name on its screen. Install the new version on each TV once.
+- **Show on a Google TV** lists the TVs running Rhema Receiver on the church network, by name and address, as soon as it opens; **Find TVs** looks again. Pick the one whose address matches the TV's screen instead of typing it; Rhema never picks one by itself.
+- Rhema checks the code with the TV before it sends the feed's link, so a device pretending to be a TV gets nothing; the code never goes over the network. Typing an address still works when a network blocks the search.
+- Rhema Receiver 1.2.0.0 tells the network it is there under the TV's name, shows that name on its screen, and does the code check. Install it on each TV once: Rhema asks you to update an older one.
 
 ### Fold the sidebar to icons (#299)
 - A **Collapse** button above your name at the foot of the sidebar folds it to icons only, giving the page more room; the same button (or **⌘B / Ctrl+B**) opens it out again.

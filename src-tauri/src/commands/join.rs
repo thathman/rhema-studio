@@ -246,16 +246,59 @@ struct TvReply {
     error: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct TvChallengeReply {
+    ok: bool,
+    y: Option<String>,
+    proof: Option<String>,
+    error: Option<String>,
+}
+
+const OLD_RECEIVER: &str = "Update Rhema Receiver on the TV (1.2 or later): this one cannot prove it is the TV showing the code, so the feed link was not sent.";
+const NOT_THIS_TV: &str = "That code is not the one on this TV's screen, or this is not a real Rhema Receiver. Check the code on the TV and try again; the feed link was not sent.";
+
+fn tv_unreachable(_: reqwest::Error) -> String {
+    "Could not reach the TV: is Rhema Receiver open on it, on the same network?".to_string()
+}
+
+/// The TV's IPv4 address and port exactly as Rhema reaches it: the TV's proof names this address.
+async fn tv_target(address: &str) -> Result<std::net::SocketAddrV4, String> {
+    let base = tv_url(address)?;
+    let not_found = || format!("No TV found at {}", address.trim());
+    let host_port = base.trim_start_matches("http://").to_string();
+    let mut found = tokio::net::lookup_host(host_port).await.map_err(|_| not_found())?;
+    found.find_map(|a| if let std::net::SocketAddr::V4(v4) = a { Some(v4) } else { None }).ok_or_else(not_found)
+}
+
 /// Give a Rhema Receiver a feed to show (#198): its address and the code on its screen, so only
 /// someone who can see the TV assigns it. The TV keeps showing it after a restart.
 #[tauri::command]
 pub async fn tv_show(address: String, code: String, url: String) -> Result<String, String> {
-    let r = client(Some(Duration::from_secs(10)))?
-        .post(format!("{}/show", tv_url(&address)?))
-        .json(&serde_json::json!({ "code": code.trim(), "url": url }))
+    show_on_tv(&address, &code, &url).await
+}
+
+/// First the code check (`tv_proof`): the link goes only to a TV that proved it shows this code.
+async fn show_on_tv(address: &str, code: &str, url: &str) -> Result<String, String> {
+    let target = tv_target(address).await?.to_string();
+    let base = format!("http://{target}");
+    // Straight to the TV, never through a proxy: the proof is for the address Rhema reaches.
+    let http = reqwest::Client::builder().no_proxy().connect_timeout(Duration::from_secs(5)).timeout(Duration::from_secs(10)).build().map_err(|e| e.to_string())?;
+    let desk = super::tv_proof::Desk::start(code.trim())?;
+    let r = http.post(format!("{base}/challenge")).json(&serde_json::json!({ "x": desk.public_hex() })).send().await.map_err(tv_unreachable)?;
+    if r.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(OLD_RECEIVER.into());
+    }
+    let reply: TvChallengeReply = r.json().await.map_err(|e| format!("The TV's answer was not understood: {e}"))?;
+    if !reply.ok {
+        return Err(reply.error.unwrap_or_else(|| "The TV refused".into()));
+    }
+    let key = desk.finish(reply.y.as_deref().unwrap_or_default(), &target, reply.proof.as_deref().unwrap_or_default()).ok_or(NOT_THIS_TV)?;
+    let r = http
+        .post(format!("{base}/show"))
+        .json(&serde_json::json!({ "url": url, "proof": super::tv_proof::desk_proof(&key, url) }))
         .send()
         .await
-        .map_err(|_| "Could not reach the TV: is Rhema Receiver open on it, on the same network?".to_string())?;
+        .map_err(tv_unreachable)?;
     let reply: TvReply = r.json().await.map_err(|e| format!("The TV's answer was not understood: {e}"))?;
     if reply.ok { Ok(reply.name.unwrap_or_default()) } else { Err(reply.error.unwrap_or_else(|| "The TV refused".into())) }
 }
@@ -316,18 +359,19 @@ fn tv_name(fullname: &str) -> String {
     fullname.strip_suffix(TV_SERVICE).unwrap_or(fullname).trim_end_matches('.').to_string()
 }
 
-/// The address people would type: a private LAN address first, never loopback or link-local.
+/// The TV's church-network address: a private one (192.168…, 10…, 172.16–31…) first, else a
+/// link-local one (169.254…). Anything else is not a TV on this LAN and is left out.
 fn tv_ip(ips: &[Ipv4Addr]) -> Option<Ipv4Addr> {
-    let usable = ips.iter().filter(|ip| !ip.is_loopback() && !ip.is_link_local() && !ip.is_unspecified() && !ip.is_multicast());
-    usable.clone().filter(|ip| ip.is_private()).min().or_else(|| usable.min()).copied()
+    ips.iter().filter(|ip| ip.is_private()).min().or_else(|| ips.iter().filter(|ip| ip.is_link_local()).min()).copied()
 }
 
 /// What the search heard (service name → port and IPv4 addresses), as a list sorted by name.
-/// A TV with no usable IPv4 address is left out; the same address heard twice is listed once.
+/// Left out: a TV with no LAN IPv4 address, or not on Rhema Receiver's port. The same address heard
+/// twice is listed once.
 fn found_tvs(seen: BTreeMap<String, (u16, Vec<Ipv4Addr>)>) -> Vec<FoundTv> {
     let mut tvs: Vec<FoundTv> = seen
         .into_iter()
-        .filter(|(_, (port, _))| *port != 0)
+        .filter(|(_, (port, _))| *port == TV_PORT)
         .filter_map(|(full, (port, ips))| tv_ip(&ips).map(|ip| FoundTv { name: tv_name(&full), address: format!("{ip}:{port}") }))
         .collect();
     tvs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.address.cmp(&b.address)));
@@ -431,25 +475,114 @@ mod tests {
         let mut seen = BTreeMap::new();
         seen.insert("Sanctuary TV._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("169.254.3.4"), ip("192.168.3.37")]));
         seen.insert("hall.tv._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("10.0.0.9")]));
-        seen.insert("No address._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("127.0.0.1")]));
+        seen.insert("Loopback._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("127.0.0.1")]));
+        seen.insert("Public._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("8.8.8.8")]));
         seen.insert("Same TV again._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("192.168.3.37")]));
-        seen.insert("No port._rhema-tv._tcp.local.".to_string(), (0, vec![ip("192.168.3.40")]));
+        seen.insert("Other port._rhema-tv._tcp.local.".to_string(), (9000, vec![ip("192.168.3.40")]));
+        seen.insert("No port._rhema-tv._tcp.local.".to_string(), (0, vec![ip("192.168.3.41")]));
+        seen.insert("Link-local only._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("169.254.7.7")]));
         assert_eq!(
             found_tvs(seen),
             vec![
                 FoundTv { name: "hall.tv".into(), address: "10.0.0.9:8095".into() },
+                FoundTv { name: "Link-local only".into(), address: "169.254.7.7:8095".into() },
                 FoundTv { name: "Same TV again".into(), address: "192.168.3.37:8095".into() },
             ]
         );
     }
 
     #[test]
-    fn tv_discovery_prefers_a_private_address_and_keeps_public_ones_as_a_last_resort() {
+    fn tv_discovery_keeps_only_private_then_link_local_addresses() {
         let ip = |s: &str| s.parse::<Ipv4Addr>().unwrap();
-        assert_eq!(tv_ip(&[ip("8.8.8.8"), ip("192.168.1.9")]), Some(ip("192.168.1.9")));
-        assert_eq!(tv_ip(&[ip("8.8.8.8")]), Some(ip("8.8.8.8")));
-        assert_eq!(tv_ip(&[ip("127.0.0.1"), ip("169.254.1.1"), ip("0.0.0.0")]), None);
+        assert_eq!(tv_ip(&[ip("8.8.8.8"), ip("169.254.1.1"), ip("192.168.1.9")]), Some(ip("192.168.1.9")));
+        assert_eq!(tv_ip(&[ip("8.8.8.8"), ip("169.254.1.1")]), Some(ip("169.254.1.1")));
+        assert_eq!(tv_ip(&[ip("8.8.8.8")]), None);
+        assert_eq!(tv_ip(&[ip("127.0.0.1"), ip("0.0.0.0"), ip("224.0.0.251")]), None);
         assert_eq!(tv_ip(&[]), None);
+    }
+
+    /// A pretend receiver on 127.0.0.1 for `show_on_tv`: answers /challenge as told and records each
+    /// request (path and body), so a test can see whether the feed link ever reached it.
+    async fn pretend_tv(answer: fn(&str, &str) -> (u16, serde_json::Value)) -> (String, std::sync::Arc<Mutex<Vec<(String, String)>>>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let seen = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let (log, me) = (seen.clone(), address.clone());
+        tokio::spawn(async move {
+            while let Ok((mut c, _)) = listener.accept().await {
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                let (head, body) = loop {
+                    let n = c.read(&mut chunk).await.unwrap();
+                    buf.extend_from_slice(&chunk[..n]);
+                    let text = String::from_utf8_lossy(&buf).to_string();
+                    if let Some((head, body)) = text.split_once("\r\n\r\n") {
+                        let len = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap())).unwrap_or(0);
+                        if body.len() >= len || n == 0 {
+                            break (head.to_string(), body.to_string());
+                        }
+                    }
+                };
+                let path = head.split(' ').nth(1).unwrap_or("").to_string();
+                log.lock().unwrap().push((path.clone(), body.clone()));
+                let (status, reply) = if path == "/challenge" { answer(&body, &me) } else { (200, serde_json::json!({ "ok": true, "name": "Hall TV" })) };
+                let out = reply.to_string();
+                let _ = c.write_all(format!("HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{out}", out.len()).as_bytes()).await;
+            }
+        });
+        (address, seen)
+    }
+
+    fn tv_answers_with(code: &'static str) -> fn(&str, &str) -> (u16, serde_json::Value) {
+        fn answer(code: &str, body: &str, me: &str) -> (u16, serde_json::Value) {
+            let x = serde_json::from_str::<serde_json::Value>(body).unwrap()["x"].as_str().unwrap().to_string();
+            let y = num_bigint::BigUint::from(123_456_789u64) << 300usize;
+            let (y, proof, _) = super::super::tv_proof::tests::tv_answer(&x, code, me, &y).unwrap();
+            (200, serde_json::json!({ "ok": true, "y": y, "proof": proof }))
+        }
+        match code {
+            "111111" => |b, me| answer("111111", b, me),
+            _ => |b, me| answer("999999", b, me),
+        }
+    }
+
+    const FEED: &str = "http://192.168.3.10:8080/feed/abc?t=secret";
+
+    #[tokio::test]
+    async fn tv_show_sends_the_link_only_after_the_tv_proves_the_code() {
+        let (address, seen) = pretend_tv(tv_answers_with("111111")).await;
+        assert_eq!(show_on_tv(&address, " 111111 ", FEED).await.unwrap(), "Hall TV");
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), ["/challenge", "/show"]);
+        assert!(!seen[0].1.contains("111111"), "the code itself is never sent");
+        let show: serde_json::Value = serde_json::from_str(&seen[1].1).unwrap();
+        assert_eq!(show["url"], FEED);
+        assert_eq!(show["proof"].as_str().map(str::len), Some(64));
+        assert!(show.get("code").is_none());
+    }
+
+    #[tokio::test]
+    async fn tv_show_never_sends_the_link_when_the_proof_fails() {
+        // A TV with another code, or a pretend TV that accepts anything.
+        let (address, seen) = pretend_tv(tv_answers_with("999999")).await;
+        assert_eq!(show_on_tv(&address, "111111", FEED).await.unwrap_err(), NOT_THIS_TV);
+        let (address2, seen2) = pretend_tv(|_, _| (200, serde_json::json!({ "ok": true, "y": "2", "proof": "00" }))).await;
+        assert_eq!(show_on_tv(&address2, "111111", FEED).await.unwrap_err(), NOT_THIS_TV);
+        let (address3, seen3) = pretend_tv(|_, _| (200, serde_json::json!({ "ok": true }))).await;
+        assert_eq!(show_on_tv(&address3, "111111", FEED).await.unwrap_err(), NOT_THIS_TV);
+        for log in [seen, seen2, seen3] {
+            let log = log.lock().unwrap();
+            assert_eq!(log.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), ["/challenge"]);
+            assert!(log.iter().all(|(_, body)| !body.contains("/feed/")), "the link never left Rhema");
+        }
+    }
+
+    #[tokio::test]
+    async fn tv_show_refuses_an_old_receiver_without_the_code_check() {
+        let (address, seen) = pretend_tv(|_, _| (404, serde_json::json!({ "ok": false, "error": "Rhema Receiver only takes POST /show and GET /status" }))).await;
+        assert_eq!(show_on_tv(&address, "111111", FEED).await.unwrap_err(), OLD_RECEIVER);
+        assert_eq!(seen.lock().unwrap().len(), 1);
     }
 
     #[test]

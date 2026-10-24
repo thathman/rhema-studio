@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -35,9 +36,9 @@ import java.util.List;
 
 /**
  * Rhema Receiver (#198): shows one Rhema browser feed full screen and keeps showing it, across
- * restarts and network drops. Until it has one, it shows its address and a code; Rhema sends the
- * feed's link with that code (Outputs → a browser feed → Show on a Google TV), so only someone who
- * can see this screen assigns it. OK on the remote shows the address and a new code again. It
+ * restarts and network drops. Until it has one, it shows its address and a code; Rhema checks that
+ * code with this TV (CodeProof) and only then sends the feed's link (Outputs → a browser feed → Show on
+ * a Google TV), so only someone who can see this screen assigns it. OK on the remote shows the address and a new code again. It
  * also tells the network it is here (mDNS/NSD), so Rhema can list it without anyone typing the address.
  */
 public class MainActivity extends Activity {
@@ -46,6 +47,7 @@ public class MainActivity extends Activity {
     static final String SERVICE_TYPE = "_rhema-tv._tcp";
     private static final int MAX_TRIES = 5;
     private static final long INFO_MS = 20_000;
+    private static final long PENDING_MS = 30_000;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final SecureRandom random = new SecureRandom();
@@ -57,6 +59,10 @@ public class MainActivity extends Activity {
     private int triesLeft;
     private volatile String problem;
     private NsdManager nsd;
+    /** The code check waiting for its /show (see challenge). */
+    private byte[] pendingKey;
+    private String pendingPeer;
+    private long pendingUntil;
     private NsdManager.RegistrationListener advert;
 
     @Override
@@ -132,9 +138,10 @@ public class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 
-    private void newCode() {
+    private synchronized void newCode() {
         code = String.format("%06d", random.nextInt(1_000_000));
         triesLeft = MAX_TRIES;
+        pendingKey = null;
     }
 
     private void retry(String why) {
@@ -167,7 +174,7 @@ public class MainActivity extends Activity {
         t.append(shown() == null ? "To show a screen here: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n" : "To show another screen: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n");
         t.append("TV name   ").append(name()).append("\n");
         t.append("TV address   ").append(ip == null ? "not on a network" : ip).append("\n");
-        t.append(triesLeft > 0 ? "Code   " + code : "Too many wrong codes: press OK for a new one");
+        t.append(triesLeft > 0 ? "Code   " + code : "Too many tries: press OK for a new code");
         info.setText(t);
         info.setVisibility(View.VISIBLE);
         ui.removeCallbacks(hide);
@@ -281,21 +288,50 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * From the server thread: the code and link Rhema sent. Null when shown, else why not. A wrong
-     * code uses up a try; after five, only a new code (OK on the remote) lets anyone in.
+     * From the server thread, the first half of the code check (#198, CodeProof): Rhema's value X,
+     * the address Rhema reached this TV at and who asked. Returns {y, proof}, or null with why in
+     * why[0]. Each exchange is one try, whatever code Rhema typed: the TV cannot tell a wrong code
+     * from a right one here (that is what keeps the code from being guessed offline), so five
+     * exchanges without a shown feed lock the code until OK is pressed. The answer is good for one
+     * /show from the same computer within 30 seconds.
      */
-    synchronized String show(String sentCode, final String url) {
-        if (triesLeft <= 0) return "Too many wrong codes: press OK on the TV's remote for a new code";
-        if (!code.equals(sentCode)) {
-            triesLeft--;
+    synchronized String[] challenge(String x, String peer, String local, String[] why) {
+        if (triesLeft <= 0) {
+            why[0] = "Too many tries: press OK on the TV's remote for a new code";
+            return null;
+        }
+        triesLeft--;
+        if (triesLeft == 0) {
             ui.post(new Runnable() {
                 @Override
                 public void run() {
                     showInfo(shown() == null);
                 }
             });
-            return "Wrong code, " + triesLeft + (triesLeft == 1 ? " try left" : " tries left");
         }
+        CodeProof.Answer a;
+        try {
+            a = CodeProof.answer(x, code, local, CodeProof.randomExponent(random));
+        } catch (RuntimeException e) {
+            why[0] = "That was not a Rhema code check";
+            return null;
+        }
+        pendingKey = a.key;
+        pendingPeer = peer;
+        pendingUntil = SystemClock.elapsedRealtime() + PENDING_MS;
+        return new String[] {a.y, a.proof};
+    }
+
+    /**
+     * From the server thread, the second half: the link and Rhema's proof that it took part in the
+     * check with the same code. Null when shown, else why not.
+     */
+    synchronized String show(String peer, final String url, String proof) {
+        byte[] key = pendingKey;
+        boolean fresh = key != null && peer.equals(pendingPeer) && SystemClock.elapsedRealtime() < pendingUntil;
+        pendingKey = null;
+        if (!fresh) return "Rhema must check the code first (update Rhema if this keeps happening)";
+        if (!CodeProof.deskProofMatches(key, url, proof)) return "Rhema's code check did not match: try again";
         Uri u = Uri.parse(url);
         if (!("http".equals(u.getScheme()) || "https".equals(u.getScheme())) || u.getPath() == null || !u.getPath().startsWith("/feed/")) {
             return "That is not a Rhema feed link";

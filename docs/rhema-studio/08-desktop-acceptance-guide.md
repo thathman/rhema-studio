@@ -985,11 +985,13 @@ report), but launching it cannot.
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10dz.1 | Build and install the new Rhema Receiver (`android-tv/build.sh`, `adb install -r android-tv/build/rhema-receiver.apk`); open it on the TV. Android settings → Apps → Rhema Receiver. | Version 1.1.0.0. The TV screen shows "TV name" (the TV's name in its settings), the address and a code. Earlier screens it was showing are kept. | Unverified |
-| 10dz.2 | Rhema on the same network: Outputs → a browser feed → settings → **Show on a Google TV**. | "Looking for TVs…" for about 3 seconds, then a button with the TV's name; with this one TV its address is already filled in. macOS may ask once to let Rhema find devices on the local network: allow. | Unverified |
-| 10dz.3 | Type the code from the TV; **Show on TV**. | The TV shows the feed, as before; a wrong code still counts down the tries. | Unverified |
+| 10dz.0 | Before installing 1.2, with the TV still on Rhema Receiver 1.0 or 1.1: Show on TV with the right code. | "Update Rhema Receiver on the TV (1.2 or later)…"; the TV does not change. | Unverified |
+| 10dz.1 | Build and install the new Rhema Receiver (`android-tv/build.sh`, `adb install -r android-tv/build/rhema-receiver.apk`); open it on the TV. Android settings → Apps → Rhema Receiver. | Version 1.2.0.0. The TV screen shows "TV name" (the TV's name in its settings), the address and a code. Earlier screens it was showing are kept; Check TV (10dy.10) still works. | Unverified |
+| 10dz.2 | Rhema on the same network: Outputs → a browser feed → settings → **Show on a Google TV**. | "Looking for TVs…" for about 3 seconds, then a button with the TV's name and its address (the same as on the TV). The address box stays empty until you pick it. macOS may ask once to let Rhema find devices on the local network: allow. | Unverified |
+| 10dz.3 | Pick the TV, type the code from the TV; **Show on TV**. | The TV shows the feed, as before, and gets a new code. | Unverified |
+| 10dz.3a | Press OK on the remote for a code; in Rhema type a wrong code, Show on TV; repeat until five tries. | Each time: "That code is not the one on this TV's screen… the feed link was not sent"; the TV keeps what it shows. After five: "Too many tries: press OK…" on both; OK on the remote gives a new code that works. | Unverified |
 | 10dz.4 | Close Rhema Receiver on the TV (Back/Home, then stop it), press **Find TVs**. Open it again, **Find TVs**. | The first look says "No TV found…" (or no longer lists it after a short while); the second lists it again. Typing the address still works throughout. | Unverified |
-| 10dz.5 | With two TVs running Rhema Receiver (or the TV plus an Android phone/emulator with the APK), open Show on a Google TV. | Both are listed by name; nothing is filled in until you pick one; the picked one is highlighted and the code box is ready to type. | Unverified |
+| 10dz.5 | With two TVs running Rhema Receiver (or the TV plus an Android phone/emulator with the APK), open Show on a Google TV. | Both are listed by name and address; nothing is filled in until you pick one; the picked one is highlighted and the code box is ready to type. | Unverified |
 
 ### 10ea. Collapsible sidebar (#299)
 

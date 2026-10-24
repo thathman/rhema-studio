@@ -707,7 +707,7 @@ type FoundTv = { name: string; address: string }
 /**
  * Send this feed to a Google TV running Rhema Receiver (#198). Rhema looks for TVs on the network
  * when this opens (Find TVs looks again); picking one fills its address, or type it. The code on the
- * TV's screen is still needed, so only someone who can see the TV assigns it.
+ * TV's screen is still needed, and Rhema checks it with the TV before the link is sent (tv_show).
  */
 export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: ReceiverTv) => void }) {
   const [address, setAddress] = useState("")
@@ -722,10 +722,10 @@ export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: Receive
   const look = () =>
     invoke<FoundTv[]>("tv_discover").then(
       (found) => {
-        setTvs(found)
+        // Never filled in by itself, even with one TV: the operator picks the TV whose address
+        // matches the one on its screen (a device can pretend to be a TV on the network).
+        setTvs(Array.isArray(found) ? found : [])
         setFindError(null)
-        // One TV and nothing typed yet: that is the one.
-        if (found.length === 1) setAddress((a) => a.trim() || found[0].address)
       },
       (e) => setFindError(String(e)),
     ).finally(() => setFinding(false))
@@ -757,12 +757,13 @@ export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: Receive
   return (
     <fieldset className="flex flex-col gap-1.5 rounded-md border border-border p-2">
       <legend className="px-1 font-medium">Show on a Google TV</legend>
-      <p className="text-muted-foreground">Open Rhema Receiver on the TV: it shows its name and a code. Pick the TV, then type the code.</p>
+      <p className="text-muted-foreground">Open Rhema Receiver on the TV: it shows its name, address and a code. Pick the TV with the same address, then type the code.</p>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="TVs on this network">
         {tvs?.map((tv) => (
           <Button key={tv.address} type="button" size="sm" variant={address.trim() === tv.address ? "secondary" : "outline"} aria-pressed={address.trim() === tv.address} onClick={() => pick(tv)} title={tv.address}>
             <TvIcon aria-hidden />
             {tv.name}
+            <span className="text-muted-foreground tabular-nums">{tv.address.replace(/:8095$/, "")}</span>
           </Button>
         ))}
         <Button type="button" size="sm" variant="ghost" disabled={finding} onClick={findAgain}>

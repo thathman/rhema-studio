@@ -28,7 +28,7 @@ describe("Show on a Google TV", { timeout: 30_000 }, () => {
     invoke.mockResolvedValue([{ name: "Hall TV", address: "192.168.3.37:8095" }, { name: "Sanctuary TV", address: "192.168.3.38:8095" }])
     const { root, address, tvs } = await open()
     expect(invoke).toHaveBeenCalledWith("tv_discover", undefined)
-    expect(tvs().map((b) => b.textContent)).toEqual(["Hall TV", "Sanctuary TV"])
+    expect(tvs().map((b) => b.textContent)).toEqual(["Hall TV192.168.3.37", "Sanctuary TV192.168.3.38"])
     expect(address(), "two TVs: the operator chooses").toBe("")
     await act(async () => tvs()[1].click())
     expect(address()).toBe("192.168.3.38:8095")
@@ -36,16 +36,30 @@ describe("Show on a Google TV", { timeout: 30_000 }, () => {
     act(() => root.unmount())
   })
 
-  it("fills the only TV found, and says so when none answer; typing still works", async () => {
+  it("never fills in a TV by itself, even the only one, and says so when none answer", async () => {
     invoke.mockReset()
     invoke.mockResolvedValueOnce([{ name: "Hall TV", address: "192.168.3.37:8095" }]).mockResolvedValueOnce([])
-    const { el, root, address } = await open()
+    const { el, root, address, tvs } = await open()
+    expect(tvs().map((b) => b.textContent)).toEqual(["Hall TV192.168.3.37"])
+    expect(address(), "one TV: still the operator's choice").toBe("")
+    await act(async () => tvs()[0].click())
     expect(address()).toBe("192.168.3.37:8095")
     const findAgain = [...el.querySelectorAll("button")].find((b) => b.textContent === "Find TVs")!
     await act(async () => findAgain.click())
     expect(invoke).toHaveBeenCalledTimes(2)
     expect(el.textContent).toContain("No TV found")
     expect(address()).toBe("192.168.3.37:8095")
+    act(() => root.unmount())
+  })
+})
+
+describe("Show on a Google TV without a search answer", () => {
+  it("copes with a backend that answers nothing", async () => {
+    invoke.mockReset()
+    invoke.mockResolvedValue(null)
+    const { el, root, address } = await open()
+    expect(address()).toBe("")
+    expect(el.textContent).toContain("No TV found")
     act(() => root.unmount())
   })
 })

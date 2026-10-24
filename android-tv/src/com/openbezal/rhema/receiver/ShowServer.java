@@ -10,7 +10,8 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 /**
- * What Rhema asks a receiver (#198): POST /show {"code","url"} → {"ok","name"|"error"}, and
+ * What Rhema asks a receiver (#198): POST /challenge {"x"} → {"ok","y","proof"} (the code check,
+ * CodeProof, 1.2), then POST /show {"url","proof"} → {"ok","name"|"error"}; and
  * (#213, 1.1) GET /status → {"ok","name","feed","problem"}: the id of the feed shown, never its
  * secret link. One request at a time, small bodies only; nothing else is served.
  */
@@ -64,14 +65,16 @@ final class ShowServer extends Thread {
         }
         JSONObject reply = new JSONObject();
         int status = 200;
-        if (request.length >= 2 && "GET".equals(request[0]) && "/status".equals(request[1])) {
+        String path = request.length >= 2 ? request[1] : "";
+        boolean post = "POST".equals(request[0]) && ("/challenge".equals(path) || "/show".equals(path));
+        if ("GET".equals(request[0]) && "/status".equals(path)) {
             reply.put("ok", true).put("name", app.name()).put("feed", app.feedShown()).put("problem", app.problem());
-        } else if (request.length < 2 || !"POST".equals(request[0]) || !"/show".equals(request[1])) {
+        } else if (!post) {
             status = 404;
-            reply.put("ok", false).put("error", "Rhema Receiver only takes POST /show and GET /status");
+            reply.put("ok", false).put("error", "Rhema Receiver only takes POST /challenge, POST /show and GET /status");
         } else if (length <= 0 || length > MAX_BODY) {
             status = 400;
-            reply.put("ok", false).put("error", "No link was sent");
+            reply.put("ok", false).put("error", "Nothing was sent");
         } else {
             byte[] body = new byte[length];
             int read = 0;
@@ -81,12 +84,26 @@ final class ShowServer extends Thread {
                 read += n;
             }
             JSONObject req = new JSONObject(new String(body, StandardCharsets.UTF_8));
-            String why = app.show(req.optString("code", "").trim(), req.optString("url", ""));
-            if (why == null) {
-                reply.put("ok", true).put("name", app.name());
+            String peer = c.getInetAddress().getHostAddress();
+            if ("/challenge".equals(path)) {
+                // The address Rhema reached this TV at, as Rhema names it ("192.168.3.37:8095").
+                String local = c.getLocalAddress().getHostAddress() + ":" + c.getLocalPort();
+                String[] why = new String[1];
+                String[] answer = app.challenge(req.optString("x", ""), peer, local, why);
+                if (answer != null) {
+                    reply.put("ok", true).put("y", answer[0]).put("proof", answer[1]);
+                } else {
+                    status = 403;
+                    reply.put("ok", false).put("error", why[0]);
+                }
             } else {
-                status = 403;
-                reply.put("ok", false).put("error", why);
+                String why = app.show(peer, req.optString("url", ""), req.optString("proof", ""));
+                if (why == null) {
+                    reply.put("ok", true).put("name", app.name());
+                } else {
+                    status = 403;
+                    reply.put("ok", false).put("error", why);
+                }
             }
         }
         byte[] out = reply.toString().getBytes(StandardCharsets.UTF_8);
