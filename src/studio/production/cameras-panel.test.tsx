@@ -48,7 +48,25 @@ beforeEach(() => {
   useBroadcastStore.setState({ scenes: [] })
 })
 
+const FP = "ab".repeat(32)
+
 describe("Cameras panel (#209)", () => {
+  it("offers the Rhema Camera app's pairing link while the router serves RTSPS", async () => {
+    answers.camera_router_status = router({ ports: { ...PORTS, rtsps: 8322 }, rtspsFingerprint: FP })
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit cam", token: "c".repeat(32) }] })
+    const el = await mount()
+    const text = el.textContent ?? ""
+    expect(text).toContain(`rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=${"c".repeat(32)}&fp=${FP}&label=Pulpit%20cam`)
+    expect(el.querySelector('img[alt="QR code of the Pulpit cam Rhema Camera link"]')).toBeTruthy()
+  })
+
+  it("explains what the app needs when the router has no RTSPS (no certificate yet, or an older build)", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "c".repeat(32) }] })
+    const el = await mount()
+    expect(el.textContent).toContain("The app needs the router's secure connection")
+    expect(el.textContent).not.toContain("rhema-camera://")
+  })
+
   it("adds a camera: its phone page QR and link, the scene address and the OBS address", async () => {
     answers.camera_router_status = router({ paths: [{ name: "pulpit", live: true, source: "webRTCSession", readers: 2, tracks: ["H264"] }] })
     const el = await mount()

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
 import { newLayer } from "@/lib/scenes"
-import { cameraName, cameraPageUrl, newCameraSecret, routerStatus, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
+import { cameraAppLink, cameraName, cameraPageUrl, newCameraSecret, routerStatus, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type CameraSource } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
@@ -177,6 +177,33 @@ function Copyable({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** The Rhema Camera app (Android): a pairing link and its QR code; the app sends over RTSPS and trusts only this computer's certificate. */
+function CameraApp({ cam, link }: { cam: CameraSource; link: string | null }) {
+  const [qr, setQr] = useState<{ url: string; data: string } | null>(null)
+  useEffect(() => {
+    if (!link) return
+    let live = true
+    void QRCode.toDataURL(link, { errorCorrectionLevel: "M", margin: 1, width: 256 }).then((data) => { if (live) setQr({ url: link, data }) }).catch(() => {})
+    return () => { live = false }
+  }, [link])
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+      <span className="text-[0.625rem] font-bold tracking-[0.06em] text-muted-foreground uppercase">Rhema Camera app (Android)</span>
+      {link ? (
+        <div className="flex flex-wrap items-start gap-3">
+          {qr?.url === link && <img src={qr.data} alt={`QR code of the ${cam.label} Rhema Camera link`} className="size-28 rounded-md bg-white p-1" />}
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="text-muted-foreground">On the phone with Rhema Camera installed, scan this with the phone's camera (or Google Lens) and open it in Rhema Camera; or copy the link and paste it in the app's Settings → Connection. The picture is encrypted on its way to this computer, and the app trusts only this computer.</p>
+            <Copyable label="Rhema Camera link" value={link} />
+          </div>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">The app needs the router's secure connection: turn on the secure phone pages in Settings → Remote control, then turn the camera router off and on.</p>
+      )}
+    </div>
+  )
+}
+
 function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource; host: string | null; router: RouterStatus | null; path: RouterPath | undefined; phonePage: number | null }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
@@ -234,6 +261,7 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
               </div>
             )}
             {rtsp && <Copyable label="For OBS (Media Source, untick Local File)" value={rtsp} />}
+            {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint)} />}
             {!host && <p className="text-muted-foreground">Addresses appear once the camera router is on and this computer is on the network.</p>}
             {host && ports && (
               <details className="text-muted-foreground">

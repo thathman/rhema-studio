@@ -30,6 +30,8 @@ pub struct Ports {
     pub webrtc_udp: u16,
     /// RTSP for OBS (Media Source).
     pub rtsp: u16,
+    /// RTSP over TLS: the Rhema Camera app sends here (#209), while Rhema has its https certificate.
+    pub rtsps: u16,
     /// RTMP and SRT for camera apps (Moblin, StreamCaster) and encoders.
     pub rtmp: u16,
     pub srt: u16,
@@ -37,7 +39,50 @@ pub struct Ports {
     pub api: u16,
 }
 
-pub const PORTS: Ports = Ports { webrtc: 8889, webrtc_udp: 8189, rtsp: 8554, rtmp: 1935, srt: 8890, api: 9997 };
+pub const PORTS: Ports = Ports { webrtc: 8889, webrtc_udp: 8189, rtsp: 8554, rtsps: 8322, rtmp: 1935, srt: 8890, api: 9997 };
+
+/// Rhema's https certificate and key (made for the secure phone pages, kept in `<data folder>/tls`,
+/// #251/#336). The router serves RTSPS with the same certificate, so the Rhema Camera app pins the
+/// fingerprint Rhema already shows its TVs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RtspsCert {
+    pub cert: PathBuf,
+    pub key: PathBuf,
+}
+
+/// The certificate files in Rhema's tls folder, once Rhema has made them (secure phone pages turned
+/// on at least once); None before, and the router then has no RTSPS.
+pub fn rtsps_cert(tls_dir: &Path) -> Option<RtspsCert> {
+    let (cert, key) = (tls_dir.join("rhema-server.pem"), tls_dir.join("rhema-server.key"));
+    (cert.is_file() && key.is_file()).then_some(RtspsCert { cert, key })
+}
+
+/// SHA-256 of the certificate the router serves for RTSPS (what the Rhema Camera link carries).
+pub fn rtsps_fingerprint(tls: &RtspsCert) -> Option<String> {
+    let cert = std::fs::read_to_string(&tls.cert).ok()?;
+    rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert, key: String::new() }).ok()
+}
+
+/// The router's settings with RTSPS added after the RTSP lines (#209): with Rhema's certificate,
+/// RTSP is also offered over TLS for the Rhema Camera app, while plain RTSP stays for OBS as
+/// before; without it (or with a path that cannot be written safely), RTSP only.
+pub fn with_rtsps(yaml: String, ports: &Ports, tls: Option<&RtspsCert>) -> String {
+    let lines = match tls.and_then(|t| yaml_path(&t.cert).zip(yaml_path(&t.key))) {
+        Some((cert, key)) => format!("rtspEncryption: \"optional\"\nrtspsAddress: :{}\nrtspServerKey: {key}\nrtspServerCert: {cert}\n", ports.rtsps),
+        None => "rtspEncryption: \"no\"\n".into(),
+    };
+    let anchor = format!("rtspAddress: :{}\n", ports.rtsp);
+    match yaml.find(&anchor) {
+        Some(at) => format!("{}{lines}{}", &yaml[..at + anchor.len()], &yaml[at + anchor.len()..]),
+        None => yaml,
+    }
+}
+
+/// A file path as a single-quoted YAML string; None for one that cannot be written safely.
+fn yaml_path(p: &Path) -> Option<String> {
+    let s = p.to_str()?;
+    (!s.is_empty() && !s.contains(['\n', '\r'])).then(|| format!("'{}'", s.replace('\'', "''")))
+}
 
 /// The router's control-API user; its password is made afresh each time the router starts. It is
 /// the first user in the settings, so the router takes its password from this variable.
@@ -161,6 +206,10 @@ struct RouterState {
     /// Its settings file and the LAN address it was started with, to rewrite when cameras change.
     config: Option<PathBuf>,
     lan: Option<String>,
+    /// Rhema's tls folder, where the RTSPS certificate is looked for each time the settings are written.
+    tls_dir: Option<PathBuf>,
+    /// The certificate in the settings written last (None: no RTSPS).
+    tls: Option<RtspsCert>,
     started_at: Option<Instant>,
     restarts: u32,
     last_error: Option<String>,
@@ -314,13 +363,17 @@ pub fn camera_router_start(app: AppHandle, router: State<'_, CameraRouter>, http
     let config = dir.join("mediamtx.yml");
     let lan = super::remote::remote_lan_address();
     let api_password = new_api_password();
-    write_config(&config, &config_yaml(&PORTS, lan.as_deref(), &hub.list(), &new_api_password())?)?;
+    let tls_dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("tls");
+    let tls = rtsps_cert(&tls_dir);
+    write_config(&config, &with_rtsps(config_yaml(&PORTS, lan.as_deref(), &hub.list(), &new_api_password())?, &PORTS, tls.as_ref()))?;
     let generation = {
         let mut s = router.lock();
         s.generation += 1;
         s.want = true;
         s.config = Some(config.clone());
         s.lan = lan;
+        s.tls_dir = Some(tls_dir);
+        s.tls = tls;
         s.last_error = None;
         s.restarts = 0;
         let child = spawn(&binary, &config, &router, s.generation, &api_password)?;
@@ -330,7 +383,7 @@ pub fn camera_router_start(app: AppHandle, router: State<'_, CameraRouter>, http
         s.generation
     };
     hub.set_router(Some(rhema_api::RouterTarget { base: format!("http://127.0.0.1:{}", PORTS.webrtc) }));
-    log::info!("camera router started ({}), WebRTC on port {}, RTSP on {}", binary.display(), PORTS.webrtc, PORTS.rtsp);
+    log::info!("camera router started ({}), WebRTC on port {}, RTSP on {}{}", binary.display(), PORTS.webrtc, PORTS.rtsp, if router.lock().tls.is_some() { format!(", RTSPS on {}", PORTS.rtsps) } else { String::new() });
     supervise(router.inner().clone(), binary, config, generation);
     Ok(())
 }
@@ -367,6 +420,8 @@ pub struct RouterStatus {
     pub wanted: bool,
     pub lan_address: Option<String>,
     pub ports: Ports,
+    /// SHA-256 of the certificate the router serves for RTSPS, while it does (the Rhema Camera link's `fp`).
+    pub rtsps_fingerprint: Option<String>,
     pub restarts: u32,
     pub error: Option<String>,
     pub paths: Vec<RouterPath>,
@@ -389,13 +444,15 @@ pub fn parse_paths(json: &serde_json::Value) -> Vec<RouterPath> {
 
 #[tauri::command]
 pub async fn camera_router_status(router: State<'_, CameraRouter>) -> Result<RouterStatus, String> {
-    let (wanted, running, restarts, error, api_password) = {
+    let (wanted, running, restarts, error, api_password, tls) = {
         let mut s = router.lock();
         let running = s.child.as_mut().is_some_and(|c| matches!(c.try_wait(), Ok(None)));
         // An old error is not news once the router has run steadily again.
         let steady = running && s.started_at.is_some_and(|t| t.elapsed() >= Duration::from_secs(10));
-        (s.want, running, s.restarts, if steady { None } else { s.last_error.clone() }, s.api_password.clone())
+        (s.want, running, s.restarts, if steady { None } else { s.last_error.clone() }, s.api_password.clone(), s.tls.clone())
     };
+    // Read from the file each time: the router follows a renewed certificate by itself.
+    let rtsps_fingerprint = if running { tls.as_ref().and_then(rtsps_fingerprint) } else { None };
     let paths = if running {
         let url = format!("http://127.0.0.1:{}/v3/paths/list", PORTS.api);
         match reqwest::Client::builder().timeout(Duration::from_millis(1500)).build().map_err(|e| e.to_string())?.get(url).basic_auth(API_USER, Some(&api_password)).send().await {
@@ -405,7 +462,7 @@ pub async fn camera_router_status(router: State<'_, CameraRouter>) -> Result<Rou
     } else {
         Vec::new()
     };
-    Ok(RouterStatus { installed: locate().is_some(), running, wanted, lan_address: super::remote::remote_lan_address(), ports: PORTS, restarts, error, paths })
+    Ok(RouterStatus { installed: locate().is_some(), running, wanted, lan_address: super::remote::remote_lan_address(), ports: PORTS, rtsps_fingerprint, restarts, error, paths })
 }
 
 #[derive(serde::Deserialize)]
@@ -424,9 +481,11 @@ pub fn cameras_set(router: State<'_, CameraRouter>, http: State<'_, Mutex<HttpRu
     hub.set(&cameras.into_iter().map(|c| (c.name, c.token)).collect::<Vec<_>>());
     let now = hub.list();
     let gone = closed_cameras(&before, &now);
-    let s = router.lock();
+    let mut s = router.lock();
     let Some(config) = s.config.clone().filter(|_| s.want) else { return Ok(()) };
-    write_config(&config, &config_yaml(&PORTS, s.lan.as_deref(), &now, &new_api_password())?)?;
+    // Secure phone pages may have been turned on since the router started: RTSPS follows.
+    s.tls = s.tls_dir.as_deref().and_then(rtsps_cert);
+    write_config(&config, &with_rtsps(config_yaml(&PORTS, s.lan.as_deref(), &now, &new_api_password())?, &PORTS, s.tls.as_ref()))?;
     if !gone.is_empty() {
         let api_password = s.api_password.clone();
         tauri::async_runtime::spawn(async move {
@@ -494,6 +553,7 @@ mod tests {
     #[test]
     fn the_config_has_the_fixed_ports_and_only_what_is_used() {
         let y = config_yaml(&PORTS, Some("192.168.1.20"), &cams(), API).unwrap();
+        assert_eq!(PORTS.rtsps, 8322);
         for line in ["webrtcAddress: :8889", "webrtcLocalUDPAddress: :8189", "rtspAddress: :8554", "rtmpAddress: :1935", "srtAddress: :8890", "apiAddress: 127.0.0.1:9997", "rtspTransports: [tcp]"] {
             assert!(y.lines().any(|l| l == line), "{line} in\n{y}");
         }
@@ -501,6 +561,45 @@ mod tests {
             assert!(y.lines().any(|l| l == off), "{off}");
         }
         assert!(!y.contains("stun:"), "no internet STUN server");
+    }
+
+    #[test]
+    fn rtsps_uses_rhemas_own_certificate_and_keeps_plain_rtsp_for_obs() {
+        let tls = RtspsCert { cert: PathBuf::from("/data/tls/rhema-server.pem"), key: PathBuf::from("/data/tls/rhema-server.key") };
+        let y = with_rtsps(config_yaml(&PORTS, None, &cams(), API).unwrap(), &PORTS, Some(&tls));
+        for line in ["rtspEncryption: \"optional\"", "rtspsAddress: :8322", "rtspServerKey: '/data/tls/rhema-server.key'", "rtspServerCert: '/data/tls/rhema-server.pem'", "rtspAddress: :8554", "rtspTransports: [tcp]"] {
+            assert!(y.lines().any(|l| l == line), "{line} in\n{y}");
+        }
+        // Without the certificate (secure phone pages never turned on): plain RTSP only, as before.
+        let plain = with_rtsps(config_yaml(&PORTS, None, &cams(), API).unwrap(), &PORTS, None);
+        assert!(plain.lines().any(|l| l == "rtspEncryption: \"no\""), "{plain}");
+        assert!(!plain.contains("rtspsAddress") && !plain.contains("rtspServerKey"));
+        // A path the YAML could misread: quotes doubled; a line break means no RTSPS at all.
+        let odd = RtspsCert { cert: PathBuf::from("/Users/o'neil/tls/rhema-server.pem"), key: PathBuf::from("/Users/o'neil/tls/rhema-server.key") };
+        assert!(with_rtsps(config_yaml(&PORTS, None, &cams(), API).unwrap(), &PORTS, Some(&odd)).lines().any(|l| l == "rtspServerCert: '/Users/o''neil/tls/rhema-server.pem'"));
+        let broken = RtspsCert { cert: PathBuf::from("/x\nrtspEncryption: no/c.pem"), key: PathBuf::from("/x/c.key") };
+        let b = with_rtsps(config_yaml(&PORTS, None, &cams(), API).unwrap(), &PORTS, Some(&broken));
+        assert!(b.lines().any(|l| l == "rtspEncryption: \"no\"") && !b.contains("rtspsAddress"), "{b}");
+    }
+
+    #[test]
+    fn the_rtsps_certificate_is_rhemas_https_one_and_its_fingerprint() {
+        let dir = std::env::temp_dir().join(format!("rhema-rtsps-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(rtsps_cert(&dir), None, "not made yet");
+        let ca = rhema_api::tls::make_ca().unwrap();
+        let server = rhema_api::tls::make_server(&ca, &["192.168.1.20".into()]).unwrap();
+        std::fs::write(dir.join("rhema-server.pem"), &server.cert).unwrap();
+        assert_eq!(rtsps_cert(&dir), None, "the key too");
+        std::fs::write(dir.join("rhema-server.key"), &server.key).unwrap();
+        let tls = rtsps_cert(&dir).unwrap();
+        assert_eq!(tls.cert, dir.join("rhema-server.pem"));
+        assert_eq!(tls.key, dir.join("rhema-server.key"));
+        // The same fingerprint a Google TV is sent (#198): the leaf certificate's SHA-256.
+        assert_eq!(rtsps_fingerprint(&tls), Some(rhema_api::tls::fingerprint(&server).unwrap()));
+        std::fs::write(dir.join("rhema-server.pem"), "nonsense").unwrap();
+        assert_eq!(rtsps_fingerprint(&tls), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

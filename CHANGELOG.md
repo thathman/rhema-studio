@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Rhema Camera: an Android camera app with a cinematic look, sending encrypted to Rhema (#209)
+- New **Rhema Camera** app for Android phones (`android-camera/`): a full-screen viewfinder with a small LIVE dot, gridlines, safe areas, a level and a histogram; tap to focus, pinch to zoom; everything else in its Settings in plain words (picture, white balance in kelvin, film shutter or manual ISO and shutter, focus, lens, sound, battery and heat).
+- **Looks** made on the phone's graphics chip before sending, so phone video looks less like a phone: Studio (default), Cinematic, Warm Sanctuary, Natural, Black & White or Off, each with a strength slider; warmth and tint, film grain, letterbox guides, and your own `.cube` looks. What the viewfinder shows is what Rhema gets.
+- It sends the best the phone does (4K and HEVC on phones that encode them) to the camera router over an encrypted connection that trusts only your Rhema, steps the bitrate down when the Wi-Fi is busy, and keeps sending with the screen off or the phone locked.
+- Production → Cameras: each camera card has a **Rhema Camera app** QR code and link. The camera router now also listens for encrypted RTSP (RTSPS) on port 8322 with Rhema's own certificate, once secure phone pages are on.
+
 ### People on each item; the two programs named in Production (#299, #215)
 - An item in Prepare can now have several **People** preparing it, as chips: type a name and press Enter (or paste "Tolu, Ade"); names already on the service and the desk's own name are offered. The rundown shows the first and how many more ("· Tolu +2"), and **Run of show** has a People column. An older item's "prepared by" name shows as its one person, and older Rhema builds still see the names as one "prepared by" line.
 - Production now names the two programs the same way everywhere: **Online program (OBS, 720p30)** on the OBS tab and **Congregation program (screens, 1080p)** on Programs and on each congregation output's card in Screens. The format is OBS's real output size and frame rate once OBS is connected, and the congregation NDI outputs' own size and frame rate; otherwise the usual one.

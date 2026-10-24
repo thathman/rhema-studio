@@ -1328,6 +1328,25 @@ Rhema with a saved service (a song and two slides), Desk menu → Your name = "T
 | 10ex.9 | Production → Scenes. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
 | 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
 
+### 10fb. Rhema Camera app for Android (#209)
+
+Needs an Android phone (8 or newer) on the church Wi-Fi with `android-camera/build/rhema-camera.apk` installed (`cd android-camera && ./build.sh`, then `adb install -r build/rhema-camera.apk`), and OBS for step 10.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fb.1 | Settings → Remote control: network listener on with **Secure page for phones (https)**. Production → Cameras: turn the router on, add a camera "Pulpit". | The card shows **Rhema Camera app (Android)** with a QR code and a `rhema-camera://pair?host=<this computer>&port=8322&name=pulpit&user=cam-pulpit&token=…&fp=…&label=Pulpit` link. Rhema's log says the router started with "RTSPS on 8322". | Unverified |
+| 10fb.2 | With https never turned on (a fresh data folder), or before turning the router off and on after turning https on. | The block says the app needs the router's secure connection; no link is shown. Turning the router off and on (with https on) shows it. | Unverified |
+| 10fb.3 | On the phone: scan the QR code with the camera (or Lens) and open it in Rhema Camera; or copy the link and use the app's Settings → Connection → Paste the pairing link. Press **Pair**. | The app asks "Pair with Rhema?" naming this computer and "Pulpit", then shows **LIVE** within a few seconds. The card says **Sending · H264** (or H265 on a phone with HEVC). | Unverified |
+| 10fb.4 | The phone's screen. | Only the picture, 16:9, with a small LIVE dot, the gear and the moon, which fade after a few seconds (the dot stays). Tap: a ring, focus holds ("double-tap to follow the scene"). Pinch: zoom shown as 1.5×. | Unverified |
+| 10fb.5 | App Settings → Look: tap each chip (Studio, Cinematic, Warm Sanctuary, Natural, Black & White, Off); move Strength. | Each chip previews this camera's picture in that look. The phone's viewfinder and Rhema's scene/OBS picture change the same way within a second. Off is the camera's own picture. | Unverified |
+| 10fb.6 | App Settings → Picture: note the Look, Size and Codec offered; Advanced → Codec → H.264. | Only the frame rates and sizes the phone really does are offered (4K only on a phone that encodes it). After H.264 the card says H264. | Unverified |
+| 10fb.7 | App Settings → Exposure (film shutter), White balance → Kelvin 3200, then 5600; Focus → Manual distance. | The picture warms/cools at once; the shutter reads 1/50 (173°, no flicker at 50 Hz) at 24 fps. No flicker under the church lights. | Unverified |
+| 10fb.8 | Press the moon. Then press the phone's power button. Wait 2 minutes. | Moon: the screen goes black, the card still says **Sending**. Power button: the notification "Rhema Camera is sending" stays; the card still says Sending and the scene/OBS picture keeps moving. Waking the phone shows the viewfinder over the lock screen. | Unverified |
+| 10fb.9 | On the camera's card press **New link**. | Within a few seconds the phone shows CONNECTING with "Rhema did not accept this camera's link…"; the card says Waiting. Scanning the new QR code pairs it again. | Unverified |
+| 10fb.10 | OBS: Media Source with the card's RTSP address (plain RTSP, this computer). | OBS plays the phone's picture, in the chosen look. | Unverified |
+| 10fb.11 | Quit Rhema (or turn the router off) while the phone sends; start it again. | The phone shows CONNECTING with "Cannot reach Rhema…", then goes LIVE again by itself within 30 seconds. | Unverified |
+| 10fb.12 | Pair the app with a link whose `fp` is changed (edit one character in the pasted link). | It pairs (the link is well formed) but never goes live: "This is not the Rhema this camera was paired with…". Nothing is sent unencrypted. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

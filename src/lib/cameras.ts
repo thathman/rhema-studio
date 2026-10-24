@@ -14,6 +14,8 @@ export interface RouterPorts {
   webrtc: number
   webrtcUdp: number
   rtsp: number
+  /** RTSP over TLS for the Rhema Camera app (absent from builds before it). */
+  rtsps?: number
   rtmp: number
   srt: number
   api: number
@@ -33,6 +35,8 @@ export interface RouterStatus {
   wanted: boolean
   lanAddress: string | null
   ports: RouterPorts
+  /** SHA-256 of the certificate the router serves for RTSPS, while it does; the Rhema Camera app trusts only that one. */
+  rtspsFingerprint?: string | null
   restarts: number
   error: string | null
   paths: RouterPath[]
@@ -85,6 +89,17 @@ export function publishUser(name: string): string {
 /** For a camera app or encoder instead of the camera page (Moblin, StreamCaster, OBS itself). */
 export function rtmpUrl(host: string, ports: RouterPorts, cam: CameraSource): string {
   return `rtmp://${host}:${ports.rtmp}/${cam.name}?user=${publishUser(cam.name)}&pass=${cam.token}`
+}
+
+/**
+ * The Rhema Camera app's pairing link (Android): where the router's RTSPS is, which camera the phone
+ * is, its publish password (the same secret as its page link, so New link closes this too) and the
+ * fingerprint of the only certificate the app will send to. Null while the router has no RTSPS.
+ */
+export function cameraAppLink(host: string, ports: RouterPorts, cam: CameraSource, fingerprint: string | null | undefined): string | null {
+  if (!ports.rtsps || !fingerprint || !/^[0-9a-f]{64}$/.test(fingerprint)) return null
+  const q = new URLSearchParams({ host, port: String(ports.rtsps), name: cam.name, user: publishUser(cam.name), token: cam.token, fp: fingerprint, label: cam.label })
+  return `rhema-camera://pair?${q.toString().replace(/\+/g, "%20")}`
 }
 
 export function srtUrl(host: string, ports: RouterPorts, cam: CameraSource): string {

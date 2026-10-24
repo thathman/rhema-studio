@@ -41,6 +41,26 @@ Keep each phone charging, with the camera page open in front (the page keeps the
 Turn the phone sideways for a wide picture. If the phone or Wi-Fi drops, the page reconnects by
 itself; the scene shows its background (or your "camera not playing" words) meanwhile.
 
+## The Rhema Camera app (Android)
+
+Rhema's own camera app gives a better picture than the camera page: the best size the phone encodes
+(4K and HEVC where it can), a film shutter, kelvin white balance and a **look** made on the phone's
+graphics chip (Studio, Cinematic, Warm Sanctuary, Natural, Black & White). See
+[android-camera/README.md](../../android-camera/README.md).
+
+1. Turn on **Secure page for phones (https)** (Settings → Remote control) at least once: the camera
+   router uses the same certificate for encrypted RTSP (RTSPS, port 8322). If the router was already
+   on, turn it off and on.
+2. On the camera's card, **Rhema Camera app (Android)** shows a QR code and a link
+   `rhema-camera://pair?host=…&port=8322&name=…&user=cam-…&token=…&fp=…`. Scan it with the phone's
+   camera or Google Lens and open it in Rhema Camera (or paste the link in the app's Settings →
+   Connection), and confirm **Pair**.
+3. The app sends to its own name only, signed in as that camera with the same secret as its camera
+   page link, and accepts only the certificate whose fingerprint (`fp`) is in the link: a computer
+   pretending to be Rhema is refused, and the app never falls back to unencrypted RTSP. **New link**
+   and removing the camera disconnect it, as for the camera page. Rhema renews its certificate when the
+   computer's address changes or after a year: scan the new link then.
+
 ## Other camera apps
 
 A free camera app (Moblin on iPhone, StreamCaster on Android) or a hardware encoder can send
@@ -56,6 +76,7 @@ play it.
 | 8889 (TCP) | WebRTC: phones send (WHIP, through Rhema's https page), screens and TVs watch (WHEP) | Rhema, TVs, the camera page |
 | 8189 (UDP) | The camera video itself (WebRTC) | Phones, Rhema, TVs |
 | 8554 (TCP) | RTSP | OBS |
+| 8322 (TCP) | RTSPS (RTSP over TLS, Rhema's https certificate), once secure phone pages have been on | The Rhema Camera app |
 | 1935 (TCP), 8890 (UDP) | RTMP, SRT | Camera apps and encoders |
 | 9997 (TCP) | The router's control API (status, disconnecting a camera) | Rhema only: this computer, a password made afresh each run, no web page |
 
