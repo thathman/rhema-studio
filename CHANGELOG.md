@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Design packs: 120 more looks to import into Design → Library (#354)
+- **Design → Library → Import design pack** adds the looks in a Rhema design pack file to the library, under the pack's name. They work like the built-in looks: the filters, **Use**, **Use and edit**, **Use with church colours** and **Reset**. Importing asks first and never changes a screen, an output, a camera or a scene.
+- The repository has one pack, **Worship Expressions** (`design-packs/`): 120 original looks in 8 colour families (scripture, songs, hymns, notices, keyed bands for OBS and NDI, name bands, tickers) and 56 scene templates with places for a camera, a picture, a video, the church logo and a clock. No pictures, videos, lyrics or logos are in it.
+- A pack is checked when it is imported, every time Rhema starts and when a backup is restored: at most 2 MB and 160 looks, known looks, colours and bundled fonts only, and anything else in the file (addresses, paths, scripts) is dropped. Imported packs are part of a backup. **Remove pack** takes it out of the library; your copies stay.
+
 ### Rhema Studio Companion: a small app for the OBS computer (#209)
 - **Rhema Studio Companion** (1.0.0.0) is a separate small app for a computer that runs OBS only, Windows first, Mac too: the same companion screen as OBS companion mode, without installing the whole studio (no speech, Bible, NDI or models).
 - It joins the main computer only over its secure page. Before you join it shows the main computer's certificate, which the main computer now shows in Settings → Remote control; after pairing it talks to no other computer.

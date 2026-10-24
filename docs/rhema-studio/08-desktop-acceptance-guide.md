@@ -1559,6 +1559,23 @@ Needs the Rhema Camera APK from this branch on an Android phone, paired as in 10
 | 10fm.3 | App Settings → Picture on a slower phone (or at 1080p30 on the test phone). | If the phone cannot keep up, a line reads "Lighter look on this phone: …" (viewfinder slower, then film grain off). The picture Rhema receives keeps its frame rate, or the line says how many frames a second it sends. | Unverified |
 | 10fm.4 | Turn the histogram off; then press the moon (screen off). | The histogram goes; with the screen off the picture keeps sending at its frame rate. | Unverified |
 
+### 10fp. Design packs: import 120 looks into Design → Library (#354)
+
+Needs `design-packs/rhema-worship-expressions.rhema-design.json` from this branch on the computer. Have one output on with a look you know.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fp.1 | Design → Library → **Import design pack**; choose the file. | Asked first: "Import “Rhema Studio · Worship Expressions”?", 120 looks, nothing on the screens changes. After Import the library shows only the pack, under its name; the output on air shows exactly what it showed. | Unverified |
+| 10fp.2 | Scroll the 120 cards; try the filters (OBS overlay, Transparent, Light, Yorùbá, Both together, Favourites, the family list). | Every card has a preview (gradients drawn, camera/picture/video/logo/clock/ticker places labelled). The filters find pack looks with the built-in ones; the family list has the pack's name. No gradient or colour outside the previews (the page stays the neutral design). | Unverified |
+| 10fp.3 | On "Midnight Blue · Camera + Bible band": **Use and edit**. | Production → Scenes opens the copy with its look "Midnight Blue · Bible lower third" in your themes; its camera has no camera chosen; nothing is on air until Take. | Unverified |
+| 10fp.4 | "Midnight Blue · Video + worship": Use; in Scenes choose a video from the Media Library for its video layer and Take in rehearsal. | The video plays without sound behind the lyrics. | Unverified |
+| 10fp.5 | Change the copy from 10fp.3 (move a layer), then the card's ⋯ → Reset. | The scene goes back to the template's layout; its camera keeps the camera you chose. Refused while an output shows it. | Unverified |
+| 10fp.6 | Quit and start Rhema again. | The pack is still in the library; the copies are unchanged. | Unverified |
+| 10fp.7 | Import the same file again. | Asked "Replace … with this version?"; still one pack, 120 looks. | Unverified |
+| 10fp.8 | Import a broken file (e.g. change a colour to `red`, or a file over 2 MB). | "That design pack cannot be imported" with the reason; nothing added. | Unverified |
+| 10fp.9 | Archive → Backups → Back up now…; **Remove pack** on the pack's heading; Archive → Backups → Restore from a backup… → that file. | Remove leaves your copies. The restore's list says "Design packs in the library: 0 packs → 1 pack"; afterwards the pack is back. | Unverified |
+| 10fp.10 | Use "Graphics only for OBS"; show it on an NDI output with alpha; look in OBS. | Only the lyrics, name band and ticker show; the rest is transparent. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ask } from "@tauri-apps/plugin-dialog"
-import { HeartIcon, MoreHorizontalIcon, PaletteIcon, PencilIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
+import { HeartIcon, MoreHorizontalIcon, PaletteIcon, PencilIcon, PlusIcon, RotateCcwIcon, Trash2Icon, UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -10,7 +10,7 @@ import { useBroadcastStore, useSettingsStore } from "@/stores"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { LOWER_THIRDS } from "@/lib/builtin-themes"
 import { SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
-import { LIBRARY_LOOKS, LOOK_FAMILIES } from "@/lib/look-library-data"
+import { DESIGN_PACK_MAX_BYTES, importDesignPack, libraryFamilies, libraryLooks, packFamilyId, parseDesignPack, removeDesignPack, useDesignPackStore, type DesignPack } from "@/lib/design-packs"
 import { adoptLook, brandable, CONTENT_LABELS, filterLooks, isObsOverlay, LAYOUT_NAMES, lookAspects, lookAudio, lookCopies, lookLanguages, OBS_OVERLAY, readLookFavourites, resetCopy, resetLowerThirdCopy, resetSceneCopy, resetSingleLook, showsTwoLanguages, writeLookFavourites, type LibraryLook, type LookAspect, type LookBackground, type LookCopy, type LookFamilyId, type LookLanguage, type LookLayout } from "@/lib/look-library"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { hasChurchColours, type BrandKit } from "@/lib/brand-kit"
@@ -21,7 +21,7 @@ import { applyStageStyle } from "@/lib/stage-style"
 import { onThemeFontsLoaded } from "@/lib/verse-renderer"
 import { themeImageCache } from "@/lib/theme-image-cache"
 import { cn } from "@/lib/utils"
-import type { BroadcastTheme, LowerThird, SceneFrame, StagePayload, Ticker, VerseRenderData } from "@/types"
+import type { BroadcastTheme, LowerThird, SceneFrame, SceneLayerKind, StagePayload, Ticker, VerseRenderData } from "@/types"
 
 // Sample words for the previews: public-domain scripture and hymn text, in English and Yorùbá.
 const PSALM_EN = "Make a joyful noise unto the LORD, all ye lands."
@@ -48,14 +48,12 @@ const CHECKER = { backgroundColor: "#2c3338", backgroundImage: "repeating-conic-
 
 const sampleFor = (shows: string[] | undefined) => (shows?.includes("bible") ? BIBLE_SAMPLE : SONG_SAMPLE)
 const themeLook = (id: string | undefined) => {
-  const l = LIBRARY_LOOKS.find((x) => x.id === id)
+  const l = libraryLooks().find((x) => x.id === id)
   return l?.kind === "theme" ? l.theme : undefined
 }
 
 const LAYOUTS: ReadonlyArray<LookLayout | "obs-overlay" | "all"> = ["all", "fullscreen", "lower-third", "ticker", "scene", "stage", "obs-overlay"]
 const layoutLabel = (l: LookLayout | "obs-overlay" | "all") => (l === "all" ? "All layouts" : l === "obs-overlay" ? OBS_OVERLAY : LAYOUT_NAMES[l])
-// The aspect filter shows once the library has looks in more than one frame shape.
-const ASPECTS = lookAspects(LIBRARY_LOOKS)
 const BACKGROUNDS: ReadonlyArray<readonly [LookBackground | "all", string]> = [["all", "Any"], ["dark", "Dark"], ["light", "Light"], ["transparent", "Transparent"]]
 const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]> = [["all", "Any language"], ["yo", "Yorùbá"], ["en", "English"], ["both", "Both together"]]
 
@@ -73,8 +71,16 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
   const [language, setLanguage] = useState<LookLanguage | "both" | "all">("all")
   const [favouritesOnly, setFavouritesOnly] = useState(false)
   const [favourites, setFavourites] = useState(() => readLookFavourites(storage))
-  const looks = useMemo(() => filterLooks(LIBRARY_LOOKS, { layout, family, background, language, aspect, favouritesOnly, favourites }), [layout, family, background, language, aspect, favouritesOnly, favourites])
-  const groups = LOOK_FAMILIES.map((f) => ({ family: f, looks: looks.filter((l) => l.family === f.id) })).filter((g) => g.looks.length > 0)
+  // The built-in looks, then each imported design pack's, as one library: the same filters, Use and Reset.
+  const packs = useDesignPackStore((s) => s.packs)
+  const all = useMemo(() => libraryLooks(packs), [packs])
+  const families = useMemo(() => libraryFamilies(packs), [packs])
+  // The aspect filter shows once the library has looks in more than one frame shape.
+  const aspects = useMemo(() => lookAspects(all), [all])
+  // A pack taken out while it was the family chosen: every family again.
+  const familyShown = family === "all" || families.some((f) => f.id === family) ? family : "all"
+  const looks = useMemo(() => filterLooks(all, { layout, family: familyShown, background, language, aspect, favouritesOnly, favourites }), [all, layout, familyShown, background, language, aspect, favouritesOnly, favourites])
+  const groups = families.map((f) => ({ family: f, looks: looks.filter((l) => l.family === f.id) })).filter((g) => g.looks.length > 0)
 
   const toggleFavourite = (id: string) => {
     const next = new Set(favourites)
@@ -86,10 +92,13 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
 
   return (
     <div className="flex flex-col gap-5">
-      <p className="max-w-3xl text-sm text-muted-foreground">
-        Ready-made looks, made for Rhema and fully offline. <strong className="font-semibold text-foreground">Use</strong> adds your own copy to your looks, to change as you like.
-        Nothing on the screens changes until you choose the copy for an output in its settings.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Ready-made looks, made for Rhema and fully offline. <strong className="font-semibold text-foreground">Use</strong> adds your own copy to your looks, to change as you like.
+          Nothing on the screens changes until you choose the copy for an output in its settings.
+        </p>
+        <ImportPackButton onImported={(pack) => { clear(); setFamily(pack.family.id) }} />
+      </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Layout">
           {LAYOUTS.map((l) => (
@@ -106,18 +115,18 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
             <Chip key={l} on={language === l} onClick={() => setLanguage(l)}>{label}</Chip>
           ))}
         </div>
-        {ASPECTS.length > 1 && (
+        {aspects.length > 1 && (
           <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Frame shape">
-            {(["all", ...ASPECTS] as const).map((a) => (
+            {(["all", ...aspects] as const).map((a) => (
               <Chip key={a} on={aspect === a} onClick={() => setAspect(a)}>{a === "all" ? "Any shape" : a}</Chip>
             ))}
           </div>
         )}
-        <Select value={family} onValueChange={(v) => setFamily(v as LookFamilyId | "all")}>
+        <Select value={familyShown} onValueChange={(v) => setFamily(v as LookFamilyId | "all")}>
           <SelectTrigger aria-label="Family" className="h-7 w-48 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Every family</SelectItem>
-            {LOOK_FAMILIES.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+            {families.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
           </SelectContent>
         </Select>
         <button type="button" aria-pressed={favouritesOnly} onClick={() => setFavouritesOnly(!favouritesOnly)} className={cn("flex items-center gap-1 rounded-full border px-2.5 py-0.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5", favouritesOnly ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
@@ -132,9 +141,12 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
       ) : (
         groups.map((g) => (
           <section key={g.family.id} aria-label={g.family.name} className="flex flex-col gap-3">
-            <header>
-              <h3 className="text-sm font-bold">{g.family.name}</h3>
-              <p className="text-xs text-muted-foreground">{g.family.description}</p>
+            <header className="flex flex-wrap items-start gap-x-3 gap-y-1">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold">{g.family.name}</h3>
+                <p className="text-xs text-muted-foreground">{g.family.description}</p>
+              </div>
+              {g.family.id.startsWith("pack:") && <RemovePackButton pack={packs.find((p) => packFamilyId(p.doc.id) === g.family.id)} />}
             </header>
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
               {g.looks.map((l) => <LookCard key={l.id} look={l} favourite={favourites.has(l.id)} onFavourite={() => toggleFavourite(l.id)} onOpen={onOpen} />)}
@@ -143,6 +155,57 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
         ))
       )}
     </div>
+  )
+}
+
+/**
+ * Import a design pack: its looks join the library (under the pack's name) and nothing else
+ * changes. Asked first, with how many looks and whether it replaces a pack already here.
+ */
+function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => void }) {
+  const file = useRef<HTMLInputElement>(null)
+  const pick = async (f: File | undefined) => {
+    if (!f) return
+    try {
+      if (f.size > DESIGN_PACK_MAX_BYTES) throw new Error("This design pack is larger than 2 MB.")
+      const pack = parseDesignPack(await f.text())
+      const here = useDesignPackStore.getState().packs.find((p) => p.doc.id === pack.doc.id)
+      const n = pack.looks.length
+      const ok = await confirm(
+        here ? `Replace “${here.doc.name}” with this version?` : `Import “${pack.doc.name}”?`,
+        `${n} ${n === 1 ? "look" : "looks"} by ${pack.doc.author} (${pack.doc.license}) join Design → Library. ${here ? "Copies you already made from the old version stay as they are. " : ""}Nothing on the screens, outputs, cameras or scenes changes.`,
+        here ? "Replace" : "Import",
+      )
+      if (!ok) return
+      await importDesignPack(pack)
+      onImported(pack)
+      toast(`Imported “${pack.doc.name}”: ${n} ${n === 1 ? "look" : "looks"}.`, { description: "Use a look to add your own copy; nothing is on the screens yet." })
+    } catch (e) {
+      toast.error("That design pack cannot be imported", { description: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  return (
+    <>
+      <input ref={file} type="file" accept=".json,application/json" className="hidden" aria-label="Design pack file" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = "" }} />
+      <Button size="sm" variant="outline" onClick={() => file.current?.click()} title="Add the looks in a Rhema design pack (.rhema-design.json) to this library">
+        <UploadIcon /> Import design pack
+      </Button>
+    </>
+  )
+}
+
+/** Take an imported pack out of the library; the church's copies of its looks stay. */
+function RemovePackButton({ pack }: { pack: DesignPack | undefined }) {
+  if (!pack) return null
+  const click = async () => {
+    if (!(await confirm(`Remove “${pack.doc.name}” from the library?`, "Its looks leave Design → Library. Copies you made from them stay in your looks, and nothing on the screens changes.", "Remove"))) return
+    await removeDesignPack(pack.doc.id)
+    toast(`Removed “${pack.doc.name}” from the library.`)
+  }
+  return (
+    <Button size="xs" variant="ghost" onClick={() => void click()}>
+      <Trash2Icon /> Remove pack
+    </Button>
   )
 }
 
@@ -158,8 +221,9 @@ const BACKGROUND_NAMES: Record<LookBackground, string> = { dark: "Dark", light: 
 
 /** The card's language line: two at once, either one, or English only. */
 function languageWords(look: LibraryLook): string {
-  if (showsTwoLanguages(look, LIBRARY_LOOKS)) return "Yorùbá and English together"
-  return lookLanguages(look, LIBRARY_LOOKS).includes("yo") ? "Yorùbá or English" : "English"
+  const library = libraryLooks()
+  if (showsTwoLanguages(look, library)) return "Yorùbá and English together"
+  return lookLanguages(look, library).includes("yo") ? "Yorùbá or English" : "English"
 }
 
 /** The church's copies of a look and what shows each now, kept up to date. */
@@ -268,7 +332,7 @@ async function reset(look: LibraryLook, c: LookCopy) {
       const copy = s.scenes.find((x) => x.id === c.id)
       if (!copy) return
       const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
-      const back = resetSceneCopy(copy, look, { library: LIBRARY_LOOKS, themes: s.themes, takenNames: taken })
+      const back = resetSceneCopy(copy, look, { library: libraryLooks(), themes: s.themes, takenNames: taken })
       for (const t of back.themes) useBroadcastStore.getState().saveTheme(t)
       useBroadcastStore.getState().saveScene(back.scene)
       break
@@ -295,7 +359,7 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
   if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
   const s = useBroadcastStore.getState()
   const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
-  const added = adoptLook(look, { takenNames: taken, library: LIBRARY_LOOKS, brand })
+  const added = adoptLook(look, { takenNames: taken, library: libraryLooks(), brand })
   for (const t of added.themes) useBroadcastStore.getState().saveTheme(t)
   if (added.lowerThirdStyle) useBroadcastStore.getState().saveLowerThirdStyle(added.lowerThirdStyle)
   // Only the saved look: the ticker on air keeps the look it started with.
@@ -342,9 +406,9 @@ function keptColours(kept: { text: boolean; accent: boolean } | undefined): stri
   return `Kept the look's own ${which}: your church's would be hard to read on this background. `
 }
 
-async function confirm(title: string, message: string): Promise<boolean> {
+async function confirm(title: string, message: string, okLabel = "Use it"): Promise<boolean> {
   try {
-    return await ask(message, { title, kind: "info", okLabel: "Use it", cancelLabel: "Cancel" })
+    return await ask(message, { title, kind: "info", okLabel, cancelLabel: "Cancel" })
   } catch {
     return false
   }
@@ -375,6 +439,8 @@ function StagePreview({ look }: { look: Extract<LibraryLook, { kind: "stage" }> 
   return <canvas ref={ref} width={1280} height={720} className="block h-full w-full" />
 }
 
+const PLACE_NAMES: Record<SceneLayerKind, string> = { feed: "On air", camera: "Camera", color: "Colour", picture: "Picture", video: "Video", clock: "Clock", ticker: "Ticker", lowerThird: "Name band", logo: "Logo" }
+
 // One canvas for every scene preview's feed layer: each is drawn and placed before the next.
 let layerCanvas: HTMLCanvasElement | null = null
 
@@ -389,9 +455,10 @@ function ScenePreview({ look }: { look: Extract<LibraryLook, { kind: "scene" }> 
         sceneId: look.id,
         // A plain stand-in for the camera picture.
         background: "#2a3136",
-        layers: look.scene.layers.map((l, i) => l.kind === "camera"
-          ? { id: `${i}`, kind: "camera", box: l.box, opacity: 1, label: "Camera" }
-          : { id: `${i}`, kind: "feed", box: l.box, opacity: 1, theme: themeLook(l.lookId), verse: sampleFor(l.shows) }),
+        layers: look.scene.layers.map((l, i) => l.kind === "feed"
+          ? { id: `${i}`, kind: "feed", box: l.box, opacity: 1, theme: themeLook(l.lookId), verse: sampleFor(l.shows) }
+          // The other layers are places for what the church chooses in Scenes: a labelled box.
+          : { id: `${i}`, kind: l.kind, box: l.box, opacity: 1, label: PLACE_NAMES[l.kind], ...(l.kind === "color" ? { color: "#101820" } : {}) }),
       }
       try {
         drawScene(ctx, canvas.width, canvas.height, frame, { image: () => null, layerCanvas: () => (layerCanvas ??= document.createElement("canvas")), imageCache: themeImageCache(), preview: true })

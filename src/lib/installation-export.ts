@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core"
 import type { AiDraft } from "@/lib/ai-drafts"
+import { designPacksForBackup, restoreDesignPacksFromBackup, type DesignPackDoc } from "@/lib/design-packs"
 import { looksForBackup, restoreLooksFromBackup, useBroadcastStore, type LooksBackup } from "@/stores/broadcast-store"
 import { restoreSettingsFromBackup, sameObs, sectionOf, settingsForBackup, useSettingsStore, type SettingsSection } from "@/stores/settings-store"
 
 /**
  * The installation in a backup file (#298 E6): this computer's settings in their three parts and
  * its looks and screens, kept inside the backup beside the services and songs, and the AI drafts in
- * Prepare (#252). No secrets: saved keys and passwords, paired devices and link secrets are left out
+ * Prepare (#252), and the design packs imported into Design → Library (#354). No secrets: saved keys and passwords, paired devices and link secrets are left out
  * (settingsForBackup, looksForBackup); a draft holds only the service an assistant proposed.
  */
 export interface InstallationExport {
@@ -17,10 +18,17 @@ export interface InstallationExport {
   looks: LooksBackup
   /** Prepare → AI drafts, waiting or opened, as saved (absent: none, or a backup from before them). */
   aiDrafts?: AiDraft[]
+  /** Design packs imported into the look library (absent: none, or a backup from before them). Checked again on restore. */
+  designPacks?: DesignPackDoc[]
 }
 
 export function buildInstallationExport(now = new Date(), aiDrafts: readonly AiDraft[] = []): InstallationExport {
-  return { kind: "rhema-installation", v: 1, madeAt: now.toISOString(), settings: settingsForBackup(useSettingsStore.getState()), looks: looksForBackup(useBroadcastStore.getState()), ...(aiDrafts.length ? { aiDrafts: [...aiDrafts] } : {}) }
+  const designPacks = designPacksForBackup()
+  return {
+    kind: "rhema-installation", v: 1, madeAt: now.toISOString(), settings: settingsForBackup(useSettingsStore.getState()), looks: looksForBackup(useBroadcastStore.getState()),
+    ...(aiDrafts.length ? { aiDrafts: [...aiDrafts] } : {}),
+    ...(designPacks.length ? { designPacks } : {}),
+  }
 }
 
 /** The installation with this computer's AI drafts, for a backup file (no drafts if they cannot be read). */
@@ -38,6 +46,7 @@ export function parseInstallationExport(json: string | null | undefined): Instal
     if (typeof x.settings !== "object" || x.settings === null || typeof x.looks !== "object" || x.looks === null) return null
     // Drafts of another shape are left out; the rest of the backup still comes back.
     if (x.aiDrafts !== undefined && !Array.isArray(x.aiDrafts)) delete x.aiDrafts
+    if (x.designPacks !== undefined && !Array.isArray(x.designPacks)) delete x.designPacks
     return x as InstallationExport
   } catch {
     return null
@@ -116,6 +125,11 @@ export function installationChanges(here: InstallationExport, incoming: Installa
       if (!same(hs[part]?.[key], value)) others++
     }
   }
+  // Packs are compared by what they hold; a backup from before packs (none in it) leaves these here.
+  if (Array.isArray(incoming.designPacks)) {
+    const packNames = (xs: readonly DesignPackDoc[] | undefined) => (xs ?? []).map((p) => String(p?.name ?? ""))
+    if (!same(here.designPacks ?? [], incoming.designPacks)) out.push({ what: "Design packs in the library", here: `${count((here.designPacks ?? []).length, "pack")}: ${listed(packNames(here.designPacks))}`, incoming: `${count(incoming.designPacks.length, "pack")}: ${listed(packNames(incoming.designPacks))}` })
+  }
   if (others > 0) out.push({ what: "Other settings", here: "as set here", incoming: `${count(others, "setting")} from the backup` })
   // Drafts only come back, never go: the ones here stay.
   const ids = new Set((here.aiDrafts ?? []).map((d) => d.id))
@@ -126,11 +140,13 @@ export function installationChanges(here: InstallationExport, incoming: Installa
 
 /**
  * Put a backup's settings and looks in place (after the operator confirmed; never while on air),
- * then its AI drafts that are not here already. Resolves to how many drafts came back.
+ * then its design packs, then its AI drafts that are not here already. Resolves to how many drafts came back.
  */
-export function restoreInstallation(incoming: InstallationExport): Promise<number> {
+export async function restoreInstallation(incoming: InstallationExport): Promise<number> {
   restoreSettingsFromBackup(incoming.settings)
   restoreLooksFromBackup(incoming.looks)
-  if (!incoming.aiDrafts?.length) return Promise.resolve(0)
+  // Only the library's packs: a pack never changes a screen, an output or a scene.
+  await restoreDesignPacksFromBackup(incoming.designPacks)
+  if (!incoming.aiDrafts?.length) return 0
   return invoke<number>("ai_drafts_restore", { drafts: incoming.aiDrafts }).then((n) => (typeof n === "number" ? n : 0)).catch(() => 0)
 }

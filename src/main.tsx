@@ -11,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip.tsx"
 import { hydrateSettings, useSettingsStore } from "@/stores/settings-store"
 import { hydrateBibleStore, initBiblePersistence } from "@/stores/bible-store"
 import { hydrateBroadcastThemes } from "@/stores/broadcast-store"
+import { hydrateDesignPacks } from "@/lib/design-packs"
 
 // Frontend warnings, errors and uncaught rejections only exist in devtools
 // otherwise, so the logs a user sends us would say nothing about them.
@@ -32,7 +33,7 @@ if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
 invoke("stop_transcription")
   .catch(() => {})
   .then(() => hydrateSettings())
-  .then(() => (useSettingsStore.getState().companionMode ? undefined : Promise.all([hydrateBibleStore(), hydrateBroadcastThemes()]).then(() => initBiblePersistence())))
+  .then(() => (useSettingsStore.getState().companionMode ? undefined : Promise.all([hydrateBibleStore(), hydrateBroadcastThemes(), hydrateDesignPacks()]).then(() => initBiblePersistence())))
   .finally(() => {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

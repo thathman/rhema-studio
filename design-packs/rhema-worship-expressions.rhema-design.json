@@ -1,0 +1,2972 @@
+{
+  "format": "rhema.design-pack",
+  "version": 1,
+  "id": "rhema-worship-expressions",
+  "name": "Rhema Studio · Worship Expressions",
+  "author": "Rhema Studio contributors",
+  "license": "MIT",
+  "description": "120 original look recipes: scripture, hymn and song looks, notices, keyed bands for OBS and NDI, name bands, tickers, and camera, picture and video scene templates. No pictures, videos, lyrics or logos are included.",
+  "entries": [
+    {
+      "id": "aurora-bible-full",
+      "name": "Aurora Teal · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#0d2930",
+          "#176b6a",
+          "#0d2930"
+        ],
+        "foreground": "#d7f5ed",
+        "secondary": "#8ed6c8",
+        "accent": "#53c4bb",
+        "radial": true,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "aurora-lyrics-full",
+      "name": "Aurora Teal · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#0d2930",
+          "#176b6a",
+          "#0d2930"
+        ],
+        "foreground": "#d7f5ed",
+        "secondary": "#8ed6c8",
+        "accent": "#53c4bb",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "aurora-hymn-full",
+      "name": "Aurora Teal · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#0d2930",
+          "#176b6a",
+          "#0d2930"
+        ],
+        "foreground": "#d7f5ed",
+        "secondary": "#8ed6c8",
+        "accent": "#53c4bb",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "aurora-announcement",
+      "name": "Aurora Teal · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#0d2930",
+          "#176b6a",
+          "#0d2930"
+        ],
+        "foreground": "#d7f5ed",
+        "secondary": "#8ed6c8",
+        "accent": "#53c4bb",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "aurora-bible-l3",
+      "name": "Aurora Teal · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#d7f5ed",
+        "secondary": "#8ed6c8",
+        "accent": "#53c4bb",
+        "plate": "#0d2930",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "aurora-lyrics-l3",
+      "name": "Aurora Teal · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#d7f5ed",
+        "secondary": "#8ed6c8",
+        "accent": "#53c4bb",
+        "plate": "#0d2930",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "aurora-speaker-l3",
+      "name": "Aurora Teal · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#d7f5ed",
+        "secondary": "#8ed6c8",
+        "accent": "#53c4bb",
+        "plate": "#0d2930",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "aurora-ticker",
+      "name": "Aurora Teal · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#d7f5ed",
+        "accent": "#53c4bb",
+        "plate": "#0d2930",
+        "label": "CHURCH NEWS",
+        "speed": 140,
+        "motion": "crawl"
+      }
+    },
+    {
+      "id": "aurora-camera-bible",
+      "name": "Aurora Teal · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#0d2930",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "aurora-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "aurora-camera-lyrics",
+      "name": "Aurora Teal · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#0d2930",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "aurora-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "aurora-sermon-split",
+      "name": "Aurora Teal · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#0d2930",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "aurora-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "aurora-picture-lyrics",
+      "name": "Aurora Teal · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#0d2930",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "aurora-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "aurora-video-lyrics",
+      "name": "Aurora Teal · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#0d2930",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "aurora-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dawn-bible-full",
+      "name": "Dawn Gold · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#33261f",
+          "#8b5a33",
+          "#33261f"
+        ],
+        "foreground": "#fff2db",
+        "secondary": "#f8d49a",
+        "accent": "#dba55b",
+        "radial": false,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "dawn-lyrics-full",
+      "name": "Dawn Gold · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#33261f",
+          "#8b5a33",
+          "#33261f"
+        ],
+        "foreground": "#fff2db",
+        "secondary": "#f8d49a",
+        "accent": "#dba55b",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "dawn-hymn-full",
+      "name": "Dawn Gold · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#33261f",
+          "#8b5a33",
+          "#33261f"
+        ],
+        "foreground": "#fff2db",
+        "secondary": "#f8d49a",
+        "accent": "#dba55b",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "dawn-announcement",
+      "name": "Dawn Gold · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#33261f",
+          "#8b5a33",
+          "#33261f"
+        ],
+        "foreground": "#fff2db",
+        "secondary": "#f8d49a",
+        "accent": "#dba55b",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "dawn-bible-l3",
+      "name": "Dawn Gold · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#fff2db",
+        "secondary": "#f8d49a",
+        "accent": "#dba55b",
+        "plate": "#33261f",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "dawn-lyrics-l3",
+      "name": "Dawn Gold · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#fff2db",
+        "secondary": "#f8d49a",
+        "accent": "#dba55b",
+        "plate": "#33261f",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "dawn-speaker-l3",
+      "name": "Dawn Gold · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#fff2db",
+        "secondary": "#f8d49a",
+        "accent": "#dba55b",
+        "plate": "#33261f",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "dawn-ticker",
+      "name": "Dawn Gold · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#fff2db",
+        "accent": "#dba55b",
+        "plate": "#33261f",
+        "label": "CHURCH NEWS",
+        "speed": 140,
+        "motion": "crawl"
+      }
+    },
+    {
+      "id": "dawn-camera-bible",
+      "name": "Dawn Gold · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#33261f",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "dawn-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dawn-camera-lyrics",
+      "name": "Dawn Gold · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#33261f",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "dawn-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dawn-sermon-split",
+      "name": "Dawn Gold · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#33261f",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "dawn-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dawn-picture-lyrics",
+      "name": "Dawn Gold · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#33261f",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "dawn-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dawn-video-lyrics",
+      "name": "Dawn Gold · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#33261f",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "dawn-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "midnight-bible-full",
+      "name": "Midnight Blue · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#08182f",
+          "#233d67",
+          "#08182f"
+        ],
+        "foreground": "#eff6ff",
+        "secondary": "#99bbea",
+        "accent": "#5f9acb",
+        "radial": false,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "midnight-lyrics-full",
+      "name": "Midnight Blue · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#08182f",
+          "#233d67",
+          "#08182f"
+        ],
+        "foreground": "#eff6ff",
+        "secondary": "#99bbea",
+        "accent": "#5f9acb",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "midnight-hymn-full",
+      "name": "Midnight Blue · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#08182f",
+          "#233d67",
+          "#08182f"
+        ],
+        "foreground": "#eff6ff",
+        "secondary": "#99bbea",
+        "accent": "#5f9acb",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "midnight-announcement",
+      "name": "Midnight Blue · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#08182f",
+          "#233d67",
+          "#08182f"
+        ],
+        "foreground": "#eff6ff",
+        "secondary": "#99bbea",
+        "accent": "#5f9acb",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "midnight-bible-l3",
+      "name": "Midnight Blue · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#eff6ff",
+        "secondary": "#99bbea",
+        "accent": "#5f9acb",
+        "plate": "#08182f",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "midnight-lyrics-l3",
+      "name": "Midnight Blue · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#eff6ff",
+        "secondary": "#99bbea",
+        "accent": "#5f9acb",
+        "plate": "#08182f",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "midnight-speaker-l3",
+      "name": "Midnight Blue · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#eff6ff",
+        "secondary": "#99bbea",
+        "accent": "#5f9acb",
+        "plate": "#08182f",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "midnight-ticker",
+      "name": "Midnight Blue · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#eff6ff",
+        "accent": "#5f9acb",
+        "plate": "#08182f",
+        "label": "CHURCH NEWS",
+        "speed": 140,
+        "motion": "crawl"
+      }
+    },
+    {
+      "id": "midnight-camera-bible",
+      "name": "Midnight Blue · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#08182f",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "midnight-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "midnight-camera-lyrics",
+      "name": "Midnight Blue · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#08182f",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "midnight-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "midnight-sermon-split",
+      "name": "Midnight Blue · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#08182f",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "midnight-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "midnight-picture-lyrics",
+      "name": "Midnight Blue · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#08182f",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "midnight-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "midnight-video-lyrics",
+      "name": "Midnight Blue · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#08182f",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "midnight-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rose-bible-full",
+      "name": "Rose Ember · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#321d29",
+          "#794052",
+          "#321d29"
+        ],
+        "foreground": "#fbe6ec",
+        "secondary": "#eeb2c6",
+        "accent": "#da829a",
+        "radial": false,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "rose-lyrics-full",
+      "name": "Rose Ember · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#321d29",
+          "#794052",
+          "#321d29"
+        ],
+        "foreground": "#fbe6ec",
+        "secondary": "#eeb2c6",
+        "accent": "#da829a",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "rose-hymn-full",
+      "name": "Rose Ember · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#321d29",
+          "#794052",
+          "#321d29"
+        ],
+        "foreground": "#fbe6ec",
+        "secondary": "#eeb2c6",
+        "accent": "#da829a",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "rose-announcement",
+      "name": "Rose Ember · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#321d29",
+          "#794052",
+          "#321d29"
+        ],
+        "foreground": "#fbe6ec",
+        "secondary": "#eeb2c6",
+        "accent": "#da829a",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "rose-bible-l3",
+      "name": "Rose Ember · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#fbe6ec",
+        "secondary": "#eeb2c6",
+        "accent": "#da829a",
+        "plate": "#321d29",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "rose-lyrics-l3",
+      "name": "Rose Ember · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#fbe6ec",
+        "secondary": "#eeb2c6",
+        "accent": "#da829a",
+        "plate": "#321d29",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "rose-speaker-l3",
+      "name": "Rose Ember · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#fbe6ec",
+        "secondary": "#eeb2c6",
+        "accent": "#da829a",
+        "plate": "#321d29",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "rose-ticker",
+      "name": "Rose Ember · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#fbe6ec",
+        "accent": "#da829a",
+        "plate": "#321d29",
+        "label": "CHURCH NEWS",
+        "speed": 140,
+        "motion": "crawl"
+      }
+    },
+    {
+      "id": "rose-camera-bible",
+      "name": "Rose Ember · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#321d29",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "rose-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rose-camera-lyrics",
+      "name": "Rose Ember · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#321d29",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "rose-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rose-sermon-split",
+      "name": "Rose Ember · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#321d29",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "rose-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rose-picture-lyrics",
+      "name": "Rose Ember · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#321d29",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "rose-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rose-video-lyrics",
+      "name": "Rose Ember · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#321d29",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "rose-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pine-bible-full",
+      "name": "Pine Chapel · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#14261d",
+          "#356748",
+          "#14261d"
+        ],
+        "foreground": "#edf5e6",
+        "secondary": "#aad6ae",
+        "accent": "#85b98b",
+        "radial": false,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "pine-lyrics-full",
+      "name": "Pine Chapel · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#14261d",
+          "#356748",
+          "#14261d"
+        ],
+        "foreground": "#edf5e6",
+        "secondary": "#aad6ae",
+        "accent": "#85b98b",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "pine-hymn-full",
+      "name": "Pine Chapel · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#14261d",
+          "#356748",
+          "#14261d"
+        ],
+        "foreground": "#edf5e6",
+        "secondary": "#aad6ae",
+        "accent": "#85b98b",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "pine-announcement",
+      "name": "Pine Chapel · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#14261d",
+          "#356748",
+          "#14261d"
+        ],
+        "foreground": "#edf5e6",
+        "secondary": "#aad6ae",
+        "accent": "#85b98b",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "pine-bible-l3",
+      "name": "Pine Chapel · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#edf5e6",
+        "secondary": "#aad6ae",
+        "accent": "#85b98b",
+        "plate": "#14261d",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "pine-lyrics-l3",
+      "name": "Pine Chapel · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#edf5e6",
+        "secondary": "#aad6ae",
+        "accent": "#85b98b",
+        "plate": "#14261d",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "pine-speaker-l3",
+      "name": "Pine Chapel · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#edf5e6",
+        "secondary": "#aad6ae",
+        "accent": "#85b98b",
+        "plate": "#14261d",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "pine-ticker",
+      "name": "Pine Chapel · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#edf5e6",
+        "accent": "#85b98b",
+        "plate": "#14261d",
+        "label": "CHURCH NEWS",
+        "speed": 140,
+        "motion": "crawl"
+      }
+    },
+    {
+      "id": "pine-camera-bible",
+      "name": "Pine Chapel · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#14261d",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "pine-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pine-camera-lyrics",
+      "name": "Pine Chapel · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#14261d",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "pine-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pine-sermon-split",
+      "name": "Pine Chapel · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#14261d",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "pine-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pine-picture-lyrics",
+      "name": "Pine Chapel · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#14261d",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "pine-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pine-video-lyrics",
+      "name": "Pine Chapel · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#14261d",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "pine-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ocean-bible-full",
+      "name": "Ocean Light · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#0f2b43",
+          "#21668a",
+          "#0f2b43"
+        ],
+        "foreground": "#edf9ff",
+        "secondary": "#b3e4ff",
+        "accent": "#5bc1e1",
+        "radial": true,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "ocean-lyrics-full",
+      "name": "Ocean Light · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#0f2b43",
+          "#21668a",
+          "#0f2b43"
+        ],
+        "foreground": "#edf9ff",
+        "secondary": "#b3e4ff",
+        "accent": "#5bc1e1",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "ocean-hymn-full",
+      "name": "Ocean Light · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#0f2b43",
+          "#21668a",
+          "#0f2b43"
+        ],
+        "foreground": "#edf9ff",
+        "secondary": "#b3e4ff",
+        "accent": "#5bc1e1",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "ocean-announcement",
+      "name": "Ocean Light · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#0f2b43",
+          "#21668a",
+          "#0f2b43"
+        ],
+        "foreground": "#edf9ff",
+        "secondary": "#b3e4ff",
+        "accent": "#5bc1e1",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "ocean-bible-l3",
+      "name": "Ocean Light · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#edf9ff",
+        "secondary": "#b3e4ff",
+        "accent": "#5bc1e1",
+        "plate": "#0f2b43",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "ocean-lyrics-l3",
+      "name": "Ocean Light · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#edf9ff",
+        "secondary": "#b3e4ff",
+        "accent": "#5bc1e1",
+        "plate": "#0f2b43",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "ocean-speaker-l3",
+      "name": "Ocean Light · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#edf9ff",
+        "secondary": "#b3e4ff",
+        "accent": "#5bc1e1",
+        "plate": "#0f2b43",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "ocean-ticker",
+      "name": "Ocean Light · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#edf9ff",
+        "accent": "#5bc1e1",
+        "plate": "#0f2b43",
+        "label": "CHURCH NEWS",
+        "speed": 140,
+        "motion": "crawl"
+      }
+    },
+    {
+      "id": "ocean-camera-bible",
+      "name": "Ocean Light · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#0f2b43",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "ocean-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ocean-camera-lyrics",
+      "name": "Ocean Light · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#0f2b43",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "ocean-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ocean-sermon-split",
+      "name": "Ocean Light · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#0f2b43",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "ocean-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ocean-picture-lyrics",
+      "name": "Ocean Light · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#0f2b43",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "ocean-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ocean-video-lyrics",
+      "name": "Ocean Light · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#0f2b43",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "ocean-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ivory-bible-full",
+      "name": "Ivory Editorial · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#f4eee3",
+          "#e3d5ba",
+          "#f4eee3"
+        ],
+        "foreground": "#25261f",
+        "secondary": "#715a3a",
+        "accent": "#b68c54",
+        "radial": false,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "ivory-lyrics-full",
+      "name": "Ivory Editorial · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#f4eee3",
+          "#e3d5ba",
+          "#f4eee3"
+        ],
+        "foreground": "#25261f",
+        "secondary": "#715a3a",
+        "accent": "#b68c54",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "ivory-hymn-full",
+      "name": "Ivory Editorial · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#f4eee3",
+          "#e3d5ba",
+          "#f4eee3"
+        ],
+        "foreground": "#25261f",
+        "secondary": "#715a3a",
+        "accent": "#b68c54",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "ivory-announcement",
+      "name": "Ivory Editorial · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#f4eee3",
+          "#e3d5ba",
+          "#f4eee3"
+        ],
+        "foreground": "#25261f",
+        "secondary": "#715a3a",
+        "accent": "#b68c54",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "ivory-bible-l3",
+      "name": "Ivory Editorial · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#25261f",
+        "secondary": "#715a3a",
+        "accent": "#b68c54",
+        "plate": "#f4eee3",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "ivory-lyrics-l3",
+      "name": "Ivory Editorial · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#25261f",
+        "secondary": "#715a3a",
+        "accent": "#b68c54",
+        "plate": "#f4eee3",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "ivory-speaker-l3",
+      "name": "Ivory Editorial · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#25261f",
+        "secondary": "#715a3a",
+        "accent": "#b68c54",
+        "plate": "#f4eee3",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "ivory-ticker",
+      "name": "Ivory Editorial · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#25261f",
+        "accent": "#b68c54",
+        "plate": "#f4eee3",
+        "label": "CHURCH NEWS",
+        "speed": 90,
+        "motion": "pages"
+      }
+    },
+    {
+      "id": "ivory-camera-bible",
+      "name": "Ivory Editorial · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#f4eee3",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "ivory-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ivory-camera-lyrics",
+      "name": "Ivory Editorial · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#f4eee3",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "ivory-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ivory-sermon-split",
+      "name": "Ivory Editorial · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#f4eee3",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "ivory-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ivory-picture-lyrics",
+      "name": "Ivory Editorial · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#f4eee3",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "ivory-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ivory-video-lyrics",
+      "name": "Ivory Editorial · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#f4eee3",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "ivory-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "royal-bible-full",
+      "name": "Royal Evening · Scripture full",
+      "purpose": "Wide Bible reading with layered radial/linear gradient, English and Yorùbá-friendly type.",
+      "from": "look-clean-bible-full",
+      "variant": {
+        "gradient": [
+          "#221d40",
+          "#514282",
+          "#221d40"
+        ],
+        "foreground": "#f5eaff",
+        "secondary": "#c7b3ef",
+        "accent": "#a290e0",
+        "radial": false,
+        "fontSize": 74,
+        "referenceSize": 39
+      }
+    },
+    {
+      "id": "royal-lyrics-full",
+      "name": "Royal Evening · Worship fullscreen",
+      "purpose": "Two-line song lyrics in a soft panoramic gradient.",
+      "from": "look-clean-lyrics-full",
+      "variant": {
+        "gradient": [
+          "#221d40",
+          "#514282",
+          "#221d40"
+        ],
+        "foreground": "#f5eaff",
+        "secondary": "#c7b3ef",
+        "accent": "#a290e0",
+        "fontSize": 80,
+        "referenceSize": 34
+      }
+    },
+    {
+      "id": "royal-hymn-full",
+      "name": "Royal Evening · Hymnal page",
+      "purpose": "Traditional stanzas and hymn numbers for widescreen projection.",
+      "from": "look-classic-hymn-full",
+      "variant": {
+        "gradient": [
+          "#221d40",
+          "#514282",
+          "#221d40"
+        ],
+        "foreground": "#f5eaff",
+        "secondary": "#c7b3ef",
+        "accent": "#a290e0",
+        "fontFamily": "Source Serif 4 Variable",
+        "fontSize": 68
+      }
+    },
+    {
+      "id": "royal-announcement",
+      "name": "Royal Evening · Service announcements",
+      "purpose": "Readable event and prayer notice slide.",
+      "from": "look-clean-announcement",
+      "variant": {
+        "gradient": [
+          "#221d40",
+          "#514282",
+          "#221d40"
+        ],
+        "foreground": "#f5eaff",
+        "secondary": "#c7b3ef",
+        "accent": "#a290e0",
+        "fontSize": 62
+      }
+    },
+    {
+      "id": "royal-bible-l3",
+      "name": "Royal Evening · Bible lower third",
+      "purpose": "Transparent keyed Bible overlay for OBS and sanctuary camera.",
+      "from": "look-clean-bible-l3",
+      "variant": {
+        "foreground": "#f5eaff",
+        "secondary": "#c7b3ef",
+        "accent": "#a290e0",
+        "plate": "#221d40",
+        "plateOpacity": 0.9,
+        "fontSize": 52
+      }
+    },
+    {
+      "id": "royal-lyrics-l3",
+      "name": "Royal Evening · Lyric lower third",
+      "purpose": "Transparent lyric band with contrast-safe backing.",
+      "from": "look-clean-lyrics-l3",
+      "variant": {
+        "foreground": "#f5eaff",
+        "secondary": "#c7b3ef",
+        "accent": "#a290e0",
+        "plate": "#221d40",
+        "plateOpacity": 0.86
+      }
+    },
+    {
+      "id": "royal-speaker-l3",
+      "name": "Royal Evening · Speaker name bar",
+      "purpose": "Presenter name and title with a small accent rule.",
+      "from": "look-clean-speaker",
+      "variant": {
+        "foreground": "#f5eaff",
+        "secondary": "#c7b3ef",
+        "accent": "#a290e0",
+        "plate": "#221d40",
+        "bottom": 9,
+        "height": 14
+      }
+    },
+    {
+      "id": "royal-ticker",
+      "name": "Royal Evening · Information crawl",
+      "purpose": "Labelled service announcements ticker over camera video.",
+      "from": "look-clean-ticker",
+      "variant": {
+        "foreground": "#f5eaff",
+        "accent": "#a290e0",
+        "plate": "#221d40",
+        "label": "CHURCH NEWS",
+        "speed": 140,
+        "motion": "crawl"
+      }
+    },
+    {
+      "id": "royal-camera-bible",
+      "name": "Royal Evening · Camera + Bible band",
+      "purpose": "Full camera with keyed Scripture band; choose camera locally.",
+      "scene": {
+        "background": "#221d40",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible · follow source",
+            "box": {
+              "x": 0,
+              "y": 68,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "royal-bible-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "royal-camera-lyrics",
+      "name": "Royal Evening · Camera + worship band",
+      "purpose": "Full camera plus changing hymn and song lyrics.",
+      "scene": {
+        "background": "#221d40",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "royal-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "royal-sermon-split",
+      "name": "Royal Evening · Camera + half Scripture",
+      "purpose": "Balanced 50/50 live camera and Bible; operator places sources independently.",
+      "scene": {
+        "background": "#221d40",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Preacher camera · assign stream",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Bible",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "royal-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "royal-picture-lyrics",
+      "name": "Royal Evening · Picture + lyric title",
+      "purpose": "Fullscreen picture placeholder with overlay for lyric lines; assign your own image.",
+      "scene": {
+        "background": "#221d40",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Picture background · assign local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live worship lyrics",
+            "box": {
+              "x": 0,
+              "y": 67,
+              "w": 100,
+              "h": 32
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "royal-lyrics-l3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "royal-video-lyrics",
+      "name": "Royal Evening · Video + worship",
+      "purpose": "Looping muted local video placeholder beneath full-screen lyrics; assign your own video.",
+      "scene": {
+        "background": "#221d40",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Motion background · assign local video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Song / hymn · live lyrics",
+            "box": {
+              "x": 3,
+              "y": 8,
+              "w": 94,
+              "h": 84
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "royal-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-broadcast-pip",
+      "name": "Broadcast Picture-in-Picture",
+      "purpose": "Camera corner over full Bible plus ticker",
+      "scene": {
+        "background": "#0f1b2a",
+        "layers": [
+          {
+            "kind": "feed",
+            "name": "Scripture",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "aurora-bible-full"
+          },
+          {
+            "kind": "camera",
+            "name": "Camera · upper right",
+            "box": {
+              "x": 70,
+              "y": 6,
+              "w": 26,
+              "h": 28
+            }
+          },
+          {
+            "kind": "ticker",
+            "name": "Live ticker",
+            "box": {
+              "x": 0,
+              "y": 91,
+              "w": 100,
+              "h": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-story-pip",
+      "name": "Worship Picture-in-Picture",
+      "purpose": "Small camera in lower right over lyrics",
+      "scene": {
+        "background": "#172f35",
+        "layers": [
+          {
+            "kind": "feed",
+            "name": "Worship",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "ocean-lyrics-full"
+          },
+          {
+            "kind": "camera",
+            "name": "Camera · lower right",
+            "box": {
+              "x": 73,
+              "y": 65,
+              "w": 23,
+              "h": 26
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-scripture-quadrant",
+      "name": "Scripture in corner",
+      "purpose": "Large camera with Scripture in right side card",
+      "scene": {
+        "background": "#101820",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Camera",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 68,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Bible",
+            "box": {
+              "x": 67,
+              "y": 10,
+              "w": 33,
+              "h": 80
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "midnight-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-double-camera",
+      "name": "Two camera view",
+      "purpose": "Two side-by-side camera placeholders",
+      "scene": {
+        "background": "#151b24",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Camera A · pulpit",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          },
+          {
+            "kind": "camera",
+            "name": "Camera B · choir",
+            "box": {
+              "x": 50,
+              "y": 0,
+              "w": 50,
+              "h": 100
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-full-photo",
+      "name": "Picture Fullscreen",
+      "purpose": "A clean edge-to-edge picture scene",
+      "scene": {
+        "background": "#162029",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Photo · choose local image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-photo-bible",
+      "name": "Picture + Bible",
+      "purpose": "Photo with full Scripture in front",
+      "scene": {
+        "background": "#101920",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Local photo · select asset",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Scripture",
+            "box": {
+              "x": 6,
+              "y": 18,
+              "w": 88,
+              "h": 64
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "ivory-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-motion-bible",
+      "name": "Motion background + Bible",
+      "purpose": "Video layer behind large Bible text",
+      "scene": {
+        "background": "#0e2030",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Local video · add muted file",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live Scripture",
+            "box": {
+              "x": 5,
+              "y": 16,
+              "w": 90,
+              "h": 72
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "aurora-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-motion-ticker",
+      "name": "Motion background + ticker",
+      "purpose": "Muted video and independently active announcement crawl",
+      "scene": {
+        "background": "#101820",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Local looping muted video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "ticker",
+            "name": "Live ticker",
+            "box": {
+              "x": 0,
+              "y": 90,
+              "w": 100,
+              "h": 10
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-motion-prayer",
+      "name": "Moving prayer background",
+      "purpose": "Looping video with prayer Scripture overlay",
+      "scene": {
+        "background": "#162a2a",
+        "layers": [
+          {
+            "kind": "video",
+            "name": "Local prayer video",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Bible",
+            "box": {
+              "x": 8,
+              "y": 18,
+              "w": 84,
+              "h": 64
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "pine-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-prayer-focus",
+      "name": "Prayer focus",
+      "purpose": "Photo on the left, Scripture on the right",
+      "scene": {
+        "background": "#192425",
+        "layers": [
+          {
+            "kind": "picture",
+            "name": "Prayer image",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 45,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Bible",
+            "box": {
+              "x": 45,
+              "y": 0,
+              "w": 55,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "pine-bible-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-sermon-three",
+      "name": "Sermon production triple view",
+      "purpose": "Camera, reference, ticker",
+      "scene": {
+        "background": "#0a2026",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 60,
+              "h": 91
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Scripture",
+            "box": {
+              "x": 60,
+              "y": 0,
+              "w": 40,
+              "h": 91
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "dawn-bible-full"
+          },
+          {
+            "kind": "ticker",
+            "name": "News crawl",
+            "box": {
+              "x": 0,
+              "y": 91,
+              "w": 100,
+              "h": 9
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-choir-hymn",
+      "name": "Choir and Hymn",
+      "purpose": "Choir camera and big hymn stanza",
+      "scene": {
+        "background": "#14252b",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Choir camera",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 45,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Hymn",
+            "box": {
+              "x": 45,
+              "y": 0,
+              "w": 55,
+              "h": 100
+            },
+            "shows": [
+              "hymn"
+            ],
+            "lookId": "dawn-hymn-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-pulpit-lyric",
+      "name": "Pulpit and lyrics",
+      "purpose": "Pulpit 30%, lyrics 70%",
+      "scene": {
+        "background": "#111a28",
+        "layers": [
+          {
+            "kind": "camera",
+            "name": "Pulpit camera",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 30,
+              "h": 100
+            }
+          },
+          {
+            "kind": "feed",
+            "name": "Live lyrics",
+            "box": {
+              "x": 30,
+              "y": 0,
+              "w": 70,
+              "h": 100
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "royal-lyrics-full"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-welcome-logo",
+      "name": "Welcome with countdown",
+      "purpose": "Church logo, a clock and a ticker on a plain colour",
+      "scene": {
+        "background": "#162c2d",
+        "layers": [
+          {
+            "kind": "logo",
+            "name": "Church logo",
+            "box": {
+              "x": 35,
+              "y": 12,
+              "w": 30,
+              "h": 22
+            }
+          },
+          {
+            "kind": "clock",
+            "name": "Clock",
+            "box": {
+              "x": 32,
+              "y": 43,
+              "w": 36,
+              "h": 22
+            }
+          },
+          {
+            "kind": "ticker",
+            "name": "Upcoming events",
+            "box": {
+              "x": 0,
+              "y": 92,
+              "w": 100,
+              "h": 8
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-all-graphics",
+      "name": "Graphics only for OBS",
+      "purpose": "Keyed lyrics, name band and ticker with nothing behind them, for OBS",
+      "scene": {
+        "background": "transparent",
+        "layers": [
+          {
+            "kind": "feed",
+            "name": "Lyric overlay",
+            "box": {
+              "x": 0,
+              "y": 62,
+              "w": 100,
+              "h": 30
+            },
+            "shows": [
+              "song",
+              "hymn"
+            ],
+            "lookId": "rose-lyrics-l3"
+          },
+          {
+            "kind": "lowerThird",
+            "name": "Presenter lower-third",
+            "box": {
+              "x": 2,
+              "y": 73,
+              "w": 96,
+              "h": 18
+            }
+          },
+          {
+            "kind": "ticker",
+            "name": "Ticker",
+            "box": {
+              "x": 0,
+              "y": 92,
+              "w": 100,
+              "h": 8
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-bible-pip",
+      "name": "Bible-led PiP",
+      "purpose": "Bible fullscreen with small camera bottom-left",
+      "scene": {
+        "background": "#17222e",
+        "layers": [
+          {
+            "kind": "feed",
+            "name": "Scripture",
+            "box": {
+              "x": 0,
+              "y": 0,
+              "w": 100,
+              "h": 100
+            },
+            "shows": [
+              "bible"
+            ],
+            "lookId": "midnight-bible-full"
+          },
+          {
+            "kind": "camera",
+            "name": "Pulpit corner",
+            "box": {
+              "x": 4,
+              "y": 66,
+              "w": 28,
+              "h": 28
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

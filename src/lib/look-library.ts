@@ -15,7 +15,8 @@ import { outputOnAir } from "@/lib/output-on-air"
  * for it (ADR 0001: no layout silently goes live).
  */
 
-export type LookFamilyId = "church-classic" | "broadcast-clean" | "contemporary" | "warm-editorial" | "high-contrast" | "seasonal"
+/** A built-in family, or an imported design pack's (`pack:<pack id>`, see design-packs.ts). */
+export type LookFamilyId = "church-classic" | "broadcast-clean" | "contemporary" | "warm-editorial" | "high-contrast" | "seasonal" | `pack:${string}`
 /** How the look sits in the frame. */
 export type LookLayout = "fullscreen" | "lower-third" | "ticker" | "scene" | "stage"
 /** What it is for. */
@@ -38,9 +39,12 @@ export interface LookFamily {
   description: string
 }
 
-/** A layer of a scene template; a feed layer names the library look it shows in. */
+/**
+ * A layer of a scene template; a feed layer names the library look it shows in. A picture, video,
+ * camera or logo layer is a place only: the church chooses its picture, video or camera in Scenes.
+ */
 export interface SceneTemplateLayer {
-  kind: Extract<SceneLayerKind, "camera" | "feed">
+  kind: SceneLayerKind
   name: string
   shows?: ContentType[]
   box: SceneBox
