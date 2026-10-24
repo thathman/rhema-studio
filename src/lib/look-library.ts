@@ -38,9 +38,9 @@ export interface LookFamily {
   description: string
 }
 
-/** A layer of a scene template; a feed layer names the library look it shows in. */
+/** A layer of a scene template: feeds can bind a theme; picture/video are deliberately empty media placeholders until the operator assigns a local asset. */
 export interface SceneTemplateLayer {
-  kind: Extract<SceneLayerKind, "camera" | "feed">
+  kind: SceneLayerKind
   name: string
   shows?: ContentType[]
   box: SceneBox
