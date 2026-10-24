@@ -215,9 +215,11 @@ public class MainActivity extends Activity {
     private void advertise() {
         if (nsd == null) nsd = (NsdManager) getSystemService(NSD_SERVICE);
         if (nsd == null) return;
+        // Android TV already announces the plain name (its remote service) and refuses the same name twice.
         String n = name();
+        n = (n.length() > 52 ? n.substring(0, 52) : n) + " · Rhema";
         NsdServiceInfo service = new NsdServiceInfo();
-        service.setServiceName(n.length() > 60 ? n.substring(0, 60) : n);
+        service.setServiceName(n);
         service.setServiceType(SERVICE_TYPE);
         service.setPort(PORT);
         advert = new NsdManager.RegistrationListener() {

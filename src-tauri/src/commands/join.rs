@@ -354,9 +354,12 @@ pub struct FoundTv {
     address: String,
 }
 
-/// The TV's own name: its service name without the service type ("Hall TV._rhema-tv._tcp.local.").
+/// The TV's own name: its service name without the service type and the " · Rhema" the receiver adds
+/// ("Hall TV · Rhema._rhema-tv._tcp.local." → "Hall TV"). Android TV already announces the plain name
+/// for its own remote service and refuses a second service with the same name.
 fn tv_name(fullname: &str) -> String {
-    fullname.strip_suffix(TV_SERVICE).unwrap_or(fullname).trim_end_matches('.').to_string()
+    let name = fullname.strip_suffix(TV_SERVICE).unwrap_or(fullname).trim_end_matches('.');
+    name.strip_suffix(" · Rhema").unwrap_or(name).to_string()
 }
 
 /// The TV's church-network address: a private one (192.168…, 10…, 172.16–31…) first, else a
@@ -589,5 +592,6 @@ mod tests {
     fn tv_discovery_names_come_from_the_service_name() {
         assert_eq!(tv_name("Living Room._rhema-tv._tcp.local."), "Living Room");
         assert_eq!(tv_name("odd name"), "odd name");
+        assert_eq!(tv_name("Bedroom TV · Rhema._rhema-tv._tcp.local."), "Bedroom TV");
     }
 }
