@@ -288,7 +288,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
             <SetupStatusRow onOpen={() => run(() => useShellStore.getState().setSetupStatusOpen(true))} />
             {confirmCompanion ? (
               <div role="group" aria-label="Use this computer for OBS only" className="mx-1 mb-1 rounded-md border border-border bg-muted/50 px-2 py-1.5 text-xs">
-                <p className="font-medium">Make this computer an OBS companion? Rhema starts again with one small screen: join the main computer and add its cameras to OBS here. The studio comes back from that screen.</p>
+                <p className="font-medium">Make this computer an OBS companion? Rhema Studio starts again with one small screen: join the main computer and add its cameras to OBS here. The studio comes back from that screen.</p>
                 <div className="mt-1.5 flex gap-1.5">
                   <Button size="xs" onClick={() => run(() => void switchMode(true))}>Start as OBS companion</Button>
                   <Button size="xs" variant="ghost" onClick={() => setConfirmCompanion(false)}>Cancel</Button>

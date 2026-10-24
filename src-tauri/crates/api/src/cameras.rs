@@ -63,7 +63,7 @@ pub struct Watcher {
     /// "companion" (an OBS companion computer), "obs" (OBS or another player, by RTSP), "screen"
     /// (a Rhema screen, desk or TV, by WebRTC) or "player" (anything else).
     pub kind: String,
-    /// In words: "Media desk (OBS companion)", "Rhema screens on this computer", "A screen or TV at 192.168.1.40".
+    /// In words: "Media desk (OBS companion)", "Rhema Studio screens on this computer", "A screen or TV at 192.168.1.40".
     pub name: String,
     /// Read over the network (not on this computer): it counts toward the network estimate.
     pub remote: bool,
@@ -317,7 +317,7 @@ impl CameraHub {
             return StatusCode::FORBIDDEN.into_response();
         };
         let Some(router) = self.router() else {
-            return (StatusCode::SERVICE_UNAVAILABLE, "The camera router is off. Turn it on in Rhema: Production, Cameras.").into_response();
+            return (StatusCode::SERVICE_UNAVAILABLE, "The camera router is off. Turn it on in Rhema Studio: Production, Cameras.").into_response();
         };
         if body.len() > MAX_BODY {
             return StatusCode::PAYLOAD_TOO_LARGE.into_response();
@@ -353,7 +353,7 @@ impl CameraHub {
         // plainly, and never ask the phone to sign in itself.
         if status == 401 || status == 403 {
             log::warn!("camera {name}: the router refused its sign-in");
-            return (StatusCode::BAD_GATEWAY, "The camera router refused this camera. Try again in a moment; if it keeps happening, turn the router off and on in Rhema.").into_response();
+            return (StatusCode::BAD_GATEWAY, "The camera router refused this camera. Try again in a moment; if it keeps happening, turn the router off and on in Rhema Studio.").into_response();
         }
         let mut out = HeaderMap::new();
         for h in ["content-type", "etag", "accept-patch"] {

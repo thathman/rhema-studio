@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rhema Receiver (#198): a Google TV / Android TV shows a Rhema browser feed, full screen. -->
+<!-- Rhema Studio Receiver (#198, formerly Rhema Receiver): a Google TV / Android TV shows a Rhema Studio
+     browser feed, full screen. The package name stays com.openbezal.rhema.receiver so installed TVs update in place. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.openbezal.rhema.receiver"
-    android:versionCode="4"
-    android:versionName="1.3.0.0">
+    android:versionCode="5"
+    android:versionName="1.4.0.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
     <!-- Also all that telling the network about this TV (NSD, _rhema-tv._tcp) needs. -->
@@ -12,7 +13,7 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
-        android:label="Rhema Receiver"
+        android:label="Rhema Studio Receiver"
         android:icon="@drawable/icon"
         android:banner="@drawable/banner"
         android:usesCleartextTraffic="true"

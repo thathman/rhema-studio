@@ -14,7 +14,7 @@ export interface RouterPorts {
   webrtc: number
   webrtcUdp: number
   rtsp: number
-  /** RTSP over TLS for the Rhema Camera app (absent from builds before it). */
+  /** RTSP over TLS for the Rhema Studio Cam app (absent from builds before it). */
   rtsps?: number
   rtmp: number
   srt: number
@@ -43,7 +43,7 @@ export interface RouterStatus {
   wanted: boolean
   lanAddress: string | null
   ports: RouterPorts
-  /** SHA-256 of the certificate the router serves for RTSPS, while it does; the Rhema Camera app trusts only that one. */
+  /** SHA-256 of the certificate the router serves for RTSPS, while it does; the Rhema Studio Cam app trusts only that one. */
   rtspsFingerprint?: string | null
   restarts: number
   error: string | null
@@ -106,7 +106,7 @@ export function rtmpUrl(host: string, ports: RouterPorts, cam: CameraSource): st
 }
 
 /**
- * The Rhema Camera app's pairing link (Android): where the router's RTSPS is, which camera the phone
+ * The Rhema Studio Cam app's pairing link (Android): where the router's RTSPS is, which camera the phone
  * is, its publish password (the same secret as its page link, so New link closes this too) and the
  * fingerprint of the only certificate the app will send to. Null while the router has no RTSPS.
  */

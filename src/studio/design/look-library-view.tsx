@@ -87,7 +87,7 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
   return (
     <div className="flex flex-col gap-5">
       <p className="max-w-3xl text-sm text-muted-foreground">
-        Ready-made looks, made for Rhema and fully offline. <strong className="font-semibold text-foreground">Use</strong> adds your own copy to your looks, to change as you like.
+        Ready-made looks, made for Rhema Studio and fully offline. <strong className="font-semibold text-foreground">Use</strong> adds your own copy to your looks, to change as you like.
         Nothing on the screens changes until you choose the copy for an output in its settings.
       </p>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">

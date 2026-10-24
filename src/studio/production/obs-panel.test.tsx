@@ -197,7 +197,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     expect(obs.requests.at(-1)?.type).toBe("TriggerStudioModeTransition")
     expect(obs.requests.some((r) => r.type === "SetCurrentProgramScene")).toBe(false)
     expect(useObsStore.getState()).toMatchObject({ program: "Choir", preview: "Wide" })
-    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("OBS: took Choir to its program (from Rhema)")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("OBS: took Choir to its program (from Rhema Studio)")
   })
 
   it("outside Studio Mode, switching OBS's program asks first, saying it changes the stream", async () => {
@@ -243,7 +243,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
   })
 
   it("in rehearsal, nothing reaches OBS: the buttons stay focusable, say why, and the store refuses too", async () => {
-    const reason = "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise"
+    const reason = "Rehearsal is on: OBS is the live stream, so Rhema Studio doesn't change it while you practise"
     const studio = await setup({ studioMode: true })
     const { useBroadcastStore } = await import("@/stores/broadcast-store")
     useBroadcastStore.setState({ rehearsal: true })

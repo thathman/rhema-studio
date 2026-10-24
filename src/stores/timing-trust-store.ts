@@ -30,7 +30,7 @@ export const useTimingTrust = create<TrustState>((set, get) => ({
     const u = get().untrusted
     if (!u) return "Nothing to confirm."
     set({ untrusted: null })
-    useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}time for ${u.label} confirmed after Rhema restarted` })
+    useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}time for ${u.label} confirmed after Rhema Studio restarted` })
     return null
   },
 }))

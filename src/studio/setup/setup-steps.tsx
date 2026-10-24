@@ -169,7 +169,7 @@ export function BibleStep({ onLeave, onSample }: { onLeave: Leave; onSample?: ()
       {translations.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="flex items-center gap-2 text-sm font-semibold"><TriangleAlertIcon className="size-4 text-confidence-mid" />No Bible edition was found on this computer</p>
-          <p className="mt-1 text-xs text-muted-foreground">Reinstalling Rhema puts the bundled Bible library back. Settings → Bible shows what is installed.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Reinstalling Rhema Studio puts the bundled Bible library back. Settings → Bible shows what is installed.</p>
         </div>
       ) : (
         <>
@@ -198,7 +198,7 @@ export function BibleStep({ onLeave, onSample }: { onLeave: Leave; onSample?: ()
       </Field>
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-sm font-semibold">Songs, hymns and media</p>
-        <p className="mt-1 text-xs text-muted-foreground">Rhema does not come with song words. Import the church's own songs, hymns and pictures in Library, now or any time.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Rhema Studio does not come with song words. Import the church's own songs, hymns and pictures in Library, now or any time.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => onLeave(() => useShellStore.getState().goTo("library"))}>Open Library</Button>
           <Button variant="ghost" size="sm" onClick={() => onLeave(() => openSettings("bible"))}>Bible settings</Button>
@@ -442,7 +442,7 @@ function SafetySection() {
             {churchFolder ? (
               <>
                 <code className="block truncate text-xs text-muted-foreground" title={churchFolder}>{churchFolder}</code>
-                {test?.state === "ok" && <span role="status" className="flex items-center gap-1 text-xs font-medium text-confidence-high"><CheckIcon className="size-3.5" /> Rhema can write there. The test file was deleted again.</span>}
+                {test?.state === "ok" && <span role="status" className="flex items-center gap-1 text-xs font-medium text-confidence-high"><CheckIcon className="size-3.5" /> Rhema Studio can write there. The test file was deleted again.</span>}
                 {test?.state === "failed" && <span role="alert" className="flex items-center gap-1 text-xs font-medium text-confidence-mid"><TriangleAlertIcon className="size-3.5" /> {test.text}</span>}
               </>
             ) : (

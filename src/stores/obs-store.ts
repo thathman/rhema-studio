@@ -146,7 +146,7 @@ function onSceneEvent(type: string, data: Record<string, unknown>): void {
 }
 
 /** Rehearsal is a sandbox (#246) and OBS's program is the online stream: no scene change reaches OBS while practising. */
-export const OBS_REHEARSAL_REASON = "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise"
+export const OBS_REHEARSAL_REASON = "Rehearsal is on: OBS is the live stream, so Rhema Studio doesn't change it while you practise"
 
 function refusedInRehearsal(): boolean {
   if (!useBroadcastStore.getState().rehearsal) return false
@@ -277,7 +277,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     if (!client || get().studioMode !== true || !preview || refusedInRehearsal()) return
     try {
       await client.request("TriggerStudioModeTransition")
-      useJournalStore.getState().add({ kind: "obs", label: `OBS: took ${preview} to its program (from Rhema)` })
+      useJournalStore.getState().add({ kind: "obs", label: `OBS: took ${preview} to its program (from Rhema Studio)` })
     } catch (e) {
       toast.error("OBS did not take the preview", { description: errText(e) })
     }
@@ -288,7 +288,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     if (!client || get().studioMode !== false || refusedInRehearsal()) return
     try {
       await client.request("SetCurrentProgramScene", { sceneName: scene })
-      useJournalStore.getState().add({ kind: "obs", label: `OBS: switched its program to ${scene} (from Rhema)` })
+      useJournalStore.getState().add({ kind: "obs", label: `OBS: switched its program to ${scene} (from Rhema Studio)` })
     } catch (e) {
       toast.error("OBS did not switch scene", { description: errText(e) })
     }

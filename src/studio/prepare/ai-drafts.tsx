@@ -80,7 +80,7 @@ export function AiDrafts() {
               Opening a draft replaces the rundown{current ? ` of "${current.title}"` : ""} ({count} {count === 1 ? "item" : "items"}){current ? " and closes that service; what it has saved stays saved" : ""}.{count > 0 || dirty ? " You are asked first." : ""}
             </p>
           )}
-          {drafts.length === 0 && <p className="text-sm text-muted-foreground">None waiting. Ask your assistant to plan a service with Rhema (Settings → AI assistants).</p>}
+          {drafts.length === 0 && <p className="text-sm text-muted-foreground">None waiting. Ask your assistant to plan a service with Rhema Studio (Settings → AI assistants).</p>}
           <ul className="flex flex-col gap-3">
             {drafts.map((d) => {
               const out = outOf(d)

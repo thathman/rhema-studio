@@ -44,7 +44,7 @@ export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; 
     keywords: ["remote", "phone", "tablet", "stream deck", "companion", "network", "lan", "wi-fi", "obs", "obs scenes", "studio mode", "password", "pairing", "talk"],
   },
   assistants: {
-    labels: ["Let AI assistants read Rhema", "Add Rhema to the assistant's MCP settings", "Copy"],
+    labels: ["Let AI assistants read Rhema Studio", "Add Rhema Studio to the assistant's MCP settings", "Copy"],
     keywords: ["ai", "mcp", "assistant", "claude", "chatgpt"],
   },
   diagnostics: {

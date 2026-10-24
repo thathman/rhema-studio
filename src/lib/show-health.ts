@@ -91,7 +91,7 @@ export function cameraStateWords(c: CameraHealth): string {
   if (c.state === "checking") return "Checking…"
   if (c.state === "router-off") return "Camera router not running"
   if (c.state === "not-sending") return "Not sending"
-  if (c.state === "elsewhere") return "Not from Rhema's camera router: Rhema cannot see whether it is sending"
+  if (c.state === "elsewhere") return "Not from Rhema Studio's camera router: Rhema Studio cannot see whether it is sending"
   const watched = `watched by ${c.readers} ${c.readers === 1 ? "screen or program" : "screens or programs"}`
   return `Sending${c.tracks.length ? ` (${c.tracks.join(", ")})` : ""} · ${watched}`
 }
@@ -223,7 +223,7 @@ export function heatWords(h: MachineHealth): HealthLine {
 /** The network links that are up, in words: Wi-Fi or cable and speed; none is a warning. */
 export function networkWords(h: MachineHealth): HealthLine[] {
   if (h.network === null) return [{ text: "Not reported on this system", tone: "off" }]
-  if (h.network.length === 0) return [{ text: "No network: TVs, phones, cameras and OBS on other computers cannot reach Rhema", tone: "warn" }]
+  if (h.network.length === 0) return [{ text: "No network: TVs, phones, cameras and OBS on other computers cannot reach Rhema Studio", tone: "warn" }]
   const lines: HealthLine[] = h.network.map((l) => ({
     text: `${l.name}: ${l.kind === "wifi" ? "Wi-Fi" : l.kind === "wired" ? "cable" : "connected"}${l.speedMbps ? ` · ${l.speedMbps >= 1000 ? `${(l.speedMbps / 1000).toFixed(l.speedMbps % 1000 ? 1 : 0)} Gbit/s` : `${l.speedMbps} Mbit/s`}` : ""}`,
     tone: "ok",

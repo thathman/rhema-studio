@@ -209,7 +209,7 @@ fn tools() -> Value {
         { "name": "rhema_list_media", "description": "The pictures, videos, sounds and documents in the church's media library, by name and kind only.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_list_translations", "description": "The Bible editions installed on this computer (abbreviation, title, language).", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_validate_service_draft", "description": "Check a proposed service without saving it: every song and hymn is matched to the church's library (by id, exact title, other title or hymn number), every Scripture reference is looked up in the installed editions, and anything not found is listed as missing. Returns errors to fix, warnings, the planned minutes and what was found.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": ro },
-        { "name": "rhema_create_service_draft", "description": "Save a checked proposed service as a draft for the church to review in Rhema → Prepare → AI drafts. It does not change any saved service, approve anything or put anything on screen; people open it, edit it and save it themselves. Fails with the same errors as the check.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } },
+        { "name": "rhema_create_service_draft", "description": "Save a checked proposed service as a draft for the church to review in Rhema Studio → Prepare → AI drafts. It does not change any saved service, approve anything or put anything on screen; people open it, edit it and save it themselves. Fails with the same errors as the check.", "inputSchema": { "type": "object", "properties": { "draft": draft_schema() }, "required": ["draft"] }, "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false } },
         { "name": "rhema_list_looks_and_scenes", "description": "The church's looks (how words appear: built-in and its own, from Design) and congregation scenes (layouts), by name, so a draft can suggest them per item. Suggestions are shown to the reviewer; nothing is applied.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_list_service_drafts", "description": "The drafts waiting for the church to review in Prepare → AI drafts (newest first): id, title, date, number of items, revision, when made or revised, by which assistant.", "inputSchema": { "type": "object", "properties": {} }, "annotations": ro },
         { "name": "rhema_get_service_draft", "description": "One waiting draft as saved: its phases, groups and items (with end-by times), assumptions and its revision. Read it before revising it with rhema_update_service_draft.", "inputSchema": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }, "annotations": ro },
@@ -283,7 +283,7 @@ fn doc(r: Result<Value, resources::Refused>) -> Value {
 
 fn call(s: &Server, name: &str, a: &Value) -> Value {
     if !s.enabled {
-        return tool_error("Rhema's AI assistant access is off. Turn it on in Rhema → Settings → AI assistants (MCP), then ask again.");
+        return tool_error("Rhema Studio's AI assistant access is off. Turn it on in Rhema Studio → Settings → AI assistants (MCP), then ask again.");
     }
     let str_arg = |k: &str| a.get(k).and_then(Value::as_str).map(str::trim).unwrap_or("");
     match name {
@@ -373,7 +373,7 @@ fn call(s: &Server, name: &str, a: &Value) -> Value {
                 Ok(id) => {
                     let mut report = checked.report;
                     report["draftId"] = json!(id);
-                    report["next"] = json!("The church opens it in Rhema → Prepare → AI drafts, edits it and saves it; nothing is approved or shown until they do.");
+                    report["next"] = json!("The church opens it in Rhema Studio → Prepare → AI drafts, edits it and saves it; nothing is approved or shown until they do.");
                     text(&report)
                 }
                 Err(e) => tool_error(&e),
@@ -410,7 +410,7 @@ fn call(s: &Server, name: &str, a: &Value) -> Value {
                     let mut report = checked.report;
                     report["draftId"] = json!(str_arg("id"));
                     report["revision"] = json!(revision);
-                    report["next"] = json!("Revised. It still waits in Rhema → Prepare → AI drafts for people to open, edit and save.");
+                    report["next"] = json!("Revised. It still waits in Rhema Studio → Prepare → AI drafts for people to open, edit and save.");
                     text(&report)
                 }
                 Err(e) => tool_error(&e),
@@ -614,7 +614,7 @@ fn handle(s: &mut Server, msg: &Value) -> Option<Value> {
     if matches!(method, "tools/call" | "resources/read" | "resources/list") {
         s.refresh();
         if method != "resources/list" && !s.rate.allow(Instant::now()) {
-            let message = format!("Too many requests: Rhema answers at most {} a minute. Wait a minute, then ask again.", s.rate.max);
+            let message = format!("Too many requests: Rhema Studio answers at most {} a minute. Wait a minute, then ask again.", s.rate.max);
             return Some(if method == "tools/call" {
                 json!({ "jsonrpc": "2.0", "id": id, "result": tool_error(&message) })
             } else {
@@ -762,7 +762,7 @@ mod tests {
         }
         let over = rpc(&mut s, "tools/call", json!({ "name": "rhema_list_looks_and_scenes", "arguments": {} }));
         assert_eq!(over["result"]["isError"], true);
-        assert_eq!(over["result"]["content"][0]["text"], "Too many requests: Rhema answers at most 3 a minute. Wait a minute, then ask again.");
+        assert_eq!(over["result"]["content"][0]["text"], "Too many requests: Rhema Studio answers at most 3 a minute. Wait a minute, then ask again.");
         let read = rpc(&mut s, "resources/read", json!({ "uri": "rhema://looks" }));
         assert_eq!((read["error"]["code"].as_i64(), read.get("result").is_none()), (Some(RATE_LIMITED), true));
         assert_eq!(rpc(&mut s, "tools/list", json!({}))["result"]["tools"].as_array().map(Vec::len), Some(16), "listing is not counted");

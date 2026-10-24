@@ -687,7 +687,7 @@ async fn remote_page() -> impl IntoResponse {
         [
             (axum::http::header::CACHE_CONTROL, "no-store"),
             (axum::http::header::X_FRAME_OPTIONS, "DENY"),
-            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'"),
+            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; form-action 'none'; frame-ancestors 'none'"),
         ],
         axum::response::Html(include_str!("remote.html")),
     )
@@ -785,7 +785,7 @@ fn in_rehearsal(live: Option<&str>) -> bool {
 }
 
 /// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
-const OBS_REHEARSAL_MESSAGE: &str = "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise";
+const OBS_REHEARSAL_MESSAGE: &str = "Rehearsal is on: OBS is the live stream, so Rhema Studio doesn't change it while you practise";
 
 #[derive(Deserialize)]
 struct PairRequest {
@@ -983,7 +983,7 @@ async fn feed_page_handler<S: CommandSink + 'static>(
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
     if !state.feeds.knows(&id, q.get("k").map_or("", String::as_str)) {
-        return (StatusCode::FORBIDDEN, "This feed's link is not valid (copy it again from Rhema → Outputs).").into_response();
+        return (StatusCode::FORBIDDEN, "This feed's link is not valid (copy it again from Rhema Studio → Outputs).").into_response();
     }
     match state.sink.asset("feed.html") {
         Some((bytes, _)) => ([(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8"), (axum::http::header::CACHE_CONTROL, "no-store")], bytes).into_response(),
@@ -1111,13 +1111,13 @@ async fn camera_page_handler<S: CommandSink + 'static>(
     }
     let (name, k) = (q.get("name").map_or("", String::as_str), q.get("k").map_or("", String::as_str));
     if !state.cameras.knows(name, k) {
-        return (StatusCode::FORBIDDEN, "This camera link is not valid. Scan it again from Rhema: Production, Cameras.").into_response();
+        return (StatusCode::FORBIDDEN, "This camera link is not valid. Scan it again from Rhema Studio: Production, Cameras.").into_response();
     }
     (
         [
             (axum::http::header::CACHE_CONTROL, "no-store"),
             (axum::http::header::X_FRAME_OPTIONS, "DENY"),
-            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; media-src 'self' blob: mediastream:; form-action 'none'; frame-ancestors 'none'"),
+            (axum::http::header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; media-src 'self' blob: mediastream:; form-action 'none'; frame-ancestors 'none'"),
             (axum::http::header::HeaderName::from_static("permissions-policy"), "camera=(self), microphone=(self)"),
         ],
         axum::response::Html(include_str!("camera.html")),
@@ -1200,7 +1200,7 @@ async fn voice_handler<S: CommandSink + 'static>(
         Ok(Ok(sdp)) => Json(serde_json::json!({ "sdp": sdp })).into_response(),
         _ => {
             state.voice.forget(&id);
-            (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "The host did not answer. Is Rhema open there?" }))).into_response()
+            (StatusCode::GATEWAY_TIMEOUT, Json(serde_json::json!({ "error": "The host did not answer. Is Rhema Studio open there?" }))).into_response()
         }
     }
 }

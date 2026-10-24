@@ -650,7 +650,7 @@ export async function retryKeychain(): Promise<boolean> {
     toast.success("Saved keys read from the keychain")
     return true
   } catch {
-    toast.error("The keychain still could not be read", { description: "Rhema keeps working; enter the keys again in Settings if this continues." })
+    toast.error("The keychain still could not be read", { description: "Rhema Studio keeps working; enter the keys again in Settings if this continues." })
     return false
   }
 }
@@ -697,7 +697,7 @@ export function hydrateSettings(): Promise<void> {
           console.warn("[settings] the saved keys are in the system keychain but could not be read")
           // Said once, with a way back: without the keys, speech, OBS and the remote fail with misleading errors.
           toast.warning("Saved keys could not be read from the system keychain", {
-            description: "Cloud speech, OBS and phone remotes need them. Allow Rhema when the system asks, then Retry.",
+            description: "Cloud speech, OBS and phone remotes need them. Allow Rhema Studio when the system asks, then Retry.",
             duration: Infinity,
             action: { label: "Retry", onClick: () => void retryKeychain() },
           })

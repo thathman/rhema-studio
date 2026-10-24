@@ -2,6 +2,8 @@ import { useEffect, useState, useSyncExternalStore } from "react"
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { PRODUCT_NAMES } from "@/lib/brand"
+import { BrandMark } from "@/components/brand-mark"
 import { useShellStore, type Workspace } from "@/studio/shell-store"
 import { DeskMenu } from "@/studio/shell/desk-menu"
 import { WORKSPACE_ITEMS, type NavItem } from "@/studio/shell/nav-items"
@@ -105,12 +107,10 @@ export function Sidebar({
       data-collapsed={collapsed ? "true" : undefined}
       className="sticky top-0 flex h-full min-h-0 w-[194px] flex-col overflow-x-hidden overflow-y-auto bg-sidebar text-sidebar-foreground transition-[width] duration-150 ease-out compact:w-[72px]"
     >
-      <div className="flex items-center gap-2 px-4 pt-[23px] pb-6 compact:justify-center compact:px-0" title="Rhema Studio">
-        <span aria-hidden className="flex size-[34px] shrink-0 items-center justify-center rounded-[7px] bg-[#2d766f] font-[Georgia,serif] text-[1.4375rem] font-bold text-[#f7fbf8]">R</span>
-        <span className="flex flex-col leading-none compact:sr-only">
-          <span className="text-[1.1875rem] font-bold tracking-[-0.045em] text-[#f2f6f3]">rhema<span className="text-[#a7c9ba]">.</span></span>
-          <span className="mt-0.5 font-mono text-[0.625rem] font-semibold tracking-[0.16em] text-sidebar-label uppercase">Studio</span>
-        </span>
+      {/* The approved mark (white square on the ink sidebar) and the name in the app's own font. */}
+      <div className="flex items-center gap-2.5 px-4 pt-[21px] pb-[22px] compact:justify-center compact:px-0" title={PRODUCT_NAMES.studio}>
+        <BrandMark tone="light" className="size-[38px]" />
+        <span className="text-[1.0625rem] leading-none font-bold tracking-[-0.03em] whitespace-nowrap text-[#f2f6f3] compact:sr-only">{PRODUCT_NAMES.studio}</span>
       </div>
       <Group label="Workspace" first>
         {WORKSPACE_ITEMS.map((item) => (

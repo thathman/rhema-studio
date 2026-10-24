@@ -53,7 +53,7 @@ export function MoreWorkspace() {
       title: "Content",
       rows: [
         { icon: <BookOpenIcon />, label: "Bible", detail: "Translations and the secondary language", onClick: () => openSettings("bible") },
-        { icon: <LibraryIcon />, label: "Library", detail: "Songs and hymnbooks: export, import (Rhema or OpenLyrics files)", onClick: () => useShellStore.getState().goTo("library") },
+        { icon: <LibraryIcon />, label: "Library", detail: "Songs and hymnbooks: export, import (Rhema Studio or OpenLyrics files)", onClick: () => useShellStore.getState().goTo("library") },
       ],
     },
     {

@@ -9,6 +9,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{Emitter, Manager, State, Window, WindowEvent};
 
+/// The name the app menu shows (the product name in tauri.conf.json stays "Rhema" for compatibility).
+#[cfg(target_os = "macos")]
+const APP_DISPLAY_NAME: &str = "Rhema Studio";
+
 #[derive(Default)]
 pub struct UnsavedWork(AtomicBool);
 
@@ -91,9 +95,11 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
 /// with one that closes the main window, which goes through
 /// `on_window_event` like the window's close button. Quitting from the Dock
 /// or at logout still goes through `terminate:` (not held; KNOWN-ISSUES).
+/// The app menu also says Rhema Studio (About, Hide, Quit): the product name
+/// stays "Rhema" so the app's file, its MCP path and installs do not move.
 #[cfg(target_os = "macos")]
 pub fn route_quit_through_close(app: &tauri::App) -> tauri::Result<()> {
-    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+    use tauri::menu::{AboutMetadata, Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
     const QUIT_ID: &str = "rhema-quit";
     let menu = match app.menu() {
         Some(menu) => menu,
@@ -101,11 +107,31 @@ pub fn route_quit_through_close(app: &tauri::App) -> tauri::Result<()> {
     };
     let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() else { return Ok(()) };
     let items = app_menu.items()?;
+    let about = items.iter().position(|item| matches!(item, MenuItemKind::Predefined(p) if p.text().is_ok_and(|t| t.starts_with("About"))));
+    if let Some(about) = about {
+        // macOS's About panel: the name, the maintainers and the upstream credit (MIT).
+        let meta = AboutMetadata {
+            name: Some(APP_DISPLAY_NAME.into()),
+            version: Some(app.package_info().version.to_string()),
+            copyright: Some("Rhema Studio contributors. Built on Rhema by OpenBezal (MIT licence, © 2025 OpenBezal).".into()),
+            ..Default::default()
+        };
+        app_menu.remove_at(about)?;
+        app_menu.insert(&PredefinedMenuItem::about(app, Some(&format!("About {APP_DISPLAY_NAME}")), Some(meta))?, about)?;
+    }
+    // "Hide Rhema" (not "Hide Others"), which macOS names after the running app.
+    for item in &items {
+        if let MenuItemKind::Predefined(p) = item {
+            if p.text().is_ok_and(|t| t.starts_with("Hide ") && t != "Hide Others") {
+                p.set_text(format!("Hide {APP_DISPLAY_NAME}"))?;
+            }
+        }
+    }
     let Some(pos) = items.iter().rposition(|item| matches!(item, MenuItemKind::Predefined(p) if p.text().is_ok_and(|t| t.starts_with("Quit")))) else {
         return Ok(());
     };
     app_menu.remove_at(pos)?;
-    let label = format!("Quit {}", app.package_info().name);
+    let label = format!("Quit {APP_DISPLAY_NAME}");
     app_menu.insert(&MenuItem::with_id(app, QUIT_ID, label, true, Some("CmdOrCtrl+Q"))?, pos)?;
     app.set_menu(menu)?;
     log::info!("[app_close] Quit (Cmd+Q) now asks about unsaved work");

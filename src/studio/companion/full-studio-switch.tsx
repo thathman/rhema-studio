@@ -8,7 +8,7 @@ export function FullStudioSwitch() {
   const [asking, setAsking] = useState(false)
   return asking ? (
     <div role="group" aria-label="Open the full studio" className="flex max-w-[320px] flex-col gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs">
-      <p>Use this computer as a full Rhema studio again? Rhema starts again; the cameras stay in OBS.</p>
+      <p>Use this computer as the full Rhema Studio again? Rhema Studio starts again; the cameras stay in OBS.</p>
       <div className="flex gap-1.5">
         <Button size="xs" onClick={() => void switchMode(false)}>Start the full studio</Button>
         <Button size="xs" variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>

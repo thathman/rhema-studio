@@ -98,7 +98,7 @@ describe("Production control", () => {
     useBroadcastStore.setState({ outputs: before })
   })
 
-  it("OBS sits beside Scenes and says it is OBS's program, separate from Rhema's congregation scenes", async () => {
+  it("OBS sits beside Scenes and says it is OBS's program, separate from Rhema Studio's congregation scenes", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
     document.body.appendChild(el)
@@ -110,7 +110,7 @@ describe("Production control", () => {
     await act(async () => tab.click())
     const panel = el.querySelector('[role="tabpanel"]')!
     expect(panel.textContent).toContain("OBS program")
-    expect(panel.textContent).toContain("separate from Rhema's congregation scenes")
+    expect(panel.textContent).toContain("separate from Rhema Studio's congregation scenes")
     expect(panel.textContent).toContain("Open Remote control") // OBS off: where to turn it on
   })
 })

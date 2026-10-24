@@ -12,6 +12,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 ### Rhema Camera: a smooth viewfinder on slower phones (#209)
 - The viewfinder no longer stutters: the look is worked out once per frame (never twice), the picture sent always comes first, and the viewfinder is drawn by the phone's display hardware. The histogram costs almost nothing, and nothing when it is off.
 - When a phone's graphics chip cannot keep up, the look gets lighter by itself (a slower viewfinder, then no film grain), and Settings → Picture says so; the picture sent is never slowed down without telling you.
+### The Rhema Studio family: names and the approved logo (owner brief)
+- Everything now says **Rhema Studio**, with the owner's approved mark: the sidebar, the setup welcome, a short start-up screen, Settings → Help → About, the macOS menu bar and app menu, the app icon, the phone remote and camera pages, and the messages throughout.
+- The Google TV app is **Rhema Studio Receiver** (1.4): its name, launcher icon, TV banner and the logo on its code screen. The Android camera app is **Rhema Studio Cam** (1.1) with the mark as its icon.
+- About keeps the original credit: Built on Rhema by OpenBezal (MIT licence, © 2025 OpenBezal); LICENSE is unchanged. Rhema Studio is maintained by Rhema Studio contributors.
+- Nothing moves: settings, services, paired phones and TVs, NDI names and the app's file name (Rhema.app) stay as they were, so updates install over the old ones.
 
 ### Countdown display: one big time that turns amber, then red (owner request)
 - A new **Countdown** look (Design → Countdown) shows one big time, readable from the back of the hall, on a black screen that turns **amber at 25 %** of the time left and **red at 10 %** (a 10-minute timer goes red at 1:00), then says **Time's up** with a slow, gentle pulse and counts on as **+0:42** when over. The steps, their colours, messages ("Please wrap up") and the pulse are yours to change, each at a percentage or a time left; a slider in the preview walks through them before Sunday.

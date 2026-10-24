@@ -79,7 +79,7 @@ export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.
   const shift = typeof last.mono === "number" ? last.at - base - last.mono : null
   const entries = kept.entries.map((e) => ({ ...e, mono: shift !== null && typeof e.mono === "number" ? e.mono + shift : e.at - base }))
   useJournalStore.setState({ entries: capJournal([...entries, ...j.entries]), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length })
-  j.add({ kind: "recovery", label: `Service log kept from before Rhema closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
+  j.add({ kind: "recovery", label: `Service log kept from before Rhema Studio closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
   // The item that was running then (#196 R3.8): its start is known, how long it has run is not,
   // until the operator confirms the time or takes it again. A finished service had none running.
   const lastEvent = [...kept.entries].reverse().find((e) => e.kind === "event")
@@ -157,7 +157,7 @@ export async function putBack(s: LiveSnapshot): Promise<void> {
     useTimerStore.setState({ timer: { durationMs: s.timer.durationMs, accumulatedMs: ran, startedAt: null } })
     if (s.timer.running) useTimerStore.getState().start()
   }
-  useJournalStore.getState().add({ kind: "recovery", label: `Put back after Rhema closed unexpectedly at ${new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
+  useJournalStore.getState().add({ kind: "recovery", label: `Put back after Rhema Studio closed unexpectedly at ${new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
   useRecovery.setState({ offer: null, dismissed: false })
 }
 

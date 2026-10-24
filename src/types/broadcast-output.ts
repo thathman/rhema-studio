@@ -327,7 +327,7 @@ export interface BroadcastOutput {
   tvs?: ReceiverTv[]
 }
 
-/** A Google TV running Rhema Receiver that was sent a feed: its name and the address on its screen. */
+/** A Google TV running Rhema Studio Receiver that was sent a feed: its name and the address on its screen. */
 export interface ReceiverTv {
   name: string
   address: string

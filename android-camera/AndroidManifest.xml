@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rhema Camera (#209): a phone's camera, sent to Rhema Studio's camera router over the church network. -->
+<!-- Rhema Studio Cam (#209, formerly Rhema Camera): a phone's camera, sent to Rhema Studio's camera router over the
+     church network. The package name and the rhema-camera:// link stay, so installed phones update in place. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.openbezal.rhema.camera"
-    android:versionCode="1"
-    android:versionName="1.0.0.0">
+    android:versionCode="2"
+    android:versionName="1.1.0.0">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
 
@@ -21,7 +22,7 @@
 
     <!-- No backup: the pairing link holds this camera's password. -->
     <application
-        android:label="Rhema Camera"
+        android:label="Rhema Studio Cam"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"

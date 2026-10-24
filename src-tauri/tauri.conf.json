@@ -44,6 +44,7 @@
     "active": true,
     "targets": "all",
     "macOS": {
+      "bundleName": "Rhema Studio",
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
       "entitlements": "entitlements.plist",

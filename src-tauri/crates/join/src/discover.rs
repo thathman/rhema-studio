@@ -81,7 +81,7 @@ pub fn found_hosts(seen: Heard) -> Vec<Found> {
 pub async fn discover_hosts() -> Result<Vec<Found>, String> {
     tokio::task::spawn_blocking(|| browse(HOST_SERVICE, Duration::from_millis(2500), "Rhema hosts").map(found_hosts))
         .await
-        .map_err(|e| format!("Could not look for Rhema hosts on the network: {e}"))?
+        .map_err(|e| format!("Could not look for Rhema Studio hosts on the network: {e}"))?
 }
 
 #[cfg(test)]

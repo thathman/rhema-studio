@@ -263,7 +263,7 @@ function AudioSection() {
 function ListeningNote() {
   return (
     <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-      Rhema is listening now. Changes here apply when you stop and start listening again.
+      Rhema Studio is listening now. Changes here apply when you stop and start listening again.
     </p>
   )
 }
@@ -996,7 +996,7 @@ function RemoteControlSection() {
       <div className="rounded-lg border border-border bg-muted/30 p-3">
         <p className="text-xs font-medium text-muted-foreground mb-1">Firewall Note</p>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Your OS may block incoming connections. On macOS, allow Rhema through
+          Your OS may block incoming connections. On macOS, allow Rhema Studio (Rhema.app) through
           System Settings → Network → Firewall. On Windows, allow through
           Windows Security → Firewall → Allow an app.
         </p>
@@ -1056,7 +1056,7 @@ function HelpSection() {
     <div className="space-y-6">
       <div className="space-y-1">
         <p className="text-sm text-muted-foreground">
-          Resources to help you get the most out of Rhema.
+          Resources to help you get the most out of Rhema Studio.
         </p>
       </div>
 
@@ -1248,8 +1248,8 @@ export function SettingsPage() {
           ))}
           {elsewhere.length > 0 && (
             // What has its own page elsewhere: a row that goes there (Settings keeps no copy of it).
-            <div role="group" aria-label="Elsewhere in Rhema" className="mb-3">
-              <p className="px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-muted-foreground">Elsewhere in Rhema</p>
+            <div role="group" aria-label="Elsewhere in Rhema Studio" className="mb-3">
+              <p className="px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-muted-foreground">Elsewhere in Rhema Studio</p>
               {elsewhere.map((e) => (
                 <button key={e.id} type="button" onClick={ELSEWHERE[e.id]} className="flex w-full items-center gap-2.5 rounded-md px-[13px] py-2.5 text-left text-xs font-bold text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4">
                   <ArrowUpRightIcon aria-hidden />
@@ -1300,7 +1300,7 @@ function CapacityLimitsBlock() {
     <section aria-label="How much this computer runs" className="flex flex-col gap-2 rounded-md border border-border p-3 text-xs">
       <h3 className="text-sm font-semibold">How much this computer runs</h3>
       <p className="text-muted-foreground">
-        Rhema warns before going past these (&ldquo;this computer may drop frames&rdquo;) but never stops you. {machine.known ? `Worked out from this computer: ${physicalCores(machine)} cores, ${Math.round(machine.memoryTotalMb / 1024)} GB.` : ""} Leave a box empty to use that figure.
+        Rhema Studio warns before going past these (&ldquo;this computer may drop frames&rdquo;) but never stops you. {machine.known ? `Worked out from this computer: ${physicalCores(machine)} cores, ${Math.round(machine.memoryTotalMb / 1024)} GB.` : ""} Leave a box empty to use that figure.
       </p>
       {CAPACITY_KINDS.map(({ kind, label, hint }) => (
         <label key={kind} className="flex items-center gap-2">
@@ -1322,7 +1322,7 @@ function CapacityLimitsBlock() {
         </label>
       ))}
       <p className="text-muted-foreground">
-        60 fps NDI: {suits60fps(machine) ? "suits this computer." : `this computer is below what it needs (${NDI_60_MIN_CORES} cores and ${NDI_60_MIN_MEMORY_GB} GB), so Rhema asks before starting a sender at 60 fps.`}
+        60 fps NDI: {suits60fps(machine) ? "suits this computer." : `this computer is below what it needs (${NDI_60_MIN_CORES} cores and ${NDI_60_MIN_MEMORY_GB} GB), so Rhema Studio asks before starting a sender at 60 fps.`}
       </p>
     </section>
   )

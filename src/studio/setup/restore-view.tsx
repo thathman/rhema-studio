@@ -105,7 +105,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
 
   const s = picked?.summary
   const blocked = s?.newer
-    ? "This backup was made by a newer Rhema Studio. Update Rhema on this computer first."
+    ? "This backup was made by a newer Rhema Studio. Update Rhema Studio on this computer first."
     : dirty
       ? "The open service has unsaved changes. Save or close it first."
       : onAir
@@ -124,8 +124,8 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
 
         <div className="mt-5 flex max-w-2xl flex-col gap-3 text-sm">
           <section aria-labelledby="restore-backup" className="rounded-lg border border-border bg-card p-4">
-            <h3 id="restore-backup" className="font-semibold">A Rhema backup file</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Every service and song, with the settings, outputs, looks and Brand Kit, as saved with Archive → Backups → Back up now (a .db file). Rhema looks inside it first.</p>
+            <h3 id="restore-backup" className="font-semibold">A Rhema Studio backup file</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Every service and song, with the settings, outputs, looks and Brand Kit, as saved with Archive → Backups → Back up now (a .db file). Rhema Studio looks inside it first.</p>
             {!s && (
               <Button size="sm" variant="outline" className="mt-3" disabled={busy !== null} onClick={() => void choose()}>
                 <RotateCcwIcon /> {busy === "inspect" ? "Looking inside…" : "Choose a backup file…"}
@@ -189,7 +189,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
 
           <section aria-labelledby="restore-songs" className="rounded-lg border border-border bg-card p-4">
             <h3 id="restore-songs" className="font-semibold">Songs and hymns on their own</h3>
-            <p className="mt-1 text-xs text-muted-foreground">A Rhema songs file or OpenLyrics files. Library adds them; songs already here are kept.</p>
+            <p className="mt-1 text-xs text-muted-foreground">A Rhema Studio songs file or OpenLyrics files. Library adds them; songs already here are kept.</p>
             <Button size="sm" variant="outline" className="mt-3" onClick={() => onLeave(() => useShellStore.getState().goTo("library"))}>Open Library</Button>
           </section>
 

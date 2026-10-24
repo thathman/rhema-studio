@@ -114,7 +114,7 @@ describe("the run state, holds, finishing and trust after a restart (#196 R2.10,
     expect(useTimingTrust.getState().confirm("Femi")).toBeNull()
     expect(useTimingTrust.getState().untrusted).toBeNull()
     expect(runStateNow()).toBe("running")
-    expect(useJournalStore.getState().entries.at(-1)!.label).toBe("Femi: time for b confirmed after Rhema restarted")
+    expect(useJournalStore.getState().entries.at(-1)!.label).toBe("Femi: time for b confirmed after Rhema Studio restarted")
     expect(useTimingTrust.getState().confirm()).toBe("Nothing to confirm.")
   })
 

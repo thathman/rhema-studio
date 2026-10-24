@@ -100,7 +100,7 @@ describe("Show health: cameras and Google TVs (#213)", () => {
     await flush()
     expect(calls.find((c) => c.cmd === "tv_status")?.args).toEqual({ address: "192.168.1.40" })
     expect(tvs.textContent).toContain("Showing this feed")
-    answers.tv_status = new Error("This TV's Rhema Receiver is too old to be checked: install version 1.1 or newer on it.")
+    answers.tv_status = new Error("This TV's Rhema Studio Receiver is too old to be checked: install version 1.1 or newer on it.")
     await act(async () => button(tvs, "Check TV")!.click())
     await flush()
     expect(tvs.textContent).toContain("too old to be checked")

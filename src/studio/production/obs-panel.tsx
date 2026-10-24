@@ -81,7 +81,7 @@ export function ObsPanel() {
           <Tag tone={connected ? "ok" : status === "connecting" ? "warn" : "off"}>{!enabled ? "Off" : connected ? "Connected" : status === "connecting" ? "Connecting" : "Not connected"}</Tag>
         </div>
         <p className="text-muted-foreground">
-          These are OBS's own scenes, the switcher for the stream. They are separate from Rhema's congregation scenes in Production → Scenes, the {congregationProgramName(outputs)}: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
+          These are OBS's own scenes, the switcher for the stream. They are separate from Rhema Studio's congregation scenes in Production → Scenes, the {congregationProgramName(outputs)}: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
         </p>
         {!enabled ? (
           <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">
@@ -90,7 +90,7 @@ export function ObsPanel() {
           </div>
         ) : !connected ? (
           <div className="flex flex-col gap-2">
-            <p role="status">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema keeps trying every 15 seconds.`}</p>
+            <p role="status">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema Studio keeps trying every 15 seconds.`}</p>
             <Button size="sm" variant="outline" className="w-fit" onClick={() => void obs.connect()}><RefreshCwIcon /> Try now</Button>
           </div>
         ) : (
@@ -125,7 +125,7 @@ export function ObsPanel() {
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">From OBS, in OBS's order</p>
             <h3 className="text-sm font-bold">OBS scenes</h3>
           </div>
-          <Button size="sm" variant="ghost" onClick={() => openProductionTab("programs")}>Rhema's congregation scenes</Button>
+          <Button size="sm" variant="ghost" onClick={() => openProductionTab("programs")}>Rhema Studio's congregation scenes</Button>
         </div>
         {!connected ? (
           <p className="text-muted-foreground">OBS's scenes appear here once OBS is connected.</p>

@@ -1558,6 +1558,19 @@ Needs the Rhema Camera APK from this branch on an Android phone, paired as in 10
 | 10fm.2 | On a computer with adb: `adb shell dumpsys gfxinfo com.openbezal.rhema.camera reset`, wait 30 s, run it again without `reset`. | Janky frames a few % at most; 99th percentile under about 20 ms. | Unverified |
 | 10fm.3 | App Settings → Picture on a slower phone (or at 1080p30 on the test phone). | If the phone cannot keep up, a line reads "Lighter look on this phone: …" (viewfinder slower, then film grain off). The picture Rhema receives keeps its frame rate, or the line says how many frames a second it sends. | Unverified |
 | 10fm.4 | Turn the histogram off; then press the moon (screen off). | The histogram goes; with the screen off the picture keeps sending at its frame rate. | Unverified |
+### 10fj. The Rhema Studio family: names and the approved logo (owner brief)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fj.1 | Build the app, install over the existing Rhema.app, open it. | The Dock and Finder icon is the approved mark (black rounded square, R with opening quotes). Services, settings, paired phones and TVs are all still there. | Unverified |
+| 10fj.2 | Look at the menu bar and the app menu; choose About Rhema Studio. | Menu bar says Rhema Studio; About / Hide / Quit say Rhema Studio; the About panel shows "Rhema Studio contributors. Built on Rhema by OpenBezal (MIT licence, © 2025 OpenBezal)". Cmd+Q still asks about unsaved work. | Unverified |
+| 10fj.3 | Look at the sidebar open and folded (Cmd+B), light and dark. | White-square mark and "Rhema Studio"; folded: the mark only; no teal R. | Unverified |
+| 10fj.4 | Settings → Help, and Desk menu → About Rhema Studio. | The mark, "Developed and maintained by Rhema Studio contributors", the OpenBezal credit word for word, the four product names. | Unverified |
+| 10fj.5 | Reset the setup (or a fresh profile) and open the welcome. | The mark beside "Welcome to Rhema Studio"; a brief start-up screen with the mark before the studio appears. | Unverified |
+| 10fj.6 | On a phone open the remote page and a camera page. | Tab titles "Rhema Studio remote" / "… · Rhema Studio"; the white mark in the heading; pairing and sending work as before. | Unverified |
+| 10fj.7 | Install Receiver 1.4 over 1.3 on the Google TV (adb install -r). | Updates in place; the TV home shows the Rhema Studio Receiver banner; the code screen shows the Receiver logo over name, address and code; Find TVs still lists it and a feed can be sent. | Unverified |
+| 10fj.8 | Install Cam 1.1 over 1.0 on the phone. | Updates in place and stays paired; the launcher shows the mark and "Rhema Studio Cam". | Unverified |
+| 10fj.9 | Check an assistant set up earlier with /Applications/Rhema.app/Contents/MacOS/Rhema --mcp. | It still connects (the app's file name did not change). | Unverified |
 
 ### 10dz. Rhema finds Google TVs by itself (#198)
 

@@ -28,6 +28,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import org.json.JSONObject;
@@ -43,7 +45,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Rhema Receiver (#198): shows one Rhema browser feed full screen and keeps showing it, across
+ * Rhema Studio Receiver (#198, formerly Rhema Receiver): shows one Rhema browser feed full screen and keeps showing it, across
  * restarts and network drops. Until it has one, it shows its address and a code; Rhema checks that
  * code with this TV (CodeProof) and only then sends the feed's link (Outputs → a browser feed → Show on
  * a Google TV), so only someone who can see this screen assigns it. OK on the remote shows the address and a new code again. It
@@ -62,12 +64,14 @@ public class MainActivity extends Activity {
     private static final long PENDING_MS = 30_000;
     /** How long a code still works after it leaves the screen (time to finish typing it). */
     private static final long GRACE_MS = 120_000;
-    private static final String NOT_THAT_RHEMA = "This TV did not open the feed: the computer answering is not the Rhema that sent it, or Rhema made a new certificate. Send the feed again: in Rhema, Outputs → the feed → Show on a Google TV.";
+    private static final String NOT_THAT_RHEMA = "This TV did not open the feed: the computer answering is not the Rhema Studio that sent it, or Rhema Studio made a new certificate. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final SecureRandom random = new SecureRandom();
     private SharedPreferences prefs;
     private WebView web;
+    /** The idle/code screen: the Rhema Studio Receiver logo over the TV's name, address and code. */
+    private LinearLayout panel;
     private TextView info;
     private ShowServer server;
     private CodeProof.Code code;
@@ -110,7 +114,7 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
-                if (req.isForMainFrame()) retry(certRefused ? NOT_THAT_RHEMA : "Looking for Rhema at " + Uri.parse(shown()).getAuthority() + "…");
+                if (req.isForMainFrame()) retry(certRefused ? NOT_THAT_RHEMA : "Looking for Rhema Studio at " + Uri.parse(shown()).getAuthority() + "…");
             }
 
             /**
@@ -136,10 +140,10 @@ public class MainActivity extends Activity {
             public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse res) {
                 if (!req.isForMainFrame()) return;
                 if (res.getStatusCode() == 403) {
-                    problem = "This screen's link no longer works (a new link was made in Rhema). Send the feed again.";
+                    problem = "This screen's link no longer works (a new link was made in Rhema Studio). Send the feed again.";
                     showInfo(true);
                 } else {
-                    retry("Rhema answered " + res.getStatusCode() + "; trying again…");
+                    retry("Rhema Studio answered " + res.getStatusCode() + "; trying again…");
                 }
             }
 
@@ -154,12 +158,26 @@ public class MainActivity extends Activity {
         info.setTextSize(28);
         info.setLineSpacing(0, 1.25f);
         info.setGravity(Gravity.CENTER);
-        info.setBackgroundColor(Color.argb(230, 0, 0, 0));
-        info.setPadding(80, 60, 80, 60);
+
+        // The approved landscape logo (brand/02_Product_Logos/Rhema-Studio-Receiver-White-Text.png, as is).
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.receiver_logo);
+        logo.setAdjustViewBounds(true);
+        logo.setContentDescription("Rhema Studio Receiver");
+        float dp = getResources().getDisplayMetrics().density;
+        panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.CENTER_HORIZONTAL);
+        panel.setBackgroundColor(Color.argb(230, 0, 0, 0));
+        panel.setPadding(80, 48, 80, 60);
+        LinearLayout.LayoutParams logoSize = new LinearLayout.LayoutParams((int) (360 * dp), -2);
+        logoSize.bottomMargin = (int) (16 * dp);
+        panel.addView(logo, logoSize);
+        panel.addView(info, new LinearLayout.LayoutParams(-2, -2));
 
         FrameLayout root = new FrameLayout(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        root.addView(info, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
+        root.addView(panel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
         setContentView(root);
         immersive();
 
@@ -167,14 +185,14 @@ public class MainActivity extends Activity {
         // A feed sent by Rhema before 1.3 (a plain http link, no certificate): sent again, it comes secure.
         if (shown() != null && (!Guard.feedLink(shown()) || !Guard.fingerprint(prefs.getString("pin", null)))) {
             prefs.edit().remove("url").remove("pin").apply();
-            problem = "Rhema Receiver was updated and now opens only Rhema's secure page. Send the feed again: in Rhema, Outputs → the feed → Show on a Google TV.";
+            problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
         }
         server = new ShowServer(PORT, this);
         server.start();
         advertise();
         if (shown() != null) {
             web.loadUrl(shown());
-            info.setVisibility(View.GONE);
+            panel.setVisibility(View.GONE);
         } else {
             showInfo(true);
         }
@@ -200,8 +218,8 @@ public class MainActivity extends Activity {
 
     /** Takes the address and code off the screen; the code works GRACE_MS longer. */
     private void hideInfo() {
-        if (info.getVisibility() != View.VISIBLE) return;
-        info.setVisibility(View.GONE);
+        if (panel.getVisibility() != View.VISIBLE) return;
+        panel.setVisibility(View.GONE);
         codeOnScreen(false);
     }
 
@@ -231,14 +249,14 @@ public class MainActivity extends Activity {
     /** The address and code; kept up until there is something to show, or for a while. */
     private void showInfo(boolean stay) {
         String ip = address();
-        StringBuilder t = new StringBuilder("Rhema Receiver\n\n");
+        StringBuilder t = new StringBuilder();
         if (problem != null) t.append(problem).append("\n\n");
-        t.append(shown() == null ? "To show a screen here: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n" : "To show another screen: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n");
+        t.append(shown() == null ? "To show a screen here: in Rhema Studio, Outputs → a browser feed → Show on a Google TV.\n\n" : "To show another screen: in Rhema Studio, Outputs → a browser feed → Show on a Google TV.\n\n");
         t.append("TV name   ").append(name()).append("\n");
         t.append("TV address   ").append(ip == null ? "not on a network" : ip).append("\n");
         t.append(triesLeft > 0 ? "Code   " + code.digits : "Too many tries: press OK for a new code");
         info.setText(t);
-        info.setVisibility(View.VISIBLE);
+        panel.setVisibility(View.VISIBLE);
         codeOnScreen(true);
         ui.removeCallbacks(hide);
         if (!stay) ui.postDelayed(hide, INFO_MS);
@@ -257,7 +275,7 @@ public class MainActivity extends Activity {
 
     /** OK: hide the address and code, or show them with a new code (also after too many wrong ones). */
     private synchronized void okPressed() {
-        if (info.getVisibility() == View.VISIBLE && shown() != null && problem == null && triesLeft > 0) {
+        if (panel.getVisibility() == View.VISIBLE && shown() != null && problem == null && triesLeft > 0) {
             hideInfo();
         } else {
             newCode();
@@ -383,7 +401,7 @@ public class MainActivity extends Activity {
         try {
             a = CodeProof.answer(x, code, local, CodeProof.randomExponent(random));
         } catch (RuntimeException e) {
-            why[0] = "That was not a Rhema code check";
+            why[0] = "That was not a Rhema Studio code check";
             return null;
         }
         pendingKey = a.enc;
@@ -400,23 +418,23 @@ public class MainActivity extends Activity {
     synchronized String show(String peer, String nonce, String data) {
         // Only the computer that did the check can use (or spend) it: another device's /show in
         // between must not break Rhema's exchange.
-        if (pendingKey == null || !peer.equals(pendingPeer)) return "Rhema must check the code first (update Rhema if this keeps happening)";
+        if (pendingKey == null || !peer.equals(pendingPeer)) return "Rhema Studio must check the code first (update Rhema Studio if this keeps happening)";
         byte[] key = pendingKey;
         pendingKey = null;
-        if (SystemClock.elapsedRealtime() >= pendingUntil) return "Rhema must check the code first (update Rhema if this keeps happening)";
+        if (SystemClock.elapsedRealtime() >= pendingUntil) return "Rhema Studio must check the code first (update Rhema Studio if this keeps happening)";
         String sent = CodeProof.open(key, nonce, data);
-        if (sent == null) return "Rhema's code check did not match: try again";
+        if (sent == null) return "Rhema Studio's code check did not match: try again";
         final String url;
         final String pin;
         try {
-            if (!Guard.flatObject(sent)) return "That is not a Rhema feed link";
+            if (!Guard.flatObject(sent)) return "That is not a Rhema Studio feed link";
             JSONObject o = new JSONObject(sent);
             url = o.optString("url", "");
             pin = o.optString("certFingerprint", "");
         } catch (Exception e) {
-            return "That is not a Rhema feed link";
+            return "That is not a Rhema Studio feed link";
         }
-        if (!Guard.feedLink(url) || !Guard.fingerprint(pin)) return "That is not a Rhema secure feed link (update Rhema if this keeps happening)";
+        if (!Guard.feedLink(url) || !Guard.fingerprint(pin)) return "That is not a Rhema Studio secure feed link (update Rhema Studio if this keeps happening)";
         newCode();
         ui.post(new Runnable() {
             @Override

@@ -187,7 +187,7 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
             let group = short(it.get("group"), 80);
             match (&group, &last_group) {
                 (None, Some(g)) if !warned_after_group => {
-                    warnings.push(format!("{at}: it has no group but follows the group \"{g}\", so Rhema shows it in that group: give it a group or put it before the first group"));
+                    warnings.push(format!("{at}: it has no group but follows the group \"{g}\", so Rhema Studio shows it in that group: give it a group or put it before the first group"));
                     warned_after_group = true;
                 }
                 _ => {}
@@ -318,7 +318,7 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
         errors.push(format!("at most {MAX_ITEMS} items"));
     }
     if !roles_seen.iter().any(|r| r == "main") && !phases.is_empty() {
-        warnings.push("no phase has the role \"main\": Rhema times the service from the main phase's start time".into());
+        warnings.push("no phase has the role \"main\": Rhema Studio times the service from the main phase's start time".into());
     }
     if let Some(main) = phases.iter().find(|p| p["role"] == "main") {
         if main.get("starts_at").is_none() {
@@ -432,7 +432,7 @@ pub fn save(data_dir: &Path, draft: &Value, client: &Value) -> Result<String, St
     let dir = data_dir.join(DRAFTS_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("could not make the drafts folder: {e}"))?;
     if waiting(data_dir) >= MAX_WAITING {
-        return Err(format!("{MAX_WAITING} drafts are already waiting: review or remove some in Rhema → Prepare → AI drafts first"));
+        return Err(format!("{MAX_WAITING} drafts are already waiting: review or remove some in Rhema Studio → Prepare → AI drafts first"));
     }
     let id = uuid::Uuid::new_v4().to_string();
     let mut doc = draft.clone();

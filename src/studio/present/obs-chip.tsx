@@ -43,7 +43,7 @@ export function ObsChip() {
       <PopoverContent align="end" className="w-80">
         {status !== "connected" ? (
           <div className="flex flex-col gap-2 text-xs">
-            <p className="text-muted-foreground">{status === "error" ? `Not connected: ${error}.` : "Connecting to OBS…"} Rhema keeps trying every 15 seconds. Settings → Remote control holds the address and password.</p>
+            <p className="text-muted-foreground">{status === "error" ? `Not connected: ${error}.` : "Connecting to OBS…"} Rhema Studio keeps trying every 15 seconds. Settings → Remote control holds the address and password.</p>
             <Button size="sm" variant="outline" className="w-fit" onClick={() => void obs.connect()}>Try now</Button>
           </div>
         ) : (

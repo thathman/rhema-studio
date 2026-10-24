@@ -108,8 +108,8 @@ function RouterCard({ router, busy, onToggle }: { router: RouterStatus | null; b
   const state = !router ? null : !installed ? "Not installed" : router.running ? "On" : router.wanted ? "Starting" : "Off"
   return (
     <Card kicker="On this computer" title="Camera router" badge={state && <Tone tone={router?.running ? "ok" : router?.wanted ? "warn" : "off"}>{state}</Tone>}>
-      <p className="text-muted-foreground">Each camera sends its picture here once. Rhema's scenes and TVs, and OBS, each take the cameras they want from it, on the church network only.</p>
-      {router && !installed && <p className="font-semibold">Camera router not installed. It comes with Rhema's installer; this copy of Rhema was built without it.</p>}
+      <p className="text-muted-foreground">Each camera sends its picture here once. Rhema Studio's scenes and TVs, and OBS, each take the cameras they want from it, on the church network only.</p>
+      {router && !installed && <p className="font-semibold">Camera router not installed. It comes with Rhema Studio's installer; this copy of Rhema Studio was built without it.</p>}
       {router?.running && (
         <p>
           Running at <span className="font-mono">{router.lanAddress ?? "this computer"}</span>
@@ -124,7 +124,7 @@ function RouterCard({ router, busy, onToggle }: { router: RouterStatus | null; b
         </Button>
         <label className="flex items-center gap-1.5 text-muted-foreground">
           <input type="checkbox" checked={auto} onChange={(e) => useSettingsStore.getState().setCameraRouterAuto(e.target.checked)} />
-          Start it with Rhema while cameras are added
+          Start it with Rhema Studio while cameras are added
         </label>
       </div>
     </Card>
@@ -158,7 +158,7 @@ function AddCamera({ phonePage, http }: { phonePage: number | null; http: HttpSt
       {!phonePage && (
         <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">
           <span className="min-w-0 flex-1">
-            {!http?.running ? "Phones open the camera page from Rhema's phone listener, which is off." : !http.lan ? "The phone listener is on this computer only; phones cannot reach it." : "Phones need the secure (https) phone page to use their camera."} Turn on the network and secure phone pages in Settings → Remote control.
+            {!http?.running ? "Phones open the camera page from Rhema Studio's phone listener, which is off." : !http.lan ? "The phone listener is on this computer only; phones cannot reach it." : "Phones need the secure (https) phone page to use their camera."} Turn on the network and secure phone pages in Settings → Remote control.
           </span>
           <Button size="sm" variant="outline" onClick={() => openSettings("remote")}>Open Remote control</Button>
         </div>
@@ -215,7 +215,7 @@ function Copyable({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** The Rhema Camera app (Android): a pairing link and its QR code; the app sends over RTSPS and trusts only this computer's certificate. */
+/** The Rhema Studio Cam app (Android): a pairing link and its QR code; the app sends over RTSPS and trusts only this computer's certificate. */
 function CameraApp({ cam, link }: { cam: CameraSource; link: string | null }) {
   const [qr, setQr] = useState<{ url: string; data: string } | null>(null)
   useEffect(() => {
@@ -226,13 +226,13 @@ function CameraApp({ cam, link }: { cam: CameraSource; link: string | null }) {
   }, [link])
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-      <span className="text-[0.625rem] font-bold tracking-[0.06em] text-muted-foreground uppercase">Rhema Camera app (Android)</span>
+      <span className="text-[0.625rem] font-bold tracking-[0.06em] text-muted-foreground uppercase">Rhema Studio Cam app (Android)</span>
       {link ? (
         <div className="flex flex-wrap items-start gap-3">
-          {qr?.url === link && <img src={qr.data} alt={`QR code of the ${cam.label} Rhema Camera link`} className="size-28 rounded-md bg-white p-1" />}
+          {qr?.url === link && <img src={qr.data} alt={`QR code of the ${cam.label} Rhema Studio Cam link`} className="size-28 rounded-md bg-white p-1" />}
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <p className="text-muted-foreground">On the phone with Rhema Camera installed, scan this with the phone's camera (or Google Lens) and open it in Rhema Camera; or copy the link and paste it in the app's Settings → Connection. The picture is encrypted on its way to this computer, and the app trusts only this computer.</p>
-            <Copyable label="Rhema Camera link" value={link} />
+            <p className="text-muted-foreground">On the phone with Rhema Studio Cam installed, scan this with the phone's camera (or Google Lens) and open it in Rhema Studio Cam; or copy the link and paste it in the app's Settings → Connection. The picture is encrypted on its way to this computer, and the app trusts only this computer.</p>
+            <Copyable label="Rhema Studio Cam link" value={link} />
           </div>
         </div>
       ) : (
@@ -289,7 +289,7 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
             {link && <Copyable label="Camera page (open on the phone)" value={link} />}
             {whep && (
               <div className="flex flex-col gap-1.5">
-                <Copyable label="For Rhema scenes and TVs (WHEP)" value={whep} />
+                <Copyable label="For Rhema Studio scenes and TVs (WHEP)" value={whep} />
                 <select aria-label={`Use ${cam.label} in a scene`} value="" disabled={scenes.length === 0} onChange={(e) => { if (e.target.value) putInScene(e.target.value) }} className="h-8 w-fit rounded-md border border-input bg-card px-2">
                   <option value="">{scenes.length === 0 ? "No scenes yet (Production → Scenes)" : "Use in a scene…"}</option>
                   {scenes.map((s) => {
@@ -301,7 +301,7 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
             )}
             {rtsp && <Copyable label="For OBS on this computer (Media Source, untick Local File)" value={rtsp} />}
             {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint)} />}
-            {rtsp && <p className="text-muted-foreground">OBS on another computer: install Rhema there and choose “This computer runs OBS only”. It adds the cameras to its OBS by itself, encrypted and with its own sign-in.</p>}
+            {rtsp && <p className="text-muted-foreground">OBS on another computer: install Rhema Studio there and choose “This computer runs OBS only”. It adds the cameras to its OBS by itself, encrypted and with its own sign-in.</p>}
             {!host && <p className="text-muted-foreground">Addresses appear once the camera router is on and this computer is on the network.</p>}
             {host && ports && (
               <details className="text-muted-foreground">

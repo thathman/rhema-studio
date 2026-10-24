@@ -32,10 +32,10 @@ missing_panics_doc = "allow"
 [package]
 name = "rhema"
 version = "0.3.2"
-description = "Rhema - Real-Time AI Bible Verse Detection"
-authors = ["Faithful"]
+description = "Rhema Studio - church service planning, live Scripture and production (built on Rhema by OpenBezal)"
+authors = ["Rhema Studio contributors", "OpenBezal (original Rhema)"]
 license = "MIT"
-repository = "https://github.com/openbezal/rhema"
+repository = "https://github.com/thathman/rhema-studio"
 edition = "2021"
 rust-version = "1.77.2"
 

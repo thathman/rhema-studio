@@ -422,7 +422,7 @@ function ComputerHealth({ health, failed }: { health: ReturnType<typeof useMachi
   return (
     <Card kicker="This computer" title="Load, memory, heat and network" badge={health && <Badge tone={busy ? "warn" : "ok"}>{busy ? "Check" : "Fine"}</Badge>}>
       {!health ? (
-        <p className="text-xs text-muted-foreground">{failed ? "This computer's figures cannot be read here (Rhema's desktop app reads them)." : "Reading…"}</p>
+        <p className="text-xs text-muted-foreground">{failed ? "This computer's figures cannot be read here (Rhema Studio's desktop app reads them)." : "Reading…"}</p>
       ) : (
         <ul aria-label="This computer" className="flex flex-col divide-y divide-border">
           <HealthRow label="CPU load" lines={[cpuWords(health)]} />
@@ -549,7 +549,7 @@ function CamerasHealth() {
 
 /**
  * Each browser feed and the screens watching it (#213): how many pages drew the latest frame, and
- * the Google TVs it was sent to, each of which can be asked what it shows (Rhema Receiver 1.1).
+ * the Google TVs it was sent to, each of which can be asked what it shows (Rhema Studio Receiver 1.1).
  */
 function FeedsHealth() {
   const outputs = useBroadcastStore((s) => s.outputs)
@@ -702,7 +702,7 @@ function UntrustedTime() {
     <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-confidence-mid/50 bg-confidence-mid/10 px-3 py-2 text-xs lg:col-span-2">
       <TriangleAlertIcon className="size-4 text-confidence-mid" aria-hidden />
       <span className="min-w-0 flex-1">
-        <b>{untrusted.label}: its elapsed time can't be trusted.</b> Rhema closed unexpectedly while it was running (last saved {hhmm(untrusted.lastSeen)}, started again {hhmm(untrusted.restartedAt)}). Its start is in the service log; how long it has run since is not known. Check it, then say so or start it again.
+        <b>{untrusted.label}: its elapsed time can't be trusted.</b> Rhema Studio closed unexpectedly while it was running (last saved {hhmm(untrusted.lastSeen)}, started again {hhmm(untrusted.restartedAt)}). Its start is in the service log; how long it has run since is not known. Check it, then say so or start it again.
       </span>
       <Button size="sm" variant="outline" onClick={() => useTimingTrust.getState().confirm(me)}><CheckIcon /> The time is right</Button>
       <Button size="sm" onClick={() => useEventClock.getState().retake(untrusted.itemId)}>Start it again now</Button>

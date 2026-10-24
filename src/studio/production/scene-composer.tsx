@@ -64,7 +64,7 @@ export function SceneComposer() {
       {/* Which of the service's two programs this is (#215 G5.1): the screens in the room, not the stream. */}
       <header aria-label="Congregation program" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-sm font-bold tracking-[-0.02em]">{congregationProgramName(outputs)}</h2>
-        <p className="text-xs text-muted-foreground">Rhema's scenes for the screens in the room. The {onlineProgramName(obsVideo)} is OBS's, in Production → OBS; nothing here changes it.</p>
+        <p className="text-xs text-muted-foreground">Rhema Studio's scenes for the screens in the room. The {onlineProgramName(obsVideo)} is OBS's, in Production → OBS; nothing here changes it.</p>
       </header>
       <div className="grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)_17rem]">
         <section aria-label="Scenes" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
