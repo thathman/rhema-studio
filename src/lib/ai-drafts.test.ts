@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { draftDiff, draftToRundown, itemKey, leaveOut, matchSuggestions, type AiDraft } from "./ai-drafts"
 import type { QueueItem } from "@/types"
+import { itemAssignees } from "./assignees"
 
 const draft: AiDraft = {
   v: 1, id: "d1", title: "Thanksgiving Service", date: "2026-11-29", created_at: "2026-10-23T05:00:00Z", client: { name: "Claude" }, assumptions: ["Sermon 35 minutes"],
@@ -21,6 +22,7 @@ describe("an AI draft opened in Prepare", () => {
     expect(headers.map((h) => [h.name, h.at, h.role, h.rule, h.starts_at])).toEqual([["Warm-up", 0, "warmup", "auto_once", undefined], ["Main service", 1, "main", "manual", "10:00"]])
     expect(items.map((i) => i.reference)).toEqual(["Welcome", "Great Is Thy Faithfulness", "Missing hymn: Now Thank We All Our God", "Psalms 100:1-5"])
     expect(items.every((i) => i.prepared_by === "AI draft · Claude")).toBe(true)
+    expect(items.every((i) => itemAssignees(i).join() === "AI draft · Claude")).toBe(true)
     expect(items.map((i) => i.planned_minutes)).toEqual([5, 6, 4, 3])
     expect(items[1]).toMatchObject({ kind: "song", song: { song_id: "s1", languages: ["en", "yo"] } })
     expect(items[2]).toMatchObject({ kind: "slide", slide: { body: "" } })

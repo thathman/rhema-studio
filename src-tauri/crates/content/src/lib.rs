@@ -928,6 +928,9 @@ struct ExtrasPayload {
     /// Who is preparing this item (CL-007), free text, short.
     #[serde(default)]
     prepared_by: Option<String>,
+    /// The people preparing it (#299 6.10), short names; `prepared_by` holds them joined for older builds.
+    #[serde(default)]
+    assignees: Option<Vec<String>>,
     /// Team comments on this item (CL-007).
     #[serde(default)]
     comments: Option<Vec<CommentPayload>>,
@@ -1007,6 +1010,9 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     }
     if p.prepared_by.as_deref().is_some_and(|n| n.chars().count() > 60 || n.chars().any(char::is_control)) {
         return Err(ContentError::Invalid(format!("item {i}: 'prepared by' must be a short name")));
+    }
+    if p.assignees.as_ref().is_some_and(|names| names.len() > 12 || names.iter().any(|n| n.trim().is_empty() || n.chars().count() > 60 || n.chars().any(char::is_control))) {
+        return Err(ContentError::Invalid(format!("item {i}: at most 12 people, each a short name")));
     }
     if p.comments.as_ref().is_some_and(|cs| cs.len() > 100 || !cs.iter().all(valid_comment)) {
         return Err(ContentError::Invalid(format!("item {i}: comments must be at most 100, each 1-1000 characters with a short name")));
@@ -1352,6 +1358,12 @@ mod tests {
         let timed = ItemInput { payload: Some("{\"planned_minutes\":4.5}".into()), ..verse("John 3:16", 43, 3, 16) };
         assert!(validate_items(&[ItemInput { payload: Some("{\"prepared_by\":\"Tolu (music)\"}".into()), ..verse("John 3:16", 43, 3, 16) }]).is_ok());
         assert!(validate_items(&[ItemInput { payload: Some(format!("{{\"prepared_by\":\"{}\"}}", "x".repeat(61))), ..verse("John 3:16", 43, 3, 16) }]).is_err());
+        // An item's people (#299 6.10): up to 12 short names.
+        assert!(validate_items(&[ItemInput { payload: Some("{\"assignees\":[\"Tolu\",\"Ade\"],\"prepared_by\":\"Tolu, Ade\"}".into()), ..verse("John 3:16", 43, 3, 16) }]).is_ok());
+        let many = format!("{{\"assignees\":[{}]}}", vec!["\"P\""; 13].join(","));
+        assert!(validate_items(&[ItemInput { payload: Some(many), ..verse("John 3:16", 43, 3, 16) }]).is_err());
+        assert!(validate_items(&[ItemInput { payload: Some("{\"assignees\":[\" \"]}".into()), ..verse("John 3:16", 43, 3, 16) }]).is_err());
+        assert!(validate_items(&[ItemInput { payload: Some(format!("{{\"assignees\":[\"{}\"]}}", "x".repeat(61))), ..verse("John 3:16", 43, 3, 16) }]).is_err());
         let comment = |text: &str| ItemInput { payload: Some(serde_json::json!({ "comments": [{ "by": "Ade", "at": "2026-10-21T10:00:00Z", "text": text }] }).to_string()), ..verse("John 3:16", 43, 3, 16) };
         assert!(validate_items(&[comment("Use the NKJV here\nthen pause")]).is_ok(), "CL-007 comment with a line break");
         assert!(validate_items(&[comment("")]).is_err());

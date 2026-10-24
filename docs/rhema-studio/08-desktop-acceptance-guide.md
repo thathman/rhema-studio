@@ -1262,6 +1262,23 @@ Rhema with five NDI outputs set up (all off), one of them set to **60 fps**, and
 | 10ew.8 | Production → Cameras: add cameras until there are more than the cameras limit. | Each camera is still added; past the limit a warning says this computer suits about 4 and a note stays under Add a camera. | Unverified |
 | 10ew.9 | Leave Show health for another tab; watch Activity Monitor for a minute. | Rhema stops reading the computer's figures when Show health is closed (no pmset process every few seconds). Nothing goes to the internet (Little Snitch or a firewall log, if used). | Unverified |
 
+### 10ex. People on items; the two programs named (#299, #215)
+
+Rhema with a saved service (a song and two slides), Desk menu → Your name = "Tolu", one congregation display output and one congregation NDI output set to 1080p at 30 fps. OBS on the same Mac (or network) with Settings → Video output 1280×720 at 30 fps, connected in Settings → Remote control. An older Rhema build (before this change) to open the same database or service file, if available.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ex.1 | Prepare: open the song, click in **People**, type "Ade", press Enter; type "Bisi, Kemi" and click elsewhere. | Three chips: Ade, Bisi, Kemi. The rundown row shows "· Ade +2"; hovering it lists all three. Save is offered. | Unverified |
+| 10ex.2 | Open a slide's People box. | "Tolu" (the desk's name) and Ade, Bisi, Kemi are offered as you type. Picking one adds it. | Unverified |
+| 10ex.3 | Remove Bisi with its ×; with the box empty of text, press Backspace once. | Bisi goes, then Kemi (the last chip). The row shows "· Ade". | Unverified |
+| 10ex.4 | Save, quit Rhema, open it again, open the service. Open **Run of show** (start time set). | The people are as saved. Run of show has a **People** column with every name in full. | Unverified |
+| 10ex.5 | Open an older service whose items had a "prepared by" name. | Each shows that name as its one person, in the row and the editor. Not changed until you edit it (no unsaved-change prompt from opening it). | Unverified |
+| 10ex.6 | Optional: open the service in the older build (or publish to the church folder and open it there). | The older build shows "prepared by" as "Ade, Kemi" (names joined). If it changes that line and saves, this build then shows the older build's line as the one person. | Unverified |
+| 10ex.7 | Prepare → AI drafts: open a draft as a new service. | Each item's People shows "AI draft · <assistant>". | Unverified |
+| 10ex.8 | Production → OBS with OBS connected. | The heading reads **Online program (OBS, 720p30)**. In OBS change Video output to 1920×1080 and 60 fps, then switch OBS profile and back (or reconnect). The heading follows (1080p60). With OBS off it reads 720p30. | Unverified |
+| 10ex.9 | Production → Programs. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
+| 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

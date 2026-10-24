@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { toast } from "sonner"
 import { ObsClient, ObsRequestError } from "@/lib/obs"
+import { obsVideo, type ObsVideo } from "@/lib/program-names"
 import { useJournalStore } from "@/stores/journal-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type ObsSettings } from "@/stores/settings-store"
@@ -22,6 +23,8 @@ interface ObsState {
   preview: string | null
   /** OBS's Studio Mode; null until OBS has answered. */
   studioMode: boolean | null
+  /** OBS's output size and frame rate (the online program's format, #215 G5.1); null until OBS has answered. */
+  video: ObsVideo | null
   connect: () => Promise<void>
   disconnect: () => void
   startRecording: () => Promise<void>
@@ -91,6 +94,19 @@ async function loadScenes(): Promise<void> {
   }
 }
 
+/** Read OBS's output size and frame rate (on connect, and when OBS changes profile). */
+async function loadVideo(): Promise<void> {
+  const c = client
+  if (!c) return
+  try {
+    const v = obsVideo(await c.request("GetVideoSettings"))
+    if (client === c) useObsStore.setState({ video: v })
+  } catch {
+    // Not known: Production names the usual format instead.
+    if (client === c) useObsStore.setState({ video: null })
+  }
+}
+
 /** OBS's scene events: follow what OBS (or anyone else using it) changed. */
 function onSceneEvent(type: string, data: Record<string, unknown>): void {
   const name = typeof data.sceneName === "string" ? data.sceneName : null
@@ -115,6 +131,10 @@ function onSceneEvent(type: string, data: Record<string, unknown>): void {
       } else {
         useObsStore.setState({ studioMode: false, preview: null })
       }
+      break
+    case "CurrentProfileChanged":
+      // A profile has its own video settings.
+      void loadVideo()
       break
     case "SceneNameChanged":
     case "SceneCreated":
@@ -149,6 +169,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
   recording: null,
   chapters: null,
   ...NO_SCENES,
+  video: null,
 
   connect: async () => {
     const o = useSettingsStore.getState().obs
@@ -167,7 +188,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
         if (client !== c) return
         client = null
         stopTimers()
-        useObsStore.setState({ status: "error", error: reason, recording: null, ...NO_SCENES })
+        useObsStore.setState({ status: "error", error: reason, recording: null, video: null, ...NO_SCENES })
         // Try again quietly while the connection stays enabled.
         if (useSettingsStore.getState().obs.enabled) retry = setTimeout(() => void useObsStore.getState().connect(), 15_000)
       },
@@ -177,7 +198,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
       await c.connect()
       if (client !== c) return
       set({ status: "connected", error: null, recording: null })
-      await Promise.all([refresh(), loadScenes()])
+      await Promise.all([refresh(), loadScenes(), loadVideo()])
       // A newer connect (or a disconnect) happened while waiting: this one must not start a poll.
       if (client !== c) return
       if (poll) clearInterval(poll)
@@ -185,7 +206,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     } catch (e) {
       if (client !== c) return
       client = null
-      set({ status: "error", error: e instanceof Error ? e.message : String(e), recording: null, ...NO_SCENES })
+      set({ status: "error", error: e instanceof Error ? e.message : String(e), recording: null, video: null, ...NO_SCENES })
       if (useSettingsStore.getState().obs.enabled) retry = setTimeout(() => void useObsStore.getState().connect(), 15_000)
     }
   },
@@ -195,7 +216,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     const c = client
     client = null
     c?.close()
-    set({ status: "off", error: null, recording: null, chapters: null, ...NO_SCENES })
+    set({ status: "off", error: null, recording: null, chapters: null, video: null, ...NO_SCENES })
   },
 
   startRecording: async () => {

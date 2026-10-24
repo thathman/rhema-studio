@@ -24,6 +24,8 @@ class FakeObs {
   program = "Wide"
   preview = "Pulpit"
   studioMode = false
+  /** OBS → Settings → Video: the output size and frame rate. */
+  video = { baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 }
   url: string
   constructor(url: string) {
     this.url = url
@@ -56,6 +58,7 @@ class FakeObs {
     let responseData: Record<string, unknown> | undefined
     const after: Array<() => void> = []
     if (type === "GetRecordStatus") responseData = { outputActive: false, outputPaused: false }
+    else if (type === "GetVideoSettings") responseData = this.video
     else if (type === "GetStudioModeEnabled") responseData = { studioModeEnabled: this.studioMode }
     else if (type === "GetSceneList") responseData = { currentProgramSceneName: this.program, currentPreviewSceneName: this.studioMode ? this.preview : null, scenes: this.list() }
     else if (type === "SetCurrentPreviewScene") {
@@ -127,6 +130,21 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     const { useObsStore } = await import("@/stores/obs-store")
     useObsStore.getState().disconnect()
     vi.unstubAllGlobals()
+  })
+
+  it("names the online program with OBS's own format, and reads it again when OBS changes profile (#215 G5.1)", async () => {
+    const { useObsStore, obs } = await setup()
+    expect(Number(obs.identify?.eventSubscriptions) & 2).toBe(2) // Config: profile changes
+    expect(useObsStore.getState().video).toEqual({ width: 1920, height: 1080, fps: 60 })
+    const { el } = await render()
+    expect(el.querySelector('[aria-label="OBS program"] h3')?.textContent).toBe("Online program (OBS, 1080p60)")
+    obs.video = { ...obs.video, outputWidth: 1280, outputHeight: 720, fpsNumerator: 30000, fpsDenominator: 1001 }
+    await act(async () => obs.event("CurrentProfileChanged", { profileName: "Stream" }))
+    await settle()
+    expect(el.querySelector('[aria-label="OBS program"] h3')?.textContent).toBe("Online program (OBS, 720p29.97)")
+    useObsStore.getState().disconnect()
+    await settle()
+    expect(useObsStore.getState().video).toBeNull()
   })
 
   it("loads OBS's scene list in OBS's order, its program, and Studio Mode, subscribing to scene and Studio Mode events", async () => {

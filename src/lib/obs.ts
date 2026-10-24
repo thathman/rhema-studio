@@ -7,8 +7,8 @@
  */
 
 const OP = { Hello: 0, Identify: 1, Identified: 2, Event: 5, Request: 6, RequestResponse: 7 } as const
-/** EventSubscription: Scenes (1 << 2: program, preview, scene list), Outputs (1 << 6: record/stream state), Ui (1 << 10: studio mode on/off). */
-export const OBS_SUBSCRIPTIONS = (1 << 2) | (1 << 6) | (1 << 10)
+/** EventSubscription: Config (1 << 1: profile changes, for its video settings), Scenes (1 << 2: program, preview, scene list), Outputs (1 << 6: record/stream state), Ui (1 << 10: studio mode on/off). */
+export const OBS_SUBSCRIPTIONS = (1 << 1) | (1 << 2) | (1 << 6) | (1 << 10)
 
 async function sha256Base64(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))

@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### People on each item; the two programs named in Production (#299, #215)
+- An item in Prepare can now have several **People** preparing it, as chips: type a name and press Enter (or paste "Tolu, Ade"); names already on the service and the desk's own name are offered. The rundown shows the first and how many more ("· Tolu +2"), and **Run of show** has a People column. An older item's "prepared by" name shows as its one person, and older Rhema builds still see the names as one "prepared by" line.
+- Production now names the two programs the same way everywhere: **Online program (OBS, 720p30)** on the OBS tab and **Congregation program (screens, 1080p)** on Programs and on each congregation output's card in Screens. The format is OBS's real output size and frame rate once OBS is connected, and the congregation NDI outputs' own size and frame rate; otherwise the usual one.
+
 ### Capacity limits, 60 fps NDI and this computer in Show health (#243, #246)
 - Rhema now knows how much this computer can run at once (outputs, NDI senders, browser feeds, cameras, outputs showing live video), worked out from its cores and memory. Turning on one output too many asks first and says the computer may drop frames; nothing is refused. The limits can be changed in **Settings → Outputs → How much this computer runs**.
 - **60 fps NDI** on a computer below 6 cores and 16 GB asks before starting (once per output each session), and the output editor says so under Frame rate.

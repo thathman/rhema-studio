@@ -11,6 +11,8 @@ import { overlayFor } from "@/lib/lower-third-style"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useObsStore } from "@/stores/obs-store"
+import { congregationProgramName, onlineProgramName } from "@/lib/program-names"
 import { useMediaStore } from "@/stores/media-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
@@ -28,6 +30,7 @@ export function SceneComposer() {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const obsVideo = useObsStore((s) => (s.status === "connected" ? s.video : null))
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
   const [targetId, setTargetId] = useState(congregation[0]?.id ?? "")
   const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
@@ -57,6 +60,11 @@ export function SceneComposer() {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Which of the service's two programs this is (#215 G5.1): the screens in the room, not the stream. */}
+      <header aria-label="Congregation program" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="text-sm font-bold tracking-[-0.02em]">{congregationProgramName(outputs)}</h2>
+        <p className="text-xs text-muted-foreground">Rhema's scenes for the screens in the room. The {onlineProgramName(obsVideo)} is OBS's, in Production → OBS; nothing here changes it.</p>
+      </header>
       <div className="grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)_17rem]">
         <section aria-label="Scenes" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
           <h3 className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Scenes</h3>

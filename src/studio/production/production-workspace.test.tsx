@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+// jsdom has no ResizeObserver (the Screens cards' look previews size themselves with one).
+vi.hoisted(() => {
+  globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+})
+
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
 
@@ -69,6 +74,28 @@ describe("Production control", () => {
     expect((el.querySelector('[aria-label="Scene name"]') as HTMLInputElement).value).toBe("Clean · Camera and scripture")
     expect(useProductionTab.getState().scene).toBeNull()
     useProductionTab.setState({ requested: null })
+  })
+
+  it("names the two programs (#215 G5.1): the congregation's from its NDI senders, the online one's usual format while OBS is off", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const before = useBroadcastStore.getState().outputs
+    const main = before[0]
+    useBroadcastStore.setState({ outputs: [{ ...main, role: "congregation" }, { ...main, id: "ndi-1", name: "Hall NDI", type: "ndi", role: "congregation", ndi: { ...main.ndi, resolution: "r1080p", frameRate: "fps30" } }] })
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => mount(el))
+    const open = async (name: string) => act(async () => ([...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLButtonElement).click())
+    await open("Programs")
+    const header = el.querySelector('[aria-label="Congregation program"]')!
+    expect(header.querySelector("h2")?.textContent).toBe("Congregation program (screens, 1080p30)")
+    expect(header.textContent).toContain("Online program (OBS, 720p30)")
+    await open("OBS")
+    expect(el.querySelector('[aria-label="OBS program"] h3')?.textContent).toBe("Online program (OBS, 720p30)")
+    await open("Screens")
+    expect(el.querySelector('[aria-label="Hall NDI"]')?.textContent).toContain("Congregation program (screens, 1080p30)")
+    // A screen sets no format of its own: the usual one.
+    expect(el.querySelector(`[aria-label="${main.name}"]`)?.textContent).toContain("Congregation program (screens, 1080p)")
+    useBroadcastStore.setState({ outputs: before })
   })
 
   it("OBS sits beside Programs and says it is OBS's program, separate from Rhema's congregation scenes", async () => {

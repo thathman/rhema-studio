@@ -95,7 +95,7 @@ Ready-made requests an assistant offers (in Claude Desktop, under the + / prompt
   (announcements, prayer points), never lyrics.
 - **Prepare → AI drafts** lists what is waiting (who proposed it, when, items, minutes, what is
   missing, assumptions). **Open as a new service** puts it in the rundown as an unsaved service,
-  asking first if the rundown has items; every item is marked "prepared by AI draft · <assistant>",
+  asking first if the rundown has items; every item is marked "prepared by AI draft · <assistant>" (its one person under People),
   missing ones say what to source. People edit it and save it as a service; approval is the
   ordinary approval. Nothing is saved, approved, shown or sent to OBS by opening a draft.
 - **Look and scene suggestions (MCP-004):** any item may carry `suggested_look` and

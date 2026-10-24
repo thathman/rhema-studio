@@ -3,6 +3,7 @@ import { ArrowRightLeftIcon, EyeIcon, RefreshCwIcon, SettingsIcon } from "lucide
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
+import { congregationProgramName, onlineProgramName } from "@/lib/program-names"
 import { OBS_REHEARSAL_REASON, useObsStore } from "@/stores/obs-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -48,6 +49,8 @@ export function ObsPanel() {
   const program = useObsStore((s) => s.program)
   const preview = useObsStore((s) => s.preview)
   const studioMode = useObsStore((s) => s.studioMode)
+  const video = useObsStore((s) => s.video)
+  const outputs = useBroadcastStore((s) => s.outputs)
   // A computer that joined a host follows it; OBS's scenes are changed from the main desk.
   const joined = useJoin((s) => s.status !== "off")
   // Rehearsal is a sandbox: OBS's program is the online stream, so nothing here changes it while practising.
@@ -71,13 +74,14 @@ export function ObsPanel() {
       <section aria-label="OBS program" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">OBS · the online stream and recording</p>
-            <h3 className="text-sm font-bold">OBS program</h3>
+            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">OBS program · the online stream and recording</p>
+            {/* The two programs by name (#215 G5.1), with OBS's own format once it has said. */}
+            <h3 className="text-sm font-bold">{onlineProgramName(connected ? video : null)}</h3>
           </div>
           <Tag tone={connected ? "ok" : status === "connecting" ? "warn" : "off"}>{!enabled ? "Off" : connected ? "Connected" : status === "connecting" ? "Connecting" : "Not connected"}</Tag>
         </div>
         <p className="text-muted-foreground">
-          These are OBS's own scenes, the switcher for the stream. They are separate from Rhema's congregation scenes in Programs: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
+          These are OBS's own scenes, the switcher for the stream. They are separate from Rhema's congregation scenes in Programs, the {congregationProgramName(outputs)}: taking a scene to the screens, or a verse or song going live, never changes OBS. Only the buttons here do.
         </p>
         {!enabled ? (
           <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">

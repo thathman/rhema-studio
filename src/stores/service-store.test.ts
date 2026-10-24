@@ -511,6 +511,30 @@ describe("createFromRundown", () => {
     expect(Array.from(cleanName("a" + "😀".repeat(80)))).toHaveLength(60)
   })
 
+  it("saves and reopens an item's people (#299 6.10), with the joined names as 'prepared by' for older builds", () => {
+    const v: VerseQueueItem = { id: "a1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, assignees: ["Tolu", " Ade ", "tolu"], prepared_by: "Tolu, Ade" }
+    const [input] = toItemInputs([v])
+    const payload = JSON.parse(input.payload ?? "{}")
+    expect(payload).toMatchObject({ assignees: ["Tolu", "Ade"], prepared_by: "Tolu, Ade" })
+    const reopened = toQueueItems({ program, items: [item("a1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
+    expect(reopened.items[0]).toMatchObject({ assignees: ["Tolu", "Ade"], prepared_by: "Tolu, Ade" })
+    expect(reopened.items[0].payload_extra).toBeUndefined()
+    expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, assignees: ["Tolu"] }]))
+    // An item from before assignees saves as it always did: no list is added.
+    const [legacy] = toItemInputs([{ ...v, assignees: null, prepared_by: "Tolu (music)" }])
+    expect(JSON.parse(legacy.payload ?? "{}")).toEqual({ prepared_by: "Tolu (music)" })
+    // An older build changed only the "prepared by" line (and kept the list as it was): the line wins.
+    const edited = JSON.stringify({ assignees: ["Tolu", "Ade"], prepared_by: "Bisi" })
+    const fromOld = toQueueItems({ program, items: [item("a1", "John 3:16", 43, 3, 16, { payload: edited })] }, 1, [])
+    expect(fromOld.items[0].prepared_by).toBe("Bisi")
+    expect(fromOld.items[0].assignees).toBeUndefined()
+    // Many names still give a "prepared by" line an older build can save (60 characters).
+    const many = toItemInputs([{ ...v, assignees: Array.from({ length: 9 }, (_, n) => `Volunteer number ${n + 1}`) }])[0]
+    const line = JSON.parse(many.payload ?? "{}").prepared_by as string
+    expect(Array.from(line).length).toBeLessThanOrEqual(60)
+    expect(line).toMatch(/^Volunteer number 1, Volunteer number 2 \+7$/)
+  })
+
   it("saves and reopens team comments (CL-007), and a new comment counts as an unsaved change", () => {
     const v: VerseQueueItem = { id: "c1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, comments: [{ by: "Ade", at: "2026-10-21T10:00:00Z", text: "Read slowly\nthen pause" }] }
     const [input] = toItemInputs([v])
