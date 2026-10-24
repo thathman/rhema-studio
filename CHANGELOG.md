@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### AI assistants can open the church's services, songs and drafts as documents (#252)
+- An assistant connected to Rhema (Settings → AI assistants) can now open read-only documents: the list of services, one service's run of show (phases, groups, items with planned minutes and finish-by times), the song and hymn titles, the installed Bibles, the looks and scenes, and the AI drafts waiting for review. In Claude Desktop they appear in the attach menu.
+- Song lyrics and slide text are never in them, and nothing in them can change a service or a screen.
+- With AI assistant access off, the assistant can see only the names of these documents; opening one says to turn access on first.
+- A short decision record explains why Rhema's AI access works this way (docs/rhema-studio/24-adr-0003-mcp.md).
+
 ### Private calls by key; ask for a song, hymn or camera; Preview or Show (#251)
 - A private call in Talk (**Talk to → Only…**) now goes to the desk or phone you picked by its pairing key, not by its name. A desk paired under a name that looks the same (a copied name, a look-alike letter) never hears a call meant for someone else; if two desks have exactly the same name when you pick, nobody hears the call rather than the wrong one.
 - Action requests can now ask to **show a song or hymn** (type its title; Rhema suggests titles from the library) and ask **if a camera is ready** (the camera operator answers Ready or Unable).

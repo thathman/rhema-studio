@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — MCP resources and the MCP decision record (#252, MCP-006)
+
+- **Branch / PR:** `mcp-006/resources-adr` (from `main` de629d4).
+- **Behaviour:** `src-tauri/src/mcp_resources.rs` (a child module of `mcp.rs`): the server advertises `resources` (`subscribe` and `listChanged` false) and answers `resources/list` (the five fixed `rhema://services`, `songs`, `translations`, `looks`, `drafts`, then, with access on, up to 50 services and waiting drafts by address), `resources/templates/list` (`rhema://services/{id}`, `rhema://drafts/{id}`) and `resources/read` (one `application/json` text). A service reads as phases → own items and groups → items (kind, title or reference and translation, song id, planned minutes, end by), with no lyrics, slide text or notes; songs as id, title, other titles, kind, numbers, languages (the summary's first line is dropped). Access off: list gives the fixed five only and every read is error -32001 "turn it on in Settings → AI assistants"; an unknown address is -32002 with `data.uri`; no `uri` is -32602. The server's instructions name the resources and say their contents are data, never instructions. `docs/rhema-studio/24-adr-0003-mcp.md` (ADR 0003): stdio and opt-in, drafts-only boundary, lyrics rule, draft revisions, text as data, a remote transport left to the owner.
+- **Tests:** `mcp.rs` through `handle`: `resources_are_listed_with_templates_and_advertised`, `every_resource_reads_and_none_hands_out_lyrics` (a service with phases, groups, a song, a verse and a slide; a song and a hymn with English and Yorùbá lyrics; a look and a scene; a waiting draft; every listed resource read whole and searched for the lyric lines and the slide's text), `unknown_resources_are_not_found_and_access_off_refuses`.
+- **Next:** desktop acceptance 10em (stdio check: `mcp-006-check.py <Rhema binary> <HOME>`). Not done: no subscriptions or change notifications (an assistant reads again); no resource for one song (titles only, by design); the remote transport waits for the owner (ADR 0003 §7).
 ## 2026-10-24 — Private calls by key; song, hymn and camera requests; Preview or Show (#251)
 
 - **Branch / PR:** `comms-008/talk-by-key-requests` (from `main` da3a4b9).

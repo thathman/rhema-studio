@@ -1103,6 +1103,19 @@ Needs two computers on the same network (the host and a joining computer). Some 
 | 10eh.7 | On the host stop the HTTP listener; untick "accept other devices" and start it again (this computer only). On the joiner press **Find hosts** each time. | No host is listed either time ("No host found…"); the address can still be typed. | Unverified |
 | 10eh.8 | Tick accept other devices again, tick https for phones, start the listener on port 9000; then quit Rhema on the host. Press **Find hosts** after each. | First it lists the host at :9000 (`dns-sd -L "CAC Ibadan" _rhema-host._tcp` shows `v=1 tls=9001`). After quitting, no host is listed. | Unverified |
 
+### 10em. AI assistants read services, songs and drafts as resources (#252)
+
+Settings → AI assistants on, at least one saved service with phases and groups, a few songs with lyrics, one AI draft waiting. An assistant (Claude Desktop) connected with `Rhema --mcp`, or the stdio check (`mcp-006-check.py <Rhema binary> <HOME>`).
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10em.1 | Run the stdio check (or open the assistant's + / attach menu for rhema-studio). | `capabilities` includes `resources`. The list starts with Services, Songs and hymns, Bible editions, Looks and scenes, AI drafts, then each saved service ("Title (date)") and each waiting draft ("AI draft: …"). Templates are `rhema://services/{id}` and `rhema://drafts/{id}`. | Unverified |
+| 10em.2 | Read `rhema://services`, then one service. | The services match Prepare's list (archived ones left out) with approved yes/no. The service's phases, groups and items are in Prepare's order, with planned minutes and "end by" times as in the rundown. | Unverified |
+| 10em.3 | Read `rhema://songs` and search the result for a line you know from a song's lyrics. | Every song and hymn by title, kind (hymn for the hymn book), numbers and languages; Yorùbá titles show every mark. No lyric line, in any language, anywhere in it or in any other resource. | Unverified |
+| 10em.4 | Read `rhema://translations`, `rhema://looks`, `rhema://drafts` and one draft. | The installed Bibles; the built-in looks, the church's own looks and its scenes by name; the waiting drafts with their revision, and the draft as saved. | Unverified |
+| 10em.5 | Read `rhema://services/nope`. | Error -32002 "Resource not found". | Unverified |
+| 10em.6 | Turn Settings → AI assistants off, start the assistant again and list and read the resources. | Only the five fixed names are listed (no service or draft titles); every read says to turn it on in Settings → AI assistants. Nothing in Rhema changed. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |
