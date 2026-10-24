@@ -8,6 +8,7 @@ import { setDeskControl } from "@/lib/desk-control"
 import { useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { activatedLabel } from "@/lib/live-sources"
+import { sourceName } from "@/lib/content-names"
 import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
@@ -169,7 +170,7 @@ function JoinedDesk() {
           <div className="rounded-md bg-[#16242b] p-3 text-[#d6e2df]">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-[#9fb2b0] uppercase">On the screens{live.program.rehearsal ? " · rehearsal" : ""}</p>
             <p className="truncate text-sm font-semibold">{live.program.onAir ? live.program.reference ?? "On air" : "Nothing on air"}</p>
-            {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [s.id, s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
+            {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
           {desks.includes("clock") && <ClockDesk live={live} />}
           {desks.includes("bible") && <BibleDesk live={live} />}

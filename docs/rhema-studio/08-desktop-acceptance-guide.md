@@ -981,6 +981,25 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10ec. Ticker, timer and cameras as live sources (#243)
+
+Set Settings → Operator name to "Tolu" first. Have one phone camera in Production → Cameras (Pulpit), a scene with its camera layer (with fallback words "Camera back shortly") taken to the projector, and OBS (or an NDI viewer) on the same network.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ec.1 | Present → Ticker: type two lines, **Start**. Look at Present → Live → **Sources**. | A **Ticker** chip: "running · <first line> · by Tolu <time> · n feeds". The service log has "Ticker on: … · by Tolu". | Unverified |
+| 10ec.2 | In Sources, press × on the Ticker chip. Then edit the ticker words, and press **Restore** on the chip. | × takes the ticker off every screen (chip: "off · <first line>"). Restore brings back the words that were on (not the edited ones), crawling from the start. Log: "Ticker off…", "Ticker back…". | Unverified |
+| 10ec.3 | Present → Ticker → Pause, then Resume. | The chip says "held still", then "running"; the log has "Ticker held still" and "Ticker moving again". | Unverified |
+| 10ec.4 | Production → Screens → **Add a ready-made feed** → **Rhema Ticker \| Alpha** (NDI), turn it on; in OBS add it over a camera. Put a verse and a hymn live. | OBS shows only the ticker, keyed; no verse or hymn ever appears on it. Its card says it follows "Ticker", "Ticker only · transparent, for keying". | Unverified |
+| 10ec.5 | Edit another NDI output → What this output follows → Only these → tick **Ticker** besides Bible. | "Show the news ticker on this output" is ticked and greyed ("it follows the ticker, above"). The feed shows Bible with the ticker over it. Untick Ticker: the switch is off again. | Unverified |
+| 10ec.6 | Press **Black**, then Back. | The ticker feed (and every other feed) goes black, then returns exactly as it was. | Unverified |
+| 10ec.7 | Present → timer: set 10 min, **Start**. Look at Sources. Press the pause button on the **Timer** chip, then resume. | The chip: "running · 9:59 left · by Tolu …", counting; paused: "paused · 9:4x left"; resume carries on from there. The timer in Present and clock layers agree. Log: "Tolu: timer started", "Tolu: timer paused", "Tolu: timer resumed". | Unverified |
+| 10ec.8 | With the phone camera sending: look at its chip. Stop the camera on the phone, wait 10 s. | "Pulpit camera · Sending · in 1 scene", then "Not sending". | Unverified |
+| 10ec.9 | Camera sending again: press the eye button on the Pulpit chip (**Hide Pulpit camera from scenes**). Then **Restore**. | The projector's scene shows "Camera back shortly" in the camera's box at once (a Google TV feed with the scene too); Production → Programs shows the scene unchanged. Restore: the camera plays again within a few seconds. Log: "Pulpit camera hidden from scenes · by Tolu", "… back in scenes · by Tolu". | Unverified |
+| 10ec.10 | Join from a second computer (Production → Operators, Present role). Look at "Live sources" on the joined desk. Open the phone remote page with a Present phone. | The desk lists Ticker, Timer and Camera with the host's state. The phone lists them with Take off / Put back, Pause / Resume and Hide / Show; pressing Hide on the phone hides the camera on the host, and the host's log says "· by <phone name>". A Bible-role phone gets "not allowed" for them. | Unverified |
+| 10ec.11 | Turn on Rehearsal. In it: stop the ticker, pause the timer, try the Sources buttons. Leave rehearsal. | In rehearsal the Sources buttons for the ticker, timer and cameras are greyed; the real screens keep the ticker and the timer counting. After rehearsal everything is as before and the log has only rehearsal on/off for that time. | Unverified |
+| 10ec.12 | Quit and reopen Rhema with outputs saved by the previous build (including an older Rhema Ticker \| Alpha made as a signage output). | Every output loads with its name, NDI name and look; the old ticker feed still shows only the ticker. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

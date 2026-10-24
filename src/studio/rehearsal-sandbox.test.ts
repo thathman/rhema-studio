@@ -71,7 +71,9 @@ describe("rehearsal is a sandbox (ARCH-003)", () => {
     useTimerStore.getState().start()
     leaveRehearsal()
     expect(useTimerStore.getState().timer).toEqual(real)
-    expect(useJournalStore.getState().entries.map((e) => e.kind)).toEqual(["rehearsal", "rehearsal"])
+    // Only the real start (before rehearsal) and rehearsal on/off.
+    expect(useJournalStore.getState().entries.map((e) => e.kind)).toEqual(["timing", "rehearsal", "rehearsal"])
+    expect(useJournalStore.getState().entries[0].label).toBe("timer started")
   })
 })
 

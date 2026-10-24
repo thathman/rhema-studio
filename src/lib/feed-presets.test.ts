@@ -32,19 +32,27 @@ describe("ready-made feeds (#299)", () => {
     expect(r.output.ticker).toBeUndefined()
   })
 
-  it("the ticker feed is the ticker alone on a transparent frame, and is not flagged as an empty signage loop", () => {
+  it("the ticker feed follows only the ticker: no service content, the ticker on a transparent frame", () => {
     const r = readyMadeFeed(preset("ticker-alpha"), "ndi", [main], BUILTIN_THEMES, () => "t")
     if (!("output" in r)) throw new Error("not added")
-    expect(r.output).toMatchObject({ role: "signage", ticker: true, signage: { mediaIds: [], seconds: 10 }, themeId: "builtin-broadcast-overlay", ndi: { alphaMode: "straightAlpha" } })
-    expect(r.output.shows).toBeUndefined()
+    // Its ticker switch is on too, so an older build draws the ticker on it as well.
+    expect(r.output).toMatchObject({ role: "congregation", shows: ["ticker"], ticker: true, themeId: "builtin-broadcast-overlay", ndi: { alphaMode: "straightAlpha" } })
+    expect(r.output.signage).toBeUndefined()
     const keyed = BUILTIN_THEMES[2]
-    expect(tickerOnly(r.output, 0, keyed)).toBe(true)
+    expect(outputFollows(r.output, keyed)).toBe("Ticker")
+    expect(outputPresentation(r.output, [], keyed)).toBe("Ticker only · transparent, for keying")
+  })
+
+  it("a ticker feed made by an earlier build (a signage loop with no pictures) still reads as the ticker feed", () => {
+    const old: BroadcastOutput = { ...main, id: "t", name: "Rhema Ticker | Alpha", type: "ndi", role: "signage", ticker: true, signage: { mediaIds: [], seconds: 10 }, themeId: "builtin-broadcast-overlay", ndi: defaultNdiSettings("Rhema Ticker | Alpha") }
+    const keyed = BUILTIN_THEMES[2]
+    expect(tickerOnly(old, 0, keyed)).toBe(true)
     // A foyer loop still waiting for pictures, or on an opaque look, is not the ticker feed.
-    expect(tickerOnly(r.output, 2, keyed)).toBe(false)
-    expect(tickerOnly(r.output, 0, BUILTIN_THEMES[0])).toBe(false)
-    expect(outputFollows(r.output, keyed)).toBe("The news ticker from Present")
-    expect(outputFollows(r.output)).toBe("Nothing in the service (its own picture loop)")
-    expect(outputPresentation(r.output, [], BUILTIN_THEMES[2])).toBe("Ticker only · transparent, for keying")
+    expect(tickerOnly(old, 2, keyed)).toBe(false)
+    expect(tickerOnly(old, 0, BUILTIN_THEMES[0])).toBe(false)
+    expect(outputFollows(old, keyed)).toBe("The news ticker from Present")
+    expect(outputFollows(old)).toBe("Nothing in the service (its own picture loop)")
+    expect(outputPresentation(old, [], keyed)).toBe("Ticker only · transparent, for keying")
   })
 
   it("as a browser feed it gets its own link secret", () => {

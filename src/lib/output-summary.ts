@@ -1,6 +1,7 @@
 import { ndiFrameRateToNumber, ndiResolutionDimensions } from "@/lib/broadcast-output-control"
-import { CONTENT_NAMES } from "@/lib/content-names"
+import { FEED_NAMES } from "@/lib/content-names"
 import { tickerOnly } from "@/lib/feed-presets"
+import { followsOnlyTicker, followsTicker } from "@/lib/live-sources"
 import { allSignageIds } from "@/lib/signage"
 import type { BroadcastOutput, BroadcastTheme, Scene } from "@/types"
 
@@ -25,7 +26,7 @@ export function outputDestination(o: BroadcastOutput, monitorLabel?: string): st
 /** What it follows: everything put on air, or only chosen live sources (ADR 0001). */
 export function outputFollows(o: BroadcastOutput, theme?: BroadcastTheme): string {
   if (o.role === "signage") return tickerOnly(o, allSignageIds(o.signage).length, theme) ? "The news ticker from Present" : "Nothing in the service (its own picture loop)"
-  return o.shows?.length ? o.shows.map((k) => CONTENT_NAMES[k]).join(", ") : "Everything put on air"
+  return o.shows?.length ? o.shows.map((k) => FEED_NAMES[k]).join(", ") : "Everything put on air"
 }
 
 /**
@@ -40,9 +41,11 @@ export function outputPresentation(o: BroadcastOutput, scenes: Scene[], theme?: 
     return o.ticker ? "Signage loop · ticker" : "Signage loop"
   }
   const scene = o.sceneId ? scenes.find((s) => s.id === o.sceneId) : undefined
+  // A feed that follows only the ticker (Rhema Ticker | Alpha): the ticker and nothing else.
+  if (!scene && followsOnlyTicker(o)) return theme?.background.type === "transparent" ? "Ticker only · transparent, for keying" : "Ticker only"
   const parts = [scene ? `Scene: ${scene.name}` : "Full screen"]
   if (o.lowerThirds) parts.push("lower thirds")
-  if (o.ticker) parts.push("ticker")
+  if (followsTicker(o)) parts.push("ticker")
   if (!scene && theme?.background.type === "transparent") parts.push("transparent, for keying")
   return parts.join(" · ")
 }

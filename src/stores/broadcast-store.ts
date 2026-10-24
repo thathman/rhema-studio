@@ -26,7 +26,7 @@ import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
-import { feedFrame, sourceOf, type LiveSources, type SourceId } from "@/lib/live-sources"
+import { feedFrame, followsOnlyTicker, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
@@ -82,6 +82,11 @@ export function tickerForScreens(s: { rehearsal: boolean; rehearsalReturn: Rehea
   return s.rehearsal ? (s.rehearsalReturn?.ticker ?? null) : s.ticker
 }
 
+/** The service timer as the real screens have it: in rehearsal, the one from before it (still counting). */
+export function timerForScreens(s: { rehearsal: boolean; rehearsalReturn: RehearsalReturn | null }, timer: TimerState = useTimerStore.getState().timer): TimerState {
+  return s.rehearsal ? (s.rehearsalReturn?.timer ?? timer) : timer
+}
+
 /** What was live before a quick screen took over, so Back can return to it. */
 export interface HeldLive {
   liveVerse: VerseRenderData
@@ -135,10 +140,19 @@ interface BroadcastState {
   heldLive: HeldLive | null
   /** Each kind of content's active value (ADR 0001). Session state, never changed in rehearsal. */
   sources: LiveSources
-  /** Take one source off (kept for Restore); the program goes off air too if it was showing it. */
-  clearSource: (id: SourceId) => void
-  /** Put a cleared source back on. */
-  restoreSource: (id: SourceId) => void
+  /**
+   * The ticker, the service timer and each camera as live sources (ADR 0001): who last changed each
+   * and when; a ticker taken off keeps its words for Restore; a camera off is hidden from scenes.
+   * Session state, never changed in rehearsal.
+   */
+  stateSources: StateSources
+  /**
+   * Take one source off (kept for Restore); the program goes off air too if it was showing it. The
+   * ticker stops (its words kept), the timer pauses, a camera is hidden from scenes.
+   */
+  clearSource: (id: AnySourceId) => void
+  /** Put a cleared source back on: the ticker runs again, the timer resumes, a camera is back in scenes. */
+  restoreSource: (id: AnySourceId) => void
   /** Activate a source without changing the program (a heard verse while a song is up, C11). `by`: who (default: see currentActor). */
   activateSource: (value: VerseRenderData, itemId?: string | null, by?: string) => void
   /** Congregation scenes (ARCH-002). Saved. */
@@ -372,7 +386,7 @@ async function syncSignage(output: BroadcastOutput, theme: BroadcastTheme): Prom
   signageLast.set(output.id, index)
   signageLastList.set(output.id, listKey)
   // Same picture and theme as last time: nothing to send (a present or Clear syncs every output).
-  const ticker = output.ticker ? tickerForScreens(useBroadcastStore.getState()) : null
+  const ticker = followsTicker(output) ? tickerForScreens(useBroadcastStore.getState()) : null
   const stamp = `${listKey}:${index}:${ids[index] ?? ""}:${theme.id}:${theme.updatedAt ?? ""}:${tickerKey(ticker)}`
   if (signageEmitted.get(output.id) === stamp) {
     ensureSignageTicker()
@@ -441,7 +455,7 @@ function syncTickerOutputs(): void {
   // Rehearsal's ticker stays in the app (signage would otherwise show it).
   if (s.rehearsal) return
   // Never the stage; signage (the foyer) when it is turned on there.
-  for (const o of s.outputs) if ((o.ticker || showsSceneWith(o, "ticker")) && o.role !== "stage") s.syncBroadcastOutputFor(o.id)
+  for (const o of s.outputs) if ((followsTicker(o) || showsSceneWith(o, "ticker")) && o.role !== "stage") s.syncBroadcastOutputFor(o.id)
 }
 
 /** The output shows a scene with a layer of this kind (a ticker, lower third or logo in its own box). */
@@ -514,6 +528,22 @@ function noteSources(by = currentActor()): void {
   // A quick screen lasts until something else is shown.
   if (id !== "quick" && sources.quick?.on) sources = { ...sources, quick: { ...sources.quick, on: false } }
   if (sources !== s.sources) useBroadcastStore.setState({ sources })
+}
+
+/**
+ * Record a change to the ticker, the timer or a camera (ADR 0001): who made it and when, the next
+ * revision. Never in rehearsal, so the real sources never see what was rehearsed.
+ */
+function markSource(id: StateSourceId, on: boolean, extra: Pick<StateSource, "ticker"> = {}): void {
+  useBroadcastStore.setState(sourceMark(id, on, extra))
+}
+
+/** The same as a patch, to go with the change it records in one update (none in rehearsal). */
+function sourceMark(id: StateSourceId, on: boolean, extra: Pick<StateSource, "ticker"> = {}): Pick<BroadcastState, "stateSources"> | Record<string, never> {
+  const s = useBroadcastStore.getState()
+  if (s.rehearsal) return {}
+  const by = currentActor()
+  return { stateSources: { ...s.stateSources, [id]: { revision: ++activations, activatedAt: Date.now(), ...(by ? { by } : {}), on, ...extra } } }
 }
 
 /**
@@ -608,6 +638,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   liveItemId: null,
   heldLive: null,
   sources: {},
+  stateSources: {},
   scenes: [],
   sceneReturn: {},
   scenePresets: [],
@@ -779,7 +810,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const liveTicker = tickerForScreens(s)
       const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl }, output, scene)
       const overlay = output.lowerThirds && !owns.lowerThird ? liveOverlay : null
-      const ticker = output.ticker && !owns.ticker ? liveTicker : null
+      const ticker = followsTicker(output) && !owns.ticker ? liveTicker : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
       deliver(outputId, { theme, verse: null, overlay, ticker, scene: frame, sound: false })
       return
@@ -788,7 +819,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const overlay = output.lowerThirds ? overlayFor(s.lowerThird, verse) : null
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
-    const ticker = output.ticker ? tickerForScreens(s) : null
+    const ticker = followsTicker(output) ? tickerForScreens(s) : null
     recordFrame(outputId, { theme, verse, overlay, ticker })
     deliver(outputId, {
       theme,
@@ -1005,7 +1036,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setTicker: (on) => {
     const s = get()
     const live = on && s.tickerItems.some((i) => i.trim()) ? { items: s.tickerItems, style: s.tickerStyle, startedAt: Date.now(), backing: on.backing } : null
-    set({ ticker: live })
+    // The ticker source: on, or off with the words it ran kept for Restore.
+    set({ ticker: live, ...(live ? sourceMark("ticker", true) : s.ticker ? sourceMark("ticker", false, { ticker: s.ticker }) : {}) })
     syncTickerOutputs()
   },
   pauseTicker: (paused) => {
@@ -1013,7 +1045,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (!t || !!t.pausedAt === paused) return
     const now = Date.now()
     // Resuming moves the start on by the pause, so the words carry on from where they stopped.
-    set({ ticker: paused ? { ...t, pausedAt: now } : { ...t, startedAt: t.startedAt + (now - (t.pausedAt ?? now)), pausedAt: undefined } })
+    set({ ticker: paused ? { ...t, pausedAt: now } : { ...t, startedAt: t.startedAt + (now - (t.pausedAt ?? now)), pausedAt: undefined }, ...sourceMark("ticker", true) })
     syncTickerOutputs()
   },
   saveTickerStyle: (tickerStyle, backing) => {
@@ -1065,6 +1097,20 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setAutoMode: (mode) => set({ autoLive: mode === "auto", autoBibleFeeds: mode === "bible" }),
   clearSource: (id) => {
     const s = get()
+    if (isStateSource(id)) {
+      // The ticker, timer and cameras are left alone in rehearsal (their real state is not the app's then).
+      if (s.rehearsal) return
+      if (id === "ticker") {
+        if (s.ticker) get().setTicker(null)
+      } else if (id === "timer") {
+        if (useTimerStore.getState().timer.startedAt !== null) useTimerStore.getState().pause()
+      } else if (s.stateSources[id]?.on !== false) {
+        // A camera hidden from scenes: every scene with it shows its fallback there, the scenes unchanged.
+        markSource(id, false)
+        get().syncBroadcastOutput()
+      }
+      return
+    }
     const cur = s.sources[id]
     if (!cur?.on) return
     if (s.isLive && s.liveVerse === cur.value) return get().setLive(false)
@@ -1073,6 +1119,25 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   restoreSource: (id) => {
     const s = get()
+    if (isStateSource(id)) {
+      if (s.rehearsal) return
+      const cur = s.stateSources[id]
+      if (cur?.on !== false) return
+      if (id === "ticker") {
+        // The ticker that was taken off, words, look and backing, its crawl starting again.
+        if (s.ticker || !cur.ticker) return
+        const was: Ticker = { ...cur.ticker, startedAt: Date.now() }
+        delete was.pausedAt
+        set({ ticker: was, ...sourceMark("ticker", true) })
+        syncTickerOutputs()
+      } else if (id === "timer") {
+        if (useTimerStore.getState().timer.startedAt === null) useTimerStore.getState().start()
+      } else {
+        markSource(id, true)
+        get().syncBroadcastOutput()
+      }
+      return
+    }
     const cur = s.sources[id]
     if (!cur || cur.on || s.rehearsal) return
     if (!s.isLive && s.cleared && s.liveVerse === cur.value) return get().setLive(true)
@@ -1366,7 +1431,8 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
  * output left every video silent.)
  */
 export function soundOutputId(outputs: BroadcastOutput[], status: Record<string, { previewOpen?: boolean } | undefined>): string | null {
-  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
+  // A ticker-only feed never shows a video, so it never plays one's sound.
+  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation" && !followsOnlyTicker(o))
   const main = congregation.find((o) => o.id === MAIN_OUTPUT_ID)
   if (main) return main.id
   return (congregation.find((o) => status[o.id]?.previewOpen) ?? congregation[0])?.id ?? null
@@ -1399,6 +1465,22 @@ useTimerStore.subscribe((s, prev) => {
     const scene = o.sceneId ? b.scenes.find((x) => x.id === o.sceneId) : undefined
     if (scene?.layers.some((l) => l.kind === "clock" && l.visible)) b.syncBroadcastOutputFor(o.id)
   }
+})
+// The service timer as a live source (ADR 0001): who started, paused or resumed it and when, from
+// wherever that was done (Present, a cue, a joined desk). Back to idle (reset) it is no source.
+useTimerStore.subscribe((t, prev) => {
+  if (t.timer === prev.timer) return
+  const s = useBroadcastStore.getState()
+  if (s.rehearsal) return
+  const running = t.timer.startedAt !== null
+  if (!running && t.timer.accumulatedMs === 0) {
+    if (!s.stateSources.timer) return
+    const stateSources = { ...s.stateSources }
+    delete stateSources.timer
+    useBroadcastStore.setState({ stateSources })
+    return
+  }
+  if (running !== (prev.timer.startedAt !== null) || !s.stateSources.timer) markSource("timer", running)
 })
 // A logo layer shows the Brand Kit logo: a new logo reaches the scenes on air.
 useSettingsStore.subscribe((s, prev) => {

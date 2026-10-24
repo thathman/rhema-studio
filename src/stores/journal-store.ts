@@ -8,7 +8,8 @@ import { formatJournal, type JournalEntry } from "@/lib/journal"
 import { plannedMs } from "@/lib/service-timing"
 import { useSettingsStore } from "@/stores/settings-store"
 import { CONTENT_NAMES } from "@/lib/content-names"
-import type { SourceId } from "@/lib/live-sources"
+import { tickerWords, type SourceId, type StateSource, type StateSourceId } from "@/lib/live-sources"
+import { cameraWords } from "@/lib/show-health"
 import type { ContentType } from "@/types/broadcast"
 
 interface JournalState {
@@ -131,6 +132,31 @@ useBroadcastStore.subscribe((s, prev) => {
       useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}${b.by && !back ? ` · by ${b.by}` : ""}`, itemId: b.itemId, source: name })
     } else if (a?.on && !b?.on) {
       useJournalStore.getState().add({ kind: "source", label: `${name} off: ${a.value.reference}`, itemId: a.itemId, source: name })
+    }
+  }
+})
+
+// The ticker, the service timer and the cameras as live sources (ADR 0001): each change, with who.
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.stateSources === prev.stateSources) return
+  const add = useJournalStore.getState().add
+  for (const [id, b] of Object.entries(s.stateSources) as [StateSourceId, StateSource][]) {
+    const a = prev.stateSources[id]
+    if (a?.revision === b.revision) continue
+    const by = b.by ? ` · by ${b.by}` : ""
+    if (id === "timer") {
+      // As the timer's other entries: "Femi: timer paused".
+      const verb = b.on ? (a ? "resumed" : "started") : "paused"
+      add({ kind: "timing", label: `${b.by ? `${b.by}: ` : ""}timer ${verb}` })
+    } else if (id === "ticker") {
+      const words = tickerWords(b.on ? s.ticker : b.ticker)
+      const held = !!s.ticker?.pausedAt
+      const verb = !b.on ? "off" : a && !a.on ? "back" : a?.on && held !== !!prev.ticker?.pausedAt ? (held ? "held still" : "moving again") : "on"
+      add({ kind: "source", label: `Ticker ${verb}${words ? `: ${words}` : ""}${by}`, source: "Ticker" })
+    } else {
+      const name = id.slice("camera:".length)
+      const label = useSettingsStore.getState().cameras.find((c) => c.name === name)?.label ?? name
+      add({ kind: "source", label: `${cameraWords(label)} ${b.on ? "back in scenes" : "hidden from scenes"}${by}`, source: "Cameras" })
     }
   }
 })
