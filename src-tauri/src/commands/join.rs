@@ -5,9 +5,10 @@
 use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use futures_util::StreamExt;
+use rhema_join::discover::{browse, found, Found};
+use rhema_join::host::{base_url, client, Host};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::watch;
@@ -18,95 +19,31 @@ pub struct JoinRuntime {
     stop: Mutex<Option<watch::Sender<bool>>>,
 }
 
-/// `host:port` only: a name or address and a port, no scheme or path.
-fn base_url(address: &str) -> Result<String, String> {
-    let a = address.trim();
-    let (host, port) = a.rsplit_once(':').ok_or("Give the host's address and port, e.g. 192.168.1.20:8080")?;
-    let port: u16 = port.parse().map_err(|_| "The port must be a number, e.g. 8080")?;
-    let host_ok = !host.is_empty() && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '[' | ']' | ':'));
-    if !host_ok || port == 0 {
-        return Err("That is not an address and port, e.g. 192.168.1.20:8080".into());
-    }
-    Ok(format!("http://{host}:{port}"))
-}
-
-fn client(timeout: Option<Duration>) -> Result<reqwest::Client, String> {
-    let mut b = reqwest::Client::builder().connect_timeout(Duration::from_secs(5));
-    if let Some(t) = timeout {
-        b = b.timeout(t);
-    }
-    b.build().map_err(|e| e.to_string())
-}
-
-#[derive(Deserialize)]
-struct PairReply {
-    success: bool,
-    token: Option<String>,
-    error: Option<String>,
-}
-
 /// Pair with the host while its pairing window is open; the token comes back once. `role` asks
 /// for a role that does less than Present (an OBS companion, #209); the host decides.
 #[tauri::command]
 pub async fn join_pair(address: String, code: String, name: String, role: Option<String>) -> Result<String, String> {
-    let url = format!("{}/api/v1/pair", base_url(&address)?);
-    let mut body = serde_json::json!({ "code": code.trim(), "name": name.trim() });
-    if let Some(r) = role.filter(|r| r == "obs-companion") {
-        body["role"] = serde_json::Value::String(r);
-    }
-    let reply: PairReply = client(Some(Duration::from_secs(10)))?
-        .post(url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("Could not reach the host: {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("The host's answer was not understood: {e}"))?;
-    match (reply.success, reply.token) {
-        (true, Some(token)) => Ok(token),
-        _ => Err(reply.error.unwrap_or_else(|| "The host refused".into())),
-    }
+    rhema_join::host::pair(&Host::plain(&address)?, &code, &name, role.as_deref()).await
 }
 
 /// The name and role the host gives this computer's key.
 #[tauri::command]
 pub async fn join_me(address: String, token: String) -> Result<serde_json::Value, String> {
-    let url = format!("{}/api/v1/me", base_url(&address)?);
-    let r = client(Some(Duration::from_secs(10)))?.get(url).header("X-Rhema-Key", token).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
-    if !r.status().is_success() {
-        return Err(if r.status().as_u16() == 401 { "The host no longer knows this computer: pair again".into() } else { format!("The host answered {}", r.status()) });
-    }
-    r.json().await.map_err(|e| e.to_string())
+    rhema_join::host::me(&Host::plain(&address)?, &token).await
 }
 
 /// What an OBS companion is told by its host (#209): the church's cameras, who reads them, and
 /// its own way to read them while the host's camera router runs.
 #[tauri::command]
 pub async fn join_cameras(address: String, token: String) -> Result<serde_json::Value, String> {
-    let url = format!("{}/api/v1/cameras/watch", base_url(&address)?);
-    let r = client(Some(Duration::from_secs(8)))?.get(url).header("X-Rhema-Key", token).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
-    let status = r.status().as_u16();
-    let v = r.json::<serde_json::Value>().await.unwrap_or_default();
-    if (200..300).contains(&status) {
-        return Ok(v);
-    }
-    let why = v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
-    Err(if status == 423 { format!("paused: {why}") } else { why })
+    rhema_join::host::cameras(&Host::plain(&address)?, &token).await
 }
 
 /// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
 /// OBS plays, for the host's Production → Cameras.
 #[tauri::command]
 pub async fn join_tally(address: String, token: String, tally: serde_json::Value) -> Result<(), String> {
-    let url = format!("{}/api/v1/cameras/tally", base_url(&address)?);
-    let r = client(Some(Duration::from_secs(5)))?.post(url).header("X-Rhema-Key", token).json(&tally).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
-    if r.status().is_success() {
-        return Ok(());
-    }
-    let status = r.status().as_u16();
-    let v = r.json::<serde_json::Value>().await.unwrap_or_default();
-    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from))
+    rhema_join::host::tally(&Host::plain(&address)?, &token, &tally).await
 }
 
 /// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this
@@ -170,39 +107,14 @@ pub async fn join_voice(address: String, token: String, sdp: String) -> Result<S
 /// ("connected", "reconnecting" with the reason, "refused", "stopped"). Reconnects by itself.
 #[tauri::command]
 pub fn join_connect(app: AppHandle, state: State<'_, JoinRuntime>, address: String, token: String) -> Result<(), String> {
-    let url = format!("{}/api/v1/live/events", base_url(&address)?);
-    let (tx, mut rx) = watch::channel(false);
+    let host = Host::plain(&address)?;
+    let (tx, rx) = watch::channel(false);
     if let Some(old) = state.stop.lock().map_err(|e| e.to_string())?.replace(tx) {
         let _ = old.send(true);
     }
-    tauri::async_runtime::spawn(async move {
-        let mut wait = 1u64;
-        loop {
-            if *rx.borrow() {
-                break;
-            }
-            let result = follow(&app, &url, &token, &mut rx).await;
-            if *rx.borrow() {
-                break;
-            }
-            match result {
-                Err(Refused(status)) => {
-                    let _ = app.emit("join:state", serde_json::json!({ "state": "refused", "error": format!("The host refused this computer ({status}): pair again") }).to_string());
-                    return;
-                }
-                Ok(()) | Err(Lost(_)) => {
-                    let reason = match result { Err(Lost(e)) => e, _ => "the host closed the connection".into() };
-                    let _ = app.emit("join:state", serde_json::json!({ "state": "reconnecting", "error": reason }).to_string());
-                }
-            }
-            tokio::select! {
-                () = tokio::time::sleep(Duration::from_secs(wait)) => {}
-                _ = rx.changed() => {}
-            }
-            wait = (wait * 2).min(10);
-        }
-        let _ = app.emit("join:state", serde_json::json!({ "state": "stopped" }).to_string());
-    });
+    tauri::async_runtime::spawn(rhema_join::host::follow_live(host, token, rx, move |event, payload| {
+        let _ = app.emit(event, payload);
+    }));
     Ok(())
 }
 
@@ -213,59 +125,6 @@ pub fn join_disconnect(state: State<'_, JoinRuntime>) -> Result<(), String> {
         let _ = stop.send(true);
     }
     Ok(())
-}
-
-enum FollowError {
-    Refused(u16),
-    Lost(String),
-}
-use FollowError::{Lost, Refused};
-
-async fn follow(app: &AppHandle, url: &str, token: &str, stop: &mut watch::Receiver<bool>) -> Result<(), FollowError> {
-    let r = client(None).map_err(Lost)?.get(url).header("X-Rhema-Key", token).header("Accept", "text/event-stream").send().await.map_err(|e| Lost(e.to_string()))?;
-    let status = r.status().as_u16();
-    if status == 401 || status == 403 {
-        return Err(Refused(status));
-    }
-    if !r.status().is_success() {
-        return Err(Lost(format!("the host answered {status}")));
-    }
-    let _ = app.emit("join:state", serde_json::json!({ "state": "connected" }).to_string());
-    let mut body = r.bytes_stream();
-    let mut buf = String::new();
-    loop {
-        let chunk = tokio::select! {
-            c = body.next() => c,
-            _ = stop.changed() => return Ok(()),
-        };
-        let Some(chunk) = chunk else { return Ok(()) };
-        buf.push_str(&String::from_utf8_lossy(&chunk.map_err(|e| Lost(e.to_string()))?));
-        // A message ends with a blank line; keep any unfinished one.
-        while let Some(end) = buf.find("\n\n") {
-            let message: String = buf.drain(..end + 2).collect();
-            if let Some(data) = sse_data(&message) {
-                let _ = app.emit("join:live", data);
-            }
-        }
-        // A host that sends garbage without blank lines must not grow this without bound.
-        if buf.len() > 4 * 1024 * 1024 {
-            return Err(Lost("the host sent a message too large".into()));
-        }
-    }
-}
-
-/// The data of one server-sent event named "live" (multi-line data joined), or None.
-fn sse_data(message: &str) -> Option<String> {
-    let mut event = "message";
-    let mut data: Vec<&str> = Vec::new();
-    for line in message.lines() {
-        if let Some(v) = line.strip_prefix("event:") {
-            event = v.trim();
-        } else if let Some(v) = line.strip_prefix("data:") {
-            data.push(v.strip_prefix(' ').unwrap_or(v));
-        }
-    }
-    (event == "live" && !data.is_empty()).then(|| data.join("\n"))
 }
 
 /// The port Rhema Receiver (the Google TV app, #198) listens on for a screen to show.
@@ -412,40 +271,12 @@ pub async fn tv_status(address: String) -> Result<TvStatus, String> {
 /// What Rhema Receiver calls itself on the network (#198), so Rhema can find TVs by themselves.
 const TV_SERVICE: &str = "_rhema-tv._tcp.local.";
 
-/// A Rhema Receiver TV or Rhema host found on the network: its name and its address (ip:port).
-#[derive(Serialize, Debug, PartialEq)]
-pub struct Found {
-    name: String,
-    address: String,
-}
-
 /// The TV's own name: its service name without the service type and the " · Rhema" the receiver adds
 /// ("Hall TV · Rhema._rhema-tv._tcp.local." → "Hall TV"). Android TV already announces the plain name
 /// for its own remote service and refuses a second service with the same name.
 fn tv_name(fullname: &str) -> String {
     let name = fullname.strip_suffix(TV_SERVICE).unwrap_or(fullname).trim_end_matches('.');
     name.strip_suffix(" · Rhema").unwrap_or(name).to_string()
-}
-
-/// The TV's church-network address: a private one (192.168…, 10…, 172.16–31…) first, else a
-/// link-local one (169.254…). Anything else is not a TV on this LAN and is left out.
-fn tv_ip(ips: &[Ipv4Addr]) -> Option<Ipv4Addr> {
-    ips.iter().filter(|ip| ip.is_private()).min().or_else(|| ips.iter().filter(|ip| ip.is_link_local()).min()).copied()
-}
-
-/// What a search heard (service name → port and IPv4 addresses), as a list sorted by name.
-/// Left out: anything with no LAN IPv4 address, or whose port `port_ok` refuses. The same address
-/// heard twice is listed once.
-fn found(seen: BTreeMap<String, (u16, Vec<Ipv4Addr>)>, port_ok: impl Fn(u16) -> bool, name: fn(&str) -> String) -> Vec<Found> {
-    let mut list: Vec<Found> = seen
-        .into_iter()
-        .filter(|(_, (port, _))| port_ok(*port))
-        .filter_map(|(full, (port, ips))| tv_ip(&ips).map(|ip| Found { name: name(&full), address: format!("{ip}:{port}") }))
-        .collect();
-    list.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.address.cmp(&b.address)));
-    let mut addresses = std::collections::HashSet::new();
-    list.retain(|f| addresses.insert(f.address.clone()));
-    list
 }
 
 /// The TVs a search heard: only those on Rhema Receiver's port.
@@ -458,28 +289,6 @@ fn browse_tvs(window: Duration) -> Result<Vec<Found>, String> {
     browse(TV_SERVICE, window, "TVs").map(found_tvs)
 }
 
-/// Listen for one kind of service for a moment (blocking): what was heard, by service name.
-fn browse(service: &str, window: Duration, what: &str) -> Result<BTreeMap<String, (u16, Vec<Ipv4Addr>)>, String> {
-    let daemon = mdns_sd::ServiceDaemon::new().map_err(|e| format!("Could not look for {what} on the network: {e}"))?;
-    let events = daemon.browse(service).map_err(|e| format!("Could not look for {what} on the network: {e}"))?;
-    let deadline = Instant::now() + window;
-    let mut seen = BTreeMap::new();
-    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
-        match events.recv_timeout(left) {
-            Ok(mdns_sd::ServiceEvent::ServiceResolved(s)) => {
-                seen.insert(s.fullname.clone(), (s.port, s.get_addresses_v4().into_iter().collect()));
-            }
-            Ok(mdns_sd::ServiceEvent::ServiceRemoved(_, full)) => {
-                seen.remove(&full);
-            }
-            Ok(_) => {}
-            Err(_) => break,
-        }
-    }
-    let _ = daemon.shutdown();
-    Ok(seen)
-}
-
 /// Find the Rhema Receivers on this network (#198), so nobody has to type a TV's address. Takes
 /// about two and a half seconds; the code on the TV's screen is still needed to show anything.
 #[tauri::command]
@@ -489,31 +298,20 @@ pub async fn tv_discover() -> Result<Vec<Found>, String> {
         .map_err(|e| format!("Could not look for TVs on the network: {e}"))?
 }
 
-/// A host's name as it announces it (#197): its service name without the service type, with any
-/// escaped characters plain again ("CAC Ibadan._rhema-host._tcp.local." → "CAC Ibadan").
-fn host_name(fullname: &str) -> String {
-    let name = fullname.strip_suffix(super::host_advert::HOST_SERVICE).unwrap_or(fullname).trim_end_matches('.');
-    name.replace("\\.", ".").replace("\\\\", "\\")
-}
-
-/// The hosts a search heard: any port (a host chooses its own), never port 0.
-fn found_hosts(seen: BTreeMap<String, (u16, Vec<Ipv4Addr>)>) -> Vec<Found> {
-    found(seen, |port| port != 0, host_name)
-}
-
 /// Find the Rhema hosts on this network (#197), so a joining computer can pick one instead of
 /// typing its address. Takes about two and a half seconds. Only the address comes from here:
 /// pairing still needs the code on the host's screen, and the host checks it.
 #[tauri::command]
 pub async fn host_discover() -> Result<Vec<Found>, String> {
-    tokio::task::spawn_blocking(|| browse(super::host_advert::HOST_SERVICE, Duration::from_millis(2500), "Rhema hosts").map(found_hosts))
-        .await
-        .map_err(|e| format!("Could not look for Rhema hosts on the network: {e}"))?
+    rhema_join::discover::discover_hosts().await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Moved to the shared crate with Rhema Companion (#209); still checked here as this app uses them.
+    use rhema_join::discover::{found_hosts, lan_ip as tv_ip};
+    use rhema_join::host::sse_data;
 
     #[test]
     fn a_tv_says_which_feed_it_shows_and_an_old_one_says_it_cannot() {

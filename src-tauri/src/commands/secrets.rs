@@ -8,51 +8,27 @@
 //! user before an app reads the keychain (macOS after an update) asks once,
 //! not once per secret.
 
+#[cfg(test)]
 use keyring::Entry;
+/// Shared with Rhema Companion, which keeps its own entry (rhema_join::secrets).
+pub use rhema_join::secrets::set_verified;
 
 const SERVICE: &str = "Rhema Studio";
+#[cfg(test)]
 const ACCOUNT: &str = "settings-secrets";
-
-fn entry() -> Result<Entry, String> {
-    Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())
-}
-
-/// Store `value` and read it back; true only when the store returned the
-/// same value, so the caller may safely blank its own copy. An empty value
-/// deletes the entry.
-pub fn set_verified(entry: &Entry, value: &str) -> Result<bool, String> {
-    if value.is_empty() {
-        return match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(true),
-            Err(e) => Err(e.to_string()),
-        };
-    }
-    entry.set_password(value).map_err(|e| e.to_string())?;
-    Ok(entry.get_password().map_err(|e| e.to_string())? == value)
-}
 
 /// The stored JSON, `None` when nothing is stored; an error when the store
 /// could not be read (locked, unavailable), which the caller must not
 /// mistake for "empty".
 #[tauri::command(async)]
 pub fn secrets_get() -> Result<Option<String>, String> {
-    match entry()?.get_password() {
-        Ok(v) => Ok(Some(v)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+    rhema_join::secrets::get(SERVICE)
 }
 
 /// Replace the stored JSON (empty deletes it). Must be a JSON object of strings.
 #[tauri::command(async)]
 pub fn secrets_set(json: String) -> Result<bool, String> {
-    if !json.is_empty() {
-        let v: serde_json::Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-        if !v.as_object().is_some_and(|o| o.values().all(serde_json::Value::is_string)) {
-            return Err("secrets must be a JSON object of strings".into());
-        }
-    }
-    set_verified(&entry()?, &json)
+    rhema_join::secrets::set(SERVICE, &json)
 }
 
 #[cfg(test)]

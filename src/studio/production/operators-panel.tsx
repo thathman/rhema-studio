@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { RUN_STATE_WORDS } from "@/lib/timing-state"
 import { validTimeZone } from "@/lib/church-time"
-import { MonitorIcon, PinIcon, SearchIcon } from "lucide-react"
+import { PinIcon } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -16,7 +16,6 @@ import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { pairingLabel } from "@/lib/setup-readiness"
 import { deskFreshness, skewWords } from "@/lib/desk-freshness"
 import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
@@ -24,6 +23,10 @@ import { HostLookOffer } from "@/studio/production/host-look-offer"
 import { CameraDesk, DeskSceneEditor, ObsDesk, SongsDesk, StageDesk } from "@/studio/production/joined-desks"
 import { deskEditable } from "@/lib/desk-scenes"
 import { editsScenes, REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
+import { Card, JoinForm } from "@/studio/production/join-form"
+
+// The join form has its own module so Rhema Companion (#209) shows it without the studio's desks.
+export { JoinForm }
 
 type Desk = "clock" | "bible" | "scenes" | "songs" | "stage" | "cameras" | "obs"
 /** Which desks a role gets on a joined computer (the host checks every command again). */
@@ -71,18 +74,6 @@ export function OperatorsPanel() {
   )
 }
 
-function Card({ title, kicker, children }: { title: string; kicker: string; children: React.ReactNode }) {
-  return (
-    <section aria-label={title} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs">
-      <div>
-        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{kicker}</p>
-        <h3 className="text-sm font-bold">{title}</h3>
-      </div>
-      {children}
-    </section>
-  )
-}
-
 function HostCard() {
   const devices = useSettingsStore((s) => s.remoteDevices)
   const [http, setHttp] = useState<{ running: boolean; lan: boolean; port: number | null } | null>(null)
@@ -126,105 +117,6 @@ function JoinCard() {
   const status = useJoin((s) => s.status)
   if (status !== "off") return <JoinedDesk />
   return <JoinForm />
-}
-
-/** A Rhema host heard on the network (host_discover): its name and ip:port. */
-type FoundHost = { name: string; address: string }
-
-/**
- * Join a host: Rhema looks for hosts on the network when this opens (Find hosts looks again), and
- * picking one fills its address, or type it. Nothing is filled in by itself and the pairing code is
- * always typed: a computer on the network can call itself anything, and the host checks the code.
- */
-export function JoinForm({ asCompanion = false }: { asCompanion?: boolean } = {}) {
-  const error = useJoin((s) => s.error)
-  const address = useSettingsStore((s) => s.joinAddress)
-  const token = useSettingsStore((s) => s.joinToken)
-  // The name the host sees for this desk: the last one used, else "operator · this computer" (#298 S2.3).
-  const [form, setForm] = useState(() => {
-    const st = useSettingsStore.getState()
-    return { address, code: "", name: st.joinName || pairingLabel(st.operatorName, st.setup.deviceName, st.setup.deviceId) }
-  })
-  // null until the first look is back; it starts as soon as this opens.
-  const [hosts, setHosts] = useState<FoundHost[] | null>(null)
-  const [finding, setFinding] = useState(true)
-  const [findError, setFindError] = useState<string | null>(null)
-  const codeInput = useRef<HTMLInputElement>(null)
-  const look = () =>
-    invoke<FoundHost[]>("host_discover")
-      .then(
-        (found) => {
-          setHosts(Array.isArray(found) ? found : [])
-          setFindError(null)
-        },
-        (e) => setFindError(String(e)),
-      )
-      .finally(() => setFinding(false))
-  useEffect(() => {
-    void look()
-  }, []) // once, when the form opens
-  const pick = (host: FoundHost) => {
-    setForm((f) => ({ ...f, address: host.address }))
-    codeInput.current?.focus()
-  }
-  return (
-    <Card kicker="Another computer" title="Join a host">
-      <p className="text-muted-foreground">
-        {asCompanion ? "Pair with the Rhema that runs the service, to take its cameras into OBS here." : "Follow the Rhema that runs the service and help from here, as its host allows."} On the host: Settings → Remote control → Pair a device. Then pick the host below (check its address matches the one on its screen) or type its address, and type its code.
-      </p>
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Rhema hosts on this network">
-        {hosts?.map((h) => (
-          <Button key={h.address} type="button" size="sm" variant={form.address.trim() === h.address ? "secondary" : "outline"} aria-pressed={form.address.trim() === h.address} onClick={() => pick(h)} title={h.address}>
-            <MonitorIcon aria-hidden />
-            {h.name}
-            <span className="text-muted-foreground tabular-nums">{h.address}</span>
-          </Button>
-        ))}
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={finding}
-          onClick={() => {
-            setFinding(true)
-            void look()
-          }}
-        >
-          <SearchIcon aria-hidden />
-          {finding ? "Looking for hosts…" : "Find hosts"}
-        </Button>
-      </div>
-      {!finding && hosts?.length === 0 && !findError && <p className="text-muted-foreground">No host found. Is Remote control on at the host, accepting other devices, on the same network? You can also type its address.</p>}
-      {findError && <p className="text-muted-foreground">{findError}. You can type the host's address.</p>}
-      <form
-        className="flex flex-col gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void useJoin.getState().pair(form.address, form.code, form.name || (asCompanion ? "OBS computer" : "Operator"), asCompanion)
-        }}
-      >
-        <label className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">Host address and port</span>
-          <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="192.168.1.20:8080" required className="h-8 rounded-md border border-input bg-transparent px-2" />
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-0.5">
-            <span className="text-xs text-muted-foreground">Pairing code</span>
-            <input ref={codeInput} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} inputMode="numeric" required className="h-8 rounded-md border border-input bg-transparent px-2 tracking-widest" />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-xs text-muted-foreground">This computer's name</span>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} className="h-8 rounded-md border border-input bg-transparent px-2" />
-          </label>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" size="sm">Join</Button>
-          {address && token && <Button type="button" size="sm" variant="outline" onClick={() => void useJoin.getState().connect()}>Join {address} again</Button>}
-        </div>
-        {error && <p role="alert" className="text-destructive">{error}</p>}
-      </form>
-    </Card>
-  )
 }
 
 /** A joined computer's desk: the host's service as it is now, and the controls its role allows. */
