@@ -48,6 +48,8 @@ public class MainActivity extends Activity {
     private static final int MAX_TRIES = 5;
     private static final long INFO_MS = 20_000;
     private static final long PENDING_MS = 30_000;
+    /** How long a code still works after it leaves the screen (time to finish typing it). */
+    private static final long GRACE_MS = 120_000;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final SecureRandom random = new SecureRandom();
@@ -55,8 +57,14 @@ public class MainActivity extends Activity {
     private WebView web;
     private TextView info;
     private ShowServer server;
-    private String code;
+    private CodeProof.Code code;
     private int triesLeft;
+    /**
+     * Until when (elapsedRealtime) the code works: always while it is on screen, then GRACE_MS more.
+     * Seeing the screen is what lets someone send it a feed, so a code seen once (or photographed,
+     * or caught on a livestream of the stage) must not work days later.
+     */
+    private long codeUntil;
     private volatile String problem;
     private NsdManager nsd;
     /** The code check waiting for its /show (see challenge). */
@@ -100,7 +108,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (problem == null && shown() != null) info.setVisibility(View.GONE);
+                if (problem == null && shown() != null) hideInfo();
             }
         });
 
@@ -139,9 +147,20 @@ public class MainActivity extends Activity {
     }
 
     private synchronized void newCode() {
-        code = String.format("%06d", random.nextInt(1_000_000));
+        code = new CodeProof.Code(String.format("%06d", random.nextInt(1_000_000)));
         triesLeft = MAX_TRIES;
         pendingKey = null;
+    }
+
+    private synchronized void codeOnScreen(boolean on) {
+        codeUntil = on ? Long.MAX_VALUE : SystemClock.elapsedRealtime() + GRACE_MS;
+    }
+
+    /** Takes the address and code off the screen; the code works GRACE_MS longer. */
+    private void hideInfo() {
+        if (info.getVisibility() != View.VISIBLE) return;
+        info.setVisibility(View.GONE);
+        codeOnScreen(false);
     }
 
     private void retry(String why) {
@@ -162,7 +181,7 @@ public class MainActivity extends Activity {
     private final Runnable hide = new Runnable() {
         @Override
         public void run() {
-            if (shown() != null && problem == null) info.setVisibility(View.GONE);
+            if (shown() != null && problem == null) hideInfo();
         }
     };
 
@@ -174,9 +193,10 @@ public class MainActivity extends Activity {
         t.append(shown() == null ? "To show a screen here: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n" : "To show another screen: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n");
         t.append("TV name   ").append(name()).append("\n");
         t.append("TV address   ").append(ip == null ? "not on a network" : ip).append("\n");
-        t.append(triesLeft > 0 ? "Code   " + code : "Too many tries: press OK for a new code");
+        t.append(triesLeft > 0 ? "Code   " + code.digits : "Too many tries: press OK for a new code");
         info.setText(t);
         info.setVisibility(View.VISIBLE);
+        codeOnScreen(true);
         ui.removeCallbacks(hide);
         if (!stay) ui.postDelayed(hide, INFO_MS);
     }
@@ -195,7 +215,7 @@ public class MainActivity extends Activity {
     /** OK: hide the address and code, or show them with a new code (also after too many wrong ones). */
     private synchronized void okPressed() {
         if (info.getVisibility() == View.VISIBLE && shown() != null && problem == null && triesLeft > 0) {
-            info.setVisibility(View.GONE);
+            hideInfo();
         } else {
             newCode();
             showInfo(shown() == null || problem != null);
@@ -295,9 +315,14 @@ public class MainActivity extends Activity {
      * why[0]. Each exchange is one try, whatever code Rhema typed: the TV cannot tell a wrong code
      * from a right one here (that is what keeps the code from being guessed offline), so five
      * exchanges without a shown feed lock the code until OK is pressed. The answer is good for one
-     * /show from the same computer within 30 seconds.
+     * /show from the same computer within 30 seconds. A code no longer on screen (GRACE_MS after it
+     * left) is refused at once, before any maths and without using a try.
      */
     synchronized String[] challenge(String x, String peer, String local, String[] why) {
+        if (SystemClock.elapsedRealtime() > codeUntil) {
+            why[0] = "No code is on the TV's screen: press OK on the TV's remote to show one, then type it";
+            return null;
+        }
         if (triesLeft <= 0) {
             why[0] = "Too many tries: press OK on the TV's remote for a new code";
             return null;
@@ -329,10 +354,12 @@ public class MainActivity extends Activity {
      * check with the same code. Null when shown, else why not.
      */
     synchronized String show(String peer, final String url, String proof) {
+        // Only the computer that did the check can use (or spend) it: another device's /show in
+        // between must not break Rhema's exchange.
+        if (pendingKey == null || !peer.equals(pendingPeer)) return "Rhema must check the code first (update Rhema if this keeps happening)";
         byte[] key = pendingKey;
-        boolean fresh = key != null && peer.equals(pendingPeer) && SystemClock.elapsedRealtime() < pendingUntil;
         pendingKey = null;
-        if (!fresh) return "Rhema must check the code first (update Rhema if this keeps happening)";
+        if (SystemClock.elapsedRealtime() >= pendingUntil) return "Rhema must check the code first (update Rhema if this keeps happening)";
         if (!CodeProof.deskProofMatches(key, url, proof)) return "Rhema's code check did not match: try again";
         Uri u = Uri.parse(url);
         if (!("http".equals(u.getScheme()) || "https".equals(u.getScheme())) || u.getPath() == null || !u.getPath().startsWith("/feed/")) {

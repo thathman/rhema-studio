@@ -63,6 +63,12 @@ fn fixed(v: &BigUint) -> [u8; LEN] {
     out
 }
 
+/// A group value as the TV writes it: lowercase hex, at most 512 digits (no sign, no `_`).
+fn value(hex: &str) -> Option<BigUint> {
+    let ok = !hex.is_empty() && hex.len() <= 2 * LEN && hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    if ok { BigUint::parse_bytes(hex.as_bytes(), 16) } else { None }
+}
+
 fn in_group(v: &BigUint) -> bool {
     let g = group();
     *v > BigUint::from(1u8) && *v < &g.p - 1u8 && v.modpow(&g.q, &g.p) == BigUint::from(1u8)
@@ -105,7 +111,7 @@ impl Desk {
     /// the TV knew the same code (compared in constant time), else None.
     pub fn finish(&self, y_hex: &str, address: &str, tv_proof_hex: &str) -> Option<[u8; 32]> {
         let g = group();
-        let y = BigUint::parse_bytes(y_hex.as_bytes(), 16)?;
+        let y = value(y_hex)?;
         if !in_group(&y) {
             return None;
         }
@@ -144,7 +150,7 @@ fn to_hex(bytes: &[u8]) -> String {
 }
 
 fn decode_hex(s: &str) -> Option<Vec<u8>> {
-    if s.len() != 64 || !s.is_ascii() {
+    if s.len() != 64 || !s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
         return None;
     }
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok()).collect()
@@ -211,5 +217,26 @@ pub(crate) mod tests {
         assert_eq!(desk.finish(&y_hex, "10.0.0.9:8095", &proof), None, "a TV with another code");
         assert_eq!(desk.finish("1", "10.0.0.9:8095", &proof), None, "not a group value");
         assert_eq!(desk.finish(&y_hex, "10.0.0.9:8095", "zz"), None);
+    }
+
+    #[test]
+    fn tv_proof_refuses_values_outside_the_group_or_chosen_to_cancel_the_code() {
+        // The same refusals CodeProofCheck makes on the TV's side, here for the TV's value Y.
+        let g = group();
+        let desk = Desk::with_exponent("123456", BigUint::parse_bytes(b"12345678901234567890", 10).unwrap());
+        let n_w = g.n.modpow(&desk.w, &g.p);
+        let bad = [BigUint::from(0u8), BigUint::from(1u8), &g.p - 1u8, g.p.clone(), &g.p + 1u8, n_w];
+        let proof = "593950f805179eff94d85dacba62e16c1e6241de03d834e69a9a6f33acbabe40";
+        for (y, what) in bad.iter().zip(["0", "1", "p-1", "p", "p+1", "N^w (the key would be 1)"]) {
+            assert_eq!(desk.finish(&y.to_str_radix(16), "192.168.3.37:8095", proof), None, "Y = {what}");
+        }
+        // Only lowercase hex, as the TV writes it.
+        let y = "e38b82b80531e4786ca069f21a46e3db64b0fc92d5db31f281e44f3e2b96ad98559261b93f17148e84b1aa8e43441246fcc1ece94c8e516661574a9b16b842bc46ddf45b672c8e3d0a03746d2aff684230d99fccc67a53dc6a4e2922096acaa9400b412cfcfab4bcb3ef5373ac75d68dcd4faa11a29cd1af0b8ce51f32c947e22f7eab7ab267ccc9cc16e7ebc8304da0a160ecddf02f9765f1ea1e5b92fc82facdbc7d03806b170c1662487a46d72b79c21d1323edf3d3f62dfaab655c636869ff1f6b6d011e75049e9630b51d9ca4ef2d3cd150f06b1b8229eeab7baf7fd1b6778a80309a6fbdfe07503707fc4019691ac3094effc376ad9d14ee0ab0ed5922";
+        assert!(desk.finish(y, "192.168.3.37:8095", proof).is_some(), "the vector itself still passes");
+        for odd in [format!("+{y}"), y.to_uppercase(), format!("{}_{}", &y[..10], &y[10..]), format!("0{y}0"), String::new()] {
+            assert_eq!(desk.finish(&odd, "192.168.3.37:8095", proof), None, "{odd:.20}");
+        }
+        assert_eq!(desk.finish(y, "192.168.3.37:8095", &proof.to_uppercase()), None, "a proof in capitals");
+        assert_eq!(desk.finish(y, "192.168.3.37:8095", &format!("+{}", &proof[1..])), None, "a proof with a sign");
     }
 }
