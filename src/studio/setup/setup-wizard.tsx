@@ -47,7 +47,7 @@ export function SetupWizard() {
     <Dialog open={setupOpen && !outputsOpen} onOpenChange={(open) => { if (!open) finishLater() }}>
       <DialogContent
         aria-describedby="setup-step-description"
-        className="flex h-[min(640px,calc(100dvh-2rem))] w-[min(940px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+        className="flex h-[min(640px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] w-[min(940px,calc(100vw-2rem))] has-[[data-setup-welcome]]:h-auto max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
       >
         <SetupBody onFinishLater={finishLater} />
       </DialogContent>
@@ -196,7 +196,8 @@ function Welcome({ onMain, onJoin, onRestore, onLater }: { onMain: () => void; o
     { icon: <TimerIcon />, title: "Use Rhema now, finish later", text: "Start with the built-in looks. Home keeps a short reminder of what is left.", onClick: onLater },
   ]
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-8 max-[720px]:px-5">
+    // The welcome sizes to its four choices (data-setup-welcome) rather than the steps' fixed height.
+    <div data-setup-welcome className="flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-8 max-[720px]:px-5">
       <p className="text-[0.625rem] font-bold tracking-[0.16em] text-muted-foreground uppercase">First time on this computer</p>
       <DialogTitle className="mt-1 text-2xl font-bold tracking-[-0.035em]">Welcome to Rhema Studio</DialogTitle>
       <DialogDescription id="setup-step-description" className="mt-1 max-w-[560px] text-sm text-muted-foreground">

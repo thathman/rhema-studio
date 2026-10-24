@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — Layout fixes from the screenshot review (#215)
+
+- **Branch/PR:** `ux-030/layout-fixes` from main 69dc08d; PR to follow.
+- **Behaviour:** Present (Standard) at 1024×600: below 1200 px wide the Live panel, scenes, transport and the Find / One-touch row sit in one scrolling column, so nothing overlaps; the Live column scrolls rather than covering the transport when the scenes are opened on a short window; the Scenes strip starts folded at 900 px tall or less; the bottom row is 14.5rem on short windows so One-touch moments keep both rows and the ticker. "Nothing on air" shrinks and drops its hint on a short Live panel. Rundown rows (Present and Prepare) wrap their details under the title; phase headers wrap their rule and counts under the name. Prepare: the start time input sizes to the locale's time; "Main service" / "planned in all" labels with formatMinutes everywhere (Prepare, Home, AI drafts). Native selects, checkboxes, radios and sliders are styled from tokens in index.css (no component swap, so tests querying native selects are unchanged). Cameras' New link is an outline button; setup's languages placeholder reads "e.g. …"; the setup welcome sizes to its content.
+- **Tests:** scenes strip starts folded under the short-window query and opens with one click; tsc -b, vitest, eslint pass. Before/after screenshots (headless Chrome, Tauri stubbed) in `qa-screenshots/ui-review/` and `qa-screenshots/ui-review/after/`; no overlap between Present's regions at 1024×600, 1280×800, 1440×900 and 1920×1080 (measured).
+- **Next:** desktop check 10eo in WebKit (the time input width and the native select look are WebKit-rendered on the Mac).
+
 ## 2026-10-24 — OBS tab against real OBS (#333)
 
 - **Main checked:** c4f378e, OBS Studio on this Mac, the "Rhema QA" collection only (the owner's collection untouched; the websocket settings and the collection were backed up and put back afterwards). 10ek.1–9 pass, 10ek.11 partial (no screen reader), 10ek.10 needs a joined computer.

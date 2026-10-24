@@ -238,7 +238,7 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
               </details>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={renew} title="The old QR code, link and app addresses stop working, and a phone sending with them is disconnected">New link</Button>
+              <Button size="sm" variant="outline" onClick={renew} title="The old QR code, link and app addresses stop working, and a phone sending with them is disconnected">New link</Button>
               <span className="flex-1" />
               <ConfirmDelete label={`Remove ${cam.label} camera`} verb="Remove" onConfirm={remove} />
             </div>

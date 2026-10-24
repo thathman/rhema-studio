@@ -6,7 +6,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), e
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { ScenesStrip, SCENES_REHEARSAL_NOTE } from "./scenes-strip"
+import { ScenesStrip, SCENES_FOLDED_QUERY, SCENES_REHEARSAL_NOTE } from "./scenes-strip"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { SCENE_PRESETS, newScene } from "@/lib/scenes"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput } from "@/types"
@@ -157,5 +157,23 @@ describe("Present's scenes", () => {
     expect(after.sources).toBe(before.sources)
     expect(after.sources.bible?.on).toBe(false)
     expect(after.outputs.filter((o) => o.sceneId).map((o) => o.id)).toEqual([MAIN_OUTPUT_ID])
+  })
+
+  it("starts folded on a short window, so the Live panel keeps its room, and opens with one click", async () => {
+    const before = window.matchMedia
+    window.matchMedia = ((q: string) => ({ matches: q === SCENES_FOLDED_QUERY, media: q, addEventListener() {}, removeEventListener() {} })) as never
+    try {
+      await render()
+      const toggle = el.querySelector('section[aria-label="Scenes"] > button') as HTMLButtonElement
+      expect(toggle.getAttribute("aria-expanded")).toBe("false")
+      expect(el.querySelector('[aria-label^="Scenes for"]')).toBeNull()
+      // The fold still says what each screen shows.
+      expect(toggle.textContent).toContain("Sanctuary: its own feed")
+      await click(toggle)
+      expect(toggle.getAttribute("aria-expanded")).toBe("true")
+      expect(el.querySelector('[aria-label^="Scenes for"]')).not.toBeNull()
+    } finally {
+      window.matchMedia = before
+    }
   })
 })

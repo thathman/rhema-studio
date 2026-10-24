@@ -88,7 +88,7 @@ export function PrepareWorkspace() {
           <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
             <div className="min-w-0">
               <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
-              <h2 className="text-sm font-semibold">{count} {count === 1 ? "item" : "items"}{planned ? ` · ${planned} planned` : ""}</h2>
+              <h2 className="text-sm font-semibold">{count} {count === 1 ? "item" : "items"}{planned ? ` · ${planned} planned in all` : ""}</h2>
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -187,8 +187,9 @@ function EventOverview() {
   const mainMinutes = main ? sums[main.id]?.minutes ?? 0 : Math.round(plannedTotalMs(items) / 60_000)
   const date = service?.service_date ? new Date(`${service.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : null
   const stats: Array<[string, string]> = [
-    ["Planned service", mainMinutes ? `${mainMinutes} min` : "—"],
-    ["Warm-up", warm ? `${sums[warm.id]?.minutes ?? 0} min` : "—"],
+    // Says what it counts: the main service alone when there is one, else the whole plan.
+    [main ? "Main service" : "Planned in all", formatMinutes(mainMinutes * 60_000) || "—"],
+    ["Warm-up", warm ? formatMinutes((sums[warm.id]?.minutes ?? 0) * 60_000) || "0 min" : "—"],
     ["Projected finish", timing ? hhmm(timing.expectedEnd) : "—"],
   ]
   return (

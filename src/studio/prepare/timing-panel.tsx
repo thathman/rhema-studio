@@ -59,7 +59,7 @@ export function TimingPanel() {
       <div className="flex items-end justify-between gap-2 border-b border-border px-4 py-3">
         <div>
           <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Run of show</p>
-          <h2 className="text-sm font-semibold">Timing{total ? ` · ${total} planned` : ""}</h2>
+          <h2 className="text-sm font-semibold">Timing{total ? ` · ${total} planned in all` : ""}</h2>
         </div>
         {plan && <Button size="xs" variant="outline" onClick={() => setTable(true)}>Table</Button>}
         <CuesheetDialog open={table} onOpenChange={setTable} />
@@ -75,7 +75,7 @@ export function TimingPanel() {
               aria-label={`${main.name} start time`}
               value={main.starts_at ?? ""}
               onChange={(e) => useQueueStore.getState().updateHeader(main.id, { starts_at: e.target.value || undefined })}
-              className="h-8 w-28 text-sm"
+              className="h-8 w-auto min-w-28 text-sm tabular-nums"
             />
           </label>
           {plan ? (

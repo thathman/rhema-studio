@@ -85,11 +85,12 @@ export function LiveOutputPanel() {
       >
         <div className="relative" style={{ width: `min(100cqw, 100cqh * ${activeTheme.resolution.width / activeTheme.resolution.height})` }}>
           <CanvasVerse theme={activeTheme} verse={verseData} />
-          {/* The approved design's empty Program: says so in words rather than a blank screen. */}
+          {/* The approved design's empty Program: says so in words rather than a blank screen. On a short
+              panel the words get smaller and the hint goes, so they never spill over the sources below. */}
           {!isLive && !liveVerse && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-md bg-[#16262b] text-center">
-              <p className="text-lg font-semibold tracking-[-0.02em] text-[#d6e2df]">Nothing on air</p>
-              <p className="text-xs text-[#9fb2b0]">Select an item, then take it live.</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 overflow-hidden rounded-md bg-[#16262b] px-2 text-center">
+              <p className="text-lg leading-tight font-semibold tracking-[-0.02em] whitespace-nowrap text-[#d6e2df] [@container(max-height:5.5rem)]:text-sm">Nothing on air</p>
+              <p className="text-xs leading-snug text-[#9fb2b0] [@container(max-height:5.5rem)]:hidden">Select an item, then take it live.</p>
             </div>
           )}
         </div>

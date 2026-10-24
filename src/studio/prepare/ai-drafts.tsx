@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { draftAuthor, draftDiff, draftToRundown, itemKey, leaveOut, type AiDraft, type AiDraftItem } from "@/lib/ai-drafts"
 import type { QueueItem } from "@/types"
+import { formatMinutes } from "@/lib/service-timing"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -85,7 +86,7 @@ export function AiDrafts() {
                     <span className="flex-1" />
                     <span className="text-muted-foreground">{draftAuthor(d)} · {new Date(d.created_at).toLocaleString()}{d.updated_at ? ` · revised ${new Date(d.updated_at).toLocaleString()}` : ""}</span>
                   </div>
-                  <p>{items.length < all ? `${items.length} of ${all}` : items.length} items · {minutes} min planned{missing.length > 0 ? <span className="font-semibold text-confidence-mid"> · {missing.length} missing from the library</span> : null}</p>
+                  <p>{items.length < all ? `${items.length} of ${all}` : items.length} items{minutes ? ` · ${formatMinutes(minutes * 60_000)} planned in all` : ""}{missing.length > 0 ? <span className="font-semibold text-confidence-mid"> · {missing.length} missing from the library</span> : null}</p>
                   {choosing ? (
                     <ChooseItems draft={d} out={out} onChange={(next) => setPicking({ id: d.id, out: next })} />
                   ) : (

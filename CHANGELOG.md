@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Tidier layouts on small windows; clearer planned times (#215)
+- **Present** fits a 1024×600 window: on a narrow window the Live panel, transport, Find & cue and One-touch moments share one column that scrolls instead of drawing over each other, and on a window 900 pixels tall or less the Scenes strip starts folded (one click opens it). The Live panel's "Nothing on air" no longer spills over the sources under it.
+- Running-order rows keep their titles readable: languages, minutes and who prepares it move under the title when the row is narrow, and phase headers wrap instead of cutting their name and counts short.
+- Planned times say what they count, in the same hours-and-minutes form everywhere: **Main service 45 min** at the top of Prepare, **1 h 8 min planned in all** for the order of service, the run of show and Home.
+- Drop-down lists, tick boxes and sliders now use Rhema's own look (teal ticks, the same chevron as the other lists); the run of show's start time shows "10:00 AM" in full, Cameras' **New link** looks like a button, and the welcome window no longer has an empty lower half.
+
 ### Google TV: the feed link and page travel encrypted; a sturdier Rhema Receiver (#198)
 - **Show on a Google TV** now sends the TV the feed's secure (https) link, encrypted, with this computer's certificate; the TV opens the feed only from this computer, so nobody else on the Wi-Fi can read the link or what the feed shows. It needs **Secure page for phones (https)** in Settings → Remote control; without it Rhema says so and sends nothing.
 - It needs **Rhema Receiver 1.3** on the TV (Rhema asks you to update an older one). After updating, send the TV its feed again once. The https certificate now stays the same while this computer's address does, so TVs and phones keep working after Rhema restarts.
