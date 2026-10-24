@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react"
-import { ImageIcon, MessageSquareIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
+import { ImageIcon, MessageSquareIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
 import { cleanComments, commentKey, MAX_COMMENTS } from "@/lib/comments"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Input } from "@/components/ui/input"
@@ -104,6 +104,7 @@ export function MissingMediaMark({ mediaId }: { mediaId: string }) {
 export function PlannedMinutes({ item }: { item: QueueItem }) {
   const label = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
   return (
+    <>
     <div className="ml-7 grid grid-cols-[5rem_minmax(0,1fr)_6.5rem] gap-2 py-1 pl-2 text-xs">
       <label className="min-w-0">
         <span className={label} title="35, 4:30 (min:sec), 1:10:00 or 1h10">Time</span>
@@ -137,6 +138,52 @@ export function PlannedMinutes({ item }: { item: QueueItem }) {
           }}
         />
       </label>
+    </div>
+    <StartRule item={item} />
+    </>
+  )
+}
+
+/**
+ * How the item starts (#196 R3): after the item before (linked, as by default), after a planned
+ * pause, or at a fixed clock time that running late or early before it does not move.
+ */
+function StartRule({ item }: { item: QueueItem }) {
+  const label = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
+  const fixed = Boolean(item.starts_at)
+  return (
+    <div className="ml-7 space-y-1 py-1 pl-2 text-xs">
+      <div className="grid grid-cols-[6.5rem_5rem] gap-2">
+        <label className="min-w-0">
+          <span className={cn(label, "flex items-center gap-1")}>{fixed && <PinIcon className="size-3" aria-hidden />}Fixed start</span>
+          <Input
+            type="time"
+            aria-label={`Fixed start for ${item.reference}`}
+            value={item.starts_at ?? ""}
+            className="h-7 px-2 text-xs tabular-nums"
+            onChange={(e) => {
+              const t = e.target.value
+              useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, starts_at: /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null }))
+            }}
+          />
+        </label>
+        <label className="min-w-0">
+          <span className={label} title="35, 4:30 (min:sec) or 1h">Pause before</span>
+          <DurationInput
+            aria-label={`Pause before ${item.reference}`}
+            minutes={fixed ? null : item.gap_minutes ?? null}
+            disabled={fixed}
+            onChange={(m) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, gap_minutes: m }))}
+          />
+        </label>
+      </div>
+      <p className="text-muted-foreground">
+        {fixed
+          ? `Starts at ${item.starts_at} however early or late what comes before runs; ±5 min does not move it. If the items before run past ${item.starts_at}, it starts when they finish and the run of show says so.`
+          : item.gap_minutes
+            ? "Starts after the item before and this pause. Running late uses the pause up first; only lateness beyond it moves this item."
+            : "Starts when the item before ends. Set a fixed start to hold a clock time, or a pause to leave room for running late."}
+      </p>
     </div>
   )
 }
@@ -365,7 +412,7 @@ export function TimedAdvance({ item }: { item: QueueItem }) {
  * A planned time typed as "35", "4:30", "1:10:00" or "1h10" (#196); applied on Enter or leaving the
  * field, written back the same way. Anything else is shown as a mistake and not applied.
  */
-export function DurationInput({ minutes, onChange, ...rest }: { minutes: number | null; onChange: (m: number | null) => void; "aria-label": string }) {
+export function DurationInput({ minutes, onChange, ...rest }: { minutes: number | null; onChange: (m: number | null) => void; "aria-label": string; disabled?: boolean }) {
   const [text, setText] = useState<string | null>(null)
   const shown = text ?? (minutes ? formatDuration(minutes) : "")
   const bad = text !== null && text.trim() !== "" && parseDuration(text) === null

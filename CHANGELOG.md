@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Fixed starts and pauses in the run of show (#196)
+- An item can now have a **fixed start** (Prepare → the item → Timing → Fixed start): it is expected at that time however early or late the items before it run, and **±5 min** does not move it. If the items before run past it, it starts when they finish and the run of show says **Late for its fixed start**. It has a pin in the run of show, its table and every desk's run of show.
+- An item can have a **pause before** it (Timing → Pause before). Running late uses the pause up first: the next item stays on time until the pause is gone, and only lateness beyond it moves what follows. The table shows each pause as its own thin row with how much lateness it takes up ("absorbs 3 min").
+- Services without fixed starts or pauses keep exactly the times they had. How Rhema works out its times is written up in `docs/rhema-studio/24-adr-0003-timing.md`, with a comparison with Ontime.
+
 ### Private calls by key; ask for a song, hymn or camera; Preview or Show (#251)
 - A private call in Talk (**Talk to → Only…**) now goes to the desk or phone you picked by its pairing key, not by its name. A desk paired under a name that looks the same (a copied name, a look-alike letter) never hears a call meant for someone else; if two desks have exactly the same name when you pick, nobody hears the call rather than the wrong one.
 - Action requests can now ask to **show a song or hymn** (type its title; Rhema suggests titles from the library) and ask **if a camera is ready** (the camera operator answers Ready or Unable).

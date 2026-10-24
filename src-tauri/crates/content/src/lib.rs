@@ -919,6 +919,12 @@ struct ExtrasPayload {
     /// A clock time the item should finish by (FR-07 "target item end"), 24-hour "HH:MM".
     #[serde(default)]
     end_by: Option<String>,
+    /// A fixed start (#196 R3), 24-hour "HH:MM": expected then, whatever runs before it.
+    #[serde(default)]
+    starts_at: Option<String>,
+    /// A planned pause before the item, in minutes (#196 R3).
+    #[serde(default)]
+    gap_minutes: Option<f64>,
     /// Who is preparing this item (CL-007), free text, short.
     #[serde(default)]
     prepared_by: Option<String>,
@@ -975,6 +981,12 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
     }
     if p.end_by.as_deref().is_some_and(|t| !is_clock_time(t)) {
         return Err(ContentError::Invalid(format!("item {i}: end-by time must be HH:MM")));
+    }
+    if p.starts_at.as_deref().is_some_and(|t| !is_clock_time(t)) {
+        return Err(ContentError::Invalid(format!("item {i}: a fixed start must be HH:MM")));
+    }
+    if p.gap_minutes.is_some_and(|m| !(0.0..=600.0).contains(&m) || m.is_nan()) {
+        return Err(ContentError::Invalid(format!("item {i}: a pause must be between 0 and 600 minutes")));
     }
     if p.prepared_by.as_deref().is_some_and(|n| n.chars().count() > 60 || n.chars().any(char::is_control)) {
         return Err(ContentError::Invalid(format!("item {i}: 'prepared by' must be a short name")));
@@ -1325,6 +1337,11 @@ mod tests {
         for (end_by, ok) in [("12:15", true), ("00:00", true), ("23:59", true), ("24:00", false), ("12:60", false), ("9:15", false), ("12-15", false)] {
             let item = ItemInput { payload: Some(format!("{{\"end_by\":\"{end_by}\"}}")), ..verse("John 3:16", 43, 3, 16) };
             assert_eq!(validate_items(&[item]).is_ok(), ok, "{end_by}");
+        }
+        // #196 R3: a fixed start is a clock time; a pause is 0-600 minutes.
+        for (payload, ok) in [("{\"starts_at\":\"10:30\"}", true), ("{\"starts_at\":\"24:00\"}", false), ("{\"gap_minutes\":5}", true), ("{\"gap_minutes\":2.5}", true), ("{\"gap_minutes\":601}", false), ("{\"gap_minutes\":-1}", false)] {
+            let item = ItemInput { payload: Some(payload.into()), ..verse("John 3:16", 43, 3, 16) };
+            assert_eq!(validate_items(&[item]).is_ok(), ok, "{payload}");
         }
         assert!(db.replace_items(&p.id, 2, &[timed]).is_ok());
     }

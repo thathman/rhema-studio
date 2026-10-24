@@ -181,6 +181,10 @@ export interface TimelineRow {
   label: string
   time: string
   minutes?: number
+  /** Items: the planned pause before it (its gap, or the free time before its fixed start), minutes. */
+  pause?: number
+  /** Items: it has a fixed start. */
+  fixed?: boolean
   /** The item's index in the rundown. */
   index?: number
 }
@@ -192,12 +196,25 @@ export interface Timeline {
   rows: TimelineRow[]
 }
 
+type Timed = { reference: string; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null }
+
+/**
+ * When an item is planned to start, in minutes from the first day's midnight, after an item planned
+ * to end at `after`: its fixed start (the one nearest `after`, so 00:05 after 23:50 is that night's),
+ * or `after` plus its pause.
+ */
+export function plannedStartMinutes(after: number, item: { starts_at?: string | null; gap_minutes?: number | null }): number {
+  const fixed = clockMinutes(item.starts_at)
+  if (fixed === null) return after + (typeof item.gap_minutes === "number" && item.gap_minutes > 0 && item.gap_minutes <= 600 ? item.gap_minutes : 0)
+  return fixed + Math.round((after - fixed) / 1440) * 1440
+}
+
 /**
  * The planned day from the main service's start time: when the warm-up begins (timed to end at the
  * start), each main-service item's planned time, and the projected finish, `delay` minutes later
  * than planned when running late (the plan itself does not change). Null without a start time.
  */
-export function planTimeline(items: Array<{ reference: string; planned_minutes?: number | null }>, headers: OutlineHeader[], delay = 0): Timeline | null {
+export function planTimeline(items: Timed[], headers: OutlineHeader[], delay = 0): Timeline | null {
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
   const start = clockMinutes(main?.starts_at)
   if (!main || start === null) return null
@@ -212,15 +229,16 @@ export function planTimeline(items: Array<{ reference: string; planned_minutes?:
   let t = start
   for (let i = main.at; i < end; i++) {
     const minutes = items[i].planned_minutes ?? 0
-    rows.push({ kind: "item", label: items[i].reference, time: clockText(t), minutes, index: i })
-    t += minutes
+    const from = plannedStartMinutes(t, items[i])
+    rows.push({ kind: "item", label: items[i].reference, time: clockText(from), minutes, index: i, ...(from > t ? { pause: from - t } : {}), ...(clockMinutes(items[i].starts_at) !== null ? { fixed: true } : {}) })
+    t = from + minutes
   }
   rows.push({ kind: "milestone", label: `${main.name} ends`, time: clockText(t + delay) })
   return { start: clockText(start), warmupStart: warm && warmMinutes > 0 ? clockText(start - warmMinutes) : null, finish: clockText(t + delay), rows }
 }
 
 /** Each item's planned clock time: the main service's from the timeline, the warm-up's from its own start. */
-export function plannedTimes(items: Array<{ reference: string; planned_minutes?: number | null }>, headers: OutlineHeader[]): Map<number, string> {
+export function plannedTimes(items: Timed[], headers: OutlineHeader[]): Map<number, string> {
   const plan = planTimeline(items, headers)
   const at = new Map((plan?.rows ?? []).flatMap((r) => (r.index === undefined ? [] : [[r.index, r.time] as const])))
   const warm = headers.find((h) => h.type === "phase" && h.role === "warmup")

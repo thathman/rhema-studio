@@ -14,6 +14,10 @@ interface QueueItemBase {
   planned_minutes?: number | null
   /** A clock time this item should finish by, 24-hour "HH:MM" (FR-07). */
   end_by?: string | null
+  /** A fixed start, 24-hour "HH:MM" (#196 R3): it is expected then, however early or late what is before runs. Absent: it follows the item before. */
+  starts_at?: string | null
+  /** A planned pause before it, in minutes (#196 R3); lateness before it uses this up first. */
+  gap_minutes?: number | null
   /** Who is preparing this item (CL-007): a short name. */
   prepared_by?: string | null
   /** Team comments on this item (CL-007); saved with the service and carried in service files. Never on screen. */

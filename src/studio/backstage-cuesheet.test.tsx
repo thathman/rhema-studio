@@ -98,6 +98,24 @@ describe("the read-only backstage run of show on a joined desk", () => {
     expect(view!.querySelectorAll("button, input, select, a")).toHaveLength(0)
   })
 
+  it("a fixed start has a pin, the pause before it a thin row, and running past it says so (R3)", async () => {
+    // The Sermon is fixed at 10:35 (5 min after Worship's planned end); Worship began 10:17, so it runs to 10:37.
+    useQueueStore.setState({ items: useQueueStore.getState().items.map((i) => (i.id === "Sermon" ? { ...i, end_by: null, starts_at: "10:35" } : i)) })
+    useJournalStore.setState({ entries: [
+      { at: at(10, 3), mono: 0, kind: "event", label: "Welcome", itemId: "Welcome" },
+      { at: at(10, 17), mono: 14 * 60_000, kind: "event", label: "Worship", itemId: "Worship" },
+    ] })
+    const live = buildLiveState(at(10, 20))
+    expect(live.rundown.find((r) => r.id === "Sermon")?.time).toMatchObject({ plan: [at(10, 35), at(11, 5)], expected: [at(10, 37), at(11, 7)], fixed: true, conflict: true, pause: [5 * 60_000, 5 * 60_000] })
+    expect(live.rundown.find((r) => r.id === "Worship")?.time?.fixed).toBeUndefined()
+    const view = await renderDesk(live, "bible")
+    const rows = [...view!.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent))
+    expect(rows.map((r) => r[0])).toEqual(["Welcome", "Notices", "Worship", "Pause before the fixed start · 5 min", "Sermon"])
+    expect(rows[3][2]).toBe("absorbs 5 min · used up")
+    expect(rows[4][5]).toBe("Late for its fixed start")
+    expect(view!.querySelector('[aria-label="Fixed start"]')).not.toBeNull()
+  })
+
   it("says so when the host sends no times (no start time, or an older host)", async () => {
     const live = buildLiveState(at(10, 12))
     const old: LiveStateV1 = { ...live, rundown: live.rundown.map(({ id, reference, plannedMinutes }) => ({ id, reference, plannedMinutes })) }

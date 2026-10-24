@@ -67,7 +67,9 @@ export interface LiveStateV1 {
 /**
  * An item's times in the run of show (#196 R4), host wall ms, for a desk's read-only cuesheet:
  * planned and expected start and end, when it went on air (and for how long, once done), its
- * state, its "end by" and whether that cuts it short.
+ * state, its "end by" and whether that cuts it short; a fixed start (plan[0] is then that time) and
+ * whether it is expected late for it; the pause before it and how much of it lateness takes up.
+ * Older desks ignore the newer fields.
  */
 export interface RundownTime {
   plan: [number, number]
@@ -77,6 +79,10 @@ export interface RundownTime {
   state: EventState
   endBy?: number
   cut?: true
+  fixed?: true
+  conflict?: true
+  /** The planned pause before it and how much of it lateness is expected to take up (ms), when it has one. */
+  pause?: [number, number]
 }
 
 /** The run of show's times by item id, as the Live State carries them. */
@@ -91,6 +97,9 @@ export function rundownTimes(timing: ServiceTiming | null, onAirMs: Map<string, 
       state: e.state,
       ...(e.hardStop !== null ? { endBy: e.hardStop } : {}),
       ...(e.squeezed ? { cut: true as const } : {}),
+      ...(e.fixedStart !== null ? { fixed: true as const } : {}),
+      ...(e.conflict ? { conflict: true as const } : {}),
+      ...(e.gapMs > 0 ? { pause: [e.gapMs, e.absorbedMs] as [number, number] } : {}),
     })
   }
   return out

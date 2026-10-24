@@ -11,6 +11,7 @@ import { mmss } from "@/lib/journal"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
+import { PinIcon } from "lucide-react"
 import { CuesheetDialog } from "@/studio/prepare/cuesheet-dialog"
 
 function Clock({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -94,6 +95,7 @@ export function TimingPanel() {
                 <span className={cn("text-xs font-semibold", lateMinutes > 0 ? "text-confidence-mid" : "text-muted-foreground")} role="status">{lateMinutes === 0 ? "On schedule" : lateness(lateMinutes)}</span>
                 <Button size="xs" variant="outline" onClick={() => useServiceOffset.getState().adjust(5, me)}>+5 min</Button>
               </div>
+              {plan.rows.some((r) => r.fixed) && <p className="text-[0.6875rem] text-muted-foreground">Items with a fixed start keep their time: ±5 min moves only the others.</p>}
               <ol className="min-h-0 overflow-y-auto border-t border-border pt-2" aria-label="Planned times">
                 {plan.rows.map((r, k) => (
                   <li key={k}>
@@ -103,11 +105,11 @@ export function TimingPanel() {
                       onClick={() => r.index !== undefined && presentActions.previewItem(items[r.index])}
                       className="flex w-full items-start gap-2.5 rounded-md px-1 py-1 text-left outline-none enabled:hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50"
                     >
-                      <span className="w-11 shrink-0 text-xs text-muted-foreground tabular-nums">{r.time}</span>
+                      <span className="flex w-11 shrink-0 items-center gap-0.5 text-xs text-muted-foreground tabular-nums">{r.fixed && <PinIcon className="size-3" aria-label="Fixed start" />}{r.time}</span>
                       <span aria-hidden className={cn("mt-1 size-2 shrink-0 rounded-full", r.kind === "milestone" ? "bg-primary" : "border border-muted-foreground")} />
                       <span className="min-w-0">
                         <span className={cn("block truncate text-xs", r.kind === "milestone" && "font-semibold")}>{r.label}</span>
-                        {r.kind === "item" && <span className="block text-[0.6875rem] text-muted-foreground">{r.minutes ? `${r.minutes} min` : "no minutes yet"}</span>}
+                        {r.kind === "item" && <span className="block text-[0.6875rem] text-muted-foreground">{r.minutes ? `${r.minutes} min` : "no minutes yet"}{r.pause ? ` · after a ${formatMinutes(r.pause * 60_000)} pause` : ""}</span>}
                         {r.index !== undefined && <ExpectedLine event={expected.get(r.index)} />}
                         {r.index !== undefined && first.has(items[r.index].id) && <ActualLine started={first.get(items[r.index].id)!} ms={onAir.get(items[r.index].id) ?? 0} planned={r.minutes} />}
                       </span>
@@ -136,7 +138,7 @@ function ActualLine({ started, ms, planned }: { started: number; ms: number; pla
   )
 }
 
-/** When an item that has not run yet is now expected, when that is a minute or more off the plan, and a hard stop cutting it short; or that it was skipped. */
+/** When an item that has not run yet is now expected, when that is a minute or more off the plan, that it will miss its fixed start, and a hard stop cutting it short; or that it was skipped. */
 function ExpectedLine({ event }: { event?: EventTiming }) {
   if (!event || event.state === "done") return null
   if (event.state === "skipped") return <span className="block text-[0.6875rem] text-muted-foreground">Skipped</span>
@@ -145,6 +147,9 @@ function ExpectedLine({ event }: { event?: EventTiming }) {
     <>
       {event.state === "upcoming" && off !== 0 && (
         <span className={cn("block text-[0.6875rem] tabular-nums", off > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>Expected {wallClock(event.expectedStart)}</span>
+      )}
+      {event.conflict && event.fixedStart !== null && (
+        <span className="block text-[0.6875rem] font-semibold text-confidence-mid" role="status">Late for its fixed start {wallClock(event.fixedStart)}</span>
       )}
       {event.squeezed && event.hardStop !== null && (
         <span className="block text-[0.6875rem] font-semibold text-destructive" role="status">Cut short to end by {wallClock(event.hardStop)}</span>
