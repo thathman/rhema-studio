@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (cmd === "setup_data_paths") return { folder: "/Users/tolu/Library/Application Support/com.openbezal.rhema", database: "/Users/tolu/Library/Application Support/com.openbezal.rhema/studio.db" }
     if (cmd === "setup_test_folder") {
       if (folderWritable) return null
-      throw "Rhema could not write there: Permission denied"
+      throw "Rhema Studio could not write there: Permission denied"
     }
     if (cmd === "get_audio_devices") return [{ id: "usb-desk", name: "Sound desk USB", sample_rate: 48000, channels: 2, is_default: false }]
     return null
@@ -97,7 +97,7 @@ describe("the setup's Finish step: safety and backups (#298 S7)", () => {
     await openAt("finish")
     await click("Test the folder")
     expect(calls.find((c) => c.cmd === "setup_test_folder")?.args).toEqual({ path: "/Volumes/Church" })
-    expect(text()).toContain("Rhema can write there")
+    expect(text()).toContain("Rhema Studio can write there")
     folderWritable = false
     await click("Test the folder")
     expect(text()).toContain("Permission denied")

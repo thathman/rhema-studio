@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest"
 const ALLOWED_HOSTS: Record<string, string> = {
   "api.deepgram.com": "optional cloud speech recognition, only with the operator's own Deepgram key",
   "openlyrics.info": "XML namespace name inside OpenLyrics song files; never contacted",
+  "www.w3.org": "SVG namespace name inside the Rhema Studio mark on the phone pages; never contacted",
 }
 
 function* sourceFiles(dir: string): Generator<string> {
