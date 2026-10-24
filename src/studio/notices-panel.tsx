@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { NOTICE_TARGETS, TARGET_NAMES, canPreview, isFor, targetName, type ActionMode, type Notice, type NoticeAction, type NoticeAnswer, type NoticeTarget, type NoticeTo } from "@/stores/notices-store"
+import { NOTICE_TARGETS, TARGET_NAMES, canPreview, isFor, noteUnableReason, targetName, type ActionMode, type Notice, type NoticeAction, type NoticeAnswer, type NoticeTarget, type NoticeTo } from "@/stores/notices-store"
 import { useSongStore } from "@/stores/song-store"
 
 const ANSWER_NAMES: Record<NoticeAnswer, string> = { seen: "Seen", ready: "Ready", unable: "Unable" }
@@ -21,7 +21,8 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
   role: string
   me: string
   onSend: (n: { to: NoticeTarget; priority: "normal" | "urgent"; text: string; action: NoticeAction | null }) => void
-  onAnswer: (id: string, state: NoticeAnswer) => void
+  /** `why`: for Unable after a request could not be done, the reason (for whoever sent it). */
+  onAnswer: (id: string, state: NoticeAnswer, why?: string) => void
   /**
    * Do what an action request asks (Comms C2), on this desk, when its button is pressed: null when
    * it was done, else why not (the host's reason, for a joined desk). `mode`: Show, or Preview only
@@ -75,8 +76,12 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
     setBusy(n.id)
     const why = await Promise.resolve(onAction(n.action!, mode)).catch((e: unknown) => String(e))
     setBusy(null)
-    setFailed((f) => ({ ...f, [n.id]: why ? `${mode === "preview" ? `“Preview ${n.action!.value}”` : `“${actionName(n.action!)}”`} was not done: ${why}` : "" }))
-    onAnswer(n.id, why ? "unable" : "ready")
+    const what = mode === "preview" ? `“Preview ${n.action!.value}”` : `“${actionName(n.action!)}”`
+    setFailed((f) => ({ ...f, [n.id]: why ? `${what} was not done: ${why}` : "" }))
+    if (!why) return onAnswer(n.id, "ready")
+    // The sender sees why too, with the Unable answer.
+    noteUnableReason(n.id, `${what}: ${why}`)
+    onAnswer(n.id, "unable", `${what}: ${why}`)
   }
   return (
     <div className="flex flex-col gap-2 text-xs">
@@ -158,6 +163,8 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
               <p className="text-sm">{n.text}</p>
               {n.action && (!forMe || n.action.kind === "camera") && <p className="text-muted-foreground">Asks: {actionName(n.action)}{forMe ? " Answer Ready when it is, or Unable." : ""}</p>}
               {n.answers.length > 0 && <p className="text-muted-foreground">{n.answers.map((a) => `${a.by}: ${ANSWER_NAMES[a.state]}`).join(" · ")}</p>}
+              {/* Whoever sent it sees why each Unable could not be done, in the answering desk's words. */}
+              {!forMe && n.answers.filter((a) => a.state === "unable" && a.why).map((a) => <p key={a.by} role="alert" className="text-destructive">{a.by} could not do it: {a.why}</p>)}
               {forMe && failed[n.id] && <p role="alert" className="text-destructive">{failed[n.id]}. Answered Unable.</p>}
               {forMe && (
                 <div role="group" aria-label={`Answer ${n.from}`} className="flex flex-wrap gap-1">

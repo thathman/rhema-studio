@@ -102,7 +102,8 @@ describe("production notices", () => {
     const el = document.createElement("div")
     await act(async () => createRoot(el).render(<OperatorsPanel />))
     await act(async () => buttonNamed(el, "Take Sermon split").click())
-    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ command: "notice_ack", value: { id: n.id, state: "unable" } }))
+    // The reason goes with the answer, for whoever asked (#251).
+    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ command: "notice_ack", value: { id: n.id, state: "unable" }, why: `“Take Sermon split”: ${why}` }))
     expect(sent.map((c) => c.command)).toEqual(["take_scene", "notice_ack"])
     expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')?.textContent).toContain(why)
 
