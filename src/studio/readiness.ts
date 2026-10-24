@@ -183,7 +183,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           ? [{ id: "timing", status: "ok" as const, label: `Planned to end at ${i.timing.plannedEnd}` }]
           : []),
     ...(i.camerasWithoutAddress?.length
-      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "It shows the scene's background instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Production → Scenes." }]
+      ? [{ id: "cameras", status: "info" as const, label: `${i.camerasWithoutAddress.join(", ")}: a camera layer has no stream address`, detail: "Its box shows colour bars (or what the scene says) instead. Add the camera's address (WHEP, e.g. from MediaMTX) in Production → Scenes." }]
       : []),
     ...(i.camerasNotSending?.length
       ? [{
@@ -192,7 +192,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           label: i.camerasNotSending.length === 1 ? `${i.camerasNotSending[0].camera} is not sending` : `${i.camerasNotSending.length} cameras are not sending: ${i.camerasNotSending.map((c) => c.camera).join(", ")}`,
           detail: (i.camerasNotSending.some((c) => c.routerOff) ? "The camera router is not running. " : "")
             + i.camerasNotSending.map((c) => `${c.camera}: in the scene on ${c.outputs.join(", ")}${c.onAir ? " (on air now)" : ""}`).join("; ")
-            + ". Until it sends, the scene shows its fallback words or background there. Check the phone is on the church Wi-Fi with the camera page open.",
+            + ". Until it sends, its box shows colour bars, TV static or words there, as the scene says. Check the phone is on the church Wi-Fi with the camera page open.",
           fix: "cameras" as const,
           fixLabel: "Open Cameras",
         }]

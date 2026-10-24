@@ -8,6 +8,7 @@ import { newLayer, newScene, SCENE_PRESETS } from "@/lib/scenes"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { useCanSend, useJoin, type SendResult } from "@/stores/join-store"
 import { deskEditable } from "@/lib/desk-scenes"
+import { NoSignalChoice } from "@/studio/production/scene-composer"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { SceneLayer, SceneLayerKind } from "@/types"
 
@@ -278,7 +279,7 @@ export function DeskSceneEditor({ live, scene, cameraOnly = false, onDone }: { l
                 <option value="">{layer.cameraUrl ? "Kept as it is" : "No camera yet"}</option>
                 {(live.cameraFeeds ?? []).map((c) => <option key={c.name} value={c.name} disabled={!c.url}>{c.label}{c.url ? "" : " (camera router off)"}</option>)}
               </select>
-              <input aria-label="Words while the camera is not playing" value={layer.cameraFallback ?? ""} maxLength={120} placeholder="Words while the camera is not playing (optional)" onChange={(e) => patch(layer.id, { cameraFallback: e.target.value || undefined })} className={field} />
+              <NoSignalChoice layer={layer} onChange={(p) => patch(layer.id, p)} />
             </>
           )}
           {(layer.kind === "picture" || layer.kind === "video" || layer.kind === "clock") && <p className="text-muted-foreground">Its picture, video or clock settings are changed on the main desk; here you can place, size and hide it.</p>}

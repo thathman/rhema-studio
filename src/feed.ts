@@ -2,7 +2,8 @@ import "./broadcast-fonts.css"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
 import { drawScene, drawTickerLayer, LayerFader, sceneOverlay } from "@/lib/scene-renderer"
 import { syncSceneVideos, videoReady } from "@/lib/scene-videos"
-import { feedMotion, tickerStrips } from "@/lib/feed-motion"
+import { feedMotion, feedNext, tickerStrips } from "@/lib/feed-motion"
+import { noiseFrame } from "@/lib/no-signal"
 import { drawStage } from "@/lib/stage-canvas"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
@@ -234,18 +235,28 @@ function draw() {
   }
 }
 
+/** The static picture last drawn (a camera not sending that shows static). */
+let lastNoise = -1
+
 /**
  * Keep drawing while something moves: the whole picture only while it changes (a fade, a camera in
- * the canvas, a lower third coming in, a ticker that has to stay in the canvas); the strips every
- * frame. A ticker on a strip leaves the main canvas still.
+ * the canvas, a lower third coming in, a ticker that has to stay in the canvas, a camera's static
+ * a few times a second); the strips every frame. A ticker on a strip leaves the main canvas still.
  */
 function animate() {
   const f = frame
   const inCanvas = [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)) || [...videos.entries()].some(([id, v]) => videoReady(v) && !v.paused && !shownBelow(id))
-  const { picture, crawl } = feedMotion(f, { now: Date.now(), hostNow: Date.now() + offset, fading: !!fade || fader.busy(), cameraInCanvas: inCanvas, strips: onStrips() })
-  if (picture) draw()
+  const hostNow = Date.now() + offset
+  const motion = feedMotion(f, { now: Date.now(), hostNow, fading: !!fade || fader.busy(), cameraInCanvas: inCanvas, strips: onStrips(), playing: (id) => !!cameras.get(id)?.ready })
+  const n = noiseFrame(hostNow)
+  if (motion.picture || (motion.noise && n !== lastNoise)) {
+    draw()
+    lastNoise = n
+  }
   drawStrips()
-  if (picture || crawl) requestAnimationFrame(animate)
+  const next = feedNext(motion, hostNow)
+  if (next === "frame") requestAnimationFrame(animate)
+  else if (next !== null) setTimeout(() => requestAnimationFrame(animate), next)
   else ticking = false
 }
 

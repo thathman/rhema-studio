@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Colour bars or TV static while a camera is not sending (#213)
+- A camera in a scene that is not sending (not connected yet, dropped, or hidden from scenes) now shows **colour bars** in its box by default, like a broadcast test card, instead of the scene's background. Existing scenes switch to bars; their words are kept.
+- Choose what it shows under **When the camera isn't sending** on the Camera layer (Production → Scenes) or under Camera in Present's **New scene / Edit scene**: **Colour bars**, **TV static** (grey noise that moves), **Words** (the words you set before) or **Nothing**. Tick **Show the camera's name on the bars** for a small label such as "Pulpit".
+- The previews show the same as the screens, and every screen, TV and NDI output goes back to the camera picture as soon as it sends. Static redraws the screens about 12 times a second only while it shows; bars cost nothing.
 ### Talk and notices from phones; channel rights, each person's volume; Pause video (#251, #36)
 - The phone page gets **Talk to** (a channel or one person), **Hear**, the crew list with roles and a **Mute** for each person; it can send notices to anyone with a request, and runs the requests sent to it (Show, Preview, Take, Start) as desks do.
 - Settings → Audio → **Talk channels** sets which desk roles may use Production and Stage & worship, and how loud the others stay while the main desk talks with priority. Each desk and the main desk can mute or turn down each person for themselves; the talking indicator shows each speaker's role.

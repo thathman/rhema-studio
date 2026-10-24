@@ -2,6 +2,7 @@ import { drawLowerThird, renderVerse } from "@/lib/verse-renderer"
 import { clockText } from "@/lib/scenes"
 import { drawTicker } from "@/lib/ticker-draw"
 import { entranceProgress } from "@/lib/lower-third-style"
+import { drawBars, drawStatic, noSignalOf } from "@/lib/no-signal"
 import type { LowerThird, SceneFrame, SceneLayerFrame, Ticker } from "@/types"
 
 export interface SceneDrawOptions {
@@ -169,6 +170,14 @@ function drawCover(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: nu
   ctx.drawImage(v, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
 }
 
+/** A camera's box while it is not sending. */
+function paintNoSignal(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, opts: SceneDrawOptions): void {
+  const mode = noSignalOf(l)
+  if (mode === "bars") drawBars(ctx, r, l.ident)
+  else if (mode === "static") drawStatic(ctx, r, opts.now ?? Date.now())
+  else if (mode === "words" && l.fallback && !opts.preview) fitText(ctx, l.fallback, r, l.theme)
+}
+
 /** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
 function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions): void {
   if (l.kind === "color") {
@@ -185,8 +194,9 @@ function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: n
     }
   } else if (l.kind === "camera" || l.kind === "video") {
     const v = (l.kind === "camera" ? opts.camera?.(l.id) : opts.video?.(l.id)) ?? null
-    // A camera not playing (not connected yet, or dropped): its fallback words, if it has them (#213).
-    if ((!v || v.videoWidth === 0) && l.fallback && !opts.preview) fitText(ctx, l.fallback, r, l.theme)
+    // A camera not playing (not connected yet, or dropped): colour bars, static, its words (#213)
+    // or nothing, as the layer says. The preview shows the same, so the operator sees what the screens do.
+    if (l.kind === "camera" && (!v || v.videoWidth === 0)) paintNoSignal(ctx, l, r, opts)
     else if (v && v.videoWidth > 0 && opts.cameraBelow?.(l.id)) {
       // Cut its box out of whatever is below, as much as the layer is opaque.
       ctx.globalCompositeOperation = "destination-out"
@@ -277,10 +287,17 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
       ctx.lineWidth = Math.max(2, width / 480)
       ctx.strokeStyle = "rgba(255,255,255,0.55)"
       ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2)
-      ctx.fillStyle = "rgba(255,255,255,0.85)"
-      ctx.font = `600 ${Math.max(12, Math.round(height / 36))}px "IBM Plex Sans", sans-serif`
+      const size = Math.max(12, Math.round(height / 36))
+      ctx.font = `600 ${size}px "IBM Plex Sans", sans-serif`
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
+      // Over a camera's bars or static the label sits on a dark band, to stay readable.
+      if (l.kind === "camera" && noSignalOf(l) !== "words" && noSignalOf(l) !== "none") {
+        const tw = Math.min(r.w - 16, ctx.measureText(l.label).width) + size
+        ctx.fillStyle = "rgba(0,0,0,0.7)"
+        ctx.fillRect(r.x + (r.w - tw) / 2, r.y + r.h / 2 - size * 0.8, tw, size * 1.6)
+      }
+      ctx.fillStyle = "rgba(255,255,255,0.85)"
       ctx.fillText(l.label, r.x + r.w / 2, r.y + r.h / 2, r.w - 16)
     }
     ctx.restore()

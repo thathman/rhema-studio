@@ -45,6 +45,13 @@ export interface SceneClock {
   text: string
 }
 
+/**
+ * What a camera's box shows while the camera is not sending: SMPTE colour bars, TV static, its
+ * words (`cameraFallback`), or nothing (the layers below show through).
+ */
+export type NoSignal = "bars" | "static" | "words" | "none"
+export const NO_SIGNALS: readonly NoSignal[] = ["bars", "static", "words", "none"]
+
 export interface SceneLayer {
   id: string
   name: string
@@ -53,8 +60,12 @@ export interface SceneLayer {
   shows?: ContentType[]
   /** camera: its stream on the church network (WHEP, e.g. http://192.168.1.10:8889/pulpit/whep). */
   cameraUrl?: string
-  /** camera: words shown in its box while the camera is not playing (#213 fallback); absent = the background. */
+  /** camera: words shown in its box while the camera is not playing (#213 fallback), when `noSignal` is "words". */
   cameraFallback?: string
+  /** camera: what its box shows while the camera is not sending; absent = colour bars. */
+  noSignal?: NoSignal
+  /** camera: the colour bars carry a small ident with the camera's name (absent = no). */
+  noSignalName?: boolean
   /** clock: what it shows: the service timer (absent), the time of day, a countdown to `until`, or to the run of show's `countdownTo`. */
   clockShows?: "timer" | "time" | "until" | "countdown"
   /** clock "until": the time of day counted down to, "HH:MM" (e.g. the service start). */
@@ -121,8 +132,12 @@ export interface SceneLayerFrame {
   clock?: SceneClock | null
   /** camera: its WHEP stream address. */
   cameraUrl?: string
-  /** camera: words for its box while the camera is not playing, in `theme`'s text style. */
+  /** camera: words for its box while the camera is not playing, in `theme`'s text style (`noSignal` "words"). */
   fallback?: string
+  /** camera: what its box shows while the camera is not playing (absent: colour bars). */
+  noSignal?: NoSignal
+  /** camera: the name the colour bars' ident shows (absent: no ident). */
+  ident?: string
   /** ticker: the running ticker (null when none runs). */
   ticker?: Ticker | null
   /** lowerThird: the lower third on air (null when none is up). */

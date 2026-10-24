@@ -7,7 +7,7 @@ import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
 import { drawScene } from "@/lib/scene-renderer"
 import { copyScene, FADES, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneFrame, type ScenePreset } from "@/lib/scenes"
-import { cameraOfUrl, routerStatus, whepUrl, type RouterStatus } from "@/lib/cameras"
+import { cameraLabelOf, cameraOfUrl, routerStatus, whepUrl, type RouterStatus } from "@/lib/cameras"
 import { overlayFor } from "@/lib/lower-third-style"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
@@ -19,7 +19,7 @@ import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
-import type { BroadcastOutput, BroadcastOutputLanguage, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
+import type { BroadcastOutput, BroadcastOutputLanguage, NoSignal, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
 
 /**
  * The congregation Scene Composer (ADR 0001, ARCH-002): arrange live sources, colours, pictures and
@@ -235,12 +235,13 @@ function ScenePreview({ scene, output, selected, onSelect, onMove }: { scene: Sc
   const ticker = useBroadcastStore((s) => tickerForScreens(s))
   const lowerThird = useBroadcastStore((s) => s.lowerThird)
   const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
+  const cameras = useSettingsStore((s) => s.cameras)
   const countdowns = useBroadcastStore((s) => s.countdowns)
   const timer = useTimerStore((s) => s.timer)
   useTimerStore((s) => s.tick)
   // The lower third as this output would show it (one that follows the program takes its words).
   const overlay = overlayFor(lowerThird, feedFrame({ isLive, liveVerse, sources }, output.shows))
-  const live = { isLive, liveVerse, sources, themes, ticker, overlay, logoUrl, countdowns }
+  const live = { isLive, liveVerse, sources, themes, ticker, overlay, logoUrl, countdowns, cameraLabel: (url: string) => cameraLabelOf(url, cameras) }
   const theme = live.themes.find((t) => t.id === output.themeId) ?? live.themes[0]
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layers = useRef(new Map<string, HTMLCanvasElement>())
@@ -447,12 +448,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
         </>
       )}
       {layer.kind === "camera" && <CameraPicker layer={layer} onChange={onChange} />}
-      {layer.kind === "camera" && (
-        <label className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">While the camera is not playing, show</span>
-          <input aria-label="Words while the camera is not playing" value={layer.cameraFallback ?? ""} maxLength={120} placeholder="the scene's background (e.g. type: Camera back shortly)" onChange={(e) => onChange({ cameraFallback: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
-        </label>
-      )}
+      {layer.kind === "camera" && <NoSignalChoice layer={layer} onChange={onChange} />}
       <div className="grid grid-cols-4 gap-1.5">
         <Num label="Left %" value={b.x} max={100 - b.w} onChange={(x) => onChange({ box: { ...b, x } })} />
         <Num label="Top %" value={b.y} max={100 - b.h} onChange={(y) => onChange({ box: { ...b, y } })} />
@@ -528,6 +524,37 @@ export function VideoPicker({ layer, onChange }: { layer: SceneLayer; onChange: 
  * The church's cameras (Production → Cameras) by name, for a camera layer; typing a stream address
  * stays possible under Advanced (a camera relayed somewhere else on the church network).
  */
+/**
+ * What a camera's box shows while the camera is not sending: colour bars (the default, with the
+ * camera's name if ticked), TV static, words, or nothing. Shared with Present's scene sheet and joined desks.
+ */
+export function NoSignalChoice({ layer, onChange, className = "h-8" }: { layer: Pick<SceneLayer, "noSignal" | "noSignalName" | "cameraFallback">; onChange: (p: Partial<SceneLayer>) => void; className?: string }) {
+  const mode = layer.noSignal ?? "bars"
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="flex flex-col gap-0.5">
+        <span className="text-xs text-muted-foreground">When the camera isn't sending</span>
+        <select aria-label="When the camera isn't sending" value={mode} onChange={(e) => onChange({ noSignal: e.target.value === "bars" ? undefined : (e.target.value as NoSignal) })} className={cn(className, "rounded-md border border-input bg-card px-1.5")}>
+          <option value="bars">Colour bars</option>
+          <option value="static">TV static</option>
+          <option value="words">Words</option>
+          <option value="none">Nothing (what is behind shows)</option>
+        </select>
+      </label>
+      {mode === "bars" && (
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={!!layer.noSignalName} onChange={(e) => onChange({ noSignalName: e.target.checked || undefined })} />
+          <span>Show the camera's name on the bars</span>
+        </label>
+      )}
+      {mode === "words" && (
+        <input aria-label="Words while the camera is not playing" value={layer.cameraFallback ?? ""} maxLength={120} placeholder="e.g. Camera back shortly" onChange={(e) => onChange({ cameraFallback: e.target.value || undefined })} className={cn(className, "rounded-md border border-input bg-transparent px-2")} />
+      )}
+      <span className="text-xs text-muted-foreground">{mode === "static" ? "Grey noise that moves, like an untuned TV." : mode === "none" ? "The camera's box is empty: the scene's background and layers below show." : mode === "words" ? "In the text style of the screen's look." : "The screens go back to the camera picture as soon as it sends."}</span>
+    </div>
+  )
+}
+
 export function CameraPicker({ layer, onChange }: { layer: SceneLayer; onChange: (p: Partial<SceneLayer>) => void }) {
   const cameras = useSettingsStore((s) => s.cameras)
   const [router, setRouter] = useState<RouterStatus | null>(null)
@@ -555,7 +582,7 @@ export function CameraPicker({ layer, onChange }: { layer: SceneLayer; onChange:
           {value === "typed" && <option value="typed" disabled>An address typed under Advanced</option>}
         </select>
         <span className="text-muted-foreground">
-          {cameras.length === 0 ? "No cameras yet: add the phones or cameras for each angle in Production → Cameras." : !host ? "Turn on the camera router in Production → Cameras to choose a camera here." : "Each screen plays it straight from the camera router, without sound; until it connects the scene's background shows there."}
+          {cameras.length === 0 ? "No cameras yet: add the phones or cameras for each angle in Production → Cameras." : !host ? "Turn on the camera router in Production → Cameras to choose a camera here." : "Each screen plays it straight from the camera router, without sound; until it connects its box shows what you choose under When the camera isn't sending."}
         </span>
       </label>
       <details open={value === "typed"} className="text-xs">

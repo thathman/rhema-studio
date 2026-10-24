@@ -3,7 +3,8 @@ import { themeIdFor } from "@/lib/output-themes"
 import { cameraHidden, feedFrame, type LiveSources, type StateSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
-import type { BroadcastOutput, BroadcastTheme, LowerThird, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
+import { NO_SIGNALS } from "@/types/scene"
+import type { BroadcastOutput, BroadcastTheme, LowerThird, NoSignal, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/countdown"
 
@@ -159,11 +160,14 @@ export function normalizeScene(raw: unknown): Scene | null {
     const until = typeof l.until === "string" && /^\d{1,2}:\d{2}$/.test(l.until) ? l.until : undefined
     const cameraUrl = typeof l.cameraUrl === "string" && /^https?:\/\//.test(l.cameraUrl.trim()) ? l.cameraUrl.trim().slice(0, 300) : undefined
     const cameraFallback = typeof l.cameraFallback === "string" && l.cameraFallback.trim() ? l.cameraFallback.trim().slice(0, 120) : undefined
+    // What a camera's box shows while it is not sending: absent stays absent (colour bars).
+    const noSignal = l.kind === "camera" && NO_SIGNALS.includes(l.noSignal as NoSignal) ? l.noSignal : undefined
+    const noSignalName = l.kind === "camera" && l.noSignalName === true ? true : undefined
     const language = l.language === "both" || l.language === "first" || l.language === "second" ? l.language : undefined
     const videoUrl = typeof l.videoUrl === "string" && l.videoUrl && l.videoUrl.length <= 4000 ? l.videoUrl : undefined
     const mediaFile = typeof l.mediaFile === "string" && MEDIA_FILE.test(l.mediaFile) ? l.mediaFile : undefined
     const fadeMs = clamp(l.fadeMs, 0, 3000, 0)
-    return [{ ...l, clockShows, until, countdownTo, cameraUrl, cameraFallback, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    return [{ ...l, clockShows, until, countdownTo, cameraUrl, cameraFallback, noSignal, noSignalName, language, videoUrl, mediaFile, fadeMs: fadeMs > 0 ? fadeMs : undefined, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}) }
 }
@@ -187,6 +191,8 @@ interface LiveState {
   overlay?: LowerThird | null
   /** The church's Brand Kit logo (a data URL), for logo layers. */
   logoUrl?: string | null
+  /** A camera's name (Production → Cameras) for its stream address, for the colour bars' ident; absent: the layer's name. */
+  cameraLabel?: (url: string) => string | undefined
 }
 
 /**
@@ -291,8 +297,11 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
     }
     // A camera: its stream, played by each output from the church network. One hidden from scenes
     // (Present → Sources) is not played: its box shows the fallback, the scene itself unchanged.
-    const fallback = l.cameraFallback ? { fallback: l.cameraFallback, theme: s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0] } : {}
+    // Until it sends, its box shows colour bars (with the camera's name, if asked), static, its words or nothing.
+    const noSignal = l.noSignal ?? "bars"
+    const fallback = noSignal === "words" && l.cameraFallback ? { fallback: l.cameraFallback, theme: s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0] } : {}
+    const ident = noSignal === "bars" && l.noSignalName ? { ident: (l.cameraUrl && s.cameraLabel?.(l.cameraUrl)) || l.name } : {}
     const hidden = !!l.cameraUrl && cameraHidden(s.stateSources, l.cameraUrl)
-    return { ...base, ...(l.cameraUrl && !hidden ? { cameraUrl: l.cameraUrl } : {}), ...fallback, ...(preview ? { label: hidden ? `${l.name} · hidden from scenes` : l.cameraUrl ? `${l.name} · camera` : `${l.name} · choose a camera` } : {}) }
+    return { ...base, ...(l.cameraUrl && !hidden ? { cameraUrl: l.cameraUrl } : {}), noSignal, ...fallback, ...ident, ...(preview ? { label: hidden ? `${l.name} · hidden from scenes` : l.cameraUrl ? `${l.name} · camera` : `${l.name} · choose a camera` } : {}) }
   }
 }

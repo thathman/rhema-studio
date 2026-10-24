@@ -62,8 +62,10 @@ struct CameraFeed {
 /// The fields a desk may send for a scene and for each of its layers; anything else is dropped
 /// (`strip`). Pictures, videos and held copies are not among them: they stay on the host.
 const SCENE_FIELDS: &[&str] = &["id", "name", "background", "layers", "fadeMs"];
-const LAYER_FIELDS: &[&str] = &["id", "name", "kind", "shows", "cameraUrl", "cameraFallback", "clockShows", "until", "countdownTo", "themeId", "color", "mediaId", "mediaFile", "language", "fadeMs", "box", "crop", "opacity", "visible"];
+const LAYER_FIELDS: &[&str] = &["id", "name", "kind", "shows", "cameraUrl", "cameraFallback", "noSignal", "noSignalName", "clockShows", "until", "countdownTo", "themeId", "color", "mediaId", "mediaFile", "language", "fadeMs", "box", "crop", "opacity", "visible"];
 const KINDS: &[&str] = &["feed", "color", "picture", "video", "camera", "clock", "ticker", "lowerThird", "logo"];
+/// What a camera's box may show while the camera is not sending.
+const NO_SIGNALS: &[&str] = &["bars", "static", "words", "none"];
 
 /// Drop every field of a desk's scene, and of its layers, that a desk may not send.
 pub fn strip(scene: &mut serde_json::Value) {
@@ -115,10 +117,12 @@ fn unsafe_scene(scene: &serde_json::Value, current: Option<&serde_json::Value>, 
                 ("box" | "crop", _) => return Some(format!("A layer's {k} is numbers only")),
                 ("opacity" | "fadeMs", v) if !v.is_number() => return Some(format!("A layer's {k} is a number")),
                 ("visible", v) if !v.is_boolean() => return Some("A layer's visible is true or false".into()),
+                ("noSignalName", v) if !v.is_boolean() => return Some("A layer's noSignalName is true or false".into()),
+                ("noSignal", v) if !v.as_str().is_some_and(|m| NO_SIGNALS.contains(&m)) => return Some("A camera without a signal shows bars, static, words or none".into()),
                 ("shows", serde_json::Value::Array(a)) if a.len() <= 10 && a.iter().all(|x| x.as_str().is_some_and(|x| x.len() <= 20)) => {}
                 ("shows", _) => return Some("A layer follows at most 10 sources".into()),
                 ("color", v) if !v.as_str().is_some_and(hex) => return Some("A colour is #rrggbb".into()),
-                ("opacity" | "fadeMs" | "visible" | "color", _) => {}
+                ("opacity" | "fadeMs" | "visible" | "color" | "noSignal" | "noSignalName", _) => {}
                 (field, serde_json::Value::String(t)) if t.chars().count() > longest(field) => return Some(format!("A layer's {field} is at most {} characters", longest(field))),
                 (_, serde_json::Value::String(_)) => {}
                 (field, _) => return Some(format!("A layer's {field} is words")),
@@ -312,10 +316,19 @@ mod tests {
             serde_json::json!({ "color": "red;x" }),
             serde_json::json!({ "kind": "camera", "cameraUrl": "http://evil.example/whep" }),
             serde_json::json!({ "name": { "nested": true } }),
+            serde_json::json!({ "kind": "camera", "noSignal": "snow" }),
+            serde_json::json!({ "kind": "camera", "noSignal": true }),
+            serde_json::json!({ "kind": "camera", "noSignalName": "yes" }),
         ] {
             assert_eq!(refused(layer(bad.clone())), Err((400, "bad-scene")), "{bad}");
         }
         assert!(refused(layer(serde_json::json!({ "kind": "camera", "cameraUrl": "http://192.168.1.10:8889/choir/whep" }))).is_ok(), "a named camera");
+        for mode in NO_SIGNALS {
+            assert!(refused(layer(serde_json::json!({ "kind": "camera", "noSignal": mode, "noSignalName": true }))).is_ok(), "{mode}");
+        }
+        let mut bars = layer(serde_json::json!({ "kind": "camera", "noSignal": "static", "noSignalName": false }));
+        strip(&mut bars);
+        assert_eq!((bars["layers"][0]["noSignal"].as_str(), bars["layers"][0]["noSignalName"].as_bool()), (Some("static"), Some(false)), "kept by strip");
         let mut extra = layer(serde_json::json!({ "onclick": "alert(1)", "imageUrl": "data:text/html,x", "held": { "reference": "fake" } }));
         extra["evil"] = "x".into();
         strip(&mut extra);

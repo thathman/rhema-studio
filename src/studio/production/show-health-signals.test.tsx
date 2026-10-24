@@ -32,7 +32,7 @@ const flush = () => act(async () => { for (let i = 0; i < 8; i++) await Promise.
 const theme = BUILTIN_THEMES[0].id
 const main: BroadcastOutput = { id: "main", name: "Main", type: "display", themeId: theme, monitorIndex: 0, ndi: defaultNdiSettings("Main"), sceneId: "s1" }
 const foyer: BroadcastOutput = { id: "foyer", name: "Foyer TV", type: "browser", themeId: theme, monitorIndex: 0, ndi: defaultNdiSettings("Foyer"), feedToken: "f".repeat(32), tvs: [{ name: "Foyer Google TV", address: "192.168.1.40", sentAt: Date.now() }] }
-const scene = { id: "s1", name: "Sermon split", background: "#000", layers: [{ id: "a", name: "Pulpit place", kind: "camera", cameraUrl: "http://192.168.1.20:8889/pulpit/whep", cameraFallback: "Back soon", box: { x: 0, y: 0, w: 1, h: 1 } }] } as unknown as Scene
+const scene = { id: "s1", name: "Sermon split", background: "#000", layers: [{ id: "a", name: "Pulpit place", kind: "camera", cameraUrl: "http://192.168.1.20:8889/pulpit/whep", cameraFallback: "Back soon", noSignal: "words", box: { x: 0, y: 0, w: 1, h: 1 } }] } as unknown as Scene
 
 const roots: Root[] = []
 async function mount(node: React.ReactNode) {

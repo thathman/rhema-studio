@@ -1400,6 +1400,22 @@ The host with a saved service (a main service with a start time, Welcome 5, Serm
 | 10fa.9 | Optional, long: run a service for more than an hour with Remote presses or verse steps every few seconds (or leave a joined Bible desk stepping), past 2000 log lines (Keep log shows the count). Open Prepare → Run of show. | The first items still show their actual start and Done, never Skipped; the expected end has not jumped. | Unverified |
 | 10fa.10 | Mid-service, with an item running, set the Mac's clock 1 minute ahead (System Settings → Date & Time, automatic off), wait 2 minutes, put it right again. Then force-quit Rhema (Activity Monitor → Force Quit), open it again and accept the kept log. | The service log comes back with "Service log kept from before Rhema closed unexpectedly". Run of show: the item that was running across the clock change shows the same time on air it had before the force-quit (not a minute more or less). | Unverified |
 
+### 10fg. Colour bars or TV static while a camera is not sending (#213)
+
+One Mac with a congregation display output (the projector), a browser feed on the Chromecast with Google TV, NDI on with OBS receiving, the camera router on and one phone camera ("Pulpit") in Production → Cameras. A scene "Sermon" with the Pulpit camera full screen and a Bible layer over it. Start with the phone's camera page closed (not sending).
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fg.1 | Production → Scenes → "Sermon", select the camera layer. | **When the camera isn't sending** shows **Colour bars**; the preview shows SMPTE bars with crisp edges in the camera's box (seven bars, the thin strip, the bottom row with the pluge), the Bible layer over them. A scene made before this change also shows bars, and its words are still there under **Words**. | Unverified |
+| 10fg.2 | Take "Sermon" to the projector, the TV feed and the NDI output. | The projector, the Google TV and OBS show the bars in the camera's box, the same as the preview. No "Waiting for…" words and no plain background. | Unverified |
+| 10fg.3 | Tick **Show the camera's name on the bars**. | A small black label "Pulpit" in white in the bars' lower left, on every screen and the TV. | Unverified |
+| 10fg.4 | Choose **TV static**. Watch the projector and the TV for 30 seconds. | Grey moving noise in the camera's box. On the Google TV it moves smoothly (no long freezes), verses still change within a second, and the TV's ticker (if running) keeps crawling. | Unverified |
+| 10fg.5 | Start the phone camera (**Start camera**). | Within a few seconds the projector, the TV and OBS show the camera picture instead of the static (and instead of bars in 10fg.2/10fg.3). | Unverified |
+| 10fg.6 | Stop the phone camera again; then Present → Sources → **Hide from scenes** on Pulpit; then **Restore**. | Static comes back when it stops and while it is hidden; Restore plays the camera again once it sends. Show health says "…shows TV static there" while it is not sending. | Unverified |
+| 10fg.7 | Choose **Words**, type "Camera back shortly"; then **Nothing**. | Words: the words in the look's text style in the box (as before #213's words); Nothing: the background and the layers below show. | Unverified |
+| 10fg.8 | Present → **Edit scene** on "Sermon": the camera's **When the camera isn't sending** choice and name tick; choose **Colour bars**, **Save scene**. | The sheet has the same four choices and the tick; its preview shows bars; the projector shows bars after saving. | Unverified |
+| 10fg.9 | With static showing on the projector only (no NDI, TV off), Activity Monitor: Rhema's CPU; then switch to bars. | Static: a modest rise; bars (or the camera picture): back to the idle level, the output window stops redrawing. | Unverified |
+| 10fg.10 | A joined Screens desk: edit "Sermon" and change the choice to **TV static**, **Save on the host**. | The host's scene shows TV static as chosen (or waits for Accept when it is on a screen). | Unverified |
 ### 10ff. Phone Talk to and requests, channel rights, each person's volume, Pause video (#251, #36)
 
 The host with HTTP remote on (and **Secure page for phones (https)** for the phone's Talk), one congregation output and its stage display. Desk B joined as **Bible**, desk C as **Stage**, and a phone paired as **Present** on the https page. A short MP4 in the Library and a video item in the service.

@@ -8,6 +8,7 @@ import { useJournalStore } from "@/stores/journal-store"
 import { useNotices } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
+import { NO_SIGNALS } from "@/types/scene"
 import type { Scene, SceneBox, SceneCrop, SceneLayer, SceneLayerKind } from "@/types"
 
 /**
@@ -105,6 +106,8 @@ function deskLayer(raw: unknown, had: SceneLayer | undefined, cameras: Set<strin
     ...(kind === "feed" && shows.length ? { shows: [...new Set(shows)] } : {}),
     ...(kind === "camera" && cameraUrl ? { cameraUrl } : {}),
     ...(kind === "camera" && text(l.cameraFallback, 120) ? { cameraFallback: text(l.cameraFallback, 120) } : {}),
+    ...(kind === "camera" && pick(l.noSignal, NO_SIGNALS) ? { noSignal: pick(l.noSignal, NO_SIGNALS) } : {}),
+    ...(kind === "camera" && l.noSignalName === true ? { noSignalName: true } : {}),
     ...(kind === "clock" && pick(l.clockShows, ["time", "until", "countdown"] as const) ? { clockShows: pick(l.clockShows, ["time", "until", "countdown"] as const) } : {}),
     ...(kind === "clock" && until ? { until } : {}),
     ...(kind === "clock" && isCountdownTo(l.countdownTo) && l.countdownTo.length <= 120 ? { countdownTo: l.countdownTo } : {}),

@@ -10,7 +10,9 @@ import { BASIC_PLACES, basicOf, NEW_BASIC, withBasic, type BasicPlace, type Basi
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMediaStore } from "@/stores/media-store"
-import { CameraPicker, VideoPicker } from "@/studio/production/scene-composer"
+import { useSettingsStore } from "@/stores/settings-store"
+import { cameraLabelOf } from "@/lib/cameras"
+import { CameraPicker, NoSignalChoice, VideoPicker } from "@/studio/production/scene-composer"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, Scene, SceneLayer } from "@/types"
@@ -150,6 +152,7 @@ function SceneSheetBody({ output, scene, onDone }: { output: BroadcastOutput; sc
             </span>
           </label>
           {b.camera !== null && <CameraPicker layer={pseudo("camera", { cameraUrl: b.camera || undefined })} onChange={(p) => { if ("cameraUrl" in p) set({ camera: p.cameraUrl ?? "" }) }} />}
+          {b.camera !== null && <NoSignalChoice layer={b.cameraWhenOff ?? {}} onChange={(p) => set({ cameraWhenOff: { ...b.cameraWhenOff, ...p } })} className="h-9" />}
         </fieldset>
 
         {onScreens.length > 0 && <p className="rounded-md border border-gold/60 bg-tone-amber px-2.5 py-1.5 text-xs text-tone-amber-foreground">{scene?.name} is on {onScreens.join(", ")} now: saving changes {onScreens.length === 1 ? "that screen" : "those screens"} at once.</p>}
@@ -172,13 +175,14 @@ function SheetPreview({ scene, output }: { scene: Scene; output: BroadcastOutput
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const sources = useBroadcastStore((s) => s.sources)
   const themes = useBroadcastStore((s) => s.themes)
+  const cameras = useSettingsStore((s) => s.cameras)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layers = useRef(new Map<string, HTMLCanvasElement>())
   const [, redraw] = useState(0)
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d")
     if (!ctx) return
-    drawScene(ctx, PREVIEW_W, PREVIEW_H, sceneFrame({ isLive, liveVerse, sources, themes }, output, scene, true), {
+    drawScene(ctx, PREVIEW_W, PREVIEW_H, sceneFrame({ isLive, liveVerse, sources, themes, cameraLabel: (url) => cameraLabelOf(url, cameras) }, output, scene, true), {
       preview: true,
       imageCache: themeImageCache(),
       layerCanvas: (id) => {
