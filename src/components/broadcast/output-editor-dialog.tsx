@@ -35,7 +35,7 @@ import { CONTENT_TYPES, FEED_SOURCES, type ContentType, type FeedSourceKind } fr
 import { withThemeFor } from "@/lib/output-themes"
 import { rememberTv } from "@/lib/show-health"
 import { CONTENT_NAMES, FEED_NAMES } from "@/lib/content-names"
-import { followsTicker } from "@/lib/live-sources"
+import { followsLowerThird, followsTicker } from "@/lib/live-sources"
 import type {
   BroadcastOutput,
   BroadcastOutputType,
@@ -288,8 +288,8 @@ export function OutputEditorDialog({
                 </Select>
                 {followsPicker(FEED_SOURCES)}
                 <label className="mt-2 flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={form.lowerThirds === true} onChange={(e) => patch({ lowerThirds: e.target.checked })} />
-                  <span>Show lower thirds on this output <span className="text-muted-foreground">(names, scripture and lyrics strips from Present; usually the stream)</span></span>
+                  <input type="checkbox" checked={followsLowerThird(form)} disabled={!!form.shows?.includes("lowerThird")} onChange={(e) => patch({ lowerThirds: e.target.checked })} />
+                  <span>Show lower thirds on this output <span className="text-muted-foreground">{form.shows?.includes("lowerThird") ? "(it follows the lower third, above)" : "(names, scripture and lyrics strips from Present; usually the stream)"}</span></span>
                 </label>
                 <label className="flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={followsTicker(form)} disabled={!!form.shows?.includes("ticker")} onChange={(e) => patch({ ticker: e.target.checked })} />

@@ -105,6 +105,9 @@ interface ShellState extends ShellPrefs {
   /** Setup status (#298): the church's setup, the equipment and this service, on one page. */
   setupStatusOpen: boolean
   setSetupStatusOpen: (open: boolean) => void
+  /** Ask the Desk menu to open (Settings search → Appearance). A new count each time. */
+  deskMenuRequest: number
+  openDeskMenu: () => void
 }
 
 // ponytail: localStorage like ThemeProvider; per-machine UI convenience, not content.
@@ -118,6 +121,8 @@ export const useShellStore = create<ShellState>((set) => ({
   setDesignTab: (tab) => set({ designTab: designTabOf(tab) }),
   designRequest: null,
   openDesign: (tab) => set({ designRequest: designTabOf(tab) }),
+  deskMenuRequest: 0,
+  openDeskMenu: () => set((s) => ({ deskMenuRequest: s.deskMenuRequest + 1 })),
   goRequest: null,
   goTo: (goRequest) => set({ goRequest }),
   newServiceOpen: false,

@@ -138,7 +138,7 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{STEP_INFO[id].short}</span>
-                    {(STEP_INFO[id].optional || state === "skipped") && <span className="block text-[0.625rem] font-normal text-muted-foreground">{state === "skipped" ? "Skipped" : "Optional"}</span>}
+                    {(STEP_INFO[id].optional || state === "skipped") && <span className="block text-[0.6875rem] font-normal text-muted-foreground">{state === "skipped" ? "Skipped" : "Optional"}</span>}
                   </span>
                   <span className="sr-only">{state === "done" ? "(done)" : state === "skipped" ? "(skipped)" : ""}</span>
                 </button>

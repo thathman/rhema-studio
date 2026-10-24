@@ -1,11 +1,13 @@
 import { newFeedToken } from "@/lib/output-on-air"
-import { defaultNdiSettings, MAIN_OUTPUT_ID, type BroadcastOutput, type BroadcastTheme } from "@/types"
+import { newLayer, newScene } from "@/lib/scenes"
+import { defaultNdiSettings, MAIN_OUTPUT_ID, type BroadcastOutput, type BroadcastTheme, type Scene } from "@/types"
 import type { FeedSourceKind } from "@/types/broadcast"
 
 /**
- * Ready-made feeds (#299 UX15-4): named outputs for OBS and other receivers, each set up for one
- * job (the Bible full screen, the Bible as a lower third, lyrics, the ticker on alpha). Adding one
- * makes a new output, off until someone turns it on; existing outputs are never renamed or changed.
+ * Ready-made feeds (#299 UX15-4, #243 FD.5): named outputs for OBS and other receivers, each set up
+ * for one job (the Bible full screen, the Bible as a lower third, lyrics, announcements, the
+ * presenter's name band, the ticker on alpha, the service clock). Adding one makes a new output, off
+ * until someone turns it on; existing outputs are never renamed or changed.
  */
 export interface FeedPreset {
   id: string
@@ -22,6 +24,8 @@ export interface FeedPreset {
   ticker?: boolean
   /** Sends transparency (NDI alpha); full-screen feeds are opaque. */
   alpha: boolean
+  /** It shows a scene of its own: the service clock (a scene of that name is reused when the church has one). */
+  clockScene?: true
 }
 
 // The four built-in themes (src/lib/builtin-themes.ts); their ids never change.
@@ -33,8 +37,16 @@ export const FEED_PRESETS: readonly FeedPreset[] = [
   { id: "bible-l3", name: "Rhema Bible | Lower third", description: "The verse as a keyed lower third over the camera, with name bands.", shows: ["bible"], themeIds: [LOWER_THIRDS], lowerThirds: true, alpha: true },
   { id: "lyrics-full", name: "Rhema Lyrics | Full", description: "Song and hymn words full screen.", shows: ["song", "hymn"], themeIds: [CLASSIC_DARK], alpha: false },
   { id: "lyrics-l3", name: "Rhema Lyrics | Lower third", description: "Song and hymn words as a keyed lower third over the camera.", shows: ["song", "hymn"], themeIds: [LOWER_THIRDS], alpha: true },
+  { id: "announcements-full", name: "Rhema Announcements | Full", description: "Announcement slides full screen, for the stream before and after the service.", shows: ["slide"], themeIds: [CLASSIC_DARK], alpha: false },
+  { id: "presenter-l3", name: "Rhema Lower third | Presenter", description: "Only the name band (the speaker, a title), keyed over the camera; no verses or lyrics.", shows: ["lowerThird"], themeIds: [LOWER_THIRDS], lowerThirds: true, alpha: true },
   { id: "ticker-alpha", name: "Rhema Ticker | Alpha", description: "Only the news ticker, on a transparent frame to key over anything.", shows: ["ticker"], themeIds: [LOWER_THIRDS], ticker: true, alpha: true },
+  { id: "clock", name: "Rhema Clock", description: "The service timer on a transparent frame (a countdown or the sermon clock), from its own scene.", shows: [], themeIds: [LOWER_THIRDS], alpha: true, clockScene: true },
 ]
+
+/** The clock feed's scene: the service timer in the middle of a transparent frame. */
+function clockScene(name: string): Scene {
+  return newScene(name, { id: "clock", name, description: "The service timer", background: "transparent", layers: () => [newLayer("clock", { name: "Service timer", box: { x: 20, y: 30, w: 60, h: 40 } })] })
+}
 
 export type FeedTransport = "ndi" | "browser"
 
@@ -47,7 +59,8 @@ export function existingFeed(preset: FeedPreset, outputs: readonly BroadcastOutp
 
 /**
  * The new output for a ready-made feed, or why not: an output with that name or NDI source name
- * exists already (two NDI senders with one name collide on the network). Pure: the caller adds it.
+ * exists already (two NDI senders with one name collide on the network). The clock feed comes with
+ * its scene, new unless the church has a scene of that name. Pure: the caller adds them.
  */
 export function readyMadeFeed(
   preset: FeedPreset,
@@ -55,9 +68,12 @@ export function readyMadeFeed(
   outputs: readonly BroadcastOutput[],
   themes: readonly Pick<BroadcastTheme, "id">[],
   newId: () => string = () => crypto.randomUUID(),
-): { output: BroadcastOutput } | { taken: BroadcastOutput } {
+  scenes: readonly Pick<Scene, "id" | "name">[] = [],
+): { output: BroadcastOutput; scene?: Scene } | { taken: BroadcastOutput } {
   const taken = existingFeed(preset, outputs)
   if (taken) return { taken }
+  const reuse = preset.clockScene ? scenes.find((x) => same(x.name, preset.name)) : undefined
+  const scene = preset.clockScene && !reuse ? clockScene(preset.name) : undefined
   const themeId = preset.themeIds.find((id) => themes.some((t) => t.id === id)) ?? outputs.find((o) => o.id === MAIN_OUTPUT_ID)?.themeId ?? themes[0]?.id ?? ""
   const output: BroadcastOutput = {
     id: newId(),
@@ -68,12 +84,13 @@ export function readyMadeFeed(
     monitorIndex: 0,
     monitorName: null,
     ndi: { ...defaultNdiSettings(preset.name), alphaMode: preset.alpha ? "straightAlpha" : "noneOpaque" },
-    shows: [...preset.shows],
+    ...(preset.shows.length ? { shows: [...preset.shows] } : {}),
     ...(preset.lowerThirds ? { lowerThirds: true } : {}),
     ...(preset.ticker ? { ticker: true } : {}),
+    ...(preset.clockScene ? { sceneId: (reuse ?? scene)!.id } : {}),
     ...(transport === "browser" ? { feedToken: newFeedToken() } : {}),
   }
-  return { output }
+  return scene ? { output, scene } : { output }
 }
 
 /**

@@ -15,6 +15,13 @@ export interface JournalEntry {
   itemId?: string | null
   /** The live source it came from or changed (ADR 0001): "Bible", "Hymns"… Shown in the log. */
   source?: string
+  /** Who did it (#243 EX.1): the operator's name, a joined desk or phone; absent when not known. The label says it too. */
+  by?: string
+  /** The source's or scene Take's revision (one count for both): higher is newer. */
+  revision?: number
+  /** A scene entry: the output it was taken to or released from, and the scene (absent: back to its own feed). */
+  outputId?: string
+  sceneId?: string
 }
 
 export interface ActualDuration {

@@ -3,7 +3,7 @@ import { eventStarts, eventTimes } from "@/lib/journal"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import { serviceTiming, type EventState, type ServiceTiming } from "@/lib/timing-engine"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
-import { cameraSourceId, tickerWords, timerWords } from "@/lib/live-sources"
+import { cameraSourceId, lowerThirdWords, tickerWords, timerWords } from "@/lib/live-sources"
 import { cameraSending, useRouterHealth } from "@/lib/cameras"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
@@ -31,9 +31,11 @@ export interface LiveStateV1 {
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
   /**
    * Each live source; `activatedAt` and `by` (who activated it) are absent from older hosts. After the
-   * content sources: "ticker", "timer" and each "camera:<name>" (reference: the ticker's first words,
-   * the timer's state, the camera's name), with `state`: running / paused / off, or sending /
+   * content sources: "ticker", "timer", "lowerThird", "stage" and each "camera:<name>" (reference: the
+   * ticker's first words, the timer's state, the lower third's lines, the stage message, the camera's
+   * name), with `state`: running / paused / off, up / down (lower third, stage message), or sending /
    * not-sending / router-off / hidden (a camera hidden from scenes; absent before the router answers).
+   * "lowerThird" and "stage" are absent from older hosts.
    */
   sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string; state?: string }[]
   event: { mode: "screens" | "own"; currentId: string | null }
@@ -44,9 +46,13 @@ export interface LiveStateV1 {
   stageMessage: string
   /** The service timer (#196 R5) when this was sent: a desk counts on from when it arrived. */
   timer?: { durationMs: number; elapsedMs: number; running: boolean }
-  /** Congregation scenes and outputs, for a screens operator. */
+  /**
+   * Congregation scenes and outputs, for a screens operator. An output's `sceneRevision` and `sceneBy`:
+   * its last scene Take or release on the host, and who did it (#243 EX.1; absent from older hosts
+   * and before the first Take).
+   */
   scenes: { id: string; name: string }[]
-  outputs: { id: string; name: string; sceneId: string | null }[]
+  outputs: { id: string; name: string; sceneId: string | null; sceneRevision?: number; sceneBy?: string }[]
   /**
    * Production notices (Rhema Comms), newest first. The host's server passes each paired desk only
    * those for it (everyone, its role, its name, or sent by it); the main desk has them all.
@@ -136,7 +142,10 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     stageMessage: b.stageMessage,
     timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null } })(),
     scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
-    outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
+    outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => {
+      const take = b.sceneTakes[o.id]
+      return { id: o.id, name: o.name, sceneId: o.sceneId ?? null, ...(take ? { sceneRevision: take.revision, ...(take.by ? { sceneBy: take.by } : {}) } : {}) }
+    }),
     notices: useNotices.getState().notices.slice(0, 50),
     crew: useSettingsStore.getState().remoteDevices.map((d) => d.name),
     voice: voiceCrew(),
@@ -203,7 +212,7 @@ export function startLiveStatePublisher(): () => void {
   return () => subs.forEach((u) => u())
 }
 
-/** The ticker, the service timer and each camera, as the real screens have them (never rehearsal's). */
+/** The ticker, the service timer, the lower third, the stage message and each camera, as the real screens have them (never rehearsal's). */
 function stateSourceRows(): LiveStateV1["sources"] {
   const b = useBroadcastStore.getState()
   const st = b.stateSources
@@ -218,6 +227,8 @@ function stateSourceRows(): LiveStateV1["sources"] {
     const words = st.timer.on ? "Running" : `Paused · ${timerWords(timerForScreens(b), monotonicNow())}`
     rows.push({ id: "timer", reference: words, on: st.timer.on, ...meta(st.timer), state: st.timer.on ? "running" : "paused" })
   }
+  if (st.lowerThird) rows.push({ id: "lowerThird", reference: lowerThirdWords(st.lowerThird.lowerThird), on: st.lowerThird.on, ...meta(st.lowerThird), state: st.lowerThird.on ? "up" : "down" })
+  if (st.stage) rows.push({ id: "stage", reference: st.stage.message ?? "", on: st.stage.on, ...meta(st.stage), state: st.stage.on ? "up" : "down" })
   const health = useRouterHealth.getState()
   for (const cam of useSettingsStore.getState().cameras) {
     const id = cameraSourceId(cam.name)

@@ -109,7 +109,7 @@ export function Sidebar({
         <span aria-hidden className="flex size-[34px] shrink-0 items-center justify-center rounded-[7px] bg-[#2d766f] font-[Georgia,serif] text-[1.4375rem] font-bold text-[#f7fbf8]">R</span>
         <span className="flex flex-col leading-none compact:sr-only">
           <span className="text-[1.1875rem] font-bold tracking-[-0.045em] text-[#f2f6f3]">rhema<span className="text-[#a7c9ba]">.</span></span>
-          <span className="mt-0.5 font-mono text-[0.5625rem] font-semibold tracking-[0.19em] text-[#93a5a9] uppercase">Studio</span>
+          <span className="mt-0.5 font-mono text-[0.625rem] font-semibold tracking-[0.16em] text-sidebar-label uppercase">Studio</span>
         </span>
       </div>
       <Group label="Workspace" first>

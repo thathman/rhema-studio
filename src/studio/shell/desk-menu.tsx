@@ -57,6 +57,17 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion(null))
   }, [])
+  // Another page asks for the menu (Settings search → Appearance): it opens, from its button.
+  useEffect(
+    () =>
+      useShellStore.subscribe((s, p) => {
+        if (s.deskMenuRequest === p.deskMenuRequest) return
+        setDraft(useSettingsStore.getState().operatorName.trim())
+        setOpen(true)
+        trigger.current?.focus()
+      }),
+    [],
+  )
 
   // The name is saved on Enter, on leaving the box and on closing the menu; Escape in the box puts it back.
   const commit = () => {
@@ -89,14 +100,14 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               (active || open) && "bg-sidebar-accent",
             )}
           >
-            <span aria-hidden className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#e6f0eb] text-xs font-bold text-[#28685f]">
+            <span aria-hidden className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-sidebar-primary text-xs font-bold text-sidebar-primary-foreground">
               {initials(name) || <UserRoundIcon className="size-4" />}
             </span>
             <span className="flex min-w-0 flex-1 flex-col compact:sr-only">
-              <span className={cn("truncate text-xs font-semibold", name ? "text-[#f2f6f3]" : "text-[#a7c9ba]")}>{label}</span>
-              <span className="truncate text-[0.6875rem] text-[#8d9ab2]">{role}</span>
+              <span className={cn("truncate text-xs font-semibold", name ? "text-sidebar-accent-foreground" : "text-sidebar-foreground")}>{label}</span>
+              <span className="truncate text-[0.6875rem] text-sidebar-foreground">{role}</span>
             </span>
-            <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-[#8d9ab2] compact:hidden" />
+            <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-sidebar-label compact:hidden" />
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -173,7 +184,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
           <div className="-mx-1 flex flex-col border-t border-border pt-2">
             <button type="button" className={ROW} onClick={() => run(onSettings)}>
               <SettingsIcon /> Settings
-              <kbd className="ml-auto rounded border border-border bg-muted px-1 font-sans text-[0.625rem] text-muted-foreground">⌘ ,</kbd>
+              <kbd className="ml-auto rounded border border-border bg-muted px-1 font-sans text-[0.6875rem] text-muted-foreground">⌘ ,</kbd>
             </button>
             <button type="button" className={ROW} onClick={() => run(() => useShellStore.getState().setSetupOpen(true))}>
               <ListChecksIcon /> Complete setup
@@ -190,7 +201,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
             </button>
             <button type="button" className={ROW} onClick={() => run(() => openSettings("help"))}>
               <InfoIcon /> About Rhema Studio
-              {version && <span className="ml-auto text-[0.625rem] text-muted-foreground">v{version}</span>}
+              {version && <span className="ml-auto text-[0.6875rem] text-muted-foreground">v{version}</span>}
             </button>
           </div>
         </PopoverContent>
@@ -214,7 +225,7 @@ function SetupStatusRow({ onOpen }: { onOpen: () => void }) {
   return (
     <button type="button" className={ROW} onClick={onOpen}>
       <ClipboardCheckIcon /> Setup status
-      <span className={cn("ml-auto text-[0.625rem] font-semibold", label === "Complete" ? "text-confidence-high" : "text-confidence-mid")}>{label}</span>
+      <span className={cn("ml-auto text-[0.6875rem] font-semibold", label === "Complete" ? "text-confidence-high" : "text-confidence-mid")}>{label}</span>
     </button>
   )
 }

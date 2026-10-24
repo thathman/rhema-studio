@@ -127,8 +127,8 @@ export function useRemoteControl() {
           }),
         )
       }
-      // Content sources, the ticker, the timer (take off = pause) and each camera added in Production → Cameras.
-      const SOURCES = ["bible", "song", "hymn", "slide", "picture", "ticker", "timer"] as const
+      // Content sources, the ticker, the timer (take off = pause), the lower third, the stage message and each camera added in Production → Cameras.
+      const SOURCES = ["bible", "song", "hymn", "slide", "picture", "ticker", "timer", "lowerThird", "stage"] as const
       const asSource = (v: unknown): AnySourceId | undefined =>
         SOURCES.find((s) => s === v) ?? (typeof v === "string" && isStateSource(v) && useSettingsStore.getState().cameras.some((c) => cameraSourceId(c.name) === v) ? v : undefined)
       await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120)) })

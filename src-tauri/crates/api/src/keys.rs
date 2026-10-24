@@ -328,6 +328,13 @@ mod tests {
             assert!(!Role::Screens.allows(&cmd), "{cmd}");
         }
         assert!(Role::Present.allows(&take) && Role::Present.allows(&RemoteCommand::ClearSource("hymn".into())));
+        // The lower third and the stage message as sources (#243): taken off and back by the Present desks only.
+        for id in ["lowerThird", "stage"] {
+            for cmd in [RemoteCommand::ClearSource(id.into()), RemoteCommand::RestoreSource(id.into())] {
+                assert!(Role::Present.allows(&cmd) && Role::Configure.allows(&cmd), "{cmd}");
+                assert!(!Role::Bible.allows(&cmd) && !Role::Screens.allows(&cmd) && !Role::Timekeeper.allows(&cmd), "{cmd}");
+            }
+        }
         assert!(!Role::Timekeeper.allows(&RemoteCommand::BibleActivate("x".into())));
         // A song or hymn asked for (Comms C2): the Present desks only.
         for cmd in [RemoteCommand::SongShow("Amazing Grace".into()), RemoteCommand::SongPreview("Amazing Grace".into())] {

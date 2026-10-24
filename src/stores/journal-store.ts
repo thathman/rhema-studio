@@ -8,7 +8,7 @@ import { formatJournal, type JournalEntry } from "@/lib/journal"
 import { plannedMs } from "@/lib/service-timing"
 import { useSettingsStore } from "@/stores/settings-store"
 import { CONTENT_NAMES } from "@/lib/content-names"
-import { tickerWords, type SourceId, type StateSource, type StateSourceId } from "@/lib/live-sources"
+import { lowerThirdWords, tickerWords, type SourceId, type StateSource, type StateSourceId } from "@/lib/live-sources"
 import { cameraWords } from "@/lib/show-health"
 import type { ContentType } from "@/types/broadcast"
 
@@ -78,7 +78,6 @@ export function remapJournalItemIds(re: (id: string | null | undefined) => strin
 useBroadcastStore.subscribe((s, prev) => {
   const add = useJournalStore.getState().add
   if (s.rehearsal !== prev.rehearsal) add({ kind: "rehearsal", label: s.rehearsal ? "on" : "off" })
-  if (s.stageMessage !== prev.stageMessage && s.stageMessage) add({ kind: "message", label: s.stageMessage })
   if (s.rehearsal && !prev.rehearsal) seenBeforeRehearsal = { isLive: prev.isLive, liveVerse: prev.liveVerse, liveItemId: prev.liveItemId }
   if (s.rehearsal) return
   // Rehearsal off sends what is live now to the congregation: that is what they see from here (AR-001).
@@ -101,14 +100,27 @@ useBroadcastStore.subscribe((s, prev) => {
   }
 })
 
-// A scene taken to an output or released from it (ARCH-002; #246 C17).
+// A scene taken to an output or released from it (ARCH-002; #246 C17), with who did it (#243 EX.1).
+// Each Take is told once: the revision last told, by output.
+const toldTakes = new Map<string, number>()
 useBroadcastStore.subscribe((s, prev) => {
   if (s.outputs === prev.outputs) return
   for (const o of s.outputs) {
     const was = prev.outputs.find((x) => x.id === o.id)
     if (!was || was.sceneId === o.sceneId) continue
     const name = o.sceneId ? s.scenes.find((x) => x.id === o.sceneId)?.name ?? "a scene" : null
-    useJournalStore.getState().add({ kind: "scene", label: name ? `${o.name}: ${name}` : `${o.name}: back to its own feed` })
+    // The Take (or release) that made this change; none when a scene was deleted or rehearsal ended.
+    const take = s.sceneTakes[o.id]
+    const own = take && toldTakes.get(o.id) !== take.revision && take.sceneId === (o.sceneId ?? null) ? take : undefined
+    if (own) toldTakes.set(o.id, own.revision)
+    const by = own?.by ? ` · by ${own.by}` : ""
+    useJournalStore.getState().add({
+      kind: "scene",
+      label: name ? `${o.name}: ${name}${by}` : `${o.name}: back to its own feed${by}`,
+      outputId: o.id,
+      ...(o.sceneId ? { sceneId: o.sceneId } : {}),
+      ...(own ? { revision: own.revision, ...(own.by ? { by: own.by } : {}) } : {}),
+    })
   }
 })
 
@@ -125,13 +137,17 @@ useBroadcastStore.subscribe((s, prev) => {
     // The program's own source: its live / clear / restore entry already says so. A new value that is
     // not the program's was activated on its own (on the Bible feeds only), even over the program's.
     const ownActivation = !!b?.on && a?.revision !== b.revision && b.value !== s.liveVerse
-    if (!ownActivation && ((b && b.value === s.liveVerse) || (a && (a.value === s.liveVerse || a.value === prev.liveVerse)))) continue
+    if (!ownActivation && ((b && b.value === s.liveVerse) || (a && (a.value === s.liveVerse || a.value === prev.liveVerse)))) {
+      // The program's own activation: its live entry (written just before) gets who and the revision (#243 EX.1).
+      if (b?.on && a?.revision !== b.revision && b.value === s.liveVerse) noteWho(b.revision, b.by)
+      continue
+    }
     const name = CONTENT_NAMES[id]
     if (b?.on && (!a?.on || a.revision !== b.revision)) {
       const back = a && !a.on && a.revision === b.revision
-      useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}${b.by && !back ? ` · by ${b.by}` : ""}`, itemId: b.itemId, source: name })
+      useJournalStore.getState().add({ kind: "source", label: `${name}${back ? " back" : ""}: ${b.value.reference}${b.by && !back ? ` · by ${b.by}` : ""}`, itemId: b.itemId, source: name, revision: b.revision, ...(b.by ? { by: b.by } : {}) })
     } else if (a?.on && !b?.on) {
-      useJournalStore.getState().add({ kind: "source", label: `${name} off: ${a.value.reference}`, itemId: a.itemId, source: name })
+      useJournalStore.getState().add({ kind: "source", label: `${name} off: ${a.value.reference}`, itemId: a.itemId, source: name, revision: a.revision })
     }
   }
 })
@@ -144,22 +160,40 @@ useBroadcastStore.subscribe((s, prev) => {
     const a = prev.stateSources[id]
     if (a?.revision === b.revision) continue
     const by = b.by ? ` · by ${b.by}` : ""
+    // Who and which revision, as fields as well as in the words (#243 EX.1).
+    const meta = { revision: b.revision, ...(b.by ? { by: b.by } : {}) }
     if (id === "timer") {
       // As the timer's other entries: "Femi: timer paused".
       const verb = b.on ? (a ? "resumed" : "started") : "paused"
-      add({ kind: "timing", label: `${b.by ? `${b.by}: ` : ""}timer ${verb}` })
+      add({ kind: "timing", label: `${b.by ? `${b.by}: ` : ""}timer ${verb}`, ...meta })
     } else if (id === "ticker") {
       const words = tickerWords(b.on ? s.ticker : b.ticker)
       const held = !!s.ticker?.pausedAt
       const verb = !b.on ? "off" : a && !a.on ? "back" : a?.on && held !== !!prev.ticker?.pausedAt ? (held ? "held still" : "moving again") : "on"
-      add({ kind: "source", label: `Ticker ${verb}${words ? `: ${words}` : ""}${by}`, source: "Ticker" })
+      add({ kind: "source", label: `Ticker ${verb}${words ? `: ${words}` : ""}${by}`, source: "Ticker", ...meta })
+    } else if (id === "lowerThird") {
+      const words = lowerThirdWords(b.lowerThird)
+      const verb = !b.on ? "down" : a && !a.on && a.lowerThird === b.lowerThird ? "back" : "up"
+      add({ kind: "source", label: `Lower third ${verb}${words ? `: ${words}` : ""}${by}`, source: "Lower third", ...meta })
+    } else if (id === "stage") {
+      // As before: the message itself is the entry; clearing it is one too now.
+      add(b.on ? { kind: "message", label: `${b.message ?? s.stageMessage}${by}`, ...meta } : { kind: "message", label: `cleared${b.message ? `: ${b.message}` : ""}${by}`, ...meta })
     } else {
       const name = id.slice("camera:".length)
       const label = useSettingsStore.getState().cameras.find((c) => c.name === name)?.label ?? name
-      add({ kind: "source", label: `${cameraWords(label)} ${b.on ? "back in scenes" : "hidden from scenes"}${by}`, source: "Cameras" })
+      add({ kind: "source", label: `${cameraWords(label)} ${b.on ? "back in scenes" : "hidden from scenes"}${by}`, source: "Cameras", ...meta })
     }
   }
 })
+
+/** The newest entry, when it is the program going on air and says nothing yet of who: it gets who and the revision. */
+function noteWho(revision: number, by: string | undefined) {
+  useJournalStore.setState((j) => {
+    const last = j.entries.at(-1)
+    if (!last || last.kind !== "live" || last.revision !== undefined) return j
+    return { entries: [...j.entries.slice(0, -1), { ...last, revision, ...(by ? { by } : {}) }] }
+  })
+}
 
 /** The first time service content goes on air (not a quick screen), the rundown as it stands is the plan. */
 function notePlan() {

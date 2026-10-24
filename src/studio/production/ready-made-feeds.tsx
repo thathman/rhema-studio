@@ -17,8 +17,9 @@ import { useShellStore } from "@/studio/shell-store"
 import { existingFeed, FEED_PRESETS, readyMadeFeed, type FeedPreset, type FeedTransport } from "@/lib/feed-presets"
 
 /**
- * Production → Screens: add a ready-made feed (Rhema Bible | Full, Rhema Ticker | Alpha…). Each
- * click adds one new output, off; nothing existing changes and nothing goes on air.
+ * Production → Screens: add a ready-made feed (Rhema Bible | Full, Rhema Ticker | Alpha, Rhema
+ * Clock…). Each click adds one new output, off (the clock feed with its scene); nothing existing
+ * changes and nothing goes on air.
  */
 export function ReadyMadeFeeds() {
   const outputs = useBroadcastStore((s) => s.outputs)
@@ -26,11 +27,13 @@ export function ReadyMadeFeeds() {
 
   const add = (preset: FeedPreset) => {
     const s = useBroadcastStore.getState()
-    const result = readyMadeFeed(preset, transport, s.outputs, s.themes)
+    const result = readyMadeFeed(preset, transport, s.outputs, s.themes, undefined, s.scenes)
     if ("taken" in result) {
       toast(`“${preset.name}” is already set up`, { description: `The output “${result.taken.name}” has that name, so another one was not added. Edit that one instead.`, action: { label: "Edit it", onClick: () => useShellStore.getState().editOutput(result.taken.id) } })
       return
     }
+    // The clock feed's own scene first, so the output has it from the start.
+    if (result.scene) s.saveScene(result.scene)
     s.addOutput(result.output)
     toast(`Added “${preset.name}”, off`, {
       description: `${transport === "ndi" ? "An NDI source" : "A browser feed"} for OBS. Turn it on in Outputs when you need it; nothing else changed.`,

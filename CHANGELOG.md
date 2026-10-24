@@ -4,6 +4,16 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The lower third and the stage message as live sources; three more ready-made feeds (#243)
+- **Present → Live → Sources** now lists the **lower third** and the **stage message** too: what is up, who put it up and when, with × to take it down and **Restore** to bring the same one back. Hide in Present → Lower third has a Restore button as well. A joined desk with the Present role can do the same.
+- The Sources strip also lists content that a scene's box follows (a scene with a Bible box counts as a Bible feed), and content put on the feeds on its own.
+- **Add a ready-made feed** offers **Rhema Announcements | Full**, **Rhema Lower third | Presenter** (only the name band, keyed) and **Rhema Clock** (the service timer on transparency, in its own scene). An output can now follow just the lower third.
+- The service log records who took each scene and who put each thing on air.
+
+### Calmer chrome, Settings search finds more, keyboard checks (#215)
+- Menus and drop-down lists are solid, with a thin border; the API key prompt is a flat card without a glow; the Team page's banner is a plain card, and "Host or join" opens Production → Operators instead of saying "Planned".
+- Settings search also finds things kept elsewhere (church name, light and dark, cameras, host and join, approvals, backups) under **Elsewhere in Rhema**, one click away.
+- The smallest text (9 and 10 px) in the sidebar, top bar, Desk menu, scene Program bar and a few lists is larger, and a test stops new tiny body text.
 ### Run-of-show items get a scene, look and camera (#243, #299)
 - In Prepare, each item has a **Look and scene** section (Slides tab): choose its congregation scene, its look and its camera from the church's own. Preview in Prepare draws the item in that look, and Present shows the plan under Preview. Nothing changes a screen by itself.
 - **Signals → When you Take it** can arm the item's scene (on every congregation screen or one), an **OBS scene** (in OBS's Studio Mode it only waits in OBS's preview) and, for a reading, **Bible feeds only** (the main screens keep what they show). These run once when you, or a joined desk, take the item: never for a timed move or a phase running by itself. In rehearsal the scene is practice and OBS is never changed.

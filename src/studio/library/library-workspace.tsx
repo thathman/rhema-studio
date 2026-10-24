@@ -46,7 +46,7 @@ export function LibraryWorkspace() {
             onClick={() => setSection(id)}
             className={cn(
               "rounded-full border px-[15px] py-2.5 text-xs font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              section === id ? "border-transparent bg-[#272d43] text-white dark:bg-foreground dark:text-background" : "border-border bg-card text-muted-foreground hover:text-foreground",
+              section === id ? "border-transparent bg-foreground text-background" : "border-border bg-card text-muted-foreground hover:text-foreground",
             )}
           >
             {label}

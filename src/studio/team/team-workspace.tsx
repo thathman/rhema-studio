@@ -9,8 +9,9 @@ import { useShellStore } from "@/studio/shell-store"
 import { openSettings } from "@/lib/settings-dialog"
 import { approvalState } from "@/lib/approval"
 import { UnreadComments } from "@/studio/prepare/unread-comments"
+import { openProductionTab } from "@/studio/production/production-tab"
 
-function Way({ icon, title, detail, action, planned }: { icon: React.ReactNode; title: string; detail: string; action?: { label: string; run: () => void }; planned?: string }) {
+function Way({ icon, title, detail, action }: { icon: React.ReactNode; title: string; detail: string; action: { label: string; run: () => void } }) {
   return (
     <li className="flex items-start gap-3 py-3">
       <span aria-hidden className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-kind-other text-kind-other-foreground [&_svg]:size-4">{icon}</span>
@@ -18,7 +19,7 @@ function Way({ icon, title, detail, action, planned }: { icon: React.ReactNode; 
         <span className="block text-sm font-semibold">{title}</span>
         <span className="block text-xs text-muted-foreground">{detail}</span>
       </span>
-      {planned ? <Badge variant="neutral">Planned · {planned}</Badge> : action ? <Button size="sm" variant="outline" onClick={action.run}>{action.label}</Button> : null}
+      <Button size="sm" variant="outline" onClick={action.run}>{action.label}</Button>
     </li>
   )
 }
@@ -41,15 +42,15 @@ export function TeamWorkspace() {
           </div>
           <Button variant="outline" onClick={() => openSettings("remote")}><SettingsIcon /> Connection settings</Button>
         </header>
-        <section className="flex flex-wrap items-center justify-between gap-6 rounded-[14px] border border-[#274b4b] bg-[#19363a] px-8 py-7">
+        {/* A plain card, like the others (#215): what sharing means, and the two ways to start. */}
+        <section aria-label="Working together" className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-card p-5 shadow-panel">
           <div className="min-w-0 max-w-2xl">
-            <span className="rounded-[5px] bg-white/15 px-2 py-1 text-[0.625rem] font-bold tracking-[0.06em] text-[#e2f0e7] uppercase">Local-first collaboration</span>
-            <h2 className="mt-3 text-[1.75rem] leading-tight font-bold tracking-[-0.04em] text-white">One church. One shared plan.</h2>
-            <p className="mt-2 text-xs text-[#c7d9d3]">Services are shared through the church folder and approved before Sunday; the team leaves comments on items. Nothing the team edits reaches the live screen without the desk. Everything stays on your computers.</p>
+            <h2 className="text-base font-bold tracking-[-0.03em]">One church, one shared plan</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Services are shared through the church folder and approved before Sunday; the team leaves comments on items. Nothing the team edits reaches the live screen without the desk. Everything stays on your computers.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => useShellStore.getState().goTo("archive")}><FolderSyncIcon /> Share through the church folder</Button>
-            <Button variant="outline" className="border-white/25 bg-white text-[#19363a] hover:bg-white/90" onClick={() => openSettings("remote")}><SmartphoneIcon /> Use a phone as a remote</Button>
+            <Button variant="outline" onClick={() => openSettings("remote")}><SmartphoneIcon /> Use a phone as a remote</Button>
           </div>
         </section>
 
@@ -86,7 +87,7 @@ export function TeamWorkspace() {
             <ul className="divide-y divide-border">
               <Way icon={<FolderSyncIcon />} title="Church folder" detail="A shared folder (a NAS, or one kept in step by Drive, OneDrive, Dropbox or Syncthing): publish a service, open it on another computer." action={{ label: "Set up", run: () => useShellStore.getState().goTo("archive") }} />
               <Way icon={<SmartphoneIcon />} title="A phone as a remote" detail="Next, previous and the live status on a phone on the same network (pairing code)." action={{ label: "Settings", run: () => openSettings("remote") }} />
-              <Way icon={<NetworkIcon />} title="Host or join a studio on the network" detail="Several computers working on one service at once, each with a role." planned="#162" />
+              <Way icon={<NetworkIcon />} title="Host or join a studio on the network" detail="Several computers working on one service at once, each with a role (Bible, timekeeper, screens…), and the team's talk channel." action={{ label: "Open Operators", run: () => openProductionTab("operators") }} />
             </ul>
           </section>
         </div>
