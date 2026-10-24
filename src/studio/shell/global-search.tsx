@@ -22,6 +22,7 @@ const DESIGN: ReadonlyArray<readonly [DesignTab, string, string]> = [
   ["lower-thirds", "Lower thirds", "name title scripture strip lyrics strip band"],
   ["ticker", "News ticker", "crawl announcements scrolling"],
   ["stage", "Stage display", "confidence monitor platform team timer next note band"],
+  ["countdown", "Countdown display", "countdown timer red amber time up wrap up confidence monitor back of hall big clock"],
   ["brand", "Brand kit", "logo colours fonts church"],
   ["used-on", "Used on…", "which outputs show each look theme screen output looks"],
 ]

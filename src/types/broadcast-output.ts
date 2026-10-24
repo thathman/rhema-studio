@@ -160,6 +160,78 @@ export interface StagePayload {
   aux?: StageAux[]
   /** How the church designed the stage display (Design → Stage); built-in look when absent. */
   style?: StageStyle
+  /** A countdown display (Design → Countdown) shows only this, the message and a few small lines. */
+  countdown?: CountdownFrame
+}
+
+/**
+ * One colour step of the countdown display: from when it comes on (a share of the whole time left,
+ * or a time left; 0 is "time's up" and stays through overtime) its colours and message hold until a
+ * later step takes over.
+ */
+export interface CountdownStep {
+  /** "percent": `at` is a percentage (0–100) of the whole time; "time": `at` is seconds left. */
+  when: "percent" | "time"
+  at: number
+  background: string
+  text: string
+  /** Shown under the time while this step is on ("Please wrap up"); empty for none. */
+  message: string
+  /** A slow, gentle pulse (once a second, never faster) while it is on and the time runs. */
+  pulse: boolean
+}
+
+/**
+ * What the countdown display counts: the service timer, the item on now (its planned minutes from
+ * when it started), a named extra timer, a time of day, or the service's start (run of show).
+ */
+export type CountdownCounts = "timer" | "item" | "aux" | "until" | "start"
+
+/** The countdown display's design (Design → Countdown): one big time, readable from the back. */
+export interface CountdownLook {
+  counts: CountdownCounts
+  /** counts "aux": the extra timer's name (Production → Timekeeper). */
+  auxLabel: string
+  /** counts "until": the time of day, "HH:MM". */
+  until: string
+  /** Counting to a time: the percentages are of this many minutes before it. */
+  leadMinutes: number
+  /** Before any step: the colours it starts in. */
+  background: string
+  text: string
+  steps: CountdownStep[]
+  /** The stage message from Present or Timekeeper, under the time. */
+  showMessage: boolean
+  /** The item on now's name, small. */
+  showItem: boolean
+  /** The next item's name, small. */
+  showNext: boolean
+  /** The time of day in a corner. */
+  showClock: boolean
+}
+
+/**
+ * What a countdown display is sent. It counts by itself (one redraw a second), so the host sends
+ * it again only when something changes: started, paused, adjusted, another item.
+ */
+export interface CountdownFrame {
+  look: CountdownLook
+  /** What it counts, small over the time ("Service timer", "Sermon", "Service starts 10:00"). */
+  label: string
+  /** The whole time the percentages are of (ms); 0: no length, it counts up. */
+  totalMs: number
+  /** Running: the instant (the host's clock, ms) it reaches 0:00; counting up, when it began. Held: null. */
+  endsAt: number | null
+  /** Held (paused or not started): the time left as it stands; counting up, minus the time so far. */
+  leftMs: number
+  /** Nothing to count, and why ("Start the service timer in Present"). */
+  idle?: string
+  /** The counted item's own warning (Prepare → Timing), ms before its end: the first step comes on then. */
+  warnMs?: number
+  item: string | null
+  next: string | null
+  /** The time zone for the time of day (the church's; "" = the screen's own). */
+  zone: string
 }
 
 export interface StageAux {
@@ -226,6 +298,8 @@ export interface BroadcastOutput {
    * put on air last, as before.
    */
   shows?: FeedSourceKind[]
+  /** A stage output's layout: "countdown" shows the countdown display (Design → Countdown); absent: the full stage view. */
+  stageLayout?: "countdown"
   /** The congregation scene this output shows (its program, ADR 0001); absent: its own feed, full frame. */
   sceneId?: string
   /** Browser feeds: the secret in the feed's link (renewing it closes the old link). */

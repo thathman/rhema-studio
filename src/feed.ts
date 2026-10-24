@@ -5,6 +5,7 @@ import { syncSceneVideos, videoReady } from "@/lib/scene-videos"
 import { feedMotion, feedNext, tickerStrips } from "@/lib/feed-motion"
 import { noiseFrame } from "@/lib/no-signal"
 import { drawStage } from "@/lib/stage-canvas"
+import { CountdownFade, nextChangeIn } from "@/lib/countdown-display"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -176,6 +177,25 @@ addEventListener("resize", () => { placeCameras(); redraw() })
 let offset = 0
 let ticking = false
 
+/** A countdown display (Design → Countdown): its blend between steps, and whether it moves now. */
+const countdownFade = new CountdownFade()
+let countdownMoving = false
+let countdownTimer: ReturnType<typeof setTimeout> | null = null
+/** Redraw a counting countdown display as its time changes: once a second, on the second (no animation frames). */
+function scheduleCountdown() {
+  if (countdownTimer) clearTimeout(countdownTimer)
+  countdownTimer = null
+  const c = frame && !frame.off && frame.role === "stage" ? frame.stage?.countdown : undefined
+  if (!c) return
+  const wait = Math.min(nextChangeIn(c, Date.now() + offset), c.look.showClock ? 1000 : Infinity)
+  if (!Number.isFinite(wait)) return
+  countdownTimer = setTimeout(() => {
+    draw()
+    scheduleCountdown()
+    if (countdownMoving && !ticking) { ticking = true; requestAnimationFrame(animate) }
+  }, wait + 5)
+}
+
 function draw() {
   const f = frame
   // A cross-fade that has run its time: done (the scene's tickers go back on their strips).
@@ -186,11 +206,15 @@ function draw() {
     return
   }
   if (f.role === "stage" && f.stage) {
-    canvas.width = 1920
-    canvas.height = 1080
-    drawStage(ctx, 1920, 1080, f.stage)
+    if (canvas.width !== 1920 || canvas.height !== 1080) {
+      canvas.width = 1920
+      canvas.height = 1080
+    }
+    // A countdown display counts by the host's clock, blending between its colour steps.
+    countdownMoving = drawStage(ctx, 1920, 1080, f.stage, { now: Date.now() + offset, fade: countdownFade }).moving
     return
   }
+  countdownMoving = false
   const { width, height } = f.theme.resolution
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width
@@ -247,7 +271,7 @@ function animate() {
   const f = frame
   const inCanvas = [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)) || [...videos.entries()].some(([id, v]) => videoReady(v) && !v.paused && !shownBelow(id))
   const hostNow = Date.now() + offset
-  const motion = feedMotion(f, { now: Date.now(), hostNow, fading: !!fade || fader.busy(), cameraInCanvas: inCanvas, strips: onStrips(), playing: (id) => !!cameras.get(id)?.ready })
+  const motion = feedMotion(f, { now: Date.now(), hostNow, fading: !!fade || fader.busy(), cameraInCanvas: inCanvas, strips: onStrips(), playing: (id) => !!cameras.get(id)?.ready, countdown: countdownMoving })
   const n = noiseFrame(hostNow)
   if (motion.picture || (motion.noise && n !== lastNoise)) {
     draw()
@@ -304,6 +328,7 @@ function show(next: Frame) {
   for (const b of backings) if (b?.kind === "picture") void loadThemeImage(b.url).then(redraw)
   draw()
   drawStrips()
+  scheduleCountdown()
   if (!ticking) {
     ticking = true
     requestAnimationFrame(animate)

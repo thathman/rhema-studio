@@ -35,7 +35,7 @@ export function outputFollows(o: BroadcastOutput, theme?: BroadcastTheme): strin
  * transparent.
  */
 export function outputPresentation(o: BroadcastOutput, scenes: Scene[], theme?: BroadcastTheme): string {
-  if (o.role === "stage") return "Stage display (words, next, note, timer)"
+  if (o.role === "stage") return o.stageLayout === "countdown" ? "Countdown display (one big time; Design → Countdown)" : "Stage display (words, next, note, timer)"
   if (o.role === "signage") {
     if (tickerOnly(o, allSignageIds(o.signage).length, theme)) return "Ticker only · transparent, for keying"
     return o.ticker ? "Signage loop · ticker" : "Signage loop"

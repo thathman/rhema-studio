@@ -10,6 +10,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { timingInputNow } from "@/stores/timing-input"
 import { useTimingTrust } from "@/stores/timing-trust-store"
 import { countdownLine, countdownTarget, countdownTargets, steadyTargets } from "@/lib/countdown"
+import { updateCountdownTiming } from "@/stores/countdown-sources"
 
 /**
  * Keeps the stage display's "Ends 10:42 · 5 min late" (issue #196): the run of show's timing
@@ -24,6 +25,8 @@ export function updateStageFinish() {
   const input = timingInputNow()
   const now = input.now
   const t = serviceTiming(input)
+  // The countdown display's "item on now" and "service start" (Design → Countdown).
+  updateCountdownTiming(t)
   const targets = steadyTargets(b.countdowns, countdownTargets(t, input.timeZone), now)
   if (JSON.stringify(targets) !== JSON.stringify(b.countdowns)) {
     b.setCountdowns(targets)

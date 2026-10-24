@@ -54,6 +54,8 @@ export interface FeedMotionState {
   strips: ReadonlySet<string>
   /** That camera layer's camera has a picture (one that has none shows its bars, static or words). */
   playing?: (layerId: string) => boolean
+  /** A countdown display pulses or blends to a new step (otherwise it redraws once a second by itself). */
+  countdown?: boolean
 }
 
 export interface FeedMotion {
@@ -71,7 +73,7 @@ export interface FeedMotion {
  */
 export function feedMotion(f: FeedMotionFrame | null, s: FeedMotionState): FeedMotion {
   if (!f || f.off) return { picture: false, crawl: false, noise: false }
-  const picture = s.fading || s.cameraInCanvas || (!!f.overlay && entranceProgress(f.overlay, s.now) < 1) || sceneMoving(f.scene, s.hostNow, (id) => s.strips.has(id))
+  const picture = !!s.countdown || s.fading || s.cameraInCanvas || (!!f.overlay && entranceProgress(f.overlay, s.now) < 1) || sceneMoving(f.scene, s.hostNow, (id) => s.strips.has(id))
   const crawl = (!!f.ticker && !f.ticker.pausedAt) || !!f.scene?.layers.some((l) => s.strips.has(l.id) && l.opacity > 0 && !!l.ticker && !l.ticker.pausedAt)
   const noise = sceneStatic(f.scene, s.playing ?? (() => false))
   return { picture, crawl, noise }

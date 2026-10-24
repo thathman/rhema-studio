@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Countdown display: one big time that turns amber, then red (owner request)
+- A new **Countdown** look (Design → Countdown) shows one big time, readable from the back of the hall, on a black screen that turns **amber at 25 %** of the time left and **red at 10 %** (a 10-minute timer goes red at 1:00), then says **Time's up** with a slow, gentle pulse and counts on as **+0:42** when over. The steps, their colours, messages ("Please wrap up") and the pulse are yours to change, each at a percentage or a time left; a slider in the preview walks through them before Sunday.
+- It counts the service timer (the default), the item on now, a named extra timer, or the time until a time of day or the service start. The stage message from Present or Timekeeper shows under the time; the item on now, what is next and the time of day are optional small lines.
+- Show it on any stage output (Production → Screens → the output → Who sees it: Stage → **Countdown**), over NDI, or as a browser feed on a TV with the new ready-made feed **Rhema Countdown**. A confidence monitor is an output showing it. Screens count the seconds themselves, so it stays smooth on a Google TV and costs little.
 ### OBS companion: the church's cameras in OBS on a second computer (#209)
 - A computer that streams with OBS can now run Rhema as an **OBS companion**: choose **This computer runs OBS only (companion)** in the first-run setup or the Desk menu. It shows one small screen (join the main computer, connect to OBS here, the cameras) and loads none of the studio, the Bible models or speech.
 - **Add to OBS** puts a camera into this computer's OBS as a Media Source, in a new scene named after it or a scene you pick. Each phone still sends once; OBS cuts between the cameras on its own. Rhema keeps the cameras' addresses current in OBS, says when OBS is not receiving a camera and starts it again, and never removes anything you made in OBS.

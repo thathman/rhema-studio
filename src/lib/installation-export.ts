@@ -104,6 +104,7 @@ export function installationChanges(here: InstallationExport, incoming: Installa
   }
   if (il.tickerStyle && !same(hl.tickerStyle, il.tickerStyle)) out.push({ what: "Ticker look", here: "as set here", incoming: "the backup's" })
   if (il.stageStyle && !same(hl.stageStyle, il.stageStyle)) out.push({ what: "Stage display look", here: "as set here", incoming: "the backup's" })
+  if (il.countdownLook && !same(hl.countdownLook, il.countdownLook)) out.push({ what: "Countdown display look", here: "as set here", incoming: "the backup's" })
   if (Array.isArray(il.scenes) && !same(hl.scenes, il.scenes)) {
     out.push({ what: "Scenes", here: `${count(hl.scenes.length, "scene")}: ${listed(names(hl.scenes))}`, incoming: `${count(il.scenes.length, "scene")}: ${listed(names(il.scenes))}` })
   }

@@ -299,8 +299,21 @@ export function OutputEditorDialog({
                 </label>
               </>
             )}
+            {form.role === "stage" && (
+              <>
+                <span id="stage-layout-label" className="mt-2 text-xs text-muted-foreground">What the stage screen shows</span>
+                <Select value={form.stageLayout ?? "full"} onValueChange={(v) => patch({ stageLayout: v === "countdown" ? "countdown" : undefined })}>
+                  <SelectTrigger aria-labelledby="stage-layout-label" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Everything: the live words, what is next, your note and the timer</SelectItem>
+                    <SelectItem value="countdown">Countdown: one big time that changes colour as time runs out</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.stageLayout === "countdown" && <span className="text-xs text-muted-foreground">What it counts, its colours and messages are in Design → Countdown.</span>}
+              </>
+            )}
             {/* A stage display can follow chosen sources too (ADR 0001): its words come from them. */}
-            {form.role === "stage" && followsPicker(CONTENT_TYPES)}
+            {form.role === "stage" && form.stageLayout !== "countdown" && followsPicker(CONTENT_TYPES)}
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">

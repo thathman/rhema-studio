@@ -1,6 +1,7 @@
 import type { StagePayload } from "@/types"
 import { stageFinishText } from "@/lib/stage-finish-text"
 import { stageFontVh } from "@/lib/stage"
+import { drawCountdown, type CountdownDrawOptions } from "@/lib/countdown-canvas"
 
 /** Words wrapped to `maxW` (the stage view's lines, as the browser would wrap them). */
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
@@ -20,9 +21,11 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
 /**
  * The stage display drawn on a canvas, laid out like StageView (title and
  * timer, the operator's message, the live words, note and next), so a stage
- * output can go out over NDI to a viewer.
+ * output can go out over NDI to a viewer. A countdown display draws only its countdown; it says
+ * whether it moves (a pulse or a blend), so the caller draws again soon.
  */
-export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: number, stage: StagePayload): void {
+export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: number, stage: StagePayload, opts?: Partial<CountdownDrawOptions>): { moving: boolean } {
+  if (stage.countdown) return drawCountdown(ctx, width, height, stage.countdown, stage.message, { now: opts?.now ?? Date.now(), fade: opts?.fade })
   const vh = height / 100
   const vw = width / 100
   const padX = 4 * vw
@@ -131,4 +134,5 @@ export function drawStage(ctx: CanvasRenderingContext2D, width: number, height: 
     }
   }
   ctx.restore()
+  return { moving: false }
 }
