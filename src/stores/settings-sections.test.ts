@@ -120,6 +120,9 @@ describe("settings in three parts: church, machine, operator (#298 M11)", () => 
       if (key === "secretsInKeychain") continue
       expect(t[key as keyof typeof t], key).toEqual(key === "gain" ? 1.5 : OLD_FILE[key])
     }
+    // The second read saves too (its keys go to the keychain): let it finish before the next test's file.
+    await settle()
+    await again.flushSettingsSave()
   })
 
   it("the top-level copy wins over its part (an older build may have changed it); a setting only in a part is read there", async () => {
