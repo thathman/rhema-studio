@@ -227,10 +227,19 @@ public final class CameraCoreCheck {
     }
 
     static void plan() {
-        check("bitrate: 4K24 about 45 Mbit/s", Plan.autoBitrate(3840, 2160, 24, false) == 45000000);
+        check("bitrate: 4K24 H.264 about 48 Mbit/s", Plan.autoBitrate(3840, 2160, 24, false) == 48000000);
         check("bitrate: 1080p30 about 14 Mbit/s", Plan.autoBitrate(1920, 1080, 30, false) == 14000000);
         check("bitrate: 1080p60 more but not double", Plan.autoBitrate(1920, 1080, 60, false) == 21000000);
-        check("bitrate: 4K24 HEVC about 38 Mbit/s", Plan.autoBitrate(3840, 2160, 24, true) == 38000000);
+        check("bitrate: 4K24 HEVC about 40 Mbit/s", Plan.autoBitrate(3840, 2160, 24, true) == 40500000);
+        check("bitrate: 4K24 H.264 within Wi-Fi", Plan.capBitrate(Plan.autoBitrate(3840, 2160, 24, false), 86, 0) == 38700000);
+        // The automatic codec is H.264 on every phone, HEVC-capable or not (Rhema's screens and TVs may not decode HEVC).
+        check("codec: automatic is H.264 on an HEVC phone", "avc".equals(Plan.codec("auto", true, true)));
+        check("codec: automatic is H.264 on an H.264-only phone", "avc".equals(Plan.codec("auto", true, false)));
+        check("codec: HEVC only when chosen by name", "hevc".equals(Plan.codec("hevc", true, true)));
+        check("codec: HEVC chosen but not encoded falls back to H.264", "avc".equals(Plan.codec("hevc", true, false)));
+        check("codec: H.264 chosen", "avc".equals(Plan.codec("h264", true, true)));
+        check("codec: automatic uses HEVC only where H.264 cannot encode the size", "hevc".equals(Plan.codec("auto", false, true)));
+        check("codec: H.264 chosen, none for the size", Plan.codec("h264", false, true) == null && Plan.codec("auto", false, false) == null);
         check("bitrate: encoder's own limit", Plan.capBitrate(45000000, 0, 20000000) == 20000000);
         check("bitrate: Wi-Fi link cap", Plan.capBitrate(45000000, 72, 100000000) == 32400000);
         check("bitrate: never below 1 Mbit/s", Plan.capBitrate(45000000, 1, 0) == 1000000);

@@ -20,7 +20,8 @@ Version 1.0.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
    dot top left is the tally: **LIVE** (red), **CONNECTING** (amber), **NOT SENDING** (grey); tap it
    to start, hold it to stop. The gear opens Settings; the moon blacks the screen out.
 4. Keep the phone on a charger on a stand. It may lock: the viewfinder shows over the lock screen
-   (Settings asks for the PIN), and sending carries on with the screen off.
+   (Settings asks for the PIN; turn it off in Settings → On screen → Show over the lock screen), and
+   sending carries on with the screen off.
 
 ## The look
 
@@ -44,13 +45,15 @@ rate. Never a LOG profile; 8-bit colour, never HDR.
 
 - **Presets** (only those the camera can hold exactly): Cinematic 24, Film 25, Smooth 30, Sports 60.
 - **Size**: the largest the camera and a hardware encoder both do at that frame rate (4K, 1440p,
-  1080p, 720p). **Codec**: HEVC where the phone's hardware encodes it (H.264 otherwise; Advanced can
-  force H.264, which every Rhema screen and TV plays). High profile, a full picture every second, no
-  B-frames, constant bitrate where offered.
-- **Bitrate**: worked out from size and frame rate (4K24 ≈ 45 Mbit/s H.264, ≈ 38 HEVC; 1080p30 ≈ 14),
-  never above the encoder's limit or about 45 % of the Wi-Fi link. If the network cannot keep up,
-  frames are dropped from the queue, the encoder is asked for a full picture, and the bitrate steps down
-  by a quarter (to a third at most), coming back 10 % every 15 s once it is quiet.
+  1080p, 720p). **Codec**: always H.264 High by default, on every phone: Rhema's screens and the
+  Google TV play cameras over WebRTC, which may not decode HEVC, and a blank camera on a Sunday is
+  worse than a little efficiency. Settings → Picture → Advanced offers "HEVC (best quality, for OBS
+  only — Rhema screens and TVs may not show it)". A full picture every second, no B-frames, constant
+  bitrate where offered.
+- **Bitrate**: worked out from size and frame rate (4K24 ≈ 48 Mbit/s H.264, ≈ 40 if HEVC is chosen;
+  1080p30 ≈ 14), never above the encoder's limit or about 45 % of the Wi-Fi link. If the network
+  cannot keep up, frames are dropped from the queue, the encoder is asked for a full picture, and the
+  bitrate steps down by a quarter (to a third at most), coming back 10 % every 15 s once it is quiet.
 - **Exposure**: **Film shutter** (default where the camera allows manual exposure): the shutter stays
   near 180° (1/48, or 1/50 under 50 Hz lights; 1/60 under 60 Hz) and the ISO follows the light from a
   tiny copy of the picture twice a second. It starts by letting the camera measure for 1.5 s and then

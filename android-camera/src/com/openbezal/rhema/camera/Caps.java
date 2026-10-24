@@ -179,13 +179,12 @@ final class Caps {
         return out;
     }
 
-    /** The codec for a size: "auto" is HEVC where the hardware encodes it, else H.264; "h264" is always H.264. */
+    /** The codec for a size (see Plan.codec): H.264 unless HEVC is chosen in Settings → Advanced. */
     static String codecFor(String choice, int w, int h, int fps) {
         boolean avc = encodes(encoder(AVC), AVC, w, h, fps);
         boolean hevc = encodes(encoder(HEVC), HEVC, w, h, fps);
-        if ("h264".equals(choice)) return avc ? AVC : null;
-        // Automatic and HEVC: HEVC where the phone's hardware encodes it (the same picture in less bitrate), else H.264.
-        return hevc ? HEVC : avc ? AVC : null;
+        String c = Plan.codec(choice, avc, hevc);
+        return c == null ? null : c.equals("hevc") ? HEVC : AVC;
     }
 
     /** The heights offered at a frame rate: both the camera and a hardware encoder do them. */

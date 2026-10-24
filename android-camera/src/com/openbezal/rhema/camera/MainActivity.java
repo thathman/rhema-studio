@@ -80,9 +80,10 @@ public final class MainActivity extends Activity {
         prefs = Prefs.get(this);
         Window w = getWindow();
         w.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        // Like the phone's own camera: the viewfinder shows over the lock screen, so a camera on its
-        // stand stays usable if the phone locks itself. Settings (with the pairing) still needs the PIN.
-        setShowWhenLocked(true);
+        // Like the phone's own camera: the viewfinder shows over the lock screen (unless turned off in
+        // Settings → On screen), so a camera on its stand stays usable if the phone locks itself.
+        // Settings (with the pairing) still needs the PIN.
+        setShowWhenLocked(prefs.getBoolean(Prefs.OVER_LOCK, true));
         if (Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams lp = w.getAttributes();
             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
@@ -351,6 +352,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        setShowWhenLocked(prefs.getBoolean(Prefs.OVER_LOCK, true));
         applyOverlayPrefs();
         immersive();
     }

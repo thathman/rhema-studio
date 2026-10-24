@@ -43,6 +43,8 @@ final class Prefs {
     static final String LEVEL = "level";
     static final String HISTOGRAM = "histogram";
     static final String AUDIO = "audio";
+    /** The viewfinder shows over the lock screen (on unless turned off). */
+    static final String OVER_LOCK = "over_lock";
     /** White-balance measurements per camera (see Kelvin.Anchor). */
     static final String ANCHORS = "wb_anchors_";
 

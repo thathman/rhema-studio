@@ -659,10 +659,10 @@ public final class SettingsActivity extends Activity {
         LinearLayout adv = fold(c, "picture");
         boolean hevcHw = Caps.encoder(Caps.HEVC) != null;
         final String[] codecIds = hevcHw ? new String[] {"auto", "h264", "hevc"} : new String[] {"auto", "h264"};
-        String[] codecNames = hevcHw ? new String[] {"Automatic (HEVC)", "H.264 High", "HEVC Main"} : new String[] {"Automatic (H.264)", "H.264 High"};
+        String[] codecNames = hevcHw ? new String[] {"Automatic (H.264)", "H.264 High", "HEVC (best quality, for OBS only — Rhema screens and TVs may not show it)"} : new String[] {"Automatic (H.264)", "H.264 High"};
         int ci = 0;
         for (int i = 0; i < codecIds.length; i++) if (codecIds[i].equals(codec)) ci = i;
-        choice(adv, "Codec", codecNames, ci, hevcHw ? "Automatic sends HEVC (the same picture in less bitrate) at sizes this phone's hardware encodes it, else H.264. OBS plays both; if a Rhema screen or TV shows no picture from this camera, choose H.264. 8-bit colour (never HDR)."
+        choice(adv, "Codec", codecNames, ci, hevcHw ? "Automatic is always H.264, which every Rhema screen, Google TV and OBS plays. HEVC gives a better picture for the same bitrate, but only OBS is sure to show it: Rhema's screens and TVs may show nothing. 8-bit colour (never HDR)."
                 : "This phone has no hardware HEVC encoder, so it sends H.264 (8-bit colour).", new Pick() {
                     @Override
                     public void picked(int which) {
@@ -684,7 +684,7 @@ public final class SettingsActivity extends Activity {
             rn.add(m == 0 ? String.format(Locale.ROOT, "Automatic (%.1f Mbit/s)", Plan.capBitrate(auto, service == null ? 0 : service.wifiUplinkMbps(), encMax) / 1e6) : m + " Mbit/s");
         }
         int bi = Math.max(0, rv.indexOf(prefs.getInt(Prefs.BITRATE, 0)));
-        choice(adv, "Bitrate", rn.toArray(new String[0]), bi, "Automatic works it out from size and frame rate (4K24 about 45, 1080p30 about 14 Mbit/s), never above this phone's encoder (" + (encMax / 1_000_000) + " Mbit/s) or about 45 % of the Wi-Fi link.", new Pick() {
+        choice(adv, "Bitrate", rn.toArray(new String[0]), bi, "Automatic works it out from size and frame rate (4K24 about 48, 1080p30 about 14 Mbit/s), never above this phone's encoder (" + (encMax / 1_000_000) + " Mbit/s) or about 45 % of the Wi-Fi link.", new Pick() {
             @Override
             public void picked(int which) {
                 prefs.edit().putInt(Prefs.BITRATE, rv.get(which)).apply();
@@ -933,6 +933,7 @@ public final class SettingsActivity extends Activity {
         toggle(c, "Safe areas", "Title-safe (90 %) and action-safe (93 %) frames for words and lower thirds.", Prefs.GRID_SAFE, false, false);
         toggle(c, "Level", "A line that turns green when the phone is level.", Prefs.LEVEL, false, false);
         toggle(c, "Histogram", "How bright the picture is, darkest on the left.", Prefs.HISTOGRAM, false, false);
+        toggle(c, "Show over the lock screen", "The viewfinder appears when the phone is locked, as the phone's own camera does; Settings still needs the PIN.", Prefs.OVER_LOCK, true, false);
     }
 
     private void sound() {

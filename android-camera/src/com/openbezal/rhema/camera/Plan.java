@@ -70,13 +70,26 @@ final class Plan {
     }
 
     /**
+     * The codec: H.264 unless HEVC is asked for by name (Settings → Advanced), on every phone. Rhema's
+     * screens and the Google TV play cameras over WebRTC, which may not decode HEVC, and a blank
+     * camera on a Sunday is worse than a little efficiency. HEVC only when the phone has no H.264
+     * encoder for the size at all. "avc", "hevc", or null when neither encodes it.
+     */
+    static String codec(String choice, boolean avc, boolean hevc) {
+        if ("hevc".equals(choice) && hevc) return "hevc";
+        if (avc) return "avc";
+        return "h264".equals(choice) || !hevc ? null : "hevc";
+    }
+
+    /**
      * The bitrate for a clean picture: about 0.225 bits per pixel for H.264 at up to 30 frames a
-     * second (4K24 ≈ 45 Mbit/s, 1080p30 ≈ 14), frames above 30 counting half, H.265 about 85 % of
-     * that (a 4K24 HEVC picture ≈ 38 Mbit/s: a phone's HEVC needs more than the textbook half). Rounded to half a megabit.
+     * second (1080p30 ≈ 14 Mbit/s), 0.24 at 4K (4K24 ≈ 48: H.264 carries the 4K picture), frames
+     * above 30 counting half, HEVC about 85 % of that. Rounded to half a megabit.
      */
     static int autoBitrate(int w, int h, int fps, boolean hevc) {
         double effFps = fps <= 30 ? fps : 30 + (fps - 30) * 0.5;
-        double bps = w * (double) h * effFps * 0.225 * (hevc ? 0.85 : 1.0);
+        double bpp = h >= 2160 ? 0.24 : 0.225;
+        double bps = w * (double) h * effFps * bpp * (hevc ? 0.85 : 1.0);
         long half = Math.round(bps / 500000.0);
         return (int) Math.max(1500000, half * 500000);
     }

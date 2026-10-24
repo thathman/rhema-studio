@@ -44,7 +44,7 @@ itself; the scene shows its background (or your "camera not playing" words) mean
 ## The Rhema Camera app (Android)
 
 Rhema's own camera app gives a better picture than the camera page: the best size the phone encodes
-(4K and HEVC where it can), a film shutter, kelvin white balance and a **look** made on the phone's
+(4K where it can, in H.264 so every Rhema screen and TV plays it), a film shutter, kelvin white balance and a **look** made on the phone's
 graphics chip (Studio, Cinematic, Warm Sanctuary, Natural, Black & White). See
 [android-camera/README.md](../../android-camera/README.md).
 
