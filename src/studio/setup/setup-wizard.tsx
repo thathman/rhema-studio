@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { resumeStep, SETUP_STEPS, type SetupStepId } from "@/lib/setup-readiness"
+import { sampleRefusal, startSampleService } from "@/lib/sample-service"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -106,6 +107,17 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
     then?.()
   }
 
+  // A sample service to try (#298 S4.5, S7.7b): an unsaved rundown in Prepare; refused, with nothing changed, over unsaved work.
+  const sample = async () => {
+    const outcome = await startSampleService()
+    if (outcome !== "started") {
+      toast.error("The sample service did not open", { description: sampleRefusal(outcome) })
+      return
+    }
+    finish(() => useShellStore.getState().goTo("prepare"))
+    toast.success("Sample service in Prepare", { description: "Not saved. Try it in Present; nothing shows until you show it live." })
+  }
+
   const main = () => {
     useSettingsStore.getState().setSetup({ mode: "main" })
     go("church")
@@ -158,8 +170,8 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
           {step === "church" && <ChurchStep error={error} />}
           {step === "operator" && <OperatorStep error={error} onJoin={join} />}
           {step === "brand" && <BrandStep onLeave={leaveTo} />}
-          {step === "bible" && <BibleStep onLeave={leaveTo} />}
-          {step === "screens" && <ScreensStep />}
+          {step === "bible" && <BibleStep onLeave={leaveTo} onSample={() => void sample()} />}
+          {step === "screens" && <ScreensStep onLeave={leaveTo} />}
           {step === "connections" && <ConnectionsStep onLeave={leaveTo} onJoin={join} />}
           {step === "finish" && <FinishStep />}
         </div>
@@ -167,9 +179,11 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
           {step === "finish" ? (
             <>
               <Button variant="ghost" onClick={() => go("church")}>Review profile</Button>
+              <Button variant="ghost" onClick={() => go("screens")}>Run screen test</Button>
               <span className="flex-1" />
               <Button variant="outline" onClick={onFinishLater}>Resume later</Button>
               <Button variant="outline" onClick={() => finish(() => setTimeout(() => useTutorialStore.getState().startTutorial(), 300))}>Take the tour</Button>
+              <Button variant="outline" onClick={() => void sample()}>Start a sample service</Button>
               <Button onClick={() => finish()}>Open Home <ArrowRightIcon /></Button>
             </>
           ) : (

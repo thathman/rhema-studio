@@ -14,6 +14,7 @@ import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { pairingLabel } from "@/lib/setup-readiness"
 import { deskFreshness, skewWords } from "@/lib/desk-freshness"
 import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
@@ -131,7 +132,11 @@ function JoinForm() {
   const error = useJoin((s) => s.error)
   const address = useSettingsStore((s) => s.joinAddress)
   const token = useSettingsStore((s) => s.joinToken)
-  const [form, setForm] = useState({ address, code: "", name: useSettingsStore.getState().joinName || useSettingsStore.getState().operatorName })
+  // The name the host sees for this desk: the last one used, else "operator · this computer" (#298 S2.3).
+  const [form, setForm] = useState(() => {
+    const st = useSettingsStore.getState()
+    return { address, code: "", name: st.joinName || pairingLabel(st.operatorName, st.setup.deviceName, st.setup.deviceId) }
+  })
   // null until the first look is back; it starts as soon as this opens.
   const [hosts, setHosts] = useState<FoundHost[] | null>(null)
   const [finding, setFinding] = useState(true)

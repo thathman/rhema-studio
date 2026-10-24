@@ -12,7 +12,8 @@ import { tickerOnly } from "@/lib/feed-presets"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
-import { computeReadiness, planCheck } from "@/studio/readiness"
+import { computeReadiness, planCheck, serviceStartsSoon } from "@/studio/readiness"
+import { useEventClock } from "@/stores/event-clock-store"
 import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
@@ -55,6 +56,14 @@ export function useReadiness() {
   const cameras = useSettingsStore((s) => s.cameras)
   const router = useRouterHealth()
   const feeds = useFeedHealthStore()
+  const isLive = useBroadcastStore((s) => s.isLive)
+  const eventId = useEventClock((s) => s.currentId)
+  // The time, once a minute: enough to notice the service coming within two hours.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
@@ -131,6 +140,13 @@ export function useReadiness() {
     camerasNotSending: cameraHealth(cameras, scenes, outputs, outputStatus, router.checked ? router.status : undefined)
       .filter((c) => c.assigned.length > 0 && (c.state === "not-sending" || c.state === "router-off"))
       .map((c) => ({ camera: cameraWords(c.label), outputs: c.assigned, onAir: c.onAir.length > 0, routerOff: c.state === "router-off" })),
+    // The service's date and the main service's start time (#298 H6): planning days ahead is not "not ready".
+    serviceSoon: serviceStartsSoon({
+      serviceDate: current?.service_date,
+      startsAt: (headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at,
+      running: isLive || eventId !== null,
+      now,
+    }),
     feedsUnwatched: outputs.filter((o) => o.type === "browser" && outputOnAir(o, outputStatus[o.id]) && feeds[o.id]?.watching === 0).map((o) => o.name),
     signage: outputs
       // A ticker feed (Rhema Ticker | Alpha) has no pictures on purpose.

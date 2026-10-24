@@ -14,6 +14,7 @@ pub mod join;
 pub mod media;
 pub mod remote;
 pub mod secrets;
+pub mod setup;
 pub mod stt;
 pub mod store_check;
 pub mod tv_proof;

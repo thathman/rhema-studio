@@ -42,7 +42,17 @@ const FRESH_MS = 6 * 60 * 60 * 1000
 /** Pictures and videos as data can be megabytes: past this the snapshot keeps names, not content. */
 const MAX_CHARS = 400_000
 
-export const useRecovery = create<{ offer: LiveSnapshot | null }>(() => ({ offer: null }))
+/**
+ * The offer after a crash. "Not now" only hides the banner (`dismissed`): the Desk menu keeps a way
+ * to put the screens back for the rest of this run, and saving starts again so a second crash is
+ * covered by what is on the screens now.
+ */
+export const useRecovery = create<{ offer: LiveSnapshot | null; dismissed: boolean }>(() => ({ offer: null, dismissed: false }))
+
+/** "Not now" on the banner: hide it, keep the offer for the Desk menu. */
+export function dismissRecovery(): void {
+  useRecovery.setState({ dismissed: true })
+}
 
 /** The service log as kept for recovery (#196 R3): what happened, and when, survives a crash. */
 export interface KeptJournal {
@@ -138,7 +148,7 @@ export async function putBack(s: LiveSnapshot): Promise<void> {
     if (s.timer.running) useTimerStore.getState().start()
   }
   useJournalStore.getState().add({ kind: "recovery", label: `Put back after Rhema closed unexpectedly at ${new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
-  useRecovery.setState({ offer: null })
+  useRecovery.setState({ offer: null, dismissed: false })
 }
 
 let store: Store | null = null
@@ -147,8 +157,9 @@ let last = ""
 
 function save(evenInRehearsal = false) {
   timer = null
-  // Rehearsal is a sandbox, and an open offer still holds the crash's snapshot.
-  if (!store || (useBroadcastStore.getState().rehearsal && !evenInRehearsal) || useRecovery.getState().offer) return
+  // Rehearsal is a sandbox, and an open offer still holds the crash's snapshot (kept in memory once put off).
+  const r = useRecovery.getState()
+  if (!store || (useBroadcastStore.getState().rehearsal && !evenInRehearsal) || (r.offer && !r.dismissed)) return
   const snap = takeSnapshot()
   const key = JSON.stringify({ ...snap, at: 0 })
   if (key === last) return
@@ -202,7 +213,7 @@ export async function startLiveRecovery(): Promise<() => void> {
     useEventClock.subscribe((s, p) => { if (s.currentId !== p.currentId) soon() }),
     // Started, paused, reset or corrected (not every tick: a running timer is worked out from the time).
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
-    useRecovery.subscribe((s, p) => { if (p.offer && !s.offer) soon() }),
+    useRecovery.subscribe((s, p) => { if ((p.offer && !s.offer) || (s.dismissed && !p.dismissed)) soon() }),
     // The log, a few seconds after it changes (and when it is cleared for another service).
     useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries && !journalTimer) journalTimer = setTimeout(saveJournal, 3000) }),
     // Notices and their answers, the same way.

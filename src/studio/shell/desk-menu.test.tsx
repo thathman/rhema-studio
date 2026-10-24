@@ -10,6 +10,9 @@ import { createRoot, type Root } from "react-dom/client"
 import { ThemeProvider } from "@/components/theme-provider"
 import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useJoin } from "@/stores/join-store"
+import { useRecovery } from "@/lib/live-recovery"
+import { defaultSetup } from "@/lib/setup-readiness"
+import { useProductionTab } from "@/studio/production/production-tab"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { DeskMenu } from "./desk-menu"
@@ -43,8 +46,10 @@ beforeEach(async () => {
   const store = new Map<string, string>()
   vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, String(v)), removeItem: (k: string) => store.delete(k), clear: () => store.clear() })
   onSettings.mockReset()
-  useSettingsStore.setState({ operatorName: "", joinAddress: "" })
+  useSettingsStore.setState({ operatorName: "", joinAddress: "", setup: defaultSetup() })
   useJoin.setState({ status: "off", me: null, live: null })
+  useRecovery.setState({ offer: null, dismissed: false })
+  useProductionTab.setState({ requested: null })
   useShellStore.setState({ setupOpen: false, setupStatusOpen: false })
   await mount()
 })
@@ -119,5 +124,58 @@ describe("the Desk menu", () => {
     expect(trigger().getAttribute("aria-label")).toContain("Bible desk · joined 192.168.1.20:7878")
     await act(async () => useJoin.setState({ status: "off", me: null }))
     expect(trigger().getAttribute("aria-label")).toContain("Main desk")
+  })
+
+  it("shows and edits this computer's name, with its desk id (#299 1.8, #298 S2.3)", async () => {
+    await act(async () => useSettingsStore.getState().setSetup({ deviceName: "Sanctuary desk", deviceId: "3f2a91c0-1111-4222-8333-944455556666" }))
+    expect(trigger().getAttribute("aria-label")).toBe("Your desk: Add your name, Sanctuary desk · Main desk")
+    await openMenu()
+    const device = document.getElementById("desk-device") as HTMLInputElement
+    expect(device.value).toBe("Sanctuary desk")
+    expect(document.getElementById("desk-device-hint")?.textContent).toContain("3F2A-91C0")
+    await type(device, " Media booth ")
+    await act(async () => { device.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })) })
+    expect(useSettingsStore.getState().setup.deviceName).toBe("Media booth")
+    // Escape in the box puts back what was saved, without closing the menu.
+    await act(async () => device.focus())
+    await type(device, "Typo")
+    await act(async () => { device.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })) })
+    expect(device.value).toBe("Media booth")
+    expect(document.getElementById("desk-device")).toBe(device)
+    expect(useSettingsStore.getState().setup.deviceName).toBe("Media booth")
+  })
+
+  it("the role row says what this desk may do and leads to Operators (#299 1.10)", async () => {
+    await openMenu()
+    expect(document.body.textContent).toContain("Every control, on this computer")
+    await act(async () => row("See joined desks").click())
+    expect(useProductionTab.getState().requested).toBe("operators")
+    expect(document.getElementById("desk-name")).toBeNull()
+  })
+
+  it("a joined desk sees what its role permits and can leave the host", async () => {
+    const leave = vi.fn(async () => {})
+    await act(async () => useJoin.setState({ status: "connected", me: { name: "Ade", role: "timekeeper" }, leave }))
+    await openMenu()
+    expect(document.body.textContent).toContain("Start and move the event clock")
+    await act(async () => row("Leave this host").click())
+    expect(leave).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the last session's screens after Not now, and puts them back only after a second click (#299 1.18)", async () => {
+    await openMenu()
+    expect(row("Put back the last session's screens")).toBeUndefined()
+    await act(async () => root.unmount())
+    const at = Date.now() - 60_000
+    useRecovery.setState({ offer: { v: 1, at, service: null, isLive: false, liveVerse: null, liveItemId: null, sources: {}, outputsOn: [], scenes: {}, eventId: null }, dismissed: true })
+    await mount()
+    await openMenu()
+    await act(async () => row("Put back the last session's screens").click())
+    // Asked first: it replaces what is on the screens now.
+    expect(document.body.textContent).toContain("It replaces what is on them now")
+    expect(useRecovery.getState().offer).not.toBeNull()
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.trim() === "Put back")!.click())
+    await act(async () => {})
+    expect(useRecovery.getState().offer).toBeNull()
   })
 })

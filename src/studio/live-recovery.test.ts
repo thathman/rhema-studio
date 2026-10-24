@@ -12,7 +12,7 @@ const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useEventClock } = await import("@/stores/event-clock-store")
 const { useJournalStore } = await import("@/stores/journal-store")
 const { useTimerStore } = await import("@/stores/timer-store")
-const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal, restoreNotices, startLiveRecovery } = await import("@/lib/live-recovery")
+const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal, restoreNotices, startLiveRecovery, dismissRecovery } = await import("@/lib/live-recovery")
 const { useNotices } = await import("@/stores/notices-store")
 const { invoke } = await import("@tauri-apps/api/core")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
@@ -58,6 +58,15 @@ describe("live recovery", () => {
     expect(b.sources.bible?.on).toBe(true)
     expect(useRecovery.getState().offer).toBeNull()
     expect(useJournalStore.getState().entries.some((e) => e.kind === "recovery")).toBe(true)
+  })
+
+  it("Not now hides the offer but keeps it for the Desk menu until it is put back (#299 1.18)", async () => {
+    const snap = { ...takeSnapshot(), eventId: null, outputsOn: [] }
+    useRecovery.setState({ offer: snap, dismissed: false })
+    dismissRecovery()
+    expect(useRecovery.getState()).toMatchObject({ offer: snap, dismissed: true })
+    await putBack(snap)
+    expect(useRecovery.getState()).toEqual({ offer: null, dismissed: false })
   })
 
   it("puts the timer back, counting the time Rhema was closed while it ran", async () => {

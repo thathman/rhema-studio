@@ -5,6 +5,7 @@ import type { BackupSummary, ContentStatus, Hymnbook, ImportMode, ImportReport, 
 import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 import { songToMarkdown } from "@/lib/lyrics"
+import { useSettingsStore } from "@/stores/settings-store"
 
 export interface ImportOutcome {
   /** Files that were read. */
@@ -151,6 +152,8 @@ export async function backupDatabaseToFile(): Promise<string | null> {
   })
   if (!path) return null
   await invoke("content_backup", { path })
+  // The setup's Finish step shows when the last backup was made.
+  useSettingsStore.getState().setSetup({ lastBackupAt: new Date().toISOString() })
   return path
 }
 

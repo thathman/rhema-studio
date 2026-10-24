@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### This computer's name in the Desk menu; a fuller setup summary (#298, #299)
+- The Desk menu now shows and edits **this computer's name** (with a short Desk ID), says **what this desk may do** (all controls on the main desk, or what the host's role allows), and leads to Production → Operators, or **Leave this host** on a joined desk. Joining a host suggests "your name · this computer" as the name the host sees.
+- After Rhema closed unexpectedly, **Not now** on the banner no longer throws the offer away: the Desk menu keeps **Put back the last session's screens** (it asks once more first).
+- The setup's summary shows where services and songs are kept (Copy, Show in folder), the last backup with **Back up now…**, a church folder write test, **Run screen test** and **Start a sample service** (passages and slides only, never saved by itself). The Church step has an optional time zone and the Screens step an optional microphone choice that asks the computer only when pressed. Google TVs and sound now appear in the equipment list.
+- Computers in use before the setup existed see **Review your setup** on Home once. Home counts readiness checks ("5 of 6 checks") instead of a percentage, and "No output is on a screen yet" is only a note when no output is set up or the service is hours away.
+
 ### Google TV: the feed link and page travel encrypted; a sturdier Rhema Receiver (#198)
 - **Show on a Google TV** now sends the TV the feed's secure (https) link, encrypted, with this computer's certificate; the TV opens the feed only from this computer, so nobody else on the Wi-Fi can read the link or what the feed shows. It needs **Secure page for phones (https)** in Settings → Remote control; without it Rhema says so and sends nothing.
 - It needs **Rhema Receiver 1.3** on the TV (Rhema asks you to update an older one). After updating, send the TV its feed again once. The https certificate now stays the same while this computer's address does, so TVs and phones keep working after Rhema restarts.

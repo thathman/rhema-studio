@@ -25,9 +25,15 @@ export interface SetupProfile {
   mode: SetupMode
   /** This computer's name (local, never shared), e.g. "Sanctuary desk". */
   deviceName: string
+  /** This install's own id, made once and never changed (tells two desks of the same name apart). "" = not made yet. */
+  deviceId: string
   campus: string
   /** As typed: "English, Yorùbá". */
   serviceLanguages: string
+  /** The church's time zone (IANA, e.g. "Africa/Lagos"); "" = this computer's own. */
+  timeZone: string
+  /** When services and songs were last backed up to a file from this computer; "" = never. */
+  lastBackupAt: string
   /** Home's "Finish church setup" card: put away for good, or until this time. */
   homeCardHidden: boolean
   remindAfter: string
@@ -40,8 +46,11 @@ export const defaultSetup = (): SetupProfile => ({
   lastStep: "",
   mode: "",
   deviceName: "",
+  deviceId: "",
   campus: "",
   serviceLanguages: "",
+  timeZone: "",
+  lastBackupAt: "",
   homeCardHidden: false,
   remindAfter: "",
 })
@@ -65,8 +74,11 @@ export function normalizeSetup(raw: unknown): SetupProfile {
     lastStep: isStep(r.lastStep) ? r.lastStep : "",
     mode: r.mode === "main" || r.mode === "join" ? r.mode : "",
     deviceName: str("deviceName"),
+    deviceId: str("deviceId"),
     campus: str("campus"),
     serviceLanguages: str("serviceLanguages"),
+    timeZone: str("timeZone"),
+    lastBackupAt: str("lastBackupAt"),
     homeCardHidden: typeof r.homeCardHidden === "boolean" ? r.homeCardHidden : false,
     remindAfter: str("remindAfter"),
   }
@@ -127,6 +139,35 @@ export function shouldAutoOpenSetup(f: InstallFacts, setup: SetupProfile): boole
   return !setup.dismissedAt && isFreshInstall(f)
 }
 
+/**
+ * An install that was in use before the setup existed: Home invites a review of the setup once,
+ * without opening it. Gone for good once the setup is opened and closed, or "Not now" is chosen.
+ */
+export function showReviewNotice(f: InstallFacts, setup: SetupProfile): boolean {
+  return !setup.dismissedAt && !isFreshInstall(f)
+}
+
+/** A new id for this install, made once. */
+export function newDeviceId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+/** The first characters of the id, as a person would read them out: "3F2A-91C0". */
+export function shortDeviceId(id: string): string {
+  const hex = id.replace(/[^0-9a-z]/gi, "").slice(0, 8).toUpperCase()
+  return hex.length > 4 ? `${hex.slice(0, 4)}-${hex.slice(4)}` : hex
+}
+
+/**
+ * The name a joining computer gives the host when it pairs: "Tolu · Sanctuary desk". Without a
+ * computer name, the id's first characters, so two desks with the same operator can be told apart.
+ */
+export function pairingLabel(operatorName: string, deviceName: string, deviceId: string): string {
+  const who = operatorName.trim()
+  const desk = deviceName.trim() || (deviceId ? `desk ${shortDeviceId(deviceId).slice(0, 4)}` : "")
+  return [who, desk].filter(Boolean).join(" · ").slice(0, 60)
+}
+
 export type EssentialState = "done" | "attention" | "checking"
 export interface SetupItem {
   id: string
@@ -149,6 +190,8 @@ export interface ChurchSetupInput {
   campus: string
   serviceLanguages: string
   deviceName: string
+  /** Songs and hymns in the Library; null while not looked up. Optional: Rhema comes with none. */
+  librarySongs?: number | null
 }
 
 export interface ChurchSetup {
@@ -187,6 +230,7 @@ export function churchSetup(i: ChurchSetupInput): ChurchSetup {
     opt("languages", "Service languages", !!i.serviceLanguages.trim(), i.serviceLanguages.trim() || undefined),
     opt("device", "This computer's name", !!i.deviceName.trim(), i.deviceName.trim() || undefined),
     opt("church-folder", "Church folder", !!i.churchFolder.trim()),
+    opt("library", "Songs and hymns in Library", !!i.librarySongs),
   ]
   const done = essentials.filter((e) => e.state === "done").length
   return { essentials, optional, done, total: essentials.length, missing: essentials.filter((e) => e.state === "attention").length }
@@ -221,12 +265,16 @@ export interface EquipmentInput {
     receivers?: number | null
     /** Browser feed pages: how many are showing it, and whether one drew the newest frame. */
     feed?: { watching: number; current: boolean } | null
+    /** Browser feeds: the Google TVs it was sent to (Show on a Google TV). */
+    tvs?: Array<{ name: string; address: string }>
   }>
   obs: { enabled: boolean; status: "off" | "connecting" | "connected" | "error"; error: string | null }
   speech: { provider: "deepgram" | "whisper"; keySaved: boolean; consentGiven: boolean }
   mcpEnabled: boolean
   join: { address: string; status: "off" | "connecting" | "connected" | "reconnecting" | "refused" }
   pairedDevices: number
+  /** Sound on this computer: a microphone chosen for listening, a headset set for Talk. Absent = neither. */
+  audio?: { micChosen: boolean; talkHeadset: boolean }
 }
 
 /**
@@ -256,6 +304,23 @@ export function equipment(i: EquipmentInput): { items: EquipmentItem[]; notUsing
   if (!i.outputs.some((o) => o.type === "ndi")) notUsing.push("NDI")
   if (!i.outputs.some((o) => o.type === "browser")) notUsing.push("Browser feeds and TVs")
 
+  // Google TVs a feed was sent to. Rhema sees the feed, not each TV: a screen showing the feed is
+  // Connected, never Verified for that TV (Check TV in Show health asks the TV itself).
+  const tvsSeen = new Set<string>()
+  for (const o of i.outputs) {
+    if (o.type !== "browser") continue
+    for (const tv of o.tvs ?? []) {
+      if (tvsSeen.has(tv.address)) continue
+      tvsSeen.add(tv.address)
+      const id = `tv-${tv.address}`
+      const label = tv.name.trim() || "Google TV"
+      if (!o.on) items.push({ id, label, state: "configured", detail: `Google TV, sent ${o.name}; that feed is off now` })
+      else if (o.feed && o.feed.watching > 0 && o.feed.current) items.push({ id, label, state: "connected", detail: `Google TV, sent ${o.name}; a screen is showing it (Check TV in Show health says which)` })
+      else items.push({ id, label, state: "not-tested", detail: `Google TV, sent ${o.name}; nothing is showing that feed yet` })
+    }
+  }
+  if (i.outputs.some((o) => o.type === "browser") && tvsSeen.size === 0) notUsing.push("Google TVs")
+
   if (!i.obs.enabled) notUsing.push("OBS")
   else if (i.obs.status === "connected") items.push({ id: "obs", label: "OBS", state: "connected", detail: "OBS is answering" })
   else items.push({ id: "obs", label: "OBS", state: "not-tested", detail: i.obs.status === "connecting" ? "Connecting…" : i.obs.error ? `Not connected: ${i.obs.error}` : "Not connected yet", attention: i.obs.status === "error" })
@@ -275,6 +340,12 @@ export function equipment(i: EquipmentInput): { items: EquipmentItem[]; notUsing
   if (i.pairedDevices > 0) items.push({ id: "paired", label: "Paired phones and computers", state: "configured", detail: `${i.pairedDevices} paired` })
   if (!i.join.address.trim() && i.pairedDevices === 0) notUsing.push("Phones and other computers")
 
+  // Sound is optional: the system's own microphone works for listening without a choice here.
+  if (i.audio?.micChosen) items.push({ id: "microphone", label: "Microphone", state: "configured", detail: "Chosen for listening. Checked when listening starts." })
+  else notUsing.push("A chosen microphone (the system's own is used)")
+  if (i.audio?.talkHeadset) items.push({ id: "talk-headset", label: "Talk headset", state: "configured", detail: "Set for Talk on this computer" })
+  else notUsing.push("Talk headset")
+
   return { items, notUsing, attention: items.filter((x) => x.attention).length }
 }
 
@@ -289,4 +360,28 @@ export function showSetupCard(missing: number, setup: SetupProfile, now: number)
 export function setupStatusLabel(missing: number, attention: number): string {
   const n = missing + attention
   return n === 0 ? "Complete" : `Needs ${n}`
+}
+
+/** This computer's own time zone, e.g. "Africa/Lagos" (empty when the system does not say). */
+export function systemTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ""
+  } catch {
+    return ""
+  }
+}
+
+/** Every time zone the system knows, for the setup's list; the saved one is always in it. */
+export function timeZones(saved: string): string[] {
+  const all = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") ?? []
+  return saved && !all.includes(saved) ? [saved, ...all] : all
+}
+
+/** When the last backup was made, in words: "Today at 09:12", "Sunday, 26 Oct 2026 at 18:40"; null for never. */
+export function backupWhen(iso: string, now = Date.now()): string | null {
+  const at = Date.parse(iso)
+  if (Number.isNaN(at)) return null
+  const d = new Date(at)
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  return new Date(now).toDateString() === d.toDateString() ? `Today at ${time}` : `${d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short", year: "numeric" })} at ${time}`
 }
