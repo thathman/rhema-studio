@@ -1275,8 +1275,8 @@ Measure on the Chromecast with Google TV (Rhema Receiver debug build, adb connec
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10dg.1 | A service with a main phase start time and two groups. Prepare → Timing → Table. | Every item of the main service with plan start/end, time, expected and offset; a total line above each group and for the service; a lock and the time on items with an end by. | TABLE_RESULT |
-| 10dg.2 | In the table, type 1h10 in an item's Time, then Enter. Show two items live a few minutes apart. | The plan moves on from that item; the shown items get Actual (when and how long), Done / On now, and their offset. | TABLE2_RESULT |
+| 10dg.1 | A service with a main phase start time and two groups. Prepare → Timing → Table. | Every item of the main service with plan start/end, time, expected and offset; a total line above each group and for the service; a lock and the time on items with an end by. | Pass 2026-10-23 (QA build, QA Slides service with a main phase at 10:00 and groups Praise / Notices / Psalm 136): Table lists 14 rows — a total line above each group (Praise 10:00–10:15, 15 min) and one for the service; End by shown on items that have one; Cut short where an end by falls before the item can start. |
+| 10dg.2 | In the table, type 1h10 in an item's Time, then Enter. Show two items live a few minutes apart. | The plan moves on from that item; the shown items get Actual (when and how long), Done / On now, and their offset. | Partial 2026-10-23 (QA build): typing 1h10 in the first item's Time stored 70 min and moved the plan and the service total (10:00–12:04); showing items live a few minutes apart (Actual / Done / On now) not tried on the desktop (covered by timing-panel.test.tsx). |
 
 ### 10df. Time warnings on the stage (#196 R6)
 
