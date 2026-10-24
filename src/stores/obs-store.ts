@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { toast } from "sonner"
 import { ObsClient, ObsRequestError } from "@/lib/obs"
 import { useJournalStore } from "@/stores/journal-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type ObsSettings } from "@/stores/settings-store"
 
 type Status = "off" | "connecting" | "connected" | "error"
@@ -124,6 +125,15 @@ function onSceneEvent(type: string, data: Record<string, unknown>): void {
   }
 }
 
+/** Rehearsal is a sandbox (#246) and OBS's program is the online stream: no scene change reaches OBS while practising. */
+export const OBS_REHEARSAL_REASON = "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise"
+
+function refusedInRehearsal(): boolean {
+  if (!useBroadcastStore.getState().rehearsal) return false
+  toast.info("OBS not changed", { description: OBS_REHEARSAL_REASON })
+  return true
+}
+
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 function stopTimers(): void {
@@ -233,7 +243,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
 
   // Scene changes happen only from these three, each a deliberate click; OBS's events then report the result.
   setPreview: async (scene) => {
-    if (!client || get().studioMode !== true) return
+    if (!client || get().studioMode !== true || refusedInRehearsal()) return
     try {
       await client.request("SetCurrentPreviewScene", { sceneName: scene })
     } catch (e) {
@@ -243,7 +253,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
 
   take: async () => {
     const preview = get().preview
-    if (!client || get().studioMode !== true || !preview) return
+    if (!client || get().studioMode !== true || !preview || refusedInRehearsal()) return
     try {
       await client.request("TriggerStudioModeTransition")
       useJournalStore.getState().add({ kind: "obs", label: `OBS: took ${preview} to its program (from Rhema)` })
@@ -254,7 +264,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
 
   switchProgram: async (scene) => {
     // In Studio Mode the stream changes only through Take.
-    if (!client || get().studioMode !== false) return
+    if (!client || get().studioMode !== false || refusedInRehearsal()) return
     try {
       await client.request("SetCurrentProgramScene", { sceneName: scene })
       useJournalStore.getState().add({ kind: "obs", label: `OBS: switched its program to ${scene} (from Rhema)` })

@@ -1,9 +1,10 @@
-import { useState } from "react"
+import { useId, useState } from "react"
 import { ArrowRightLeftIcon, EyeIcon, RefreshCwIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
-import { useObsStore } from "@/stores/obs-store"
+import { OBS_REHEARSAL_REASON, useObsStore } from "@/stores/obs-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useJoin } from "@/stores/join-store"
 import { openProductionTab } from "@/studio/production/production-tab"
@@ -17,6 +18,21 @@ function Tag({ tone, children }: { tone: "program" | "preview" | "ok" | "warn" |
     off: "bg-tone-neutral text-tone-neutral-foreground",
   }[tone]
   return <span className={cn("shrink-0 rounded-[5px] px-[7px] py-[4px] text-[0.625rem] font-bold tracking-[0.04em] uppercase", cls)}>{children}</span>
+}
+
+/** A scene action: in rehearsal it stays focusable but does nothing, and says why (as the transport bar does). */
+function ObsAction({ held, reasonId, disabled, onClick, ...rest }: React.ComponentProps<typeof Button> & { held: boolean; reasonId: string }) {
+  return (
+    <Button
+      {...rest}
+      disabled={disabled && !held}
+      aria-disabled={held || undefined}
+      aria-describedby={held ? reasonId : undefined}
+      title={held ? OBS_REHEARSAL_REASON : undefined}
+      className={cn(rest.className, held && "cursor-not-allowed opacity-50")}
+      onClick={held ? undefined : onClick}
+    />
+  )
 }
 
 /**
@@ -34,6 +50,9 @@ export function ObsPanel() {
   const studioMode = useObsStore((s) => s.studioMode)
   // A computer that joined a host follows it; OBS's scenes are changed from the main desk.
   const joined = useJoin((s) => s.status !== "off")
+  // Rehearsal is a sandbox: OBS's program is the online stream, so nothing here changes it while practising.
+  const held = useBroadcastStore((s) => s.rehearsal)
+  const reasonId = useId()
   const [confirm, setConfirm] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const run = async (f: () => Promise<void>) => {
@@ -85,10 +104,11 @@ export function ObsPanel() {
             <p role="status" className="text-muted-foreground">
               {studioMode === null ? "Asking OBS about Studio Mode…" : studioMode ? "Studio Mode is on in OBS: set a preview, then Take it to the stream with OBS's own transition." : "Studio Mode is off in OBS: a switch goes straight to the stream. Turn Studio Mode on in OBS to preview first."}
             </p>
+            {held && !joined && <p id={reasonId} role="status" className="rounded-md bg-muted px-2.5 py-2 font-semibold">{OBS_REHEARSAL_REASON}.</p>}
             {studioMode && !joined && (
-              <Button className="w-fit" disabled={!preview || busy} onClick={() => void run(() => obs.take())}>
+              <ObsAction held={held} reasonId={reasonId} className="w-fit" disabled={!preview || busy} onClick={() => void run(() => obs.take())}>
                 <ArrowRightLeftIcon /> Take in OBS{preview ? `: ${preview}` : ""}
-              </Button>
+              </ObsAction>
             )}
             {joined && <p className="rounded-md bg-muted px-2.5 py-2">This computer has joined a host: OBS's scenes are changed from the main desk. Here they are shown only.</p>}
           </>
@@ -116,17 +136,17 @@ export function ObsPanel() {
                   {name === program && <Tag tone="program">Program</Tag>}
                   {studioMode && name === preview && <Tag tone="preview">Preview</Tag>}
                   {!joined && studioMode === true && (
-                    <Button size="sm" variant="outline" disabled={busy || name === preview} onClick={() => void run(() => obs.setPreview(name))}>
+                    <ObsAction held={held} reasonId={reasonId} size="sm" variant="outline" disabled={busy || name === preview} onClick={() => void run(() => obs.setPreview(name))}>
                       <EyeIcon /> Set as OBS preview
-                    </Button>
+                    </ObsAction>
                   )}
                   {!joined && studioMode === false && confirm !== name && (
-                    <Button size="sm" variant="outline" disabled={busy || name === program} onClick={() => setConfirm(name)}>
+                    <ObsAction held={held} reasonId={reasonId} size="sm" variant="outline" disabled={busy || name === program} onClick={() => setConfirm(name)}>
                       Switch OBS to this scene…
-                    </Button>
+                    </ObsAction>
                   )}
                 </div>
-                {!joined && studioMode === false && confirm === name && (
+                {!joined && !held && studioMode === false && confirm === name && (
                   <div role="alertdialog" aria-label={`Switch OBS to ${name}?`} className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2">
                     <span className="min-w-0 flex-1"><span className="font-semibold">This changes what the stream shows.</span> Switch OBS's program to {name} now?</span>
                     <Button size="sm" variant="destructive" disabled={busy} onClick={() => { setConfirm(null); void run(() => obs.switchProgram(name)) }}>Switch OBS</Button>

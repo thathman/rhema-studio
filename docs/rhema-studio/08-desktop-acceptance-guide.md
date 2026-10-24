@@ -1119,6 +1119,7 @@ Needs OBS 28 or later (with its WebSocket server on: Tools → WebSocket Server 
 | 10ek.8 | Take a congregation scene from Production → Programs or Present, and show a verse and a song live. | OBS's program and preview do not change. | Unverified |
 | 10ek.9 | Quit OBS (or unplug the network to the OBS computer); then start it again. | Rhema shows "Not connected" with no scene list (no stale Program); within 15 seconds of OBS being back the list and Program return by themselves. | Unverified |
 | 10ek.10 | On a computer that joined this host (Production → Operators → Join), with its own OBS connection on, open Production → OBS. | It says OBS's scenes are changed from the main desk; no Switch, preview or Take buttons. | Unverified |
+| 10ek.11 | Turn rehearsal on (Present). In Production → OBS, Tab to **Set as OBS preview** / **Take in OBS** (Studio Mode) and **Switch OBS to this scene…** (Studio Mode off) and press each; with a screen reader, listen to the button. | The buttons can be focused but do nothing; the tab says "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise" and the screen reader reads it with the button. OBS does not change. Turn rehearsal off: they work again. | Unverified |
 
 ### 10dz. Rhema finds Google TVs by itself (#198)
 

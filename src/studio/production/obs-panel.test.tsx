@@ -220,6 +220,45 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     expect(button("Try now")).toBeTruthy()
   })
 
+  it("in rehearsal, nothing reaches OBS: the buttons stay focusable, say why, and the store refuses too", async () => {
+    const reason = "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise"
+    const studio = await setup({ studioMode: true })
+    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    useBroadcastStore.setState({ rehearsal: true })
+    const sent = () => studio.obs.requests.filter((r) => r.type.startsWith("Set") || r.type === "TriggerStudioModeTransition")
+    const { button, row } = await render()
+    const take = button("Take in OBS")!
+    const preview = row("Choir").querySelector("button") as HTMLButtonElement
+    for (const b of [take, preview]) {
+      expect(b.disabled).toBe(false) // focusable
+      expect(b.getAttribute("aria-disabled")).toBe("true")
+      expect(document.getElementById(b.getAttribute("aria-describedby")!)?.textContent).toContain(reason)
+    }
+    await act(async () => { take.click(); preview.click() })
+    await settle()
+    expect(sent()).toEqual([])
+    // Defence in depth: the store itself refuses, whoever calls it.
+    await studio.useObsStore.getState().setPreview("Choir")
+    await studio.useObsStore.getState().take()
+    expect(sent()).toEqual([])
+    await act(async () => root!.unmount())
+    root = null
+    studio.useObsStore.getState().disconnect()
+
+    const plain = await setup()
+    const { useBroadcastStore: broadcast } = await import("@/stores/broadcast-store")
+    broadcast.setState({ rehearsal: true })
+    const view = await render()
+    const sw = view.row("Pulpit").querySelector("button") as HTMLButtonElement
+    expect(sw.getAttribute("aria-disabled")).toBe("true")
+    await act(async () => sw.click())
+    expect(view.el.querySelector('[role="alertdialog"]')).toBeNull()
+    await plain.useObsStore.getState().switchProgram("Pulpit")
+    expect(plain.obs.requests.some((r) => r.type === "SetCurrentProgramScene")).toBe(false)
+    expect(plain.useObsStore.getState().program).toBe("Wide")
+    expect(view.el.textContent).toContain(reason)
+  })
+
   it("on a computer that joined a host, OBS's scenes are shown only", async () => {
     await setup()
     const { useJoin } = await import("@/stores/join-store")
