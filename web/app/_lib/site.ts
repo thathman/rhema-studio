@@ -18,15 +18,11 @@ export const SITE = {
     url: "https://github.com/thathman/rhema-studio",
     releases: "https://github.com/thathman/rhema-studio/releases",
     latestRelease: "https://github.com/thathman/rhema-studio/releases",
-    // `/releases/latest` resolves to the newest published, non-prerelease
-    // release, so these track each tagged release with no hand re-upload. The
-    // release workflow ships a copy of each installer under these exact stable
-    // filenames (Tauri's own bundle names carry the version); keep them in sync
-    // with the `aliases` list in .github/workflows/build-release.yml or these
-    // links 404.
+    // Send visitors to this fork's release list until branded and verified
+    // platform installers have been published under their final filenames.
     downloadWindows:
       "https://github.com/thathman/rhema-studio/releases",
-    // Apple Silicon only — the build matrix has no x86_64-apple-darwin target.
+    // Do not point users to the original upstream's Mac installer.
     downloadMac:
       "https://github.com/thathman/rhema-studio/releases",
     // AppImage runs on any distro without a package manager step, so it is the
@@ -49,10 +45,9 @@ export const SITE = {
 } as const;
 
 /**
- * Where a "Download" CTA should point: straight at the installer for the
- * visitor's platform. Church volunteers should not have to pick a file out of a
- * GitHub release page. Unrecognised platforms still land on the release list,
- * where every bundle (.msi, .deb, .rpm) is available.
+ * Where a Download CTA should point. Until branded binaries have been
+ * independently validated and released, go to this fork's release listing,
+ * never the original upstream app's installer.
  */
 export function downloadHref(platform: string | null | undefined): string {
   switch (platform) {
