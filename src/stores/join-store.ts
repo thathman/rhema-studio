@@ -91,7 +91,11 @@ async function listenOnce() {
       // The host lists the desks it has taken back control from; an older host does not say.
       const paused = Array.isArray(live.paused) && name ? live.paused.includes(name) : useJoin.getState().paused
       if (typeof live.at === "number") gaps = [...gaps, Date.now() - live.at].slice(-5)
-      useJoin.setState({ live, receivedAt: performance.now(), clockSkewMs: gaps.length ? Math.min(...gaps) : null, status: "connected", error: null, paused })
+      // A lost connection's reason goes once the host is heard again. A command's refusal stays
+      // until the next command: the host sends every 2 s, which would wipe it before it was read.
+      const was = useJoin.getState()
+      const error = was.status === "connected" ? was.error : null
+      useJoin.setState({ live, receivedAt: performance.now(), clockSkewMs: gaps.length ? Math.min(...gaps) : null, status: "connected", error, paused })
     } catch {
       // A snapshot this build cannot read: keep the last one.
     }

@@ -83,6 +83,27 @@ describe("acting on what the desk saw (#196 R7)", () => {
   })
 })
 
+describe("a refusal stays on the joined desk until its next command", () => {
+  it("the next Live State (every 2 s) does not wipe the reason; a lost connection's reason does go once it is back", async () => {
+    await useJoin.getState().connect()
+    handlers.get("join:live")!({ payload: JSON.stringify(served({ "output:main": 1 })) })
+    refuseNext = `stale: ${STALE_MESSAGE}`
+    await useJoin.getState().send({ command: "release_scene", value: "main" })
+    // The heartbeat: the operator still sees why nothing happened.
+    handlers.get("join:live")!({ payload: JSON.stringify(served({ "output:main": 2 })) })
+    expect(useJoin.getState()).toMatchObject({ status: "connected", error: STALE_MESSAGE })
+    refuseNext = "this device runs the congregation screens: it may take and release scenes only"
+    await useJoin.getState().send({ command: "event_next" })
+    handlers.get("join:live")!({ payload: JSON.stringify(served({ "output:main": 2 })) })
+    expect(useJoin.getState().error).toBe("this device runs the congregation screens: it may take and release scenes only")
+    // The connection drops and comes back: its reason was about the connection, and goes.
+    handlers.get("join:state")!({ payload: JSON.stringify({ state: "reconnecting", error: "the host closed the connection" }) })
+    expect(useJoin.getState()).toMatchObject({ status: "reconnecting", error: "the host closed the connection" })
+    handlers.get("join:live")!({ payload: JSON.stringify(served({ "output:main": 2 })) })
+    expect(useJoin.getState()).toMatchObject({ status: "connected", error: null })
+  })
+})
+
 describe("why a request could not be done reaches whoever sent it (Comms, #251)", () => {
   it("an Unable answer keeps its reason; other answers have none", () => {
     const n = useNotices.getState().send({ from: "Main desk", fromId: "host", to: "bible", text: "Show John 3:16", action: { kind: "bible", value: "John 3:16" } })!
