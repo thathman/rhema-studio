@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Rhema finds Google TVs by itself (#198)
+- **Show on a Google TV** lists the TVs running Rhema Receiver on the church network, by name and address, as soon as it opens; **Find TVs** looks again. Pick the one whose address matches the TV's screen instead of typing it; Rhema never picks one by itself.
+- Rhema checks the code with the TV before it sends the feed's link, so a device pretending to be a TV gets nothing; the code never goes over the network. Typing an address still works when a network blocks the search.
+- Rhema Receiver 1.2.0.0 tells the network it is there under the TV's name, shows that name on its screen, and does the code check. Install it on each TV once: Rhema asks you to update an older one.
+
 ### Smoother scene tickers on Google TV browser feeds (#198)
 - A scene's Ticker layer on a browser feed (a Google TV, a TV browser, OBS Browser source) now crawls on its own strip, so the rest of the picture is no longer redrawn 60 times a second. Cameras and the ticker should stay smooth together on a Chromecast with Google TV, as the full-screen ticker already does.
 - It looks exactly as before. A ticker layer that has another layer over it (a logo, a picture, a lower third that is up) is still drawn in the picture, in its place, so nothing changes order; the smooth strip is used when nothing sits on top of the ticker's box.
