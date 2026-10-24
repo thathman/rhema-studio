@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rhema Studio brand preview</title>
+<!-- The Rhema Studio family as the owner's pack has it (brand/), with real screenshots of the app. Self-contained: images by relative path. -->
+<style>
+  :root { --bg:#f5f4ef; --card:#ffffff; --ink:#1d2a30; --muted:#5f6b72; --line:#e2dfd6; --sidebar:#17242b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1240px; margin:0 auto; padding:40px 24px 64px; }
+  h1 { font-size:30px; letter-spacing:-.02em; margin:0 0 4px; }
+  h2 { font-size:19px; margin:44px 0 6px; letter-spacing:-.01em; }
+  p.lead, p.note { color:var(--muted); margin:0 0 16px; max-width:760px; }
+  .row { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; }
+  .card.dark { background:#111b21; border-color:#24343c; color:#eef3f1; }
+  .card small { display:block; color:var(--muted); margin-top:10px; font-size:12px; }
+  .card.dark small { color:#9aabb1; }
+  .lockup img { width:100%; max-width:420px; display:block; }
+  .marks { display:flex; gap:20px; align-items:center; }
+  .marks img { width:96px; height:96px; }
+  .tv { background:#000; border-radius:12px; overflow:hidden; }
+  .tv img { width:100%; display:block; }
+  .idle { aspect-ratio:16/9; background:#000; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+  .idle .panel { background:rgba(0,0,0,.9); padding:22px 34px 26px; text-align:center; color:#fff; font-size:13px; line-height:1.55; }
+  .idle .panel img { width:200px; display:block; margin:0 auto 10px; }
+  .phone { background:linear-gradient(#24343c,#17242b); border-radius:22px; padding:26px 18px; display:flex; gap:22px; justify-content:center; }
+  .tile { width:84px; text-align:center; color:#fff; font-size:12px; }
+  .tile .icon { width:64px; height:64px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; margin:0 auto 6px; overflow:hidden; }
+  .tile .icon img { width:100%; height:100%; }
+  .tile.mute { opacity:.45; } .tile.mute .icon { background:#5f6b72; }
+  .shots { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(520px,1fr)); }
+  figure { margin:0; } figure img { width:100%; display:block; border-radius:10px; border:1px solid var(--line); }
+  figcaption { font-size:13px; color:var(--muted); margin-top:6px; }
+  .credit { margin-top:48px; font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:16px; }
+  @media (max-width:600px) { .shots { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>The Rhema Studio family</h1>
+  <p class="lead">The owner's approved logo pack (brand/, byte for byte) on every product, and the rebuilt app in context. Four names: Rhema Studio, Rhema Studio Receiver, Rhema Studio Cam, Rhema Studio Companion.</p>
+
+  <h2>1 · Rhema Studio: the mark and the lockup</h2>
+  <div class="row">
+    <div class="card"><div class="marks"><img src="../../brand/01_Master_Mark/Rhema-Studio-Mark-Black.svg" alt="Rhema Studio mark, black"><img src="../../brand/01_Master_Mark/Rhema-Studio-Mark-Light.svg" alt="Rhema Studio mark, reversed" style="background:#17242b;border-radius:18px;padding:6px"></div><small>The mark (black) and the reversed mark on the ink sidebar colour.</small></div>
+    <div class="card lockup"><img src="../../brand/02_Product_Logos/Rhema-Studio-Dark-Text.png" alt="Rhema Studio"><small>Lockup on light.</small></div>
+    <div class="card dark lockup"><img src="../../brand/02_Product_Logos/Rhema-Studio-White-Text.png" alt="Rhema Studio"><small>Lockup on dark.</small></div>
+  </div>
+
+  <h2>2 · Rhema Studio Receiver (Google TV)</h2>
+  <div class="row">
+    <div class="card"><div class="tv"><img src="../../brand/03_Google_TV/Rhema-Studio-Receiver-TV-640x360.png" alt="Rhema Studio Receiver, TV landscape logo"></div><small>The Google TV landscape logo; the launcher banner is the 320×180 file of the same.</small></div>
+    <div class="card"><div class="idle"><div class="panel"><img src="../../brand/02_Product_Logos/Rhema-Studio-Receiver-White-Text.png" alt="Rhema Studio Receiver">To show a screen here: in Rhema Studio, Outputs → a browser feed → Show on a Google TV.<br><br>TV name&nbsp;&nbsp;Hall TV<br>TV address&nbsp;&nbsp;192.168.1.37:8095<br>Code&nbsp;&nbsp;482 913</div></div><small>The idle / code screen as the app lays it out (android-tv MainActivity: logo over the text); drawn here in HTML, not a photo of a TV. Example name, address and code.</small></div>
+  </div>
+
+  <h2>3 · Rhema Studio Cam and 4 · Rhema Studio Companion</h2>
+  <div class="row">
+    <div class="card"><div class="phone">
+      <div class="tile mute"><div class="icon"></div>Camera</div>
+      <div class="tile"><div class="icon"><img src="../../brand/04_Launcher_Assets/Android-Adaptive-Foreground-1024.png" alt=""></div>Rhema Studio Cam</div>
+      <div class="tile"><div class="icon"><img src="../../brand/04_Launcher_Assets/Companion-Launcher-512.png" alt=""></div>Rhema Studio Companion</div>
+      <div class="tile mute"><div class="icon"></div>Settings</div>
+    </div><small>Android home tiles (circle mask): Cam's adaptive icon is the pack's foreground on white; Companion uses the pack's launcher (built on its own branch).</small></div>
+    <div class="card lockup"><img src="../../brand/02_Product_Logos/Rhema-Studio-Cam-Dark-Text.png" alt="Rhema Studio Cam"><br><img src="../../brand/02_Product_Logos/Rhema-Studio-Companion-Dark-Text.png" alt="Rhema Studio Companion"><small>The Cam and Companion lockups.</small></div>
+  </div>
+
+  <h2>5 · The app in context (1440 × 900, light and dark)</h2>
+  <p class="note">Real screenshots of this branch in a browser with the app's dev shim (synthetic, empty demo data; nothing from a church).</p>
+  <div class="shots">
+    <figure><img src="screens/home-light.png" alt="Home, light"><figcaption>Home, light: the sidebar lockup</figcaption></figure>
+    <figure><img src="screens/home-dark.png" alt="Home, dark"><figcaption>Home, dark</figcaption></figure>
+    <figure><img src="screens/present-light.png" alt="Present, light"><figcaption>Present (live console), light</figcaption></figure>
+    <figure><img src="screens/present-dark.png" alt="Present, dark"><figcaption>Present (live console), dark</figcaption></figure>
+    <figure><img src="screens/setup-welcome-light.png" alt="Setup welcome, light"><figcaption>Setup welcome, light</figcaption></figure>
+    <figure><img src="screens/setup-welcome-dark.png" alt="Setup welcome, dark"><figcaption>Setup welcome, dark</figcaption></figure>
+    <figure><img src="screens/settings-about-light.png" alt="Settings, Help, About, light"><figcaption>Settings → Help → About, light: maintainers and the OpenBezal credit</figcaption></figure>
+    <figure><img src="screens/settings-about-dark.png" alt="Settings, Help, About, dark"><figcaption>Settings → Help → About, dark</figcaption></figure>
+  </div>
+
+  <p class="credit">Rhema Studio is developed and maintained by Rhema Studio contributors. Built on Rhema by OpenBezal (MIT licence, © 2025 OpenBezal); the original licence is in LICENSE.</p>
+</main>
+</body>
+</html>
