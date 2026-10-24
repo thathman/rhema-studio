@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Talk and notices from phones; channel rights, each person's volume; Pause video (#251, #36)
+- The phone page gets **Talk to** (a channel or one person), **Hear**, the crew list with roles and a **Mute** for each person; it can send notices to anyone with a request, and runs the requests sent to it (Show, Preview, Take, Start) as desks do.
+- Settings → Audio → **Talk channels** sets which desk roles may use Production and Stage & worship, and how loud the others stay while the main desk talks with priority. Each desk and the main desk can mute or turn down each person for themselves; the talking indicator shows each speaker's role.
+- New request: **Ask for a wrap-up warning on the stage**, and **Queue** on the main desk to add a requested verse or song to the run of show for later.
+- A video item on air can be paused and resumed from Present's Live panel (every screen and NDI hold the frame); two new scene presets, **Closing announcements** and **Countdown over a live camera**.
 ### New desk roles: Worship, Stage, Camera, OBS director; scenes changed from a joined desk (#243, #215)
 - Four new roles for a paired desk (Settings → Remote control, with a line on what each may do): **Worship** (songs and hymns), **Stage** (the stage message), **Camera** (camera-ready, hiding a camera from scenes, the camera boxes in scenes) and **OBS director** (switches OBS scenes through the main computer's OBS connection; never in rehearsal). Each gets its own desk in Production → Operators, and the main computer checks every command.
 - A Screens desk can now **make and change scenes** from another computer. A new scene, or a change to a scene on no screen, goes in at once; a change to a scene on a screen, deleting one, or any scene change while Approvals is on, waits in the main desk's notices for **Accept** or **Decline**.

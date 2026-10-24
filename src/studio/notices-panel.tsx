@@ -1,8 +1,9 @@
 import { useEffect, useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { NOTICE_TARGETS, TARGET_NAMES, canPreview, isFor, noteUnableReason, targetName, type ActionMode, type Notice, type NoticeAction, type NoticeAnswer, type NoticeTarget, type NoticeTo } from "@/stores/notices-store"
+import { NOTICE_TARGETS, TARGET_NAMES, WRAP_UP_LINE, canPreview, canQueue, isFor, noteUnableReason, targetName, type ActionMode, type Notice, type NoticeAction, type NoticeAnswer, type NoticeTarget, type NoticeTo } from "@/stores/notices-store"
 import { useSongStore } from "@/stores/song-store"
+import { useJoin } from "@/stores/join-store"
 
 const ANSWER_NAMES: Record<NoticeAnswer, string> = { seen: "Seen", ready: "Ready", unable: "Unable" }
 /** A scene change waiting for the main desk is answered Accepted (Ready) or Declined (Unable). */
@@ -14,11 +15,20 @@ const ago = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit
 const librarySongs = async (q: string) => (await useSongStore.getState().lookup(q, 8)).map((s) => ({ title: s.title, number: s.numbers[0] }))
 
 /**
+ * A wrap-up warning answered on a joined desk: the line goes to the host's stage display, checked
+ * against this desk's role like its own stage message. Null when it went up, else the host's reason.
+ */
+async function stageFromDesk(line: string): Promise<string | null> {
+  const r = await useJoin.getState().send({ command: "stage_message", value: line.trim().slice(0, 120) })
+  return r.ok ? null : r.error
+}
+
+/**
  * Production notices (Rhema Comms C1, #251), the same on the main desk and on a joined desk: what
  * is for this desk (and what it sent), write one, and answer Seen / Ready / Unable. Private: nothing
  * here reaches a screen.
  */
-export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, eventTitle, scenes = [], rundown = [], people = [], cameras = [], findSongs = librarySongs }: {
+export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, onQueue, eventTitle, scenes = [], rundown = [], people = [], cameras = [], findSongs = librarySongs }: {
   notices: Notice[]
   /** "host" on the main desk, else the joined desk's role. */
   role: string
@@ -32,6 +42,11 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
    * for a verse or a song.
    */
   onAction: (action: NoticeAction, mode: ActionMode) => Promise<string | null> | string | null
+  /**
+   * Queue a verse or a song asked for: add it to the run of show for later, showing nothing (Comms
+   * C2). Null when added, else why not. Without it, no Queue button.
+   */
+  onQueue?: (action: NoticeAction) => Promise<string | null> | string | null
   /** Paired desks and people a notice can go to by name (besides the groups). */
   people?: string[]
   /** For writing and naming action requests. */
@@ -67,6 +82,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
   const actionName = (a: NoticeAction) =>
     a.kind === "bible" || a.kind === "song" ? `Show ${a.value}`
       : a.kind === "camera" ? `Is ${a.value} framed?`
+        : a.kind === "wrap" ? `Put “${a.value}” on the stage`
         : a.kind === "sceneEdit" ? "Accept the scene change"
         : a.kind === "scene" ? `Take ${scenes.find((s) => s.id === a.value)?.name ?? "the scene"}`
           : `Start ${rundown.find((r) => r.id === a.value)?.reference ?? "the item"}`
@@ -76,11 +92,14 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
    * Pressing it is the recipient's own act: Ready when it was done (for a joined desk, when the main
    * desk accepted it), Unable (and why) when not.
    */
-  const act = async (n: Notice, mode: ActionMode) => {
+  const act = async (n: Notice, mode: ActionMode | "queue") => {
     setBusy(n.id)
-    const why = await Promise.resolve(onAction(n.action!, mode)).catch((e: unknown) => String(e))
+    const a = n.action!
+    // A wrap-up warning on a joined desk goes to the host's stage display as this desk's stage message.
+    const run = () => (mode === "queue" ? onQueue!(a) : a.kind === "wrap" && role !== "host" ? stageFromDesk(a.value) : onAction(a, mode))
+    const why = await Promise.resolve().then(run).catch((e: unknown) => String(e))
     setBusy(null)
-    const what = mode === "preview" ? `“Preview ${n.action!.value}”` : `“${actionName(n.action!)}”`
+    const what = mode === "preview" ? `“Preview ${a.value}”` : mode === "queue" ? `“Queue ${a.value}”` : `“${actionName(a)}”`
     setFailed((f) => ({ ...f, [n.id]: why ? `${what} was not done: ${why}` : "" }))
     if (!why) return onAnswer(n.id, "ready")
     // The sender sees why too, with the Unable answer.
@@ -114,13 +133,14 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
           <Button size="sm" type="submit" disabled={!text.trim() || (!!kind && !action)}>Send</Button>
         </div>
         <div className="flex gap-1.5">
-          <select aria-label="Ask them to" value={kind} onChange={(e) => { setKind(e.target.value as typeof kind); setValue("") }} className="h-8 rounded-md border border-input bg-card px-1.5">
+          <select aria-label="Ask them to" value={kind} onChange={(e) => { setKind(e.target.value as typeof kind); setValue(e.target.value === "wrap" ? WRAP_UP_LINE : "") }} className="h-8 rounded-md border border-input bg-card px-1.5">
             <option value="">Just a message</option>
             <option value="bible">Ask to show a verse</option>
             <option value="song">Ask to show a song or hymn</option>
             {scenes.length > 0 && <option value="scene">Ask to take a scene</option>}
             {rundown.length > 0 && <option value="event">Ask to start an item</option>}
             <option value="camera">Ask if a camera is ready</option>
+            <option value="wrap">Ask for a wrap-up warning on the stage</option>
           </select>
           {kind === "bible" && <input aria-label="Verse" value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder="Romans 8:28" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />}
           {kind === "song" && (
@@ -135,6 +155,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
               <datalist id={`${listId}-cameras`}>{cameras.map((c) => <option key={c} value={c} />)}</datalist>
             </>
           )}
+          {kind === "wrap" && <input aria-label="Line for the stage display" value={value} onChange={(e) => setValue(e.target.value)} maxLength={120} placeholder={WRAP_UP_LINE} title="Shown on the stage display only, never to the congregation" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />}
           {kind === "scene" && (
             <select aria-label="Scene" value={value} onChange={(e) => setValue(e.target.value)} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-1.5">
               <option value="">Choose a scene</option>
@@ -175,6 +196,8 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
                   {n.action && n.action.kind !== "camera" && <Button size="xs" disabled={busy === n.id} onClick={() => void act(n, "show")}>{actionName(n.action)}</Button>}
                   {/* Preview only: the main desk's Preview, nothing goes live. */}
                   {n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main desk's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
+                  {/* Queue: into the run of show for later; nothing is shown. */}
+                  {n.action && onQueue && canQueue(n.action) && <Button size="xs" variant="outline" disabled={busy === n.id} aria-label={`Queue ${n.action.value}`} title="Add it to the run of show for later: nothing is shown" onClick={() => void act(n, "queue")}>Queue</Button>}
                   {/* A scene change is accepted with its own button (above) or declined: no bare Ready. */}
                   {(n.action?.kind === "sceneEdit" ? (["unable"] as const) : (["seen", "ready", "unable"] as const)).map((s) => (
                     <Button key={s} size="xs" variant={answered?.state === s ? "default" : "outline"} onClick={() => onAnswer(n.id, s)}>{n.action?.kind === "sceneEdit" ? "Decline" : ANSWER_NAMES[s]}</Button>

@@ -6,8 +6,9 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 
 import { act } from "react"
 import { createRoot } from "react-dom/client"
-import { TalkButton } from "./talk"
-import { callTarget, hears, talkName } from "@/lib/voice"
+import { TalkButton, TalkRulesSettings } from "./talk"
+import { callTarget, channelsFor, hears, levelOf, mayUseChannel, speakerName, talkName } from "@/lib/voice"
+import { DEFAULT_TALK_RULES, restoreSettingsFromBackup, sectionOf, useSettingsStore } from "@/stores/settings-store"
 
 /** Hold to talk (Rhema Comms C3): talk only while held; letting go or leaving the window stops it. */
 describe("the Talk button", () => {
@@ -56,5 +57,36 @@ describe("the Talk button", () => {
     expect(callTarget("all", crew)).toBeUndefined()
     // Two keys under the same name (a copied name): nobody, rather than the wrong person.
     expect(callTarget("to:Ade", [...crew, ["k-copy", { name: "Ade" }]])).toBeUndefined()
+  })
+
+  it("names the speaker with their role, and works out channel rights and levels (#251)", () => {
+    expect(speakerName({ name: "Ade", role: "bible" })).toBe("Ade · Bible")
+    expect(speakerName({ name: "Pat (main desk)" })).toBe("Pat (main desk)")
+    const rules = { channels: { stage: ["stage", "worship"] } }
+    expect([mayUseChannel(rules, "stage", "worship"), mayUseChannel(rules, "stage", "bible"), mayUseChannel(rules, "production", "bible")]).toEqual([true, false, true])
+    // All crew, private calls and the main desk (no role) are never limited.
+    expect([mayUseChannel(rules, "all", "bible"), mayUseChannel(rules, "to:Ade", "bible"), mayUseChannel(rules, "stage")]).toEqual([true, true, true])
+    expect(channelsFor(rules.channels, "bible").map((c) => c.id)).toEqual(["production"])
+    expect(channelsFor(undefined, "bible").map((c) => c.id)).toEqual(["production", "stage"])
+    expect([levelOf({ a: { volume: 0.5 } }, "a"), levelOf({ a: { volume: 0.5, muted: true } }, "a"), levelOf({}, "b"), levelOf({ a: 3 }, "a")]).toEqual([0.5, 0, 1, 1])
+  })
+
+  it("the church's talk rules are a church setting, edited in Settings → Audio, and a bad one in a backup is skipped", async () => {
+    expect(sectionOf("talkRules")).toBe("church")
+    useSettingsStore.setState({ talkRules: DEFAULT_TALK_RULES })
+    expect(restoreSettingsFromBackup({ church: { talkRules: { channels: { stage: "everyone" }, duck: 0.2 } } })).toEqual([])
+    expect(restoreSettingsFromBackup({ church: { talkRules: { channels: { stage: ["stage"] }, duck: 0.3 } } })).toEqual(["talkRules"])
+    expect(useSettingsStore.getState().talkRules).toEqual({ channels: { stage: ["stage"] }, duck: 0.3 })
+    useSettingsStore.setState({ talkRules: DEFAULT_TALK_RULES })
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const el = document.createElement("div")
+    await act(async () => createRoot(el).render(<TalkRulesSettings />))
+    const bible = [...el.querySelectorAll("fieldset")][1].querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1]
+    expect(bible.checked).toBe(true)
+    await act(async () => bible.click())
+    expect(useSettingsStore.getState().talkRules.channels.stage).not.toContain("bible")
+    await act(async () => [...el.querySelectorAll("fieldset")][1].querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click())
+    // Every role ticked again is no limit at all.
+    expect(useSettingsStore.getState().talkRules.channels).toEqual({})
   })
 })

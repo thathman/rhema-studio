@@ -47,7 +47,7 @@ export interface VerseRenderData {
    * and draw its frames; anywhere without that element (the main window's
    * monitors) the renderer shows "▶ name" instead.
    */
-  video?: { url: string; fit: "cover" | "contain" | "stretch"; loop: boolean; sound: boolean; name: string; token: number }
+  video?: { url: string; fit: "cover" | "contain" | "stretch"; loop: boolean; sound: boolean; name: string; token: number; paused?: boolean }
 }
 
 export interface RenderOptions {

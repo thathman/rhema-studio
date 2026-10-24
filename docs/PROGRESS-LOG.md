@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — Phone Talk to and requests, channel rights, each person's volume, Pause video (#251, #36)
+
+- **Branch / PR:** `comms-048/phone-and-talk` (from `main` 70bdd2a). Audit 2 batches 3 (251-AB4, AB8, AB10, I10, R1, C2) and 11 (36-4, 208-U3).
+- **Behaviour:** `remote.html`: Talk to / Hear / crew list with roles / per-person Mute / crew volume after joining; notice composer with Send to (groups, one person from `crew`) and requests (verse, song, camera, wrap); request buttons on received notices (bible/song Show and Preview, scene, event, wrap) answering Ready or Unable with `why`. `voice.ts`: `VoicePerson.role` from the paired device, channel rights by role (`talkRules`, church setting, default open to every role; Settings → Audio → Talk channels), per-listener levels (main desk by key id via `setHostLevel`; desks and phones by name in `voice_channels.levels`, percent), priority duck from the setting (0.2 default, 5–80%), desks cannot use `priority`. Live State `talkRights`. Rust `rhema-api`: `VoiceChannelsIn.levels` (optional, u8 percent, capped at 32 names and 100 in dispatch); notice action kind `wrap` passed through. Notices: `wrap` kind (main desk sets the stage message; a joined desk sends `stage_message`, checked by role), **Queue** on the main desk (`queueRequest`, into the run of show). Video: `VideoSpec.paused`, `setVideoPaused` (same live-source revision), Pause video / Resume video in the Live panel; output windows hold the frame and push it on NDI. Scene presets `closing-announcements`, `countdown-camera` appended.
+- **Tests:** `studio/phone-comms.test.ts`, `studio/comms-requests.test.tsx`, `talk-drop.test.tsx` (roles, rights, levels, duck, joined desk), `talk.test.tsx`, `output-video.test.ts`, `live-output-panel.test.tsx`; cargo `command.rs` / `dispatch.rs` tests for levels and `wrap`.
+- **Next:** desktop acceptance 10ff. Not done: Queue on joined desks and phones (needs a new host command and the Operators panel, which another batch owns); per-person volume sliders on the phone (Mute only); channel activity history (251-AB6, optional).
+
 ## 2026-10-24 — Desk roles and scene changes from joined desks (#243, #215)
 
 - **Branch / PR:** `desk-041/roles-scene-edits` (from `main` a2f1568, after PR #348). Audit batch 9 (243 G7 with SC.16/SC.17/AC.4, G12/VL.5; 215-G10).

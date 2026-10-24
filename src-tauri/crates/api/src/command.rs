@@ -91,6 +91,11 @@ pub struct VoiceChannelsIn {
     pub listen: Vec<String>,
     /// "all", "production", "stage", or "to:<name>" for one person.
     pub talk: String,
+    /// How loud this desk hears each person, in percent (0–100), by the name it sees ("to:host" for
+    /// the main desk); anyone not listed is heard in full. The host mixes what each desk hears, so it
+    /// applies them there. Absent from older desks.
+    #[serde(default)]
+    pub levels: std::collections::BTreeMap<String, u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,7 +137,8 @@ impl fmt::Display for NoticeTo {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoticeAction {
     /// "bible" (a reference), "song" (a song or hymn title), "scene" (a scene id), "event" (a
-    /// run-of-show item id) or "camera" (a camera's name: is it framed? the answer is Ready or Unable).
+    /// run-of-show item id), "camera" (a camera's name: is it framed? the answer is Ready or Unable)
+    /// or "wrap" (a wrap-up warning: the line to put on the stage display).
     pub kind: String,
     pub value: String,
 }
@@ -526,7 +532,7 @@ mod tests {
             RemoteCommand::NoticeAck(NoticeAckIn { id: "n1".into(), state: "seen".into() }),
             RemoteCommand::VoiceTalk(true),
             RemoteCommand::VoiceLeave,
-            RemoteCommand::VoiceChannels(VoiceChannelsIn { listen: vec!["stage".into()], talk: "production".into() }),
+            RemoteCommand::VoiceChannels(VoiceChannelsIn { listen: vec!["stage".into()], talk: "production".into(), levels: Default::default() }),
         ];
 
         for cmd in &cmds {
@@ -559,7 +565,12 @@ mod tests {
         let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
         assert_eq!(off, RemoteCommand::EventOffset(-5));
         let ch: RemoteCommand = serde_json::from_str(r#"{"command":"voice_channels","value":{"listen":["stage"],"talk":"to:Ade bible"}}"#).unwrap();
-        assert!(matches!(ch, RemoteCommand::VoiceChannels(VoiceChannelsIn { ref talk, .. }) if talk == "to:Ade bible"));
+        assert!(matches!(ch, RemoteCommand::VoiceChannels(VoiceChannelsIn { ref talk, ref levels, .. }) if talk == "to:Ade bible" && levels.is_empty()), "levels are optional (older desks)");
+        // Per-person levels (#251): percent by name; anything else in them refuses the command.
+        let lv: RemoteCommand = serde_json::from_str(r#"{"command":"voice_channels","value":{"listen":[],"talk":"all","levels":{"Ade":0,"to:host":40}}}"#).unwrap();
+        assert!(matches!(lv, RemoteCommand::VoiceChannels(VoiceChannelsIn { ref levels, .. }) if levels.get("Ade") == Some(&0) && levels.get("to:host") == Some(&40)));
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"voice_channels","value":{"talk":"all","levels":{"Ade":"loud"}}}"#).is_err());
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"voice_channels","value":{"talk":"all","levels":{"Ade":900}}}"#).is_err());
         let talk: RemoteCommand = serde_json::from_str(r#"{"command":"voice_talk","value":true}"#).unwrap();
         assert_eq!(talk, RemoteCommand::VoiceTalk(true));
         let leave: RemoteCommand = serde_json::from_str(r#"{"command":"voice_leave"}"#).unwrap();

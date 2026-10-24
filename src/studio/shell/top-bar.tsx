@@ -1,11 +1,12 @@
 import { useState } from "react"
-import { BellIcon, ChevronRightIcon, InfoIcon, SearchIcon } from "lucide-react"
+import { BellIcon, ChevronRightIcon, InfoIcon, SearchIcon, SlidersHorizontalIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { NoticesPanel } from "@/studio/notices-panel"
-import { TalkButton, TalkTo } from "@/studio/talk"
-import { hostTalk, setHostChannels, setVoiceVolume, useVoice } from "@/lib/voice"
+import { PersonLevels, TalkButton, TalkTo } from "@/studio/talk"
+import { hostTalk, setHostChannels, setHostLevel, setVoiceVolume, speakerName, useVoice } from "@/lib/voice"
+import { queueRequest } from "@/lib/queue-request"
 import { sceneTargets, useNotices, type ActionMode, type NoticeAction } from "@/stores/notices-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { activateBibleReference, previewBibleReference } from "@/lib/bible-activate"
@@ -86,6 +87,7 @@ function HostNotices() {
             if (state === "unable" && a?.kind === "sceneEdit") declineSceneRequest(a.value)
           }}
           onAction={runNoticeAction}
+          onQueue={queueRequest}
           scenes={scenes}
           rundown={rundown}
           people={people}
@@ -115,6 +117,11 @@ async function runNoticeAction(a: NoticeAction, mode: ActionMode = "show"): Prom
   // A joined desk's scene change waiting for the main desk (#243 SC.17): Accept puts it in.
   if (a.kind === "sceneEdit") return acceptSceneRequest(a.value)
   if (a.kind === "song") return songRequest(a.value, mode)
+  // A wrap-up warning: its line on the stage display (stage screens only), as the stage message box does.
+  if (a.kind === "wrap") {
+    useBroadcastStore.getState().setStageMessage(a.value.trim().slice(0, 120))
+    return null
+  }
   if (a.kind === "bible" && mode === "preview") {
     const outcome = await previewBibleReference(a.value)
     if (outcome === null) return "that is not a Bible reference"
@@ -148,8 +155,10 @@ function HostTalk() {
   const volume = useVoice((s) => s.volume)
   const talkTo = useVoice((s) => s.hostTalkTo)
   const talkToId = useVoice((s) => s.hostTalkToId)
+  const levels = useVoice((s) => s.hostLevels)
   if (peers.length === 0 && !talking) return null
-  const speaking = peers.filter((p) => p.speaking).map((p) => p.name)
+  // Who is heard now, with their desk's role ("Ade · Bible").
+  const speaking = peers.filter((p) => p.speaking).map(speakerName)
   return (
     <div className="flex items-center gap-1.5 max-[450px]:hidden">
       {speaking.length > 0 && <span aria-live="polite" className="max-w-48 truncate rounded-full border border-confidence-high px-2 py-0.5 text-[0.6875rem] font-semibold">{speaking.join(", ")}</span>}
@@ -166,6 +175,16 @@ function HostTalk() {
         people={peers.map((p) => ({ key: p.id ?? p.name, name: p.name }))}
       />
       <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVoiceVolume(Number(e.target.value))} aria-label="Crew volume" title="How loud you hear the crew" className="w-16 accent-primary" />
+      {/* Each person's mute and volume, for what this desk hears only. */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button type="button" className={ICON} aria-label="Each person's volume" title="Mute or set the volume of each person you hear"><SlidersHorizontalIcon /></button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-80">
+          <p className="mb-2 text-sm font-semibold">What you hear</p>
+          <PersonLevels people={peers.flatMap((p) => (p.id ? [{ key: p.id, name: p.name, role: p.role }] : []))} levels={levels} onChange={setHostLevel} />
+        </PopoverContent>
+      </Popover>
       {micError && <span role="alert" className="sr-only">{micError}</span>}
       {micNote && <span role="status" className="sr-only">{micNote}</span>}
     </div>

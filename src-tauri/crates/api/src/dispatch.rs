@@ -74,7 +74,7 @@ impl CommandDispatcher {
                     Some(crate::command::NoticeTo::Named { name }) => serde_json::json!({ "name": name.trim().chars().take(60).collect::<String>() }),
                 },
                 "priority": if n.priority.as_deref() == Some("urgent") { "urgent" } else { "normal" }, "event": n.event, "by": by,
-                "action": n.action.as_ref().filter(|a| matches!(a.kind.as_str(), "bible" | "song" | "scene" | "event" | "camera")).map(|a| serde_json::json!({ "kind": a.kind, "value": a.value.chars().take(120).collect::<String>() })),
+                "action": n.action.as_ref().filter(|a| matches!(a.kind.as_str(), "bible" | "song" | "scene" | "event" | "camera" | "wrap")).map(|a| serde_json::json!({ "kind": a.kind, "value": a.value.chars().take(120).collect::<String>() })),
             }).to_string()),
             RemoteCommand::NoticeAck(a) => sink.emit_event("remote:notice_ack", &serde_json::json!({ "id": a.id, "state": a.state, "by": by }).to_string()),
             // The talk channel knows each desk by its key id (`byId`), never by its name (#251).
@@ -92,7 +92,8 @@ impl CommandDispatcher {
             // what it did with it itself.
             RemoteCommand::SaveScene(s) => sink.emit_event("remote:save_scene", &serde_json::json!({ "scene": s.scene, "request": s.request, "by": by, "byId": by_id }).to_string()),
             RemoteCommand::DeleteScene(d) => sink.emit_event("remote:delete_scene", &serde_json::json!({ "id": d.id.chars().take(100).collect::<String>(), "request": d.request, "by": by, "byId": by_id }).to_string()),
-            RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "by": by, "byId": by_id }).to_string()),
+            // Levels: at most 32 people, each name short and each level at most 100 (percent).
+            RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "levels": c.levels.iter().take(32).map(|(k, v)| (k.chars().take(84).collect::<String>(), serde_json::json!((*v).min(100)))).collect::<serde_json::Map<_, _>>(), "by": by, "byId": by_id }).to_string()),
             other => {
                 // Who sent it rides along in the command's own event, so the host can say who
                 // activated a source ("Bible · Romans 8:28 · by Femi's laptop").
@@ -422,10 +423,10 @@ mod tests {
         let odd = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "x".into(), to: None, priority: None, event: None, action: Some(crate::command::NoticeAction { kind: "shell".into(), value: "rm".into() }) });
         CommandDispatcher::dispatch_as(&odd, &sink, "x").unwrap();
         assert!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["action"].is_null(), "unknown action kinds are dropped");
-        for kind in ["song", "camera"] {
+        for kind in ["song", "camera", "wrap"] {
             let asks = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "x".into(), to: None, priority: None, event: None, action: Some(crate::command::NoticeAction { kind: kind.into(), value: "Amazing Grace".into() }) });
             CommandDispatcher::dispatch_as(&asks, &sink, "x").unwrap();
-            assert_eq!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["action"]["kind"], kind, "a song or hymn, and camera ready");
+            assert_eq!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["action"]["kind"], kind, "a song or hymn, camera ready and a wrap-up warning");
         }
         let named = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "Mic 2 is yours".into(), to: Some(crate::command::NoticeTo::Named { name: " Ade's phone ".into() }), priority: None, event: None, action: None });
         CommandDispatcher::dispatch_as(&named, &sink, "Main").unwrap();
@@ -434,7 +435,11 @@ mod tests {
         CommandDispatcher::dispatch_from(&named, &sink, "Ade's phone", Some("abc123")).unwrap();
         assert_eq!(serde_json::from_str::<serde_json::Value>(&sink.last_event().1).unwrap()["byId"], "abc123", "the sending key's id, from the server");
         // The talk channel: every voice event names the key, so the host routes by it, not by the name.
-        let ch = RemoteCommand::VoiceChannels(crate::command::VoiceChannelsIn { listen: vec![], talk: "to:Ade's phone".into() });
+        let levels = [("Ade".to_string(), 30u8), ("to:host".to_string(), 250u8)].into_iter().collect();
+        let ch = RemoteCommand::VoiceChannels(crate::command::VoiceChannelsIn { listen: vec![], talk: "to:Ade's phone".into(), levels });
+        CommandDispatcher::dispatch_from(&ch, &sink, "Ade's phone", Some("abc123")).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&sink.last_event().1).unwrap();
+        assert_eq!(v["levels"], serde_json::json!({ "Ade": 30, "to:host": 100 }), "each person's level, at most 100");
         for cmd in [RemoteCommand::VoiceTalk(true), RemoteCommand::VoiceLeave, ch] {
             CommandDispatcher::dispatch_from(&cmd, &sink, "Ade's phone", Some("abc123")).unwrap();
             let v: serde_json::Value = serde_json::from_str(&sink.last_event().1).unwrap();

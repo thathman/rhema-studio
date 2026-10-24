@@ -1,4 +1,6 @@
+import { PauseIcon, PlayIcon } from "lucide-react"
 import { PanelHeader } from "@/components/ui/panel-header"
+import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -28,6 +30,8 @@ export function LiveOutputPanel({ goLiveSwitch = true }: { goLiveSwitch?: boolea
   // The live output renders only what was explicitly presented — it no longer
   // follows the preview selection, so detections can't override the operator.
   const verseData = isLive ? liveVerse : null
+  // A video item on air can be paused and resumed on every screen (MD-002, #36).
+  const video = isLive && liveVerse?.content === "picture" ? liveVerse.video : undefined
 
   // Following a translation change on air lives in useLiveTranslationFollow (mounted once).
 
@@ -51,6 +55,21 @@ export function LiveOutputPanel({ goLiveSwitch = true }: { goLiveSwitch?: boolea
       )}
     >
       <PanelHeader title="Live">
+        {video && (
+          <>
+            <Button
+              size="xs"
+              variant="outline"
+              aria-pressed={!!video.paused}
+              title={video.paused ? `Carry on playing ${video.name} from where it stopped` : `Hold ${video.name} on this frame on every screen, NDI and feed`}
+              onClick={() => useBroadcastStore.getState().setVideoPaused(!video.paused)}
+            >
+              {video.paused ? <PlayIcon /> : <PauseIcon />}
+              {video.paused ? "Resume video" : "Pause video"}
+            </Button>
+            <span aria-hidden className="mx-2 h-4 w-px bg-border" />
+          </>
+        )}
         <label
           className="flex items-center gap-2"
           title="Auto: On: while on air, a verse heard while listening goes live without Take live (while a song, hymn or slide is up it goes only to the feeds that follow Bible). Bible feeds only: it goes to the feeds that follow Bible and never the main screens. Off (the default): heard verses wait in the preview."

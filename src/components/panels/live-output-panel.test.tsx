@@ -71,4 +71,42 @@ describe("Present's Live and Preview panels", () => {
     expect(line.textContent).toContain("Only you see this")
     expect(line.textContent).toContain("Planned · Scene: Sermon split")
   })
+
+  it("a video item on air has Pause video / Resume video, held on every output without a new activation (#36)", async () => {
+    await render(<LiveOutputPanel goLiveSwitch={false} />)
+    expect(el.textContent).not.toContain("Pause video")
+    const clip = { kind: "image" as const, content: "picture" as const, reference: "", segments: [], video: { url: "asset://localhost/m/a.mp4", fit: "cover" as const, loop: false, sound: true, name: "Welcome clip", token: 3 } }
+    await act(async () => useBroadcastStore.getState().setLiveVerse(clip, null, { goLive: true }))
+    const before = useBroadcastStore.getState().sources.picture!
+    const pause = [...el.querySelectorAll("button")].find((b) => b.textContent === "Pause video")!
+    expect(pause.getAttribute("aria-pressed")).toBe("false")
+    await act(async () => pause.click())
+    const s = useBroadcastStore.getState()
+    expect(s.liveVerse?.video).toMatchObject({ paused: true, token: 3 })
+    // The live source is the same item paused: same revision, still on, its value the paused one (feeds follow it).
+    expect(s.sources.picture).toMatchObject({ revision: before.revision, on: true })
+    expect(s.sources.picture!.value).toBe(s.liveVerse)
+    const resume = [...el.querySelectorAll("button")].find((b) => b.textContent === "Resume video")!
+    await act(async () => resume.click())
+    expect(useBroadcastStore.getState().liveVerse?.video?.paused).toBe(false)
+    // Nothing for a verse, or with nothing on air.
+    await act(async () => useBroadcastStore.getState().setVideoPaused(true))
+    await act(async () => useBroadcastStore.setState({ isLive: false }))
+    expect(el.textContent).not.toContain("video")
+    useBroadcastStore.setState({ liveVerse: { reference: "John 3:16", segments: [] }, isLive: true })
+    useBroadcastStore.getState().setVideoPaused(true)
+    expect(useBroadcastStore.getState().liveVerse?.video).toBeUndefined()
+  })
+
+  it("the scene presets keep their ids and order; Closing announcements and Countdown over a live camera come after (#208 U3)", () => {
+    expect(SCENE_PRESETS.map((p) => p.id)).toEqual(["full", "bible-lyrics", "picture-lyrics", "camera-bible", "full-camera", "pip-camera", "sermon-split", "welcome", "lyrics-video", "closing-announcements", "countdown-camera"])
+    const closing = newScene("", SCENE_PRESETS.find((p) => p.id === "closing-announcements"))
+    expect(closing.name).toBe("Closing announcements")
+    expect(closing.layers.map((l) => l.kind)).toEqual(["color", "feed", "logo", "ticker"])
+    expect(closing.layers[1].shows).toEqual(["slide", "picture"])
+    const countdown = newScene("", SCENE_PRESETS.find((p) => p.id === "countdown-camera"))
+    expect(countdown.layers.map((l) => l.kind)).toEqual(["camera", "color", "clock"])
+    expect(countdown.layers[2]).toMatchObject({ clockShows: "until" })
+    expect(countdown.layers[1].opacity).toBeLessThan(1)
+  })
 })

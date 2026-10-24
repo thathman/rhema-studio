@@ -1400,6 +1400,27 @@ The host with a saved service (a main service with a start time, Welcome 5, Serm
 | 10fa.9 | Optional, long: run a service for more than an hour with Remote presses or verse steps every few seconds (or leave a joined Bible desk stepping), past 2000 log lines (Keep log shows the count). Open Prepare → Run of show. | The first items still show their actual start and Done, never Skipped; the expected end has not jumped. | Unverified |
 | 10fa.10 | Mid-service, with an item running, set the Mac's clock 1 minute ahead (System Settings → Date & Time, automatic off), wait 2 minutes, put it right again. Then force-quit Rhema (Activity Monitor → Force Quit), open it again and accept the kept log. | The service log comes back with "Service log kept from before Rhema closed unexpectedly". Run of show: the item that was running across the clock change shows the same time on air it had before the force-quit (not a minute more or less). | Unverified |
 
+### 10ff. Phone Talk to and requests, channel rights, each person's volume, Pause video (#251, #36)
+
+The host with HTTP remote on (and **Secure page for phones (https)** for the phone's Talk), one congregation output and its stage display. Desk B joined as **Bible**, desk C as **Stage**, and a phone paired as **Present** on the https page. A short MP4 in the Library and a video item in the service.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ff.1 | On the phone, **Join the talk channel**. Look under Talk. | **Talk to**, **Hear** (Production, Stage & worship), **Crew volume on this phone** and the crew list appear; B shows "Ade · Bible", C "· Stage". | Unverified |
+| 10ff.2 | On the phone, **Talk to → Only… → B**, hold Talk. Then **Talk to → The main desk**. | Only B hears the phone, then only the main desk (as 10ei.1). The host's crew list shows the phone "→ B". | Unverified |
+| 10ff.3 | B and C hold Talk together. On the host look at the top bar. | The talking mark reads both names with their roles ("Ade · Bible, … · Stage"). | Unverified |
+| 10ff.4 | Host: Settings → Audio → **Talk channels**: untick **Bible** under Stage & worship. C talks on Stage & worship. | B no longer hears C; the phone and the host still do. On B, Hear and Talk to no longer offer Stage & worship. Tick Bible again: it comes back. | Unverified |
+| 10ff.5 | Host: set **Others while the main desk talks with priority** to 40%. Talk to **All crew, priority** and hold while B talks. | C and the phone hear B quieter but clearly (not silent); B is back to full when the host lets go. | Unverified |
+| 10ff.6 | Host: the sliders button beside the crew volume → **Mute** B, then set C to half. On B: Talk → **Each person's volume** → mute **The main desk**. On the phone: **Mute** C. | Each change affects only that listener: the host no longer hears B and hears C quieter; B no longer hears the host; the phone no longer hears C. Everyone else hears as before. | Unverified |
+| 10ff.7 | On the phone: Send to → **One person → B**, **Ask to show a song or hymn** "Amazing Grace", message "Next hymn", Send. | B's Notices shows "Show Amazing Grace" and Preview. | Unverified |
+| 10ff.8 | Host bell: send the phone (Present desks) **Ask to show a verse** "Romans 8:28". On the phone press **Preview**. | The host's Preview goes to Romans 8:28; nothing live. The host sees the phone's answer Ready. | Unverified |
+| 10ff.9 | Host bell: send C (Stage) **Ask for a wrap-up warning on the stage** (keep "Please start wrapping up"). On C press **Put “Please start wrapping up” on the stage**. Then send the same to B (Bible) and press it there. | C: the stage display shows the line; nothing on the congregation screen; C answers Ready. B: Unable, and the host's notice shows why (the Bible desk may not change the stage). | Unverified |
+| 10ff.10 | B sends the host **Ask to show a song or hymn** "Amazing Grace". On the host bell press **Queue**. | Amazing Grace is added to the run of show (where added items go); nothing on the screens or in Preview changes; answered Ready. | Unverified |
+| 10ff.11 | Present: show the video item. In the Live panel press **Pause video**, wait 5 s, **Resume video**. | Every output, the NDI source in OBS and the stage keep the held frame; the sound stops. Resume carries on from the same moment, not from the start. | Unverified |
+| 10ff.12 | Pause the video, **Clear**, then **Restore**. | It comes back on its first frame, paused; the button says **Resume video**. | Unverified |
+| 10ff.13 | Production → Scenes → **New from** → **Closing announcements**, then **Countdown over a live camera** (choose a camera and a time). Take each. | The slide large with the logo and ticker; then the camera, darkened, with the countdown over it. The earlier presets are listed as before, in the same order. | Unverified |
+| 10ff.14 | An older settings file (or a backup from before this): open it. | The talk channels are open to every role, priority 20%; nothing else changes. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |
