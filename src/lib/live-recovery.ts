@@ -6,7 +6,7 @@ import type { LiveSources } from "@/lib/live-sources"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
-import { useJournalStore } from "@/stores/journal-store"
+import { capJournal, useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
@@ -73,7 +73,7 @@ export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.
   if (!kept || kept.v !== 1 || !kept.entries?.length || now - kept.at >= FRESH_MS || now < kept.at || j.entries.some((e) => e.kind === "recovery")) return false
   const base = now - nowMono
   const entries = kept.entries.map((e) => ({ ...e, mono: e.at - base }))
-  useJournalStore.setState({ entries: [...entries, ...j.entries].slice(-2000), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length })
+  useJournalStore.setState({ entries: capJournal([...entries, ...j.entries]), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length })
   j.add({ kind: "recovery", label: `Service log kept from before Rhema closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
   return true
 }
