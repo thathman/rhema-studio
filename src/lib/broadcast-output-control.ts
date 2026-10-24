@@ -3,9 +3,13 @@ import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { toast } from "sonner"
 import { info as logInfo, error as logError } from "@tauri-apps/plugin-log"
 import { invoke } from "@tauri-apps/api/core"
+import { ask } from "@tauri-apps/plugin-dialog"
 import { emitTo } from "@tauri-apps/api/event"
 import { getAllWindows } from "@tauri-apps/api/window"
 import { useBroadcastStore } from "@/stores"
+import { useSettingsStore } from "@/stores/settings-store"
+import { capacityLimits, capacityUse, machineInfo, startWarning } from "@/lib/capacity"
+import { outputOnAir } from "@/lib/output-on-air"
 import type {
   BroadcastOutput,
   NdiAlphaMode,
@@ -104,6 +108,45 @@ export async function reconcileOutputStatus(output: BroadcastOutput): Promise<vo
   // The output may have been removed while these queries were in flight.
   if (!store.outputs.some((o) => o.id === output.id)) return
   store.setOutputStatus(output.id, { previewOpen, ndiActive, ndiReceivers })
+}
+
+/** Outputs whose 60 fps the operator already said yes to in this session: asked once each. */
+const fps60Confirmed = new Set<string>()
+
+/**
+ * Before the operator turns an output on (#243 G13): past this computer's limits, or 60 fps NDI on
+ * a computer below what it needs, Rhema says so and asks. Returns whether to go on. Restarts and
+ * recovery do not come through here: those outputs were on already.
+ */
+export async function confirmStart(output: BroadcastOutput): Promise<boolean> {
+  const store = useBroadcastStore.getState()
+  if (outputOnAir(output, store.outputStatus[output.id])) return true
+  const machine = await machineInfo()
+  const limits = capacityLimits(machine, useSettingsStore.getState().capacityLimits)
+  const before = capacityUse(store.outputs.filter((o) => o.id !== output.id), store.outputStatus, store.scenes, useSettingsStore.getState().cameras.length)
+  const warning = startWarning(output, before, store.scenes, limits, machine)
+  const fps60 = warning?.fps60 && !fps60Confirmed.has(output.id) ? warning.fps60 : null
+  if (!warning?.over && !fps60) return true
+  let yes = false
+  try {
+    yes = await ask([warning?.over, fps60].filter(Boolean).join("\n\n"), {
+      title: fps60 ? `Start ${output.name} at 60 fps?` : `Turn on ${output.name}?`,
+      kind: "warning",
+      okLabel: fps60 ? "Start at 60 fps" : "Turn it on",
+      cancelLabel: "Keep it off",
+    })
+  } catch {
+    // Not under Tauri (a browser preview): the warning shows as a toast and the output starts.
+    toast.warning(warning?.over ? "This computer may drop frames" : "60 fps on this computer", { description: [warning?.over, fps60].filter(Boolean).join(" ") })
+    return true
+  }
+  if (yes && fps60) fps60Confirmed.add(output.id)
+  return yes
+}
+
+/** Forget the 60 fps answers (tests). */
+export function resetStartConfirmations(): void {
+  fps60Confirmed.clear()
 }
 
 /**

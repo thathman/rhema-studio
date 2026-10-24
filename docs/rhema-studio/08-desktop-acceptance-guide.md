@@ -1246,6 +1246,22 @@ Rhema with a saved service that has phases (pre-service loop, warm-up, main serv
 | 10eo.7 | Production → Cameras (a camera added), Timekeeper (Count down to, the chime, "Follows the screens") and Settings → Audio → Talk headset, in light and dark. | The drop-down lists look like Rhema's other lists (border, quiet chevron, teal focus ring, dark lists in dark mode); tick boxes are teal; they open and choose as before. **New link** is an outlined button. | Unverified |
 | 10eo.8 | First run (or Home → setup): the welcome, then step 1. | The welcome window fits its four choices with no empty lower half. "Service languages" shows a grey "e.g. English, Yorùbá" that disappears when you type. | Unverified |
 
+### 10ew. Capacity limits, 60 fps NDI and this computer in Show health (#243, #246)
+
+Rhema with five NDI outputs set up (all off), one of them set to **60 fps**, and a camera scene. A receiver for frame rates (OBS or NDI Studio Monitor) on the same network. Note this Mac's cores and memory (Apple menu → About This Mac).
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ew.1 | Settings → Outputs: read **How much this computer runs**. | It names this computer's cores and memory. On the 4-core, 16 GB Intel Mac the empty boxes show 8 outputs, 4 NDI senders, 8 browser feeds, 4 cameras and 3 live-video outputs. 60 fps NDI says Rhema asks first. | Unverified |
+| 10ew.2 | Outputs: turn on four 30 fps NDI outputs, then a fifth. | The first four start without a question. The fifth asks "Turn on …?" and says this computer may drop frames, with 5 NDI senders (it suits about 4). **Keep it off** leaves it off; **Turn it on** starts it. | Unverified |
+| 10ew.3 | Settings → Outputs: type 6 in **NDI senders**. Turn the fifth output off and on again. Clear the box. | No question with 6; with the box empty the figure goes back to the computer's own. The setting is kept after a restart. | Unverified |
+| 10ew.4 | Edit the 60 fps output: look under Frame rate. Turn it on. | A note says this computer is below what 60 fps NDI needs and Rhema will ask. Turning it on asks "Start … at 60 fps?"; **Start at 60 fps** starts it. Off and on again in the same session does not ask a second time. | Unverified |
+| 10ew.5 | Production → Show health with the NDI outputs on. | **This computer** shows CPU load %, memory in use, Heat ("Normal: running at full speed" on the Intel Mac) and Network (Wi-Fi or cable, with its speed). Figures change every few seconds. **What this computer is running** shows each count against its limit, amber where over; Needs attention says "This computer may drop frames…". | Unverified |
+| 10ew.6 | Still on Show health: play a video (or run the ticker) on an NDI output and watch **NDI senders**, then compare with the receiver's frame rate. | After a few seconds each sender shows "N of 30 frames a second sent" and how many receivers watch it. With moving content N is close to what the receiver shows; on a still picture it is low (only changes are sent). | Unverified |
+| 10ew.7 | Unplug the network cable or turn Wi-Fi off, then on, with Show health open. | Network says there is no network, then the link again. Over Wi-Fi only it suggests a cable. No other screen changes. | Unverified |
+| 10ew.8 | Production → Cameras: add cameras until there are more than the cameras limit. | Each camera is still added; past the limit a warning says this computer suits about 4 and a note stays under Add a camera. | Unverified |
+| 10ew.9 | Leave Show health for another tab; watch Activity Monitor for a minute. | Rhema stops reading the computer's figures when Show health is closed (no pmset process every few seconds). Nothing goes to the internet (Little Snitch or a firewall log, if used). | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

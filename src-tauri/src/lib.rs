@@ -221,6 +221,8 @@ pub fn run() {
             commands::setup::setup_data_paths,
             commands::setup::setup_show_data_folder,
             commands::setup::setup_test_folder,
+            commands::machine::machine_info,
+            commands::machine::machine_health,
             commands::content::content_list_songs,
             commands::content::content_get_song,
             commands::content::content_create_song,

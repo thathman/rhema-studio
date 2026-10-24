@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 
-const { attention, cameraHealth, cameraPathOf, cameraStateWords, feedSummary, rememberTv, showing, tvCheckWords } = await import("@/lib/show-health")
+const { attention, cameraHealth, cameraPathOf, cameraStateWords, capacityAttention, cpuWords, feedSummary, heatWords, memoryWords, ndiRate, ndiRateWords, networkWords, rememberTv, showing, tvCheckWords } = await import("@/lib/show-health")
 const { defaultNdiSettings } = await import("@/types")
 
 const out = (id: string, type: "display" | "ndi" | "browser", extra = {}) => ({ id, name: id, type, themeId: "t", monitorIndex: 0, ndi: defaultNdiSettings(id), ...extra })
@@ -98,5 +98,52 @@ describe("show health", () => {
     expect(tvCheckWords({ name: "TV", feed: "foyer", problem: "Looking for Rhema at 192.168.1.20:8080…" }, "foyer", outputs).ok).toBe(false)
     expect(tvCheckWords({ name: "TV", feed: "hall", problem: null }, "foyer", outputs).text).toBe("Showing another feed (Hall)")
     expect(tvCheckWords({ name: "TV", feed: null, problem: null }, "foyer", outputs).text).toContain("Not showing a feed")
+  })
+})
+
+/** This computer in Show health (#243 G13, AC.5) and what NDI really sends (#246 C15). */
+describe("computer health", () => {
+  const h = { cpuPercent: 37.4, memoryUsedMb: 9 * 1024, memoryTotalMb: 16 * 1024, cpuSpeedLimit: 100, network: [] }
+
+  it("puts load, memory and heat in words, warning when busy, full or hot", () => {
+    expect(cpuWords(h)).toEqual({ text: "37%", tone: "ok" })
+    expect(cpuWords({ ...h, cpuPercent: 96 })).toEqual({ text: "96%: very busy, screens may drop frames", tone: "warn" })
+    expect(memoryWords(h)).toEqual({ text: "9.0 of 16 GB in use", tone: "ok" })
+    expect(memoryWords({ ...h, memoryUsedMb: 15 * 1024 }).tone).toBe("warn")
+    expect(memoryWords({ ...h, memoryUsedMb: 3584, memoryTotalMb: 8192 }).text).toBe("3.5 of 8.0 GB in use")
+    expect(heatWords(h)).toEqual({ text: "Normal: running at full speed", tone: "ok" })
+    expect(heatWords({ ...h, cpuSpeedLimit: 70 }).text).toBe("Hot: slowed to 70% of full speed to keep cool. Give it air, or turn an output off")
+    expect(heatWords({ ...h, cpuSpeedLimit: null })).toEqual({ text: "Not reported by this computer", tone: "off" })
+  })
+
+  it("lists the network links, and says when there is none or only Wi-Fi", () => {
+    expect(networkWords({ ...h, network: null })).toEqual([{ text: "Not reported on this system", tone: "off" }])
+    expect(networkWords(h)[0].tone).toBe("warn")
+    expect(networkWords({ ...h, network: [{ name: "Wi-Fi", kind: "wifi", speedMbps: 228, hasAddress: true }] })).toEqual([
+      { text: "Wi-Fi: Wi-Fi · 228 Mbit/s", tone: "ok" },
+      { text: "Wi-Fi only: a network cable is steadier for cameras, NDI and TVs", tone: "warn" },
+    ])
+    expect(networkWords({ ...h, network: [{ name: "USB LAN", kind: "wired", speedMbps: 1000, hasAddress: true }, { name: "Wi-Fi", kind: "wifi", speedMbps: null, hasAddress: true }] })).toEqual([
+      { text: "USB LAN: cable · 1 Gbit/s", tone: "ok" },
+      { text: "Wi-Fi: Wi-Fi", tone: "ok" },
+    ])
+  })
+
+  it("measures NDI frames a second from two readings, apart from who watches", () => {
+    expect(ndiRate(undefined, 100, 1000)).toBeNull()
+    expect(ndiRate({ frames: 100, at: 1000 }, 190, 4000)).toBe(30)
+    // A restarted sender counts from 0 again: no figure until the next reading.
+    expect(ndiRate({ frames: 900, at: 1000 }, 10, 4000)).toBeNull()
+    expect(ndiRateWords(29.6, 30, 1)).toEqual({ text: "30 of 30 frames a second sent · 1 receiver watching", tone: "ok" })
+    expect(ndiRateWords(0.4, 30, 0).text).toBe("0 of 30 frames a second sent · no receiver watching")
+    expect(ndiRateWords(null, 30, null)).toEqual({ text: "Measuring…", tone: "off" })
+  })
+
+  it("adds one attention line when more runs than the computer suits", () => {
+    const limits = { outputs: 8, ndiSenders: 4, browserFeeds: 8, cameras: 4, videoScenes: 3 }
+    expect(capacityAttention({ outputs: 3, ndiSenders: 2, browserFeeds: 1, cameras: 4, videoScenes: 0 }, limits)).toEqual([])
+    expect(capacityAttention({ outputs: 6, ndiSenders: 6, browserFeeds: 0, cameras: 4, videoScenes: 0 }, limits)).toEqual([
+      { level: "medium", outputId: "capacity", text: "This computer may drop frames: it runs 6 NDI senders (it suits about 4)" },
+    ])
   })
 })

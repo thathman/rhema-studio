@@ -323,6 +323,9 @@ pub struct NdiStatusResponse {
     pub fps: u32,
     /// Receivers connected right now; `None` when the runtime cannot say.
     pub receivers: Option<i32>,
+    /// Frames sent since it started: two readings give the frames a second really sent.
+    #[serde(rename = "framesSent")]
+    pub frames_sent: Option<u64>,
 }
 
 #[tauri::command]
@@ -338,6 +341,7 @@ pub fn get_ndi_status(
             height: info.height,
             fps: info.fps,
             receivers: runtime.receivers(&output_id),
+            frames_sent: runtime.frames_sent(&output_id),
         })),
         None => Ok(None),
     }

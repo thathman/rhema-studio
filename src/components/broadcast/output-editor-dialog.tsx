@@ -1,4 +1,5 @@
 import { resolveMonitorIndex } from "@/lib/monitor-health"
+import { NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { feedUrl } from "@/lib/browser-feeds"
 import { newFeedToken } from "@/lib/output-on-air"
 import { invoke } from "@tauri-apps/api/core"
@@ -104,6 +105,7 @@ export function OutputEditorDialog({
   // The monitor shown is where the output's screen is now (the OS may have renumbered since).
   const withResolved = (o: BroadcastOutput): BroadcastOutput => ({ ...o, monitorIndex: resolveMonitorIndex(o, monitors.map((m) => m.name ?? null)) ?? o.monitorIndex })
   const [form, setForm] = useState<BroadcastOutput>(() => withResolved(output ?? draft))
+  const machine = useMachineInfo()
   const [error, setError] = useState<string | null>(null)
 
   // Reset the form whenever the dialog opens for a different output. Adjusting
@@ -450,6 +452,11 @@ export function OutputEditorDialog({
                     </Select>
                   </div>
                 </div>
+                {machine.known && form.ndi.frameRate === "fps60" && !suits60fps(machine) && (
+                  <p role="note" className="text-xs text-confidence-mid">
+                    This computer ({physicalCores(machine)} cores, {Math.round(machine.memoryTotalMb / 1024)} GB) is below what 60 fps NDI needs ({NDI_60_MIN_CORES} cores and {NDI_60_MIN_MEMORY_GB} GB) and may drop frames. Rhema asks before starting it; 30 fps is smooth for words and most video.
+                  </p>
+                )}
                 <div className="flex flex-col gap-1.5">
                   <span
                     id="ndi-alpha-label"

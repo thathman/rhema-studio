@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { FeedHealth } from "@/lib/browser-feeds"
 import type { RouterStatus } from "@/lib/cameras"
 import { outputOnAir } from "@/lib/output-on-air"
+import { overLimits, type CapacityLimits, type CapacityUse } from "@/lib/capacity"
 import { cameraPathOf } from "@/lib/live-sources"
 import type { OutputFrame } from "@/stores/broadcast-store"
 import type { CameraSource } from "@/stores/settings-store"
@@ -150,6 +151,12 @@ export function attention(outputs: BroadcastOutput[], status: Record<string, Bro
   return out.sort((a, b) => (a.level === b.level ? 0 : a.level === "high" ? -1 : 1))
 }
 
+/** More running than this computer suits (#243 G13): one line for the attention list, or none. */
+export function capacityAttention(use: CapacityUse, limits: CapacityLimits): Attention[] {
+  const over = overLimits(use, limits)
+  return over.length === 0 ? [] : [{ level: "medium", outputId: "capacity", text: `This computer may drop frames: it runs ${over.map((o) => o.text).join(", ")}` }]
+}
+
 /** What an output is showing now, in a few words, for the routing view. */
 export function showing(o: BroadcastOutput, frame: OutputFrame | undefined, scenes: Scene[], on: boolean): string {
   if (!on) return "Off"
@@ -162,4 +169,74 @@ export function showing(o: BroadcastOutput, frame: OutputFrame | undefined, scen
   if (v.screen === "black") return "Black"
   if (v.screen === "logo") return "Logo"
   return v.reference || v.lines?.[0] || "A slide"
+}
+
+/** How the computer is doing, from the machine_health command (#243 G13, AC.5). */
+export interface MachineHealth {
+  cpuPercent: number
+  memoryUsedMb: number
+  memoryTotalMb: number
+  /** macOS on Intel: the % of full speed the computer allows itself to keep cool; null: not reported. */
+  cpuSpeedLimit: number | null
+  /** Links that are up; null: Rhema cannot list them on this system. */
+  network: NetLink[] | null
+}
+
+export interface NetLink {
+  name: string
+  kind: "wifi" | "wired" | "other"
+  speedMbps: number | null
+  hasAddress: boolean
+}
+
+export type HealthLine = { text: string; tone: "ok" | "warn" | "off" }
+
+/** Whole-computer CPU load in words; busy from 90%. */
+export function cpuWords(h: MachineHealth): HealthLine {
+  const p = Math.round(Math.max(0, Math.min(100, h.cpuPercent)))
+  return { text: p >= 90 ? `${p}%: very busy, screens may drop frames` : `${p}%`, tone: p >= 90 ? "warn" : "ok" }
+}
+
+const gb = (mb: number) => (mb / 1024).toFixed(mb >= 10 * 1024 ? 0 : 1)
+
+/** Memory in use in words; short from 90% used. */
+export function memoryWords(h: MachineHealth): HealthLine {
+  const short = h.memoryTotalMb > 0 && h.memoryUsedMb / h.memoryTotalMb >= 0.9
+  return { text: `${gb(h.memoryUsedMb)} of ${gb(h.memoryTotalMb)} GB in use${short ? ": nearly full, close other apps" : ""}`, tone: short ? "warn" : "ok" }
+}
+
+/** Whether the computer is slowing itself to keep cool (macOS on Intel says; others do not). */
+export function heatWords(h: MachineHealth): HealthLine {
+  if (h.cpuSpeedLimit === null) return { text: "Not reported by this computer", tone: "off" }
+  if (h.cpuSpeedLimit >= 100) return { text: "Normal: running at full speed", tone: "ok" }
+  return { text: `Hot: slowed to ${h.cpuSpeedLimit}% of full speed to keep cool. Give it air, or turn an output off`, tone: "warn" }
+}
+
+/** The network links that are up, in words: Wi-Fi or cable and speed; none is a warning. */
+export function networkWords(h: MachineHealth): HealthLine[] {
+  if (h.network === null) return [{ text: "Not reported on this system", tone: "off" }]
+  if (h.network.length === 0) return [{ text: "No network: TVs, phones, cameras and OBS on other computers cannot reach Rhema", tone: "warn" }]
+  const lines: HealthLine[] = h.network.map((l) => ({
+    text: `${l.name}: ${l.kind === "wifi" ? "Wi-Fi" : l.kind === "wired" ? "cable" : "connected"}${l.speedMbps ? ` · ${l.speedMbps >= 1000 ? `${(l.speedMbps / 1000).toFixed(l.speedMbps % 1000 ? 1 : 0)} Gbit/s` : `${l.speedMbps} Mbit/s`}` : ""}`,
+    tone: "ok",
+  }))
+  if (h.network.every((l) => l.kind === "wifi")) lines.push({ text: "Wi-Fi only: a network cable is steadier for cameras, NDI and TVs", tone: "warn" })
+  return lines
+}
+
+/** Frames a second from two readings of an NDI sender's frame count; null until there are two. */
+export function ndiRate(prev: { frames: number; at: number } | undefined, frames: number, at: number): number | null {
+  if (!prev || at <= prev.at || frames < prev.frames) return null
+  return ((frames - prev.frames) * 1000) / (at - prev.at)
+}
+
+/**
+ * An NDI sender's measured frames a second against what it is set to (#246 C15: what is really
+ * sent, apart from who is connected). A still picture sends a frame only when it changes.
+ */
+export function ndiRateWords(rate: number | null, setFps: number, receivers: number | null): HealthLine {
+  const watched = receivers === null ? "" : ` · ${receivers === 0 ? "no receiver watching" : `${receivers} ${receivers === 1 ? "receiver" : "receivers"} watching`}`
+  if (rate === null) return { text: `Measuring…${watched}`, tone: "off" }
+  const r = Math.round(rate)
+  return { text: `${r} of ${setFps} frames a second sent${watched}`, tone: "ok" }
 }

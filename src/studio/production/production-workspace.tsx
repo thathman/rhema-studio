@@ -10,7 +10,9 @@ import { resetTimerLogged } from "@/lib/timer-reset"
 import { openSettings } from "@/lib/settings-dialog"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
-import { attention, cameraHealth, cameraStateWords, cameraWords, feedSummary, showing, tvCheckWords, useFeedHealthStore, type Attention, type CameraHealth } from "@/lib/show-health"
+import { attention, cameraHealth, cameraStateWords, cameraWords, capacityAttention, cpuWords, feedSummary, heatWords, memoryWords, ndiRateWords, networkWords, showing, tvCheckWords, useFeedHealthStore, type Attention, type CameraHealth, type HealthLine } from "@/lib/show-health"
+import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, capacityLimits, capacityUse, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
+import { useMachineHealth, type NdiMeasure } from "@/studio/production/use-machine-health"
 import { useRouterHealth } from "@/lib/cameras"
 import { invoke } from "@tauri-apps/api/core"
 import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
@@ -272,7 +274,19 @@ function useNeeds(): Attention[] {
   const scenes = useBroadcastStore((s) => s.scenes)
   const feeds = useFeedHealthStore()
   const cameras = useCameraHealth()
-  return attention(outputs, status, feeds, { cameras, scenes })
+  const use = useCapacity()
+  return [...attention(outputs, status, feeds, { cameras, scenes }), ...capacityAttention(use.use, use.limits)]
+}
+
+/** What is running against what this computer suits (#243 G13). */
+function useCapacity() {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const status = useBroadcastStore((s) => s.outputStatus)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const cameras = useSettingsStore((s) => s.cameras.length)
+  const overrides = useSettingsStore((s) => s.capacityLimits)
+  const machine = useMachineInfo()
+  return { machine, use: capacityUse(outputs, status, scenes, cameras), limits: capacityLimits(machine, overrides) }
 }
 
 function NeedsAttention({ needs, className }: { needs: Attention[]; className?: string }) {
@@ -346,15 +360,110 @@ function Health() {
   const { ready, checks, openOutputs, setWorkspace } = useReadiness()
   const needs = useNeeds()
   const fix = (c: ReadinessCheck) => (c.fix === "outputs" ? openOutputs() : c.fix === "prepare" ? setWorkspace("prepare") : c.fix === "cameras" ? openProductionTab("cameras") : openSettings("diagnostics"))
+  const live = useMachineHealth()
   return (
     <div className="flex flex-col gap-[18px]">
       <NeedsAttention needs={needs} />
       <Preflight ready={ready} checks={checks} fix={fix} />
       <div className="grid gap-[18px] lg:grid-cols-2">
+        <ComputerHealth health={live.health} failed={live.failed} />
+        <CapacityHealth />
+        <NdiHealth ndi={live.ndi} />
         <CamerasHealth />
         <FeedsHealth />
       </div>
     </div>
+  )
+}
+
+const LINE_TONE = { ok: "text-foreground", warn: "font-semibold text-confidence-mid", off: "text-muted-foreground" } as const
+
+function HealthRow({ label, lines }: { label: string; lines: HealthLine[] }) {
+  return (
+    <li aria-label={label} className="flex items-start gap-3 py-2.5 text-xs">
+      <span className="w-24 shrink-0 font-semibold">{label}</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        {lines.map((l) => <span key={l.text} className={LINE_TONE[l.tone]}>{l.text}</span>)}
+      </span>
+    </li>
+  )
+}
+
+/**
+ * This computer now (#243 G13, AC.5): CPU load, memory, heat and network, read every few seconds
+ * while Show health is open. Heat is what macOS on Intel reports; elsewhere it says it is not reported.
+ */
+function ComputerHealth({ health, failed }: { health: ReturnType<typeof useMachineHealth>["health"]; failed: boolean }) {
+  const busy = !!health && [cpuWords(health), memoryWords(health), heatWords(health), ...networkWords(health)].some((l) => l.tone === "warn")
+  return (
+    <Card kicker="This computer" title="Load, memory, heat and network" badge={health && <Badge tone={busy ? "warn" : "ok"}>{busy ? "Check" : "Fine"}</Badge>}>
+      {!health ? (
+        <p className="text-xs text-muted-foreground">{failed ? "This computer's figures cannot be read here (Rhema's desktop app reads them)." : "Reading…"}</p>
+      ) : (
+        <ul aria-label="This computer" className="flex flex-col divide-y divide-border">
+          <HealthRow label="CPU load" lines={[cpuWords(health)]} />
+          <HealthRow label="Memory" lines={[memoryWords(health)]} />
+          <HealthRow label="Heat" lines={[heatWords(health)]} />
+          <HealthRow label="Network" lines={networkWords(health)} />
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">Updated every few seconds while this page is open. Nothing here is sent anywhere.</p>
+    </Card>
+  )
+}
+
+/** How much is running against what this computer suits (#243 G13): soft limits, changed in Settings → Outputs. */
+function CapacityHealth() {
+  const { machine, use, limits } = useCapacity()
+  const over = CAPACITY_KINDS.some(({ kind }) => use[kind] > limits[kind])
+  return (
+    <Card kicker="Capacity" title="What this computer is running" badge={<Badge tone={over ? "warn" : "ok"}>{over ? "More than it suits" : "Within its limits"}</Badge>}>
+      <ul aria-label="Capacity" className="flex flex-col divide-y divide-border">
+        {CAPACITY_KINDS.map(({ kind, label }) => (
+          <li key={kind} aria-label={label} className="flex items-center gap-3 py-2 text-xs">
+            <span className="min-w-0 flex-1">{label}</span>
+            <span className={use[kind] > limits[kind] ? LINE_TONE.warn : "tabular-nums"}>{use[kind]} of about {limits[kind]}</span>
+          </li>
+        ))}
+        <li aria-label="60 fps NDI" className="flex items-center gap-3 py-2 text-xs">
+          <span className="min-w-0 flex-1">60 fps NDI</span>
+          <span className="text-muted-foreground">{suits60fps(machine) ? "Suits this computer" : `Asks first (below ${NDI_60_MIN_CORES} cores and ${NDI_60_MIN_MEMORY_GB} GB)`}</span>
+        </li>
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        {machine.known ? `Worked out from this computer (${physicalCores(machine)} cores, ${Math.round(machine.memoryTotalMb / 1024)} GB).` : "This computer's size is not known here: these are a small laptop's."} Going past a limit only warns: screens may drop frames.
+      </p>
+      <div><Button size="sm" variant="outline" onClick={() => openSettings("screens")}><SettingsIcon /> Change limits</Button></div>
+    </Card>
+  )
+}
+
+/** Each NDI sender on: the frames a second it really sends and who watches (#246 C15), apart from whether it is on. */
+function NdiHealth({ ndi }: { ndi: Record<string, NdiMeasure> }) {
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const status = useBroadcastStore((s) => s.outputStatus)
+  const on = outputs.filter((o) => o.type === "ndi" && outputOnAir(o, status[o.id]))
+  return (
+    <Card kicker="Signal" title="NDI senders">
+      {on.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No NDI sender is on.</p>
+      ) : (
+        <ul aria-label="NDI signals" className="flex flex-col divide-y divide-border">
+          {on.map((o) => {
+            const m = ndi[o.id]
+            const line = ndiRateWords(m?.rate ?? null, m?.fps ?? 0, m?.receivers ?? null)
+            return (
+              <li key={o.id} aria-label={o.name} className="flex items-start gap-3 py-2.5 text-xs">
+                <RadioIcon aria-hidden className="mt-px size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 font-semibold">{o.name}</span>
+                <span className={LINE_TONE[line.tone]}>{m ? line.text : "Measuring…"}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">Frames really sent in the last few seconds. A still picture is sent only when it changes, so a low figure then is normal; while video or a ticker moves it should be near the frame rate.</p>
+    </Card>
   )
 }
 

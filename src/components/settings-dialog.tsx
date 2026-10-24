@@ -1,4 +1,5 @@
 import { AboutNotices } from "@/components/about-notices"
+import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, defaultLimits, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast-store"
 import { AssistantsSection } from "@/components/settings/assistants-section"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
@@ -1262,7 +1263,49 @@ function ScreensSection() {
         <Button onClick={() => useShellStore.getState().openOutputs()}><MonitorIcon /> Open outputs</Button>
         <Button variant="outline" onClick={() => useShellStore.getState().openDesign("used-on")}><PaletteIcon /> Where each look is used (Design)</Button>
       </div>
+      <CapacityLimitsBlock />
     </div>
+  )
+}
+
+/**
+ * How much this computer runs before Rhema warns (#243 G13). Each limit is worked out from the
+ * computer unless set here; going past one only warns, and 60 fps NDI on a smaller computer asks.
+ */
+function CapacityLimitsBlock() {
+  const machine = useMachineInfo()
+  const overrides = useSettingsStore((s) => s.capacityLimits)
+  const setLimit = useSettingsStore((s) => s.setCapacityLimit)
+  const auto = defaultLimits(machine)
+  return (
+    <section aria-label="How much this computer runs" className="flex flex-col gap-2 rounded-md border border-border p-3 text-xs">
+      <h3 className="text-sm font-semibold">How much this computer runs</h3>
+      <p className="text-muted-foreground">
+        Rhema warns before going past these (&ldquo;this computer may drop frames&rdquo;) but never stops you. {machine.known ? `Worked out from this computer: ${physicalCores(machine)} cores, ${Math.round(machine.memoryTotalMb / 1024)} GB.` : ""} Leave a box empty to use that figure.
+      </p>
+      {CAPACITY_KINDS.map(({ kind, label, hint }) => (
+        <label key={kind} className="flex items-center gap-2">
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">{label}</span>
+            <span className="block text-muted-foreground">{hint}</span>
+          </span>
+          <Input
+            aria-label={label}
+            inputMode="numeric"
+            value={overrides[kind] ?? ""}
+            placeholder={String(auto[kind])}
+            onChange={(e) => {
+              const n = Number(e.target.value.replace(/[^0-9]/g, ""))
+              setLimit(kind, e.target.value.trim() === "" || !n ? null : Math.min(64, n))
+            }}
+            className="h-7 w-16 text-xs"
+          />
+        </label>
+      ))}
+      <p className="text-muted-foreground">
+        60 fps NDI: {suits60fps(machine) ? "suits this computer." : `this computer is below what it needs (${NDI_60_MIN_CORES} cores and ${NDI_60_MIN_MEMORY_GB} GB), so Rhema asks before starting a sender at 60 fps.`}
+      </p>
+    </section>
   )
 }
 

@@ -11,8 +11,8 @@ export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; 
     keywords: ["bible", "version", "edition", "language", "yoruba", "bilingual", "second language", "kjv", "scripture"],
   },
   screens: {
-    labels: ["Open outputs", "Where each look is used (Design)"],
-    keywords: ["outputs", "screens", "ndi", "projector", "stage screen", "signage", "display", "monitor", "obs", "congregation", "look"],
+    labels: ["Open outputs", "Where each look is used (Design)", "How much this computer runs"],
+    keywords: ["outputs", "screens", "ndi", "projector", "stage screen", "signage", "display", "monitor", "obs", "congregation", "look", "capacity", "limits", "60 fps", "drop frames"],
   },
   display: {
     labels: ["Heard verses", "Wait for me (recommended)", "Bible feeds only", "Auto"],

@@ -11,6 +11,7 @@ import { cameraName, cameraPageUrl, newCameraSecret, routerStatus, rtmpUrl, rtsp
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type CameraSource } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
+import { capacityLimits, useMachineInfo } from "@/lib/capacity"
 
 interface HttpStatus {
   running: boolean
@@ -130,6 +131,10 @@ function RouterCard({ router, busy, onToggle }: { router: RouterStatus | null; b
 
 function AddCamera({ phonePage, http }: { phonePage: number | null; http: HttpStatus | null }) {
   const [label, setLabel] = useState("")
+  const count = useSettingsStore((s) => s.cameras.length)
+  const machine = useMachineInfo()
+  const overrides = useSettingsStore((s) => s.capacityLimits)
+  const limit = capacityLimits(machine, overrides).cameras
   const add = () => {
     const text = label.trim()
     if (!text) return
@@ -137,6 +142,8 @@ function AddCamera({ phonePage, http }: { phonePage: number | null; http: HttpSt
     const cam: CameraSource = { name: cameraName(text, s.cameras.map((c) => c.name)), label: text.slice(0, 40), token: newCameraSecret() }
     s.setCameras([...s.cameras, cam])
     setLabel("")
+    // A soft limit (#243 G13): the camera is added; the operator is told.
+    if (s.cameras.length + 1 > limit) toast.warning(`${s.cameras.length + 1} cameras: this computer suits about ${limit}`, { description: "Screens showing several cameras at once may drop frames. You can change the limit in Settings → Outputs." })
   }
   return (
     <Card kicker="Phones and cameras" title="Add a camera">
@@ -145,6 +152,7 @@ function AddCamera({ phonePage, http }: { phonePage: number | null; http: HttpSt
         <input aria-label="Camera name" value={label} maxLength={40} placeholder="e.g. Pulpit" onChange={(e) => setLabel(e.target.value)} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
         <Button size="sm" type="submit" disabled={!label.trim()}><PlusIcon /> Add camera</Button>
       </form>
+      {count >= limit && <p role="note" className="text-confidence-mid">{count} {count === 1 ? "camera" : "cameras"} added; this computer suits about {limit}. More can be added, but screens showing several at once may drop frames.</p>}
       {!phonePage && (
         <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted px-2.5 py-2">
           <span className="min-w-0 flex-1">

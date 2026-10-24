@@ -303,6 +303,12 @@ impl NdiRuntime {
         Some(unsafe { f(s.sender, 0) })
     }
 
+    /// Frames sent since the session started (a region counts as a frame), or `None` with no
+    /// session: Show health turns two readings into frames a second.
+    pub fn frames_sent(&self, session_id: &str) -> Option<u64> {
+        self.sessions.get(session_id).map(|s| s.frame_count)
+    }
+
     pub fn send_frame_rgba(
         &mut self,
         session_id: &str,

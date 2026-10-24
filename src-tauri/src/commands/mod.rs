@@ -11,6 +11,7 @@ pub mod diagnostics;
 pub mod fonts;
 pub mod host_advert;
 pub mod join;
+pub mod machine;
 pub mod media;
 pub mod remote;
 pub mod secrets;
