@@ -1,4 +1,5 @@
 import type { StagePayload, StageStyle } from "@/types"
+import { isCountdownTo } from "@/lib/countdown"
 
 export const DEFAULT_STAGE_STYLE: StageStyle = {
   background: "#000000",
@@ -32,6 +33,7 @@ export function normalizeStageStyle(raw: Partial<StageStyle> | null | undefined)
     showFinish: flag(r.showFinish, d.showFinish),
     warnAtMinutes: typeof r.warnAtMinutes === "number" && Number.isFinite(r.warnAtMinutes) ? Math.min(30, Math.max(0, Math.round(r.warnAtMinutes))) : d.warnAtMinutes,
     warnWhenOver: flag(r.warnWhenOver, d.warnWhenOver),
+    ...(isCountdownTo(r.countdown) ? { countdown: r.countdown } : {}),
   }
 }
 

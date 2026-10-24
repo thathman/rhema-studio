@@ -5,6 +5,7 @@ import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, BroadcastTheme, LowerThird, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
+import { countdownTarget, isCountdownTo, type CountdownTargets } from "@/lib/countdown"
 
 /**
  * Congregation scenes (ADR 0001, ARCH-002): layers of live content, colour, pictures and cameras
@@ -134,11 +135,12 @@ export function normalizeScene(raw: unknown): Scene | null {
   const layers = (Array.isArray(s.layers) ? s.layers : []).flatMap((l): SceneLayer[] => {
     if (!l || typeof l !== "object" || typeof l.id !== "string" || !KINDS.includes(l.kind)) return []
     const shows = Array.isArray(l.shows) ? l.shows.filter((k): k is ContentType => (CONTENT_TYPES as readonly string[]).includes(k)) : undefined
-    const clockShows = l.clockShows === "time" || l.clockShows === "until" ? l.clockShows : undefined
+    const clockShows = l.clockShows === "time" || l.clockShows === "until" || l.clockShows === "countdown" ? l.clockShows : undefined
+    const countdownTo = isCountdownTo(l.countdownTo) ? l.countdownTo : undefined
     const until = typeof l.until === "string" && /^\d{1,2}:\d{2}$/.test(l.until) ? l.until : undefined
     const cameraUrl = typeof l.cameraUrl === "string" && /^https?:\/\//.test(l.cameraUrl.trim()) ? l.cameraUrl.trim().slice(0, 300) : undefined
     const cameraFallback = typeof l.cameraFallback === "string" && l.cameraFallback.trim() ? l.cameraFallback.trim().slice(0, 120) : undefined
-    return [{ ...l, clockShows, until, cameraUrl, cameraFallback, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
+    return [{ ...l, clockShows, until, countdownTo, cameraUrl, cameraFallback, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
   return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) }
 }
@@ -154,6 +156,8 @@ interface LiveState {
   clock?: SceneClock | null
   /** Wall-clock ms for "count down to a time" (default: now). */
   now?: number
+  /** What "time until" clocks count down to (the run of show's next item and milestones). */
+  countdowns?: CountdownTargets | null
   /** The running ticker, for ticker layers (null or absent: none runs). */
   ticker?: Ticker | null
   /** The lower third on air for this output, for lower-third layers. */
@@ -173,6 +177,15 @@ export function untilClock(until: string | undefined, now: number): SceneClock |
   d.setHours(Number(m[1]), Number(m[2]), 0, 0)
   if (now - d.getTime() > 12 * 3_600_000) d.setDate(d.getDate() + 1)
   return { mode: "down", at: d.getTime(), text: "" }
+}
+
+/**
+ * A countdown to the run of show's next item or a milestone (#196 R2); null when there is none
+ * (the last item is on, or the service has no start time), and the layer then shows nothing.
+ */
+export function countdownClock(targets: CountdownTargets | null | undefined, to: SceneLayer["countdownTo"]): SceneClock | null {
+  const target = countdownTarget(targets, to ?? "next")
+  return target ? { mode: "down", at: target.at, text: "" } : null
 }
 
 /** The service timer as a clock layer shows it; null when there is nothing to show. */
@@ -220,8 +233,9 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
       if (l.kind === "lowerThird") return { ...base, overlay: s.overlay ?? null, fontFamily: font(), ...(preview && !s.overlay ? { label: `${l.name} · shows when a lower third is up` } : {}) }
       if (l.kind === "clock") {
         const theme = s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0]
-        const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : (s.clock ?? null)
-        return { ...base, theme, clock, ...(preview && !clock ? { label: l.clockShows === "until" ? `${l.name} · choose the time to count down to` : `${l.name} · set the service timer in Present` } : {}) }
+        const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : l.clockShows === "countdown" ? countdownClock(s.countdowns, l.countdownTo) : (s.clock ?? null)
+        const missing = l.clockShows === "until" ? "choose the time to count down to" : l.clockShows === "countdown" ? ((l.countdownTo ?? "next") === "next" ? "no next item in the run of show now" : "not in the run of show now") : "set the service timer in Present"
+        return { ...base, theme, clock, ...(preview && !clock ? { label: `${l.name} · ${missing}` } : {}) }
       }
       // A camera: its stream, played by each output from the church network. One hidden from scenes
       // (Present → Sources) is not played: its box shows the fallback, the scene itself unchanged.

@@ -28,6 +28,7 @@ import { WORKSPACE_ITEMS, churchItems, type NavItem } from "@/studio/shell/nav-i
 import { cn } from "@/lib/utils"
 import { TopBar } from "@/studio/shell/top-bar"
 import { startLiveStatePublisher } from "@/lib/live-state"
+import { startCountdownChime } from "@/stores/countdown-chime"
 import { startBrowserFeeds } from "@/lib/browser-feeds"
 import { startCameras } from "@/lib/cameras"
 import { startLiveRecovery } from "@/lib/live-recovery"
@@ -87,6 +88,8 @@ export function AppShell() {
   }, [designRequest, go])
   // Host/Join: keep this computer's Live State current for the computers that join it.
   useEffect(() => startLiveStatePublisher(), [])
+  // Timekeeper's chime (#196 R2): this computer only, off unless turned on there.
+  useEffect(() => startCountdownChime(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
   useEffect(() => startBrowserFeeds(), [])
   // Cameras (#209): the camera page's list, and the camera router when cameras are added.

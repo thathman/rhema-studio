@@ -30,6 +30,7 @@ import { feedFrame, followsOnlyTicker, followsTicker, isStateSource, sourceOf, t
 import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
+import type { CountdownTargets } from "@/lib/countdown"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -203,6 +204,12 @@ interface BroadcastState {
   /** Auxiliary timers shown on the stage (kept by aux-timers-store.ts). */
   stageAux: StageAux[]
   setStageAux: (aux: StageAux[]) => void
+  /** What "time until" clocks count down to: the next item, the service end, each "end by" (kept by stage-finish.ts; #196 R2). */
+  countdowns: CountdownTargets | null
+  setCountdowns: (countdowns: CountdownTargets | null) => void
+  /** The stage's countdown line, when its design shows one (kept by stage-finish.ts). */
+  stageCountdown: StageAux | null
+  setStageCountdown: (line: StageAux | null) => void
   /** Saved sets of announcements. Saved. */
   tickerPresets: TickerPreset[]
   /** Save the words now in the ticker as a set (replacing one of the same name). */
@@ -660,6 +667,20 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({ stageFinish })
     for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
   },
+  countdowns: null,
+  setCountdowns: (countdowns) => {
+    set({ countdowns })
+    // Clock layers count down by themselves: a scene is sent again only when what it counts to moves.
+    for (const o of get().outputs) {
+      const scene = o.sceneId && (o.role ?? "congregation") === "congregation" ? get().scenes.find((x) => x.id === o.sceneId) : undefined
+      if (scene?.layers.some((l) => l.kind === "clock" && l.visible && l.clockShows === "countdown")) get().syncBroadcastOutputFor(o.id)
+    }
+  },
+  stageCountdown: null,
+  setStageCountdown: (stageCountdown) => {
+    set({ stageCountdown })
+    for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
+  },
   saveStageStyle: (stageStyle) => {
     set({ stageStyle: normalizeStageStyle(stageStyle) })
     get().syncBroadcastOutput()
@@ -798,7 +819,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         stage: applyStageStyle({ ...buildStagePayload({
           isLive: shown !== null, liveVerse: shown, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), finish: s.stageFinish, aux: s.stageAux }, s.stageStyle),
+        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux }, s.stageStyle),
       })
       return
     }

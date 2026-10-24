@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Countdown to the next item or a milestone; the run of show on every desk (#196)
+- New clocks count down to **the next item** (when it is now expected to start) or to **a milestone**: the end of the main service, or an item's "end by". Use them in a scene's clock layer (Production → Programs → Clock → Shows), on the stage display (Design → Stage → Countdown) and in Production → Timekeeper. They move as the service runs late or early and count across midnight. On the congregation screens they stop at 0:00; the stage and Timekeeper say how far over it is.
+- Timekeeper can **chime** on this computer at a chosen number of minutes before, and again at zero. It is off until you turn it on, and the screens, stage and online feed never hear it.
+- Every joined desk, whatever its role, now has a read-only **Run of show**: each item's planned and expected times, how far off plan it is, its end by, and whether it is done, on now, skipped or cut short. Nothing on it can be pressed. A host that has not been updated sends no times, and the desk says so.
 ### Notices: honest answers, private delivery, kept through a crash (#251)
 - Pressing the button on an action request ("Show Romans 8:28", "Take Sermon split") now answers **Ready** only when it really happened. If the main desk refused it (the desk's role does not allow it, the main desk has taken back control, or it moved to another service), the notice answers **Unable** and the desk shows the reason.
 - Each joined desk and phone now receives only the notices meant for it: those to everyone, to its role, to it by name, or that it sent. The main desk still sees them all. Before, every desk received every notice and only hid the others. Who sent a notice, and who one is for, is decided by each device's pairing key, not its name, so a desk named like the main desk or like someone else gets nothing extra; pairing no longer accepts a name ending in "(main desk)".

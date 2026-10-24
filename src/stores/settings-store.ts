@@ -61,6 +61,14 @@ function isCameraSource(c: unknown): c is CameraSource {
 }
 
 /** A church-defined cue: steps are cue action ids (validated when run, so a newer build's unknown step is skipped). */
+/** Production → Timekeeper's countdown (#196 R2): what it counts to, and a chime on this computer at `chimeMinutes` before and at zero. */
+export interface TimekeeperCountdown {
+  to: CountdownTo
+  chime: boolean
+  /** 0: only at zero. */
+  chimeMinutes: number
+}
+
 export interface CustomMacro {
   id: string
   label: string
@@ -75,6 +83,8 @@ import { create } from "zustand"
 import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
 import { defaultSetup, normalizeSetup, type SetupProfile } from "@/lib/setup-readiness"
+import { isCountdownTo } from "@/lib/countdown"
+import type { CountdownTo } from "@/types"
 
 type SttProvider = "deepgram" | "whisper"
 
@@ -132,6 +142,9 @@ interface SettingsState {
   talkInputId: string
   talkOutputId: string
   setTalkDevices: (patch: { talkInputId?: string; talkOutputId?: string }) => void
+  /** Production → Timekeeper's countdown on this computer (#196 R2): what it counts to, and its chime (off unless turned on). */
+  timekeeperCountdown: TimekeeperCountdown
+  setTimekeeperCountdown: (patch: Partial<TimekeeperCountdown>) => void
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
   /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
@@ -212,6 +225,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   talkInputId: "",
   talkOutputId: "",
   setTalkDevices: (patch) => set(patch),
+  timekeeperCountdown: { to: "next", chime: false, chimeMinutes: 2 },
+  setTimekeeperCountdown: (patch) => set((s) => ({ timekeeperCountdown: { ...s.timekeeperCountdown, ...patch } })),
   remoteDevices: [],
   remoteAuthRequired: false,
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
@@ -319,6 +334,10 @@ function acceptable(key: string, value: unknown): boolean {
     case "confidenceThreshold":
     case "cooldownMs":
       return typeof value === "number" && Number.isFinite(value)
+    case "timekeeperCountdown": {
+      const t = value as Partial<TimekeeperCountdown>
+      return typeof value === "object" && value !== null && isCountdownTo(t.to) && typeof t.chime === "boolean" && typeof t.chimeMinutes === "number" && Number.isInteger(t.chimeMinutes) && t.chimeMinutes >= 0 && t.chimeMinutes <= 30
+    }
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
     case "openedFrom":
@@ -361,6 +380,7 @@ const PERSISTED_KEYS = [
   "joinToken",
   "talkInputId",
   "talkOutputId",
+  "timekeeperCountdown",
   "remoteDevices",
   "remoteAuthRequired",
   "remoteListeners",

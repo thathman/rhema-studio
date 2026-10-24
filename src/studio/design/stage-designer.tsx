@@ -5,6 +5,7 @@ import { drawStage } from "@/lib/stage-canvas"
 import { applyStageStyle, DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
 import type { StagePayload, StageStyle } from "@/types"
 import { Colour, Row } from "@/studio/design/lower-third-designer"
+import { CountdownSelect } from "@/studio/production/countdown-select"
 
 /** What the preview shows: a verse live, the timer running, a note and the next item. */
 const SAMPLE: StagePayload = {
@@ -33,7 +34,9 @@ export function StageDesigner() {
   const patch = (p: Partial<StageStyle>) => useBroadcastStore.getState().saveStageStyle({ ...style, ...p })
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d")
-    if (ctx) drawStage(ctx, 1280, 720, applyStageStyle(SAMPLE, style))
+    // A countdown chosen shows first on the timers' line, as on the real stage.
+    const sample = style.countdown ? { ...SAMPLE, aux: [{ label: style.countdown === "next" ? "Next: Sermon in" : "End of the main service in", text: "4:12", tone: "ok" as const }, ...(SAMPLE.aux ?? [])] } : SAMPLE
+    if (ctx) drawStage(ctx, 1280, 720, applyStageStyle(sample, style))
   }, [style])
   return (
     <div className="flex flex-col gap-4">
@@ -61,6 +64,10 @@ export function StageDesigner() {
               </label>
             ))}
           </fieldset>
+          <Row label="Countdown">
+            <CountdownSelect label="Stage countdown" off="None" value={style.countdown} onChange={(countdown) => patch({ countdown })} className="h-7 text-xs" />
+          </Row>
+          <p className="-mt-2 text-xs text-muted-foreground">Time until the next item or a milestone, from the run of show; it shows how far over once it is due.</p>
           <fieldset className="flex flex-col gap-1.5 text-xs">
             <legend className="mb-1 text-muted-foreground">Time warnings (a message on the stage while the timer runs)</legend>
             <label className="flex items-center gap-2">

@@ -159,6 +159,7 @@ describe("settings store", () => {
     expect(s.remoteDevices).toEqual([])
     expect(s.remoteAuthRequired).toBe(false)
     expect([s.talkInputId, s.talkOutputId]).toEqual(["", ""]) // the system's headset
+    expect(s.timekeeperCountdown).toEqual({ to: "next", chime: false, chimeMinutes: 2 }) // no chime unless turned on
     expect(mockSet).not.toHaveBeenCalled()
     expect(mockSave).not.toHaveBeenCalled()
   })
@@ -173,6 +174,7 @@ describe("settings store", () => {
         brandKit: ["no"],
         cooldownMs: Number.NaN,
         talkInputId: { id: 1 },
+        timekeeperCountdown: { to: "whenever", chime: "yes", chimeMinutes: 2 },
       }
       return key in bad ? bad[key] : undefined
     })
@@ -187,6 +189,7 @@ describe("settings store", () => {
     expect(s.brandKit).toEqual(before.brandKit)
     expect(s.cooldownMs).toBe(before.cooldownMs)
     expect(s.talkInputId).toBe("")
+    expect(s.timekeeperCountdown.chime).toBe(false)
   })
 
   it("well-formed values from this build round-trip", async () => {
@@ -197,6 +200,7 @@ describe("settings store", () => {
         operatorName: "Tolu",
         talkInputId: "headset-mic",
         talkOutputId: "headset-ears",
+        timekeeperCountdown: { to: "endby:sermon", chime: true, chimeMinutes: 5 },
       }
       return key in good ? good[key] : undefined
     })
@@ -204,6 +208,7 @@ describe("settings store", () => {
     await hydrateSettings()
     const s = useSettingsStore.getState()
     expect(s.remoteDevices).toHaveLength(1)
+    expect(s.timekeeperCountdown).toEqual({ to: "endby:sermon", chime: true, chimeMinutes: 5 })
     expect(s.remoteAuthRequired).toBe(true)
     expect(s.operatorName).toBe("Tolu")
     // The talk headset (Rhema Comms) is kept per computer.
