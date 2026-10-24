@@ -1,13 +1,14 @@
 /**
  * A minimal obs-websocket v5 client: connect (with the SHA-256 challenge when
  * OBS has a password), send requests, receive events. Optional and bounded:
- * nothing in Rhema needs OBS to show anything; this only reads OBS's real
- * recording state and marks moments in the recording.
+ * nothing in Rhema needs OBS to show anything; this reads OBS's real
+ * recording state and scenes, marks moments in the recording, and changes
+ * OBS's scene only when the operator asks.
  */
 
 const OP = { Hello: 0, Identify: 1, Identified: 2, Event: 5, Request: 6, RequestResponse: 7 } as const
-/** EventSubscription.Outputs: record/stream state changes. */
-const SUBSCRIBE_OUTPUTS = 64
+/** EventSubscription: Scenes (1 << 2: program, preview, scene list), Outputs (1 << 6: record/stream state), Ui (1 << 10: studio mode on/off). */
+export const OBS_SUBSCRIPTIONS = (1 << 2) | (1 << 6) | (1 << 10)
 
 async function sha256Base64(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
@@ -71,7 +72,7 @@ export class ObsClient {
         if (msg.op === OP.Hello) {
           const auth = msg.d.authentication as { challenge: string; salt: string } | undefined
           void (async () => {
-            const identify: Record<string, unknown> = { rpcVersion: 1, eventSubscriptions: SUBSCRIBE_OUTPUTS }
+            const identify: Record<string, unknown> = { rpcVersion: 1, eventSubscriptions: OBS_SUBSCRIPTIONS }
             if (auth) identify.authentication = await obsAuth(this.o.password, auth.salt, auth.challenge)
             ws.send(JSON.stringify({ op: OP.Identify, d: identify }))
           })()

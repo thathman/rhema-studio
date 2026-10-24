@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### OBS's scenes in Production; preview and Take in OBS (#197)
+- New **Production → OBS** tab (beside Programs) lists OBS's own scenes, in OBS's order, and shows which one is on OBS's program (the stream and recording) and, in Studio Mode, which is in OBS's preview. It follows OBS as it changes, including cuts made in OBS itself.
+- With Studio Mode on in OBS: **Set as OBS preview** on a scene, then **Take in OBS** to run OBS's own transition. With Studio Mode off: **Switch OBS to this scene…** asks first ("This changes what the stream shows") before anything changes.
+- This is OBS's program, kept apart from Rhema's congregation scenes: taking a scene to the screens, or a verse or song going live, never changes OBS. Scene changes made from Rhema go into the service log. For now only the main desk changes OBS; a joined desk sees the list only.
+
 ### Private calls by key; ask for a song, hymn or camera; Preview or Show (#251)
 - A private call in Talk (**Talk to → Only…**) now goes to the desk or phone you picked by its pairing key, not by its name. A desk paired under a name that looks the same (a copied name, a look-alike letter) never hears a call meant for someone else; if two desks have exactly the same name when you pick, nobody hears the call rather than the wrong one.
 - Action requests can now ask to **show a song or hymn** (type its title; Rhema suggests titles from the library) and ask **if a camera is ready** (the camera operator answers Ready or Unable).

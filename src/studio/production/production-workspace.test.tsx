@@ -45,4 +45,19 @@ describe("Production control", () => {
     expect(useBroadcastStore.getState().outputs.find((o) => o.id === main.id)?.sceneId).toBeUndefined()
     expect(button("Restore Bible and lyrics")).toBeTruthy()
   })
+
+  it("OBS sits beside Programs and says it is OBS's program, separate from Rhema's congregation scenes", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    await act(async () => createRoot(el).render(<ProductionWorkspace />))
+    const tabs = [...el.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
+    expect(tabs.indexOf("OBS")).toBe(tabs.indexOf("Programs") + 1)
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "OBS") as HTMLButtonElement
+    await act(async () => tab.click())
+    const panel = el.querySelector('[role="tabpanel"]')!
+    expect(panel.textContent).toContain("OBS program")
+    expect(panel.textContent).toContain("separate from Rhema's congregation scenes")
+    expect(panel.textContent).toContain("Open Remote control") // OBS off: where to turn it on
+  })
 })
