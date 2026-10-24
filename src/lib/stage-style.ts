@@ -34,6 +34,7 @@ export function normalizeStageStyle(raw: Partial<StageStyle> | null | undefined)
     warnAtMinutes: typeof r.warnAtMinutes === "number" && Number.isFinite(r.warnAtMinutes) ? Math.min(30, Math.max(0, Math.round(r.warnAtMinutes))) : d.warnAtMinutes,
     warnWhenOver: flag(r.warnWhenOver, d.warnWhenOver),
     ...(isCountdownTo(r.countdown) ? { countdown: r.countdown } : {}),
+    ...(typeof r.libraryLookId === "string" && r.libraryLookId ? { libraryLookId: r.libraryLookId } : {}),
   }
 }
 

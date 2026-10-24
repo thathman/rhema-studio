@@ -52,6 +52,7 @@ export function normalizeLowerThirdStyle(raw: Partial<LowerThirdStyle> & { id?: 
     radius: num(raw.radius, d.radius, 0, 50),
     accent: { enabled: ac.enabled === true, color: str(ac.color, d.accent.color), width: num(ac.width, d.accent.width, 1, 60) },
     animation: raw.animation === "none" || raw.animation === "slide" ? raw.animation : "fade",
+    ...(typeof raw.libraryLookId === "string" && raw.libraryLookId ? { libraryLookId: raw.libraryLookId } : {}),
   }
 }
 

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { LIBRARY_LOOKS, LOOK_FAMILIES } from "@/lib/look-library-data"
-import { adoptLook, brandable, filterLooks, lookLanguages, readLookFavourites, resetCopy, showsTwoLanguages, sourceLook, themeUsedBy, uniqueName, writeLookFavourites, type LibraryLook } from "@/lib/look-library"
+import { adoptLook, brandable, filterLooks, isObsOverlay, libraryLookOf, lookAspects, lookAudio, lookCopies, lookLanguages, readLookFavourites, resetCopy, resetLowerThirdCopy, resetSceneCopy, resetSingleLook, showsTwoLanguages, sourceLook, themeUsedBy, uniqueName, writeLookFavourites, type ChurchLooks, type LibraryLook } from "@/lib/look-library"
+import { DEFAULT_LOWER_THIRD_STYLE } from "@/lib/lower-third-style"
+import { DEFAULT_TICKER_STYLE } from "@/lib/ticker"
+import { DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
 import { normalizeTheme } from "@/lib/theme-migrations"
 import { normalizeLowerThirdStyle } from "@/lib/lower-third-style"
 import { normalizeTickerStyle } from "@/lib/ticker"
@@ -41,6 +44,7 @@ describe("look library contents", () => {
       expect(has("lower-third", "lyrics"), `${f.name} lyrics lower third`).toBe(true)
       expect(has("lower-third", "speaker"), `${f.name} speaker`).toBe(true)
       expect(has("ticker", "announcements"), `${f.name} ticker`).toBe(true)
+      expect(has("fullscreen", "announcements"), `${f.name} announcement`).toBe(true)
       expect(has("scene", "bible"), `${f.name} camera + Bible`).toBe(true)
       expect(has("scene", "lyrics"), `${f.name} camera + lyrics`).toBe(true)
     }
@@ -274,6 +278,138 @@ describe("Use with church colours (#299)", () => {
     expect(of("stage").some(brandable)).toBe(false)
     // Asked anyway, the ticker look is copied as the library has it.
     const t = of("ticker")[0]
-    expect(adoptLook(t, { brand: kit }).tickerStyle).toEqual(t.style)
+    expect(adoptLook(t, { brand: kit }).tickerStyle).toEqual({ ...t.style, libraryLookId: t.id })
+  })
+})
+
+const out = (id: string, patch: Partial<BroadcastOutput> = {}): BroadcastOutput => ({ id, name: id, type: "display", themeId: "builtin-classic-dark", monitorIndex: 0, ndi: { sourceName: id, resolution: "r1080p", frameRate: "fps30", alphaMode: "noneOpaque" }, ...patch })
+
+describe("announcements, OBS overlay, aspect and sound (#299 3.9, 3.12, 3.15, 3.19)", () => {
+  it("each announcement look is a full-screen slide look with a title and no verse numbers", () => {
+    const notices = of("theme").filter((l) => l.content === "announcements")
+    expect(notices).toHaveLength(5)
+    for (const l of notices) {
+      expect(l.layout, l.id).toBe("fullscreen")
+      expect(l.theme.verseNumbers.visible, l.id).toBe(false)
+      expect(l.theme.reference.position, l.id).toBe("above")
+      expect(l.theme.reference.fontSize, l.id).toBeGreaterThan(l.theme.verseText.fontSize)
+    }
+  })
+
+  it("OBS overlay keeps the keyed lower thirds and tickers only", () => {
+    const obs = filterLooks(LIBRARY_LOOKS, { layout: "obs-overlay", family: "all", background: "all" })
+    expect(obs.length).toBeGreaterThan(0)
+    for (const l of obs) {
+      expect(l.background, l.id).toBe("transparent")
+      expect(["lower-third", "ticker"], l.id).toContain(l.layout)
+    }
+    expect(obs.map((l) => l.id)).toEqual(LIBRARY_LOOKS.filter(isObsOverlay).map((l) => l.id))
+    expect(obs.some((l) => l.id === "look-clean-speaker")).toBe(true)
+    expect(obs.some((l) => l.id === "look-clean-ticker")).toBe(true)
+    expect(obs.some((l) => l.kind === "scene" || l.layout === "fullscreen")).toBe(false)
+    expect(isObsOverlay({ layout: "lower-third", background: "dark" })).toBe(false)
+  })
+
+  it("every look says its frame shape and is silent; the aspect filter keeps only that shape", () => {
+    for (const l of LIBRARY_LOOKS) {
+      expect(["16:9", "9:16"], l.id).toContain(l.aspect)
+      expect(lookAudio(l), l.id).toBe("silent")
+    }
+    expect(lookAspects(LIBRARY_LOOKS)).toEqual(["16:9"])
+    expect(filterLooks(LIBRARY_LOOKS, { layout: "all", family: "all", background: "all", aspect: "16:9" })).toHaveLength(LIBRARY_LOOKS.length)
+    expect(filterLooks(LIBRARY_LOOKS, { layout: "all", family: "all", background: "all", aspect: "9:16" })).toEqual([])
+    const tall = { ...of("theme")[0], id: "tall", aspect: "9:16" as const, audio: "own-sound" as const }
+    expect(lookAspects([...LIBRARY_LOOKS, tall])).toEqual(["16:9", "9:16"])
+    expect(filterLooks([...LIBRARY_LOOKS, tall], { layout: "all", family: "all", background: "all", aspect: "9:16" }).map((l) => l.id)).toEqual(["tall"])
+    expect(lookAudio(tall)).toBe("own-sound")
+  })
+})
+
+describe("copies remember their library look; Reset for every kind (#299 3.24)", () => {
+  const speaker = of("lower-third")[0]
+  const ticker = of("ticker")[0]
+  const stage = of("stage")[0]
+  const scene = LIBRARY_LOOKS.find((l) => l.id === "look-clean-scene-bible") as Extract<LibraryLook, { kind: "scene" }>
+
+  it("Use stamps the library look on lower-third, ticker, stage and scene copies, and loading keeps it", () => {
+    const l3 = adoptLook(speaker, { newId: ids }).lowerThirdStyle!
+    expect(l3.libraryLookId).toBe(speaker.id)
+    expect(normalizeLowerThirdStyle(l3)).toEqual(l3)
+    const t = adoptLook(ticker).tickerStyle!
+    expect(t.libraryLookId).toBe(ticker.id)
+    expect(normalizeTickerStyle(t)).toEqual(t)
+    const st = adoptLook(stage).stageStyle!
+    expect(st.libraryLookId).toBe(stage.id)
+    expect(normalizeStageStyle(st)).toEqual(st)
+    const sc = adoptLook(scene, { newId: ids, library: LIBRARY_LOOKS }).scene!
+    expect(sc.libraryLookId).toBe(scene.id)
+    expect(normalizeScene(sc)).toEqual(sc)
+    // Looks saved before this keep loading as they were.
+    expect(normalizeTickerStyle(DEFAULT_TICKER_STYLE)).not.toHaveProperty("libraryLookId")
+    expect(normalizeStageStyle(DEFAULT_STAGE_STYLE)).not.toHaveProperty("libraryLookId")
+    expect(libraryLookOf("ticker", t.libraryLookId, LIBRARY_LOOKS)?.id).toBe(ticker.id)
+    expect(libraryLookOf("theme", t.libraryLookId, LIBRARY_LOOKS)).toBeNull()
+  })
+
+  it("a scene can use layer looks the church already copied", () => {
+    const { themes, scene: sc } = adoptLook(scene, { newId: ids, library: LIBRARY_LOOKS, reuse: new Map([["look-clean-bible-l3", "mine"]]) })
+    expect(themes).toEqual([])
+    expect(sc!.layers.find((l) => l.kind === "feed")?.themeId).toBe("mine")
+  })
+
+  it("finds each kind's copies and what shows them now", () => {
+    const l3 = { ...adoptLook(speaker, { newId: () => "l3" }).lowerThirdStyle!, name: "Ours" }
+    const adopted = adoptLook(scene, { newId: ids, library: LIBRARY_LOOKS })
+    const sc = adopted.scene!
+    const theme = adopted.themes[0]
+    const base: ChurchLooks = {
+      themes: [...BUILTIN_THEMES, theme], lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE, l3], scenes: [sc],
+      tickerStyle: adoptLook(ticker).tickerStyle!, stageStyle: adoptLook(stage).stageStyle!,
+      outputs: [out("Projector"), out("Stage", { role: "stage" })], outputStatus: {}, lowerThird: null, ticker: null,
+    }
+    expect(lookCopies(speaker, base)).toEqual([{ id: "l3", name: "Ours", usedBy: [] }])
+    expect(lookCopies(scene, base)).toEqual([{ id: sc.id, name: sc.name, usedBy: [] }])
+    expect(lookCopies(LIBRARY_LOOKS.find((l) => l.id === "look-clean-bible-l3")!, base)).toEqual([{ id: theme.id, name: theme.name, usedBy: [] }])
+    expect(lookCopies(ticker, base)).toEqual([{ id: "ticker", name: "Your ticker look", usedBy: [] }])
+    expect(lookCopies(stage, base)).toEqual([{ id: "stage", name: "Your stage display look", usedBy: [] }])
+    expect(lookCopies(of("ticker")[1], base)).toEqual([])
+    // On air: the band showing in the style, an output showing the scene (and so its layer look), the ticker running, a stage screen on.
+    const live: ChurchLooks = {
+      ...base,
+      outputs: [out("Projector", { sceneId: sc.id }), out("Stage", { role: "stage" })],
+      outputStatus: { Stage: { previewOpen: true, ndiActive: false } },
+      lowerThird: { line1: "A", line2: "B", style: l3 },
+      ticker: { items: ["x"], style: base.tickerStyle, startedAt: 0 },
+    }
+    expect(lookCopies(speaker, live)[0].usedBy).toEqual(["the name band on air"])
+    expect(lookCopies(scene, live)[0].usedBy).toEqual(["Projector"])
+    expect(lookCopies(LIBRARY_LOOKS.find((l) => l.id === "look-clean-bible-l3")!, live)[0].usedBy).toEqual(["Projector"])
+    expect(lookCopies(ticker, live)[0].usedBy).toEqual(["the ticker running now"])
+    expect(lookCopies(stage, live)[0].usedBy).toEqual(["Stage"])
+  })
+
+  it("Reset puts a lower-third style back, keeping its id and name", () => {
+    const copy = { ...adoptLook(speaker, { newId: () => "l3" }).lowerThirdStyle!, name: "Ours", radius: 40 }
+    expect(resetLowerThirdCopy(copy, speaker)).toEqual({ ...speaker.style, id: "l3", name: "Ours", libraryLookId: speaker.id })
+    expect(resetSingleLook(ticker)).toEqual({ ...ticker.style, libraryLookId: ticker.id })
+    expect(resetSingleLook(stage)).toEqual({ ...stage.style, libraryLookId: stage.id })
+  })
+
+  it("Reset puts a scene back as the template places it; its looks and camera address stay", () => {
+    const adopted = adoptLook(scene, { newId: ids, library: LIBRARY_LOOKS, now: 1 })
+    const theme = adopted.themes[0]
+    const sc = adopted.scene!
+    const camera = sc.layers.find((l) => l.kind === "camera")!
+    const edited = { ...sc, name: "Sunday camera", layers: [{ ...camera, cameraUrl: "http://10.0.0.5:8889/pulpit/whep", box: { x: 10, y: 10, w: 50, h: 50 } }] }
+    const back = resetSceneCopy(edited, scene, { newId: ids, library: LIBRARY_LOOKS, themes: [theme], now: 9 })
+    // The band layer had been removed, so its look is copied anew (the old copy may be in use elsewhere).
+    expect(back.themes.map((t) => t.libraryLookId)).toEqual(["look-clean-bible-l3"])
+    expect(back.scene).toMatchObject({ id: sc.id, name: "Sunday camera", createdAt: 1, updatedAt: 9, libraryLookId: scene.id })
+    expect(back.scene.layers.map((l) => l.kind)).toEqual(["camera", "feed"])
+    expect(back.scene.layers[0]).toMatchObject({ box: { x: 0, y: 0, w: 100, h: 100 }, cameraUrl: "http://10.0.0.5:8889/pulpit/whep" })
+    expect(back.scene.layers[1].themeId).toBe(back.themes[0].id)
+    const kept = resetSceneCopy(sc, scene, { newId: ids, library: LIBRARY_LOOKS, themes: [theme] })
+    expect(kept.themes).toEqual([])
+    expect(kept.scene.layers[1].themeId).toBe(theme.id)
   })
 })

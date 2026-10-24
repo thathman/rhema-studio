@@ -47,6 +47,7 @@ export function normalizeTickerStyle(raw: Partial<TickerStyle> | null | undefine
     direction: r.direction === "right" ? "right" : "left",
     motion: r.motion === "pages" ? "pages" : "crawl",
     pageSeconds: num(r.pageSeconds, d.pageSeconds, 2, 60),
+    ...(typeof r.libraryLookId === "string" && r.libraryLookId ? { libraryLookId: r.libraryLookId } : {}),
   }
 }
 

@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Starter looks in setup; announcement looks, OBS overlay filter and Reset for every library look (#298, #299)
+- Setup step 3 (**Brand and starter looks**) now offers **starter looks**: pick a family (Church Classic, Broadcast Clean, Contemporary, Warm Editorial, High Contrast) to see its scripture, song, notice and over-the-camera looks drawn in your church colours. Nothing is added until you press **Apply…** and confirm; then the looks are copied into your own looks and set on the outputs that are **off**. An output that is on, the stage display and signage screens are left as they are.
+- **Design → Library** has an announcement (notice slide) look in each main family, and an **OBS overlay** filter (the lower thirds and tickers with nothing behind them, to lay over the camera in OBS).
+- **Use and edit** on a camera scene now opens your copy in **Production → Programs**.
+- **Reset** (the card's **…** menu) now also works for copies of name bands, camera scenes, the ticker look and the stage look, not only themes. It is refused while that copy is on air.
 ### The lower third and the stage message as live sources; three more ready-made feeds (#243)
 - **Present → Live → Sources** now lists the **lower third** and the **stage message** too: what is up, who put it up and when, with × to take it down and **Restore** to bring the same one back. Hide in Present → Lower third has a Restore button as well. A joined desk with the Present role can do the same.
 - The Sources strip also lists content that a scene's box follows (a scene with a Bible box counts as a Bible feed), and content put on the feeds on its own.

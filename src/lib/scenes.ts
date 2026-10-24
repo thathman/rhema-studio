@@ -142,7 +142,7 @@ export function normalizeScene(raw: unknown): Scene | null {
     const cameraFallback = typeof l.cameraFallback === "string" && l.cameraFallback.trim() ? l.cameraFallback.trim().slice(0, 120) : undefined
     return [{ ...l, clockShows, until, countdownTo, cameraUrl, cameraFallback, name: typeof l.name === "string" ? l.name.slice(0, 80) : "Layer", shows: shows?.length ? shows : undefined, box: box(l.box), crop: crop(l.crop), opacity: clamp(l.opacity, 0, 1, 1), visible: l.visible !== false }]
   })
-  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0) }
+  return { id: s.id, name: typeof s.name === "string" && s.name.trim() ? s.name.slice(0, 80) : "Scene", background: typeof s.background === "string" ? s.background : "#000000", layers, ...(clamp(s.fadeMs, 0, 3000, 0) > 0 ? { fadeMs: clamp(s.fadeMs, 0, 3000, 0) } : {}), createdAt: clamp(s.createdAt, 0, Number.MAX_SAFE_INTEGER, 0), updatedAt: clamp(s.updatedAt, 0, Number.MAX_SAFE_INTEGER, 0), ...(typeof s.libraryLookId === "string" && s.libraryLookId ? { libraryLookId: s.libraryLookId } : {}) }
 }
 
 interface LiveState {

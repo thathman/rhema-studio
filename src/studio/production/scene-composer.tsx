@@ -14,6 +14,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useMediaStore } from "@/stores/media-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
+import { useProductionTab } from "@/studio/production/production-tab"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
 
@@ -30,7 +31,11 @@ export function SceneComposer() {
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
   const [targetId, setTargetId] = useState(congregation[0]?.id ?? "")
   const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
-  const [draft, setDraft] = useState<Scene | null>(() => scenes[0] ?? null)
+  // A scene another page asked for (a library scene just copied) opens first, once.
+  const [draft, setDraft] = useState<Scene | null>(() => scenes.find((s) => s.id === useProductionTab.getState().scene) ?? scenes[0] ?? null)
+  useEffect(() => {
+    if (useProductionTab.getState().scene) useProductionTab.setState({ scene: null })
+  }, [])
   const [layerId, setLayerId] = useState<string | null>(null)
   const saved = draft ? scenes.find((s) => s.id === draft.id) : undefined
   const dirty = !!draft && (!saved || JSON.stringify({ ...saved, updatedAt: 0 }) !== JSON.stringify({ ...draft, updatedAt: 0 }))
