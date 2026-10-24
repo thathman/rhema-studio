@@ -15,7 +15,7 @@ import { clockInstant, clockMinutes, phaseRange, type OutlineHeader } from "@/li
  * move it; when what runs before it goes past that time, it starts once that ends and says so.
  * A pause before an item (its gap) takes up lateness first: only what is left of it is waited out,
  * and only lateness beyond it pushes the item. The free time before a fixed start works the same.
- * The rules are in docs/rhema-studio/24-adr-0003-timing.md.
+ * The rules are in docs/rhema-studio/25-adr-0004-timing.md.
  */
 export interface TimingItem {
   id: string
