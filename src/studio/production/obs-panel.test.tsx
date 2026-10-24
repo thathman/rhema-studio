@@ -118,6 +118,10 @@ async function render() {
   return { el, button, row }
 }
 
+/** The last request that is not one of the reads "Camera follows OBS" makes after a program change (#208). */
+const PROGRAM_READS = ["GetInputList", "GetInputSettings", "GetSceneItemList", "GetGroupSceneItemList"]
+const lastCommand = (requests: { type: string }[]) => requests.filter((r) => !PROGRAM_READS.includes(r.type)).at(-1)
+
 describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => {
   beforeEach(() => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -189,12 +193,12 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     expect(button("Switch OBS to this scene")).toBeUndefined()
     await act(async () => (row("Choir").querySelector("button") as HTMLButtonElement).click())
     await settle()
-    expect(obs.requests.at(-1)).toEqual({ type: "SetCurrentPreviewScene", data: { sceneName: "Choir" } })
+    expect(lastCommand(obs.requests)).toEqual({ type: "SetCurrentPreviewScene", data: { sceneName: "Choir" } })
     expect(useObsStore.getState().preview).toBe("Choir")
     expect(useObsStore.getState().program).toBe("Wide") // a preview changes nothing on the stream
     await act(async () => button("Take in OBS")!.click())
     await settle()
-    expect(obs.requests.at(-1)?.type).toBe("TriggerStudioModeTransition")
+    expect(lastCommand(obs.requests)?.type).toBe("TriggerStudioModeTransition")
     expect(obs.requests.some((r) => r.type === "SetCurrentProgramScene")).toBe(false)
     expect(useObsStore.getState()).toMatchObject({ program: "Choir", preview: "Wide" })
     expect(useJournalStore.getState().entries.at(-1)?.label).toBe("OBS: took Choir to its program (from Rhema)")
@@ -214,7 +218,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     await act(async () => (row("Pulpit").querySelector("button") as HTMLButtonElement).click())
     await act(async () => (el.querySelector('[role="alertdialog"] button') as HTMLButtonElement).click()) // "Switch OBS"
     await settle()
-    expect(obs.requests.at(-1)).toEqual({ type: "SetCurrentProgramScene", data: { sceneName: "Pulpit" } })
+    expect(lastCommand(obs.requests)).toEqual({ type: "SetCurrentProgramScene", data: { sceneName: "Pulpit" } })
     expect(useObsStore.getState().program).toBe("Pulpit")
   })
 
