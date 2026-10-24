@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-23 — Rhema finds Google TVs by itself (#198)
+
+- **Branch / PR:** `op-008/tv-discovery` (from `integration/night-3`).
+- **Behaviour:** Rhema Receiver (android-tv, versionCode 2 / 1.1.0.0) registers `_rhema-tv._tcp` on port 8095 with Android NSD under the TV's device name (`MainActivity.advertise`, anonymous listener; a failed registration retries after 10 s; unregistered in `onDestroy`), and its info screen shows the TV name. Only INTERNET is needed (NSD is done by the system's mDNS service; no multicast lock or network-state permission). Rust: `tv_discover` in `commands/join.rs` browses `_rhema-tv._tcp.local.` with `mdns-sd` 0.21 (MIT/Apache-2.0, default features off, app crate only) for 2.5 s on a blocking thread and returns `[{name, address: "ip:port"}]`: IPv4 only, private address first, no loopback/link-local, sorted by name, one entry per address, removed services dropped. UI: `ShowOnTv` looks once on mount, lists TVs as toggle buttons that fill the address and focus the code, **Find TVs** looks again, one TV fills the empty address, "No TV found" falls back to typing; `tv_show` and the code check are unchanged. `Info.plist` gets `NSLocalNetworkUsageDescription` (the text of macOS's local-network prompt).
+- **Tests:** `join.rs` (+3: result shaping (names, private address, loopback/no port dropped, duplicate address), address choice, names). `show-on-tv.test.tsx` (2: lists and picks; one TV fills, Find TVs again, none found). APK built with `android-tv/build.sh` (not installed).
+- **Next:** desktop acceptance 10dz with the new APK on a real Google TV. Not done: the TV does not yet find Rhema (the other direction), and pairing/roles from #162 are unchanged.
+
 ## 2026-10-24 — Collapsible sidebar (#299)
 
 - **Branch / PR:** `ux-018/collapsible-sidebar` (from `integration/night-3`).

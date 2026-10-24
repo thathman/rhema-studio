@@ -3,8 +3,8 @@ import { feedUrl } from "@/lib/browser-feeds"
 import { newFeedToken } from "@/lib/output-on-air"
 import { invoke } from "@tauri-apps/api/core"
 import QRCode from "qrcode"
-import { Fragment, useEffect, useState } from "react"
-import { ChevronRightIcon, GlobeIcon, MonitorIcon, RadioIcon, RefreshCwIcon } from "lucide-react"
+import { Fragment, useEffect, useRef, useState } from "react"
+import { ChevronRightIcon, GlobeIcon, MonitorIcon, RadioIcon, RefreshCwIcon, SearchIcon, TvIcon } from "lucide-react"
 import type { Monitor } from "@tauri-apps/api/window"
 import {
   Dialog,
@@ -701,12 +701,45 @@ export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: str
   )
 }
 
-/** Send this feed to a Google TV running Rhema Receiver (#198): the address and code it shows. */
-function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: ReceiverTv) => void }) {
+/** A Rhema Receiver Rhema heard on the network (tv_discover). */
+type FoundTv = { name: string; address: string }
+
+/**
+ * Send this feed to a Google TV running Rhema Receiver (#198). Rhema looks for TVs on the network
+ * when this opens (Find TVs looks again); picking one fills its address, or type it. The code on the
+ * TV's screen is still needed, so only someone who can see the TV assigns it.
+ */
+export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: ReceiverTv) => void }) {
   const [address, setAddress] = useState("")
   const [code, setCode] = useState("")
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  // null until the first look is back; it starts as soon as this opens.
+  const [tvs, setTvs] = useState<FoundTv[] | null>(null)
+  const [finding, setFinding] = useState(true)
+  const [findError, setFindError] = useState<string | null>(null)
+  const codeInput = useRef<HTMLInputElement>(null)
+  const look = () =>
+    invoke<FoundTv[]>("tv_discover").then(
+      (found) => {
+        setTvs(found)
+        setFindError(null)
+        // One TV and nothing typed yet: that is the one.
+        if (found.length === 1) setAddress((a) => a.trim() || found[0].address)
+      },
+      (e) => setFindError(String(e)),
+    ).finally(() => setFinding(false))
+  useEffect(() => {
+    void look()
+  }, []) // once, when the form opens
+  const findAgain = () => {
+    setFinding(true)
+    void look()
+  }
+  const pick = (tv: FoundTv) => {
+    setAddress(tv.address)
+    codeInput.current?.focus()
+  }
   const send = async () => {
     setBusy(true)
     setStatus(null)
@@ -724,10 +757,26 @@ function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: ReceiverTv) =>
   return (
     <fieldset className="flex flex-col gap-1.5 rounded-md border border-border p-2">
       <legend className="px-1 font-medium">Show on a Google TV</legend>
-      <p className="text-muted-foreground">Open Rhema Receiver on the TV: it shows its address and a code.</p>
+      <p className="text-muted-foreground">Open Rhema Receiver on the TV: it shows its name and a code. Pick the TV, then type the code.</p>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="TVs on this network">
+        {tvs?.map((tv) => (
+          <Button key={tv.address} type="button" size="sm" variant={address.trim() === tv.address ? "secondary" : "outline"} aria-pressed={address.trim() === tv.address} onClick={() => pick(tv)} title={tv.address}>
+            <TvIcon aria-hidden />
+            {tv.name}
+          </Button>
+        ))}
+        <Button type="button" size="sm" variant="ghost" disabled={finding} onClick={findAgain}>
+          <SearchIcon aria-hidden />
+          {finding ? "Looking for TVs…" : "Find TVs"}
+        </Button>
+      </div>
+      {!finding && tvs?.length === 0 && !findError && (
+        <p className="text-muted-foreground">No TV found. Is Rhema Receiver open on it, on the same network? You can also type the address it shows.</p>
+      )}
+      {findError && <p className="text-muted-foreground">{findError}. You can type the address the TV shows.</p>}
       <div className="flex flex-wrap items-center gap-2">
         <Input aria-label="TV address" placeholder="192.168.1.40" value={address} onChange={(e) => setAddress(e.target.value)} className="h-7 w-36 text-xs" />
-        <Input aria-label="Code on the TV" placeholder="Code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} className="h-7 w-20 text-xs tabular-nums" />
+        <Input ref={codeInput} aria-label="Code on the TV" placeholder="Code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} className="h-7 w-20 text-xs tabular-nums" />
         <Button type="button" size="sm" variant="outline" disabled={busy || !address.trim() || !code.trim()} onClick={() => void send()}>Show on TV</Button>
       </div>
       {status && <p role="status" className={cn(status.ok ? "text-muted-foreground" : "text-destructive")}>{status.text}</p>}

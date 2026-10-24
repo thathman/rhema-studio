@@ -2,8 +2,10 @@
 //! its Live State, and send the commands this computer's key allows. The host stays in charge:
 //! everything here goes through its ordinary command API, which checks the key and its role.
 
+use std::collections::BTreeMap;
+use std::net::Ipv4Addr;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -299,6 +301,72 @@ pub async fn tv_status(address: String) -> Result<TvStatus, String> {
     tv_status_from(reply, not_found)
 }
 
+/// What Rhema Receiver calls itself on the network (#198), so Rhema can find TVs by themselves.
+const TV_SERVICE: &str = "_rhema-tv._tcp.local.";
+
+/// A Rhema Receiver found on the network: the TV's name and the address to send a screen to.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct FoundTv {
+    name: String,
+    address: String,
+}
+
+/// The TV's own name: its service name without the service type ("Hall TV._rhema-tv._tcp.local.").
+fn tv_name(fullname: &str) -> String {
+    fullname.strip_suffix(TV_SERVICE).unwrap_or(fullname).trim_end_matches('.').to_string()
+}
+
+/// The address people would type: a private LAN address first, never loopback or link-local.
+fn tv_ip(ips: &[Ipv4Addr]) -> Option<Ipv4Addr> {
+    let usable = ips.iter().filter(|ip| !ip.is_loopback() && !ip.is_link_local() && !ip.is_unspecified() && !ip.is_multicast());
+    usable.clone().filter(|ip| ip.is_private()).min().or_else(|| usable.min()).copied()
+}
+
+/// What the search heard (service name → port and IPv4 addresses), as a list sorted by name.
+/// A TV with no usable IPv4 address is left out; the same address heard twice is listed once.
+fn found_tvs(seen: BTreeMap<String, (u16, Vec<Ipv4Addr>)>) -> Vec<FoundTv> {
+    let mut tvs: Vec<FoundTv> = seen
+        .into_iter()
+        .filter(|(_, (port, _))| *port != 0)
+        .filter_map(|(full, (port, ips))| tv_ip(&ips).map(|ip| FoundTv { name: tv_name(&full), address: format!("{ip}:{port}") }))
+        .collect();
+    tvs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.address.cmp(&b.address)));
+    let mut addresses = std::collections::HashSet::new();
+    tvs.retain(|tv| addresses.insert(tv.address.clone()));
+    tvs
+}
+
+/// Listen for Rhema Receivers for a moment (blocking; run off the async threads).
+fn browse_tvs(window: Duration) -> Result<Vec<FoundTv>, String> {
+    let daemon = mdns_sd::ServiceDaemon::new().map_err(|e| format!("Could not look for TVs on the network: {e}"))?;
+    let events = daemon.browse(TV_SERVICE).map_err(|e| format!("Could not look for TVs on the network: {e}"))?;
+    let deadline = Instant::now() + window;
+    let mut seen = BTreeMap::new();
+    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+        match events.recv_timeout(left) {
+            Ok(mdns_sd::ServiceEvent::ServiceResolved(s)) => {
+                seen.insert(s.fullname.clone(), (s.port, s.get_addresses_v4().into_iter().collect()));
+            }
+            Ok(mdns_sd::ServiceEvent::ServiceRemoved(_, full)) => {
+                seen.remove(&full);
+            }
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
+    let _ = daemon.shutdown();
+    Ok(found_tvs(seen))
+}
+
+/// Find the Rhema Receivers on this network (#198), so nobody has to type a TV's address. Takes
+/// about two and a half seconds; the code on the TV's screen is still needed to show anything.
+#[tauri::command]
+pub async fn tv_discover() -> Result<Vec<FoundTv>, String> {
+    tokio::task::spawn_blocking(|| browse_tvs(Duration::from_millis(2500)))
+        .await
+        .map_err(|e| format!("Could not look for TVs on the network: {e}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,5 +423,38 @@ mod tests {
         assert_eq!(sse_data("event: live\ndata: line 1\ndata: line 2\n\n").as_deref(), Some("line 1\nline 2"));
         assert_eq!(sse_data(": keep-alive\n\n"), None);
         assert_eq!(sse_data("event: other\ndata: x\n\n"), None);
+    }
+
+    #[test]
+    fn tv_discovery_lists_named_tvs_with_their_lan_address() {
+        let ip = |s: &str| s.parse::<Ipv4Addr>().unwrap();
+        let mut seen = BTreeMap::new();
+        seen.insert("Sanctuary TV._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("169.254.3.4"), ip("192.168.3.37")]));
+        seen.insert("hall.tv._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("10.0.0.9")]));
+        seen.insert("No address._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("127.0.0.1")]));
+        seen.insert("Same TV again._rhema-tv._tcp.local.".to_string(), (8095, vec![ip("192.168.3.37")]));
+        seen.insert("No port._rhema-tv._tcp.local.".to_string(), (0, vec![ip("192.168.3.40")]));
+        assert_eq!(
+            found_tvs(seen),
+            vec![
+                FoundTv { name: "hall.tv".into(), address: "10.0.0.9:8095".into() },
+                FoundTv { name: "Same TV again".into(), address: "192.168.3.37:8095".into() },
+            ]
+        );
+    }
+
+    #[test]
+    fn tv_discovery_prefers_a_private_address_and_keeps_public_ones_as_a_last_resort() {
+        let ip = |s: &str| s.parse::<Ipv4Addr>().unwrap();
+        assert_eq!(tv_ip(&[ip("8.8.8.8"), ip("192.168.1.9")]), Some(ip("192.168.1.9")));
+        assert_eq!(tv_ip(&[ip("8.8.8.8")]), Some(ip("8.8.8.8")));
+        assert_eq!(tv_ip(&[ip("127.0.0.1"), ip("169.254.1.1"), ip("0.0.0.0")]), None);
+        assert_eq!(tv_ip(&[]), None);
+    }
+
+    #[test]
+    fn tv_discovery_names_come_from_the_service_name() {
+        assert_eq!(tv_name("Living Room._rhema-tv._tcp.local."), "Living Room");
+        assert_eq!(tv_name("odd name"), "odd name");
     }
 }

@@ -981,6 +981,16 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dz. Rhema finds Google TVs by itself (#198)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dz.1 | Build and install the new Rhema Receiver (`android-tv/build.sh`, `adb install -r android-tv/build/rhema-receiver.apk`); open it on the TV. Android settings → Apps → Rhema Receiver. | Version 1.1.0.0. The TV screen shows "TV name" (the TV's name in its settings), the address and a code. Earlier screens it was showing are kept. | Unverified |
+| 10dz.2 | Rhema on the same network: Outputs → a browser feed → settings → **Show on a Google TV**. | "Looking for TVs…" for about 3 seconds, then a button with the TV's name; with this one TV its address is already filled in. macOS may ask once to let Rhema find devices on the local network: allow. | Unverified |
+| 10dz.3 | Type the code from the TV; **Show on TV**. | The TV shows the feed, as before; a wrong code still counts down the tries. | Unverified |
+| 10dz.4 | Close Rhema Receiver on the TV (Back/Home, then stop it), press **Find TVs**. Open it again, **Find TVs**. | The first look says "No TV found…" (or no longer lists it after a short while); the second lists it again. Typing the address still works throughout. | Unverified |
+| 10dz.5 | With two TVs running Rhema Receiver (or the TV plus an Android phone/emulator with the APK), open Show on a Google TV. | Both are listed by name; nothing is filled in until you pick one; the picked one is highlighted and the code box is ready to type. | Unverified |
+
 ### 10ea. Collapsible sidebar (#299)
 
 | # | Step | Expected | Result |

@@ -183,6 +183,7 @@ pub fn run() {
             commands::join::join_pair,
             commands::join::tv_show,
             commands::join::tv_status,
+            commands::join::tv_discover,
             commands::join::join_me,
             commands::join::join_command,
             commands::join::join_voice,

@@ -6,6 +6,7 @@
     android:versionName="1.1.0.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+    <!-- Also all that telling the network about this TV (NSD, _rhema-tv._tcp) needs. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

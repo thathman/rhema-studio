@@ -5,6 +5,8 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.net.Uri;
+import android.net.nsd.NsdManager;
+import android.net.nsd.NsdServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -35,10 +37,13 @@ import java.util.List;
  * Rhema Receiver (#198): shows one Rhema browser feed full screen and keeps showing it, across
  * restarts and network drops. Until it has one, it shows its address and a code; Rhema sends the
  * feed's link with that code (Outputs → a browser feed → Show on a Google TV), so only someone who
- * can see this screen assigns it. OK on the remote shows the address and a new code again.
+ * can see this screen assigns it. OK on the remote shows the address and a new code again. It
+ * also tells the network it is here (mDNS/NSD), so Rhema can list it without anyone typing the address.
  */
 public class MainActivity extends Activity {
     static final int PORT = 8095;
+    /** What Rhema looks for on the network to list this TV (Show on a Google TV → Find TVs). */
+    static final String SERVICE_TYPE = "_rhema-tv._tcp";
     private static final int MAX_TRIES = 5;
     private static final long INFO_MS = 20_000;
 
@@ -51,6 +56,8 @@ public class MainActivity extends Activity {
     private String code;
     private int triesLeft;
     private volatile String problem;
+    private NsdManager nsd;
+    private NsdManager.RegistrationListener advert;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -108,6 +115,7 @@ public class MainActivity extends Activity {
         newCode();
         server = new ShowServer(PORT, this);
         server.start();
+        advertise();
         if (shown() != null) {
             web.loadUrl(shown());
             info.setVisibility(View.GONE);
@@ -157,6 +165,7 @@ public class MainActivity extends Activity {
         StringBuilder t = new StringBuilder("Rhema Receiver\n\n");
         if (problem != null) t.append(problem).append("\n\n");
         t.append(shown() == null ? "To show a screen here: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n" : "To show another screen: in Rhema, Outputs → a browser feed → Show on a Google TV.\n\n");
+        t.append("TV name   ").append(name()).append("\n");
         t.append("TV address   ").append(ip == null ? "not on a network" : ip).append("\n");
         t.append(triesLeft > 0 ? "Code   " + code : "Too many wrong codes: press OK for a new one");
         info.setText(t);
@@ -192,8 +201,60 @@ public class MainActivity extends Activity {
         if (focus) immersive();
     }
 
+    /**
+     * Tells the network this TV is a Rhema Receiver, by its name, so Rhema's Find TVs lists it. If
+     * that fails (no network yet), it tries again shortly; typing the address still works meanwhile.
+     */
+    private void advertise() {
+        if (nsd == null) nsd = (NsdManager) getSystemService(NSD_SERVICE);
+        if (nsd == null) return;
+        String n = name();
+        NsdServiceInfo service = new NsdServiceInfo();
+        service.setServiceName(n.length() > 60 ? n.substring(0, 60) : n);
+        service.setServiceType(SERVICE_TYPE);
+        service.setPort(PORT);
+        advert = new NsdManager.RegistrationListener() {
+            @Override
+            public void onServiceRegistered(NsdServiceInfo info) { }
+
+            @Override
+            public void onRegistrationFailed(NsdServiceInfo info, int error) {
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        advert = null;
+                        ui.removeCallbacks(readvertise);
+                        ui.postDelayed(readvertise, 10_000);
+                    }
+                });
+            }
+
+            @Override
+            public void onServiceUnregistered(NsdServiceInfo info) { }
+
+            @Override
+            public void onUnregistrationFailed(NsdServiceInfo info, int error) { }
+        };
+        try {
+            nsd.registerService(service, NsdManager.PROTOCOL_DNS_SD, advert);
+        } catch (RuntimeException e) {
+            advert = null;
+        }
+    }
+
+    private final Runnable readvertise = new Runnable() {
+        @Override
+        public void run() {
+            if (advert == null && !isDestroyed()) advertise();
+        }
+    };
+
     @Override
     protected void onDestroy() {
+        if (advert != null) {
+            try { nsd.unregisterService(advert); } catch (RuntimeException ignored) { }
+            advert = null;
+        }
         server.close();
         ui.removeCallbacksAndMessages(null);
         web.destroy();
