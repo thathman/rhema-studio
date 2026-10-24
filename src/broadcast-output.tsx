@@ -365,6 +365,11 @@ function BroadcastCanvas() {
         draw()
         pushNdiBurst()
       },
+      // Paused from Present: the held frame on the screen and on NDI (the frame loop has stopped).
+      onPaused: () => {
+        draw()
+        pushNdiBurst()
+      },
       onError: (name) => {
         console.warn("[broadcast-output] video failed to play:", name)
         void currentWindow.emitTo("main", "broadcast:media-error", { outputId: OUTPUT_ID, name }).catch(() => {})

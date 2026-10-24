@@ -75,8 +75,13 @@ export interface LiveStateV1 {
   notices: Notice[]
   /** The paired desks' names, so a notice can go to one person (Comms). Absent from older hosts. */
   crew?: string[]
-  /** The talk channel (Rhema Comms voice): who is in it, holding Talk, audible now. */
+  /** The talk channel (Rhema Comms voice): who is in it, with their role, holding Talk, audible now. */
   voice?: VoicePerson[]
+  /**
+   * Which desk roles may use each talk channel (Settings → Audio on the host), for the channels the
+   * church has limited; one not listed is open to everyone. Absent from older hosts.
+   */
+  talkRights?: Record<string, string[]>
   /** Desks the main desk has taken back control from (#243), by name: each shows "Paused by the main desk". Absent from older hosts. */
   paused?: string[]
   /** A hold in the service (#196 R3): its reason, since when (host wall ms) and which desk held it. Null when not held; absent from older hosts. */
@@ -204,6 +209,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     notices: useNotices.getState().notices.slice(0, 50),
     crew: useSettingsStore.getState().remoteDevices.map((d) => d.name),
     voice: voiceCrew(),
+    talkRights: Object.fromEntries(Object.entries(useSettingsStore.getState().talkRules?.channels ?? {}).flatMap(([c, roles]) => (roles ? [[c, [...roles]]] : []))),
     paused: useSettingsStore.getState().remoteDevices.filter((d) => d.paused === true).map((d) => d.name),
     hold: (() => { const h = useHold.getState().hold; return h ? { reason: h.reason, since: h.since, ...(h.by ? { by: h.by } : {}) } : null })(),
     requireApproval: useSettingsStore.getState().requireApproval,
@@ -269,7 +275,7 @@ export function startLiveStatePublisher(): () => void {
     useHold.subscribe((s, p) => { if (s.hold !== p.hold) soon() }),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
-    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit || s.requireApproval !== p.requireApproval || s.setup.timeZone !== p.setup.timeZone) soon() }),
+    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit || s.requireApproval !== p.requireApproval || s.setup.timeZone !== p.setup.timeZone || s.talkRules !== p.talkRules) soon() }),
     useTimingTrust.subscribe(() => soon()),
     useObsStore.subscribe((s, p) => { if (s.status !== p.status || s.scenes !== p.scenes || s.program !== p.program || s.preview !== p.preview || s.studioMode !== p.studioMode) soon() }),
     useRouterHealth.subscribe(() => soon()),
@@ -314,5 +320,5 @@ function voiceCrew(): VoicePerson[] {
   const v = useVoice.getState()
   const operator = useSettingsStore.getState().operatorName.trim()
   const host = v.hostTalking || v.hostSpeaking ? [{ name: operator ? `${operator} (main desk)` : "Main desk", talk: v.hostTalkTo, talking: v.hostTalking, speaking: v.hostSpeaking }] : []
-  return [...host, ...v.peers.map((p) => ({ name: p.name, talk: p.talk, talking: p.talking, speaking: p.speaking }))]
+  return [...host, ...v.peers.map((p) => ({ name: p.name, ...(p.role ? { role: p.role } : {}), talk: p.talk, talking: p.talking, speaking: p.speaking }))]
 }

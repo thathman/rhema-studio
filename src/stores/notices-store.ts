@@ -19,10 +19,13 @@ export type NoticeAnswer = "seen" | "ready" | "unable"
  * whether it is framed (answering Ready or Unable is the action); sceneEdit: a scene change from a
  * joined desk waiting for the main desk (src/lib/desk-scenes.ts), by its request id: Accept puts it
  * in, Decline (Unable) leaves the scene as it is. Only the host makes sceneEdit notices; its server
- * drops that kind from a desk's notice.
+ * drops that kind from a desk's notice. wrap: a wrap-up warning for the preacher, the line to put
+ * on the stage display (stage screens only, never the congregation's).
  */
-export interface NoticeAction { kind: "bible" | "song" | "scene" | "event" | "camera" | "sceneEdit"; value: string }
-export const ACTION_KINDS: readonly NoticeAction["kind"][] = ["bible", "song", "scene", "event", "camera", "sceneEdit"]
+export interface NoticeAction { kind: "bible" | "song" | "scene" | "event" | "camera" | "sceneEdit" | "wrap"; value: string }
+export const ACTION_KINDS: readonly NoticeAction["kind"][] = ["bible", "song", "scene", "event", "camera", "sceneEdit", "wrap"]
+/** What a wrap-up warning says on the stage display unless the sender writes another line. */
+export const WRAP_UP_LINE = "Please start wrapping up"
 /**
  * How the recipient carries out a request that puts something on screen: Show (as the button says)
  * or Preview (into the main desk's Preview only; nothing goes live).
@@ -30,6 +33,8 @@ export const ACTION_KINDS: readonly NoticeAction["kind"][] = ["bible", "song", "
 export type ActionMode = "show" | "preview"
 /** Requests that can go to Preview first: a verse, a song or hymn. A scene has no Preview: it is taken or not. */
 export const canPreview = (a: NoticeAction): boolean => a.kind === "bible" || a.kind === "song"
+/** Requests that can be added to the main desk's run of show for later (Queue), without showing anything. */
+export const canQueue = canPreview
 
 export interface Notice {
   id: string

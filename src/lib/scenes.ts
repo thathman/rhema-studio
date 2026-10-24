@@ -84,6 +84,18 @@ export const SCENE_PRESETS: ScenePreset[] = [
     newLayer("video", { name: "Video background" }),
     newLayer("feed", { name: "Lyrics", shows: ["song", "hymn"], box: { x: 0, y: 66, w: 100, h: 34 }, fadeMs: 300 }),
   ] },
+  // Added after the first ones; ids are kept as they are, new ones go at the end (#208 U3).
+  { id: "closing-announcements", name: "Closing announcements", description: "The announcement slides large, the church logo in the corner and the ticker along the bottom", layers: () => [
+    newLayer("color", { name: "Background" }),
+    newLayer("feed", { name: "Announcements", shows: ["slide", "picture"], box: { x: 4, y: 6, w: 92, h: 82 } }),
+    newLayer("logo", { box: { x: 86, y: 4, w: 10, h: 10 } }),
+    newLayer("ticker"),
+  ] },
+  { id: "countdown-camera", name: "Countdown over a live camera", description: "A camera full screen, darkened a little, with the countdown to the service over it", layers: () => [
+    newLayer("camera", { name: "Camera" }),
+    newLayer("color", { name: "Darken the camera", color: "#000000", opacity: 0.35 }),
+    newLayer("clock", { name: "Countdown to the service", clockShows: "until", box: { x: 25, y: 37, w: 50, h: 26 } }),
+  ] },
 ]
 
 export function newScene(name: string, preset: ScenePreset = SCENE_PRESETS[0]): Scene {

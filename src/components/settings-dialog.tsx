@@ -33,7 +33,7 @@ import {
   BrainCircuitIcon,
 } from "lucide-react"
 import { LevelMeter } from "@/components/ui/level-meter"
-import { TalkDevices } from "@/studio/talk"
+import { TalkDevices, TalkRulesSettings } from "@/studio/talk"
 import { useAudioTest } from "@/hooks/use-audio-test"
 import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
@@ -237,6 +237,17 @@ function AudioSection() {
         <TalkDevices />
         <p className="text-xs text-muted-foreground">
           The microphone you talk to the crew with and where you hear them, on this computer only. It never feeds listening, the outputs, OBS or the sound player.
+        </p>
+      </div>
+
+      {/* The church's talk channels (Rhema Comms): who may use each, and how quiet priority makes the others. */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Talk channels
+        </label>
+        <TalkRulesSettings />
+        <p className="text-xs text-muted-foreground">
+          Set on the main desk for every joined desk and phone. Everyone is always in All crew; a role left out neither hears nor talks on that channel.
         </p>
       </div>
     </div>

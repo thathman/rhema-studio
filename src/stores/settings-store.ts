@@ -9,6 +9,17 @@ import { validLimit, type CapacityKind, type CapacityOverrides } from "@/lib/cap
  */
 export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens" | "worship" | "stage" | "camera" | "obs"
 
+/**
+ * The talk channels' rules (Rhema Comms, #251), set on the main desk: which desk roles may hear and
+ * talk on each channel (a channel not listed is open to every role; All crew always is), and how
+ * loud the others stay while the main desk talks with priority (0–1; never silent).
+ */
+export interface TalkRules {
+  channels: Partial<Record<string, RemoteRole[]>>
+  duck: number
+}
+export const DEFAULT_TALK_RULES: TalkRules = { channels: {}, duck: 0.2 }
+
 export interface RemoteDevice {
   hash: string
   name: string
@@ -147,6 +158,9 @@ export interface SettingsState {
   talkInputId: string
   talkOutputId: string
   setTalkDevices: (patch: { talkInputId?: string; talkOutputId?: string }) => void
+  /** Who may use each talk channel, and how quiet priority makes the others (the church's rules). */
+  talkRules: TalkRules
+  setTalkRules: (patch: Partial<TalkRules>) => void
   /** Production → Timekeeper's countdown on this computer (#196 R2): what it counts to, and its chime (off unless turned on). */
   timekeeperCountdown: TimekeeperCountdown
   setTimekeeperCountdown: (patch: Partial<TimekeeperCountdown>) => void
@@ -240,6 +254,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   talkInputId: "",
   talkOutputId: "",
   setTalkDevices: (patch) => set(patch),
+  talkRules: DEFAULT_TALK_RULES,
+  setTalkRules: (patch) => set((s) => ({ talkRules: { ...s.talkRules, ...patch, duck: Math.min(0.8, Math.max(0.05, patch.duck ?? s.talkRules.duck)) } })),
   timekeeperCountdown: { to: "next", chime: false, chimeMinutes: 2 },
   setTimekeeperCountdown: (patch) => set((s) => ({ timekeeperCountdown: { ...s.timekeeperCountdown, ...patch } })),
   remoteDevices: [],
@@ -383,6 +399,10 @@ function acceptable(key: string, value: unknown): boolean {
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
+    case "talkRules": {
+      const t = value as Partial<TalkRules>
+      return typeof value === "object" && value !== null && typeof t.duck === "number" && Number.isFinite(t.duck) && t.duck > 0 && t.duck <= 1 && typeof t.channels === "object" && t.channels !== null && !Array.isArray(t.channels) && Object.values(t.channels).every((r) => Array.isArray(r) && r.every((x) => typeof x === "string"))
+    }
     case "setup":
       return typeof value === "object" && !Array.isArray(value) // fields are checked one by one in hydrateSettings
     default:
@@ -398,7 +418,7 @@ function acceptable(key: string, value: unknown): boolean {
  * Every saved setting is in exactly one part (settings-sections.test.ts checks it).
  */
 export const SETTINGS_SECTIONS = {
-  church: ["brandKit", "customMacros", "requireApproval", "hymnFirstLanguage"],
+  church: ["brandKit", "customMacros", "requireApproval", "hymnFirstLanguage", "talkRules"],
   machine: [
     "setup",
     "churchFolder",

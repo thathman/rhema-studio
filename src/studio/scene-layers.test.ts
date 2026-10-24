@@ -169,7 +169,7 @@ describe("a scene with a ticker or lower-third layer owns it (#243)", () => {
 
 describe("scene presets (#243)", () => {
   it("the built-in presets keep stable ids, old ones first", () => {
-    expect(SCENE_PRESETS.map((p) => p.id)).toEqual(["full", "bible-lyrics", "picture-lyrics", "camera-bible", "full-camera", "pip-camera", "sermon-split", "welcome", "lyrics-video"])
+    expect(SCENE_PRESETS.map((p) => p.id)).toEqual(["full", "bible-lyrics", "picture-lyrics", "camera-bible", "full-camera", "pip-camera", "sermon-split", "welcome", "lyrics-video", "closing-announcements", "countdown-camera"])
     const kinds = (id: string) => SCENE_PRESETS.find((p) => p.id === id)!.layers().map((l) => l.kind)
     expect(kinds("full-camera")).toEqual(["camera"])
     expect(kinds("pip-camera")).toEqual(["feed", "camera"])

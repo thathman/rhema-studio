@@ -281,6 +281,11 @@ interface BroadcastState {
   /** `goLive` puts the output on air in the same update as the verse, so no stale frame shows first. */
   setLiveVerse: (verse: VerseRenderData | null, source?: Verse | null, opts?: { goLive?: boolean; item?: ItemTranslations | null; slide?: LiveSlide | null; itemId?: string | null; keepHeld?: boolean; follow?: boolean; by?: string }) => void
   setPresentWarning: (warning: string | null) => void
+  /**
+   * Pause or resume the video item on air (MD-002, #36): every output holds its frame (and NDI and
+   * the feeds that show it with it) and carries on from there. Nothing when no video item is live.
+   */
+  setVideoPaused: (paused: boolean) => void
   setStageMessage: (message: string) => void
   /** Off puts back the program from before rehearsal, unless `keepRehearsed` (a deliberate go-live). */
   setRehearsal: (on: boolean, opts?: { keepRehearsed?: boolean }) => void
@@ -1037,6 +1042,17 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     get().syncBroadcastOutput()
   },
   setPresentWarning: (presentWarning) => set({ presentWarning }),
+  setVideoPaused: (paused) => {
+    const s = get()
+    const v = s.liveVerse
+    if (!v?.video || v.content !== "picture" || !!v.video.paused === paused) return
+    const liveVerse = { ...v, video: { ...v.video, paused } }
+    // The same item, paused: its live source keeps its revision and who showed it (not a new activation).
+    const id = sourceOf(v)
+    const cur = s.sources[id]
+    set({ liveVerse, ...(cur && cur.value === v ? { sources: { ...s.sources, [id]: { ...cur, value: liveVerse } } } : {}) })
+    get().syncBroadcastOutput()
+  },
   setRehearsal: (rehearsal, opts = {}) => {
     const s = get()
     if (rehearsal === s.rehearsal) return
