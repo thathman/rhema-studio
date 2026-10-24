@@ -23,6 +23,15 @@ fn clock(s: &str) -> bool {
     b.len() == 5 && b[2] == b':' && s[..2].parse::<u8>().is_ok_and(|h| h < 24) && s[3..].parse::<u8>().is_ok_and(|m| m < 60)
 }
 
+fn clock_minutes(s: &str) -> Option<u32> {
+    clock(s).then(|| s[..2].parse::<u32>().unwrap_or(0) * 60 + s[3..].parse::<u32>().unwrap_or(0))
+}
+
+fn clock_text(minutes: f64) -> String {
+    let m = (minutes.round() as i64).rem_euclid(1440);
+    format!("{:02}:{:02}", m / 60, m % 60)
+}
+
 fn short(v: Option<&Value>, max: usize) -> Option<String> {
     v.and_then(Value::as_str).map(str::trim).filter(|x| !x.is_empty()).map(|x| x.chars().take(max).collect())
 }
@@ -108,6 +117,13 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
             }
         }
         let mut items = Vec::new();
+        // Planned clock time through a phase with a start time, to check items' end-by times.
+        let start = starts_at.as_deref().and_then(clock_minutes);
+        let mut clock_at = start.map(f64::from);
+        // Groups are runs of items with the same `group` name; Rhema's run of show has no "end of
+        // group", so an ungrouped item after a group would join it.
+        let mut last_group: Option<String> = None;
+        let mut warned_after_group = false;
         for (ii, it) in p.get("items").and_then(Value::as_array).cloned().unwrap_or_default().iter().enumerate() {
             count += 1;
             if count > MAX_ITEMS {
@@ -123,6 +139,41 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
                     minutes += m;
                 }
             }
+            if let Some(t) = clock_at.as_mut() {
+                *t += planned.filter(|m| (0.0..=240.0).contains(m)).unwrap_or(0.0);
+            }
+            // Finish by a clock time: a bad one is named and left out, never kept silently.
+            let mut end_by = short(it.get("end_by"), 20);
+            if let Some(e) = end_by.clone() {
+                match clock_minutes(&e) {
+                    None => {
+                        warnings.push(format!("{at}: end by \"{e}\" is not HH:MM, so it was left out"));
+                        end_by = None;
+                    }
+                    Some(e_min) => {
+                        if let (Some(s0), Some(t)) = (start, clock_at) {
+                            // A time well before the start is the next day (a service around midnight).
+                            let e_min = if e_min + 720 < s0 { e_min + 1440 } else { e_min };
+                            if e_min < s0 {
+                                warnings.push(format!("{at}: end by {e} is before {name} starts at {}", clock_text(f64::from(s0))));
+                            } else if t > f64::from(e_min) + 0.01 {
+                                warnings.push(format!("{at}: planned to finish at {}, after its end by {e}", clock_text(t)));
+                            }
+                        }
+                    }
+                }
+            }
+            let group = short(it.get("group"), 80);
+            match (&group, &last_group) {
+                (None, Some(g)) if !warned_after_group => {
+                    warnings.push(format!("{at}: it has no group but follows the group \"{g}\", so Rhema shows it in that group: give it a group or put it before the first group"));
+                    warned_after_group = true;
+                }
+                _ => {}
+            }
+            if group.is_some() {
+                last_group = group.clone();
+            }
             let notes = short(it.get("notes"), 500);
             // Suggestions only: shown to the reviewer, never stored in the service (MCP-004).
             let mut look = short(it.get("suggested_look"), 80);
@@ -137,7 +188,7 @@ pub fn check_with(content: Option<&ContentDb>, bible: Option<&BibleDb>, looks: O
                     }
                 }
             }
-            let base = json!({ "planned_minutes": planned, "notes": notes, "suggested_look": look, "suggested_scene": scene });
+            let base = json!({ "planned_minutes": planned, "end_by": end_by, "group": group, "notes": notes, "suggested_look": look, "suggested_scene": scene });
             let item = match kind.as_str() {
                 "song" | "hymn" => {
                     let wanted = short(it.get("title"), 120).unwrap_or_default();
@@ -253,6 +304,7 @@ pub fn save(data_dir: &Path, draft: &Value, client: &Value) -> Result<String, St
     doc["v"] = json!(1);
     doc["id"] = json!(id);
     doc["status"] = json!("awaiting review");
+    doc["revision"] = json!(1);
     doc["created_at"] = json!(chrono_now());
     doc["client"] = client.clone();
     let tmp = dir.join(format!(".{id}.tmp"));
@@ -277,36 +329,61 @@ pub fn list(data_dir: &Path) -> Vec<Value> {
         .filter(|v| v.get("v") == Some(&json!(1)) && v.get("id").and_then(Value::as_str).is_some_and(is_draft_id))
         .map(|v| {
             let items: usize = v["phases"].as_array().map_or(0, |p| p.iter().map(|ph| ph["items"].as_array().map_or(0, Vec::len)).sum());
-            json!({ "id": v["id"], "title": v["title"], "date": v["date"], "items": items, "created_at": v["created_at"], "updated_at": v["updated_at"], "by": v["client"]["name"], "status": v["status"] })
+            json!({ "id": v["id"], "title": v["title"], "date": v["date"], "items": items, "revision": revision(&v), "created_at": v["created_at"], "updated_at": v["updated_at"], "by": v["client"]["name"], "status": v["status"] })
         })
         .collect();
     out.sort_by(|a, b| b["created_at"].as_str().unwrap_or("").cmp(a["created_at"].as_str().unwrap_or("")));
     out
 }
 
-/// Replace a waiting draft with a revised one (same id, still for people to review). Refuses a
-/// draft that is not there any more (people removed it); what people saved from it is a service of
-/// its own and is never touched.
-pub fn update(data_dir: &Path, id: &str, draft: &Value, client: &Value) -> Result<(), String> {
+/// A draft's revision: 1 when saved, one more on every revision; drafts from before revisions are 0.
+fn revision(v: &Value) -> u64 {
+    v.get("revision").and_then(Value::as_u64).unwrap_or(0)
+}
+
+fn read_draft(data_dir: &Path, id: &str) -> Result<Value, String> {
     if !is_draft_id(id) {
         return Err("not a draft id (rhema_list_service_drafts lists them)".into());
     }
+    std::fs::read(data_dir.join(DRAFTS_DIR).join(format!("{id}.json")))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .filter(|v| v.get("v") == Some(&json!(1)))
+        .ok_or_else(|| "that draft is not waiting any more (people may have removed it): create a new one".to_string())
+}
+
+/// One waiting draft as saved (with its revision, which a revision must name), for an assistant to revise.
+pub fn get(data_dir: &Path, id: &str) -> Result<Value, String> {
+    let mut v = read_draft(data_dir, id)?;
+    v["revision"] = json!(revision(&v));
+    Ok(v)
+}
+
+/// Replace a waiting draft with a revised one (same id, still for people to review). `read` is the
+/// revision the assistant read: if the draft changed since (another revision), nothing is written
+/// and the assistant is told to read it again. Refuses a draft that is not there any more (people
+/// removed it); what people saved from it is a service of its own and is never touched. Returns the
+/// new revision.
+pub fn update(data_dir: &Path, id: &str, read: u64, draft: &Value, client: &Value) -> Result<u64, String> {
+    let old = read_draft(data_dir, id)?;
+    let now = revision(&old);
+    if now != read {
+        return Err(format!("this draft changed since you read it (you read revision {read}; it is now revision {now}), so nothing was saved: read it again with rhema_get_service_draft and revise that"));
+    }
     let dir = data_dir.join(DRAFTS_DIR);
     let path = dir.join(format!("{id}.json"));
-    let old: Value = std::fs::read(&path)
-        .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok())
-        .ok_or_else(|| "that draft is not waiting any more (people may have removed it): create a new one".to_string())?;
     let mut doc = draft.clone();
     doc["v"] = json!(1);
     doc["id"] = json!(id);
     doc["status"] = json!("awaiting review");
+    doc["revision"] = json!(now + 1);
     doc["created_at"] = old["created_at"].clone();
     doc["updated_at"] = json!(chrono_now());
     doc["client"] = client.clone();
     let tmp = dir.join(format!(".{id}.tmp"));
     std::fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(|e| e.to_string())?).map_err(|e| format!("could not save the draft: {e}"))?;
-    std::fs::rename(&tmp, &path).map_err(|e| format!("could not save the draft: {e}"))
+    std::fs::rename(&tmp, &path).map_err(|e| format!("could not save the draft: {e}"))?;
+    Ok(now + 1)
 }
 
 /// RFC 3339 UTC, without a date crate.
@@ -407,13 +484,69 @@ mod tests {
         let listed = list(&dir);
         assert_eq!((listed.len(), listed[0]["id"].as_str(), listed[0]["items"].as_u64(), listed[0]["by"].as_str()), (1, Some(id.as_str()), Some(1), Some("Claude")));
         let revised = json!({ "title": "Sunday (revised)", "phases": [{ "name": "Main", "items": [{ "kind": "slide", "title": "Welcome" }, { "kind": "slide", "title": "Notices" }] }] });
-        update(&dir, &id, &revised, &json!({ "name": "Claude" })).unwrap();
+        assert_eq!(listed[0]["revision"], 1);
+        assert_eq!(update(&dir, &id, 1, &revised, &json!({ "name": "Claude" })).unwrap(), 2);
         let listed = list(&dir);
         assert_eq!((listed.len(), listed[0]["title"].as_str(), listed[0]["items"].as_u64()), (1, Some("Sunday (revised)"), Some(2)), "same draft, revised");
         assert!(listed[0]["updated_at"].is_string() && listed[0]["created_at"].is_string());
-        assert!(update(&dir, "../../etc/passwd", &revised, &json!({})).is_err(), "only draft ids");
+        assert!(update(&dir, "../../etc/passwd", 0, &revised, &json!({})).is_err(), "only draft ids");
         std::fs::remove_file(dir.join(DRAFTS_DIR).join(format!("{id}.json"))).unwrap(); // people removed it
-        assert!(update(&dir, &id, &revised, &json!({})).unwrap_err().contains("not waiting any more"));
+        assert!(update(&dir, &id, 2, &revised, &json!({})).unwrap_err().contains("not waiting any more"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn end_by_times_and_groups_are_kept_and_bad_times_named() {
+        let c = check(None, None, &json!({ "title": "Sunday", "phases": [
+            { "name": "Main service", "role": "main", "starts_at": "10:00", "items": [
+                { "kind": "slide", "title": "Welcome", "planned_minutes": 5 },
+                { "kind": "slide", "title": "Praise", "group": "Praise and worship", "planned_minutes": 20, "end_by": "10:25" },
+                { "kind": "slide", "title": "Worship", "group": "Praise and worship", "planned_minutes": 10, "end_by": "10:35" },
+                { "kind": "slide", "title": "Sermon", "group": "Word", "planned_minutes": 40, "end_by": "11:00" },
+                { "kind": "slide", "title": "Close", "group": "Word", "end_by": "half eleven" },
+                { "kind": "slide", "title": "Notices", "end_by": "09:00" },
+            ] },
+        ] }));
+        assert_eq!(c.report["ok"], true, "{}", c.report);
+        let items = &c.draft.as_ref().unwrap()["phases"][0]["items"];
+        assert!(items[0].get("group").is_none() && items[0].get("end_by").is_none(), "nothing added to an item without them");
+        assert_eq!((items[1]["group"].as_str(), items[1]["end_by"].as_str()), (Some("Praise and worship"), Some("10:25")));
+        assert_eq!(items[3]["group"], "Word");
+        assert!(items[4].get("end_by").is_none(), "a bad time is left out");
+        let warnings = c.report["warnings"].to_string();
+        for w in ["item 4: planned to finish at 11:15, after its end by 11:00", "item 5: end by \\\"half eleven\\\" is not HH:MM", "item 6: end by 09:00 is before Main service starts at 10:00", "item 6: it has no group but follows the group \\\"Word\\\""] {
+            assert!(warnings.contains(w), "{w} in {warnings}");
+        }
+        assert!(!warnings.contains("item 2:") && !warnings.contains("item 3:"), "on-time items are not warned about: {warnings}");
+        // Around midnight a time after it is the next day.
+        let late = check(None, None, &json!({ "title": "Watch night", "phases": [{ "name": "Main", "role": "main", "starts_at": "23:30", "items": [{ "kind": "slide", "title": "Prayer", "planned_minutes": 40, "end_by": "00:15" }] }] }));
+        assert_eq!(late.report["warnings"], json!([]), "00:10 is before 00:15 the next day");
+    }
+
+    #[test]
+    fn a_draft_changed_since_it_was_read_is_not_overwritten() {
+        let dir = std::env::temp_dir().join(format!("rhema-drafts-stale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let draft = json!({ "title": "Sunday", "phases": [{ "name": "Main", "items": [{ "kind": "slide", "title": "Welcome" }] }] });
+        let id = save(&dir, &draft, &json!({ "name": "Claude" })).unwrap();
+        assert_eq!(get(&dir, &id).unwrap()["revision"], 1);
+        // Two assistants read revision 1; the first revises it.
+        let first = json!({ "title": "Sunday (first)", "phases": [{ "name": "Main", "items": [] }] });
+        assert_eq!(update(&dir, &id, 1, &first, &json!({ "name": "A" })).unwrap(), 2);
+        let second = json!({ "title": "Sunday (second)", "phases": [{ "name": "Main", "items": [] }] });
+        let e = update(&dir, &id, 1, &second, &json!({ "name": "B" })).unwrap_err();
+        assert!(e.contains("changed since you read it") && e.contains("revision 2") && e.contains("rhema_get_service_draft"), "{e}");
+        let now = get(&dir, &id).unwrap();
+        assert_eq!((now["title"].as_str(), now["revision"].as_u64(), now["client"]["name"].as_str()), (Some("Sunday (first)"), Some(2), Some("A")), "the first revision stays");
+        assert_eq!(update(&dir, &id, 2, &second, &json!({ "name": "B" })).unwrap(), 3, "after reading again it saves");
+        // A draft saved before revisions existed is revision 0.
+        let old_id = "22222222-2222-2222-2222-222222222222";
+        std::fs::write(dir.join(DRAFTS_DIR).join(format!("{old_id}.json")), json!({ "v": 1, "id": old_id, "title": "Old", "status": "awaiting review", "created_at": "2026-10-22T05:00:00Z", "phases": [] }).to_string()).unwrap();
+        assert_eq!(get(&dir, old_id).unwrap()["revision"], 0);
+        assert!(list(&dir).iter().any(|d| d["id"] == old_id && d["revision"] == 0));
+        assert!(update(&dir, old_id, 1, &first, &json!({})).is_err());
+        assert_eq!(update(&dir, old_id, 0, &first, &json!({})).unwrap(), 1);
+        assert_eq!(get(&dir, old_id).unwrap()["created_at"], "2026-10-22T05:00:00Z");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

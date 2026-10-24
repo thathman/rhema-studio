@@ -41,8 +41,9 @@ plan a service. MCP-001 reads; MCP-002 lets an assistant propose a whole service
 | `rhema_validate_service_draft` | Checks a proposed service without saving: songs and hymns matched to the library (id, exact title, other title, hymn number), references looked up in the installed editions, missing items listed, errors to fix, planned minutes |
 | `rhema_create_service_draft` | Saves a checked proposal as `ai-drafts/<id>.json` in the data folder (never the services database), with the assistant's name and the time; at most 50 wait at once |
 | `rhema_list_looks_and_scenes` | The church's looks (built-in and its own, from Design) and congregation scenes, by name, for suggestions in a draft (MCP-004) |
-| `rhema_list_service_drafts` | The drafts waiting for review: id, title, date, items, made / revised, by which assistant (MCP-003) |
-| `rhema_update_service_draft` | Replaces a waiting draft with a revised one (same id, checked like create, `updated_at` set); refused once people removed it; services people already saved from it are never touched (MCP-003) |
+| `rhema_list_service_drafts` | The drafts waiting for review: id, title, date, items, revision, made / revised, by which assistant (MCP-003) |
+| `rhema_get_service_draft` | One waiting draft as saved: phases, groups, items with end-by times, assumptions, revision (MCP-005) |
+| `rhema_update_service_draft` | Replaces a waiting draft with a revised one (same id, checked like create, `updated_at` set). Needs the `revision` the assistant read; if the draft changed since, nothing is saved and the error says to read it again (MCP-005). Refused once people removed it; services people already saved from it are never touched (MCP-003) |
 
 ## Prompts (MCP-003)
 
@@ -72,3 +73,30 @@ Ready-made requests an assistant offers (in Claude Desktop, under the + / prompt
   Thanksgiving gold, scene: Bible and lyrics)") for people to apply by hand; they are never stored in
   the service, so nothing about the screens changes by opening a draft.
 - The only file the MCP server writes is the draft; it still cannot change a saved service.
+
+## Timing, groups, choosing items and revisions (MCP-005)
+
+- **Finish-by times:** any item may carry `end_by` ("HH:MM", 24-hour), e.g. the sermon by 11:20.
+  The check warns, never silently, when a time is not HH:MM (it is left out), is before its phase
+  starts, or is earlier than the item's planned finish from the phase's start time and the planned
+  minutes before it (a time well before the start counts as the next day, for services around
+  midnight). Opening the draft puts it on the item, where Present shows "by 11:20".
+- **Groups:** any item may carry `group` (a name). Items next to each other with the same group sit
+  under one group heading in the phase (`{type: "group"}` headers in the run of show). The run of
+  show has no "end of group", so an ungrouped item after a group would join it: the check warns.
+- Drafts saved before these fields open exactly as before.
+- **Choosing items:** in Prepare → AI drafts, **Choose items** lists every item with a tick box under
+  its phase and group; a group's box ticks or unticks all of it. Only ticked items go into the
+  rundown ("Open 5 of 7 items in the rundown"); phases stay.
+- **Compared with the open service:** when a service is open, each draft says what opening it would
+  change, matched by name: new items, items not in the draft, and items with a different planned
+  length or finish-by time ("Sermon 30 min → 40 min, by 11:15"). It counts only the ticked items.
+- **Revisions:** a draft is revision 1 when saved and one more each time it is revised; drafts from
+  before this are revision 0. `rhema_update_service_draft` needs the revision the assistant read
+  (from `rhema_get_service_draft` or the list); a draft revised by someone else since is not
+  overwritten, and the error tells the assistant to read it again.
+- **Yorùbá and other text** is stored and returned byte for byte (tone marks, underdots, combining
+  marks, not normalised). **Text that looks like orders or markup** ("ignore previous instructions",
+  `<script>`) is only words: stored and returned as given, shown as text in Prepare, and nothing
+  acts on it. Tests: `mcp.rs` (`yoruba_tone_marks_and_underdots_come_back_exactly`,
+  `instructions_hidden_in_a_draft_stay_words_and_change_nothing`), `ai-drafts.test.tsx`.
