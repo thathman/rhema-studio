@@ -96,7 +96,7 @@ export function SiteFooter() {
           ))}
         </div>
         <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-border pt-8 text-[13px] leading-5 text-subtle-foreground md:flex-row md:items-center">
-          <p>© {new Date().getFullYear()} Rhema. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Rhema Studio contributors. Built on Rhema by OpenBezal (MIT licence, © 2025 OpenBezal).</p>
           <div className="flex items-center gap-4">
             <a
               href={SITE.socials.github}

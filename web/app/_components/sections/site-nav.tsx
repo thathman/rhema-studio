@@ -49,7 +49,7 @@ export function SiteNav({ stars }: { stars: number }) {
       )}
     >
       <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-12 xl:px-[140px]">
-        <Link href="/" aria-label="Rhema home" className="shrink-0">
+        <Link href="/" aria-label="Rhema Studio home" className="shrink-0">
           <RhemaLogo />
         </Link>
 
@@ -75,7 +75,7 @@ export function SiteNav({ stars }: { stars: number }) {
             href={SITE.repo.url}
             variant="secondary"
             size="md"
-            aria-label={`Rhema on GitHub, ${stars} stars`}
+            aria-label={`Rhema Studio on GitHub, ${stars} stars`}
           >
             <IconBrandGithub size={16} aria-hidden stroke={2} />
             <span>

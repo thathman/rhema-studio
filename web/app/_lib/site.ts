@@ -1,6 +1,6 @@
 export const SITE = {
-  name: "Rhema",
-  legalName: "openbezal",
+  name: "Rhema Studio",
+  legalName: "Rhema Studio contributors",
   tagline: "Your Pastor speaks. Rhema finds the verse.",
   shortDescription:
     "Real-time AI Bible verse detection for live sermons. Free, open-source, broadcast-ready via NDI.",
@@ -12,12 +12,14 @@ export const SITE = {
   founded: "2025",
   category: "ChurchSoftware",
   operatingSystems: ["Windows", "macOS"],
+  // Rhema Studio's own repository; downloads go to its release list (never the original OpenBezal installers)
+  // until Rhema Studio installers are published under fixed names.
   repo: {
-    owner: "openbezal",
-    name: "rhema",
-    url: "https://github.com/openbezal/rhema",
-    releases: "https://github.com/openbezal/rhema/releases",
-    latestRelease: "https://github.com/openbezal/rhema/releases/latest",
+    owner: "thathman",
+    name: "rhema-studio",
+    url: "https://github.com/thathman/rhema-studio",
+    releases: "https://github.com/thathman/rhema-studio/releases",
+    latestRelease: "https://github.com/thathman/rhema-studio/releases",
     // `/releases/latest` resolves to the newest published, non-prerelease
     // release, so these track each tagged release with no hand re-upload. The
     // release workflow ships a copy of each installer under these exact stable
@@ -25,19 +27,19 @@ export const SITE = {
     // with the `aliases` list in .github/workflows/build-release.yml or these
     // links 404.
     downloadWindows:
-      "https://github.com/openbezal/rhema/releases/latest/download/Rhema-windows-x64-setup.exe",
+      "https://github.com/thathman/rhema-studio/releases",
     // Apple Silicon only — the build matrix has no x86_64-apple-darwin target.
     downloadMac:
-      "https://github.com/openbezal/rhema/releases/latest/download/Rhema-macos-arm64.dmg",
+      "https://github.com/thathman/rhema-studio/releases",
     // AppImage runs on any distro without a package manager step, so it is the
     // one-click choice; .deb and .rpm stay on the release page.
     downloadLinux:
-      "https://github.com/openbezal/rhema/releases/latest/download/Rhema-linux-x86_64.AppImage",
-    discussions: "https://github.com/openbezal/rhema/discussions",
+      "https://github.com/thathman/rhema-studio/releases",
+    discussions: "https://github.com/thathman/rhema-studio/discussions",
     stars: { fallback: 221 },
   },
   socials: {
-    github: "https://github.com/openbezal/rhema",
+    github: "https://github.com/thathman/rhema-studio",
     twitter: "https://x.com/openbezal",
     linkedin: "https://www.linkedin.com/company/openbezal",
     email: "mailto:hello@openbezal.com",

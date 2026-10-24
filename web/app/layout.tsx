@@ -4,7 +4,7 @@ import "./globals.css";
 import { SITE } from "./_lib/site";
 import { StructuredData } from "./_components/seo/structured-data";
 
-const TITLE = `${SITE.name} — AI Bible verse detection for live sermons`;
+const TITLE = `${SITE.name} — church service production and presentation`;
 const OG_TITLE = `${SITE.name} — ${SITE.tagline}`;
 
 export const metadata: Metadata = {
