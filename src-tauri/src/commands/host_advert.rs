@@ -5,8 +5,8 @@
 use std::net::IpAddr;
 use std::time::Duration;
 
-/// What a Rhema host calls itself on the network (mDNS / Bonjour).
-pub const HOST_SERVICE: &str = "_rhema-host._tcp.local.";
+/// What a Rhema host calls itself on the network (mDNS / Bonjour), as Rhema Studio Companion looks for it.
+pub use rhema_join::discover::HOST_SERVICE;
 
 /// What this computer would announce: the name people see, the network host name, the http port
 /// and the TXT record (`v=1`, and `tls=<port>` when https for phone pages is on).
