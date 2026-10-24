@@ -8,6 +8,7 @@ import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type
 import { SlideList } from "@/studio/present/rundown-list"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { PreviewPanel } from "@/components/panels/preview-panel"
+import { TimingRules } from "@/studio/prepare/timing-rules"
 import { BackgroundPicker, CommentsEditor, CustomSlideEditor, ImageItemControls, LookAndScene, NoteEditor, GoLiveCues, PlannedMinutes, TakeSteps, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
 
 const KIND: Record<string, [string, React.ReactNode]> = {
@@ -83,6 +84,7 @@ export function ItemEditor() {
         </TabsContent>
         <TabsContent value="timing" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           <PlannedMinutes item={item} />
+          <TimingRules item={item} />
         </TabsContent>
       </Tabs>
     </div>

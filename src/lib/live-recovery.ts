@@ -12,6 +12,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
 import type { JournalEntry } from "@/lib/journal"
 import { useNotices, type Notice } from "@/stores/notices-store"
+import { useTimingTrust, whilePuttingBack } from "@/stores/timing-trust-store"
 import type { VerseRenderData } from "@/types"
 
 /**
@@ -79,6 +80,10 @@ export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.
   const entries = kept.entries.map((e) => ({ ...e, mono: shift !== null && typeof e.mono === "number" ? e.mono + shift : e.at - base }))
   useJournalStore.setState({ entries: capJournal([...entries, ...j.entries]), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length })
   j.add({ kind: "recovery", label: `Service log kept from before Rhema closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
+  // The item that was running then (#196 R3.8): its start is known, how long it has run is not,
+  // until the operator confirms the time or takes it again. A finished service had none running.
+  const lastEvent = [...kept.entries].reverse().find((e) => e.kind === "event")
+  if (lastEvent?.itemId) useTimingTrust.setState({ untrusted: { itemId: lastEvent.itemId, label: lastEvent.label, lastSeen: kept.at, restartedAt: now } })
   return true
 }
 
@@ -143,7 +148,8 @@ export async function putBack(s: LiveSnapshot): Promise<void> {
     const output = useBroadcastStore.getState().outputs.find((o) => o.id === id)
     if (output && !outputOnAir(output, useBroadcastStore.getState().outputStatus[id])) await enableOutput(output)
   }
-  if (s.eventId && useEventClock.getState().currentId !== s.eventId) useEventClock.getState().start(s.eventId)
+  // The same event again, not the operator taking it again: its time stays not trusted (#196 R3.8).
+  if (s.eventId && useEventClock.getState().currentId !== s.eventId) whilePuttingBack(() => useEventClock.getState().start(s.eventId!))
   // The timer as it was, still counting the time Rhema was closed if it was running; not over one started since.
   const now = useTimerStore.getState().timer
   if (s.timer && now.startedAt === null && now.accumulatedMs === 0) {

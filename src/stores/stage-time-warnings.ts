@@ -1,4 +1,7 @@
+import { cleanItemTiming } from "@/lib/item-timing"
 import { remainingMs } from "@/lib/timer"
+import { useEventClock } from "@/stores/event-clock-store"
+import { useQueueStore } from "@/stores/queue-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 
@@ -20,9 +23,13 @@ export function checkStageWarnings(now = monotonicNow()): void {
   if (key !== run || (timer.startedAt === null && timer.accumulatedMs === 0)) { run = key; fired = new Set() }
   if (timer.startedAt === null || timer.durationMs === 0 || b.rehearsal) return
   const left = remainingMs(timer, now)
-  const at = b.stageStyle.warnAtMinutes * 60_000
+  // The item happening may have its own warning (#196 R1.3); otherwise the stage look's.
+  const own = cleanItemTiming(useQueueStore.getState().items.find((i) => i.id === useEventClock.getState().currentId)?.timing)?.warn_minutes
+  const minutes = own ?? b.stageStyle.warnAtMinutes
+  const at = minutes * 60_000
+  const words = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1)
   const due: [string, boolean, string][] = [
-    ["left", at > 0 && left <= at && left > at - 60_000, `${b.stageStyle.warnAtMinutes} minute${b.stageStyle.warnAtMinutes === 1 ? "" : "s"} left`],
+    ["left", at > 0 && left <= at && left > at - 60_000, `${words} minute${minutes === 1 ? "" : "s"} left`],
     ["over", b.stageStyle.warnWhenOver && left <= 0 && left > -60_000, "Time is up"],
   ]
   for (const [id, crossing, text] of due) {

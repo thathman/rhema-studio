@@ -37,12 +37,12 @@ export function projectedEnd(summary: TimingSummary, elapsedMs: number, nowWallM
 /**
  * Time left until the live item's end-by clock time ("12:15"): negative once
  * it has passed. The nearest such time is meant, within 12 hours either way,
- * so "00:10" at 23:55 is 15 minutes away. Null for no or a malformed time.
+ * so "00:10" at 23:55 is 15 minutes away, on the church's clock (`zone`). Null for no or a malformed time.
  */
-export function endByLeftMs(endBy: string | null | undefined, nowWallMs: number): number | null {
+export function endByLeftMs(endBy: string | null | undefined, nowWallMs: number, zone = ""): number | null {
   const m = endBy ? /^([01]\d|2[0-3]):([0-5]\d)$/.exec(endBy) : null
   if (!m) return null
-  return clockInstant(Number(m[1]) * 60 + Number(m[2]), nowWallMs) - nowWallMs
+  return clockInstant(Number(m[1]) * 60 + Number(m[2]), nowWallMs, zone) - nowWallMs
 }
 
 /** "1 h 10 min", "45 min", "" for zero. */

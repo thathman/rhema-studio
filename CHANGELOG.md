@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The church's time zone, holds that count, milestones, soft ends, delay modes, Finish and a restart that doesn't guess (#196)
+- When Setup has the church's **time zone**, every planned and expected time, the stage finish line and each joined desk use it; with none set, the computer's clock is used as before.
+- A **hold** now moves the expected times: the item on now is expected to end later by the time held. Production → Timekeeper shows when each **phase and group** is now expected to finish, and has **Finish service** (anything never started counts as skipped) and a state badge (Not started, Running, On hold, Finished).
+- Prepare → an item → Timing: mark a **milestone** (a moment with no minutes), give a **soft end** ("may run to 25 min" before it counts as over), and choose when its timer **warns** before the end. Running late can now **push everything** still to come, pauses and fixed starts too, instead of letting pauses take it up.
+- After Rhema closes unexpectedly mid-service, the item that was running says **its elapsed time can't be trusted** until you press **The time is right** or start it again; Rhema makes up no length for it meanwhile.
+
 ### New desk roles: Worship, Stage, Camera, OBS director; scenes changed from a joined desk (#243, #215)
 - Four new roles for a paired desk (Settings → Remote control, with a line on what each may do): **Worship** (songs and hymns), **Stage** (the stage message), **Camera** (camera-ready, hiding a camera from scenes, the camera boxes in scenes) and **OBS director** (switches OBS scenes through the main computer's OBS connection; never in rehearsal). Each gets its own desk in Production → Operators, and the main computer checks every command.
 - A Screens desk can now **make and change scenes** from another computer. A new scene, or a change to a scene on no screen, goes in at once; a change to a scene on a screen, deleting one, or any scene change while Approvals is on, waits in the main desk's notices for **Accept** or **Decline**.

@@ -58,12 +58,27 @@ export function eventStarts(entries: JournalEntry[]): Map<string, number> {
   return out
 }
 
-/** How long each event ran: until the next event started, the last one until `nowMono`. */
+/**
+ * How long each event ran: until the next event started (or the service was finished), the last
+ * one until `nowMono`.
+ */
 export function eventTimes(entries: JournalEntry[], nowMono: number): Map<string, number> {
   const out = new Map<string, number>()
-  const starts = entries.filter((e) => e.kind === "event" && e.itemId)
-  starts.forEach((e, i) => out.set(e.itemId!, (out.get(e.itemId!) ?? 0) + Math.max(0, (starts[i + 1]?.mono ?? nowMono) - e.mono)))
+  const marks = entries.filter((e) => e.kind === "event")
+  marks.forEach((e, i) => { if (e.itemId) out.set(e.itemId, (out.get(e.itemId) ?? 0) + Math.max(0, (marks[i + 1]?.mono ?? nowMono) - e.mono)) })
   return out
+}
+
+/** The event-clock entry that finishes the service (#196 R3.7): an "event" with no item. */
+export const SERVICE_FINISHED = "Service finished"
+
+/** When the service was finished (wall ms), if that is the last thing the event clock did; else null. */
+export function serviceFinishedAt(entries: JournalEntry[]): number | null {
+  for (let k = entries.length - 1; k >= 0; k--) {
+    const e = entries[k]
+    if (e.kind === "event") return e.itemId ? null : e.at
+  }
+  return null
 }
 
 /** When each rundown item first went on air (wall clock ms), for the run of show's actual times. */

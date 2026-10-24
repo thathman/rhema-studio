@@ -1,5 +1,5 @@
 import type { CountdownTo, StageAux } from "@/types"
-import { clockText } from "@/lib/run-of-show"
+import { clockAt } from "@/lib/church-time"
 import { formatMs } from "@/lib/timer"
 import type { ServiceTiming } from "@/lib/timing-engine"
 
@@ -26,14 +26,13 @@ export interface CountdownTargets {
 
 export const NO_COUNTDOWNS: CountdownTargets = { next: null, end: null, endBy: {} }
 
-const hhmm = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
-
-export function countdownTargets(timing: ServiceTiming | null): CountdownTargets {
+/** `zone`: the church's time zone for the "end by" times in the labels ("" = this computer's). */
+export function countdownTargets(timing: ServiceTiming | null, zone = ""): CountdownTargets {
   if (!timing) return NO_COUNTDOWNS
   // Skipped items are never next; neither is anything done or on now.
   const next = timing.events.find((e) => e.state === "upcoming")
   const endBy: Record<string, CountdownTarget> = {}
-  for (const e of timing.events) if (e.hardStop !== null) endBy[e.id] = { label: `${e.label} · end by ${hhmm(e.hardStop)}`, at: e.hardStop }
+  for (const e of timing.events) if (e.hardStop !== null) endBy[e.id] = { label: `${e.label} · end by ${clockAt(e.hardStop, zone)}`, at: e.hardStop }
   return { next: next ? { label: next.label, at: next.expectedStart } : null, end: { label: "End of the main service", at: timing.expectedEnd }, endBy }
 }
 

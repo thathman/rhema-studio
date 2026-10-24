@@ -1,32 +1,37 @@
 import { useServiceOffset } from "@/stores/service-offset-store"
 import { useEffect, useState } from "react"
-import { eventStarts, eventTimes } from "@/lib/journal"
 import { serviceTiming } from "@/lib/timing-engine"
 import { useEventClock } from "@/stores/event-clock-store"
+import { useHold } from "@/stores/hold-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { monotonicNow } from "@/stores/timer-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { runStateNow, timingInputNow } from "@/stores/timing-input"
+import { useTimingTrust } from "@/stores/timing-trust-store"
 
 /**
  * The run of show's timing for any view (issue #196): one engine, the same numbers in Prepare
- * and Present. Looks again every 15 s, since the live item's time and what is expected move on.
+ * and Present. Looks again every 15 s, since the live item's time and what is expected move on,
+ * and whenever the rundown, the log, the event, the offset, a hold, the church's time zone or the
+ * trust in the running item's time change.
  */
 export function useServiceTiming() {
-  // The shared running-late offset (#196): the same everywhere.
-  const adjustMinutes = useServiceOffset((s) => s.minutes)
-  const items = useQueueStore((s) => s.items)
-  const headers = useQueueStore((s) => s.headers)
-  const entries = useJournalStore((s) => s.entries)
-  // The event happening now, from the event clock (C03), not whatever is on the screens.
-  const liveItemId = useEventClock((s) => s.currentId)
-  const [now, setNow] = useState(() => monotonicNow())
-  const [wall, setWall] = useState(() => Date.now())
+  // Each of these changing means the times are worked out again.
+  useServiceOffset((s) => s.minutes)
+  useServiceOffset((s) => s.mode)
+  useQueueStore((s) => s.items)
+  useQueueStore((s) => s.headers)
+  useJournalStore((s) => s.entries)
+  useEventClock((s) => s.currentId)
+  useHold((s) => s.hold)
+  useTimingTrust((s) => s.untrusted)
+  useSettingsStore((s) => s.setup.timeZone)
+  const [, setTick] = useState(0)
   useEffect(() => {
-    const t = setInterval(() => { setNow(monotonicNow()); setWall(Date.now()) }, 15_000)
+    const t = setInterval(() => setTick((n) => n + 1), 15_000)
     return () => clearInterval(t)
   }, [])
-  const first = eventStarts(entries)
-  const onAir = eventTimes(entries, Math.max(now, entries.at(-1)?.mono ?? 0))
-  const timing = serviceTiming({ items, headers, firstOnAir: first, onAirMs: onAir, liveItemId, now: Math.max(wall, entries.at(-1)?.at ?? 0), adjustMinutes })
-  return { timing, first, onAir }
+  const input = timingInputNow()
+  const timing = serviceTiming(input)
+  return { timing, first: input.firstOnAir, onAir: input.onAirMs, zone: input.timeZone ?? "", state: runStateNow() }
 }

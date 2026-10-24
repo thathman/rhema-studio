@@ -1,11 +1,13 @@
 import { useServiceOffset } from "@/stores/service-offset-store"
+import { clockAt, minutesOfDay } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useQueueStore } from "@/stores"
 import { presentActions } from "@/studio/present-actions"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
-import { clockMinutes, clockText, phaseRange, planTimeline } from "@/lib/run-of-show"
+import { clockMinutes, phaseRange, planTimeline } from "@/lib/run-of-show"
 import type { EventTiming } from "@/lib/timing-engine"
 import { mmss } from "@/lib/journal"
 import { useServiceTiming } from "@/studio/use-service-timing"
@@ -24,7 +26,8 @@ function Clock({ label, value, note }: { label: string; value: string; note?: st
   )
 }
 
-const wallClock = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+// On the church's clock (#196 R1.1).
+const wallClock = (ms: number) => clockAt(ms, churchTimeZone())
 
 /** "4 min late", "on time", "1 h 10 min early". */
 function lateness(minutes: number): string {
@@ -48,7 +51,7 @@ export function TimingPanel() {
   const range = main ? phaseRange(items.length, headers, main.id) : null
   const began = range ? Math.min(...items.slice(range.start, range.end).map((i) => first.get(i.id) ?? Infinity)) : Infinity
   const plannedStart = clockMinutes(main?.starts_at)
-  const late = Number.isFinite(began) && plannedStart !== null ? (() => { const d = new Date(began); return d.getHours() * 60 + d.getMinutes() - plannedStart })() : null
+  const late = Number.isFinite(began) && plannedStart !== null ? minutesOfDay(began, churchTimeZone()) - plannedStart : null
   // The plan as prepared; what is expected comes from the timing engine (what happened, the time now, ±5 min).
   const plan = planTimeline(items, headers)
   const expected = new Map(timing?.events.map((e) => [e.index, e]) ?? [])
@@ -111,7 +114,7 @@ export function TimingPanel() {
                         <span className={cn("block truncate text-xs", r.kind === "milestone" && "font-semibold")}>{r.label}</span>
                         {r.kind === "item" && <span className="block text-[0.6875rem] text-muted-foreground">{r.minutes ? `${r.minutes} min` : "no minutes yet"}{r.pause ? ` · after a ${formatMinutes(r.pause * 60_000)} pause` : ""}</span>}
                         {r.index !== undefined && <ExpectedLine event={expected.get(r.index)} />}
-                        {r.index !== undefined && first.has(items[r.index].id) && <ActualLine started={first.get(items[r.index].id)!} ms={onAir.get(items[r.index].id) ?? 0} planned={r.minutes} />}
+                        {r.index !== undefined && first.has(items[r.index].id) && <ActualLine started={first.get(items[r.index].id)!} ms={expected.get(r.index)?.untrusted ? null : onAir.get(items[r.index].id) ?? 0} planned={r.minutes} />}
                       </span>
                     </button>
                   </li>
@@ -128,7 +131,9 @@ export function TimingPanel() {
 }
 
 /** When an item actually went on air and for how long, against its plan. */
-function ActualLine({ started, ms, planned }: { started: number; ms: number; planned?: number }) {
+function ActualLine({ started, ms, planned }: { started: number; ms: number | null; planned?: number }) {
+  // Not known after a restart (#196 R3.8): the start only, no length made up.
+  if (ms === null) return <span className="block text-[0.6875rem] tabular-nums">On air {wallClock(started)}</span>
   const over = planned ? ms - planned * 60_000 : 0
   return (
     <span className="block text-[0.6875rem] tabular-nums">
@@ -140,11 +145,14 @@ function ActualLine({ started, ms, planned }: { started: number; ms: number; pla
 
 /** When an item that has not run yet is now expected, when that is a minute or more off the plan, that it will miss its fixed start, and a hard stop cutting it short; or that it was skipped. */
 function ExpectedLine({ event }: { event?: EventTiming }) {
-  if (!event || event.state === "done") return null
+  if (!event || (event.state === "done" && !event.untrusted)) return null
+  if (event.state === "done") return <span className="block text-[0.6875rem] font-semibold text-confidence-mid">How long it ran can't be trusted after the restart</span>
   if (event.state === "skipped") return <span className="block text-[0.6875rem] text-muted-foreground">Skipped</span>
   const off = Math.round((event.expectedStart - event.plannedStart) / 60_000)
   return (
     <>
+      {event.untrusted && <span className="block text-[0.6875rem] font-semibold text-confidence-mid" role="status">Elapsed time can't be trusted after the restart</span>}
+      {event.state === "live" && event.overrun && <span className="block text-[0.6875rem] font-semibold text-destructive" role="status">{event.softEnd !== null ? "Past its soft end" : "Running over"}</span>}
       {event.state === "upcoming" && off !== 0 && (
         <span className={cn("block text-[0.6875rem] tabular-nums", off > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>Expected {wallClock(event.expectedStart)}</span>
       )}

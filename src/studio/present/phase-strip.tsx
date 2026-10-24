@@ -1,10 +1,12 @@
 import { PlayIcon, SquareIcon } from "lucide-react"
+import { clockAt } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
 import { Button } from "@/components/ui/button"
-import { clockText, phaseRange } from "@/lib/run-of-show"
+import { phaseRange } from "@/lib/run-of-show"
 import { usePhaseRun } from "@/stores/phase-run-store"
 import { useQueueStore } from "@/stores/queue-store"
 
-const at = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+const at = (ms: number) => clockAt(ms, churchTimeZone())
 
 /**
  * Present's automated phases (approved design): the loops and the warm-up start and stop here;
