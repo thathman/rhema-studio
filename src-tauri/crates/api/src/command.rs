@@ -39,6 +39,11 @@ pub enum RemoteCommand {
     TimerStart,
     TimerPause,
     TimerAdjust(i32),
+    /// Hold the service with an optional reason ("Waiting for the pastor"), or resume it, from a
+    /// Timekeeper desk (#196 R3): logged with who, on the stage display; loops and timed moves
+    /// wait until Resume. Never a congregation screen.
+    Hold(Option<String>),
+    Resume,
     /// Activate the Bible source with a typed reference ("Romans 8:28", "jn 3 16"): every feed that
     /// follows Bible takes it; the main screens too unless a song, hymn or slide is up (ADR 0001).
     BibleActivate(String),
@@ -142,6 +147,9 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::TimerStart => write!(f, "timer_start"),
             RemoteCommand::TimerPause => write!(f, "timer_pause"),
             RemoteCommand::TimerAdjust(m) => write!(f, "timer_adjust({m:+})"),
+            RemoteCommand::Hold(None) => write!(f, "hold"),
+            RemoteCommand::Hold(Some(r)) => write!(f, "hold({r})"),
+            RemoteCommand::Resume => write!(f, "resume"),
             RemoteCommand::BibleActivate(r) => write!(f, "bible_activate({r})"),
             RemoteCommand::ClearSource(id) => write!(f, "clear_source({id})"),
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
@@ -423,6 +431,8 @@ mod tests {
             RemoteCommand::TimerStart,
             RemoteCommand::TimerPause,
             RemoteCommand::TimerAdjust(-1),
+            RemoteCommand::Hold(Some("Waiting for the pastor".into())),
+            RemoteCommand::Resume,
             RemoteCommand::BibleActivate("John 3:16".into()),
             RemoteCommand::ClearSource("bible".into()),
             RemoteCommand::RestoreSource("bible".into()),
@@ -452,13 +462,13 @@ mod tests {
                 RemoteCommand::BibleNext => {}
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
-                RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => {}
+                RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => {}
                 RemoteCommand::BibleActivate(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
                 RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 32);
+        assert_eq!(cmds.len(), 34);
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#).unwrap(), RemoteCommand::TimerAdjust(1));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_start"}"#).unwrap(), RemoteCommand::TimerStart);
         let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
@@ -473,6 +483,20 @@ mod tests {
         assert!(matches!(n, RemoteCommand::NoticeSend(NoticeIn { ref to, .. }) if to.as_deref() == Some("present")));
         let take: RemoteCommand = serde_json::from_str(r#"{"command":"take_scene","value":{"output":"main","scene":"s1"}}"#).unwrap();
         assert_eq!(take, RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s1".into() }));
+    }
+
+    #[test]
+    fn hold_and_resume_parse_with_or_without_a_reason() {
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"hold","value":"Waiting for the pastor"}"#).unwrap(), RemoteCommand::Hold(Some("Waiting for the pastor".into())));
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"hold"}"#).unwrap(), RemoteCommand::Hold(None));
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"hold","value":null}"#).unwrap(), RemoteCommand::Hold(None));
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"resume"}"#).unwrap(), RemoteCommand::Resume);
+        assert_eq!(serde_json::to_value(&RemoteCommand::Resume).unwrap(), serde_json::json!({"command": "resume"}));
+        assert_eq!(serde_json::to_value(&RemoteCommand::Hold(Some("x".into()))).unwrap(), serde_json::json!({"command": "hold", "value": "x"}));
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"hold","value":5}"#).is_err());
+        assert_eq!(RemoteCommand::Hold(Some("tech".into())).to_string(), "hold(tech)");
+        assert_eq!(RemoteCommand::Hold(None).to_string(), "hold");
+        assert!(!RemoteCommand::Hold(None).is_comms() && !RemoteCommand::Resume.is_comms(), "a paused desk cannot hold the service");
     }
 
     #[test]

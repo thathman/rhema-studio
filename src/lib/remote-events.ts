@@ -34,6 +34,8 @@ export const REMOTE_EVENTS = {
   timer_start: "remote:timer_start",
   timer_pause: "remote:timer_pause",
   timer_adjust: "remote:timer_adjust",
+  hold: "remote:hold",
+  resume: "remote:resume",
   bible_activate: "remote:bible_activate",
   clear_source: "remote:clear_source",
   restore_source: "remote:restore_source",

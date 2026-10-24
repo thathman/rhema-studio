@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Skipped items, Hold from a joined desk, and desks that say when they may be out of date (#196)
+- An item that never went on air while a later one did now says **Skipped** in the run of show, its table and the Timekeeper, and takes no time in what is expected: the expected times carry on from the item on now. The plan is unchanged.
+- A joined **Timekeeper** desk (and Present, Present and settings) can **Hold** the service with a reason and **Resume** it, as the main desk can; the host's log names the desk, and every desk shows the hold and who made it. Bible and Screens desks cannot.
+- A joined desk that has not heard from the host for more than 5 seconds, or is reconnecting, says **Last update N s ago** and dims its clock and timer with **may be out of date**, instead of counting on as if all were well.
+- A joined desk warns when its computer's clock and the host's differ by more than 2 seconds.
 ### AI drafts: times, groups and choosing items (#252)
 - A service an AI assistant proposes can now give items a **finish-by time** (the sermon by 11:20) and put them in **named groups** within a phase (Praise and worship, Offering). Opening the draft puts both in the run of show. Rhema warns the assistant about times that are not real, or that the plan cannot meet.
 - In **Prepare → AI drafts**, **Choose items** lets you untick songs, readings, slides or whole groups to leave out before opening the draft. Only what is ticked goes into the rundown.

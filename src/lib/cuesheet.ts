@@ -5,12 +5,13 @@ const MINUTE = 60_000
 
 export type CueRow =
   | { kind: "group"; id: string; name: string; minutes: number; plannedStart: number; plannedEnd: number; expectedEnd: number }
-  | { kind: "item"; event: EventTiming; minutes: number; actualMs: number | null; offsetMinutes: number }
+  | { kind: "item"; event: EventTiming; minutes: number; actualMs: number | null; offsetMinutes: number | null }
 
 /**
  * The run of show as a cuesheet (#196 Prepare columns): each item of the main service with its
  * plan, what happened and what is expected, and a total line above each group. The offset is
- * how far from the plan it started (done, on now) or is expected to start (still to come).
+ * how far from the plan it started (done, on now) or is expected to start (still to come); a
+ * skipped item has none.
  */
 export function cuesheet(timing: ServiceTiming, headers: OutlineHeader[], itemCount: number, onAirMs: Map<string, number>): CueRow[] {
   const groups = headers.filter((h) => h.type === "group")
@@ -23,7 +24,7 @@ export function cuesheet(timing: ServiceTiming, headers: OutlineHeader[], itemCo
       rows.push({ kind: "group", id: g.id, name: g.name, minutes: inside.reduce((m, x) => m + (x.plannedEnd - x.plannedStart), 0) / MINUTE, plannedStart: inside[0].plannedStart, plannedEnd: inside.at(-1)!.plannedEnd, expectedEnd: inside.at(-1)!.expectedEnd })
     }
     const started = e.state === "upcoming" ? e.expectedStart : (e.actualStart ?? e.expectedStart)
-    rows.push({ kind: "item", event: e, minutes: (e.plannedEnd - e.plannedStart) / MINUTE, actualMs: e.actualStart === null ? null : (onAirMs.get(e.id) ?? 0), offsetMinutes: Math.round((started - e.plannedStart) / MINUTE) })
+    rows.push({ kind: "item", event: e, minutes: (e.plannedEnd - e.plannedStart) / MINUTE, actualMs: e.actualStart === null ? null : (onAirMs.get(e.id) ?? 0), offsetMinutes: e.state === "skipped" ? null : Math.round((started - e.plannedStart) / MINUTE) })
   }
   return rows
 }

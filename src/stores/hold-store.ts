@@ -12,12 +12,15 @@ export interface Hold {
   reason: string
   /** Wall ms. */
   since: number
+  /** The joined desk that held it (#196); absent when held here. */
+  by?: string
 }
 
 interface HoldState {
   hold: Hold | null
-  start: (reason: string) => void
-  resume: () => void
+  /** `by`: the joined desk asking (its name goes in the log line). */
+  start: (reason: string, by?: string) => void
+  resume: (by?: string) => void
 }
 
 // The stage message the hold put up, so Resume clears it only if nobody changed it since.
@@ -25,20 +28,20 @@ let heldMessage: string | null = null
 
 export const useHold = create<HoldState>((set, get) => ({
   hold: null,
-  start: (raw) => {
+  start: (raw, by) => {
     if (get().hold) return
     const reason = raw.replace(/\s+/g, " ").trim().slice(0, 80) || "On hold"
-    set({ hold: { reason, since: Date.now() } })
-    useJournalStore.getState().add({ kind: "timing", label: `hold: ${reason}` })
+    set({ hold: { reason, since: Date.now(), ...(by ? { by } : {}) } })
+    useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}hold: ${reason}` })
     heldMessage = `On hold: ${reason}`
     useBroadcastStore.getState().setStageMessage(heldMessage)
   },
-  resume: () => {
+  resume: (by) => {
     const h = get().hold
     if (!h) return
     if (heldMessage !== null && useBroadcastStore.getState().stageMessage === heldMessage) useBroadcastStore.getState().setStageMessage("")
     heldMessage = null
-    useJournalStore.getState().add({ kind: "timing", label: `resumed after ${formatMs(Date.now() - h.since)}` })
+    useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}resumed after ${formatMs(Date.now() - h.since)}` })
     set({ hold: null })
   },
 }))

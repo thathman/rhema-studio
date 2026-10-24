@@ -14,7 +14,7 @@ use crate::command::{same_key, RemoteCommand};
 /// What a key may do. `Present` is the volunteer's set (move through the
 /// service, show/hide, the event clock); `Configure` adds theme, opacity,
 /// confidence and the on-air switch; `Timekeeper` may only move the event
-/// clock (Host/Join, ARCH-004), never a screen; `Bible` activates, steps and
+/// clock, the service timer and a hold (Host/Join, ARCH-004), never a screen; `Bible` activates, steps and
 /// clears the Bible source only; `Screens` takes scenes to congregation outputs.
 /// Existing entries without a role are `Configure`, as before.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -34,7 +34,7 @@ impl Role {
         match cmd {
             // Production notices and the talk channel are for everyone on the team (Rhema Comms, #251).
             RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => true,
-            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
+            RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
             RemoteCommand::BibleActivate(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
             RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => matches!(self, Role::Present | Role::Configure) || (self == Role::Bible && id == "bible"),
             RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => matches!(self, Role::Present | Role::Configure | Role::Screens),
@@ -275,6 +275,20 @@ mod tests {
             assert!(!Role::Timekeeper.allows(&cmd), "{cmd}");
         }
         assert_eq!(serde_json::to_string(&Role::Timekeeper).unwrap(), "\"timekeeper\"");
+    }
+
+    #[test]
+    fn hold_and_resume_are_for_the_timekeeper_present_and_configure_only() {
+        for cmd in [RemoteCommand::Hold(Some("Waiting for the pastor".into())), RemoteCommand::Hold(None), RemoteCommand::Resume] {
+            for role in [Role::Timekeeper, Role::Present, Role::Configure] {
+                assert!(role.allows(&cmd), "{role:?} {cmd}");
+            }
+            for role in [Role::Bible, Role::Screens] {
+                assert!(!role.allows(&cmd), "{role:?} {cmd}");
+            }
+        }
+        let paused = KeyEntry { hash: "h".into(), name: "Desk C".into(), role: Role::Timekeeper, paused: true };
+        assert!(paused.paused_for(&RemoteCommand::Hold(None)) && paused.paused_for(&RemoteCommand::Resume));
     }
 
     #[test]

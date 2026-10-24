@@ -1000,6 +1000,16 @@ Set Settings → Operator name to "Tolu" first. Have one phone camera in Product
 | 10ec.11 | Turn on Rehearsal. In it: stop the ticker, pause the timer, try the Sources buttons. Leave rehearsal. | In rehearsal the Sources buttons for the ticker, timer and cameras are greyed; the real screens keep the ticker and the timer counting. After rehearsal everything is as before and the log has only rehearsal on/off for that time. | Unverified |
 | 10ec.12 | Quit and reopen Rhema with outputs saved by the previous build (including an older Rhema Ticker \| Alpha made as a signage output). | Every output loads with its name, NDI name and look; the old ticker feed still shows only the ticker. | Unverified |
 
+### 10ef. Skipped items, Hold from a joined desk, stale desks (#196)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ef.1 | Prepare: a main service with a start time and three items with minutes (Welcome 5, Notices 5, Sermon 30). Production → Timekeeper → I start each event. Start Welcome, then start the Sermon directly (not Notices). | Prepare → Run of show and its **Table**, and Production → Timekeeper, show Notices as **Skipped**: no expected time, no offset. The Sermon's expected end is its start + 30 min; the service's expected end is 5 min earlier than if Notices still had to run. | Unverified |
+| 10ef.2 | Join from a second computer as **Timekeeper** (Production → Operators). Under the timer, type "Waiting for the pastor" and press **Hold**. | The host: stage display "On hold: Waiting for the pastor", its hold line "… · by <desk name>", service log "<desk name>: hold: Waiting for the pastor". The desk shows "On hold since hh:mm: Waiting for the pastor · by <desk name>" with **Resume**. The congregation screens do not change. | Unverified |
+| 10ef.3 | Press **Resume** on the desk. | The hold clears on the host and the desk; the stage message goes; log "<desk name>: resumed after m:ss"; a loop or timed move that waited carries on. | Unverified |
+| 10ef.4 | Pair a phone or desk as **Bible** and send `{"command":"hold"}` with its key (curl to /api/v1/command). | Refused (403); nothing held. | Unverified |
+| 10ef.5 | With the desk joined and the host's timer running, unplug the host's network (or quit the host) for 15 s, then plug it back. | Within about 6 s the desk says **Last update N s ago** (counting up) and its timer and Now/ends line are dimmed with **may be out of date**; after the host is back, both clear within a few seconds and the timer shows the host's time again. The host's service carried on. | Unverified |
+| 10ef.6 | Set the joined computer's clock 1 minute ahead (turn off automatic time), wait 10 s. Turn automatic time back on. | The desk warns "This computer's clock is 1 min ahead of the host's…"; the timer still matches the host. The warning goes once the clock is right again (within about 10 s). | Unverified |
 ### 10eg. AI drafts: times, groups, choosing items, revisions (#252)
 
 Settings → AI assistants on, and an assistant (Claude Desktop) connected with `Rhema --mcp`.

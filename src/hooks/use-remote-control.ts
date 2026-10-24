@@ -1,5 +1,6 @@
 import { useTimerStore } from "@/stores/timer-store"
 import { useServiceOffset } from "@/stores/service-offset-store"
+import { useHold } from "@/stores/hold-store"
 import { useEffect } from "react"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
@@ -108,6 +109,9 @@ export function useRemoteControl() {
           useTimerStore.getState().adjustMinutes(m)
           useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer corrected by ${m > 0 ? "+" : "−"}${Math.abs(m)} min` })
         }],
+        // A hold from a joined desk (#196 R3): as the main desk's Hold, with who in the log line.
+        [REMOTE_EVENTS.hold, (p) => useHold.getState().start(typeof p?.reason === "string" ? p.reason : "", senderOf(p ?? null))],
+        [REMOTE_EVENTS.resume, (p) => useHold.getState().resume(senderOf(p ?? null))],
       ] as const satisfies ReadonlyArray<readonly [string, (p: Record<string, unknown> | null | undefined) => void]>) {
         keep(await listen<string>(event, (e) => { if (!cancelled) run(parsePayload(e.payload)) }))
       }

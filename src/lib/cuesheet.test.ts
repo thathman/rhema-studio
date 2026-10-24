@@ -33,4 +33,16 @@ describe("cuesheet", () => {
     const praise = rows[1]
     expect(praise.kind === "group" && [praise.plannedStart, praise.plannedEnd, praise.expectedEnd]).toEqual([at(10, 5), at(10, 15), at(10, 23)])
   })
+
+  it("an item jumped over says Skipped, with no offset, and the rest follows the live item", () => {
+    // Welcome ran; Song 1 never went on air; Song 2 is on now.
+    const onAir = new Map([["w", 5 * 60_000], ["s2", 60_000]])
+    const t = serviceTiming({ items, headers, firstOnAir: new Map([["w", at(10, 0)], ["s2", at(10, 5)]]), onAirMs: onAir, liveItemId: "s2", now: at(10, 6) })!
+    const rows = cuesheet(t, headers, items.length, onAir)
+    const row = (label: string) => rows.find((r) => r.kind === "item" && r.event.label === label)
+    expect(row("Song 1")).toMatchObject({ event: { state: "skipped" }, actualMs: null, offsetMinutes: null })
+    // Song 2 started 4 min early against the plan; the Sermon is expected after it (10:11), not after Song 1 too.
+    expect(row("Song 2")).toMatchObject({ event: { state: "live" }, offsetMinutes: -4 })
+    expect(row("Sermon")).toMatchObject({ offsetMinutes: -4 })
+  })
 })
