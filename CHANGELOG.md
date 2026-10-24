@@ -4,6 +4,17 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The lower third and the stage message as live sources; three more ready-made feeds (#243)
+- **Present → Live → Sources** now lists the **lower third** and the **stage message** too: what is up, who put it up and when, with × to take it down and **Restore** to bring the same one back. Hide in Present → Lower third has a Restore button as well. A joined desk with the Present role can do the same.
+- The Sources strip also lists content that a scene's box follows (a scene with a Bible box counts as a Bible feed), and content put on the feeds on its own.
+- **Add a ready-made feed** offers **Rhema Announcements | Full**, **Rhema Lower third | Presenter** (only the name band, keyed) and **Rhema Clock** (the service timer on transparency, in its own scene). An output can now follow just the lower third.
+- The service log records who took each scene and who put each thing on air.
+
+### Calmer chrome, Settings search finds more, keyboard checks (#215)
+- Menus and drop-down lists are solid, with a thin border; the API key prompt is a flat card without a glow; the Team page's banner is a plain card, and "Host or join" opens Production → Operators instead of saying "Planned".
+- Settings search also finds things kept elsewhere (church name, light and dark, cameras, host and join, approvals, backups) under **Elsewhere in Rhema**, one click away.
+- The smallest text (9 and 10 px) in the sidebar, top bar, Desk menu, scene Program bar and a few lists is larger, and a test stops new tiny body text.
+
 ### Google TV: the feed link and page travel encrypted; a sturdier Rhema Receiver (#198)
 - **Show on a Google TV** now sends the TV the feed's secure (https) link, encrypted, with this computer's certificate; the TV opens the feed only from this computer, so nobody else on the Wi-Fi can read the link or what the feed shows. It needs **Secure page for phones (https)** in Settings → Remote control; without it Rhema says so and sends nothing.
 - It needs **Rhema Receiver 1.3** on the TV (Rhema asks you to update an older one). After updating, send the TV its feed again once. The https certificate now stays the same while this computer's address does, so TVs and phones keep working after Rhema restarts.

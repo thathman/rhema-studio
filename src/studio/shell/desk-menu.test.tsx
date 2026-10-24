@@ -120,4 +120,11 @@ describe("the Desk menu", () => {
     await act(async () => useJoin.setState({ status: "off", me: null }))
     expect(trigger().getAttribute("aria-label")).toContain("Main desk")
   })
+
+  it("opens when another page asks (Settings search → Appearance), on the Appearance choice", async () => {
+    expect(document.querySelector('[aria-label="Your desk"]')).toBeNull()
+    await act(async () => useShellStore.getState().openDeskMenu())
+    expect(document.querySelector('[aria-label="Your desk"]')).not.toBeNull()
+    expect(document.querySelector('[role="radiogroup"]')).not.toBeNull()
+  })
 })

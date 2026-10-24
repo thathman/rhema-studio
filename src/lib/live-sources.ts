@@ -1,5 +1,5 @@
 import type { ContentType, FeedSourceKind, VerseRenderData } from "@/types/broadcast"
-import type { Ticker } from "@/types/broadcast-output"
+import type { LowerThird, Ticker } from "@/types/broadcast-output"
 import { elapsedMs, formatMs, remainingMs, type TimerState } from "@/lib/timer"
 
 /**
@@ -42,8 +42,8 @@ export function feedFrame(s: { isLive: boolean; liveVerse: VerseRenderData | nul
   if (!shows?.length || program?.screen) return program
   let best: LiveSource | undefined
   for (const id of shows) {
-    // The ticker is drawn over the frame (followsTicker), never as its content.
-    if (id === "ticker") continue
+    // The ticker and the lower third are drawn over the frame (followsTicker, followsLowerThird), never as its content.
+    if (id === "ticker" || id === "lowerThird") continue
     const x = s.sources[id]
     if (x?.on && (!best || x.revision > best.revision)) best = x
   }
@@ -57,11 +57,12 @@ export function activatedLabel(src: { by?: string; activatedAt?: number }): stri
 }
 
 /**
- * Sources with no frame of their own (ADR 0001): the ticker, the service timer and each camera on
- * the church network ("camera:pulpit", by its name in the camera router). Each records who last
- * changed it and when, like a content source, and is never changed by rehearsal.
+ * Sources with no frame of their own (ADR 0001): the ticker, the service timer, the lower third,
+ * the stage message (only ever on stage screens) and each camera on the church network
+ * ("camera:pulpit", by its name in the camera router). Each records who last changed it and when,
+ * like a content source, and is never changed by rehearsal.
  */
-export type StateSourceId = "ticker" | "timer" | `camera:${string}`
+export type StateSourceId = "ticker" | "timer" | "lowerThird" | "stage" | `camera:${string}`
 
 /** Any live source: a content source or one of the above. */
 export type AnySourceId = SourceId | StateSourceId
@@ -73,10 +74,14 @@ export interface StateSource {
   activatedAt: number
   /** Who changed it last: the operator's name, a joined desk or phone; absent when not known. */
   by?: string
-  /** Ticker: running (held still counts); timer: running; camera: in scenes (off: hidden, its layers show their fallback). */
+  /** Ticker: running (held still counts); timer: running; lower third, stage message: up; camera: in scenes (off: hidden, its layers show their fallback). */
   on: boolean
   /** Ticker taken off: the ticker it was, for Restore. */
   ticker?: Ticker
+  /** Lower third: the one up, or taken down (for Restore). */
+  lowerThird?: LowerThird
+  /** Stage message: the one up, or cleared (for Restore). */
+  message?: string
 }
 
 export type StateSources = Partial<Record<StateSourceId, StateSource>>
@@ -84,7 +89,7 @@ export type StateSources = Partial<Record<StateSourceId, StateSource>>
 export const cameraSourceId = (name: string): StateSourceId => `camera:${name}`
 
 export function isStateSource(id: string): id is StateSourceId {
-  return id === "ticker" || id === "timer" || /^camera:[a-z0-9][a-z0-9_-]{0,39}$/.test(id)
+  return id === "ticker" || id === "timer" || id === "lowerThird" || id === "stage" || /^camera:[a-z0-9][a-z0-9_-]{0,39}$/.test(id)
 }
 
 /** The router's name in a camera layer's address (http://192.168.1.20:8889/pulpit/whep → "pulpit"), or null. */
@@ -111,6 +116,29 @@ export function followsTicker(o: { ticker?: boolean; shows?: readonly FeedSource
 /** It follows only the ticker (Rhema Ticker | Alpha): the ticker and nothing from the service. */
 export function followsOnlyTicker(o: { shows?: readonly FeedSourceKind[] }): boolean {
   return !!o.shows?.length && o.shows.every((k) => k === "ticker")
+}
+
+/** The output draws the lower third: its lower-thirds switch, or it follows the lower third. */
+export function followsLowerThird(o: { lowerThirds?: boolean; shows?: readonly FeedSourceKind[] }): boolean {
+  return o.lowerThirds === true || !!o.shows?.includes("lowerThird")
+}
+
+/** It follows only what is drawn over a frame (the lower third, the ticker): no content of its own. */
+export function followsOnlyOverlays(o: { shows?: readonly FeedSourceKind[] }): boolean {
+  return !!o.shows?.length && o.shows.every((k) => k === "ticker" || k === "lowerThird")
+}
+
+/** "Pastor Ade · Lead pastor", or what a following strip follows: for the strip, the log and joined desks. */
+export function lowerThirdWords(lt: Pick<LowerThird, "line1" | "line2" | "follow"> | null | undefined, max = 60): string {
+  if (!lt) return ""
+  const words = lt.follow ? `following ${lt.follow}` : [lt.line1, lt.line2].map((x) => x.trim()).filter(Boolean).join(" · ")
+  return words.length > max ? `${words.slice(0, max - 1).trimEnd()}…` : words
+}
+
+/** How many outputs follow a kind of content: on their own, or through the scene they show (a scene's feed layer). */
+export function followerCount(kind: ContentType, outputs: readonly { shows?: readonly FeedSourceKind[]; sceneId?: string; role?: string }[], scenes: readonly { id: string; layers: readonly { kind: string; shows?: readonly ContentType[] }[] }[]): number {
+  const sceneFollows = new Set(scenes.filter((sc) => sc.layers.some((l) => l.kind === "feed" && l.shows?.includes(kind))).map((sc) => sc.id))
+  return outputs.filter((o) => o.shows?.includes(kind) || (o.sceneId !== undefined && (o.role ?? "congregation") === "congregation" && sceneFollows.has(o.sceneId))).length
 }
 
 /** The ticker's first words, for the strip, the log and joined desks. */

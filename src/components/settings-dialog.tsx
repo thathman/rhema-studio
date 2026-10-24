@@ -38,12 +38,13 @@ import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dialog"
-import { markSearchHits, searchSettings, searchWords } from "@/lib/settings-search"
+import { markSearchHits, searchElsewhere, searchSettings, searchWords, type ElsewhereId } from "@/lib/settings-search"
+import { openProductionTab } from "@/studio/production/production-tab"
 import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { qrDataUrl } from "@/lib/qr-bulletin"
 import { setDeskControl } from "@/lib/desk-control"
-import { EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
+import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
 
@@ -1129,6 +1130,16 @@ const GROUPS: Array<{ title: string; ids: NavSection[] }> = [
 
 const SEARCHABLE = navItems.map((n) => ({ id: n.id, name: n.name, title: sectionTitles[n.id] }))
 
+/** Where a search hit outside Settings takes you. */
+const ELSEWHERE: Record<ElsewhereId, () => void> = {
+  church: () => useShellStore.getState().openDesign("brand"),
+  appearance: () => useShellStore.getState().openDeskMenu(),
+  cameras: () => openProductionTab("cameras"),
+  hosting: () => openProductionTab("operators"),
+  "service-defaults": () => useShellStore.getState().goTo("team"),
+  backups: () => useShellStore.getState().goTo("archive"),
+}
+
 /** Settings as a page: a search and the sections down the side, the chosen one beside them. */
 export function SettingsPage() {
   const activeSection = useSettingsDialogStore((s) => s.activeSection)
@@ -1136,6 +1147,7 @@ export function SettingsPage() {
   const ActiveContent = sectionComponents[activeSection]
   const [query, setQuery] = useState("")
   const hits = searchSettings(query, SEARCHABLE)
+  const elsewhere = searchElsewhere(query)
   const found = new Map(hits.map((h) => [h.id, h.labels]))
   const groups = GROUPS.map((g) => ({ ...g, ids: g.ids.filter((id) => found.has(id)) })).filter((g) => g.ids.length > 0)
   const searching = query.trim() !== ""
@@ -1172,9 +1184,10 @@ export function SettingsPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && hits[0]) {
+                if (e.key === "Enter" && (hits[0] || elsewhere[0])) {
                   e.preventDefault()
-                  setActiveSection(hits[0].id)
+                  if (hits[0]) setActiveSection(hits[0].id)
+                  else ELSEWHERE[elsewhere[0].id]()
                 } else if (e.key === "Escape" && query) {
                   e.preventDefault()
                   e.stopPropagation()
@@ -1186,12 +1199,12 @@ export function SettingsPage() {
             <span id="settings-search-hint" className="sr-only">Enter opens the first match. Escape clears the search.</span>
           </div>
           <p role="status" className={searching ? "px-3 pt-1 pb-2 text-xs text-muted-foreground" : "sr-only"}>
-            {!searching ? "" : hits.length === 0 ? "Nothing in Settings matches. Light and dark are under Appearance in the Desk menu, at the foot of the sidebar." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}. Enter opens the first.`}
+            {!searching ? "" : hits.length === 0 && elsewhere.length === 0 ? "Nothing in Settings matches. Light and dark are under Appearance in the Desk menu, at the foot of the sidebar." : hits.length === 0 ? "Not in Settings: it has its own page, below. Enter opens the first." : `${hits.length} ${hits.length === 1 ? "section matches" : "sections match"}${elsewhere.length ? `, and ${elsewhere.length} elsewhere in Rhema` : ""}. Enter opens the first.`}
           </p>
           {!searching && <p className="px-4 pt-2.5 pb-2 text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Preferences</p>}
           {groups.map((g) => (
             <div key={g.title} className="mb-3">
-              <p className="px-3 pt-1.5 pb-1 text-[0.625rem] font-semibold text-muted-foreground">{g.title}</p>
+              <p className="px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-muted-foreground">{g.title}</p>
               {g.ids.map((id) => {
                 const item = navItems.find((n) => n.id === id)!
                 const labels = found.get(id) ?? []
@@ -1213,6 +1226,21 @@ export function SettingsPage() {
               })}
             </div>
           ))}
+          {elsewhere.length > 0 && (
+            // What has its own page elsewhere: a row that goes there (Settings keeps no copy of it).
+            <div role="group" aria-label="Elsewhere in Rhema" className="mb-3">
+              <p className="px-3 pt-1.5 pb-1 text-[0.6875rem] font-semibold text-muted-foreground">Elsewhere in Rhema</p>
+              {elsewhere.map((e) => (
+                <button key={e.id} type="button" onClick={ELSEWHERE[e.id]} className="flex w-full items-center gap-2.5 rounded-md px-[13px] py-2.5 text-left text-xs font-bold text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-4">
+                  <ArrowUpRightIcon aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block truncate">{e.name}</span>
+                    <span className="block truncate text-[0.6875rem] font-normal">{e.where}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </nav>
         <section aria-label={sectionTitles[activeSection]} className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
           <h2 className="shrink-0 px-[30px] pt-[26px] pb-2 text-[1.5625rem] font-bold tracking-[-0.035em]">{sectionTitles[activeSection]}</h2>

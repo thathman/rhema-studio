@@ -316,7 +316,7 @@ const round = (b: SceneBox): SceneBox => ({ x: Math.round(b.x * 10) / 10, y: Mat
 function Num({ label, value, onChange, min = 0, max = 100 }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number }) {
   return (
     <label className="flex flex-col gap-0.5">
-      <span className="text-[0.625rem] text-muted-foreground">{label}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
       <input type="number" aria-label={label} value={value} min={min} max={max} step={1} onChange={(e) => onChange(clamp(Number(e.target.value) || 0, min, max))} className="h-7 w-full rounded border border-input bg-transparent px-1.5 tabular-nums" />
     </label>
   )
@@ -340,7 +340,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       {layer.kind === "feed" && (
         <>
           <fieldset className="flex flex-col gap-1">
-            <legend className="mb-1 text-[0.625rem] text-muted-foreground">Follows</legend>
+            <legend className="mb-1 text-xs text-muted-foreground">Follows</legend>
             <span className="flex flex-wrap gap-1">
               <Chip on={!layer.shows?.length} onClick={() => onChange({ shows: undefined })}>Whatever is on air</Chip>
               {CONTENT_TYPES.map((k: ContentType) => {
@@ -350,7 +350,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
             </span>
           </fieldset>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[0.625rem] text-muted-foreground">Look (from Design)</span>
+            <span className="text-xs text-muted-foreground">Look (from Design)</span>
             <select aria-label="Look" value={layer.themeId ?? ""} onChange={(e) => onChange({ themeId: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-card px-1.5">
               <option value="">{target ? `${target.name}'s looks` : "The output's looks"}</option>
               {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -371,7 +371,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       )}
       {layer.kind === "picture" && (
         <label className="flex flex-col gap-0.5">
-          <span className="text-[0.625rem] text-muted-foreground">Picture (from Library)</span>
+          <span className="text-xs text-muted-foreground">Picture (from Library)</span>
           <select
             aria-label="Picture"
             value={layer.mediaId ?? ""}
@@ -391,7 +391,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       {layer.kind === "clock" && (
         <>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[0.625rem] text-muted-foreground">Shows</span>
+            <span className="text-xs text-muted-foreground">Shows</span>
             <select aria-label="What the clock shows" value={clockChoice(layer)} onChange={(e) => onChange(clockPatch(e.target.value))} className="h-8 rounded-md border border-input bg-card px-1.5">
               <option value="timer">The service timer (Present → timer)</option>
               <option value="until">A countdown to a time (e.g. the service start)</option>
@@ -414,7 +414,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
           )}
           <p className="text-muted-foreground">{layer.clockShows === "time" ? "This computer's time of day." : layer.clockShows === "until" ? "Counts down to that time today, then stays at 0:00." : layer.clockShows === "countdown" ? "From the run of show: when it is expected to start or end, moving as the service runs late or early. It stops at 0:00 on the screens and shows nothing when there is no next item." : "A countdown or the time so far, as Present's timer runs. It stops at 0:00 on the screens."}</p>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[0.625rem] text-muted-foreground">Look (from Design)</span>
+            <span className="text-xs text-muted-foreground">Look (from Design)</span>
             <select aria-label="Clock look" value={layer.themeId ?? ""} onChange={(e) => onChange({ themeId: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-card px-1.5">
               <option value="">{target ? `${target.name}'s look` : "The output's look"}</option>
               {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -424,14 +424,14 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
       )}
       {layer.kind === "camera" && (
         <label className="flex flex-col gap-0.5">
-          <span className="text-[0.625rem] text-muted-foreground">Stream address (WHEP)</span>
+          <span className="text-xs text-muted-foreground">Stream address (WHEP)</span>
           <input aria-label="Camera stream address" value={layer.cameraUrl ?? ""} placeholder="http://192.168.1.10:8889/pulpit/whep" onChange={(e) => onChange({ cameraUrl: e.target.value.trim() || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
           <span className="text-muted-foreground">A camera relayed on the church network (MediaMTX: http://&lt;its computer&gt;:8889/&lt;camera&gt;/whep). Each screen plays it directly, without sound; until it connects the scene's background shows there. Only addresses on the church network are used.</span>
         </label>
       )}
       {layer.kind === "camera" && (
         <label className="flex flex-col gap-0.5">
-          <span className="text-[0.625rem] text-muted-foreground">While the camera is not playing, show</span>
+          <span className="text-xs text-muted-foreground">While the camera is not playing, show</span>
           <input aria-label="Words while the camera is not playing" value={layer.cameraFallback ?? ""} maxLength={120} placeholder="the scene's background (e.g. type: Camera back shortly)" onChange={(e) => onChange({ cameraFallback: e.target.value || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
         </label>
       )}
@@ -483,20 +483,21 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
   const restorable = !showing && back ? scenes.find((s) => s.id === back) : undefined
   if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Production → Screens) to take a scene to it.</p>
   return (
-    <section aria-label="Program" className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-[#16242b] p-3 text-xs text-[#d6e2df]">
-      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-[#9fb2b0] uppercase">Program</span>
-      <select aria-label="Congregation output" value={target.id} onChange={(e) => onTarget(e.target.value)} className="h-8 rounded-md border border-[#34504b] bg-[#1b3033] px-1.5 text-[#e9f1ed]">
+    // The live console's own colours (dark ink, in every theme), from its tokens.
+    <section aria-label="Program" className="dark present-surface flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-foreground">
+      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Program</span>
+      <select aria-label="Congregation output" value={target.id} onChange={(e) => onTarget(e.target.value)} className="h-8 rounded-md border border-input bg-secondary px-1.5 text-foreground">
         {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
       <span className="min-w-0 flex-1 truncate">
-        {rehearsal && <strong className="mr-1.5 text-[#e2bf86]" title="Rehearsal is on: a Take here stays in the app. The screens keep their scene, and it comes back when rehearsal ends.">Rehearsal ·</strong>}
+        {rehearsal && <strong className="mr-1.5 text-tone-amber-foreground" title="Rehearsal is on: a Take here stays in the app. The screens keep their scene, and it comes back when rehearsal ends.">Rehearsal ·</strong>}
         {showing ? <>Shows <strong>{showing.name}</strong></> : "Shows its own feed, full screen"}
       </span>
-      {draft && dirty && <Button size="sm" variant="outline" onClick={onSave} className="border-[#34504b] bg-transparent text-[#e9f1ed] hover:bg-[#1b3033]"><SaveIcon /> Save scene</Button>}
+      {draft && dirty && <Button size="sm" variant="outline" onClick={onSave} className="border-input bg-transparent text-foreground hover:bg-muted"><SaveIcon /> Save scene</Button>}
       {/* In rehearsal nothing reaches a screen, so Take is not red. */}
-      {draft && <Button size="sm" onClick={onTake} className={rehearsal ? "border border-[#b38c58] bg-transparent text-[#e2bf86] hover:bg-[#1b3033]" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
-      {showing && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-[#34504b] bg-transparent text-[#e9f1ed] hover:bg-[#1b3033]">Back to its own feed</Button>}
-      {restorable && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().takeScene(target.id, restorable.id)} className="border-[#34504b] bg-transparent text-[#e9f1ed] hover:bg-[#1b3033]"><UndoIcon /> Restore {restorable.name}</Button>}
+      {draft && <Button size="sm" onClick={onTake} className={rehearsal ? "border border-gold bg-transparent text-tone-amber-foreground hover:bg-muted" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
+      {showing && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-input bg-transparent text-foreground hover:bg-muted">Back to its own feed</Button>}
+      {restorable && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().takeScene(target.id, restorable.id)} className="border-input bg-transparent text-foreground hover:bg-muted"><UndoIcon /> Restore {restorable.name}</Button>}
     </section>
   )
 }

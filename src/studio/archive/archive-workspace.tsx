@@ -54,7 +54,7 @@ export function ArchiveWorkspace() {
               <h2 className="text-sm font-bold">{monthName} at a glance</h2>
               <p className="text-xs text-muted-foreground">From the services saved on this computer.</p>
             </div>
-            <span className="rounded-[5px] bg-tone-green px-2 py-1 text-[0.625rem] font-bold text-tone-green-foreground">{monthName} {year}</span>
+            <span className="rounded-[5px] bg-tone-green px-2 py-1 text-[0.6875rem] font-bold text-tone-green-foreground">{monthName} {year}</span>
           </div>
           <dl className="mt-4 grid grid-cols-3 gap-4 max-[700px]:grid-cols-1">
             {stats.map(([label, value, note]) => (

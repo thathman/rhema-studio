@@ -52,6 +52,11 @@ const PAIRS: Array<[string, string]> = [
   ["sidebar-accent", "sidebar-accent-foreground"],
   ["sidebar-primary", "sidebar-primary-foreground"],
   ["sidebar-hover", "sidebar-foreground"],
+  // The Desk menu button: its role line on the sidebar, and while the menu is open.
+  ["sidebar-accent", "sidebar-foreground"],
+  ["sidebar", "sidebar-label"],
+  // The scene composer's Program bar: "Rehearsal ·" and a rehearsal Take.
+  ["card", "tone-amber-foreground"],
   ["tone-neutral", "tone-neutral-foreground"],
   ["tone-accent", "tone-accent-foreground"],
   ["tone-green", "tone-green-foreground"],
@@ -79,6 +84,14 @@ describe("colour tokens meet WCAG AA for text (#215)", () => {
     const files = readdirSync(src, { recursive: true, encoding: "utf8" }).filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
     const offenders = files.filter((f) => /(?<![\w-])text-primary(?![-\w])/.test(readFileSync(new URL(f, src), "utf8")))
     expect(offenders).toEqual([])
+  })
+
+  it("the Desk menu and the scene composer use the tokens, not colours of their own", () => {
+    // A hex colour in a class (bg-[#16242b]) escapes the pairs above; these two had them.
+    for (const f of ["studio/shell/desk-menu.tsx", "studio/production/scene-composer.tsx", "studio/library/library-workspace.tsx"]) {
+      const text = readFileSync(new URL(`./${f}`, import.meta.url), "utf8")
+      expect(text.match(/\b(?:bg|text|border|ring|from|via|to|fill|stroke)-\[#[0-9a-f]{3,8}\]/gi) ?? [], f).toEqual([])
+    }
   })
 
   it("reads the colours as written (a known pair, to guard the parser)", () => {

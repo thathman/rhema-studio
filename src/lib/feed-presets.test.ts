@@ -11,7 +11,7 @@ const main: BroadcastOutput = { id: "main", name: "Main", type: "display", theme
 
 describe("ready-made feeds (#299)", () => {
   it("offers the named feeds", () => {
-    expect(FEED_PRESETS.map((p) => p.name)).toEqual(["Rhema Bible | Full", "Rhema Bible | Lower third", "Rhema Lyrics | Full", "Rhema Lyrics | Lower third", "Rhema Ticker | Alpha"])
+    expect(FEED_PRESETS.map((p) => p.name)).toEqual(["Rhema Bible | Full", "Rhema Bible | Lower third", "Rhema Lyrics | Full", "Rhema Lyrics | Lower third", "Rhema Announcements | Full", "Rhema Lower third | Presenter", "Rhema Ticker | Alpha", "Rhema Clock"])
   })
 
   it("Bible lower third: a new NDI output following the Bible, in Lower Thirds, alpha, with name bands", () => {

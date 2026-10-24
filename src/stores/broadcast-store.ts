@@ -26,7 +26,7 @@ import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
-import { feedFrame, followsOnlyTicker, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
+import { feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
@@ -162,12 +162,17 @@ interface BroadcastState {
   saveScene: (scene: Scene) => void
   /** Remove a scene; outputs showing it go back to their own feed. */
   deleteScene: (id: string) => void
-  /** Take: put a scene on an output (its program). In rehearsal it stays in the app and is undone when rehearsal ends. */
-  takeScene: (outputId: string, sceneId: string) => void
+  /**
+   * Take: put a scene on an output (its program). In rehearsal it stays in the app and is undone when
+   * rehearsal ends. `by`: who took it (default: see currentActor).
+   */
+  takeScene: (outputId: string, sceneId: string, by?: string) => void
   /** Back to the output's own feed, full frame; Restore takes the scene again. */
-  releaseScene: (outputId: string) => void
+  releaseScene: (outputId: string, by?: string) => void
   /** The scene an output last showed, for Restore. Session state. */
   sceneReturn: Record<string, string>
+  /** Each output's last scene Take or release outside rehearsal (#243 EX.1): which scene, who, when, its revision. Session state. */
+  sceneTakes: Record<string, SceneTakeRecord>
   /** The church's own scene presets (arrangements saved from scenes), beside the built-in ones. Saved. */
   scenePresets: Scene[]
   /** Save a scene's arrangement as a preset (replacing one of the same name). */
@@ -444,6 +449,15 @@ function ensureSignageTicker(): void {
   }, 1000)
 }
 
+/** A scene taken to an output, or released from it (sceneId null): who did it, when, and its revision. */
+export interface SceneTakeRecord {
+  sceneId: string | null
+  /** From the same count as source activations: higher is newer. */
+  revision: number
+  at: number
+  by?: string
+}
+
 export interface OutputFrame {
   theme: BroadcastTheme
   verse: VerseRenderData | null
@@ -456,6 +470,19 @@ export interface OutputFrame {
 }
 
 /** Keep what an output was last sent, for the multiview. Skips the write when nothing changed. */
+/** Send the lower third (up, changed or down) to the congregation outputs that show it, over the frame or in a scene's box. */
+function syncLowerThirdOutputs(): void {
+  const s = useBroadcastStore.getState()
+  for (const o of s.outputs) if ((followsLowerThird(o) || showsSceneWith(o, "lowerThird")) && (o.role ?? "congregation") === "congregation") s.syncBroadcastOutputFor(o.id)
+}
+
+/** A scene Take or release as a record (who, when, its revision), to go with the change in one update; none in rehearsal. */
+function sceneTake(outputId: string, sceneId: string | null, by: string | undefined): Pick<BroadcastState, "sceneTakes"> | Record<string, never> {
+  const s = useBroadcastStore.getState()
+  if (s.rehearsal) return {}
+  return { sceneTakes: { ...s.sceneTakes, [outputId]: { sceneId, revision: ++activations, at: Date.now(), ...(by ? { by } : {}) } } }
+}
+
 /** Send the ticker (on, changed or off) to the outputs that show it. */
 function syncTickerOutputs(): void {
   const s = useBroadcastStore.getState()
@@ -538,15 +565,18 @@ function noteSources(by = currentActor()): void {
 }
 
 /**
- * Record a change to the ticker, the timer or a camera (ADR 0001): who made it and when, the next
- * revision. Never in rehearsal, so the real sources never see what was rehearsed.
+ * Record a change to the ticker, the timer, the lower third, the stage message or a camera (ADR 0001):
+ * who made it and when, the next revision. Never in rehearsal, so the real sources never see what
+ * was rehearsed.
  */
-function markSource(id: StateSourceId, on: boolean, extra: Pick<StateSource, "ticker"> = {}): void {
+function markSource(id: StateSourceId, on: boolean, extra: SourceExtra = {}): void {
   useBroadcastStore.setState(sourceMark(id, on, extra))
 }
 
+type SourceExtra = Pick<StateSource, "ticker" | "lowerThird" | "message">
+
 /** The same as a patch, to go with the change it records in one update (none in rehearsal). */
-function sourceMark(id: StateSourceId, on: boolean, extra: Pick<StateSource, "ticker"> = {}): Pick<BroadcastState, "stateSources"> | Record<string, never> {
+function sourceMark(id: StateSourceId, on: boolean, extra: SourceExtra = {}): Pick<BroadcastState, "stateSources"> | Record<string, never> {
   const s = useBroadcastStore.getState()
   if (s.rehearsal) return {}
   const by = currentActor()
@@ -648,6 +678,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   stateSources: {},
   scenes: [],
   sceneReturn: {},
+  sceneTakes: {},
   scenePresets: [],
   cleared: false,
   stageMessage: "",
@@ -830,14 +861,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const liveOverlay = overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null)
       const liveTicker = tickerForScreens(s)
       const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl }, output, scene)
-      const overlay = output.lowerThirds && !owns.lowerThird ? liveOverlay : null
+      const overlay = followsLowerThird(output) && !owns.lowerThird ? liveOverlay : null
       const ticker = followsTicker(output) && !owns.ticker ? liveTicker : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
       deliver(outputId, { theme, verse: null, overlay, ticker, scene: frame, sound: false })
       return
     }
     const verse = shown ? forOutputLanguage(shown, output.language) : null
-    const overlay = output.lowerThirds ? overlayFor(s.lowerThird, verse) : null
+    // A lower-third-only feed has no content of its own: a strip that follows what is live follows the program.
+    const program = !verse && followsOnlyOverlays(output) && s.isLive && s.liveVerse ? forOutputLanguage(s.liveVerse, output.language) : null
+    const overlay = followsLowerThird(output) ? overlayFor(s.lowerThird, verse ?? program) : null
     // Only a real change of screen is timed (QA-007); resends after a window opens are not.
     const changed = get().outputFrames[outputId]?.verse !== verse
     const ticker = followsTicker(output) ? tickerForScreens(s) : null
@@ -1032,8 +1065,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   setLowerThird: (lt) => {
     // A strip that follows what is live has no words of its own.
     const clean = lt && (lt.follow || lt.line1.trim() || lt.line2.trim()) ? { ...lt, line1: lt.line1.trim(), line2: lt.line2.trim(), shownAt: Date.now() } : null
-    set({ lowerThird: clean })
-    for (const o of get().outputs) if ((o.lowerThirds || showsSceneWith(o, "lowerThird")) && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+    // The lower third as a live source: up, or taken down with the one it was kept for Restore.
+    const was = get().lowerThird
+    set({ lowerThird: clean, ...(clean ? sourceMark("lowerThird", true, { lowerThird: clean }) : was ? sourceMark("lowerThird", false, { lowerThird: was }) : {}) })
+    syncLowerThirdOutputs()
   },
   saveLowerThirdStyle: (style, backing) => {
     const styles = get().lowerThirdStyles
@@ -1043,7 +1078,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const lt = get().lowerThird
     if (lt?.style?.id === style.id) {
       set({ lowerThird: { ...lt, style, ...(backing !== undefined ? { backing } : {}) } })
-      for (const o of get().outputs) if ((o.lowerThirds || showsSceneWith(o, "lowerThird")) && (o.role ?? "congregation") === "congregation") get().syncBroadcastOutputFor(o.id)
+      syncLowerThirdOutputs()
     }
   },
   setTickerItems: (tickerItems) => {
@@ -1082,7 +1117,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (styles.length > 1) set({ lowerThirdStyles: styles.filter((x) => x.id !== id) })
   },
   setStageMessage: (stageMessage) => {
-    set({ stageMessage })
+    // The stage message as a live source: up, or cleared with the one it was kept for Restore.
+    const was = get().stageMessage
+    set({ stageMessage, ...(stageMessage === was ? {} : stageMessage ? sourceMark("stage", true, { message: stageMessage }) : sourceMark("stage", false, { message: was })) })
     for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
   },
   holdLive: () => {
@@ -1123,6 +1160,10 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       if (s.rehearsal) return
       if (id === "ticker") {
         if (s.ticker) get().setTicker(null)
+      } else if (id === "lowerThird") {
+        if (s.lowerThird) get().setLowerThird(null)
+      } else if (id === "stage") {
+        if (s.stageMessage) get().setStageMessage("")
       } else if (id === "timer") {
         if (useTimerStore.getState().timer.startedAt !== null) useTimerStore.getState().pause()
       } else if (s.stateSources[id]?.on !== false) {
@@ -1151,6 +1192,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         delete was.pausedAt
         set({ ticker: was, ...sourceMark("ticker", true) })
         syncTickerOutputs()
+      } else if (id === "lowerThird") {
+        // The lower third that was taken down, coming on again.
+        if (!s.lowerThird && cur.lowerThird) get().setLowerThird(cur.lowerThird)
+      } else if (id === "stage") {
+        if (!s.stageMessage && cur.message) get().setStageMessage(cur.message)
       } else if (id === "timer") {
         if (useTimerStore.getState().timer.startedAt === null) useTimerStore.getState().start()
       } else {
@@ -1176,13 +1222,15 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({ scenes: get().scenes.filter((x) => x.id !== id) })
     for (const o of get().outputs) if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
   },
-  takeScene: (outputId, sceneId) => {
+  takeScene: (outputId, sceneId, by = currentActor()) => {
     if (!get().scenes.some((x) => x.id === sceneId)) return
-    set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId } })
+    set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
     get().updateOutput(outputId, { sceneId })
   },
-  releaseScene: (outputId) => {
-    if (get().outputs.find((o) => o.id === outputId)?.sceneId) get().updateOutput(outputId, { sceneId: undefined })
+  releaseScene: (outputId, by = currentActor()) => {
+    if (!get().outputs.find((o) => o.id === outputId)?.sceneId) return
+    set(sceneTake(outputId, null, by))
+    get().updateOutput(outputId, { sceneId: undefined })
   },
   saveScenePreset: (scene, name) => {
     const n = name.trim().slice(0, 80)
@@ -1452,8 +1500,8 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
  * output left every video silent.)
  */
 export function soundOutputId(outputs: BroadcastOutput[], status: Record<string, { previewOpen?: boolean } | undefined>): string | null {
-  // A ticker-only feed never shows a video, so it never plays one's sound.
-  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation" && !followsOnlyTicker(o))
+  // A ticker-only or lower-third-only feed never shows a video, so it never plays one's sound.
+  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation" && !followsOnlyOverlays(o))
   const main = congregation.find((o) => o.id === MAIN_OUTPUT_ID)
   if (main) return main.id
   return (congregation.find((o) => status[o.id]?.previewOpen) ?? congregation[0])?.id ?? null

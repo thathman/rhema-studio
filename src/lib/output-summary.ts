@@ -1,7 +1,7 @@
 import { ndiFrameRateToNumber, ndiResolutionDimensions } from "@/lib/broadcast-output-control"
 import { FEED_NAMES } from "@/lib/content-names"
 import { tickerOnly } from "@/lib/feed-presets"
-import { followsOnlyTicker, followsTicker } from "@/lib/live-sources"
+import { followsLowerThird, followsOnlyOverlays, followsOnlyTicker, followsTicker } from "@/lib/live-sources"
 import { allSignageIds } from "@/lib/signage"
 import type { BroadcastOutput, BroadcastTheme, Scene } from "@/types"
 
@@ -43,8 +43,10 @@ export function outputPresentation(o: BroadcastOutput, scenes: Scene[], theme?: 
   const scene = o.sceneId ? scenes.find((s) => s.id === o.sceneId) : undefined
   // A feed that follows only the ticker (Rhema Ticker | Alpha): the ticker and nothing else.
   if (!scene && followsOnlyTicker(o)) return theme?.background.type === "transparent" ? "Ticker only · transparent, for keying" : "Ticker only"
+  // One that follows only the lower third (Rhema Lower third | Presenter), perhaps with the ticker.
+  if (!scene && followsOnlyOverlays(o)) return `${followsTicker(o) ? "Lower third and ticker only" : "Lower third only"}${theme?.background.type === "transparent" ? " · transparent, for keying" : ""}`
   const parts = [scene ? `Scene: ${scene.name}` : "Full screen"]
-  if (o.lowerThirds) parts.push("lower thirds")
+  if (followsLowerThird(o)) parts.push("lower thirds")
   if (followsTicker(o)) parts.push("ticker")
   if (!scene && theme?.background.type === "transparent") parts.push("transparent, for keying")
   return parts.join(" · ")

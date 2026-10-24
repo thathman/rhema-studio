@@ -77,7 +77,7 @@ export function SongLibrary({ layout = "list", newRequest = 0 }: { layout?: "lis
             className={cn("h-11 pl-9 text-sm", cards && "border-transparent shadow-none")}
           />
         </div>
-        {cards && <span className="shrink-0 rounded-[5px] bg-tone-green px-2 py-1 text-[0.625rem] font-bold text-tone-green-foreground max-[900px]:hidden">Fast local search</span>}
+        {cards && <span className="shrink-0 rounded-[5px] bg-tone-green px-2 py-1 text-[0.6875rem] font-bold text-tone-green-foreground max-[900px]:hidden">Fast local search</span>}
         {!cards && (
           <Button size="sm" className="h-11" onClick={() => setEditing({ open: true, id: null })}>
             <PlusIcon /> New song
@@ -179,8 +179,8 @@ function SongCard({ song, selected, onEdit, onAdd }: { song: SongSummary; select
         <p className="truncate text-[0.8125rem] font-bold">{song.title}</p>
         <p className="truncate text-[0.6875rem] text-muted-foreground">{meta || song.first_line || "—"}</p>
         <div className="mt-auto flex items-center gap-1.5 pt-2">
-          <span className="rounded-[5px] bg-tone-neutral px-[7px] py-1 text-[0.625rem] font-semibold text-tone-neutral-foreground">{choir ? "choir" : hymn ? "hymn" : "song"}</span>
-          <span className={cn("rounded-[5px] px-[7px] py-1 text-[0.625rem] font-semibold", song.licence === "unknown" ? "bg-tone-amber text-tone-amber-foreground" : "bg-tone-neutral text-tone-neutral-foreground")} title={song.licence === "unknown" ? "Licence not recorded yet" : undefined}>
+          <span className="rounded-[5px] bg-tone-neutral px-[7px] py-1 text-[0.6875rem] font-semibold text-tone-neutral-foreground">{choir ? "choir" : hymn ? "hymn" : "song"}</span>
+          <span className={cn("rounded-[5px] px-[7px] py-1 text-[0.6875rem] font-semibold", song.licence === "unknown" ? "bg-tone-amber text-tone-amber-foreground" : "bg-tone-neutral text-tone-neutral-foreground")} title={song.licence === "unknown" ? "Licence not recorded yet" : undefined}>
             {LICENCE_BADGE[song.licence] ?? song.licence}
           </span>
           <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label={`Edit ${song.title}`} onClick={onEdit}><PencilIcon /></Button>

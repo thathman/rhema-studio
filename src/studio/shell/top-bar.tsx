@@ -34,7 +34,7 @@ export function TopBar({ title }: { title: string }) {
         >
           <SearchIcon aria-hidden className="size-4" />
           <span className="max-[600px]:sr-only">Find anything…</span>
-          <kbd className="ml-auto rounded-[5px] border border-border bg-muted px-[5px] py-px font-sans text-[0.625rem] max-[600px]:hidden">⌘ K</kbd>
+          <kbd className="ml-auto rounded-[5px] border border-border bg-muted px-[5px] py-px font-sans text-[0.6875rem] max-[600px]:hidden">⌘ K</kbd>
         </button>
         <button type="button" className={ICON} aria-label="Keyboard shortcuts" title="Keyboard shortcuts" onClick={() => setShortcuts(true)}><InfoIcon /></button>
         <HostTalk />
@@ -67,7 +67,7 @@ function HostNotices() {
       <PopoverTrigger asChild>
         <button type="button" className={`${ICON} relative max-[450px]:hidden`} aria-label={unread.length ? `Notices: ${unread.length} new` : "Notices"} title="Production notices from the team">
           <BellIcon />
-          {unread.length > 0 && <span aria-hidden className={`absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[0.5625rem] font-bold text-white ${unread.some((n) => n.priority === "urgent") ? "bg-on-air" : "bg-primary"}`}>{unread.length}</span>}
+          {unread.length > 0 && <span aria-hidden className={`absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[0.6875rem] font-bold text-white ${unread.some((n) => n.priority === "urgent") ? "bg-on-air" : "bg-primary"}`}>{unread.length}</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96">

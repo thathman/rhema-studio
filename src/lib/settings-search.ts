@@ -95,6 +95,34 @@ export function searchSettings(
   })
 }
 
+/** Things people look for in Settings that live on their own page (#215): Settings search points there. */
+export type ElsewhereId = "church" | "appearance" | "cameras" | "hosting" | "service-defaults" | "backups"
+
+export interface ElsewhereEntry {
+  id: ElsewhereId
+  /** What it is, as the row says it. */
+  name: string
+  /** Where it lives, as the row says it ("Design → Brand kit"). */
+  where: string
+  keywords: string[]
+}
+
+export const SETTINGS_ELSEWHERE: readonly ElsewhereEntry[] = [
+  { id: "church", name: "Church name, logo and colours", where: "Design → Brand kit", keywords: ["church", "church name", "identity", "logo", "brand", "brand kit", "colours", "colors", "fonts", "general"] },
+  { id: "appearance", name: "Light, dark or system", where: "Desk menu, at the foot of the sidebar", keywords: ["appearance", "light", "dark", "dark mode", "light mode", "system", "theme", "night"] },
+  { id: "cameras", name: "Cameras and the camera router", where: "Production → Cameras", keywords: ["camera", "cameras", "camera router", "mediamtx", "whep", "video", "pulpit", "phone camera"] },
+  { id: "hosting", name: "Host or join, roles and the talk channel", where: "Production → Operators", keywords: ["host", "join", "hosting", "roles", "role", "operators", "volunteers", "desks", "another computer", "permissions", "crew"] },
+  { id: "service-defaults", name: "Approvals before a service goes live", where: "Team → Approvals", keywords: ["service defaults", "approval", "approvals", "approve", "unapproved", "ask before", "defaults", "operator name", "your name"] },
+  { id: "backups", name: "Backups and the church folder", where: "Archive", keywords: ["backup", "backups", "back up", "restore", "church folder", "archive", "export", "import", "data", "nas", "sync"] },
+]
+
+/** The pages elsewhere that a search finds (none for an empty search: those are not Settings). */
+export function searchElsewhere(query: string): ElsewhereEntry[] {
+  const words = searchWords(query)
+  if (words.length === 0) return []
+  return SETTINGS_ELSEWHERE.filter((e) => matchesSearch([e.name, e.where, ...e.keywords].join(" \n "), words))
+}
+
 /** Labels this short or shorter can be marked; whole paragraphs are not, or everything would light up. */
 const LABEL_LENGTH = 80
 

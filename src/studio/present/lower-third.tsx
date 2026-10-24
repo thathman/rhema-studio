@@ -1,11 +1,12 @@
 import { useState } from "react"
-import { EyeIcon, EyeOffIcon, PaletteIcon, TextCursorInputIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, PaletteIcon, RotateCcwIcon, TextCursorInputIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBroadcastStore } from "@/stores"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
+import { followsLowerThird } from "@/lib/live-sources"
 import { cn } from "@/lib/utils"
 import { useShellStore } from "@/studio/shell-store"
 
@@ -21,12 +22,14 @@ export function LowerThirdControl() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const current = useBroadcastStore((s) => s.lowerThird)
   const styles = useBroadcastStore((s) => s.lowerThirdStyles)
+  // The one taken down, for Restore (the lower third as a live source).
+  const taken = useBroadcastStore((s) => (s.stateSources.lowerThird?.on === false ? s.stateSources.lowerThird.lowerThird : undefined))
   const [mode, setMode] = useState<Mode>("name")
   const [styleId, setStyleId] = useState<string | null>(null)
   const [line1, setLine1] = useState("")
   const [line2, setLine2] = useState("")
   const style = styles.find((x) => x.id === styleId) ?? styles[0]
-  const targets = outputs.filter((o) => o.lowerThirds && (o.role ?? "congregation") === "congregation")
+  const targets = outputs.filter((o) => followsLowerThird(o) && (o.role ?? "congregation") === "congregation")
   const show = async () => {
     const backing = await lowerThirdBacking(style)
     useBroadcastStore.getState().setLowerThird({ line1, line2, style, backing, ...(mode === "name" ? {} : { follow: mode }) })
@@ -89,6 +92,9 @@ export function LowerThirdControl() {
             <div className="flex items-center gap-2">
               <Button type="submit" size="sm" disabled={mode === "name" && !line1.trim() && !line2.trim()}><EyeIcon /> Show</Button>
               <Button type="button" size="sm" variant="outline" disabled={!current} onClick={() => useBroadcastStore.getState().setLowerThird(null)}><EyeOffIcon /> Hide</Button>
+              {!current && taken && (
+                <Button type="button" size="sm" variant="ghost" onClick={() => useBroadcastStore.getState().restoreSource("lowerThird")} title="Put back the lower third that was hidden"><RotateCcwIcon /> Restore</Button>
+              )}
               {current && !current.follow && (
                 <Button type="button" size="sm" variant="ghost" className="ml-auto text-xs" onClick={() => { setMode("name"); setLine1(current.line1); setLine2(current.line2) }}>Edit current</Button>
               )}

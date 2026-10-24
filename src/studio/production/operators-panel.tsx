@@ -189,16 +189,16 @@ function JoinForm() {
         }}
       >
         <label className="flex flex-col gap-0.5">
-          <span className="text-[0.625rem] text-muted-foreground">Host address and port</span>
+          <span className="text-xs text-muted-foreground">Host address and port</span>
           <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="192.168.1.20:8080" required className="h-8 rounded-md border border-input bg-transparent px-2" />
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col gap-0.5">
-            <span className="text-[0.625rem] text-muted-foreground">Pairing code</span>
+            <span className="text-xs text-muted-foreground">Pairing code</span>
             <input ref={codeInput} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} inputMode="numeric" required className="h-8 rounded-md border border-input bg-transparent px-2 tracking-widest" />
           </label>
           <label className="flex flex-col gap-0.5">
-            <span className="text-[0.625rem] text-muted-foreground">This computer's name</span>
+            <span className="text-xs text-muted-foreground">This computer's name</span>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60} className="h-8 rounded-md border border-input bg-transparent px-2" />
           </label>
         </div>
@@ -364,7 +364,7 @@ function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
                 <Fragment key={r.id}>
                 {r.time.pause && (() => {
                   const words = pauseWords(r.time.pause[0] / 60_000, r.time.state === "upcoming" ? Math.round(r.time.pause[1] / 60_000) : null, r.time.fixed === true)
-                  return <tr className="border-t border-dashed border-border/60 text-[0.625rem] text-muted-foreground"><td className="px-1.5 py-0.5 italic">{words.label}</td><td /><td colSpan={4} className="px-1.5 py-0.5">{words.absorbs}</td></tr>
+                  return <tr className="border-t border-dashed border-border/60 text-[0.6875rem] text-muted-foreground"><td className="px-1.5 py-0.5 italic">{words.label}</td><td /><td colSpan={4} className="px-1.5 py-0.5">{words.absorbs}</td></tr>
                 })()}
                 <tr className={cn("border-t border-border/60", r.time.state === "live" && "bg-primary/10 font-semibold", r.time.state === "skipped" && "text-muted-foreground")}>
                   <td className="max-w-40 truncate px-1.5 py-1">{r.label}</td>
