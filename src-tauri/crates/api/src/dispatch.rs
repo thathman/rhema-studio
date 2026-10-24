@@ -65,6 +65,9 @@ impl CommandDispatcher {
             RemoteCommand::TimerStart => sink.emit_event("remote:timer_start", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::TimerPause => sink.emit_event("remote:timer_pause", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::TimerAdjust(m) => sink.emit_event("remote:timer_adjust", &serde_json::json!({ "minutes": (*m).clamp(-10, 10), "by": by }).to_string()),
+            // The reason is a short line for the stage and the log (80 characters, one line).
+            RemoteCommand::Hold(r) => sink.emit_event("remote:hold", &serde_json::json!({ "reason": r.as_deref().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(80).collect::<String>(), "by": by }).to_string()),
+            RemoteCommand::Resume => sink.emit_event("remote:resume", &serde_json::json!({ "by": by }).to_string()),
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "by": by }).to_string()),
             other => {
                 // Who sent it rides along in the command's own event, so the host can say who
@@ -85,7 +88,7 @@ impl CommandDispatcher {
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => Self::dispatch_as(cmd, sink, "a remote"),
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {
@@ -290,6 +293,24 @@ mod tests {
         assert_eq!(payload, r#"{"by":"Timekeeper","minutes":30}"#, "one step is at most 30 minutes, with who sent it");
         CommandDispatcher::dispatch_as(&RemoteCommand::TimerAdjust(-25), &sink, "Timekeeper").unwrap();
         assert_eq!(sink.last_event(), ("remote:timer_adjust".to_string(), r#"{"by":"Timekeeper","minutes":-10}"#.to_string()));
+    }
+
+    #[test]
+    fn hold_and_resume_carry_who_and_a_short_reason() {
+        let sink = MockSink::new();
+        CommandDispatcher::dispatch_as(&RemoteCommand::Hold(Some(format!("  waiting   for\nthe pastor {}", "x".repeat(200)))), &sink, "Timekeeper desk").unwrap();
+        let (event, payload) = sink.last_event();
+        assert_eq!(event, "remote:hold");
+        let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(v["by"], "Timekeeper desk");
+        let reason = v["reason"].as_str().unwrap();
+        assert_eq!(reason.chars().count(), 80, "at most 80 characters");
+        assert!(reason.starts_with("waiting for the pastor x"), "one line: {reason}");
+        CommandDispatcher::dispatch_as(&RemoteCommand::Hold(None), &sink, "Timekeeper desk").unwrap();
+        assert_eq!(sink.last_event(), ("remote:hold".to_string(), r#"{"by":"Timekeeper desk","reason":""}"#.to_string()));
+        CommandDispatcher::dispatch(&RemoteCommand::Resume, &sink).unwrap();
+        assert_eq!(sink.last_event(), ("remote:resume".to_string(), r#"{"by":"a remote"}"#.to_string()));
+        assert_eq!(sink.event_count(), 3, "the host logs these itself: no separate audit line");
     }
 
     #[test]

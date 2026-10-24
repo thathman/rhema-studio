@@ -26,7 +26,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }))
 
-const { buildLiveState, publishLiveState, startLiveStatePublisher } = await import("@/lib/live-state")
+const { buildLiveState, publishLiveState, refreshLiveState, startLiveStatePublisher } = await import("@/lib/live-state")
 const { useJoin } = await import("@/stores/join-store")
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useEventClock } = await import("@/stores/event-clock-store")
@@ -69,6 +69,19 @@ describe("the host's Live State", () => {
     useEventClock.setState({ currentId: "Sermon" })
     publishLiveState()
     expect(calls.filter((c) => c.cmd === "publish_live_state")).toHaveLength(2)
+  })
+})
+
+describe("the heartbeat (#196 R5)", () => {
+  it("unchanged, it is still sent every 2 s on the app tick, so a desk can tell a quiet host from a lost one", () => {
+    publishLiveState()
+    const sent = () => calls.filter((c) => c.cmd === "publish_live_state")
+    const n = sent().length
+    refreshLiveState(Date.now() + 1000)
+    expect(sent()).toHaveLength(n)
+    refreshLiveState(Date.now() + 2500)
+    expect(sent()).toHaveLength(n + 1)
+    expect(JSON.parse(sent().at(-1)!.args.json as string)).toMatchObject({ heartbeatMs: 2000, hold: null })
   })
 })
 

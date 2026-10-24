@@ -95,7 +95,7 @@ scene, cameras included (a ticker-only feed shows Black too); Black also hides t
   (`GET /api/v1/live`) or follow it (`GET /api/v1/live/events`, server-sent events). The listener never
   reads it; keys off means this computer only.
 - **Roles** are permissions, not staffing: `timekeeper` may only move the event clock
-  (`event_next`, `event_prev`, `event_start`, `event_offset`: running late or early, and `timer_start`, `timer_pause`, `timer_adjust`: the service timer, #196); `bible` may activate a typed reference
+  (`event_next`, `event_prev`, `event_start`, `event_offset`: running late or early, and `timer_start`, `timer_pause`, `timer_adjust`: the service timer, and `hold` with an optional reason, `resume`, #196); `bible` may activate a typed reference
   (`bible_activate`), step the passage and take the Bible source off or back; `screens` may take and
   release congregation scenes (`take_scene`, `release_scene`); `present` has all of these and the
   screens; `configure` adds settings. The host always keeps every control. A Bible activation that

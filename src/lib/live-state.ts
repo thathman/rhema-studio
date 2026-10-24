@@ -12,6 +12,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useNotices, type Notice } from "@/stores/notices-store"
 import { useServiceOffset } from "@/stores/service-offset-store"
+import { useHold } from "@/stores/hold-store"
 import { useVoice, type VoicePerson } from "@/lib/voice"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
@@ -51,7 +52,14 @@ export interface LiveStateV1 {
   voice?: VoicePerson[]
   /** Desks the main desk has taken back control from (#243), by name: each shows "Paused by the main desk". Absent from older hosts. */
   paused?: string[]
+  /** A hold in the service (#196 R3): its reason, since when (host wall ms) and which desk held it. Null when not held; absent from older hosts. */
+  hold?: { reason: string; since: number; by?: string } | null
+  /** How often the host sends this at the least (ms), so a desk can tell a quiet host from a lost one. Absent from older hosts. */
+  heartbeatMs?: number
 }
+
+/** The host sends its Live State at least this often, changed or not (on the app's one-second tick). */
+export const LIVE_HEARTBEAT_MS = 2_000
 
 export function buildLiveState(now = Date.now()): LiveStateV1 {
   const b = useBroadcastStore.getState()
@@ -83,6 +91,8 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     notices: useNotices.getState().notices.slice(0, 50),
     voice: voiceCrew(),
     paused: useSettingsStore.getState().remoteDevices.filter((d) => d.paused === true).map((d) => d.name),
+    hold: (() => { const h = useHold.getState().hold; return h ? { reason: h.reason, since: h.since, ...(h.by ? { by: h.by } : {}) } : null })(),
+    heartbeatMs: LIVE_HEARTBEAT_MS,
   }
 }
 
@@ -90,11 +100,11 @@ let queued = false
 let last = ""
 let lastAt = 0
 
-/** Publish now if it changed (the "at" stamp aside). */
-export function publishLiveState(): void {
+/** Publish now if it changed (the "at" stamp aside), or anyway (`force`: the heartbeat). */
+export function publishLiveState(force = false): void {
   const state = buildLiveState()
   const key = JSON.stringify({ ...state, at: 0 })
-  if (key === last) return
+  if (key === last && !force) return
   last = key
   lastAt = Date.now()
   void invoke("publish_live_state", { json: JSON.stringify(state) }).catch(() => {})
@@ -113,9 +123,12 @@ function soon() {
   })
 }
 
-/** On the app's one-second tick (src/lib/app-tick.ts): timing moves on even when nothing else does. */
+/**
+ * On the app's one-second tick (src/lib/app-tick.ts): timing moves on even when nothing else does,
+ * and a desk hears from the host every couple of seconds, so it can tell when it stops (#196 R5).
+ */
 export function refreshLiveState(now = Date.now()): void {
-  if (now - lastAt >= 15_000) publishLiveState()
+  if (now - lastAt >= LIVE_HEARTBEAT_MS) publishLiveState(true)
 }
 
 /** Keep the host's Live State current: on any change that it shows (and every 15 s via the app tick). */
@@ -130,6 +143,7 @@ export function startLiveStatePublisher(): () => void {
     useServiceStore.subscribe((s, p) => { if (s.current !== p.current) soon() }),
     useNotices.subscribe((s, p) => { if (s.notices !== p.notices) soon() }),
     useServiceOffset.subscribe(() => soon()),
+    useHold.subscribe((s, p) => { if (s.hold !== p.hold) soon() }),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
     useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras) soon() }),

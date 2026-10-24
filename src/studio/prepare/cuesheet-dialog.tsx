@@ -11,7 +11,7 @@ import { useServiceTiming } from "@/studio/use-service-timing"
 
 const wallClock = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
 const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}${formatMinutes(Math.abs(m) * 60_000)}`)
-const STATUS = { done: "Done", live: "On now", upcoming: "" } as const
+const STATUS = { done: "Done", live: "On now", upcoming: "", skipped: "Skipped" } as const
 
 /**
  * The run of show as a cuesheet (#196): plan, actual, expected and offset side by side for every
@@ -56,7 +56,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                       <td colSpan={3} />
                     </tr>
                   ) : (
-                    <tr key={r.event.id} className={cn("border-t border-border/60", r.event.state === "live" && "bg-primary/10")}>
+                    <tr key={r.event.id} className={cn("border-t border-border/60", r.event.state === "live" && "bg-primary/10", r.event.state === "skipped" && "text-muted-foreground")}>
                       <td className="max-w-56 truncate px-2 py-1">{r.event.label}</td>
                       <td className={td}>{wallClock(r.event.plannedStart)}</td>
                       <td className={td}>{wallClock(r.event.plannedEnd)}</td>
@@ -68,8 +68,8 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                         />
                       </td>
                       <td className={td}>{r.event.actualStart === null ? "" : `${wallClock(r.event.actualStart)} · ${mmss(r.actualMs ?? 0)}`}</td>
-                      <td className={td}>{r.event.state === "done" ? "" : `${wallClock(r.event.expectedStart)}–${wallClock(r.event.expectedEnd)}`}</td>
-                      <td className={cn(td, r.offsetMinutes > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{offsetText(r.offsetMinutes)}</td>
+                      <td className={td}>{r.event.state === "done" || r.event.state === "skipped" ? "" : `${wallClock(r.event.expectedStart)}–${wallClock(r.event.expectedEnd)}`}</td>
+                      <td className={cn(td, r.offsetMinutes !== null && r.offsetMinutes > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{r.offsetMinutes === null ? "" : offsetText(r.offsetMinutes)}</td>
                       <td className={td}>
                         {r.event.hardStop !== null && (
                           <span className="inline-flex items-center gap-1" title="A hard stop: the time it may take is cut to fit">

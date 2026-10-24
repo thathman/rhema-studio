@@ -168,6 +168,7 @@ function Timekeeper() {
                   <span className="min-w-0 flex-1 truncate font-medium">{e.label}</span>
                   {e.state === "live" && <Badge tone="live">Now</Badge>}
                   {e.state === "done" && <span className="text-muted-foreground">done</span>}
+                  {e.state === "skipped" && <span className="text-muted-foreground">skipped</span>}
                   {e.state === "upcoming" && off !== 0 && <span className={cn("tabular-nums", off > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>→ {hhmm(e.expectedStart)}</span>}
                   {e.squeezed && <span className="font-semibold text-destructive">cut short</span>}
                 </li>

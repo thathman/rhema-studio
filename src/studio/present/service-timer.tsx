@@ -157,7 +157,7 @@ export function HoldControl() {
   if (hold) {
     return (
       <div className="mt-3 flex items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2 py-1.5 text-xs" role="status">
-        <span className="min-w-0 flex-1"><b>On hold</b> since {clock(hold.since)}: {hold.reason}</span>
+        <span className="min-w-0 flex-1"><b>On hold</b> since {clock(hold.since)}: {hold.reason}{hold.by ? ` · by ${hold.by}` : ""}</span>
         <Button size="xs" onClick={() => useHold.getState().resume()}>Resume</Button>
       </div>
     )

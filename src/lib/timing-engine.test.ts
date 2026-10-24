@@ -61,6 +61,31 @@ describe("timing engine (issue #196)", () => {
     expect(times(t).slice(0, 2)).toEqual(["a 10:00-10:05 done", "b 10:12-10:32 upcoming"])
   })
 
+  it("an item jumped over is skipped: no expected time, and the rest follows the live item", () => {
+    // Opening prayer ran 10:00–10:05; Worship never went on air; the Sermon is on now.
+    const t = serviceTiming(input({
+      now: at(10, 10),
+      firstOnAir: new Map([["a", at(10, 0)], ["c", at(10, 5)]]),
+      onAirMs: new Map([["a", 5 * 60_000], ["c", 5 * 60_000]]),
+      liveItemId: "c",
+      adjustMinutes: 5,
+    }))!
+    const b = t.events.find((e) => e.id === "b")!
+    expect(b.state).toBe("skipped")
+    expect(b.expectedEnd - b.expectedStart).toBe(0)
+    expect(b.actualStart).toBeNull()
+    expect(b.plannedStart).toBe(at(10, 5))
+    expect(times(t)).toEqual(["a 10:00-10:05 done", "b 10:05-10:05 skipped", "c 10:05-10:35 live", "d 10:40-10:45 upcoming"])
+    // Twenty minutes of worship not done: the service is expected to end 15 min early (with +5).
+    expect(Math.round(t.lateMs / 60_000)).toBe(-15)
+  })
+
+  it("off air after a jump: what was jumped over stays skipped, what is after the last one on air is still to come", () => {
+    const t = serviceTiming(input({ now: at(10, 40), firstOnAir: new Map([["c", at(10, 2)]]), onAirMs: new Map([["c", 30 * 60_000]]), liveItemId: null }))!
+    expect(t.events.map((e) => e.state)).toEqual(["skipped", "skipped", "done", "upcoming"])
+    expect(times(t)[3]).toBe("d 10:40-10:45 upcoming")
+  })
+
   it("the operator's ±5 shifts only what is still to come", () => {
     const t = serviceTiming(input({ now: at(9, 30), adjustMinutes: 5 }))!
     expect(times(t)[0]).toBe("a 10:05-10:10 upcoming")

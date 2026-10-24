@@ -13,6 +13,7 @@ import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { deskFreshness, skewWords } from "@/lib/desk-freshness"
 
 const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event clock only)", bible: "Bible (the Bible source only)", screens: "Screens (congregation scenes only)", present: "Present", configure: "Present and settings" }
 /** Which desks a role gets on a joined computer (the host checks every command again). */
@@ -20,6 +21,20 @@ const DESKS: Record<string, readonly ("clock" | "bible" | "scenes")[]> = { timek
 const hhmm = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 /** A joined desk may send commands: connected, and the main desk has not taken back control. */
 const useCanSend = () => useJoin((s) => s.status === "connected" && !s.paused)
+
+/** How fresh this desk's view of the host is, looked at again every second (#196 R5). */
+function useFreshness() {
+  const status = useJoin((s) => s.status)
+  const receivedAt = useJoin((s) => s.receivedAt)
+  const clockSkewMs = useJoin((s) => s.clockSkewMs)
+  const heartbeatMs = useJoin((s) => s.live?.heartbeatMs)
+  const [now, setNow] = useState(() => performance.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(performance.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return deskFreshness({ status, receivedAt, now: Math.max(now, receivedAt), heartbeatMs, clockSkewMs })
+}
 
 /** Take back control from a paired desk, or give it back (#243). Its pairing and role stay. */
 function DeskControlButton({ hash, name, paused }: { hash: string; name: string; paused: boolean }) {
@@ -147,6 +162,7 @@ function JoinedDesk() {
   const live = useJoin((s) => s.live)
   const address = useSettingsStore((s) => s.joinAddress)
   const desks = DESKS[me?.role ?? "present"] ?? []
+  const fresh = useFreshness()
   return (
     <Card kicker={`Joined ${live?.church || address}`} title={live?.service?.title ?? "The host's service"}>
       <div className="flex flex-wrap items-center gap-2">
@@ -154,6 +170,7 @@ function JoinedDesk() {
           {status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}
         </span>
         {me && <span className="text-muted-foreground">as {me.name} · {ROLE_NAMES[me.role] ?? me.role}</span>}
+        {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
         <span className="flex-1" />
         <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave()}>Leave</Button>
         <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().leave(true)}>Forget this host</Button>
@@ -164,6 +181,11 @@ function JoinedDesk() {
         </p>
       )}
       {note && <p role="status" className="text-muted-foreground">{note}</p>}
+      {live && fresh.skewMs !== null && (
+        <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
+          <span className="font-semibold">This computer's clock is {skewWords(fresh.skewMs)} the host's.</span> <span className="text-muted-foreground">Timers here follow the host, but times of day may not agree: set both computers to set their time automatically.</span>
+        </p>
+      )}
       {error && <p role="alert" className="text-destructive">{error}</p>}
       {live && (
         <>
@@ -172,7 +194,7 @@ function JoinedDesk() {
             <p className="truncate text-sm font-semibold">{live.program.onAir ? live.program.reference ?? "On air" : "Nothing on air"}</p>
             {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
-          {desks.includes("clock") && <ClockDesk live={live} />}
+          {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
           {desks.includes("bible") && <BibleDesk live={live} />}
           {desks.includes("scenes") && <ScenesDesk live={live} />}
           <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
@@ -205,8 +227,8 @@ function JoinedDesk() {
   )
 }
 
-/** The event clock: Now, the run of show, Start / Back one (Timekeeper). */
-function ClockDesk({ live }: { live: LiveStateV1 }) {
+/** The event clock: Now, the run of show, Start / Back one, Hold / Resume (Timekeeper). `stale`: the host has not been heard from lately. */
+function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const off = !useCanSend()
   const current = live.rundown.find((r) => r.id === live.event.currentId)
   const at = current ? live.rundown.indexOf(current) : -1
@@ -216,8 +238,8 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
   return (
     <section aria-label="Event clock desk" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold">Now: {current ? current.reference : "no event yet"}</span>
-        {live.timing && <span className={cn("tabular-nums", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>ends {hhmm(live.timing.expectedEnd)}{late !== 0 ? ` · ${Math.abs(late)} min ${late > 0 ? "late" : "early"}` : " · on time"}</span>}
+        <span className={cn("font-semibold", stale && "opacity-50")}>Now: {current ? current.reference : "no event yet"}</span>
+        {live.timing && <span className={cn("tabular-nums", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground", stale && "opacity-50")}>ends {hhmm(live.timing.expectedEnd)}{late !== 0 ? ` · ${Math.abs(late)} min ${late > 0 ? "late" : "early"}` : " · on time"}</span>}
         {live.timing?.offsetMinutes ? <span className="text-muted-foreground">({live.timing.offsetMinutes > 0 ? "+" : "−"}{Math.abs(live.timing.offsetMinutes)} min{live.timing.offsetBy ? ` by ${live.timing.offsetBy}` : ""})</span> : null}
         <span className="flex-1" />
         <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "event_offset", value: -5 })}>−5 min</Button>
@@ -225,7 +247,8 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
         <Button size="sm" variant="outline" disabled={at <= 0 || off} onClick={() => void send({ command: "event_prev" })}>Back one</Button>
         <Button size="sm" disabled={!next || off} onClick={() => void send({ command: "event_next" })}>{next ? `Start ${next.reference}` : "Last event"}</Button>
       </div>
-      <DeskTimer live={live} />
+      <DeskTimer live={live} stale={stale} />
+      <DeskHold live={live} />
       <ol aria-label="The host's run of show" className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
         {live.rundown.map((r) => (
           <li key={r.id} className={cn("flex items-center gap-2 px-2.5 py-1.5", r.id === live.event.currentId && "bg-primary/10 font-semibold")}>
@@ -240,8 +263,12 @@ function ClockDesk({ live }: { live: LiveStateV1 }) {
   )
 }
 
-/** The host's service timer (#196 R5): counting on from when the state arrived; Start / Pause / ±1 min. */
-function DeskTimer({ live }: { live: LiveStateV1 }) {
+/**
+ * The host's service timer (#196 R5): counting on from when the state arrived; Start / Pause / ±1 min.
+ * While the host is not heard from it is dimmed and says it may be out of date, rather than
+ * counting on as if all were well.
+ */
+function DeskTimer({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const off = !useCanSend()
   const receivedAt = useJoin((s) => s.receivedAt)
   const [now, setNow] = useState(() => performance.now())
@@ -257,15 +284,38 @@ function DeskTimer({ live }: { live: LiveStateV1 }) {
   const send = useJoin.getState().send
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="The host's service timer">
-      <span className={cn("font-mono text-lg font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid")} role="timer">
+      <span className={cn("font-mono text-lg font-semibold tabular-nums", left !== null && left < 0 && "text-destructive", left !== null && left >= 0 && left <= 120_000 && "text-confidence-mid", stale && "opacity-50")} role="timer">
         {left === null ? formatMs(elapsed) : left < 0 ? `+${formatMs(-left)}` : formatMs(left)}
       </span>
       <span className="text-muted-foreground">{left === null ? "elapsed" : left < 0 ? "over" : "left"}{t.running ? "" : " · paused"}</span>
+      {stale && <span className="font-semibold text-confidence-mid">may be out of date</span>}
       <span className="flex-1" />
       <Button size="sm" disabled={off} onClick={() => void send({ command: t.running ? "timer_pause" : "timer_start" })}>{t.running ? "Pause" : "Start"}</Button>
       <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "timer_adjust", value: -1 })}>−1 min</Button>
       <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "timer_adjust", value: 1 })}>+1 min</Button>
     </div>
+  )
+}
+
+/** A hold in the host's service (#196 R3): Hold with a reason, or Resume; the host logs it with this desk's name. Hidden for an older host that does not say. */
+function DeskHold({ live }: { live: LiveStateV1 }) {
+  const off = !useCanSend()
+  const [reason, setReason] = useState("")
+  const send = useJoin.getState().send
+  if (live.hold === undefined) return null
+  if (live.hold) {
+    return (
+      <div role="status" aria-label="The host's service is on hold" className="flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-1.5">
+        <span className="min-w-0 flex-1"><b>On hold</b> since {hhmm(live.hold.since)}: {live.hold.reason}{live.hold.by ? ` · by ${live.hold.by}` : ""}</span>
+        <Button size="sm" disabled={off} onClick={() => void send({ command: "resume" })}>Resume</Button>
+      </div>
+    )
+  }
+  return (
+    <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); const r = reason.trim(); void send(r ? { command: "hold", value: r.slice(0, 80) } : { command: "hold" }); setReason("") }}>
+      <input aria-label="Reason for the hold" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason, e.g. waiting for the pastor" maxLength={80} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+      <Button size="sm" variant="outline" type="submit" disabled={off} title="Hold: in the host's service log and on its stage display; loops and timed moves wait until Resume">Hold</Button>
+    </form>
   )
 }
 

@@ -7,6 +7,8 @@ import { clockInstant, clockMinutes, phaseRange, type OutlineHeader } from "@/li
  * - actual: when items really went on air and for how long (the service log);
  * - expected: what happened so far, the live item's remaining time, then the plan for the rest;
  *   until the service has begun it is the plan itself, whatever the time now.
+ * An item that never went on air while a later one did is skipped: it takes no expected time, and
+ * what is expected carries on from the item live (or done) after it.
  * An item's "end by" is a hard stop: the time it may take is cut to fit, and flagged.
  */
 export interface TimingItem {
@@ -30,7 +32,7 @@ export interface TimingInput {
   adjustMinutes?: number
 }
 
-export type EventState = "done" | "live" | "upcoming"
+export type EventState = "done" | "live" | "upcoming" | "skipped"
 
 export interface EventTiming {
   id: string
@@ -74,6 +76,8 @@ export function serviceTiming(input: TimingInput): ServiceTiming | null {
   // The time now matters once the service has begun. Before that (planning on Thursday for Sunday,
   // or rehearsing in the evening) what is expected is the plan, not "12 h late".
   const begun = liveAt !== -1 || list.some((i) => firstOnAir.has(i.id))
+  // The last item that has been on air (or is now): anything before it that never was, was skipped.
+  const lastAired = list.reduce((last, i, k) => (k === liveAt || firstOnAir.has(i.id) ? k : last), -1)
   const events: EventTiming[] = []
   let planned = start
   // Before anything has gone on air the service starts at its time, or now if that has passed.
@@ -85,10 +89,13 @@ export function serviceTiming(input: TimingInput): ServiceTiming | null {
     // Nearest the item's planned start: "end by 00:15" after a 23:50 start is that night's.
     const hardStop = endBy === null ? null : clockInstant(endBy, planned)
     const actualStart = firstOnAir.get(item.id) ?? null
-    const state: EventState = k === liveAt ? "live" : actualStart !== null && (liveAt === -1 || k < liveAt) ? "done" : "upcoming"
+    const state: EventState = k === liveAt ? "live" : actualStart !== null && (liveAt === -1 || k < liveAt) ? "done" : actualStart === null && k < lastAired ? "skipped" : "upcoming"
     let expectedStart: number
     let expectedEnd: number
-    if (state === "done") {
+    if (state === "skipped") {
+      expectedStart = cursor
+      expectedEnd = cursor
+    } else if (state === "done") {
       expectedStart = actualStart!
       expectedEnd = actualStart! + (onAirMs.get(item.id) ?? 0)
     } else if (state === "live") {
@@ -103,7 +110,7 @@ export function serviceTiming(input: TimingInput): ServiceTiming | null {
       expectedEnd = expectedStart + ms
     }
     let squeezed = false
-    if (hardStop !== null && state !== "done" && expectedEnd > hardStop) {
+    if (hardStop !== null && state !== "done" && state !== "skipped" && expectedEnd > hardStop) {
       expectedEnd = Math.max(expectedStart, hardStop)
       squeezed = true
     }

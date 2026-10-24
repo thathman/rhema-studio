@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Skipped items, Hold from a joined desk, and desks that say when they may be out of date (#196)
+- An item that never went on air while a later one did now says **Skipped** in the run of show, its table and the Timekeeper, and takes no time in what is expected: the expected times carry on from the item on now. The plan is unchanged.
+- A joined **Timekeeper** desk (and Present, Present and settings) can **Hold** the service with a reason and **Resume** it, as the main desk can; the host's log names the desk, and every desk shows the hold and who made it. Bible and Screens desks cannot.
+- A joined desk that has not heard from the host for more than 5 seconds, or is reconnecting, says **Last update N s ago** and dims its clock and timer with **may be out of date**, instead of counting on as if all were well.
+- A joined desk warns when its computer's clock and the host's differ by more than 2 seconds.
+
 ### The ticker, the timer and cameras in Present → Sources (#243)
 - **Present → Live → Sources** now also lists the **Ticker** (running, held still or off, with its first words), the **service timer** (running or paused, with the time left) and **each camera** (sending or not), each saying who changed it last and when.
 - Take the ticker off and **Restore** the same words; pause and resume the timer; **Hide a camera from scenes** so every scene with it shows its fallback words instead, without changing the scenes. Each change is in the service log with who made it, and joined desks and the phone page see and can do the same (with the Present role).

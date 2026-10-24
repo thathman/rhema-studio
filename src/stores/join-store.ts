@@ -23,6 +23,12 @@ interface JoinState {
   live: LiveStateV1 | null
   /** This desk's monotonic time when `live` arrived: a running timer counts on from it (no clock skew). */
   receivedAt: number
+  /**
+   * How far this desk's wall clock is from the host's (ms, + = this one ahead), from the Live
+   * State's "at": the smallest gap of the last few arrivals, so a snapshot that waited does not
+   * count as skew. Null until one arrives.
+   */
+  clockSkewMs: number | null
   pair: (address: string, code: string, name: string) => Promise<void>
   connect: () => Promise<void>
   leave: (forget?: boolean) => Promise<void>
@@ -41,6 +47,9 @@ export function serviceOf(live: LiveStateV1 | null): string | undefined {
   return live.service.id
 }
 
+// The last few arrivals' (this desk's wall time − the host's "at").
+let gaps: number[] = []
+
 let listening = false
 async function listenOnce() {
   if (listening) return
@@ -52,7 +61,8 @@ async function listenOnce() {
       const name = useJoin.getState().me?.name
       // The host lists the desks it has taken back control from; an older host does not say.
       const paused = Array.isArray(live.paused) && name ? live.paused.includes(name) : useJoin.getState().paused
-      useJoin.setState({ live, receivedAt: performance.now(), status: "connected", error: null, paused })
+      if (typeof live.at === "number") gaps = [...gaps, Date.now() - live.at].slice(-5)
+      useJoin.setState({ live, receivedAt: performance.now(), clockSkewMs: gaps.length ? Math.min(...gaps) : null, status: "connected", error: null, paused })
     } catch {
       // A snapshot this build cannot read: keep the last one.
     }
@@ -76,6 +86,7 @@ export const useJoin = create<JoinState>((set, get) => ({
   note: null,
   live: null,
   receivedAt: 0,
+  clockSkewMs: null,
   pair: async (address, code, name) => {
     set({ status: "connecting", error: null })
     try {
@@ -90,7 +101,8 @@ export const useJoin = create<JoinState>((set, get) => ({
     const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
     if (!address || !token) return
     await listenOnce()
-    set({ status: "connecting", error: null })
+    gaps = []
+    set({ status: "connecting", error: null, clockSkewMs: null })
     try {
       const me = await invoke<{ name: string; role: string; paused?: boolean }>("join_me", { address, token })
       set({ me: { name: me.name, role: me.role }, paused: me.paused === true })
@@ -101,7 +113,8 @@ export const useJoin = create<JoinState>((set, get) => ({
   },
   leave: async (forget = false) => {
     await invoke("join_disconnect").catch(() => {})
-    set({ status: "off", live: null, me: null, error: null, paused: false, note: null })
+    gaps = []
+    set({ status: "off", live: null, me: null, error: null, paused: false, note: null, clockSkewMs: null })
     if (forget) useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "" })
   },
   send: async (command) => {

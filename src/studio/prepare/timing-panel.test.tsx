@@ -56,3 +56,30 @@ describe("run of show timing: actual times", () => {
     expect(document.querySelector("tfoot")?.textContent).toContain("ends 10:19")
   })
 })
+
+describe("run of show timing: an item jumped over", () => {
+  it("says Skipped in the panel and the table, with no expected time or offset", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    document.body.innerHTML = ""
+    useQueueStore.setState({
+      items: [slide("Welcome", 3), slide("Notices", 5), slide("Reading", 10)],
+      headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
+    })
+    useJournalStore.setState({
+      entries: [
+        { at: at(10, 0), mono: 0, kind: "event", label: "Welcome", itemId: "Welcome" },
+        { at: at(10, 3), mono: 180_000, kind: "event", label: "Reading", itemId: "Reading" },
+      ],
+    })
+    useEventClock.setState({ currentId: "Reading" })
+    const el = document.createElement("div")
+    await act(async () => createRoot(el).render(<TimingPanel />))
+    expect(el.textContent).toContain("Skipped")
+    const table = [...el.querySelectorAll("button")].find((b) => b.textContent === "Table")!
+    await act(async () => table.click())
+    const rows = [...document.querySelectorAll("tbody tr")].map((r) => [...r.querySelectorAll("td")].map((c) => c.querySelector("input")?.value ?? c.textContent))
+    expect(rows[1]).toEqual(["Notices", "10:03", "10:08", "5", "", "", "", "", "Skipped"])
+    // The reading follows the welcome: expected 10:03–10:13, 5 min early against its plan (10:08).
+    expect(rows[2].slice(5, 7)).toEqual(["10:03–10:13", "−5 min"])
+  })
+})

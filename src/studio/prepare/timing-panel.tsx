@@ -136,9 +136,10 @@ function ActualLine({ started, ms, planned }: { started: number; ms: number; pla
   )
 }
 
-/** When an item that has not run yet is now expected, when that is a minute or more off the plan, and a hard stop cutting it short. */
+/** When an item that has not run yet is now expected, when that is a minute or more off the plan, and a hard stop cutting it short; or that it was skipped. */
 function ExpectedLine({ event }: { event?: EventTiming }) {
   if (!event || event.state === "done") return null
+  if (event.state === "skipped") return <span className="block text-[0.6875rem] text-muted-foreground">Skipped</span>
   const off = Math.round((event.expectedStart - event.plannedStart) / 60_000)
   return (
     <>
