@@ -1,55 +1,20 @@
 <p align="center">
-  <img src="public/rhema.svg" alt="Rhema logo" width="160" height="160" />
+  <img src="public/rhema.svg" alt="Rhema Studio app icon" width="160" height="160" />
 </p>
 
-<h1 align="center">Rhema</h1>
+<h1 align="center">Rhema Studio</h1>
 
-> **Rhema Studio** — this fork is evolving Rhema into a church production platform
-> (service preparation, volunteer-friendly presenting, production tools). The new
-> application shell lives under `src/studio/`; the original Rhema dashboard remains
-> available as the **Production** view. Design and architecture documents are in
-> [`docs/rhema-studio/`](docs/rhema-studio/). Upstream: [openbezal/rhema](https://github.com/openbezal/rhema) (MIT).
+<p align="center"><strong>Plan · Produce · Present · Together</strong></p>
 
-<p align="center">Real-time AI-powered Bible verse detection for live sermons and broadcasts. A Tauri v2 desktop app with a React frontend and Rust backend.</p>
+**Rhema Studio** is a local-first church service-planning, live Scripture and worship presentation, production, and team-collaboration platform. It includes independent content sources, congregation scenes, OBS/NDI/browser feeds, event timing, and optional LAN operators.
 
-Rhema listens to a live sermon audio feed, transcribes speech in real time, detects Bible verse references (both explicit citations and quoted passages), and renders them as broadcast-ready overlays via NDI for live production.
+**Developed and maintained by Rhema Studio contributors.** Built on the original [Rhema](https://github.com/openbezal/rhema) application by OpenBezal, licensed under MIT. The original **Copyright (c) 2025 OpenBezal** notice remains in [LICENSE](LICENSE) and the shipped installer notices. New Rhema Studio work and its branding are distinct from the upstream project. Additional Bible text, NDI, fonts and dependency licences still apply; see [docs/LICENSES.md](docs/LICENSES.md).
 
-## Download
+## Development builds
 
-| Platform | | Requires |
-|---|---|---|
-| **Windows** | [**Rhema-windows-x64-setup.exe**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-windows-x64-setup.exe) | Windows 10/11 x64 |
-| **macOS** | [**Rhema-macos-arm64.dmg**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-macos-arm64.dmg) | macOS 11 Big Sur or newer, **Apple Silicon** |
-| **Linux** | [**Rhema-linux-x86_64.AppImage**](https://github.com/openbezal/rhema/releases/latest/download/Rhema-linux-x86_64.AppImage) | x86_64; `.deb` and `.rpm` on the [release page](https://github.com/openbezal/rhema/releases/latest) |
+Rhema Studio is evolving in [this repository](https://github.com/thathman/rhema-studio). Consult [our releases](https://github.com/thathman/rhema-studio/releases) for builds published by this project; do **not** use the original OpenBezal installer as though it were a Rhema Studio release. Release availability and physical-production readiness must be verified before using the application in services.
 
-There is no Intel Mac build — on an Intel Mac,
-[build from source](#getting-started).
-For `cargo check`/`clippy` on an Intel Mac, install `onnxruntime` with Homebrew and set
-`ORT_LIB_LOCATION=$(brew --prefix onnxruntime) ORT_PREFER_DYNAMIC_LINK=1`.
-
-Every build is **unsigned** — there is no Apple Developer or Windows code
-signing certificate behind this project — so each OS warns on first run.
-
-**Windows:** SmartScreen warns — *More info → Run anyway*.
-
-**macOS:** drag `Rhema.app` to Applications first, then open it. Gatekeeper
-blocks unsigned apps that carry the browser's quarantine flag; on macOS 15 and
-newer the right-click → Open trick no longer works, so use:
-
-- **System Settings → Privacy & Security**, scroll to the blocked-app notice,
-  then **Open Anyway**, or
-- clear the quarantine flag yourself:
-
-  ```sh
-  xattr -cr /Applications/Rhema.app
-  ```
-
-Releases do **not** bundle the embedding model or the Whisper model — together
-they exceed a gigabyte. The Bible database ships inside the app, so reference
-detection and keyword search work out of the box; embedding re-ranking and local
-speech-to-text stay inactive until you build from source and run
-`bun run setup:all`. All releases are listed at
-[github.com/openbezal/rhema/releases](https://github.com/openbezal/rhema/releases).
+For local development, follow [Getting Started](#getting-started). Our new application interface lives under `src/studio/`; the Rust/Tauri workspace and its original subsystems remain the compatible technical foundation.
 
 ## Features
 
