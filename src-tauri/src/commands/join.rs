@@ -88,14 +88,16 @@ fn command_body(command: serde_json::Value, service: Option<String>) -> serde_js
     body
 }
 
-/// What the desk is told when the host refuses. Two refusals start with a word the desk acts on:
-/// "paused:" (the main desk has taken back control, #243) and "other-service:" (the desk is looking
-/// at a different service and refreshes, #246 C16).
-fn refusal(status: u16, error: Option<String>) -> String {
+/// What the desk is told when the host refuses. Three refusals start with a word the desk acts on:
+/// "paused:" (the main desk has taken back control, #243), "other-service:" (the desk is looking
+/// at a different service and refreshes, #246 C16) and "stale:" (someone changed that part of the
+/// service first: look again, #196 R7). An older host's 409 has no code and is the other service.
+fn refusal(status: u16, error: Option<String>, code: Option<&str>) -> String {
     let msg = error.unwrap_or_else(|| "The host refused".into());
-    match status {
-        423 => format!("paused: {msg}"),
-        409 => format!("other-service: {msg}"),
+    match (status, code) {
+        (423, _) => format!("paused: {msg}"),
+        (409, Some("stale")) => format!("stale: {msg}"),
+        (409, _) => format!("other-service: {msg}"),
         _ => msg,
     }
 }
@@ -110,8 +112,8 @@ pub async fn join_command(address: String, token: String, command: serde_json::V
         return Ok(());
     }
     let status = r.status().as_u16();
-    let msg = r.json::<serde_json::Value>().await.ok().and_then(|v| v.get("error").and_then(|e| e.as_str()).map(String::from));
-    Err(refusal(status, msg))
+    let v = r.json::<serde_json::Value>().await.unwrap_or_default();
+    Err(refusal(status, v.get("error").and_then(|e| e.as_str()).map(String::from), v.get("code").and_then(|c| c.as_str())))
 }
 
 /// Join the host's talk channel (Rhema Comms C3): send this desk's complete WebRTC offer, get the
@@ -517,10 +519,12 @@ mod tests {
 
     #[test]
     fn paused_and_other_service_refusals_are_marked_for_the_desk() {
-        assert_eq!(refusal(423, Some("The main desk has taken back control".into())), "paused: The main desk has taken back control");
-        assert_eq!(refusal(409, Some("That desk is looking at a different service; it will refresh".into())), "other-service: That desk is looking at a different service; it will refresh");
-        assert_eq!(refusal(403, Some("this device keeps time".into())), "this device keeps time");
-        assert_eq!(refusal(500, None), "The host refused");
+        assert_eq!(refusal(423, Some("The main desk has taken back control".into()), None), "paused: The main desk has taken back control");
+        assert_eq!(refusal(409, Some("That desk is looking at a different service; it will refresh".into()), Some("other-service")), "other-service: That desk is looking at a different service; it will refresh");
+        assert_eq!(refusal(409, Some("That desk is looking at a different service; it will refresh".into()), None), "other-service: That desk is looking at a different service; it will refresh", "an older host");
+        assert_eq!(refusal(409, Some("Someone changed this first \u{2014} look again".into()), Some("stale")), "stale: Someone changed this first \u{2014} look again");
+        assert_eq!(refusal(403, Some("this device keeps time".into()), None), "this device keeps time");
+        assert_eq!(refusal(500, None, None), "The host refused");
     }
 
     #[test]

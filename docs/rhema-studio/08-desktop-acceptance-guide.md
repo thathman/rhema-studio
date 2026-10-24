@@ -1328,6 +1328,23 @@ Rhema with a saved service (a song and two slides), Desk menu → Your name = "T
 | 10ex.9 | Production → Scenes. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
 | 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
 
+### 10fa. Two desks at once, Unable reasons, a long service's log (#196, #246, #251)
+
+The host with a saved service (a main service with a start time, Welcome 5, Sermon 30), one congregation output and two scenes, HTTP remote on. Two other computers joined in Production → Operators: **Desk A** as Present and **Desk B** as Screens (a third as Timekeeper for 10fa.4, or Desk A). curl on the host for 10fa.6.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fa.1 | On Desk A and Desk B, under the congregation output, press **Take** on different scenes at the same moment (count down together). | The output shows one of the two scenes. The other desk shows **Someone changed this first — look again** in red, and its view shows the scene that won. The host's service log has one scene line, naming the desk that won. | Unverified |
+| 10fa.2 | On the desk that was refused, press Take again. | It goes through; the message goes. | Unverified |
+| 10fa.3 | Desk A: **Take the Bible off**; at the same moment Desk B or the host's phone page takes a scene (any other part). | Both go through: only presses on the same thing are refused. | Unverified |
+| 10fa.4 | Hold the service from the host. On two Timekeeper/Present desks press **Resume** at the same moment. | Resumed once: one "resumed after" line in the log. The other desk says **Someone changed this first — look again**, and shows the service is no longer on hold. | Unverified |
+| 10fa.5 | Leave the refused message on a desk for 30 s without pressing anything. | It stays (it no longer disappears after about 2 seconds); the next button pressed clears it. | Unverified |
+| 10fa.6 | On the host: `curl -s http://127.0.0.1:8080/api/v1/live -H "X-Rhema-Key: <a desk key>"`. Then send a take with an old revision: `curl -s -X POST http://127.0.0.1:8080/api/v1/command -H "X-Rhema-Key: <key>" -H "Content-Type: application/json" -d '{"command":"release_scene","value":"main","seen":{"output:main":0}}'`. Then the same without `seen`. | The Live State starts with `"revisions":{…}` (event, hold, timer, offset, each source and output). The first command is refused with 409 and `"code":"stale"`; the one without `seen` is carried out (as phones and Stream Decks are). | Unverified |
+| 10fa.7 | From the host's bell, Send to → One person → **Desk B**, Ask to show a verse "John 3:16", Send. On Desk B (Screens) press **Show John 3:16**. | Desk B shows why it was not done and answers Unable. On the host, under the notice: **Desk B could not do it: “Show John 3:16”: this device runs the congregation screens: it may take and release scenes only**. | Unverified |
+| 10fa.8 | Desk B (Screens) sends the host a notice asking to show a verse; the host answers by pressing **Unable** without trying it. | Desk B sees "<host>: Unable" with no reason line (only a request that was tried and failed has one). | Unverified |
+| 10fa.9 | Optional, long: run a service for more than an hour with Remote presses or verse steps every few seconds (or leave a joined Bible desk stepping), past 2000 log lines (Keep log shows the count). Open Prepare → Run of show. | The first items still show their actual start and Done, never Skipped; the expected end has not jumped. | Unverified |
+| 10fa.10 | Mid-service, with an item running, set the Mac's clock 1 minute ahead (System Settings → Date & Time, automatic off), wait 2 minutes, put it right again. Then force-quit Rhema (Activity Monitor → Force Quit), open it again and accept the kept log. | The service log comes back with "Service log kept from before Rhema closed unexpectedly". Run of show: the item that was running across the clock change shows the same time on air it had before the force-quit (not a minute more or less). | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

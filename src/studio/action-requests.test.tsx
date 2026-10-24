@@ -151,7 +151,8 @@ describe("action requests", () => {
     // The main desk refuses: Unable, with its reason, never Ready.
     refuse = "this device may present but not change settings"
     await act(async () => el.querySelector<HTMLButtonElement>('[aria-label="Preview Amazing Grace"]')!.click())
-    await vi.waitFor(() => expect(sent.at(-1)).toEqual(ack(song.id, "unable")))
+    // The reason goes with the answer, for whoever asked (#251).
+    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ ...ack(song.id, "unable"), why: `“Preview Amazing Grace”: ${refuse}` }))
     expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')?.textContent).toContain(`“Preview Amazing Grace” was not done: ${refuse}`)
   })
 

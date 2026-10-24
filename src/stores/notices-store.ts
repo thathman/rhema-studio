@@ -46,7 +46,8 @@ export interface Notice {
   event?: { id: string; title: string } | null
   action?: NoticeAction | null
   at: number
-  answers: { by: string; state: NoticeAnswer; at: number }[]
+  /** `why`: for Unable, what could not be done and why, in the answering desk's words (absent from older builds). */
+  answers: { by: string; state: NoticeAnswer; at: number; why?: string }[]
 }
 
 export const NOTICE_TARGETS: readonly NoticeTo[] = ["all", "host", "timekeeper", "bible", "screens", "present"]
@@ -58,7 +59,8 @@ interface NoticesState {
   /** Notices this desk has read (ids), for the unread count. */
   read: string[]
   send: (n: { from: string; fromId?: string; to?: unknown; priority?: string; text: string; event?: { id: string; title: string } | null; action?: unknown }) => Notice | null
-  answer: (id: string, by: string, state: string) => void
+  /** `why`: the reason for an Unable answer, kept with it for whoever sent the notice. */
+  answer: (id: string, by: string, state: string, why?: string) => void
   markRead: (ids: string[]) => void
   /** Notices kept from the run that closed unexpectedly (src/lib/live-recovery.ts), behind any sent since. */
   restore: (kept: Notice[], read: string[]) => void
@@ -89,11 +91,12 @@ export const useNotices = create<NoticesState>((set, get) => ({
     set({ notices: [notice, ...get().notices].slice(0, MAX) })
     return notice
   },
-  answer: (id, by, state) => {
+  answer: (id, by, state, why) => {
     const s = ANSWERS.find((a) => a === state)
     if (!s) return
     const who = by.trim().slice(0, 60) || "Someone"
-    set({ notices: get().notices.map((n) => (n.id === id ? { ...n, answers: [...n.answers.filter((a) => a.by !== who), { by: who, state: s, at: Date.now() }] } : n)) })
+    const reason = s === "unable" && typeof why === "string" ? why.replace(/\s+/g, " ").trim().slice(0, 200) : ""
+    set({ notices: get().notices.map((n) => (n.id === id ? { ...n, answers: [...n.answers.filter((a) => a.by !== who), { by: who, state: s, at: Date.now(), ...(reason ? { why: reason } : {}) }] } : n)) })
   },
   markRead: (ids) => set({ read: [...new Set([...get().read, ...ids])].slice(-500) }),
   restore: (kept, read) => {
@@ -102,6 +105,23 @@ export const useNotices = create<NoticesState>((set, get) => ({
     set({ notices: [...get().notices, ...back].slice(0, MAX), read: [...new Set([...get().read, ...read])].slice(-500) })
   },
 }))
+
+// Why this desk could not do what a notice asked, by notice id, until its Unable answer is sent.
+const unableReasons = new Map<string, string>()
+
+/** This desk could not do what notice `id` asked: the reason goes with its Unable answer (Comms, #251). */
+export function noteUnableReason(id: string, why: string): void {
+  unableReasons.set(id, why)
+  // Only ever a few: a request answered long ago is not worth keeping.
+  if (unableReasons.size > 50) unableReasons.delete(unableReasons.keys().next().value!)
+}
+
+/** The reason noted for notice `id`, once (it goes with that one answer). */
+export function takeUnableReason(id: string): string | undefined {
+  const why = unableReasons.get(id)
+  unableReasons.delete(id)
+  return why
+}
 
 /** A known group or one named desk; anything else is everyone. */
 export function asTarget(to: unknown): NoticeTarget {

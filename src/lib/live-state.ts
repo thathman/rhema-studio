@@ -46,8 +46,8 @@ export interface LiveStateV1 {
   /** offsetMinutes: the shared running-late offset and who set it (#196). */
   timing: { plannedEnd: number; expectedEnd: number; lateMs: number; offsetMinutes?: number; offsetBy?: string | null } | null
   stageMessage: string
-  /** The service timer (#196 R5) when this was sent: a desk counts on from when it arrived. */
-  timer?: { durationMs: number; elapsedMs: number; running: boolean }
+  /** The service timer (#196 R5) when this was sent: a desk counts on from when it arrived. `revision`: one more for each start, pause or correction (#196 R7; absent from older hosts). */
+  timer?: { durationMs: number; elapsedMs: number; running: boolean; revision?: number }
   /**
    * Congregation scenes and outputs, for a screens operator. An output's `sceneRevision` and `sceneBy`:
    * its last scene Take or release on the host, and who did it (#243 EX.1; absent from older hosts
@@ -76,6 +76,13 @@ export interface LiveStateV1 {
    * says so. Absent from older hosts.
    */
   churchLook?: ChurchLook
+  /**
+   * Added by the host's server, not the app (#196 R7): a revision for each part of the service a
+   * desk can change ("event", "offset", "timer", "hold", "source:<id>", "output:<id>"). A desk sends
+   * them back with each command, and the host refuses one for a part someone changed since.
+   * Absent from older hosts.
+   */
+  revisions?: Record<string, number>
 }
 
 /**
@@ -148,7 +155,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     rundown: q.items.map((i) => { const time = times.get(i.id); return { id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null, ...(time ? { time } : {}) } }),
     timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by } : null,
     stageMessage: b.stageMessage,
-    timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null } })(),
+    timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null, revision: timerRevision } })(),
     scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => {
       const take = b.sceneTakes[o.id]
@@ -163,6 +170,11 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     churchLook: sharedChurchLook(useSettingsStore.getState().brandKit, b.themes),
   }
 }
+
+// Each start, pause or correction of the service timer, counted: a running timer's time moves on by
+// itself, so this is how the host's server tells that someone changed it (#196 R7).
+let timerRevision = 0
+useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) timerRevision++ })
 
 let queued = false
 let last = ""

@@ -207,6 +207,89 @@ pub struct LiveHub {
     current: std::sync::RwLock<Option<String>>,
     service: std::sync::RwLock<Option<String>>,
     tx: broadcast::Sender<String>,
+    revisions: std::sync::Mutex<Revisions>,
+}
+
+/// A revision for each part of the live service a joined desk can change (#196 R7, #246 T6): the
+/// event clock, the running-late offset, the service timer, the hold, each live source and each
+/// congregation output. It goes up whenever the host's Live State shows that part changed, and at
+/// once when the server accepts a command for it, so of two desks acting on what they both saw,
+/// only the first is carried out; the other is told to look again. The server keeps them and adds
+/// them to the Live State it hands on (`revisions`), so a desk sends back what it saw.
+#[derive(Debug, Default)]
+struct Revisions {
+    parts: std::collections::HashMap<String, (u64, String)>,
+}
+
+impl Revisions {
+    /// What each part looks like in this Live State, to tell when it changed. Fields an older host
+    /// does not send read as null, so its parts simply never move.
+    fn fingerprints(v: &serde_json::Value) -> Vec<(String, String)> {
+        let mut out = vec![
+            ("event".to_string(), v["event"]["currentId"].to_string()),
+            ("offset".to_string(), serde_json::json!([v["timing"]["offsetMinutes"], v["timing"]["offsetBy"]]).to_string()),
+            ("timer".to_string(), serde_json::json!([v["timer"]["running"], v["timer"]["durationMs"], v["timer"]["revision"]]).to_string()),
+            ("hold".to_string(), v["hold"].to_string()),
+        ];
+        for s in v["sources"].as_array().into_iter().flatten() {
+            if let Some(id) = s["id"].as_str() {
+                out.push((format!("source:{id}"), serde_json::json!([s["on"], s["revision"]]).to_string()));
+            }
+        }
+        for o in v["outputs"].as_array().into_iter().flatten() {
+            if let Some(id) = o["id"].as_str() {
+                out.push((format!("output:{id}"), serde_json::json!([o["sceneId"], o["sceneRevision"]]).to_string()));
+            }
+        }
+        out
+    }
+
+    /// A new Live State: each part that looks different from the last one goes up by one.
+    fn observe(&mut self, v: &serde_json::Value) {
+        for (part, fp) in Self::fingerprints(v) {
+            match self.parts.get_mut(&part) {
+                Some((n, old)) if *old != fp => {
+                    *n += 1;
+                    *old = fp;
+                }
+                Some(_) => {}
+                None => {
+                    self.parts.insert(part, (1, fp));
+                }
+            }
+        }
+    }
+
+    fn get(&self, part: &str) -> Option<u64> {
+        self.parts.get(part).map(|(n, _)| *n)
+    }
+
+    /// A command for this part was accepted: anyone still acting on the old revision is too late.
+    fn bump(&mut self, part: &str) {
+        if let Some((n, _)) = self.parts.get_mut(part) {
+            *n += 1;
+        }
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::Value::Object(self.parts.iter().map(|(k, (n, _))| (k.clone(), serde_json::json!(n))).collect())
+    }
+}
+
+/// The part of the live service a remote command changes, for its revision check (see
+/// `Revisions`); None for those not checked: stepping verses, activating a reference, notices and
+/// talk, and anything newer this list does not name.
+fn revision_part(cmd: &RemoteCommand) -> Option<String> {
+    Some(match cmd {
+        RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) => "event".into(),
+        RemoteCommand::EventOffset(_) => "offset".into(),
+        RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) => "timer".into(),
+        RemoteCommand::Hold(_) | RemoteCommand::Resume => "hold".into(),
+        RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => format!("source:{id}"),
+        RemoteCommand::TakeScene(t) => format!("output:{}", t.output),
+        RemoteCommand::ReleaseScene(output) => format!("output:{output}"),
+        _ => return None,
+    })
 }
 
 /// The one part of a Live State the server reads: `service.id` ("" when no saved service is open).
@@ -232,9 +315,32 @@ fn service_of(json: &str) -> Option<String> {
 impl LiveHub {
     pub fn publish(&self, json: String) {
         *self.service.write().unwrap_or_else(std::sync::PoisonError::into_inner) = service_of(&json);
+        // The revisions go in with it, so a desk acts on, and sends back, what it saw.
+        // The app's own text is kept as it is, with them in front.
+        let json = match serde_json::from_str::<serde_json::Value>(&json) {
+            Ok(v) if v.is_object() => {
+                let mut revs = self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                revs.observe(&v);
+                let rest = json.trim_start().strip_prefix('{').unwrap_or("}");
+                let sep = if v.as_object().is_some_and(serde_json::Map::is_empty) { "" } else { "," };
+                format!(r#"{{"revisions":{}{sep}{rest}"#, revs.to_json())
+            }
+            _ => json,
+        };
         *self.current.write().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(json.clone());
         // No one following is fine.
         let _ = self.tx.send(json);
+    }
+
+    /// The revision of one part of the live service now (see `Revisions`), None before the host
+    /// has shown it.
+    #[must_use]
+    pub fn revision(&self, part: &str) -> Option<u64> {
+        self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(part)
+    }
+
+    fn bump(&self, part: &str) {
+        self.revisions.lock().unwrap_or_else(std::sync::PoisonError::into_inner).bump(part);
     }
 
     #[must_use]
@@ -291,7 +397,7 @@ fn notice_is_for(n: &serde_json::Value, reader: &crate::keys::KeyEntry) -> bool 
 
 #[must_use]
 pub fn new_live_hub() -> SharedLive {
-    Arc::new(LiveHub { current: std::sync::RwLock::new(None), service: std::sync::RwLock::new(None), tx: broadcast::channel(32).0 })
+    Arc::new(LiveHub { current: std::sync::RwLock::new(None), service: std::sync::RwLock::new(None), tx: broadcast::channel(32).0, revisions: std::sync::Mutex::new(Revisions::default()) })
 }
 
 /// Handle to a running HTTP server. Call `stop()` to shut it down.
@@ -339,6 +445,9 @@ struct AppState<S: CommandSink> {
     pairing: PairingWindow,
     rate: crate::rate::RateLimiter,
     recent: RecentIds,
+    /// One command at a time from its revision check to the app: two desks pressing at once are
+    /// carried out one after the other, and the second is checked against the first.
+    gate: std::sync::Mutex<()>,
 }
 
 /// Snapshot of the current application state, served by `GET /api/v1/status`.
@@ -396,6 +505,7 @@ where
         pairing: config.pairing.clone(),
         rate: crate::rate::RateLimiter::default(),
         recent: RecentIds::default(),
+        gate: std::sync::Mutex::new(()),
     });
 
     let app = Router::new()
@@ -560,10 +670,21 @@ struct CommandRequest {
     /// older desks, scripts) = accepted as before.
     #[serde(default)]
     service: Option<String>,
+    /// The revisions in the Live State the desk acted on (#196 R7): a command for a part of the
+    /// service that has changed since is refused. Absent (the phone page, older desks, scripts) =
+    /// not checked, as before.
+    #[serde(default)]
+    seen: Option<std::collections::HashMap<String, u64>>,
+    /// An Unable answer's reason (Rhema Comms, #251): what the desk could not do and why, for
+    /// whoever sent the notice. Beside the command, so an older host simply ignores it.
+    #[serde(default)]
+    why: Option<String>,
 }
 
 /// What a desk looking at another service is told; it refreshes its Live State.
 const OTHER_SERVICE_MESSAGE: &str = "That desk is looking at a different service; it will refresh";
+/// What a desk acting on what it saw is told when someone changed that part of the service first.
+pub const STALE_MESSAGE: &str = "Someone changed this first \u{2014} look again";
 
 /// Command ids seen recently, so a retried press is not carried out twice.
 #[derive(Default)]
@@ -572,6 +693,14 @@ struct RecentIds(std::sync::Mutex<std::collections::VecDeque<(String, std::time:
 impl RecentIds {
     const KEEP: std::time::Duration = std::time::Duration::from_secs(60);
     const MAX: usize = 256;
+
+    /// This id was carried out within the last minute (a retry), without recording it.
+    fn seen(&self, id: &str) -> bool {
+        let Ok(seen) = self.0.lock() else { return false };
+        let id: String = id.chars().take(64).collect();
+        let now = std::time::Instant::now();
+        seen.iter().any(|(s, at)| *s == id && now.duration_since(*at) <= Self::KEEP)
+    }
 
     /// True the first time an id is seen within the last minute.
     fn first_time(&self, id: &str) -> bool {
@@ -594,6 +723,9 @@ struct CommandResponse {
     success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    /// Which refusal a 409 is, for a desk to act on: "stale" (look again) or "other-service" (refresh).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'static str>,
 }
 
 #[derive(Deserialize)]
@@ -1032,19 +1164,19 @@ async fn command_handler<S: CommandSink + 'static>(
 ) -> impl IntoResponse {
     if !state.rate.allow(peer.ip()) {
         log::warn!("HTTP command refused: too many from {}", peer.ip());
-        return (StatusCode::TOO_MANY_REQUESTS, Json(CommandResponse { success: false, error: Some("too many commands; slow down".into()) }));
+        return (StatusCode::TOO_MANY_REQUESTS, Json(CommandResponse { success: false, error: Some("too many commands; slow down".into()), code: None }));
     }
     let by = match check_key(&state.keys, presented_key(&headers)) {
         Err(reason) => {
             log::warn!("HTTP command refused: {reason}");
             return (
                 StatusCode::UNAUTHORIZED,
-                Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")) }),
+                Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")), code: None }),
             );
         }
         Ok(Some(entry)) if entry.paused_for(&request.command) => {
             log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
-            return (StatusCode::LOCKED, Json(CommandResponse { success: false, error: Some(crate::keys::PAUSED_MESSAGE.into()) }));
+            return (StatusCode::LOCKED, Json(CommandResponse { success: false, error: Some(crate::keys::PAUSED_MESSAGE.into()), code: None }));
         }
         Ok(Some(entry)) if !entry.role.allows(&request.command) => {
             let why = match entry.role {
@@ -1056,7 +1188,7 @@ async fn command_handler<S: CommandSink + 'static>(
             log::warn!("HTTP command refused for {}: {why}", entry.name);
             return (
                 StatusCode::FORBIDDEN,
-                Json(CommandResponse { success: false, error: Some(why.into()) }),
+                Json(CommandResponse { success: false, error: Some(why.into()), code: None }),
             );
         }
         Ok(Some(entry)) => (entry.name, Some(entry.hash)),
@@ -1069,29 +1201,62 @@ async fn command_handler<S: CommandSink + 'static>(
         if let (Some(sent), Some(host)) = (request.service.as_deref(), state.live.service()) {
             if sent != host {
                 log::info!("HTTP command from {by} refused: it is for another service");
-                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()) }));
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()), code: Some("other-service") }));
             }
         }
     }
-    if request.id.as_deref().is_some_and(|id| !state.recent.first_time(id)) {
+    // From here one command at a time, so two desks pressing at once are checked one after the other.
+    let _turn = state.gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if request.id.as_deref().is_some_and(|id| state.recent.seen(id)) {
         log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
-        return (StatusCode::OK, Json(CommandResponse { success: true, error: None }));
+        return (StatusCode::OK, Json(CommandResponse { success: true, error: None, code: None }));
     }
-    match CommandDispatcher::dispatch_from(&request.command, &*state.sink, &by, by_id.as_deref()) {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(CommandResponse {
-                success: true,
-                error: None,
-            }),
-        ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(CommandResponse {
-                success: false,
-                error: Some(e.to_string()),
-            }),
-        ),
+    // Acting on what it saw (#196 R7): if someone changed that part of the service since, the desk
+    // looks again rather than undo or repeat their change.
+    let part = revision_part(&request.command);
+    if let (Some(part), Some(seen)) = (part.as_deref(), request.seen.as_ref()) {
+        if let (Some(sent), Some(now)) = (seen.get(part), state.live.revision(part)) {
+            if *sent != now {
+                log::info!("HTTP command {:?} from {by} refused: {part} changed since (revision {sent}, now {now})", request.command);
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale") }));
+            }
+        }
+    }
+    if let Some(id) = request.id.as_deref() {
+        state.recent.first_time(id);
+    }
+    if let Some(part) = part.as_deref() {
+        state.live.bump(part);
+    }
+    let why = request.why.as_deref().map(|w| w.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect::<String>()).filter(|w| !w.is_empty());
+    let done = match (&request.command, why) {
+        (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&request.command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
+        _ => CommandDispatcher::dispatch_from(&request.command, &*state.sink, &by, by_id.as_deref()),
+    };
+    match done {
+        Ok(()) => (StatusCode::OK, Json(CommandResponse { success: true, error: None, code: None })),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(CommandResponse { success: false, error: Some(e.to_string()), code: None })),
+    }
+}
+
+/// Carries an Unable answer's reason to the app with the answer itself (Rhema Comms, #251).
+struct WithWhy<'a> {
+    inner: &'a dyn CommandSink,
+    why: &'a str,
+}
+
+impl CommandSink for WithWhy<'_> {
+    fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+        match serde_json::from_str::<serde_json::Value>(payload) {
+            Ok(serde_json::Value::Object(mut m)) if event == "remote:notice_ack" => {
+                m.insert("why".into(), self.why.into());
+                self.inner.emit_event(event, &serde_json::Value::Object(m).to_string())
+            }
+            _ => self.inner.emit_event(event, payload),
+        }
+    }
+    fn invoke_backend(&self, action: &str, args: &str) -> Result<(), CommandError> {
+        self.inner.invoke_backend(action, args)
     }
 }
 
@@ -1235,7 +1400,7 @@ mod tests {
         assert!(now.contains("200 OK") && now.contains("Opening prayer"), "{now}");
 
         // The stream starts with the current state, then each change.
-        let handle = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", Some(400)).await });
+        let handle = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", Some(500)).await });
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
         let stream = handle.await.unwrap();
@@ -2028,5 +2193,315 @@ mod tests {
 
         let result = start_http_server(config, sink, status).await;
         assert!(result.is_err());
+    }
+
+    // --- Revisions and races between desks (#196 R7, #246 T6) ---
+
+    #[test]
+    fn each_part_of_the_service_has_a_revision_that_moves_only_when_it_changes() {
+        let live = new_live_hub();
+        let state = |current: &str, scene: &str, hold: &str| format!(r#"{{"v":1,"event":{{"mode":"own","currentId":{current}}},"outputs":[{{"id":"main","sceneId":{scene}}}],"hold":{hold},"sources":[{{"id":"bible","on":true,"revision":3}}],"timer":{{"running":false,"durationMs":0,"elapsedMs":0}}}}"#);
+        live.publish(state("null", "null", "null"));
+        let first = ["event", "output:main", "hold", "source:bible", "timer", "offset"].map(|p| live.revision(p));
+        assert!(first.iter().all(Option::is_some), "{first:?}");
+        // The same again (the heartbeat), even with the timer counting on: nothing moves.
+        live.publish(state("null", "null", "null").replace(r#""elapsedMs":0"#, r#""elapsedMs":900"#));
+        assert_eq!(["event", "output:main", "hold", "source:bible", "timer", "offset"].map(|p| live.revision(p)), first);
+        live.publish(state(r#""sermon""#, r#""pulpit""#, "null"));
+        assert_eq!(live.revision("event"), first[0].map(|n| n + 1));
+        assert_eq!(live.revision("output:main"), first[1].map(|n| n + 1));
+        assert_eq!(live.revision("hold"), first[2], "the hold did not change");
+        // What a desk reads carries them.
+        let served: serde_json::Value = serde_json::from_str(&live.current().unwrap()).unwrap();
+        assert_eq!(served["revisions"]["event"].as_u64(), live.revision("event"));
+        assert_eq!(served["event"]["currentId"], "sermon", "the Live State itself is as the app sent it");
+        // An accepted command moves its part at once, before the app's next Live State.
+        live.bump("hold");
+        assert_eq!(live.revision("hold"), first[2].map(|n| n + 1));
+        assert_eq!(live.revision("camera:nowhere"), None);
+        live.bump("camera:nowhere");
+        assert_eq!(live.revision("camera:nowhere"), None, "a part the host never showed is not checked");
+        // Not JSON (a test, a broken build): passed on as it is.
+        live.publish("not json".into());
+        assert_eq!(live.current().as_deref(), Some("not json"));
+    }
+
+    #[test]
+    fn the_commands_that_change_live_state_name_their_part() {
+        let part = |json: &str| revision_part(&serde_json::from_str::<RemoteCommand>(json).unwrap());
+        assert_eq!(part(r#"{"command":"take_scene","value":{"output":"main","scene":"s"}}"#).as_deref(), Some("output:main"));
+        assert_eq!(part(r#"{"command":"release_scene","value":"main"}"#).as_deref(), Some("output:main"));
+        assert_eq!(part(r#"{"command":"clear_source","value":"ticker"}"#).as_deref(), Some("source:ticker"));
+        assert_eq!(part(r#"{"command":"restore_source","value":"bible"}"#).as_deref(), Some("source:bible"));
+        assert_eq!(part(r#"{"command":"hold","value":"Waiting"}"#).as_deref(), Some("hold"));
+        assert_eq!(part(r#"{"command":"resume"}"#).as_deref(), Some("hold"));
+        for timer in [r#"{"command":"timer_start"}"#, r#"{"command":"timer_pause"}"#, r#"{"command":"timer_adjust","value":1}"#] {
+            assert_eq!(part(timer).as_deref(), Some("timer"));
+        }
+        for event in [r#"{"command":"event_next"}"#, r#"{"command":"event_prev"}"#, r#"{"command":"event_start","value":"x"}"#] {
+            assert_eq!(part(event).as_deref(), Some("event"));
+        }
+        assert_eq!(part(r#"{"command":"event_offset","value":5}"#).as_deref(), Some("offset"));
+        for unchecked in [r#"{"command":"verse_next"}"#, r#"{"command":"bible_activate","value":"John 3:16"}"#, r#"{"command":"notice_ack","value":{"id":"n","state":"seen"}}"#, r#"{"command":"next"}"#] {
+            assert_eq!(part(unchecked), None, "{unchecked}");
+        }
+    }
+
+    /// The host app as far as these tests need it: it carries out each command a little after the
+    /// server hands it on (as the window does), keeps a service log line for each, and publishes its
+    /// Live State again.
+    struct HostSim {
+        live: SharedLive,
+        model: Arc<Mutex<Model>>,
+    }
+
+    #[derive(Default, Clone)]
+    struct Model {
+        scene: Option<String>,
+        scene_revision: u64,
+        hold: Option<String>,
+        bible_on: bool,
+        bible_revision: u64,
+        /// The service log: one line per command carried out.
+        journal: Vec<String>,
+    }
+
+    impl Model {
+        fn live_state(&self) -> String {
+            serde_json::json!({
+                "v": 1, "service": { "id": "s1", "title": "9 AM" }, "event": { "mode": "own", "currentId": null },
+                "outputs": [{ "id": "main", "name": "Main", "sceneId": self.scene, "sceneRevision": self.scene_revision }],
+                "sources": [{ "id": "bible", "reference": "John 3:16", "on": self.bible_on, "revision": self.bible_revision }],
+                "hold": self.hold.as_ref().map(|r| serde_json::json!({ "reason": r, "since": 1 })),
+            })
+            .to_string()
+        }
+    }
+
+    impl HostSim {
+        fn new(start: Model) -> Arc<Self> {
+            let live = new_live_hub();
+            live.publish(start.live_state());
+            Arc::new(Self { live, model: Arc::new(Mutex::new(start)) })
+        }
+    }
+
+    impl CommandSink for HostSim {
+        fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+            let p: serde_json::Value = serde_json::from_str(payload).unwrap_or_default();
+            let (model, live, event) = (self.model.clone(), self.live.clone(), event.to_string());
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(3));
+                let mut m = model.lock().unwrap();
+                let by = p["by"].as_str().unwrap_or("?").to_string();
+                match event.as_str() {
+                    "remote:take_scene" => { m.scene = p["scene"].as_str().map(String::from); m.scene_revision += 1; }
+                    "remote:release_scene" => { m.scene = None; m.scene_revision += 1; }
+                    "remote:clear_source" => { m.bible_on = false; }
+                    "remote:restore_source" => { m.bible_on = true; }
+                    // The hold store logs its own line (src/stores/hold-store.ts).
+                    "remote:hold" => if m.hold.is_none() { m.hold = Some(p["reason"].as_str().unwrap_or("").to_string()); m.journal.push(format!("{by}: hold")); },
+                    "remote:resume" => if m.hold.take().is_some() { m.journal.push(format!("{by}: resumed")); },
+                    // The app's log line for each other command (use-remote-control.ts).
+                    "remote:audit" => m.journal.push(format!("{} · by {by}", p["command"].as_str().unwrap_or("?"))),
+                    _ => {}
+                }
+                live.publish(m.live_state());
+            });
+            Ok(())
+        }
+        fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+    }
+
+    const DESKS: [(&str, &str); 6] = [("ka", "Desk A"), ("kb", "Desk B"), ("kc", "Desk C"), ("kd", "Desk D"), ("ke", "Desk E"), ("kf", "Desk F")];
+
+    async fn sim_server(host: &Arc<HostSim>) -> (u16, HttpHandle) {
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: crate::keys::key_set_from(&DESKS), live: host.live.clone(), ..Default::default() };
+        let result = start_http_server(config, host.clone(), new_shared_status()).await.expect("should bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        (result.bound_port, result.handle)
+    }
+
+    /// What a desk saw: the revisions in the Live State it read.
+    async fn read_revisions(port: u16, key: &str) -> serde_json::Value {
+        let r = get_with(port, "/api/v1/live", &format!("X-Rhema-Key: {key}\r\n"), None).await;
+        let body = r.split("\r\n\r\n").nth(1).expect("a body");
+        serde_json::from_str::<serde_json::Value>(body).expect("the Live State")["revisions"].clone()
+    }
+
+    /// Send one command as a desk and return the HTTP status and the body.
+    async fn press(port: u16, key: &str, command: serde_json::Value) -> (u16, String) {
+        let r = raw_http_request_with(port, "POST", "/api/v1/command", Some(&command.to_string()), &format!("X-Rhema-Key: {key}\r\n")).await;
+        let status = r.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+        (status, r.split("\r\n\r\n").nth(1).unwrap_or("").to_string())
+    }
+
+    /// Every desk presses at the same moment, each with what it saw.
+    async fn all_at_once(port: u16, presses: Vec<(&'static str, serde_json::Value)>) -> Vec<(u16, String)> {
+        let barrier = Arc::new(tokio::sync::Barrier::new(presses.len()));
+        let tasks: Vec<_> = presses
+            .into_iter()
+            .map(|(key, cmd)| {
+                let barrier = barrier.clone();
+                tokio::spawn(async move {
+                    barrier.wait().await;
+                    press(port, key, cmd).await
+                })
+            })
+            .collect();
+        let mut out = Vec::new();
+        for t in tasks {
+            out.push(t.await.expect("the press"));
+        }
+        out
+    }
+
+    async fn settle() {
+        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn two_desks_taking_a_scene_at_once_one_wins_and_the_other_looks_again() {
+        let host = HostSim::new(Model::default());
+        let (port, mut handle) = sim_server(&host).await;
+        let seen = read_revisions(port, "ka").await;
+        let take = |scene: &str| serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": scene }, "seen": seen, "service": "s1" });
+        let results = all_at_once(port, vec![("ka", take("pulpit")), ("kb", take("choir"))]).await;
+        let won: Vec<_> = results.iter().filter(|(s, _)| *s == 200).collect();
+        let lost: Vec<_> = results.iter().filter(|(s, _)| *s == 409).collect();
+        assert_eq!((won.len(), lost.len()), (1, 1), "{results:?}");
+        assert!(lost[0].1.contains("Someone changed this first") && lost[0].1.contains(r#""code":"stale""#), "{}", lost[0].1);
+        settle().await;
+        let m = host.model.lock().unwrap().clone();
+        let winner = if results[0].0 == 200 { "pulpit" } else { "choir" };
+        assert_eq!(m.scene.as_deref(), Some(winner), "the output shows the scene that was accepted");
+        assert_eq!(m.scene_revision, 1, "taken once");
+        assert_eq!(m.journal.len(), 1, "one log line for the one take: {:?}", m.journal);
+        // The other desk looks again and its take now goes through.
+        let fresh = read_revisions(port, "kb").await;
+        let (status, _) = press(port, "kb", serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": "choir" }, "seen": fresh })).await;
+        assert_eq!(status, 200);
+        settle().await;
+        let m = host.model.lock().unwrap().clone();
+        assert_eq!((m.scene.as_deref(), m.journal.len()), (Some("choir"), 2));
+        handle.stop();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_take_and_a_release_at_once_leave_one_consistent_output() {
+        for round in 0..5 {
+            let host = HostSim::new(Model { scene: Some("welcome".into()), scene_revision: 1, ..Model::default() });
+            let (port, mut handle) = sim_server(&host).await;
+            let seen = read_revisions(port, "ka").await;
+            let results = all_at_once(port, vec![
+                ("ka", serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": "pulpit" }, "seen": seen })),
+                ("kb", serde_json::json!({ "command": "release_scene", "value": "main", "seen": seen })),
+            ])
+            .await;
+            assert_eq!(results.iter().filter(|(s, _)| *s == 200).count(), 1, "round {round}: {results:?}");
+            settle().await;
+            let m = host.model.lock().unwrap().clone();
+            let expected = if results[0].0 == 200 { Some("pulpit") } else { None };
+            assert_eq!(m.scene.as_deref(), expected, "round {round}");
+            assert_eq!((m.scene_revision, m.journal.len()), (2, 1), "round {round}: {:?}", m.journal);
+            handle.stop();
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn hold_and_resume_from_many_desks_at_once_is_carried_out_once() {
+        let host = HostSim::new(Model { hold: Some("Waiting for the pastor".into()), ..Model::default() });
+        let (port, mut handle) = sim_server(&host).await;
+        let seen = read_revisions(port, "ka").await;
+        // Three desks resume, three hold again with another reason, all from the same Live State.
+        let presses = DESKS
+            .iter()
+            .enumerate()
+            .map(|(i, (key, _))| (*key, if i % 2 == 0 { serde_json::json!({ "command": "resume", "seen": seen }) } else { serde_json::json!({ "command": "hold", "value": "Mic check", "seen": seen }) }))
+            .collect();
+        let results = all_at_once(port, presses).await;
+        let accepted: Vec<usize> = results.iter().enumerate().filter(|(_, (s, _))| *s == 200).map(|(i, _)| i).collect();
+        assert_eq!(accepted.len(), 1, "{results:?}");
+        assert!(results.iter().all(|(s, _)| *s == 200 || *s == 409), "{results:?}");
+        settle().await;
+        let m = host.model.lock().unwrap().clone();
+        if accepted[0] % 2 == 0 {
+            assert_eq!((m.hold.as_deref(), m.journal.len()), (None, 1), "resumed once: {:?}", m.journal);
+        } else {
+            // A hold while held changes nothing (the hold store keeps the first one) and logs nothing.
+            assert_eq!((m.hold.as_deref(), m.journal.len()), (Some("Waiting for the pastor"), 0), "{:?}", m.journal);
+        }
+        handle.stop();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn many_desks_clearing_and_restoring_a_source_at_once_one_goes_through() {
+        let host = HostSim::new(Model { bible_on: true, bible_revision: 4, ..Model::default() });
+        let (port, mut handle) = sim_server(&host).await;
+        let seen = read_revisions(port, "ka").await;
+        let presses = DESKS.iter().enumerate().map(|(i, (key, _))| (*key, serde_json::json!({ "command": if i % 2 == 0 { "clear_source" } else { "restore_source" }, "value": "bible", "seen": seen }))).collect();
+        let results = all_at_once(port, presses).await;
+        assert_eq!(results.iter().filter(|(s, _)| *s == 200).count(), 1, "{results:?}");
+        settle().await;
+        assert_eq!(host.model.lock().unwrap().journal.len(), 1, "one log line for the one accepted");
+        handle.stop();
+    }
+
+    #[tokio::test]
+    async fn without_revisions_commands_work_as_before_and_a_retry_is_never_called_stale() {
+        let host = HostSim::new(Model::default());
+        let (port, mut handle) = sim_server(&host).await;
+        // The phone page, Companion and older desks send none: not checked.
+        assert_eq!(press(port, "ka", serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": "a" } })).await.0, 200);
+        assert_eq!(press(port, "kb", serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": "b" } })).await.0, 200);
+        settle().await;
+        let seen = read_revisions(port, "ka").await;
+        let take = serde_json::json!({ "command": "take_scene", "value": { "output": "main", "scene": "c" }, "seen": seen, "id": "press-1" });
+        assert_eq!(press(port, "ka", take.clone()).await.0, 200);
+        // The same press again (its answer was lost): already done, not "someone changed this".
+        assert_eq!(press(port, "ka", take).await.0, 200);
+        // A part the desk did not see (an older host's Live State had no revisions): not checked.
+        assert_eq!(press(port, "kb", serde_json::json!({ "command": "resume", "seen": {} })).await.0, 200);
+        // Commands that are not checked carry on whatever was seen.
+        assert_eq!(press(port, "kb", serde_json::json!({ "command": "verse_next", "seen": { "event": 0 } })).await.0, 200);
+        settle().await;
+        let m = host.model.lock().unwrap().clone();
+        assert_eq!((m.scene.as_deref(), m.scene_revision), (Some("c"), 3));
+        handle.stop();
+    }
+
+    struct Recorder(Mutex<Vec<(String, String)>>);
+    impl CommandSink for Recorder {
+        fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
+            self.0.lock().unwrap().push((event.into(), payload.into()));
+            Ok(())
+        }
+        fn invoke_backend(&self, _: &str, _: &str) -> Result<(), CommandError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unable_answer_carries_its_reason_to_the_app() {
+        let sink = Arc::new(Recorder(Mutex::new(Vec::new())));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let port = result.bound_port;
+        let unable = r#"{"command":"notice_ack","value":{"id":"n1","state":"unable"},"why":"  that verse\nwas not found "}"#;
+        assert!(raw_http_request(port, "POST", "/api/v1/command", Some(unable)).await.contains("200 OK"));
+        // An answer without a reason, and a reason beside another command, change nothing.
+        assert!(raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"notice_ack","value":{"id":"n1","state":"seen"}}"#)).await.contains("200 OK"));
+        assert!(raw_http_request(port, "POST", "/api/v1/command", Some(r#"{"command":"event_next","why":"x"}"#)).await.contains("200 OK"));
+        let events = sink.0.lock().unwrap().clone();
+        let v = |i: usize| serde_json::from_str::<serde_json::Value>(&events[i].1).unwrap();
+        assert_eq!(events[0].0, "remote:notice_ack");
+        assert_eq!((v(0)["state"].as_str(), v(0)["why"].as_str()), (Some("unable"), Some("that verse was not found")));
+        assert!(v(1).get("why").is_none());
+        assert!(events.iter().all(|(_, p)| !p.contains(r#""why":"x""#)), "{events:?}");
+        let mut handle = result.handle;
+        handle.stop();
     }
 }

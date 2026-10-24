@@ -32,10 +32,26 @@ export const useJournalStore = create<JournalState>((set) => ({
   // Rehearsal is a sandbox (ADR 0001): only its start and end are part of the service's history.
   add: (entry) => {
     if (entry.kind !== "rehearsal" && useBroadcastStore.getState().rehearsal) return
-    set((s) => ({ entries: [...s.entries, { ...entry, at: Date.now(), mono: monotonicNow() }].slice(-2000), added: s.added + 1 }))
+    set((s) => ({ entries: capJournal([...s.entries, { ...entry, at: Date.now(), mono: monotonicNow() }]), added: s.added + 1 }))
   },
   clear: () => set((s) => ({ entries: [], startItemIds: null, keptAt: s.added })),
 }))
+
+/** The most entries the log keeps in this run. */
+export const JOURNAL_MAX = 2000
+
+/**
+ * The last 2000 entries, except that an event's start is never dropped: the run of show's actual
+ * times and durations are worked out from those alone (#196 R7), and a long service with a verse
+ * stepped every few seconds would otherwise lose its first items and call them skipped. There are
+ * only ever as many of them as items started; past that, the oldest go after all.
+ */
+export function capJournal(entries: JournalEntry[]): JournalEntry[] {
+  let drop = entries.length - JOURNAL_MAX
+  if (drop <= 0) return entries
+  const kept = entries.filter((e) => (drop > 0 && e.kind !== "event" ? (drop--, false) : true))
+  return kept.length > JOURNAL_MAX ? kept.slice(-JOURNAL_MAX) : kept
+}
 
 /** The log as text (no transcript): what Keep log and Save log write. */
 export function journalText(): string {

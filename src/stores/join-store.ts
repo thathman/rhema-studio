@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { useSettingsStore } from "@/stores/settings-store"
+import { takeUnableReason } from "@/stores/notices-store"
 
 /**
  * Joining another Rhema (Host/Join, ARCH-004): this computer follows the host's Live State and
@@ -42,6 +43,25 @@ interface JoinState {
 
 export type SendResult = { ok: true } | { ok: false; error: string }
 
+/** What a desk is told when someone changed that part of the service before its command arrived. */
+export const STALE_MESSAGE = "Someone changed this first — look again"
+
+/**
+ * A command as this desk sends it: with the revisions of the Live State it acted on (`seen`, #196
+ * R7), so the host can refuse it if someone changed that part first, and, for an Unable answer, the
+ * reason this desk could not do what was asked (Comms, #251). Older hosts ignore both.
+ */
+export function withWhatWasSeen(command: { command: string; value?: unknown }, live: LiveStateV1 | null): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...command }
+  if (live?.revisions) out.seen = live.revisions
+  const v = command.value as { id?: unknown; state?: unknown } | undefined
+  if (command.command === "notice_ack" && v?.state === "unable" && typeof v.id === "string") {
+    const why = takeUnableReason(v.id)
+    if (why) out.why = why
+  }
+  return out
+}
+
 /** What a desk shows when the host is on another service and the command was not sent. */
 const OTHER_SERVICE_NOTE = "The main desk is on a different service now, so that was not sent. This desk has refreshed: check what is live, then try again."
 
@@ -71,7 +91,11 @@ async function listenOnce() {
       // The host lists the desks it has taken back control from; an older host does not say.
       const paused = Array.isArray(live.paused) && name ? live.paused.includes(name) : useJoin.getState().paused
       if (typeof live.at === "number") gaps = [...gaps, Date.now() - live.at].slice(-5)
-      useJoin.setState({ live, receivedAt: performance.now(), clockSkewMs: gaps.length ? Math.min(...gaps) : null, status: "connected", error: null, paused })
+      // A lost connection's reason goes once the host is heard again. A command's refusal stays
+      // until the next command: the host sends every 2 s, which would wipe it before it was read.
+      const was = useJoin.getState()
+      const error = was.status === "connected" ? was.error : null
+      useJoin.setState({ live, receivedAt: performance.now(), clockSkewMs: gaps.length ? Math.min(...gaps) : null, status: "connected", error, paused })
     } catch {
       // A snapshot this build cannot read: keep the last one.
     }
@@ -129,7 +153,7 @@ export const useJoin = create<JoinState>((set, get) => ({
   send: async (command) => {
     const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
     try {
-      await invoke("join_command", { address, token, command, service: serviceOf(get().live) })
+      await invoke("join_command", { address, token, command: withWhatWasSeen(command, get().live), service: serviceOf(get().live) })
       set({ error: null, note: null })
       return { ok: true }
     } catch (e) {
@@ -138,6 +162,13 @@ export const useJoin = create<JoinState>((set, get) => ({
       if (msg.startsWith("paused:")) {
         set({ paused: true, error: null })
         return { ok: false, error: msg.slice("paused:".length).trim() || "The main desk has taken back control" }
+      }
+      // Someone changed that part of the service first (#196 R7): nothing was done; this desk's
+      // view is already following the change, so the operator looks again.
+      if (msg.startsWith("stale:")) {
+        const why = msg.slice("stale:".length).trim() || STALE_MESSAGE
+        set({ error: why, note: null })
+        return { ok: false, error: why }
       }
       if (msg.startsWith("other-service:")) {
         set({ error: null, note: OTHER_SERVICE_NOTE })

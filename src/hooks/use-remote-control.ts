@@ -169,7 +169,8 @@ export function useRemoteControl() {
         await listen<string>(REMOTE_EVENTS.notice_ack, (e) => {
           if (cancelled) return
           const p = parsePayload(e.payload)
-          if (p && typeof p.id === "string" && typeof p.state === "string" && typeof p.by === "string") useNotices.getState().answer(p.id, p.by, p.state)
+          // An Unable answer's reason (`why`) comes from the answering desk, for whoever sent the notice.
+          if (p && typeof p.id === "string" && typeof p.state === "string" && typeof p.by === "string") useNotices.getState().answer(p.id, p.by, p.state, typeof p.why === "string" ? p.why : undefined)
         }),
       )
       await withPayload(REMOTE_EVENTS.release_scene, (p) => { if (typeof p.output === "string") useBroadcastStore.getState().releaseScene(p.output) })
