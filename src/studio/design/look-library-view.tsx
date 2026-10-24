@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ask } from "@tauri-apps/plugin-dialog"
-import { HeartIcon, MoreHorizontalIcon, PaletteIcon, PencilIcon, PlusIcon, RotateCcwIcon } from "lucide-react"
+import { HeartIcon, MoreHorizontalIcon, PaletteIcon, PencilIcon, PlusIcon, RotateCcwIcon, UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -11,6 +11,7 @@ import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { LOWER_THIRDS } from "@/lib/builtin-themes"
 import { SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
 import { LIBRARY_LOOKS, LOOK_FAMILIES } from "@/lib/look-library-data"
+import { allRhemaLooks, hydrateDesignPacks, parseRhemaDesignPack, useDesignPackStore } from "@/lib/rhema-design-packs"
 import { adoptLook, brandable, CONTENT_LABELS, filterLooks, isObsOverlay, LAYOUT_NAMES, lookAspects, lookAudio, lookCopies, lookLanguages, OBS_OVERLAY, readLookFavourites, resetCopy, resetLowerThirdCopy, resetSceneCopy, resetSingleLook, showsTwoLanguages, writeLookFavourites, type LibraryLook, type LookAspect, type LookBackground, type LookCopy, type LookFamilyId, type LookLanguage, type LookLayout } from "@/lib/look-library"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { hasChurchColours, type BrandKit } from "@/lib/brand-kit"
@@ -48,7 +49,7 @@ const CHECKER = { backgroundColor: "#2c3338", backgroundImage: "repeating-conic-
 
 const sampleFor = (shows: string[] | undefined) => (shows?.includes("bible") ? BIBLE_SAMPLE : SONG_SAMPLE)
 const themeLook = (id: string | undefined) => {
-  const l = LIBRARY_LOOKS.find((x) => x.id === id)
+  const l = allRhemaLooks().find((x) => x.id === id)
   return l?.kind === "theme" ? l.theme : undefined
 }
 
@@ -67,13 +68,17 @@ const storage = typeof localStorage === "undefined" ? null : localStorage
  */
 export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: string) => void }) {
   const [layout, setLayout] = useState<LookLayout | "obs-overlay" | "all">("all")
+  const fileInput = useRef<HTMLInputElement>(null)
+  const importedPacks = useDesignPackStore((s) => s.packs)
+  useEffect(() => { void hydrateDesignPacks() }, [])
+  const allLooks = useMemo(() => [...LIBRARY_LOOKS, ...importedPacks.flatMap((p) => p.looks)], [importedPacks])
   const [aspect, setAspect] = useState<LookAspect | "all">("all")
   const [family, setFamily] = useState<LookFamilyId | "all">("all")
   const [background, setBackground] = useState<LookBackground | "all">("all")
   const [language, setLanguage] = useState<LookLanguage | "both" | "all">("all")
   const [favouritesOnly, setFavouritesOnly] = useState(false)
   const [favourites, setFavourites] = useState(() => readLookFavourites(storage))
-  const looks = useMemo(() => filterLooks(LIBRARY_LOOKS, { layout, family, background, language, aspect, favouritesOnly, favourites }), [layout, family, background, language, aspect, favouritesOnly, favourites])
+  const looks = useMemo(() => filterLooks(allLooks, { layout, family, background, language, aspect, favouritesOnly, favourites }), [allLooks, layout, family, background, language, aspect, favouritesOnly, favourites])
   const groups = LOOK_FAMILIES.map((f) => ({ family: f, looks: looks.filter((l) => l.family === f.id) })).filter((g) => g.looks.length > 0)
 
   const toggleFavourite = (id: string) => {
@@ -90,6 +95,33 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
         Ready-made looks, made for Rhema and fully offline. <strong className="font-semibold text-foreground">Use</strong> adds your own copy to your looks, to change as you like.
         Nothing on the screens changes until you choose the copy for an output in its settings.
       </p>
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold">Rhema design packs</p>
+          <p className="text-[0.6875rem] text-muted-foreground">Import a .rhema-design.json file. Its themes, lower thirds, tickers and scene templates appear here; nothing goes live until you use and assign a look.</p>
+          {importedPacks.length > 0 && <p className="mt-1 text-[0.6875rem] text-muted-foreground">{importedPacks.map((p) => p.name + " (" + p.looks.length + ")").join(" · ")}</p>}
+        </div>
+        <input ref={fileInput} type="file" accept=".json,.rhema-design.json,application/json" className="sr-only" aria-label="Choose a Rhema design pack JSON file" onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ""
+          if (!file) return
+          void (async () => {
+            try {
+              if (file.size > 2_000_000) throw new Error("Design pack exceeds 2 MB")
+              const pack = parseRhemaDesignPack(await file.text())
+              const existing = useDesignPackStore.getState().packs.find((p) => p.id === pack.id)
+              const message = "Import " + pack.looks.length + " looks from " + pack.name + "?" + (existing ? " This updates the existing imported pack without changing copies already in use." : "") + " No public output will change."
+              const accepted = await ask(message, { title: "Import Rhema design pack", kind: "info", okLabel: "Import looks", cancelLabel: "Cancel" }).catch(() => window.confirm(message))
+              if (!accepted) return
+              await useDesignPackStore.getState().importPack(pack)
+              toast.success("Imported " + pack.looks.length + " designs from " + pack.name)
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Unable to import this pack")
+            }
+          })()
+        }} />
+        <Button type="button" variant="outline" size="sm" onClick={() => fileInput.current?.click()}><UploadIcon className="size-4" /> Import design pack</Button>
+      </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
         <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Layout">
           {LAYOUTS.map((l) => (
@@ -158,8 +190,8 @@ const BACKGROUND_NAMES: Record<LookBackground, string> = { dark: "Dark", light: 
 
 /** The card's language line: two at once, either one, or English only. */
 function languageWords(look: LibraryLook): string {
-  if (showsTwoLanguages(look, LIBRARY_LOOKS)) return "Yorùbá and English together"
-  return lookLanguages(look, LIBRARY_LOOKS).includes("yo") ? "Yorùbá or English" : "English"
+  if (showsTwoLanguages(look, allRhemaLooks())) return "Yorùbá and English together"
+  return lookLanguages(look, allRhemaLooks()).includes("yo") ? "Yorùbá or English" : "English"
 }
 
 /** The church's copies of a look and what shows each now, kept up to date. */
@@ -268,7 +300,7 @@ async function reset(look: LibraryLook, c: LookCopy) {
       const copy = s.scenes.find((x) => x.id === c.id)
       if (!copy) return
       const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
-      const back = resetSceneCopy(copy, look, { library: LIBRARY_LOOKS, themes: s.themes, takenNames: taken })
+      const back = resetSceneCopy(copy, look, { library: allRhemaLooks(), themes: s.themes, takenNames: taken })
       for (const t of back.themes) useBroadcastStore.getState().saveTheme(t)
       useBroadcastStore.getState().saveScene(back.scene)
       break
@@ -295,7 +327,7 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
   if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
   const s = useBroadcastStore.getState()
   const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
-  const added = adoptLook(look, { takenNames: taken, library: LIBRARY_LOOKS, brand })
+  const added = adoptLook(look, { takenNames: taken, library: allRhemaLooks(), brand })
   for (const t of added.themes) useBroadcastStore.getState().saveTheme(t)
   if (added.lowerThirdStyle) useBroadcastStore.getState().saveLowerThirdStyle(added.lowerThirdStyle)
   // Only the saved look: the ticker on air keeps the look it started with.
