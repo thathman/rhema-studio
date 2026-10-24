@@ -2,8 +2,8 @@
 <!-- Rhema Receiver (#198): a Google TV / Android TV shows a Rhema browser feed, full screen. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.openbezal.rhema.receiver"
-    android:versionCode="3"
-    android:versionName="1.2.0.0">
+    android:versionCode="4"
+    android:versionName="1.3.0.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
     <!-- Also all that telling the network about this TV (NSD, _rhema-tv._tcp) needs. -->

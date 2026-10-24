@@ -77,6 +77,15 @@ pub fn make_server(ca: &Pem, names: &[String]) -> Result<Pem, String> {
     Ok(Pem { cert: cert.pem(), key: key.serialize_pem() })
 }
 
+/// SHA-256 of the server certificate's DER, lowercase hex: what a Rhema Receiver TV insists on when
+/// it opens a feed over https (#198), since its WebView does not know the local CA.
+pub fn fingerprint(server: &Pem) -> Result<String, String> {
+    use rustls::pki_types::{pem::PemObject, CertificateDer};
+    use sha2::{Digest, Sha256};
+    let leaf = CertificateDer::pem_slice_iter(server.cert.as_bytes()).next().ok_or("no certificate")?.map_err(|e| e.to_string())?;
+    Ok(Sha256::digest(leaf.as_ref()).iter().map(|b| format!("{b:02x}")).collect())
+}
+
 /// The rustls server config for a certificate (with its CA after it, as a chain).
 pub fn server_config(server: &Pem, ca_cert: &str) -> Result<std::sync::Arc<rustls::ServerConfig>, String> {
     use rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer};
@@ -118,6 +127,19 @@ mod tests {
         let verifier = rustls::client::WebPkiServerVerifier::builder_with_provider(std::sync::Arc::new(roots), std::sync::Arc::new(rustls::crypto::ring::default_provider())).build().unwrap();
         let leaf = CertificateDer::pem_slice_iter(server.cert.as_bytes()).next().unwrap().unwrap();
         verifier.verify_server_cert(&leaf, &[], &ServerName::try_from(name.to_string()).unwrap(), &[], UnixTime::now()).is_ok()
+    }
+
+    #[test]
+    fn a_server_certificate_has_a_stable_fingerprint_of_its_own() {
+        let ca = make_ca().unwrap();
+        let server = make_server(&ca, &["192.168.1.20".into()]).unwrap();
+        let f = fingerprint(&server).unwrap();
+        assert_eq!(f.len(), 64);
+        assert!(f.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+        assert_eq!(fingerprint(&server).unwrap(), f, "the same certificate, the same fingerprint");
+        assert_ne!(fingerprint(&make_server(&ca, &["192.168.1.20".into()]).unwrap()).unwrap(), f, "a new certificate, another one");
+        assert_ne!(fingerprint(&Pem { cert: ca.cert.clone(), key: String::new() }).unwrap(), f, "the leaf, not the CA");
+        assert!(fingerprint(&Pem { cert: "nonsense".into(), key: String::new() }).is_err());
     }
 
     #[test]

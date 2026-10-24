@@ -26,9 +26,12 @@ export function startBrowserFeeds(): () => void {
   return useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs) sync() })
 }
 
-/** The link to give OBS Browser Source or a TV's browser. */
-export function feedUrl(host: string, port: number, id: string, token: string): string {
-  return `http://${host}:${port}/feed/${encodeURIComponent(id)}?k=${token}`
+/**
+ * The link to give OBS Browser Source or a TV's browser; `secure` for the https port, the only link
+ * Show on a Google TV sends (#198).
+ */
+export function feedUrl(host: string, port: number, id: string, token: string, secure = false): string {
+  return `${secure ? "https" : "http"}://${host}:${port}/feed/${encodeURIComponent(id)}?k=${token}`
 }
 
 export interface FeedHealth {

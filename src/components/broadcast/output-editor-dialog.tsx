@@ -660,15 +660,17 @@ function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: 
 
 /** A browser feed's link (ARCH-002): what to paste into OBS Browser Source or a TV's browser. */
 export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: string; onRenew: () => void; onTv?: (tv: ReceiverTv) => void }) {
-  const [where, setWhere] = useState<{ host: string | null; port: number | null; lan: boolean } | null>(null)
+  const [where, setWhere] = useState<{ host: string | null; port: number | null; tlsPort: number | null; lan: boolean } | null>(null)
   useEffect(() => {
     void (async () => {
-      const http = await invoke<{ running: boolean; lan: boolean; port: number | null }>("get_http_status").catch(() => null)
+      const http = await invoke<{ running: boolean; lan: boolean; port: number | null; tls_port?: number | null }>("get_http_status").catch(() => null)
       const host = http?.lan ? await invoke<string | null>("remote_lan_address").catch(() => null) : "127.0.0.1"
-      setWhere({ host, port: http?.running ? http.port : null, lan: !!http?.lan })
+      setWhere({ host, port: http?.running ? http.port : null, tlsPort: http?.running ? (http.tls_port ?? null) : null, lan: !!http?.lan })
     })()
   }, [])
   const url = token && where?.host && where.port ? feedUrl(where.host, where.port, id, token) : null
+  // A Google TV gets only the https link (#198): the link and the page stay private on the network.
+  const secureUrl = token && where?.host && where.tlsPort ? feedUrl(where.host, where.tlsPort, id, token, true) : null
   // A TV or tablet opens it by scanning, instead of typing a long link (#198).
   const [code, setCode] = useState<{ url: string; data: string } | null>(null)
   useEffect(() => {
@@ -696,7 +698,7 @@ export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: str
             <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(url).catch(() => {})}>Copy link</Button>
             <Button type="button" size="sm" variant="ghost" onClick={onRenew} title="The old link stops working when you save">New link</Button>
           </div>
-          {where?.lan && <ShowOnTv url={url} onShown={onTv} />}
+          {where?.lan && <ShowOnTv url={secureUrl} onShown={onTv} />}
         </>
       )}
       <p className="text-muted-foreground">OBS: add a Browser source with this link at the feed's size (1920×1080). Anyone with the link can watch this feed on the network; a new link closes the old one. Videos do not play in a browser feed.</p>
@@ -711,8 +713,9 @@ type FoundTv = { name: string; address: string }
  * Send this feed to a Google TV running Rhema Receiver (#198). Rhema looks for TVs on the network
  * when this opens (Find TVs looks again); picking one fills its address, or type it. The code on the
  * TV's screen is still needed, and Rhema checks it with the TV before the link is sent (tv_show).
+ * `url` is the feed's https link; without one (the secure page is off) nothing can be sent.
  */
-export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: ReceiverTv) => void }) {
+export function ShowOnTv({ url, onShown }: { url: string | null; onShown?: (tv: ReceiverTv) => void }) {
   const [address, setAddress] = useState("")
   const [code, setCode] = useState("")
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
@@ -744,6 +747,7 @@ export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: Receive
     codeInput.current?.focus()
   }
   const send = async () => {
+    if (!url) return
     setBusy(true)
     setStatus(null)
     try {
@@ -761,6 +765,11 @@ export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: Receive
     <fieldset className="flex flex-col gap-1.5 rounded-md border border-border p-2">
       <legend className="px-1 font-medium">Show on a Google TV</legend>
       <p className="text-muted-foreground">Open Rhema Receiver on the TV: it shows its name, address and a code. Pick the TV with the same address, then type the code.</p>
+      {!url && (
+        <p role="status" className="text-muted-foreground">
+          Turn on the secure page in Settings → Remote control (<span className="font-medium">Secure page for phones</span>), then stop and start the listener: Rhema sends a TV only the feed&apos;s secure link.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="TVs on this network">
         {tvs?.map((tv) => (
           <Button key={tv.address} type="button" size="sm" variant={address.trim() === tv.address ? "secondary" : "outline"} aria-pressed={address.trim() === tv.address} onClick={() => pick(tv)} title={tv.address}>
@@ -781,7 +790,7 @@ export function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: Receive
       <div className="flex flex-wrap items-center gap-2">
         <Input aria-label="TV address" placeholder="192.168.1.40" value={address} onChange={(e) => setAddress(e.target.value)} className="h-7 w-36 text-xs" />
         <Input ref={codeInput} aria-label="Code on the TV" placeholder="Code" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} className="h-7 w-20 text-xs tabular-nums" />
-        <Button type="button" size="sm" variant="outline" disabled={busy || !address.trim() || !code.trim()} onClick={() => void send()}>Show on TV</Button>
+        <Button type="button" size="sm" variant="outline" disabled={busy || !url || !address.trim() || !code.trim()} onClick={() => void send()}>Show on TV</Button>
       </div>
       {status && <p role="status" className={cn(status.ok ? "text-muted-foreground" : "text-destructive")}>{status.text}</p>}
     </fieldset>

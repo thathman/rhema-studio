@@ -5,7 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 
+import javax.crypto.Cipher;
 import javax.crypto.Mac;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
@@ -19,6 +21,10 @@ import javax.crypto.spec.SecretKeySpec;
  * code can test only one guess per exchange, by taking part in it, so the receiver counts every exchange
  * as a try. The address Rhema reached the TV at is part of the proof, so a device that passes Rhema's
  * messages on to the real TV cannot use the TV's answer. Rhema's side is src-tauri/src/commands/tv_proof.rs.
+ *
+ * Two keys come from the exchange (1.3): one for the TV's proof, one that encrypts what Rhema sends
+ * in /show (AES-256-GCM): the feed's https link and the fingerprint of Rhema's certificate, so
+ * someone watching the network learns neither, and the TV opens only that exact Rhema's page.
  *
  * Plain Java only (no Android classes): build.sh runs CodeProofCheck against it on the computer.
  */
@@ -36,16 +42,22 @@ final class CodeProof {
     static final BigInteger N = element("rhema-tv N");
     private static final int LEN = 256;
 
-    /** The TV's reply: its public value, its proof, and the shared key for checking Rhema's proof. */
+    /** What /show is encrypted with, so the TV can tell what Rhema sent from anything else. */
+    static final byte[] SHOW_AAD = ascii("rhema-tv show");
+
+    /** The TV's reply: its public value and its proof; and the key that opens Rhema's /show. */
     static final class Answer {
         final String y;
         final String proof;
-        final byte[] key;
+        /** The exchange's shared secret (for the test vector only). */
+        final byte[] transcript;
+        final byte[] enc;
 
-        Answer(String y, String proof, byte[] key) {
+        Answer(String y, String proof, byte[] transcript, byte[] enc) {
             this.y = y;
             this.proof = proof;
-            this.key = key;
+            this.transcript = transcript;
+            this.enc = enc;
         }
     }
 
@@ -83,13 +95,35 @@ final class CodeProof {
         BigInteger k = x.multiply(code.mWInverse).mod(P).modPow(y, P);
         if (k.equals(BigInteger.ONE)) throw new IllegalArgumentException("not a Rhema value");
         byte[] key = sha256(ascii("rhema-tv-1"), fixed(x), fixed(yPub), fixed(k), fixed(code.w), ascii(address));
-        return new Answer(yPub.toString(16), hex(hmac(key, ascii("tv"))), key);
+        return new Answer(yPub.toString(16), hex(hmac(derive(key, "rhema-tv confirm"), ascii("tv"))), key, derive(key, "rhema-tv enc"));
     }
 
-    /** Rhema's proof that it took part in this exchange with the same code, for this link. */
-    static boolean deskProofMatches(byte[] key, String url, String proofHex) {
-        byte[] sent = unhex(proofHex);
-        return sent != null && MessageDigest.isEqual(hmac(key, ("desk" + url).getBytes(StandardCharsets.UTF_8)), sent);
+    /** HKDF-SHA256 (RFC 5869) with no salt, one 32-byte block: a separate key for each use. */
+    static byte[] derive(byte[] secret, String info) {
+        byte[] prk = hmac(new byte[32], secret);
+        byte[] label = ascii(info);
+        byte[] in = new byte[label.length + 1];
+        System.arraycopy(label, 0, in, 0, label.length);
+        in[label.length] = 1;
+        return hmac(prk, in);
+    }
+
+    /**
+     * Rhema's /show, decrypted with the exchange's key: the text, or null when it was not sealed
+     * with this exchange's key (a wrong code, another exchange, or changed on the way).
+     */
+    static String open(byte[] enc, String nonceHex, String dataHex) {
+        byte[] nonce = unhex(nonceHex, 12);
+        byte[] data = dataHex == null || dataHex.length() < 34 || dataHex.length() > 8192 ? null : unhex(dataHex, dataHex.length() / 2);
+        if (nonce == null || data == null) return null;
+        try {
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.DECRYPT_MODE, new SecretKeySpec(enc, "AES"), new GCMParameterSpec(128, nonce));
+            c.updateAAD(SHOW_AAD);
+            return new String(c.doFinal(data), StandardCharsets.UTF_8);
+        } catch (Exception wrong) {
+            return null;
+        }
     }
 
     static BigInteger w(String code) {
@@ -157,10 +191,11 @@ final class CodeProof {
         return s.toString();
     }
 
-    static byte[] unhex(String s) {
-        if (s == null || s.length() != 64) return null;
-        byte[] out = new byte[32];
-        for (int i = 0; i < 32; i++) {
+    /** Exactly this many bytes as lowercase hex, else null. */
+    static byte[] unhex(String s, int bytes) {
+        if (s == null || s.length() != 2 * bytes) return null;
+        byte[] out = new byte[bytes];
+        for (int i = 0; i < bytes; i++) {
             int hi = nibble(s.charAt(2 * i));
             int lo = nibble(s.charAt(2 * i + 1));
             if (hi < 0 || lo < 0) return null;

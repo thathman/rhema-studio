@@ -1320,6 +1320,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_browser_feed_is_served_over_https_with_the_certificate_a_tv_insists_on() {
+        // A Google TV (#198) opens the feed's https link and checks the certificate it is shown
+        // against the fingerprint Rhema sent it; the feed routes are the same on the https port.
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let ca = crate::tls::make_ca().unwrap();
+        let server = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let fingerprint = crate::tls::fingerprint(&server).unwrap();
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds, tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let tls_port = result.tls_port.expect("https port");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let mut roots = rustls::RootCertStore::empty();
+        use rustls::pki_types::pem::PemObject;
+        for c in rustls::pki_types::CertificateDer::pem_slice_iter(ca.cert.as_bytes()) {
+            roots.add(c.unwrap()).unwrap();
+        }
+        let client = Arc::new(rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider())).with_safe_default_protocol_versions().unwrap().with_root_certificates(roots).with_no_client_auth());
+        let get = |path: &'static str| {
+            let client = client.clone();
+            async move {
+                let tcp = tokio::net::TcpStream::connect(("127.0.0.1", tls_port)).await.unwrap();
+                let mut tls = tokio_rustls::TlsConnector::from(client).connect(rustls::pki_types::ServerName::try_from("127.0.0.1").unwrap(), tcp).await.unwrap();
+                use sha2::Digest;
+                let shown = tls.get_ref().1.peer_certificates().unwrap()[0].clone();
+                let seen: String = sha2::Sha256::digest(shown.as_ref()).iter().map(|b| format!("{b:02x}")).collect();
+                tls.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                let mut out = Vec::new();
+                let _ = tls.read_to_end(&mut out).await;
+                (seen, String::from_utf8_lossy(&out).to_string())
+            }
+        };
+        let (seen, page) = get("/feed/l3?k=s3cret").await;
+        assert_eq!(seen, fingerprint, "the certificate shown is the one whose fingerprint the TV gets");
+        assert!(page.contains("200 OK") && page.contains("feed page"), "{page}");
+        assert!(get("/assets/feed.js").await.1.contains("console.log"));
+        assert!(get("/feed/l3?k=wrong").await.1.contains("403"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
     async fn a_desk_joins_the_talk_channel_with_its_key_and_gets_the_host_answer() {
         let voice = new_voice_hub();
         let keys = new_key_set();

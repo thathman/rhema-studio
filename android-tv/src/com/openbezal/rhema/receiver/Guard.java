@@ -63,6 +63,31 @@ final class Guard {
         return port == null || (digits(port, 5) && Integer.parseInt(port) <= 65535);
     }
 
+    /**
+     * A feed link Rhema 1.3 sends: https, to a computer named by its address (that is what Rhema's
+     * certificate is made for), on a port, at /feed/<id>.
+     */
+    static boolean feedLink(String url) {
+        try {
+            java.net.URI u = new java.net.URI(url);
+            String host = u.getHost();
+            return "https".equals(u.getScheme()) && u.getRawUserInfo() == null && host != null && u.getPort() > 0
+                    && ipLiteralHost(host + ":" + u.getPort()) && u.getRawPath() != null && u.getRawPath().startsWith("/feed/") && u.getRawPath().length() > 6;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** A certificate fingerprint as Rhema writes it: SHA-256, 64 lowercase hex digits. */
+    static boolean fingerprint(String hex) {
+        if (hex == null || hex.length() != 64) return false;
+        for (int i = 0; i < 64; i++) {
+            char c = hex.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+        }
+        return true;
+    }
+
     private static boolean digits(String s, int max) {
         if (s.isEmpty() || s.length() > max) return false;
         for (int i = 0; i < s.length(); i++) {

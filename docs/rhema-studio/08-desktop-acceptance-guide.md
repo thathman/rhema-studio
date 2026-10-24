@@ -1146,6 +1146,24 @@ Settings → AI assistants on, at least one saved service with phases and groups
 | 10em.5 | Read `rhema://services/nope`. | Error -32002 "Resource not found". | Unverified |
 | 10em.6 | Turn Settings → AI assistants off, start the assistant again and list and read the resources. | Only the five fixed names are listed (no service or draft titles); every read says to turn it on in Settings → AI assistants. Nothing in Rhema changed. | Unverified |
 
+### 10en. Google TV: secure link, certificate pin, receiver hardening (#198)
+
+Rhema on the church network with the HTTP listener on the network. The Chromecast with Google TV; `adb` for installing only. `curl` and `nc` on another computer on the same Wi-Fi for 10en.8–9.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10en.0 | Before installing 1.3 (the TV on Rhema Receiver 1.2), secure page on: Show on a Google TV with the right code. | "Update Rhema Receiver on the TV (1.3 or later)…"; the TV keeps what it shows. | Unverified |
+| 10en.1 | Settings → Remote control: untick **Secure page for phones (https)**, stop and start the listener. Outputs → a browser feed → settings. | Show on a Google TV says "Turn on the secure page in Settings → Remote control…"; **Show on TV** stays off even with an address and code typed. The link to copy (and its QR code) is still the plain http one. | Unverified |
+| 10en.2 | Build (`android-tv/build.sh`) and install Rhema Receiver; open it. Android settings → Apps → Rhema Receiver. | The build prints "CodeProofCheck: all checks passed". Version 1.3.0.0. The TV says "Rhema Receiver was updated and now opens only Rhema's secure page. Send the feed again…" with its name, address and code. | Unverified |
+| 10en.3 | Tick the secure page again, stop and start the listener. Show on a Google TV: pick the TV, type its code, **Show on TV**. | "<TV> is showing this feed". The TV shows the feed; Show health counts it; a verse reaches the TV within a second. (Debug build: chrome://inspect shows the page at `https://<this computer>:<port + 1>/feed/…`.) | Unverified |
+| 10en.4 | Optional: on this computer, `sudo tcpdump -A -i en0 host <TV address> and port 8095` during 10en.3. | The /show request carries only `nonce` and `data` (hex); no `/feed/`, `k=` or the computer's address in clear text. | Unverified |
+| 10en.5 | Quit and reopen Rhema (same network) so the listener starts again; then force-stop Rhema Receiver and open it again. | Both times the TV picks the feed up again by itself, with no warning (the same certificate). A phone that accepted the secure page's warning before is not asked again. | Unverified |
+| 10en.6 | With the feed showing, press OK on the remote (the code shows). Wait until it hides (20 s) and then 2½ minutes more; Show on TV with that code. | "No code is on the TV's screen: press OK on the TV's remote to show one, then type it". Press OK: the new code works first time (no try was used). | Unverified |
+| 10en.7 | Stop the listener, delete `tls/rhema-server.txt` in Rhema's data folder, start the listener (a new certificate). Watch the TV. | Within a few seconds the TV says "This TV did not open the feed: the computer answering is not the Rhema that sent it, or Rhema made a new certificate…". Show on TV again: it shows the feed. | Unverified |
+| 10en.8 | From another computer: `curl -i -X POST -H 'Origin: http://example.com' -H 'Content-Type: application/json' -d '{"x":"2"}' http://<TV>:8095/challenge`; again with `-H 'Content-Type: text/plain'` and no Origin; and `curl -i -H 'Host: tv.example' http://<TV>:8095/status`. Then press OK and Show on TV with the code. | 403 "does not answer web pages"; 415 "takes JSON only"; 403 "Ask this TV by its address". The code still works first time: none of these used a try. | Unverified |
+| 10en.9 | From another computer: `nc <TV> 8095` and type nothing; at once press **Check TV** in Show health. Then `python3 -c "print('{' + '[' * 8000)" > deep.json; curl -i -X POST -H 'Content-Type: application/json' --data-binary @deep.json http://<TV>:8095/challenge`. | Check TV answers while nc is open; nc is closed by the TV after about 5 s. The deep body gets 400 "That is not what Rhema sends"; Rhema Receiver keeps running and showing the feed. | Unverified |
+| 10en.10 | A scene with a camera (camera router on) on the TV's feed. | The camera plays on the TV as before (10dh.8). | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

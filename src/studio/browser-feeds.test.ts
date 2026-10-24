@@ -35,6 +35,7 @@ describe("browser feeds", () => {
     useBroadcastStore.getState().updateOutput("tv", { feedToken: "f".repeat(32) })
     expect(calls.filter((c) => c.cmd === "feeds_set").at(-1)?.args).toEqual({ feeds: [{ id: "tv", token: "f".repeat(32) }] })
     expect(feedUrl("192.168.1.20", 8080, "tv", "abc")).toBe("http://192.168.1.20:8080/feed/tv?k=abc")
+    expect(feedUrl("192.168.1.20", 8081, "tv", "abc", true)).toBe("https://192.168.1.20:8081/feed/tv?k=abc")
     stop()
   })
 

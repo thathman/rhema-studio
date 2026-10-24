@@ -20,10 +20,12 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * What Rhema asks a receiver (#198): POST /challenge {"x"} → {"ok","y","proof"} (the code check,
- * CodeProof, 1.2), then POST /show {"url","proof"} → {"ok","name"|"error"}; and
- * (#213, 1.1) GET /status → {"ok","name","feed","problem"}: the id of the feed shown, never its
- * secret link. Small bodies only; nothing else is served.
+ * What Rhema asks a receiver (#198): POST /challenge {"x"} → {"ok","v","y","proof"} (the code
+ * check, CodeProof, 1.2; "v": 2 since 1.3), then POST /show {"nonce","data"} → {"ok","name"|"error"}:
+ * the feed's https link and Rhema's certificate fingerprint, encrypted with the check's key (1.3;
+ * the plain {"url","proof"} of 1.2 is refused); and (#213, 1.1) GET /status →
+ * {"ok","name","feed","problem"}: the id of the feed shown, never its secret link. Small bodies
+ * only; nothing else is served.
  *
  * Any device on the network can reach this port, so (1.3): a few requests are served at a time and
  * each one has 5 seconds in all, so a slow sender cannot keep Rhema out; nothing a request does can
@@ -163,13 +165,18 @@ final class ShowServer extends Thread {
                     String[] why = new String[1];
                     String[] answer = app.challenge(req.optString("x", ""), peer, local, why);
                     if (answer != null) {
-                        reply.put("ok", true).put("y", answer[0]).put("proof", answer[1]);
+                        // v 2: this receiver takes only the encrypted /show (Rhema refuses older ones).
+                        reply.put("ok", true).put("v", 2).put("y", answer[0]).put("proof", answer[1]);
                     } else {
                         status = 403;
                         reply.put("ok", false).put("error", why[0]);
                     }
+                } else if (req.has("url")) {
+                    // Rhema before 1.3's form: the link in clear text, which this TV no longer takes.
+                    status = 403;
+                    reply.put("ok", false).put("error", "This Rhema Receiver takes only Rhema's secure link: update Rhema on the computer");
                 } else {
-                    String why = app.show(peer, req.optString("url", ""), req.optString("proof", ""));
+                    String why = app.show(peer, req.optString("nonce", ""), req.optString("data", ""));
                     if (why == null) {
                         reply.put("ok", true).put("name", app.name());
                     } else {

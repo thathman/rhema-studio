@@ -5,6 +5,8 @@ import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.net.Uri;
+import android.net.http.SslCertificate;
+import android.net.http.SslError;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Build;
@@ -20,6 +22,7 @@ import android.view.WindowManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -27,10 +30,15 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import org.json.JSONObject;
+
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.List;
 
@@ -40,6 +48,10 @@ import java.util.List;
  * code with this TV (CodeProof) and only then sends the feed's link (Outputs → a browser feed → Show on
  * a Google TV), so only someone who can see this screen assigns it. OK on the remote shows the address and a new code again. It
  * also tells the network it is here (mDNS/NSD), so Rhema can list it without anyone typing the address.
+ *
+ * Since 1.3 the link is Rhema's https page, sent encrypted with the fingerprint of Rhema's own
+ * certificate; the TV opens the page only from a computer showing exactly that certificate, so
+ * nobody on the network can read the link or stand in for Rhema.
  */
 public class MainActivity extends Activity {
     static final int PORT = 8095;
@@ -50,6 +62,7 @@ public class MainActivity extends Activity {
     private static final long PENDING_MS = 30_000;
     /** How long a code still works after it leaves the screen (time to finish typing it). */
     private static final long GRACE_MS = 120_000;
+    private static final String NOT_THAT_RHEMA = "This TV did not open the feed: the computer answering is not the Rhema that sent it, or Rhema made a new certificate. Send the feed again: in Rhema, Outputs → the feed → Show on a Google TV.";
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final SecureRandom random = new SecureRandom();
@@ -72,6 +85,8 @@ public class MainActivity extends Activity {
     private String pendingPeer;
     private long pendingUntil;
     private NsdManager.RegistrationListener advert;
+    /** The last page load stopped because the certificate was not the one Rhema sent. */
+    private boolean certRefused;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -88,11 +103,33 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         // Cameras in scenes are video: they start by themselves, muted (no echo in the room).
         s.setMediaPlaybackRequiresUserGesture(false);
+        // The feed page is https now, but cameras in scenes still ask the camera router over plain
+        // http (as before); nothing secret goes there, and the browser sends it no link.
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
-                if (req.isForMainFrame()) retry("Looking for Rhema at " + Uri.parse(shown()).getAuthority() + "…");
+                if (req.isForMainFrame()) retry(certRefused ? NOT_THAT_RHEMA : "Looking for Rhema at " + Uri.parse(shown()).getAuthority() + "…");
+            }
+
+            /**
+             * Rhema's certificate is its own (no public authority vouches for a church computer), so
+             * WebView always asks here. Open the page only when the certificate is exactly the one
+             * Rhema sent in its encrypted /show; anything else is refused.
+             */
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                String pin = prefs.getString("pin", null);
+                String seen = fingerprint(error.getCertificate());
+                if (pin != null && seen != null && MessageDigest.isEqual(pin.getBytes(StandardCharsets.US_ASCII), seen.getBytes(StandardCharsets.US_ASCII))) {
+                    handler.proceed();
+                    return;
+                }
+                handler.cancel();
+                certRefused = true;
+                problem = NOT_THAT_RHEMA;
+                showInfo(true);
             }
 
             @Override
@@ -127,6 +164,11 @@ public class MainActivity extends Activity {
         immersive();
 
         newCode();
+        // A feed sent by Rhema before 1.3 (a plain http link, no certificate): sent again, it comes secure.
+        if (shown() != null && (!Guard.feedLink(shown()) || !Guard.fingerprint(prefs.getString("pin", null)))) {
+            prefs.edit().remove("url").remove("pin").apply();
+            problem = "Rhema Receiver was updated and now opens only Rhema's secure page. Send the feed again: in Rhema, Outputs → the feed → Show on a Google TV.";
+        }
         server = new ShowServer(PORT, this);
         server.start();
         advertise();
@@ -174,6 +216,7 @@ public class MainActivity extends Activity {
         @Override
         public void run() {
             problem = null;
+            certRefused = false;
             if (shown() != null) web.loadUrl(shown());
         }
     };
@@ -343,39 +386,70 @@ public class MainActivity extends Activity {
             why[0] = "That was not a Rhema code check";
             return null;
         }
-        pendingKey = a.key;
+        pendingKey = a.enc;
         pendingPeer = peer;
         pendingUntil = SystemClock.elapsedRealtime() + PENDING_MS;
         return new String[] {a.y, a.proof};
     }
 
     /**
-     * From the server thread, the second half: the link and Rhema's proof that it took part in the
-     * check with the same code. Null when shown, else why not.
+     * From the server thread, the second half: the feed's https link and Rhema's certificate
+     * fingerprint, encrypted with the key of the check just made. Only Rhema that took part in the
+     * check with the same code could seal it. Null when shown, else why not.
      */
-    synchronized String show(String peer, final String url, String proof) {
+    synchronized String show(String peer, String nonce, String data) {
         // Only the computer that did the check can use (or spend) it: another device's /show in
         // between must not break Rhema's exchange.
         if (pendingKey == null || !peer.equals(pendingPeer)) return "Rhema must check the code first (update Rhema if this keeps happening)";
         byte[] key = pendingKey;
         pendingKey = null;
         if (SystemClock.elapsedRealtime() >= pendingUntil) return "Rhema must check the code first (update Rhema if this keeps happening)";
-        if (!CodeProof.deskProofMatches(key, url, proof)) return "Rhema's code check did not match: try again";
-        Uri u = Uri.parse(url);
-        if (!("http".equals(u.getScheme()) || "https".equals(u.getScheme())) || u.getPath() == null || !u.getPath().startsWith("/feed/")) {
+        String sent = CodeProof.open(key, nonce, data);
+        if (sent == null) return "Rhema's code check did not match: try again";
+        final String url;
+        final String pin;
+        try {
+            if (!Guard.flatObject(sent)) return "That is not a Rhema feed link";
+            JSONObject o = new JSONObject(sent);
+            url = o.optString("url", "");
+            pin = o.optString("certFingerprint", "");
+        } catch (Exception e) {
             return "That is not a Rhema feed link";
         }
+        if (!Guard.feedLink(url) || !Guard.fingerprint(pin)) return "That is not a Rhema secure feed link (update Rhema if this keeps happening)";
         newCode();
         ui.post(new Runnable() {
             @Override
             public void run() {
-                prefs.edit().putString("url", url).apply();
+                prefs.edit().putString("url", url).putString("pin", pin).apply();
                 problem = null;
+                certRefused = false;
                 ui.removeCallbacks(reload);
+                // Forget certificates let through for an earlier feed: only this one counts now.
+                web.clearSslPreferences();
                 web.loadUrl(url);
             }
         });
         return null;
+    }
+
+    /** SHA-256 of a page's certificate (lowercase hex), as Rhema writes it, or null. */
+    static String fingerprint(SslCertificate cert) {
+        if (cert == null) return null;
+        byte[] der = null;
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                X509Certificate x = cert.getX509Certificate();
+                if (x != null) der = x.getEncoded();
+            } else {
+                // Before Android 10 the certificate's bytes are only in its saved state.
+                Bundle b = SslCertificate.saveState(cert);
+                if (b != null) der = b.getByteArray("x509-certificate");
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return der == null ? null : CodeProof.hex(CodeProof.sha256(der));
     }
 
     /** This TV's address on the church network (IPv4, as people type it). */

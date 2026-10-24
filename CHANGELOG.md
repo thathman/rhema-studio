@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Google TV: the feed link and page travel encrypted; a sturdier Rhema Receiver (#198)
+- **Show on a Google TV** now sends the TV the feed's secure (https) link, encrypted, with this computer's certificate; the TV opens the feed only from this computer, so nobody else on the Wi-Fi can read the link or what the feed shows. It needs **Secure page for phones (https)** in Settings → Remote control; without it Rhema says so and sends nothing.
+- It needs **Rhema Receiver 1.3** on the TV (Rhema asks you to update an older one). After updating, send the TV its feed again once. The https certificate now stays the same while this computer's address does, so TVs and phones keep working after Rhema restarts.
+- A TV's code works only while it is on screen and two minutes after; a web page, a slow or broken request from another device can no longer lock, stall or close Rhema Receiver.
+
 ### Fixed starts and pauses in the run of show (#196)
 - An item can now have a **fixed start** (Prepare → the item → Timing → Fixed start): it is expected at that time however early or late the items before it run, and **±5 min** does not move it. If the items before run past it, it starts when they finish and the run of show says **Late for its fixed start**. It has a pin in the run of show, its table and every desk's run of show.
 - An item can have a **pause before** it (Timing → Pause before). Running late uses the pause up first: the next item stays on time until the pause is gone, and only lateness beyond it moves what follows. The table shows each pause as its own thin row with how much lateness it takes up ("absorbs 3 min").

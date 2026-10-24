@@ -9,13 +9,13 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 
 import { ShowOnTv } from "./output-editor-dialog"
 
-const FEED = "http://192.168.1.10:8080/feed/abc"
+const FEED = "https://192.168.1.10:8081/feed/abc"
 
-async function open() {
+async function open(url: string | null = FEED) {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const el = document.createElement("div")
   const root = createRoot(el)
-  await act(async () => root.render(<ShowOnTv url={FEED} />))
+  await act(async () => root.render(<ShowOnTv url={url} />))
   const address = () => el.querySelector<HTMLInputElement>('[aria-label="TV address"]')!.value
   const tvs = () => [...el.querySelectorAll<HTMLButtonElement>('[aria-label="TVs on this network"] button[aria-pressed]')]
   return { el, root, address, tvs }
@@ -60,6 +60,20 @@ describe("Show on a Google TV without a search answer", () => {
     const { el, root, address } = await open()
     expect(address()).toBe("")
     expect(el.textContent).toContain("No TV found")
+    act(() => root.unmount())
+  })
+})
+
+describe("Show on a Google TV without the secure page", () => {
+  it("says how to turn it on, and Show on TV stays off", async () => {
+    invoke.mockReset()
+    invoke.mockResolvedValue([{ name: "Hall TV", address: "192.168.3.37:8095" }])
+    const { el, root, tvs } = await open(null)
+    expect(el.textContent).toContain("Turn on the secure page in Settings → Remote control")
+    await act(async () => tvs()[0].click())
+    const button = [...el.querySelectorAll("button")].find((b) => b.textContent === "Show on TV")!
+    expect(button.disabled).toBe(true)
+    expect(invoke).not.toHaveBeenCalledWith("tv_show", expect.anything())
     act(() => root.unmount())
   })
 })
