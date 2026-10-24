@@ -642,6 +642,22 @@ public final class CameraService extends Service {
         return r == null ? 0f : r.floatValue();
     }
 
+    /** The viewfinder's surface is going away: the GPU lets go of it now (waits for the GPU thread). */
+    void dropViewfinderNow() {
+        gpu.viewfinder(null);
+    }
+
+    /** The viewfinder's histogram while it is shown (null: none, and the GPU reads nothing for it). */
+    void histogram(Gpu.Histogram h) {
+        gpu.histogram(h);
+    }
+
+    /** What Settings → Picture says when the look had to be made lighter on this phone ("" when not). */
+    String lighterNote() {
+        Plan.Shape s = shape;
+        return gpu.pacer.note(gpu.encoderFps, s == null ? 30 : s.fps);
+    }
+
     /** A small copy of the camera's picture (before the look), for the look previews in Settings. */
     void sample(Gpu.Pixels out) {
         gpu.snapshot(96, 54, out);

@@ -11,10 +11,8 @@ import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.RectF;
-import android.graphics.SurfaceTexture;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -33,7 +31,8 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.Surface;
-import android.view.TextureView;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -54,7 +53,8 @@ import android.widget.Toast;
  */
 public final class MainActivity extends Activity {
     private CameraService service;
-    private TextureView view;
+    /** The viewfinder: a SurfaceView, which the display hardware shows without costing the GPU anything. */
+    private SurfaceView view;
     private OverlayView overlay;
     private TextView pill;
     private TextView detail;
@@ -63,7 +63,6 @@ public final class MainActivity extends Activity {
     private ImageButton dark;
     private View black;
     private TextView blackHint;
-    private SurfaceTexture texture;
     private Surface surface;
     private boolean started;
     private boolean screenOff;
@@ -71,7 +70,6 @@ public final class MainActivity extends Activity {
     private long touchedAt;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private SensorManager sensors;
-    private Bitmap histoBitmap;
     private SharedPreferences prefs;
 
     @Override
@@ -97,8 +95,8 @@ public final class MainActivity extends Activity {
     private void build() {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
-        view = new TextureView(this);
-        view.setSurfaceTextureListener(textureListener);
+        view = new SurfaceView(this);
+        view.getHolder().addCallback(holderCallback);
         root.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         overlay = new OverlayView(this);
         root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -363,7 +361,11 @@ public final class MainActivity extends Activity {
         ui.removeCallbacks(poll);
         sensors.unregisterListener(levelListener);
         // The camera must stop drawing into a viewfinder nobody sees, or it would stall the encoder.
-        if (service != null) service.setPreview(null, null);
+        if (service != null) {
+            service.setPreview(null, null);
+            service.histogram(null);
+        }
+        histogramOn = false;
         if (screenOff) screenOff(false);
         if (service != null) {
             unbindService(connection);
@@ -437,10 +439,8 @@ public final class MainActivity extends Activity {
     }
 
     private void attach() {
-        if (service == null || texture == null || screenOff || !started) return;
+        if (service == null || surface == null || screenOff || !started) return;
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return;
-        texture.setDefaultBufferSize(view.getWidth(), view.getHeight());
-        if (surface == null) surface = new Surface(texture);
         service.setPreview(surface, null);
     }
 
@@ -497,6 +497,7 @@ public final class MainActivity extends Activity {
             }, 4000);
             sensors.unregisterListener(levelListener);
             if (service != null) service.setPreview(null, null);
+            histogram();
         } else {
             blackHint.setVisibility(View.GONE);
             attach();
@@ -510,10 +511,15 @@ public final class MainActivity extends Activity {
         controls(true);
     }
 
+    private Boolean controlsShown;
+
+    /** Shows or hides the controls; does nothing while they already are (no animation restarted). */
     private void controls(boolean show) {
+        if (controlsShown != null && controlsShown == show) return;
+        controlsShown = show;
         float a = show ? 1f : 0f;
         for (View v : new View[] {gear, dark, detail}) {
-            if (v.getAlpha() != a) v.animate().alpha(a).setDuration(250).start();
+            v.animate().alpha(a).setDuration(250).start();
             v.setEnabled(show);
         }
     }
@@ -548,8 +554,14 @@ public final class MainActivity extends Activity {
             // The screen's up and right in the phone's axes, for each landscape way round.
             float up = rot == Surface.ROTATION_270 ? -gx : gx, right = rot == Surface.ROTATION_270 ? gy : -gy;
             float roll = (float) Math.toDegrees(Math.atan2(right, up));
-            overlay.roll = Float.isNaN(overlay.roll) ? roll : overlay.roll * 0.8f + roll * 0.2f;
-            overlay.invalidate();
+            float before = overlay.roll;
+            overlay.roll = Float.isNaN(before) ? roll : before * 0.8f + roll * 0.2f;
+            // Redraw only for a visible change, at most about 15 times a second.
+            long now = android.os.SystemClock.uptimeMillis();
+            if ((Float.isNaN(before) || Math.abs(overlay.roll - before) > 0.15f) && now - levelDrawnAt > 66) {
+                levelDrawnAt = now;
+                overlay.invalidate();
+            }
         }
 
         @Override
@@ -569,47 +581,35 @@ public final class MainActivity extends Activity {
         overlay.invalidate();
     }
 
-    private final TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
+    private final SurfaceHolder.Callback holderCallback = new SurfaceHolder.Callback() {
         @Override
-        public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
-            texture = st;
-            surface = null;
+        public void surfaceCreated(SurfaceHolder h) {
+            surface = h.getSurface();
             transform();
             attach();
         }
 
         @Override
-        public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {
+        public void surfaceChanged(SurfaceHolder h, int format, int w, int hgt) {
+            // The GPU reads the surface's size each frame; only the overlay needs telling.
             transform();
-            // A new size: the GPU takes the viewfinder again at it.
-            if (service != null && surface != null && !screenOff) service.setPreview(surface, null);
         }
 
         @Override
-        public boolean onSurfaceTextureDestroyed(final SurfaceTexture st) {
-            final Surface s = surface;
+        public void surfaceDestroyed(SurfaceHolder h) {
             surface = null;
-            texture = null;
-            if (service == null) {
-                if (s != null) s.release();
-                return true;
+            // The GPU must let go of the surface before this returns.
+            if (service != null) {
+                service.dropViewfinderNow();
+                service.setPreview(null, null);
             }
-            // Released once the camera has let go of it.
-            service.setPreview(null, new Runnable() {
-                @Override
-                public void run() {
-                    if (s != null) s.release();
-                    st.release();
-                }
-            });
-            return false;
         }
-
-        @Override
-        public void onSurfaceTextureUpdated(SurfaceTexture st) { }
     };
 
-    private long histoAt;
+    private boolean histogramOn;
+    private long levelDrawnAt;
+    private String shownLabel;
+    private int shownColour;
 
     private final Runnable poll = new Runnable() {
         @Override
@@ -636,12 +636,17 @@ public final class MainActivity extends Activity {
             color = Ui.IDLE;
             label = p == null ? "NOT PAIRED" : "NOT SENDING";
         }
-        android.graphics.drawable.GradientDrawable d = Ui.dot(color);
-        int size = Ui.dp(this, 9);
-        d.setSize(size, size);
-        d.setBounds(0, 0, size, size);
-        pill.setCompoundDrawables(d, null, null, null);
-        pill.setText(label);
+        // Views change only when what they show changes (no layout work twice a second for nothing).
+        if (color != shownColour || !label.equals(shownLabel)) {
+            shownColour = color;
+            shownLabel = label;
+            android.graphics.drawable.GradientDrawable d = Ui.dot(color);
+            int size = Ui.dp(this, 9);
+            d.setSize(size, size);
+            d.setBounds(0, 0, size, size);
+            pill.setCompoundDrawables(d, null, null, null);
+            pill.setText(label);
+        }
         String text = "";
         if (s != null) {
             if (s.cameraError != null) text = s.cameraError;
@@ -649,37 +654,35 @@ public final class MainActivity extends Activity {
             else if (!s.sending) text = p == null ? "Tap to pair with Rhema" : "Tap to send to Rhema as \"" + p.title() + "\"";
             else if (s.shape != null) text = s.shape.height + "p" + s.shape.fps + " · " + String.format(java.util.Locale.ROOT, "%.1f Mbit/s", s.mbps);
         }
-        detail.setText(text);
+        if (!text.contentEquals(detail.getText())) detail.setText(text);
         String h = s == null ? "" : !s.note.isEmpty() ? s.note : s.focusHeld() ? "Focus held here · double-tap to follow the scene" : "";
-        hint.setText(h);
-        hint.setVisibility(h.isEmpty() || screenOff ? View.GONE : View.VISIBLE);
+        if (!h.contentEquals(hint.getText())) hint.setText(h);
+        int hv = h.isEmpty() || screenOff ? View.GONE : View.VISIBLE;
+        if (hint.getVisibility() != hv) hint.setVisibility(hv);
         boolean problem = s != null && (s.cameraError != null || (s.sending && !live));
         if (!problem && android.os.SystemClock.uptimeMillis() - touchedAt > 4000) controls(false);
         else if (problem) controls(true);
-        pill.setAlpha(1f);
         histogram();
     }
 
-    /** A small brightness histogram from a tiny copy of the viewfinder, a few times a second, only when shown. */
+    /** The histogram comes from the GPU (a 64 × 36 copy of the graded picture, twice a second), only while shown. */
     private void histogram() {
-        if (!overlay.histogram || screenOff || texture == null) return;
-        long now = android.os.SystemClock.uptimeMillis();
-        if (now - histoAt < 700) return;
-        histoAt = now;
-        if (histoBitmap == null) histoBitmap = Bitmap.createBitmap(96, 54, Bitmap.Config.ARGB_8888);
-        view.getBitmap(histoBitmap);
-        RectF p = overlay.picture;
-        float sx = 96f / view.getWidth(), sy = 54f / view.getHeight();
-        int x0 = (int) Math.ceil(p.left * sx), x1 = (int) (p.right * sx), y0 = (int) Math.ceil(p.top * sy), y1 = (int) (p.bottom * sy);
-        int[] bins = new int[48];
-        for (int y = Math.max(0, y0); y < Math.min(54, y1); y++) {
-            for (int x = Math.max(0, x0); x < Math.min(96, x1); x++) {
-                int c = histoBitmap.getPixel(x, y);
-                int luma = (int) (0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255));
-                bins[Math.min(47, luma * 48 / 256)]++;
+        CameraService s = service;
+        if (s == null) return;
+        boolean want = overlay.histogram && started && !screenOff;
+        if (want == histogramOn) return;
+        histogramOn = want;
+        s.histogram(want ? new Gpu.Histogram() {
+            @Override
+            public void bins(final int[] counts) {
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        overlay.bins = counts;
+                        overlay.invalidate();
+                    }
+                });
             }
-        }
-        overlay.bins = bins;
-        overlay.invalidate();
+        } : null);
     }
 }

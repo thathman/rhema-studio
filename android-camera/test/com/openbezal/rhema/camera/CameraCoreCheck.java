@@ -33,6 +33,7 @@ public final class CameraCoreCheck {
         looks();
         lut();
         exposure();
+        pace();
         if (failed > 0) {
             System.out.println(failed + " camera check(s) failed");
             System.exit(1);
@@ -370,6 +371,51 @@ public final class CameraCoreCheck {
             }
             check("lut: refused (" + bad.replace("\n", " ").trim() + ")", thrown);
         }
+    }
+
+    /** Feeds the pacer a number of 30 fps frames, each taking passMs. */
+    static long run(Pace p, long start, int frames, double passMs) {
+        long t = start;
+        for (int i = 0; i < frames; i++) {
+            t += 33_333_333L;
+            p.frame(t, (long) (passMs * 1e6), false);
+        }
+        return t;
+    }
+
+    static void pace() {
+        Pace p = new Pace();
+        p.reset(30);
+        long t = run(p, 0, 90, 12);
+        check("pace: a phone with time to spare stays normal", p.level == Pace.NORMAL && p.grainAllowed() && p.note(30, 30).isEmpty());
+        check("pace: normal viewfinder rate", p.viewEveryNs(15) == 1_000_000_000L / 15 - 3_000_000L);
+        t = run(p, t, 40, 31);
+        check("pace: about a second over budget, the viewfinder goes to 15 first", p.level == Pace.VIEW15 && p.viewEveryNs(30) == 1_000_000_000L / 15 - 3_000_000L && p.grainAllowed());
+        check("pace: Settings says so", p.note(30, 30).startsWith("Lighter look on this phone"));
+        p.grainOn = true;
+        t = run(p, t, 35, 31);
+        check("pace: then the grain goes", p.level == Pace.NO_GRAIN && !p.grainAllowed());
+        t = run(p, t, 35, 31);
+        check("pace: then the viewfinder goes to 8", p.level == Pace.VIEW8 && p.viewEveryNs(15) == 1_000_000_000L / 8 - 3_000_000L);
+        t = run(p, t, 35, 40);
+        check("pace: the encoder is never slowed on purpose, and Settings says it cannot keep up", p.level == Pace.VIEW8 && p.struggling && p.note(22, 30).contains("sends 22 of 30 frames a second"));
+        t = run(p, t, 30 * 31, 18);
+        check("pace: half a minute of calm (well within the frame) steps back one level", p.level == Pace.NO_GRAIN && !p.struggling);
+        t = run(p, t, 30 * 31, 24);
+        check("pace: busy but within the frame neither steps back nor down", p.level == Pace.NO_GRAIN);
+        Pace q = new Pace();
+        q.reset(30);
+        long u = run(q, 0, 40, 31);
+        u = run(q, u, 35, 31);
+        check("pace: without grain on, the grain step is skipped", q.level == Pace.VIEW8);
+        Pace r = new Pace();
+        r.reset(30);
+        long v = 0;
+        for (int i = 0; i < 90; i++) {
+            v += 33_333_333L;
+            r.frame(v, 10_000_000L, i % 2 == 0);
+        }
+        check("pace: skipped camera frames count as over budget", r.level >= Pace.VIEW15);
     }
 
     static int[] flat(int grey, int w, int h) {
