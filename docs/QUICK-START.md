@@ -42,14 +42,14 @@ First time at this computer? Click **Add your name** at the bottom of the sideba
 |---|---|
 | Show the next item or slide | **Next** (→ or PgDn). On a wide window the button says what comes next. |
 | Go back | **Previous** (←). |
-| Show what is in the preview | **Take live** (the teal button in the middle of the bar). The preview is exactly what will appear; the words beside it say what and where (the main screens, or this console only in rehearsal). |
-| Continue a reading | **Next verse** / **Previous verse** (the » and « buttons, Shift+→ / Shift+←). Stays in the same Bible version. |
+| Show what is in the preview | **Take live** (the teal button in the middle of the bar). The preview is exactly what will appear; the words beside it say what and where (the main screens, or this console only in rehearsal). On a small window (under 1200 pixels wide) the preview is the one line with a small picture just above the bar. The Live panel's badge says **On air**, **Off air** or **Rehearsal**; Take live, Clear and Restore are the only go-live buttons (the old Go live switch is in the Advanced view). |
+| Continue a reading | **Next verse** / **Previous verse** (the » and « buttons, Shift+→ / Shift+←). Stays in the same Bible version. While a song, slide or quick screen is up they wait and say why: take a verse live first. |
 | Take the screen down | **Clear** (Esc). **Restore** (Shift+Esc) brings it back. |
 | Please stand / Let us pray / Welcome / Offering / Technical issue / Logo / Black | **Quick screens**; **Back** returns to what was live. Black is a black screen (on the stream it shows nothing); Logo shows the church logo large. |
 | A verse the preacher just mentioned | Type it in **Quick find**, press Enter to preview, then Take live. |
 | Keep an eye on time | **Timer** in the header: set the planned minutes, Start. Amber under two minutes, red when over. |
 | Tell the band something | **Message stage**. Only the stage screen sees it. |
-| Change how the projector is arranged (camera with the verse, lyrics on a picture…) | **Scenes**, under Live: click a scene, then **Take scene**. **Own feed** goes back; **Restore** brings the last scene back. It does not change what is live. |
+| Change how the projector is arranged (camera with the verse, lyrics on a picture…) | **Scenes**, under Live: click a scene, then **Take scene**. **Own feed** goes back; **Restore** brings the last scene back. It does not change what is live. If the item in Preview was planned with a scene, that one is already picked (**For Preview**); you still press Take scene. |
 | Practise without touching the projector | **Rehearsal on**. Everything works in the app; the screens keep what they showed. Turning it off brings back exactly that; **Show this live** puts what you rehearsed on screen. |
 
 Things that cannot go wrong by accident: nothing goes live before it has loaded; a missing song, picture or translation is reported and the screen keeps what it had; Prepare never presents; the timer ignores the computer's clock.

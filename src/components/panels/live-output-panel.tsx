@@ -8,9 +8,16 @@ import { useBroadcastStore, useBibleStore } from "@/stores"
 import { autoModeOf, type AutoMode } from "@/stores/broadcast-store"
 import { presentVerse } from "@/hooks/use-broadcast"
 import { LiveSourcesStrip } from "@/studio/present/live-sources-strip"
+import { StatusChip } from "@/studio/ui/status-chip"
 
-export function LiveOutputPanel() {
+/**
+ * What the screens show. `goLiveSwitch` (the Advanced dashboard): the old Go live / On air switch.
+ * Present's Standard view has Take live, Clear and Restore in its transport instead, so there it is
+ * off and the header only says whether the screens are on air (#299 5.16).
+ */
+export function LiveOutputPanel({ goLiveSwitch = true }: { goLiveSwitch?: boolean } = {}) {
   const isLive = useBroadcastStore((s) => s.isLive)
+  const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const autoMode = useBroadcastStore(autoModeOf)
   const liveVerse = useBroadcastStore((s) => s.liveVerse)
   const themes = useBroadcastStore((s) => s.themes)
@@ -61,23 +68,33 @@ export function LiveOutputPanel() {
           </Select>
         </label>
         <span aria-hidden className="mx-2 h-4 w-px bg-border" />
-        <label
-          className="flex items-center gap-2"
-          title={isLive ? "On air: the screens show Live. Switch off to take it off the screens." : "Off air: the screens show nothing. Switch on to show Live (the preview, if nothing was presented yet)."}
-        >
-          <span className={cn("text-xs font-medium transition-colors", isLive ? "text-destructive" : "text-muted-foreground")}>
-            {isLive ? "On air" : "Go live"}
-          </span>
-          <Switch
-            aria-label="Go live: show this on the screens"
-            checked={isLive}
-            onCheckedChange={handleGoLive}
-            className="data-[state=checked]:bg-live-pulse"
+        {goLiveSwitch ? (
+          <label
+            className="flex items-center gap-2"
+            title={isLive ? "On air: the screens show Live. Switch off to take it off the screens." : "Off air: the screens show nothing. Switch on to show Live (the preview, if nothing was presented yet)."}
+          >
+            <span className={cn("text-xs font-medium transition-colors", isLive ? "text-destructive" : "text-muted-foreground")}>
+              {isLive ? "On air" : "Go live"}
+            </span>
+            <Switch
+              aria-label="Go live: show this on the screens"
+              checked={isLive}
+              onCheckedChange={handleGoLive}
+              className="data-[state=checked]:bg-live-pulse"
+            />
+          </label>
+        ) : (
+          <StatusChip
+            tone={!isLive ? "off" : rehearsal ? "warn" : "live"}
+            label={!isLive ? "Off air" : rehearsal ? "Rehearsal" : "On air"}
+            title={!isLive ? "Nothing is on the screens. Take live puts Preview up; Restore brings back what was cleared." : rehearsal ? "Rehearsal: the screens keep what they showed before it." : "On air: the screens show Live. Clear takes it down."}
+            className="h-7 px-2.5"
           />
-        </label>
+        )}
       </PanelHeader>
 
       <div
+        data-slot="live-picture"
         className={cn(
           "flex min-h-0 flex-1 items-center justify-center p-3 transition-opacity [container-type:size]",
           !isLive && liveVerse && "opacity-40"

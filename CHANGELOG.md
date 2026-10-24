@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Present: one go-live control, honest verse buttons, bigger touch targets, Preview on small windows (#299, #215)
+- In Present's Standard view the Live panel no longer has its own **Go live** switch next to **Take live**: it shows **On air**, **Off air** or **Rehearsal** instead. The switch is still in the Advanced view.
+- While a song, hymn, slide, picture or quick screen is up, **Next verse** and **Previous verse** say why they wait ("A song is on air: verse steps continue a Bible reading…") and do nothing, instead of quietly changing Preview behind it.
+- Quick screens, Back, the Scenes strip, running-order rows and a song's slides in Present, Prepare's move and remove buttons, and the automated phases' Start and Stop are at least 44 pixels to touch.
+- On a window narrower than 1200 pixels (where the Preview panel has no room) a one-line **Preview** with a small picture sits right above Take live. The Scenes strip picks the scene planned for the item in Preview (marked **For Preview**); Take scene is still yours to press.
 ### Capacity limits, 60 fps NDI and this computer in Show health (#243, #246)
 - Rhema now knows how much this computer can run at once (outputs, NDI senders, browser feeds, cameras, outputs showing live video), worked out from its cores and memory. Turning on one output too many asks first and says the computer may drop frames; nothing is refused. The limits can be changed in **Settings → Outputs → How much this computer runs**.
 - **60 fps NDI** on a computer below 6 cores and 16 GB asks before starting (once per output each session), and the output editor says so under Frame rate.
