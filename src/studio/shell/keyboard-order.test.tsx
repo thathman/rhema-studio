@@ -99,14 +99,14 @@ describe("keyboard order (#215)", () => {
     expect(tabbables().filter((el) => el.tabIndex > 0)).toEqual([])
   })
 
-  it("the Desk menu: name, appearance, then its rows; Tab wraps inside it and Escape gives focus back to its button", async () => {
+  it("the Desk menu: name, this computer, its role rows, appearance, then its rows; Tab wraps inside it and Escape gives focus back to its button", async () => {
     await mount(<DeskMenu onSettings={() => {}} />)
     const trigger = host.querySelector<HTMLButtonElement>("button")!
     await act(async () => trigger.focus())
     await act(async () => trigger.click())
     // It opens on its first control.
     expect(focused()).toBe("Your name")
-    expect(await walk(11)).toEqual(["Light", "Dark", "System", expect.stringMatching(/^Settings/), "Complete setup", expect.stringMatching(/^Setup status/), "Keyboard shortcuts", "Help and the tour", "Diagnostics", expect.stringMatching(/^About Rhema Studio/), "Your name"])
+    expect(await walk(14)).toEqual(["This computer", "See joined desks", "Join another host", "Light", "Dark", "System", expect.stringMatching(/^Settings/), "Complete setup", expect.stringMatching(/^Setup status/), "Keyboard shortcuts", "Help and the tour", "Diagnostics", expect.stringMatching(/^About Rhema Studio/), "Your name"])
     await act(async () => void document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })))
     expect(document.querySelector('[aria-label="Your desk"]')).toBeNull()
     expect(document.activeElement).toBe(trigger)
