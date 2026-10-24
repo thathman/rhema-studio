@@ -266,6 +266,7 @@
     pc = mic = player = null
     $("talkJoin").textContent = "Join the talk channel"
     $("talkHold").hidden = true
+    $("talkHold").disabled = false
   }
   async function joinTalk() {
     const btn = $("talkJoin")
@@ -277,6 +278,16 @@
       mic.enabled = false
       pc = new RTCPeerConnection({ iceServers: [] })
       pc.addTransceiver(mic, { direction: "sendrecv", streams: [s] })
+      // The computer went quiet on the network: stop talking at once (never back on by itself).
+      // A blip that passes says so; a lost connection leaves, and Join brings the phone back.
+      const own = pc
+      own.onconnectionstatechange = () => {
+        if (pc !== own) return
+        const st = own.connectionState
+        if (st === "disconnected") { talk(false); $("talkHold").disabled = true; say("Talk dropped — reconnecting…") }
+        else if (st === "connected" && $("talkHold").disabled) { $("talkHold").disabled = false; say("Back in the talk channel") }
+        else if (st === "failed") { leaveTalk(); say("Talk dropped: the computer could not be reached. Press Join the talk channel to come back.", true) }
+      }
       pc.ontrack = (e) => {
         player = new Audio()
         player.srcObject = e.streams[0] || new MediaStream([e.track])

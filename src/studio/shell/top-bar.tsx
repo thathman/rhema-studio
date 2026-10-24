@@ -100,6 +100,7 @@ function HostTalk() {
   const peers = useVoice((s) => s.peers)
   const talking = useVoice((s) => s.hostTalking)
   const micError = useVoice((s) => s.micError)
+  const micNote = useVoice((s) => s.micNote)
   const volume = useVoice((s) => s.volume)
   const talkTo = useVoice((s) => s.hostTalkTo)
   if (peers.length === 0 && !talking) return null
@@ -111,6 +112,7 @@ function HostTalk() {
       <TalkTo compact priority value={talkTo} onChange={(t) => setHostChannels(useVoice.getState().hostListen, t)} people={peers.map((p) => ({ key: p.name, name: p.name }))} />
       <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVoiceVolume(Number(e.target.value))} aria-label="Crew volume" title="How loud you hear the crew" className="w-16 accent-primary" />
       {micError && <span role="alert" className="sr-only">{micError}</span>}
+      {micNote && <span role="status" className="sr-only">{micNote}</span>}
     </div>
   )
 }

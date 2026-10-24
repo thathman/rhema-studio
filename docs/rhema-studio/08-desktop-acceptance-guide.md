@@ -1000,6 +1000,21 @@ Set Settings → Operator name to "Tolu" first. Have one phone camera in Product
 | 10ec.11 | Turn on Rehearsal. In it: stop the ticker, pause the timer, try the Sources buttons. Leave rehearsal. | In rehearsal the Sources buttons for the ticker, timer and cameras are greyed; the real screens keep the ticker and the timer counting. After rehearsal everything is as before and the log has only rehearsal on/off for that time. | Unverified |
 | 10ec.12 | Quit and reopen Rhema with outputs saved by the previous build (including an older Rhema Ticker \| Alpha made as a signage output). | Every output loads with its name, NDI name and look; the old ticker feed still shows only the ticker. | Unverified |
 
+### 10ee. Talk notices a dropped connection; the talk headset (#251)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ee.1 | Two computers: main desk A, a second computer B joined with the Present role (Production → Operators). On B press **Join the talk channel**, then hold **Hold to talk** and speak. | A hears B; A's top bar lists B with a green mark while B speaks. | Unverified |
+| 10ee.2 | While B holds Talk, pull A's network cable or turn off its Wi-Fi. | Within a few seconds B shows **Talk dropped — reconnecting…**, B's Talk button is greyed and shows let go even though the mouse is still held down. B's microphone light (if any) goes out. | Unverified |
+| 10ee.3 | Reconnect A's network within about a minute. | B shows **Back in the talk channel** for a few seconds. B's Talk is still off: A hears nothing from B until B lets go and presses Talk again; then A hears B. | Unverified |
+| 10ee.4 | On A, watch the top bar while B's network is pulled instead (B's cable out, A stays up). | B's Talk shows let go at once and B leaves A's crew list within about 3 seconds. Plug B back: B rejoins by itself and appears again (listening, not talking). | Unverified |
+| 10ee.5 | Keep A off the network for two minutes. | After about a minute and a half B gives up: back to **Join the talk channel** with "The main desk could not be reached. Join the talk channel again when it is back." Joining again after A is back works. | Unverified |
+| 10ee.6 | Phone page joined to Talk (https). Hold Talk, then turn A's Wi-Fi off. | The phone lets go of Talk, greys **Hold to talk** and says "Talk dropped — reconnecting…". If the network returns quickly it says "Back in the talk channel"; otherwise it leaves with a message, and **Join the talk channel** brings it back. | Unverified |
+| 10ee.7 | On A: Settings → Audio → **Talk headset**. Plug in a USB headset; choose it as **Talk microphone**. Join from B and talk from A. | The headset's name is listed (after the microphone was allowed once). B hears A through the USB headset's microphone, not the built-in one. Speech listening still uses the Input Device above it. | Unverified |
+| 10ee.8 | Look at **Hear the crew on** on A (the Mac app). | Either an output list (choose the USB headset: the crew is heard in it), or the line "The crew is heard on the system output: choose the headset in this computer's sound settings." Nothing else changes. | Unverified |
+| 10ee.9 | On B, open **Headset** under Talk while in the channel, change the microphone while talking. | Talk lets go; the next Talk uses the new microphone and A hears it. | Unverified |
+| 10ee.10 | Unplug the chosen headset on B, then join the talk channel again. | B joins on the computer's own microphone and says "The chosen talk microphone is not connected: using the system's microphone." The picker shows "The chosen headset (not connected)". | Unverified |
+| 10ee.11 | Quit and reopen Rhema on both computers (with settings saved by the previous build on one of them). | The chosen talk headset is still chosen; the older computer's settings load unchanged, with System microphone / System output. | Unverified |
 ### 10ef. Skipped items, Hold from a joined desk, stale desks (#196)
 
 | # | Step | Expected | Result |

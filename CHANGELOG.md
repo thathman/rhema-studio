@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Talk notices a dropped connection, and your own headset (#251)
+- When the main desk drops off the network, a joined desk stops sending its microphone at once and shows **Talk dropped — reconnecting…**. It joins again by itself for about a minute and a half, then says **Back in the talk channel**. The microphone stays off until you press Talk again, so nobody is heard by surprise.
+- A desk or phone that drops off leaves the main desk's crew list within a few seconds, and its Talk shows as let go straight away. The phone page also stops talking and says so when the computer goes quiet.
+- Choose the **Talk headset** for each computer: which microphone you talk with and where you hear the crew (Settings → Audio, or **Headset** under Talk on a joined desk). If that headset is unplugged, Rhema uses the computer's own microphone and says so. Where the computer cannot pick an output (the Mac app), it says the crew plays on the system output.
 ### Skipped items, Hold from a joined desk, and desks that say when they may be out of date (#196)
 - An item that never went on air while a later one did now says **Skipped** in the run of show, its table and the Timekeeper, and takes no time in what is expected: the expected times carry on from the item on now. The plan is unchanged.
 - A joined **Timekeeper** desk (and Present, Present and settings) can **Hold** the service with a reason and **Resume** it, as the main desk can; the host's log names the desk, and every desk shows the hold and who made it. Bible and Screens desks cannot.

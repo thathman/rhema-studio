@@ -52,6 +52,8 @@ interface VoiceState {
   hostTalking: boolean
   hostSpeaking: boolean
   micError: string | null
+  /** Said when the chosen talk microphone is missing and the system's is used instead. */
+  micNote: string | null
   /** How loud the main desk hears the crew, 0–1. */
   volume: number
   /** The main desk's channels (besides All crew) and whom it talks to. */
@@ -59,7 +61,7 @@ interface VoiceState {
   hostTalkTo: string
 }
 
-export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, volume: 1, hostListen: [...CHANNEL_IDS], hostTalkTo: "all" }))
+export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, micNote: null, volume: 1, hostListen: [...CHANNEL_IDS], hostTalkTo: "all" }))
 
 /** How loud the main desk hears the crew (its own output only). */
 export function setVoiceVolume(v: number): void {
@@ -68,7 +70,46 @@ export function setVoiceVolume(v: number): void {
   useVoice.setState({ volume })
 }
 
-const MIC: MediaStreamConstraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }
+const VOICE = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+const MIC: MediaStreamConstraints = { audio: VOICE }
+
+/**
+ * The talk microphone: the one chosen for this computer when it is plugged in, otherwise the
+ * system's (and the desk is told), so an unplugged headset never leaves someone unable to talk.
+ */
+export async function openTalkMic(deviceId = useSettingsStore.getState().talkInputId): Promise<MediaStream> {
+  if (deviceId) {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: { ...VOICE, deviceId: { exact: deviceId } } })
+      useVoice.setState({ micNote: null })
+      return s
+    } catch (e) {
+      const name = (e as { name?: string } | null)?.name
+      if (name !== "OverconstrainedError" && name !== "NotFoundError") throw e
+      useVoice.setState({ micNote: "The chosen talk microphone is not connected: using the system's microphone." })
+      return navigator.mediaDevices.getUserMedia(MIC)
+    }
+  }
+  useVoice.setState({ micNote: null })
+  return navigator.mediaDevices.getUserMedia(MIC)
+}
+
+type Sinkable = { setSinkId?: (id: string) => Promise<void> }
+
+/** Whether this computer can send the crew to a chosen output; where it cannot (WebKit, so far) the crew plays on the system output. */
+export function canChooseTalkOutput(): boolean {
+  const media = globalThis.HTMLMediaElement?.prototype as Sinkable | undefined
+  const context = globalThis.AudioContext?.prototype as Sinkable | undefined
+  return typeof media?.setSinkId === "function" || typeof context?.setSinkId === "function"
+}
+
+/** Send an audio element or audio context to the chosen output ("" = the system's), where it can. */
+async function toOutput(target: object | null, id: string): Promise<void> {
+  const set = (target as Sinkable | null)?.setSinkId
+  if (typeof set !== "function") return
+  await set.call(target, id).catch((e: unknown) => console.warn("[voice] could not use the chosen output", e))
+}
+
 /** RMS above this is someone speaking (a quiet room reads well under it with noise suppression on). */
 const SPEAKING = 0.02
 
@@ -106,7 +147,7 @@ interface Peer {
 let ctx: AudioContext | null = null
 let monitor: GainNode | null = null
 const peers = new Map<string, Peer>()
-let hostMic: { stream: MediaStream; gate: GainNode; analyser: AnalyserNode } | null = null
+let hostMic: { stream: MediaStream; source: AudioNode; gate: GainNode; analyser: AnalyserNode } | null = null
 /** One gain per speaker → listener (from → to → route); 1 when the speaker's talk reaches that listener. */
 const routes = new Map<string, Map<string, { gain: GainNode; source: AudioNode }>>()
 
@@ -171,6 +212,8 @@ async function audio(): Promise<AudioContext> {
     monitor = ctx.createGain()
     monitor.gain.value = useVoice.getState().volume
     monitor.connect(ctx.destination)
+    const out = useSettingsStore.getState().talkOutputId
+    if (out) void toOutput(ctx, out)
   }
   if (ctx.state !== "running") await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
   return ctx
@@ -189,6 +232,13 @@ function drop(name: string) {
   p.pc.close()
   rewire()
   publishPeers()
+}
+
+/** How long a desk that went quiet on the network keeps its place before it leaves the crew list. */
+const PEER_GRACE_MS = 3000
+
+function connected(pc: RTCPeerConnection): boolean {
+  return pc.connectionState === "connected" || pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed"
 }
 
 /** A desk's offer: answer it with what that desk should hear. */
@@ -217,12 +267,21 @@ async function answer(id: string, by: string, sdp: string) {
     peer.analyser = analyser
     rewire()
   }
-  // A desk that left or lost the network: gone at once on failure, after 5 s of silence otherwise.
-  pc.onconnectionstatechange = () => {
-    const state = pc.connectionState
-    if ((state === "failed" || state === "closed") && peers.get(by)?.pc === pc) drop(by)
-    else if (state === "disconnected") setTimeout(() => { if (pc.connectionState === "disconnected" && peers.get(by)?.pc === pc) drop(by) }, 5000)
+  // A desk that left or lost the network leaves the crew list: at once on failure, after a short
+  // grace otherwise (a blip on the network often comes back by itself). Its Talk shows let go at once.
+  const watch = () => {
+    if (peers.get(by)?.pc !== pc) return
+    const states = [pc.connectionState, pc.iceConnectionState] as string[]
+    if (states.includes("failed") || states.includes("closed")) return drop(by)
+    if (!states.includes("disconnected")) return
+    if (peer.talking) {
+      peer.talking = false
+      publishPeers()
+    }
+    setTimeout(() => { if (peers.get(by)?.pc === pc && !connected(pc)) drop(by) }, PEER_GRACE_MS)
   }
+  pc.onconnectionstatechange = watch
+  pc.oniceconnectionstatechange = watch
   await pc.setRemoteDescription({ type: "offer", sdp })
   const tr = pc.getTransceivers().find((t) => t.receiver.track.kind === "audio")
   if (!tr) throw new Error("no audio in the offer")
@@ -260,23 +319,37 @@ export async function hostTalk(on: boolean, stream?: MediaStream): Promise<void>
 async function openHostMic(stream?: MediaStream): Promise<void> {
   try {
     const a = await audio()
-    const s = stream ?? (await navigator.mediaDevices.getUserMedia(MIC))
+    const s = stream ?? (await openTalkMic())
     const gate = a.createGain()
     gate.gain.value = 0
     const analyser = a.createAnalyser()
     analyser.fftSize = 1024
-    a.createMediaStreamSource(s).connect(gate)
+    const source = a.createMediaStreamSource(s)
+    source.connect(gate)
     gate.connect(analyser)
     // Keep the meter processed without hearing yourself.
     const silent = a.createGain()
     silent.gain.value = 0
     analyser.connect(silent).connect(a.destination)
-    hostMic = { stream: s, gate, analyser }
+    hostMic = { stream: s, source, gate, analyser }
     rewire()
     useVoice.setState({ micError: null })
   } catch (e) {
     useVoice.setState({ micError: `The microphone is not available: ${e instanceof Error ? e.message : String(e)}` })
   }
+}
+
+/** Close the main desk's microphone (another was chosen): the next Talk press opens the new one. */
+function closeHostMic() {
+  if (!hostMic) return
+  for (const t of hostMic.stream.getTracks()) t.stop()
+  hostMic.source.disconnect()
+  hostMic.gate.disconnect()
+  hostMic.analyser.disconnect()
+  hostMic = null
+  wantTalk = false
+  useVoice.setState({ hostTalking: false, hostSpeaking: false })
+  rewire()
 }
 
 let hosting = false
@@ -287,6 +360,9 @@ export function startVoiceHub(): () => void {
   // A device whose key is revoked leaves the talk channel at once (its next request would be
   // refused anyway, but an open call would carry on).
   const offSettings = useSettingsStore.subscribe((s, p) => {
+    // Another headset chosen for this computer: the crew is heard there now, the microphone from the next Talk.
+    if (s.talkOutputId !== p.talkOutputId && ctx) void toOutput(ctx, s.talkOutputId)
+    if (s.talkInputId !== p.talkInputId) closeHostMic()
     if (s.remoteDevices === p.remoteDevices) return
     const paired = new Set(s.remoteDevices.map((d) => d.name))
     for (const name of [...peers.keys()]) if (!paired.has(name) && name !== "Shared key" && name !== "This computer") drop(name)
@@ -354,13 +430,38 @@ export function startVoiceHub(): () => void {
 
 // ---------------------------------------------------------------- a joined desk
 
-/** One desk's connection to the host's talk channel. */
+/**
+ * How a joined desk's talk channel stands: in it; dropped (the main desk went quiet on the network)
+ * and joining again; back after a drop; or lost (gave up after the last try).
+ */
+export type TalkStatus = "on" | "dropped" | "back" | "lost"
+
+/** A blip this short may come back by itself before the desk joins again. */
+const BLIP_MS = 2000
+/** Tries to join again after a drop (about a minute and a half in all), each given 2 s, 4 s, 8 s… (at most 15 s) to connect. */
+const REJOIN_TRIES = 8
+const rejoinWait = (tries: number) => Math.min(15000, 2000 * 2 ** Math.max(0, tries - 1))
+
+/**
+ * One desk's connection to the host's talk channel. A dropped connection stops the microphone at
+ * once and joins again by itself (a bounded number of times); the microphone stays off until the
+ * person presses Talk again, so nobody is heard by surprise when the channel comes back.
+ */
 export class TalkClient {
   private pc: RTCPeerConnection | null = null
+  private stream: MediaStream | null = null
   private mic: MediaStreamTrack | null = null
   private player: HTMLAudioElement | null = null
+  private down = false
+  private left = false
+  private tries = 0
+  private retry: ReturnType<typeof setTimeout> | null = null
+  private input = ""
+  private output = ""
   /** What this desk hears (the host's mix of everyone else). */
   remote: MediaStream | null = null
+  /** Told when the connection drops, comes back or is given up. */
+  onStatus: ((s: TalkStatus) => void) | null = null
 
   private address: string
   private token: string
@@ -370,24 +471,93 @@ export class TalkClient {
     this.token = token
   }
 
-  /** Join; `stream` replaces the microphone (tests). */
-  async join(stream?: MediaStream): Promise<void> {
-    const s = stream ?? (await navigator.mediaDevices.getUserMedia(MIC))
+  /** Join; `stream` replaces the microphone (tests). Hears the crew on `output` ("" = the system's). */
+  async join(stream?: MediaStream, output = useSettingsStore.getState().talkOutputId): Promise<void> {
+    this.output = output
+    this.input = useSettingsStore.getState().talkInputId
+    const s = stream ?? (await openTalkMic(this.input))
+    this.stream = s
     this.mic = s.getAudioTracks()[0]
     this.mic.enabled = false
+    await this.connect()
+  }
+
+  /** One connection to the host: offer, its answer, and watching that it stays up. */
+  private async connect(): Promise<void> {
     const pc = new RTCPeerConnection({ iceServers: [] })
     this.pc = pc
-    pc.addTransceiver(this.mic, { direction: "sendrecv", streams: [s] })
+    pc.addTransceiver(this.mic!, { direction: "sendrecv", streams: [this.stream!] })
     pc.ontrack = (e) => {
+      if (this.pc !== pc) return
       this.remote = e.streams[0] ?? new MediaStream([e.track])
-      this.player = new Audio()
+      if (!this.player) {
+        this.player = new Audio()
+        void toOutput(this.player, this.output)
+      }
       this.player.srcObject = this.remote
       void this.player.play().catch(() => {})
     }
+    pc.onconnectionstatechange = () => this.watch(pc)
+    pc.oniceconnectionstatechange = () => this.watch(pc)
     await pc.setLocalDescription(await pc.createOffer())
     await gathered(pc)
+    if (this.pc !== pc) return
     const sdp = await invoke<string>("join_voice", { address: this.address, token: this.token, sdp: pc.localDescription!.sdp })
+    if (this.pc !== pc) return // left, or replaced, while asking
     await pc.setRemoteDescription({ type: "answer", sdp })
+  }
+
+  private watch(pc: RTCPeerConnection) {
+    if (pc !== this.pc || this.left) return
+    const states = [pc.connectionState, pc.iceConnectionState] as string[]
+    if (connected(pc)) {
+      if (!this.down) return
+      this.down = false
+      this.tries = 0
+      if (this.retry) clearTimeout(this.retry)
+      this.retry = null
+      this.onStatus?.("back")
+    } else if (states.includes("failed")) this.dropped(0)
+    else if (states.includes("disconnected")) this.dropped(BLIP_MS)
+  }
+
+  /** The main desk went quiet: stop talking now, then join again (unless the blip passes first). */
+  private dropped(wait: number) {
+    if (!this.down) {
+      this.down = true
+      this.stopTalking()
+      this.onStatus?.("dropped")
+    }
+    if (this.retry && wait > 0) return
+    if (this.retry) clearTimeout(this.retry)
+    this.retry = setTimeout(() => void this.rejoin(), wait)
+  }
+
+  private async rejoin() {
+    this.retry = null
+    if (this.left || !this.down) return
+    if (this.tries >= REJOIN_TRIES) {
+      this.onStatus?.("lost")
+      this.leave()
+      return
+    }
+    this.tries++
+    // Each try is checked after its wait: still not connected means the next one.
+    this.retry = setTimeout(() => void this.rejoin(), rejoinWait(this.tries))
+    const old = this.pc
+    this.pc = null
+    old?.close()
+    try {
+      await this.connect()
+    } catch {
+      // the main desk is not answering yet: the next try is already waiting
+    }
+  }
+
+  private stopTalking() {
+    if (!this.mic?.enabled) return
+    this.mic.enabled = false
+    void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_talk", value: false } }).catch(() => {})
   }
 
   /** Channels heard besides All crew, and whom to talk to ("all", a channel, "to:<name>"). */
@@ -395,15 +565,46 @@ export class TalkClient {
     void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_channels", value: { listen, talk } } }).catch(() => {})
   }
 
-  /** Hold or let go of Talk; everyone sees it. */
+  /** Hold or let go of Talk; everyone sees it. Nothing while the connection is down. */
   talk(on: boolean): void {
-    if (!this.mic || this.mic.enabled === on) return
+    if (!this.mic || this.mic.enabled === on || (on && this.down)) return
     this.mic.enabled = on
     void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_talk", value: on } }).catch(() => {})
   }
 
+  /** Whether the connection is down and joining again. */
+  get dropping(): boolean {
+    return this.down
+  }
+
   get state(): RTCPeerConnectionState | "off" {
     return this.pc?.connectionState ?? "off"
+  }
+
+  /**
+   * Another headset chosen: the crew is heard on `output` now, and `input` talks from the next
+   * Talk press (Talk is let go meanwhile). True when the microphone changed.
+   */
+  async useDevices(input: string, output: string): Promise<boolean> {
+    if (output !== this.output) {
+      this.output = output
+      await toOutput(this.player, output)
+    }
+    if (!this.mic || this.left || input === this.input) return false
+    this.input = input
+    const s = await openTalkMic(input)
+    const track = s.getAudioTracks()[0]
+    if (this.left) {
+      track.stop()
+      return false
+    }
+    this.stopTalking()
+    track.enabled = false
+    await this.pc?.getSenders().find((x) => x.track === this.mic)?.replaceTrack(track)
+    this.mic.stop()
+    this.mic = track
+    this.stream = s
+    return true
   }
 
   /** Muting what this desk hears (its own output only). */
@@ -413,6 +614,9 @@ export class TalkClient {
 
   leave(): void {
     this.talk(false)
+    this.left = true
+    if (this.retry) clearTimeout(this.retry)
+    this.retry = null
     if (this.pc) void invoke("join_command", { address: this.address, token: this.token, command: { command: "voice_leave" } }).catch(() => {})
     this.player?.pause()
     this.mic?.stop()

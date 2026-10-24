@@ -32,6 +32,7 @@ import {
   BrainCircuitIcon,
 } from "lucide-react"
 import { LevelMeter } from "@/components/ui/level-meter"
+import { TalkDevices } from "@/studio/talk"
 import { useAudioTest } from "@/hooks/use-audio-test"
 import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
@@ -222,6 +223,17 @@ function AudioSection() {
         <p className="text-xs text-muted-foreground">
           Amplifies the incoming audio signal before transcription. 50% is unity
           gain.
+        </p>
+      </div>
+
+      {/* The talk channel's headset (Rhema Comms): separate from the listening microphone above. */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Talk headset
+        </label>
+        <TalkDevices />
+        <p className="text-xs text-muted-foreground">
+          The microphone you talk to the crew with and where you hear them, on this computer only. It never feeds listening, the outputs, OBS or the sound player.
         </p>
       </div>
     </div>

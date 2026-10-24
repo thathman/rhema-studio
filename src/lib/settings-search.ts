@@ -19,8 +19,8 @@ export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; 
     keywords: ["auto-live", "auto live", "detection", "detected verse", "take live", "confidence", "automatic"],
   },
   audio: {
-    labels: ["Input Device", "Test Input", "Input Gain"],
-    keywords: ["microphone", "mic", "sound", "level", "volume", "gain", "audio"],
+    labels: ["Input Device", "Test Input", "Input Gain", "Talk headset"],
+    keywords: ["microphone", "mic", "sound", "level", "volume", "gain", "audio", "headset", "headphones", "talk", "intercom", "comms"],
   },
   speech: {
     labels: ["Provider", "Cloud (Deepgram)", "Local (Whisper)", "Deepgram API Key", "Withdraw"],
