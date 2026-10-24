@@ -1526,6 +1526,20 @@ Settings → AI assistants on, and an assistant (Claude Desktop) connected with 
 | 10fe.10 | In the assistant, open the prompt list. Pick **Prepare bilingual worship**. | It plans with songs that have both languages, readings with two editions, and slides in Yorùbá and English with every tone mark kept. | Unverified |
 | 10fe.11 | With two drafts waiting, use **Back up now**. Remove the drafts, then restore that backup (Setup → Bring in a previous installation). | The restore preview says "AI drafts: 2 drafts added from the backup; the ones here stay". After restoring, both drafts are back in Prepare → AI drafts, warnings and Yorùbá text as they were. | Unverified |
 
+### 10fj. The Rhema Studio family: names and the approved logo (owner brief)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fj.1 | Build the app, install over the existing Rhema.app, open it. | The Dock and Finder icon is the approved mark (black rounded square, R with opening quotes). Services, settings, paired phones and TVs are all still there. | Unverified |
+| 10fj.2 | Look at the menu bar and the app menu; choose About Rhema Studio. | Menu bar says Rhema Studio; About / Hide / Quit say Rhema Studio; the About panel shows "Rhema Studio contributors. Built on Rhema by OpenBezal (MIT licence, © 2025 OpenBezal)". Cmd+Q still asks about unsaved work. | Unverified |
+| 10fj.3 | Look at the sidebar open and folded (Cmd+B), light and dark. | White-square mark and "Rhema Studio"; folded: the mark only; no teal R. | Unverified |
+| 10fj.4 | Settings → Help, and Desk menu → About Rhema Studio. | The mark, "Developed and maintained by Rhema Studio contributors", the OpenBezal credit word for word, the four product names. | Unverified |
+| 10fj.5 | Reset the setup (or a fresh profile) and open the welcome. | The mark beside "Welcome to Rhema Studio"; a brief start-up screen with the mark before the studio appears. | Unverified |
+| 10fj.6 | On a phone open the remote page and a camera page. | Tab titles "Rhema Studio remote" / "… · Rhema Studio"; the white mark in the heading; pairing and sending work as before. | Unverified |
+| 10fj.7 | Install Receiver 1.4 over 1.3 on the Google TV (adb install -r). | Updates in place; the TV home shows the Rhema Studio Receiver banner; the code screen shows the Receiver logo over name, address and code; Find TVs still lists it and a feed can be sent. | Unverified |
+| 10fj.8 | Install Cam 1.1 over 1.0 on the phone. | Updates in place and stays paired; the launcher shows the mark and "Rhema Studio Cam". | Unverified |
+| 10fj.9 | Check an assistant set up earlier with /Applications/Rhema.app/Contents/MacOS/Rhema --mcp. | It still connects (the app's file name did not change). | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

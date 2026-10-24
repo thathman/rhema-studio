@@ -1,4 +1,6 @@
-# Rhema Camera (Android)
+# Rhema Studio Cam (Android)
+
+(Called Rhema Camera before 1.1. The package `com.openbezal.rhema.camera` and the `rhema-camera://` link are unchanged, so an installed copy updates in place.)
 
 A phone camera app for Rhema Studio (#209). The screen shows the camera's picture and nothing else;
 everything else is in Settings. It sends to the camera router that comes with Rhema (MediaMTX),
@@ -11,8 +13,8 @@ Version 1.0.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) an
 
 1. In Rhema: **Settings → Remote control**: turn on the network listener and **Secure page for phones
    (https)** (this makes Rhema's certificate, which the camera router also uses). **Production →
-   Cameras**: add a camera; its card shows **Rhema Camera app (Android)** with a QR code and a link.
-2. On the phone: scan the QR code with the phone's camera or Google Lens and open it in Rhema Camera
+   Cameras**: add a camera; its card shows **Rhema Studio Cam app (Android)** with a QR code and a link.
+2. On the phone: scan the QR code with the phone's camera or Google Lens and open it in Rhema Studio Cam
    (or copy the link and paste it in **Settings → Connection → Paste the pairing link**). Confirm
    **Pair**. The app goes live at once (unless **Start sending when the app opens** is off).
 3. The viewfinder: **tap** to focus and expose there (the focus then holds), **double-tap** to follow
