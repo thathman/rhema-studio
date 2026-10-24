@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — People on items; the two programs named in Production (#299, #215)
+
+- **Branch / PR:** `prep-039/assignees-programs` (from `main` 5b96f2d). Audit unbatched items 299-6.10 and 215-G5.1.
+- **Behaviour:** Queue items gain `assignees?: string[] | null` (`src/lib/assignees.ts`: clean, dedupe, at most 12). There is no team list in the app, so names are free text, with the desk's name and names already on the service offered (`knownPeople`). Saving writes `assignees` and `prepared_by` = the names joined, kept within the crate's 60 characters ("Tolu, Ade +3" when they do not fit); an item with only `prepared_by` saves exactly as before (no list added, so old services do not look changed). Reading keeps the list only while its `prepared_by` still matches it, so an older build's edit of the line wins (`parseAssignees`). Item editor `AssigneesInput` chips replace the Prepared by box; rundown row "· first +N"; Run of show People column; AI drafts set the assistant as the one person. Content crate validates `assignees` (≤ 12, each 1–60 characters, no control characters). Programs: `src/lib/program-names.ts` (`onlineProgramName`, `congregationProgramName`, `outputFormat`); the OBS store reads `GetVideoSettings` on connect and on `CurrentProfileChanged` (Config events now subscribed) into `video`; OBS tab heading, Programs header and congregation output cards use the names; fallbacks 720p30 and 1080p. Home's Sunday at a glance shows no preparer, so it is unchanged.
+- **Tests:** `lib/assignees.test.ts`, `stores/service-store.test.ts` (round trip, legacy save unchanged, older-build edit wins, 60-character line), `studio/prepare/assignees-input.test.tsx` (chips, paste, offered names, row "+2"), `lib/ai-drafts.test.ts`, `lib/program-names.test.ts`, `studio/production/obs-panel.test.tsx` (fake OBS video settings, profile change, reset on disconnect), `studio/production/production-workspace.test.tsx` (Programs, OBS, Screens names); `lib/obs.test.ts` subscription mask; Rust `rhema-content` payload validation.
+- **Next:** desktop acceptance 10ex. Not done: a church team list (none exists to pick from); display outputs' format is not read from their monitor (the usual 1080p is shown); roles per person (`{ name, role }`) were left out.
+
 ## 2026-10-24 — Church look from the host, settings split, full backup and restore (#298)
 
 - **Branch / PR:** `setup-037/church-profile-restore` (from `main` 76b2ea8). Audit batch 10 (298-E4, M12, S1.7, scenario G, M11, E6).

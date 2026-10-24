@@ -17,6 +17,7 @@ import { useRouterHealth } from "@/lib/cameras"
 import { invoke } from "@tauri-apps/api/core"
 import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
 import { outputDestination, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
+import { congregationProgramName } from "@/lib/program-names"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { safeArea, safeAreaWords } from "@/lib/theme-look"
 import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, ReceiverTv, Scene } from "@/types"
@@ -327,7 +328,7 @@ function OutputInspector({ output: o, status: st, frame, scenes, themes }: { out
         <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground [&_svg]:size-4">{o.type === "browser" ? <GlobeIcon /> : o.type === "ndi" ? <RadioIcon /> : <MonitorIcon />}</span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold">{o.name}</span>
-          <span className="block text-xs text-muted-foreground">{outputTransport(o)} · {ROLE_NAMES[role]}</span>
+          <span className="block text-xs text-muted-foreground">{outputTransport(o)} · {role === "congregation" ? congregationProgramName([o]) : ROLE_NAMES[role]}</span>
         </span>
         {st?.ndiError ? <Badge tone="warn">{st.ndiError}</Badge> : <Badge tone={on ? "ok" : "off"}>{on ? "On" : "Off"}</Badge>}
       </div>

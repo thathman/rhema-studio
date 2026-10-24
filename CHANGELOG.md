@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### People on each item; the two programs named in Production (#299, #215)
+- An item in Prepare can now have several **People** preparing it, as chips: type a name and press Enter (or paste "Tolu, Ade"); names already on the service and the desk's own name are offered. The rundown shows the first and how many more ("· Tolu +2"), and **Run of show** has a People column. An older item's "prepared by" name shows as its one person, and older Rhema builds still see the names as one "prepared by" line.
+- Production now names the two programs the same way everywhere: **Online program (OBS, 720p30)** on the OBS tab and **Congregation program (screens, 1080p)** on Programs and on each congregation output's card in Screens. The format is OBS's real output size and frame rate once OBS is connected, and the congregation NDI outputs' own size and frame rate; otherwise the usual one.
+
 ### The church look from the host; settings in three parts; backups bring back the whole installation (#298)
 - A computer that joined a host is offered the host's **church look** (Brand Kit and the themes made from it) when it changes: **The host's church look changed — Use it**. Nothing changes until its operator confirms, and then only its Brand Kit and brand themes; its own name, computer, screens and keys stay. **Not now** puts that change aside.
 - **Back up now** also keeps the settings, outputs, looks (themes, lower thirds, ticker, stage, scenes) and Brand Kit in the backup file, never saved keys, passwords, paired phones or link secrets; remote control, the AI assistant connector and cloud speech consent stay as each computer has them.

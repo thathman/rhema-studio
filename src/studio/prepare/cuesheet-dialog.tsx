@@ -6,6 +6,7 @@ import { mmss } from "@/lib/journal"
 import { clockText } from "@/lib/run-of-show"
 import { formatMinutes } from "@/lib/service-timing"
 import { cn } from "@/lib/utils"
+import { itemAssignees } from "@/lib/assignees"
 import { DurationInput } from "@/studio/prepare/item-editor-parts"
 import { useServiceTiming } from "@/studio/use-service-timing"
 
@@ -15,7 +16,7 @@ const STATUS = { done: "Done", live: "On now", upcoming: "", skipped: "Skipped" 
 
 /**
  * The run of show as a cuesheet (#196): plan, actual, expected and offset side by side for every
- * item of the main service, the time typed in place. The plan changes only when a time is typed;
+ * item of the main service, who is preparing it, the time typed in place. The plan changes only when a time is typed;
  * running late moves what is expected. A fixed start has a pin; a pause before an item is its own
  * thin row with how much lateness it takes up.
  */
@@ -24,6 +25,8 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const headers = useQueueStore((s) => s.headers)
   const { timing, onAir } = useServiceTiming()
   const rows = timing ? cuesheet(timing, headers, items.length, onAir) : []
+  // Who is preparing each item (#299 6.10), every name.
+  const people = new Map(items.map((i) => [i.id, itemAssignees(i).join(", ")]))
   const th = "px-2 py-1.5 text-left text-[0.6875rem] font-semibold tracking-wide text-muted-foreground uppercase"
   const td = "px-2 py-1 tabular-nums"
   return (
@@ -40,7 +43,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             <table className="w-full border-collapse text-xs">
               <thead className="border-b border-border">
                 <tr>
-                  <th className={th}>Item</th><th className={th}>Plan start</th><th className={th}>Plan end</th><th className={cn(th, "w-24")}>Time</th>
+                  <th className={th}>Item</th><th className={th}>People</th><th className={th}>Plan start</th><th className={th}>Plan end</th><th className={cn(th, "w-24")}>Time</th>
                   <th className={th}>Actual</th><th className={th}>Expected</th><th className={th}>Offset</th><th className={th}>End by</th><th className={th}>Status</th>
                 </tr>
               </thead>
@@ -49,6 +52,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   r.kind === "group" ? (
                     <tr key={r.id} className="border-t border-border bg-surface-sunken font-semibold">
                       <td className="px-2 py-1">{r.name}</td>
+                      <td />
                       <td className={td}>{wallClock(r.plannedStart)}</td>
                       <td className={td}>{wallClock(r.plannedEnd)}</td>
                       <td className={td}>{formatMinutes(r.minutes * 60_000) || "—"}</td>
@@ -61,6 +65,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   ) : (
                     <tr key={r.event.id} className={cn("border-t border-border/60", r.event.state === "live" && "bg-primary/10", r.event.state === "skipped" && "text-muted-foreground")}>
                       <td className="max-w-56 truncate px-2 py-1">{r.event.label}</td>
+                      <td className="max-w-40 truncate px-2 py-1 text-muted-foreground">{people.get(r.event.id) ?? ""}</td>
                       <td className={td}>
                         {r.event.fixedStart !== null ? (
                           <span className="inline-flex items-center gap-1" title="A fixed start: it keeps this time whatever runs before it">
@@ -94,6 +99,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
               <tfoot className="border-t-2 border-border font-semibold">
                 <tr>
                   <td className="px-2 py-1.5">Main service</td>
+                  <td />
                   <td className={td}>{wallClock(timing.start)}</td>
                   <td className={td}>{wallClock(timing.plannedEnd)}</td>
                   <td className={td}>{formatMinutes(timing.plannedEnd - timing.start) || "—"}</td>
@@ -117,7 +123,7 @@ function GapRow({ minutes, absorbed, beforeFixed }: { minutes: number; absorbed:
   return (
     <tr className="border-t border-dashed border-border/60 text-[0.6875rem] text-muted-foreground">
       <td className="px-2 py-0.5 italic">{words.label}</td>
-      <td colSpan={4} />
+      <td colSpan={5} />
       <td colSpan={4} className={cn("px-2 py-0.5", absorbed !== null && absorbed > 0 && "font-semibold text-confidence-mid")}>{words.absorbs}</td>
     </tr>
   )

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import { ImageIcon, MessageSquareIcon, PinIcon, StickyNoteIcon, Volume2Icon, XIcon } from "lucide-react"
 import { cleanComments, commentKey, MAX_COMMENTS } from "@/lib/comments"
+import { itemAssignees, knownPeople, MAX_ASSIGNEES, withAssignees } from "@/lib/assignees"
 import { useSettingsStore } from "@/stores/settings-store"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -104,6 +105,56 @@ export function MissingMediaMark({ mediaId }: { mediaId: string }) {
   return <span className="shrink-0 rounded bg-destructive/15 px-1 text-[0.6875rem] font-semibold text-destructive uppercase" title="The file is missing from the media folder">missing</span>
 }
 
+/**
+ * Who is preparing or responsible for an item (#299 6.10): one chip per person, typed in (Enter
+ * or a comma adds one) with the names already on this service offered. There is no team list in
+ * the app yet, so any name goes. Older builds see the names as one "prepared by" line.
+ */
+export function AssigneesInput({ item }: { item: QueueItem }) {
+  const [draft, setDraft] = useState("")
+  const people = itemAssignees(item)
+  const offered = useQueueStore((s) => s.items)
+  const operatorName = useSettingsStore((s) => s.operatorName)
+  const suggestions = knownPeople(offered, operatorName).filter((n) => !people.some((p) => p.toLowerCase() === n.toLowerCase()))
+  const listId = `people-known-${item.id}`
+  const save = (names: string[]) => useQueueStore.getState().updateItem(item.id, (i) => withAssignees(i, names))
+  const add = () => {
+    // "Tolu, Ade" pasted in is two people.
+    const names = draft.split(",").map((n) => n.trim()).filter(Boolean)
+    if (names.length) save([...people, ...names])
+    setDraft("")
+  }
+  return (
+    <div className="flex min-h-7 flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-1 py-0.5" role="group" aria-labelledby={`people-${item.id}`}>
+      {people.map((name) => (
+        <span key={name} className="inline-flex max-w-full items-center gap-0.5 rounded bg-muted py-0.5 pr-0.5 pl-1.5 text-xs">
+          <span className="truncate">{name}</span>
+          <button type="button" aria-label={`Remove ${name} from ${item.reference}`} className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 outline-none" onClick={() => save(people.filter((p) => p !== name))}>
+            <XIcon className="size-3" aria-hidden />
+          </button>
+        </span>
+      ))}
+      {people.length < MAX_ASSIGNEES && (
+        <input
+          aria-label={`Add a person to ${item.reference}`}
+          list={suggestions.length ? listId : undefined}
+          value={draft}
+          placeholder={people.length ? "Add" : "Name"}
+          maxLength={60}
+          className="h-6 min-w-16 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add() }
+            else if (e.key === "Backspace" && !draft && people.length) save(people.slice(0, -1))
+          }}
+          onBlur={add}
+        />
+      )}
+      {suggestions.length > 0 && <datalist id={listId}>{suggestions.map((n) => <option key={n} value={n} />)}</datalist>}
+    </div>
+  )
+}
+
 export function PlannedMinutes({ item }: { item: QueueItem }) {
   const label = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
   return (
@@ -117,17 +168,10 @@ export function PlannedMinutes({ item }: { item: QueueItem }) {
           onChange={(m) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, planned_minutes: m }))}
         />
       </label>
-      <label className="min-w-0">
-        <span className={label}>Prepared by</span>
-        <Input
-          aria-label={`Who prepares ${item.reference}`}
-          value={item.prepared_by ?? ""}
-          placeholder="Name"
-          maxLength={60}
-          className="h-7 text-xs"
-          onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, prepared_by: e.target.value.trim() ? e.target.value : null }))}
-        />
-      </label>
+      <div className="min-w-0">
+        <span className={label} id={`people-${item.id}`}>People</span>
+        <AssigneesInput item={item} />
+      </div>
       <label className="min-w-0">
         <span className={label}>End by</span>
         <Input

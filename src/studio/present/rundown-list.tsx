@@ -17,6 +17,7 @@ import { presentQueueItem } from "@/lib/remote-actions"
 import { buildSlides, sectionShort } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
 import { interleave, sectionSummaries } from "@/lib/run-of-show"
+import { assigneesShort, itemAssignees } from "@/lib/assignees"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
 import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
@@ -120,7 +121,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 )}
                 {item.auto_advance && <TimerIcon className="size-3 shrink-0 text-muted-foreground" role="img" aria-label={`Moves on by itself after ${item.planned_minutes ?? 0} min while timed moves are on`} />}
                 {item.end_by ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
-                {item.prepared_by ? <span className="max-w-24 shrink-0 truncate text-[0.6875rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
+                <PeopleMark item={item} />
                 {item.comments?.length ? (
                   <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
                     <MessageSquareIcon className="size-3" aria-hidden />
@@ -309,5 +310,18 @@ export function SlideList({ item, index, mode }: { item: SongQueueItem; index: n
         )
       })}
     </ol>
+  )
+}
+
+/** Who is preparing a row's item, kept short (#299 6.10): "· Tolu +2", every name on hover. */
+function PeopleMark({ item }: { item: QueueItem }) {
+  const people = itemAssignees(item)
+  const short = assigneesShort(people)
+  if (!short) return null
+  return (
+    <span className="inline-flex max-w-28 shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`Prepared by ${people.join(", ")}`}>
+      <span className="truncate">· {short.first}</span>
+      {short.more > 0 && <span className="shrink-0 tabular-nums">+{short.more}</span>}
+    </span>
   )
 }

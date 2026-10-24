@@ -21,7 +21,7 @@ describe("run of show timing: actual times", () => {
   it("shows when the service began against its start, each item's time on air, and moves the finish", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useQueueStore.setState({
-      items: [slide("Welcome", 3), slide("Reading", 10)],
+      items: [{ ...slide("Welcome", 3), assignees: ["Tolu", "Ade"], prepared_by: "Tolu, Ade" }, slide("Reading", 10)],
       headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
     })
     useJournalStore.setState({
@@ -45,13 +45,13 @@ describe("run of show timing: actual times", () => {
     expect(text).toContain("planned 10:13")
     expect(text).toContain("6 min late")
 
-    // The same as a table: plan, actual, expected and offset per item.
+    // The same as a table: who prepares it (#299 6.10), plan, actual, expected and offset per item.
     const table = [...el.querySelectorAll("button")].find((b) => b.textContent === "Table")!
     await act(async () => table.click())
     const rows = [...document.querySelectorAll("tbody tr")].map((r) => [...r.querySelectorAll("td")].map((c) => c.querySelector("input")?.value ?? c.textContent))
     expect(rows).toEqual([
-      ["Welcome", "10:00", "10:03", "3", "10:04 · 5:00", "", "+4 min", "", "Done"],
-      ["Reading", "10:03", "10:13", "10", "10:09 · 0:00", "10:09–10:19", "+6 min", "", "On now"],
+      ["Welcome", "Tolu, Ade", "10:00", "10:03", "3", "10:04 · 5:00", "", "+4 min", "", "Done"],
+      ["Reading", "", "10:03", "10:13", "10", "10:09 · 0:00", "10:09–10:19", "+6 min", "", "On now"],
     ])
     expect(document.querySelector("tfoot")?.textContent).toContain("ends 10:19")
   })
@@ -78,8 +78,8 @@ describe("run of show timing: an item jumped over", () => {
     const table = [...el.querySelectorAll("button")].find((b) => b.textContent === "Table")!
     await act(async () => table.click())
     const rows = [...document.querySelectorAll("tbody tr")].map((r) => [...r.querySelectorAll("td")].map((c) => c.querySelector("input")?.value ?? c.textContent))
-    expect(rows[1]).toEqual(["Notices", "10:03", "10:08", "5", "", "", "", "", "Skipped"])
+    expect(rows[1]).toEqual(["Notices", "", "10:03", "10:08", "5", "", "", "", "", "Skipped"])
     // The reading follows the welcome: expected 10:03–10:13, 5 min early against its plan (10:08).
-    expect(rows[2].slice(5, 7)).toEqual(["10:03–10:13", "−5 min"])
+    expect(rows[2].slice(6, 8)).toEqual(["10:03–10:13", "−5 min"])
   })
 })

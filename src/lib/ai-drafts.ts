@@ -125,7 +125,7 @@ export function draftToRundown(d: AiDraft, newId: () => string = () => crypto.ra
       if (g) group = g
       const endBy = clockMinutes(it.end_by) !== null ? it.end_by! : null
       const { look, scene } = matchSuggestions(it, names)
-      const base = { id: newId(), confidence: 1, source: "manual" as const, added_at: now, prepared_by: by, planned_minutes: it.planned_minutes ?? null, ...(endBy ? { end_by: endBy } : {}), notes: it.notes ?? null, ...(look?.id ? { look_id: look.id } : {}), ...(scene?.id ? { scene_id: scene.id } : {}) }
+      const base = { id: newId(), confidence: 1, source: "manual" as const, added_at: now, prepared_by: by, assignees: [by], planned_minutes: it.planned_minutes ?? null, ...(endBy ? { end_by: endBy } : {}), notes: it.notes ?? null, ...(look?.id ? { look_id: look.id } : {}), ...(scene?.id ? { scene_id: scene.id } : {}) }
       if (it.kind === "song" && it.song) {
         const languages = [it.song.primary_language, ...it.song.languages.filter((l) => l !== it.song!.primary_language)]
         items.push({ ...base, kind: "song", reference: it.song.title, song: { song_id: it.song.id, title: it.song.title, arrangement_id: null, languages } })

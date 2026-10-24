@@ -37,7 +37,7 @@ describe("obs-websocket client", () => {
     obs.hello()
     await connected
     const identify = obs.sent.find((m) => m.op === 1)
-    expect(OBS_SUBSCRIPTIONS).toBe(4 | 64 | 1024)
+    expect(OBS_SUBSCRIPTIONS).toBe(2 | 4 | 64 | 1024)
     expect(identify?.d).toEqual({ rpcVersion: 1, eventSubscriptions: OBS_SUBSCRIPTIONS, authentication: "1Ct943GAT+6YQUUX47Ia/ncufilbe6+oD6lY+5kaCu4=" })
     expect(await client.request("GetRecordStatus")).toEqual({ outputActive: true, outputTimecode: "00:12:31.000" })
     await expect(client.request("CreateRecordChapter", { chapterName: "Sermon" })).rejects.toBeInstanceOf(ObsRequestError)

@@ -18,8 +18,13 @@ interface QueueItemBase {
   starts_at?: string | null
   /** A planned pause before it, in minutes (#196 R3); lateness before it uses this up first. */
   gap_minutes?: number | null
-  /** Who is preparing this item (CL-007): a short name. */
+  /**
+   * Who is preparing this item (CL-007), as one short line. Older builds read and edit only this;
+   * this build keeps it as the names in `assignees` joined ("Tolu, Ade").
+   */
   prepared_by?: string | null
+  /** The people preparing or responsible for this item (#299 6.10), short names. Empty: see `prepared_by`. */
+  assignees?: string[] | null
   /** Team comments on this item (CL-007); saved with the service and carried in service files. Never on screen. */
   comments?: ItemComment[] | null
   /** What happens as it goes live (issue #193): a stage-only message, one cue that never changes the screen. */
