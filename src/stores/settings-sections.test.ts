@@ -161,6 +161,37 @@ describe("settings in three parts: church, machine, operator (#298 M11)", () => 
   })
 })
 
+describe("OBS companion mode (#209)", () => {
+  it("is this computer's: saved in the machine part, read back, never carried by a backup", async () => {
+    file.set("machine", { companionMode: true, companionLatencyMs: 400 })
+    const { hydrateSettings, useSettingsStore, settingsForBackup, restoreSettingsFromBackup, sectionOf } = await import("./settings-store")
+    await hydrateSettings()
+    expect(sectionOf("companionMode")).toBe("machine")
+    expect(useSettingsStore.getState().companionMode).toBe(true)
+    expect(useSettingsStore.getState().companionLatencyMs).toBe(400)
+    useSettingsStore.getState().setCompanionLatencyMs(120)
+    await settle()
+    expect((file.get("machine") as Record<string, unknown>).companionLatencyMs).toBe(120)
+    expect(file.get("companionMode")).toBe(true) // the top-level copy, for an older build
+    const backup = settingsForBackup()
+    expect(backup.machine).not.toHaveProperty("companionMode")
+    backup.machine.companionMode = false
+    restoreSettingsFromBackup(backup)
+    expect(useSettingsStore.getState().companionMode).toBe(true)
+  })
+
+  it("a delay buffer of the wrong size is skipped", async () => {
+    file.set("machine", { companionLatencyMs: 5 })
+    file.set("companionMode", "yes")
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    expect(useSettingsStore.getState().companionLatencyMs).toBe(200)
+    expect(useSettingsStore.getState().companionMode).toBe(false)
+    useSettingsStore.getState().setCompanionLatencyMs(99999)
+    expect(useSettingsStore.getState().companionLatencyMs).toBe(200)
+  })
+})
+
 describe("settings in a backup file (#298 E6)", () => {
   it("leave out every secret: keys, passwords, paired devices and camera links", async () => {
     for (const [k, v] of Object.entries(OLD_FILE)) file.set(k, structuredClone(v))

@@ -107,7 +107,55 @@ This tab was called **Programs** before; it is the same composer.
 
 ## Cameras (Production → Cameras)
 
-Phones on the church Wi-Fi can be cameras: **Add a camera** (Pulpit, Choir…), scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; scenes and TVs take it with **Use in a scene…** (or its WHEP address in a Camera layer), and OBS with its RTSP address in a Media Source. Phones need the secure phone page (Settings → Remote control → "Secure page for phones (https)"). Nothing goes to the internet. Step by step, ports and security: [rhema-studio/cameras.md](rhema-studio/cameras.md).
+Phones on the church Wi-Fi can be cameras: **Add a camera** (Pulpit, Choir…), scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; scenes and TVs take it with **Use in a scene…** (or its WHEP address in a Camera layer), OBS on this computer with its RTSP address in a Media Source, and OBS on another computer through Rhema there ([A second computer for OBS](#a-second-computer-for-obs)). Phones need the secure phone page (Settings → Remote control → "Secure page for phones (https)"). Nothing goes to the internet. Step by step, ports and security: [rhema-studio/cameras.md](rhema-studio/cameras.md).
+
+### Who watches each camera
+
+Each camera's card names who reads it now: "Rhema screens on this computer", "OBS on this computer",
+"A screen or TV at 192.168.1.40", a joined desk by its name, and each OBS companion ("Media desk (OBS
+companion)"). When an OBS companion has the camera on its program, the card says **On OBS** with
+the companion's name ("On the program of Media desk's OBS"), or **OBS preview** in Studio Mode,
+and adds "(its OBS is not receiving it)" if that OBS has it but is not playing it. Above the cards,
+Rhema adds up what the cameras ask of the network: each camera's rate times the screens, TVs and
+OBS computers reading it ("about 12.0 Mbit/s, 3 readers on other computers and TVs"). Above about
+25 Mbit/s it says so plainly: that is a lot for Wi-Fi; connect this computer and the OBS computers
+with a cable, or read fewer cameras.
+
+## A second computer for OBS
+
+The computer that streams with OBS does not need the whole studio. Install Rhema on it and, in the
+first-run setup, choose **This computer runs OBS only (companion)** (or Desk menu → **This computer
+runs OBS only…** later). Rhema starts again with one small screen and nothing else: no services,
+screens, Bible models or speech.
+
+1. **Join the main computer.** On the main computer: Settings → Remote control → **Pair a device**.
+   On the OBS computer: pick the main computer under **Join a host** (or type its address), type the
+   code and **Join**. It pairs as an **OBS companion**, a role that reads the cameras and sends
+   nothing to the service. If the main computer gives it another role, the screen says so.
+2. **Connect to OBS here.** OBS → Tools → WebSocket Server Settings → Enable; copy the port and
+   password into the **OBS** card (address 127.0.0.1).
+3. **Add the cameras.** The **Cameras** list shows the church's cameras from the main computer:
+   sending or not, the codec, picture size and rate, and who else watches each. **Add to OBS**
+   makes a Media Source playing that camera (a network stream: restarted whenever it is shown, a
+   small network buffer, hardware decoding) in a new scene named after the camera, or in a scene
+   you pick; **Add all to OBS** adds every camera not yet there. Arrange, crop and rename them in
+   OBS as you like: Rhema finds them by their address, never removes or rearranges anything, and
+   when the main computer renews a camera's link or starts again, gives OBS the new address by
+   itself.
+4. **Cut in OBS.** OBS cuts between the cameras on its own; the screens in church are not changed
+   from here, and the main computer's scenes do not change OBS. The main computer's Production →
+   Cameras shows which cameras are **On OBS** at this computer.
+
+The camera's line says whether **OBS is receiving it**. If a phone stops sending, the companion
+says so once ("Pulpit has stopped sending"); if the phone sends but OBS stopped playing, it says
+"OBS is not receiving Pulpit" and starts it again in OBS. The **Delay buffer** (Short 120 ms for two
+computers on a cable, Normal 200 ms, Wi-Fi 400 ms, Very safe 800 ms) trades a later picture for
+riding out network hiccups; OBS takes a change within a few seconds.
+
+Everything stays on the church network: the cameras travel from the main computer's camera router
+to OBS over SRT, encrypted, with this computer's own sign-in. **Leave this host**, or taking back
+control at the main computer, stops it at once. **Open the full studio…** at the top makes this
+computer a whole Rhema again (Rhema starts again; the cameras stay in OBS).
 
 **Rhema Camera app (Android):** for a better picture than the browser page, install Rhema Camera on the phone (`android-camera/`). On the camera's card, **Rhema Camera app (Android)** shows a QR code: scan it with the phone's camera (or Google Lens) and open it in Rhema Camera, or copy the link into the app's Settings → Connection. It goes live at once and the card says **Sending**. The phone's screen shows only the picture (tap to focus, pinch to zoom, the moon blacks the screen out while it keeps sending); its Settings has the **Look** (Studio by default, Cinematic, Warm Sanctuary, Natural, Black & White, Off, each with a strength), the picture size and frame rate (the best the phone does, 4K where it can; always H.264 unless you choose HEVC under Advanced, which only OBS is sure to show), white balance, exposure (a film shutter by default where the phone allows), focus, sound (off: the sound desk has the sound) and battery. It sends encrypted to this computer only (RTSPS on port 8322, with Rhema's own certificate), so the QR code appears once secure phone pages are on; **New link** stops the old one as for the camera page. Keep the phone on a charger; it carries on with the screen off or locked, and its viewfinder shows over the lock screen (Settings → On screen can turn that off).
 

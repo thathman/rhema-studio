@@ -19,7 +19,9 @@ use crate::command::{same_key, RemoteCommand};
 /// specialist roles (#215 G10, #243 VL.5): `Worship` shows songs and hymns and takes the lyrics off
 /// and back; `Stage` writes the stage message; `Camera` hides a camera from scenes and changes the
 /// camera boxes of scenes; `Obs` (OBS director) switches OBS scenes through the host's OBS
-/// connection, which no other joined desk may do.
+/// connection, which no other joined desk may do. `ObsCompanion` (#209) is a computer that runs OBS
+/// only: it reads the church's cameras from the camera router into its own OBS and reports which are
+/// on its program; it sends no service command (only the notices and the talk channel, as everyone).
 /// Existing entries without a role are `Configure`, as before.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -34,11 +36,13 @@ pub enum Role {
     Stage,
     Camera,
     Obs,
+    #[serde(rename = "obs-companion")]
+    ObsCompanion,
 }
 
 impl Role {
     /// As saved and as notices address it: "present", "configure", "timekeeper", "bible", "screens",
-    /// "worship", "stage", "camera", "obs".
+    /// "worship", "stage", "camera", "obs", "obs-companion".
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -51,6 +55,7 @@ impl Role {
             Role::Stage => "stage",
             Role::Camera => "camera",
             Role::Obs => "obs",
+            Role::ObsCompanion => "obs-companion",
         }
     }
 
@@ -225,6 +230,21 @@ pub enum PairOutcome {
 
 /// Try a code from a device. Three wrong codes or the deadline close the window.
 pub fn try_pair(window: &PairingWindow, keys: &KeySet, code: &str, name: &str) -> PairOutcome {
+    try_pair_as(window, keys, code, name, None)
+}
+
+/// The role a device may ask for while pairing: only one that can do less than Present, so the
+/// code alone never gives more. An OBS companion (#209) asks to be one; anything else is Present.
+#[must_use]
+pub fn role_asked(asked: Option<&str>) -> Role {
+    match asked {
+        Some("obs-companion") => Role::ObsCompanion,
+        _ => Role::Present,
+    }
+}
+
+/// `try_pair` with the role the device asked for (see `role_asked`).
+pub fn try_pair_as(window: &PairingWindow, keys: &KeySet, code: &str, name: &str, asked: Option<&str>) -> PairOutcome {
     let mut guard = window.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let Some(p) = guard.as_mut() else { return PairOutcome::NotOpen };
     if Instant::now() > p.expires {
@@ -243,8 +263,9 @@ pub fn try_pair(window: &PairingWindow, keys: &KeySet, code: &str, name: &str) -
     drop(guard);
     let token = random_hex();
     let mut k = keys.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-    // A newly paired device may present, not change settings, until the operator says otherwise.
-    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: Role::Present, paused: false };
+    // A newly paired device may present, not change settings, until the operator says otherwise
+    // (an OBS companion asks for less, and gets it).
+    let entry = KeyEntry { hash: hash_key(&token), name: unique_name(name, &k.entries), role: role_asked(asked), paused: false };
     k.entries.push(entry.clone());
     k.require_auth = true;
     drop(k);
@@ -435,6 +456,29 @@ mod tests {
         }
         assert!(Role::Camera.edits_scenes() && Role::Screens.edits_scenes() && Role::Configure.edits_scenes());
         assert!(!Role::Present.edits_scenes() && !Role::Bible.edits_scenes() && !Role::Obs.edits_scenes());
+    }
+
+    #[test]
+    fn an_obs_companion_reads_cameras_and_sends_no_service_command() {
+        let c = Role::ObsCompanion;
+        assert_eq!(c.as_str(), "obs-companion");
+        assert_eq!(serde_json::to_string(&c).unwrap(), "\"obs-companion\"");
+        assert_eq!(serde_json::from_str::<Role>("\"obs-companion\"").unwrap(), c);
+        assert!(!c.edits_scenes());
+        let take = RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "s".into() });
+        for cmd in [RemoteCommand::Next, RemoteCommand::Show, take, RemoteCommand::ObsTake, RemoteCommand::ObsProgram("Wide".into()), RemoteCommand::BibleActivate("x".into()), RemoteCommand::EventNext, RemoteCommand::ClearSource("camera:pulpit".into()), RemoteCommand::OnAir(true), RemoteCommand::Macro("x".into())] {
+            assert!(!c.allows(&cmd), "{cmd}");
+        }
+        assert!(c.allows(&RemoteCommand::VoiceTalk(true)), "it stays on Talk, as everyone");
+        // Pairing gives a device at most Present; asking to be a companion gives less.
+        assert_eq!(role_asked(Some("obs-companion")), Role::ObsCompanion);
+        for asked in [None, Some("configure"), Some("obs"), Some("present"), Some("")] {
+            assert_eq!(role_asked(asked), Role::Present, "{asked:?}");
+        }
+        let (keys, window) = (new_key_set(), new_pairing_window());
+        let code = open_pairing(&window);
+        let PairOutcome::Paired { entry, .. } = try_pair_as(&window, &keys, &code, "OBS computer", Some("obs-companion")) else { panic!("should pair") };
+        assert_eq!(entry.role, Role::ObsCompanion);
     }
 
     #[test]

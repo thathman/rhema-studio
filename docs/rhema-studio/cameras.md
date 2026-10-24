@@ -34,8 +34,11 @@ them in congregation scenes, on TVs and in OBS, without any app to buy and witho
    empty camera place if the scene has one, or as a full-frame camera underneath the other layers.
    A scene that is on air is not changed; take it off first. You can also choose the camera by name
    in a camera layer in Production → Scenes, or in Present's New / Edit scene panel.
-5. **In OBS:** add a **Media Source**, untick "Local File" and paste the camera's RTSP address
-   (`rtsp://<this computer>:8554/pulpit`).
+5. **In OBS on this computer:** add a **Media Source**, untick "Local File" and paste the camera's
+   RTSP address (`rtsp://<this computer>:8554/pulpit`).
+6. **In OBS on another computer:** install Rhema there too and choose **This computer runs OBS
+   only (companion)** (first-run setup, or the Desk menu). See "A second computer for OBS" in the
+   [production guide](../PRODUCTION-GUIDE.md#a-second-computer-for-obs).
 
 Keep each phone charging, with the camera page open in front (the page keeps the screen awake).
 Turn the phone sideways for a wide picture. If the phone or Wi-Fi drops, the page reconnects by
@@ -77,7 +80,7 @@ play it.
 | 8189 (UDP) | The camera video itself (WebRTC) | Phones, Rhema, TVs |
 | 8554 (TCP) | RTSP | OBS |
 | 8322 (TCP) | RTSPS (RTSP over TLS, Rhema's https certificate), once secure phone pages have been on | The Rhema Camera app |
-| 1935 (TCP), 8890 (UDP) | RTMP, SRT | Camera apps and encoders |
+| 1935 (TCP), 8890 (UDP) | RTMP, SRT | Camera apps and encoders; OBS companions read over SRT |
 | 9997 (TCP) | The router's control API (status, disconnecting a camera) | Rhema only: this computer, a password made afresh each run, no web page |
 
 - **Each camera sends as itself, to its own name only.** Its password is the secret in its link
@@ -90,9 +93,19 @@ play it.
   Rhema makes afresh each time it starts the router (kept in memory and handed to the router as it
   starts; never written to a file or the log), and to no web page (no browser origin is allowed). Nothing else on the computer or
   the network can change the router's settings through it.
-- **Watching is open on the church network** for now: any device on the Wi-Fi that knows a camera's
-  name can watch it (as with most local cameras). Keep cameras on the church's private network,
-  not a guest network open to visitors. Per-camera watch passwords are a later step.
+- **OBS companions read with their own sign-in, encrypted.** Each paired OBS companion gets its
+  own router user (`read-` and 8 characters of its key) and a secret made afresh each time Rhema
+  starts, and reads each camera over SRT from the camera's companion name (`companion/pulpit`),
+  encrypted with a passphrase made afresh each time the router starts (handed to the router as it
+  starts, never written to a file). Only companions may read the companion names. Unpairing a
+  companion, taking back control from it, or giving it another role removes its user and
+  disconnects its OBS within a few seconds; it cannot sign in again. The router fills a companion
+  name from the camera on this computer only while someone reads it. Reading over SRT always needs
+  that passphrase now, so SRT is for companions only; camera apps still *send* over SRT as before.
+- **Watching a camera's own name is still open on the church network** (WHEP for screens and TVs,
+  RTSP for OBS on this computer, as before): any device on the Wi-Fi that knows a camera's name can
+  watch it. Keep cameras on the church's private network, not a guest network open to visitors.
+  Sign-ins for screens and TVs are a later step.
 - The router's settings file is rewritten each time it starts
   (`<Rhema's data folder>/camera-router/mediamtx.yml`, readable only by this user). The router's
   messages are in Rhema's log.

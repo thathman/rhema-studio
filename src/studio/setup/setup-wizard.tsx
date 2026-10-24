@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { ArrowLeftIcon, ArrowRightIcon, ArchiveRestoreIcon, CheckIcon, LaptopIcon, LinkIcon, TimerIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, ArchiveRestoreIcon, CameraIcon, CheckIcon, LaptopIcon, LinkIcon, TimerIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { BibleStep, BrandStep, ChurchStep, ConnectionsStep, FinishStep, OperatorStep, ScreensStep } from "@/studio/setup/setup-steps"
 import { RestoreView } from "@/studio/setup/restore-view"
+import { switchMode } from "@/stores/companion-store"
 
 /** Each step's name in the step list, its heading, and whether it may be skipped. */
 const STEP_INFO: Record<SetupStepId, { short: string; title: string; description: string; optional: boolean }> = {
@@ -122,7 +123,12 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
     useSettingsStore.getState().setSetup({ mode: "main" })
     go("church")
   }
-  if (step === "welcome") return <Welcome onMain={main} onJoin={join} onRestore={() => go("restore")} onLater={onFinishLater} />
+  // A computer that runs OBS only (#209): Rhema starts again as the OBS companion screen.
+  const companion = () => {
+    useSettingsStore.getState().setSetup({ dismissedAt: new Date().toISOString() })
+    void switchMode(true)
+  }
+  if (step === "welcome") return <Welcome onMain={main} onJoin={join} onCompanion={companion} onRestore={() => go("restore")} onLater={onFinishLater} />
   if (step === "restore") return <RestoreView onBack={() => go("welcome")} onContinue={main} onLeave={leaveTo} />
 
   const info = STEP_INFO[step]
@@ -202,10 +208,11 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
 }
 
 /** The first screen: how this computer will be used. */
-function Welcome({ onMain, onJoin, onRestore, onLater }: { onMain: () => void; onJoin: () => void; onRestore: () => void; onLater: () => void }) {
+function Welcome({ onMain, onJoin, onCompanion, onRestore, onLater }: { onMain: () => void; onJoin: () => void; onCompanion: () => void; onRestore: () => void; onLater: () => void }) {
   const choices = [
     { icon: <LaptopIcon />, title: "Set up this computer as the main desk", text: "This computer runs the service with every control. Volunteers, phones and other computers can join later; nobody else is needed.", note: "Recommended", onClick: onMain },
     { icon: <LinkIcon />, title: "Join an existing church host", text: "This computer follows another Rhema at your church. Opens Production → Operators to pair with it; nothing here is replaced.", onClick: onJoin },
+    { icon: <CameraIcon />, title: "This computer runs OBS only (companion)", text: "For the computer that streams with OBS: it takes the church's phone cameras from the main Rhema computer into OBS here. Rhema shows one small screen and nothing else.", onClick: onCompanion },
     { icon: <ArchiveRestoreIcon />, title: "Bring in a previous installation", text: "Services, songs, settings and looks from a backup file, or services from a service file or the church folder. You see what comes in before anything here is replaced.", onClick: onRestore },
     { icon: <TimerIcon />, title: "Use Rhema now, finish later", text: "Start with the built-in looks. Home keeps a short reminder of what is left.", onClick: onLater },
   ]

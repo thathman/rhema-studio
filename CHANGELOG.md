@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### OBS companion: the church's cameras in OBS on a second computer (#209)
+- A computer that streams with OBS can now run Rhema as an **OBS companion**: choose **This computer runs OBS only (companion)** in the first-run setup or the Desk menu. It shows one small screen (join the main computer, connect to OBS here, the cameras) and loads none of the studio, the Bible models or speech.
+- **Add to OBS** puts a camera into this computer's OBS as a Media Source, in a new scene named after it or a scene you pick. Each phone still sends once; OBS cuts between the cameras on its own. Rhema keeps the cameras' addresses current in OBS, says when OBS is not receiving a camera and starts it again, and never removes anything you made in OBS.
+- Companions read the cameras encrypted (SRT), each with its own sign-in; unpairing one or taking back control from it disconnects it at once.
+- The main computer's **Production → Cameras** now names who watches each camera (its screens, TVs, desks, OBS here and each OBS companion), shows **On OBS** when a companion has the camera on its program, and adds up the network load, with a plain warning when it is high for Wi-Fi.
 ### Rhema Camera: an Android camera app with a cinematic look, sending encrypted to Rhema (#209)
 - New **Rhema Camera** app for Android phones (`android-camera/`): a full-screen viewfinder with a small LIVE dot, gridlines, safe areas, a level and a histogram; tap to focus, pinch to zoom; everything else in its Settings in plain words (picture, white balance in kelvin, film shutter or manual ISO and shutter, focus, lens, sound, battery and heat).
 - **Looks** made on the phone's graphics chip before sending, so phone video looks less like a phone: Studio (default), Cinematic, Warm Sanctuary, Natural, Black & White or Off, each with a strength slider; warmth and tint, film grain, letterbox guides, and your own `.cube` looks. What the viewfinder shows is what Rhema gets.

@@ -8,7 +8,7 @@ import "./index.css"
 import App from "./App.tsx"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { TooltipProvider } from "@/components/ui/tooltip.tsx"
-import { hydrateSettings } from "@/stores/settings-store"
+import { hydrateSettings, useSettingsStore } from "@/stores/settings-store"
 import { hydrateBibleStore, initBiblePersistence } from "@/stores/bible-store"
 import { hydrateBroadcastThemes } from "@/stores/broadcast-store"
 
@@ -28,10 +28,11 @@ if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
 // fail silently with "Transcription is already running". Reset the
 // backend to a clean state on boot, then hydrate persisted settings and
 // bible store so the UI reflects the user's choices immediately.
+// An OBS companion (#209) needs only its settings: no Bible, no outputs or looks.
 invoke("stop_transcription")
   .catch(() => {})
-  .then(() => Promise.all([hydrateSettings(), hydrateBibleStore(), hydrateBroadcastThemes()]))
-  .then(() => initBiblePersistence())
+  .then(() => hydrateSettings())
+  .then(() => (useSettingsStore.getState().companionMode ? undefined : Promise.all([hydrateBibleStore(), hydrateBroadcastThemes()]).then(() => initBiblePersistence())))
   .finally(() => {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

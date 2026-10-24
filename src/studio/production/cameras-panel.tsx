@@ -12,6 +12,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type CameraSource } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { capacityLimits, useMachineInfo } from "@/lib/capacity"
+import { readMbps, WIFI_COMFORT_MBPS } from "@/lib/obs-companion"
 
 interface HttpStatus {
   running: boolean
@@ -69,6 +70,7 @@ export function CamerasPanel() {
         <RouterCard router={router} busy={busy} onToggle={() => void toggle()} />
         <AddCamera phonePage={phonePage} http={http} />
       </div>
+      {router?.running && <NetworkLoad paths={router.paths} />}
       {cameras.length > 0 && (
         <ul aria-label="Cameras" className="flex flex-col gap-3">
           {cameras.map((c) => (
@@ -165,6 +167,42 @@ function AddCamera({ phonePage, http }: { phonePage: number | null; http: HttpSt
   )
 }
 
+/**
+ * What the cameras ask of the network (#209): each camera's rate times the screens, TVs and OBS
+ * computers reading it over the network. Wi-Fi shares its airtime, so a high total is said plainly.
+ */
+function NetworkLoad({ paths }: { paths: RouterPath[] }) {
+  const cams = paths.filter((p) => p.live && (p.watchers ?? []).some((w) => w.remote))
+  if (cams.length === 0) return null
+  const mbps = readMbps(cams.map((p) => ({ kbps: p.kbps, watchers: p.watchers ?? [] })))
+  const readers = cams.reduce((n, p) => n + (p.watchers ?? []).filter((w) => w.remote).length, 0)
+  const high = mbps > WIFI_COMFORT_MBPS
+  return (
+    <p role={high ? "alert" : "status"} className={cn("rounded-md px-3 py-2 text-xs", high ? "bg-tone-amber text-tone-amber-foreground" : "bg-muted text-muted-foreground")}>
+      Reading the cameras over the network: about <b className="tabular-nums">{mbps.toFixed(1)} Mbit/s</b> ({readers} {readers === 1 ? "reader" : "readers"} on other computers and TVs).
+      {high ? ` That is a lot for Wi-Fi (about ${WIFI_COMFORT_MBPS} Mbit/s is comfortable): connect this computer and the OBS computers with a cable, or read fewer cameras.` : ""}
+    </p>
+  )
+}
+
+/** Who reads one camera, and which OBS companions show it, in a line each. */
+function Watchers({ path }: { path: RouterPath }) {
+  const onObs = (path.obs ?? []).filter((o) => o.program || o.preview)
+  const watchers = path.watchers ?? []
+  if (watchers.length === 0 && onObs.length === 0) return null
+  return (
+    <div className="flex flex-col gap-1">
+      {onObs.map((o) => (
+        <p key={o.desk} className="flex flex-wrap items-center gap-1.5">
+          <Tone tone={o.program ? "ok" : "off"}>{o.program ? "On OBS" : "OBS preview"}</Tone>
+          <span>{o.program ? `On the program of ${o.desk}'s OBS` : `In the preview of ${o.desk}'s OBS`}{o.receiving ? "" : " (its OBS is not receiving it)"}</span>
+        </p>
+      ))}
+      {watchers.length > 0 && <p className="text-muted-foreground">Read by: {watchers.map((w) => w.name).join(", ")}</p>}
+    </div>
+  )
+}
+
 function Copyable({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -244,7 +282,8 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
             <p className="text-muted-foreground">
               {link ? "Scan with the phone for this angle (on the church Wi-Fi), allow the camera and press Start camera. Keep the phone charging." : "The QR code appears once secure phone pages are on (Settings → Remote control)."}
             </p>
-            {path?.live && <p>{path.tracks.join(", ") || "Video"} · watched by {watching} {watching === 1 ? "screen or program" : "screens or programs"}</p>}
+            {path?.live && <p>{[path.tracks.join(", ") || "Video", path.width && path.height ? `${path.width}×${path.height}` : null, path.kbps ? `${(path.kbps / 1000).toFixed(1)} Mbit/s` : null].filter(Boolean).join(" · ")} · watched by {watching} {watching === 1 ? "screen or program" : "screens or programs"}</p>}
+            {path && <Watchers path={path} />}
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             {link && <Copyable label="Camera page (open on the phone)" value={link} />}
@@ -260,8 +299,9 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
                 </select>
               </div>
             )}
-            {rtsp && <Copyable label="For OBS (Media Source, untick Local File)" value={rtsp} />}
+            {rtsp && <Copyable label="For OBS on this computer (Media Source, untick Local File)" value={rtsp} />}
             {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint)} />}
+            {rtsp && <p className="text-muted-foreground">OBS on another computer: install Rhema there and choose “This computer runs OBS only”. It adds the cameras to its OBS by itself, encrypted and with its own sign-in.</p>}
             {!host && <p className="text-muted-foreground">Addresses appear once the camera router is on and this computer is on the network.</p>}
             {host && ports && (
               <details className="text-muted-foreground">

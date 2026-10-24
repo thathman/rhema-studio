@@ -5,9 +5,10 @@ import { validLimit, type CapacityKind, type CapacityOverrides } from "@/lib/cap
 
 /**
  * present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join).
- * worship: songs and hymns; stage: the stage message; camera: cameras in scenes; obs: OBS through the host (#215 G10). See src/lib/remote-roles.ts.
+ * worship: songs and hymns; stage: the stage message; camera: cameras in scenes; obs: OBS through the host (#215 G10);
+ * obs-companion: a computer that runs OBS only and reads the church's cameras into it (#209). See src/lib/remote-roles.ts.
  */
-export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens" | "worship" | "stage" | "camera" | "obs"
+export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens" | "worship" | "stage" | "camera" | "obs" | "obs-companion"
 
 /**
  * The talk channels' rules (Rhema Comms, #251), set on the main desk: which desk roles may hear and
@@ -197,6 +198,15 @@ export interface SettingsState {
   /** Start the camera router with Rhema while any camera is added (never when none is). */
   cameraRouterAuto: boolean
   setCameraRouterAuto: (on: boolean) => void
+  /**
+   * This computer runs OBS only (#209): Rhema shows the OBS companion screen (join the host, the
+   * church's cameras, add them to this OBS) and none of the studio, and loads no Bible models.
+   */
+  companionMode: boolean
+  setCompanionMode: (on: boolean) => void
+  /** The companion's network delay buffer for each camera in OBS (SRT latency, ms): more rides out Wi-Fi hiccups, less is quicker. */
+  companionLatencyMs: number
+  setCompanionLatencyMs: (ms: number) => void
   /** How much this computer runs before Rhema warns (#243 G13); a kind not set is worked out from the computer. */
   capacityLimits: CapacityOverrides
   /** null: back to the computer's own figure. */
@@ -272,6 +282,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCameras: (cameras) => set({ cameras }),
   cameraRouterAuto: true,
   setCameraRouterAuto: (cameraRouterAuto) => set({ cameraRouterAuto }),
+  companionMode: false,
+  setCompanionMode: (companionMode) => set({ companionMode }),
+  companionLatencyMs: 200,
+  setCompanionLatencyMs: (ms) => set({ companionLatencyMs: validCompanionLatency(ms) ? ms : 200 }),
   capacityLimits: {},
   setCapacityLimit: (kind, n) =>
     set((s) => {
@@ -340,6 +354,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSttProvider: (sttProvider) => set({ sttProvider }),
 }))
 
+/** The companion's delay buffer choices (ms); a saved value must be a whole number in this range. */
+export const COMPANION_LATENCY_MS = { min: 80, max: 1000 }
+export function validCompanionLatency(ms: unknown): ms is number {
+  return typeof ms === "number" && Number.isInteger(ms) && ms >= COMPANION_LATENCY_MS.min && ms <= COMPANION_LATENCY_MS.max
+}
+
 /**
  * A settings file written by an older or newer build may hold a shape this
  * build does not expect (a string where a list is due, a number where a
@@ -365,8 +385,11 @@ function acceptable(key: string, value: unknown): boolean {
       const o = value as Partial<ObsSettings>
       return typeof value === "object" && value !== null && typeof o.enabled === "boolean" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
     }
+    case "companionLatencyMs":
+      return validCompanionLatency(value)
     case "remoteAuthRequired":
     case "cameraRouterAuto":
+    case "companionMode":
     case "mcpEnabled":
     case "requireApproval":
     case "autoMode":
@@ -438,6 +461,8 @@ export const SETTINGS_SECTIONS = {
     "obs",
     "cameras",
     "cameraRouterAuto",
+    "companionMode",
+    "companionLatencyMs",
     "capacityLimits",
     "deepgramApiKey",
     "openaiApiKey",
@@ -482,12 +507,14 @@ export function settingsSection(state: SettingsState, section: SettingsSection):
 
 /**
  * Never in a backup: the saved keys and passwords; the phones and desks paired with this computer
- * and the host it joins; and what lets others in (the remote listeners, the remote key rule, the
- * AI assistant switch, cloud speech consent), which each computer's operator turns on there (#298 M9).
+ * and the host it joins; what lets others in (the remote listeners, the remote key rule, the
+ * AI assistant switch, cloud speech consent), which each computer's operator turns on there (#298 M9);
+ * and whether this computer is an OBS companion (#209), which is this computer's job, not the church's.
  */
 export const NOT_IN_BACKUP = [
   "deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken",
   "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "mcpEnabled", "cloudSpeechConsentAt",
+  "companionMode",
 ] as const satisfies readonly PersistedKey[]
 const notInBackup = (key: string) => (NOT_IN_BACKUP as readonly string[]).includes(key)
 

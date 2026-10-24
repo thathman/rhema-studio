@@ -295,6 +295,15 @@ export const useObsStore = create<ObsState>((set, get) => ({
   },
 }))
 
+/**
+ * One request to OBS on the current connection, for the OBS companion (#209), which adds the
+ * church's cameras to this OBS. Fails when OBS is not connected.
+ */
+export function obsRequest<T extends Record<string, unknown> = Record<string, unknown>>(requestType: string, requestData?: Record<string, unknown>): Promise<T> {
+  if (!client || useObsStore.getState().status !== "connected") return Promise.reject(new Error("OBS is not connected"))
+  return client.request<T>(requestType, requestData)
+}
+
 // Follow the settings: connect when enabled, disconnect when off. Debounced, so
 // editing the address or password never opens a socket per keystroke (each
 // attempt would send an answer derived from a partial password).

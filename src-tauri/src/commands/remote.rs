@@ -30,16 +30,20 @@ impl Default for RemoteKeys {
 /// Replace the accepted keys: the shared key (if any) plus every paired
 /// device. `require_auth` is the operator's switch; it is forced on while
 /// any key exists, and when on with no keys every command is refused.
+/// An OBS companion unpaired, paused or given another role loses its camera reading at once (#209).
 #[tauri::command]
-pub fn remote_set_keys(remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>, require_auth: Option<bool>) -> Result<usize, String> {
+pub fn remote_set_keys(app: AppHandle, remote: State<'_, RemoteKeys>, shared: Option<String>, devices: Vec<KeyEntry>, require_auth: Option<bool>) -> Result<usize, String> {
     let mut entries: Vec<KeyEntry> = devices.into_iter().filter(|d| d.hash.len() == 64).collect();
     if let Some(s) = shared.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
         entries.push(KeyEntry { hash: hash_key(&s), name: "Shared key".into(), role: Role::Configure, paused: false });
     }
     let n = entries.len();
-    let mut k = remote.keys.write().map_err(|e| e.to_string())?;
-    k.require_auth = require_auth.unwrap_or(false) || n > 0;
-    k.entries = entries;
+    {
+        let mut k = remote.keys.write().map_err(|e| e.to_string())?;
+        k.require_auth = require_auth.unwrap_or(false) || n > 0;
+        k.entries = entries;
+    }
+    super::camera_router::desks_changed(&app);
     Ok(n)
 }
 

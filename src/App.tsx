@@ -12,8 +12,27 @@ import { Toaster, toast } from "sonner"
 import { useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { UnsavedCloseDialog } from "@/components/unsaved-close-dialog"
+import { useSettingsStore } from "@/stores/settings-store"
+import { CompanionScreen } from "@/studio/companion/companion-screen"
 
+/**
+ * The whole window: the studio, or on a computer that runs OBS only, the OBS companion screen
+ * (#209), which starts none of the studio's listeners, screens, speech or detection.
+ */
 export function App() {
+  const companion = useSettingsStore((s) => s.companionMode)
+  if (companion) {
+    return (
+      <>
+        <ErrorBoundary name="the OBS companion"><CompanionScreen /></ErrorBoundary>
+        <Toaster position="bottom-right" />
+      </>
+    )
+  }
+  return <Studio />
+}
+
+function Studio() {
   useRemoteControl()
   useBroadcastOutputs()
   useDetectionEvents()

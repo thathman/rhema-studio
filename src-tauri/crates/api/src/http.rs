@@ -18,7 +18,7 @@ use tower_http::cors::CorsLayer;
 use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
 use crate::error::CommandError;
-use crate::keys::{check_key, new_key_set, new_pairing_window, try_pair, KeySet, PairOutcome, PairingWindow};
+use crate::keys::{check_key, new_key_set, new_pairing_window, try_pair_as, KeySet, PairOutcome, PairingWindow};
 
 /// Configuration for the HTTP API server.
 #[derive(Debug, Clone)]
@@ -565,6 +565,8 @@ where
         .route("/camera", get(camera_page_handler::<S>))
         .route("/api/v1/camera/{name}/whip", post(camera_whip_handler::<S>))
         .route("/api/v1/camera/{name}/whip/{session}", axum::routing::patch(camera_session_handler::<S>).delete(camera_session_handler::<S>))
+        .route("/api/v1/cameras/watch", get(companion_cameras_handler::<S>))
+        .route("/api/v1/cameras/tally", post(companion_tally_handler::<S>))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
         .layer(CorsLayer::permissive())
@@ -790,6 +792,9 @@ struct PairRequest {
     code: String,
     #[serde(default)]
     name: String,
+    /// A role that can do less than Present ("obs-companion", #209); anything else pairs as Present.
+    #[serde(default)]
+    role: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -813,7 +818,7 @@ async fn pair_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return (StatusCode::TOO_MANY_REQUESTS, Json(PairResponse { success: false, token: None, name: None, error: Some("too many requests; slow down".into()) }));
     }
-    match try_pair(&state.pairing, &state.keys, &req.code, &req.name) {
+    match try_pair_as(&state.pairing, &state.keys, &req.code, &req.name, req.role.as_deref()) {
         PairOutcome::Paired { token, entry } => {
             let payload = serde_json::json!({ "name": entry.name, "hash": entry.hash, "role": entry.role }).to_string();
             if let Err(e) = state.sink.emit_event("remote:paired", &payload) {
@@ -896,6 +901,10 @@ async fn live_events_handler<S: CommandSink + 'static>(
         Ok(entry) => notice_reader(entry),
         Err(code) => return code.into_response(),
     };
+    // Production → Cameras names a desk that watches a camera from this address (#209).
+    if let Some(e) = &reader {
+        state.cameras.saw_desk(peer.ip(), &e.name);
+    }
     let rx = state.live.tx.subscribe();
     let first = state.live.current();
     let stream = futures_util::stream::unfold((rx, first, reader), |(mut rx, first, reader)| async move {
@@ -919,6 +928,49 @@ async fn live_events_handler<S: CommandSink + 'static>(
 }
 
 type Query = axum::extract::Query<std::collections::HashMap<String, String>>;
+
+/// An OBS companion's key (#209): paired as one, and not paused. A paused companion is told so
+/// (423), as a paused desk is; any other desk is refused.
+fn companion_key<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &HeaderMap) -> Result<crate::keys::KeyEntry, (StatusCode, &'static str)> {
+    if !state.rate.allow(peer.ip()) {
+        return Err((StatusCode::TOO_MANY_REQUESTS, "too many requests; slow down"));
+    }
+    match check_key(&state.keys, presented_key(headers)) {
+        Ok(Some(e)) if e.role != crate::keys::Role::ObsCompanion => Err((StatusCode::FORBIDDEN, "This computer is not an OBS companion of this host. On the host: Settings → Remote control, set its role to OBS companion.")),
+        Ok(Some(e)) if e.paused => Err((StatusCode::LOCKED, crate::keys::PAUSED_MESSAGE)),
+        Ok(Some(e)) => Ok(e),
+        Ok(None) | Err(_) => Err((StatusCode::UNAUTHORIZED, "The host no longer knows this computer: pair again")),
+    }
+}
+
+/// `GET /api/v1/cameras/watch`: the church's cameras for an OBS companion (#209), and its own way
+/// to read them while the camera router runs.
+async fn companion_cameras_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    match companion_key(&state, peer, &headers) {
+        Ok(e) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(state.cameras.companion_view(&e.hash))).into_response(),
+        Err((code, why)) => (code, Json(serde_json::json!({ "error": why }))).into_response(),
+    }
+}
+
+/// `POST /api/v1/cameras/tally {"program":[…],"preview":[…],"receiving":[…]}`: which cameras are on
+/// an OBS companion's program and preview, and which its OBS plays, for Production → Cameras.
+async fn companion_tally_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(tally): Json<crate::cameras::Tally>,
+) -> axum::response::Response {
+    match companion_key(&state, peer, &headers) {
+        Ok(e) if state.cameras.set_tally(&e.hash, tally) => StatusCode::NO_CONTENT.into_response(),
+        // Paired a moment ago: the app has not made its reader yet.
+        Ok(_) => (StatusCode::CONFLICT, Json(serde_json::json!({ "error": "The host is still setting this computer up; try again in a moment" }))).into_response(),
+        Err((code, why)) => (code, Json(serde_json::json!({ "error": why }))).into_response(),
+    }
+}
 
 /// `GET /feed/{id}?k=<secret>`: the browser feed page (the app's own `feed.html`).
 async fn feed_page_handler<S: CommandSink + 'static>(
@@ -1350,6 +1402,7 @@ fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
         Role::Stage => "this device runs the stage: it may change the stage message only",
         Role::Camera => "this device runs the cameras: it may hide or show a camera and change the camera boxes in scenes only",
         Role::Obs => "this device is the OBS director: it may switch OBS scenes only",
+        Role::ObsCompanion => "this computer is an OBS companion: it reads the church's cameras into its own OBS and sends no commands",
         _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_)) => "only a desk the main desk made OBS director may switch OBS",
         _ if matches!(cmd, RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_)) => "this device may present but not make or change scenes",
         _ => "this device may present but not change settings",
@@ -1901,7 +1954,7 @@ mod tests {
         assert!(off.contains("503"), "{off}");
 
         let (router, seen) = fake_router().await;
-        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}") }));
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: format!("http://127.0.0.1:{router}"), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into() }));
         // Without the secret nothing reaches the router.
         assert!(send("POST", "/api/v1/camera/pulpit/whip", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
         assert!(send("POST", "/api/v1/camera/pulpit/whip?k=wrong", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));
@@ -2028,6 +2081,63 @@ mod tests {
         assert!(old.contains("200 OK"), "a client without ids still works: {old}");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert_eq!(sink.command_count(), 2, "the retried press once, the old client's once");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// An OBS companion (#209): pairs as one, reads the cameras with its own sign-in, reports its
+    /// tally; a paused companion and any other desk are refused.
+    #[tokio::test]
+    async fn an_obs_companion_reads_the_cameras_with_its_own_sign_in() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("comp", "Media desk", Role::ObsCompanion), entry("pres", "Phone", Role::Present)] }));
+        let cameras = crate::cameras::new_camera_hub();
+        cameras.set(&[("pulpit".into(), "0123456789abcdef0123".into())]);
+        cameras.sync_readers(&[(hash_key("comp"), "Media desk".into())]);
+        cameras.set_router(Some(crate::cameras::RouterTarget { base: "http://127.0.0.1:8889".into(), srt_port: 8890, srt_passphrase: "Passphrase0123456789".into() }));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), cameras: cameras.clone(), ..Default::default() };
+        let result = start_http_server(config, sink, new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let comp = "X-Rhema-Key: comp\r\n";
+        let watch = get_with(port, "/api/v1/cameras/watch", comp, None).await;
+        assert!(watch.contains("200 OK") && watch.contains(r#""user":"read-"#) && watch.contains(r#""name":"pulpit""#), "{watch}");
+        assert!(!watch.contains("0123456789abcdef0123"), "never the camera's publishing secret: {watch}");
+        let phone = get_with(port, "/api/v1/cameras/watch", "X-Rhema-Key: pres\r\n", None).await;
+        assert!(phone.contains("403") && phone.contains("OBS companion"), "{phone}");
+        assert!(get_with(port, "/api/v1/cameras/watch", "X-Rhema-Key: nope\r\n", None).await.contains("401"));
+        let tally = raw_http_request_with(port, "POST", "/api/v1/cameras/tally", Some(r#"{"program":["pulpit"],"preview":[],"receiving":["pulpit"]}"#), comp).await;
+        assert!(tally.contains("204"), "{tally}");
+        cameras.set_watch(vec![crate::cameras::CameraWatch { name: "pulpit".into(), live: true, ..Default::default() }]);
+        assert_eq!(cameras.watch()[0].obs[0].desk, "Media desk");
+        assert!(cameras.watch()[0].obs[0].program);
+        keys.write().unwrap().entries[0].paused = true;
+        let paused = get_with(port, "/api/v1/cameras/watch", comp, None).await;
+        assert!(paused.contains("423") && paused.contains("taken back control"), "{paused}");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// Pairing as an OBS companion gives that role (less than Present); asking for more gives Present.
+    #[tokio::test]
+    async fn a_device_pairs_as_an_obs_companion_or_as_present() {
+        let sink = Arc::new(MockSink::new());
+        let keys = crate::keys::new_key_set();
+        let pairing = crate::keys::new_pairing_window();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), pairing: pairing.clone(), ..Default::default() };
+        let result = start_http_server(config, sink, new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let code = crate::keys::open_pairing(&pairing);
+        let r = raw_http_request_with(port, "POST", "/api/v1/pair", Some(&format!(r#"{{"code":"{code}","name":"OBS computer","role":"obs-companion"}}"#)), "").await;
+        assert!(r.contains("200 OK"), "{r}");
+        let code = crate::keys::open_pairing(&pairing);
+        let r = raw_http_request_with(port, "POST", "/api/v1/pair", Some(&format!(r#"{{"code":"{code}","name":"Sneaky","role":"configure"}}"#)), "").await;
+        assert!(r.contains("200 OK"), "{r}");
+        let roles: Vec<crate::keys::Role> = keys.read().unwrap().entries.iter().map(|e| e.role).collect();
+        assert_eq!(roles, vec![crate::keys::Role::ObsCompanion, crate::keys::Role::Present]);
         let mut handle = result.handle;
         handle.stop();
     }
