@@ -1,6 +1,7 @@
 import type { OpenedFrom } from "@/lib/church-folder"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
+import { validLimit, type CapacityKind, type CapacityOverrides } from "@/lib/capacity"
 
 /** present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join). */
 export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens"
@@ -172,6 +173,10 @@ interface SettingsState {
   /** Start the camera router with Rhema while any camera is added (never when none is). */
   cameraRouterAuto: boolean
   setCameraRouterAuto: (on: boolean) => void
+  /** How much this computer runs before Rhema warns (#243 G13); a kind not set is worked out from the computer. */
+  capacityLimits: CapacityOverrides
+  /** null: back to the computer's own figure. */
+  setCapacityLimit: (kind: CapacityKind, n: number | null) => void
 
   setRemoteSecret: (secret: string) => void
   addRemoteDevice: (d: { hash: string; name: string; role?: RemoteRole }) => void
@@ -239,6 +244,14 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCameras: (cameras) => set({ cameras }),
   cameraRouterAuto: true,
   setCameraRouterAuto: (cameraRouterAuto) => set({ cameraRouterAuto }),
+  capacityLimits: {},
+  setCapacityLimit: (kind, n) =>
+    set((s) => {
+      const next = { ...s.capacityLimits }
+      if (n === null || !validLimit(n)) delete next[kind]
+      else next[kind] = n
+      return { capacityLimits: next }
+    }),
 
   setRemoteListeners: (patch) => set((s) => ({ remoteListeners: { ...s.remoteListeners, ...patch } })),
   setRemoteAuthRequired: (remoteAuthRequired) => {
@@ -342,6 +355,8 @@ function acceptable(key: string, value: unknown): boolean {
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
     case "openedFrom":
       return typeof value === "object" && value !== null && !Array.isArray(value)
+    case "capacityLimits":
+      return typeof value === "object" && value !== null && !Array.isArray(value) && Object.values(value).every(validLimit)
     case "remoteListeners": {
       const v = value as Record<string, unknown>
       const port = (p: unknown) => typeof p === "number" && Number.isInteger(p) && p > 0 && p < 65536
@@ -388,6 +403,7 @@ const PERSISTED_KEYS = [
   "setup",
   "cameras",
   "cameraRouterAuto",
+  "capacityLimits",
   "deepgramApiKey",
   "openaiApiKey",
   "claudeApiKey",

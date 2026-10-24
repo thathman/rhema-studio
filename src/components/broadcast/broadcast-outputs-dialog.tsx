@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
+  confirmStart,
   disableOutput,
   enableOutput,
   reconcileOutputStatus,
@@ -25,6 +26,8 @@ import { OutputCard } from "./output-card"
 import { OutputEditorDialog } from "./output-editor-dialog"
 import { outputEditPatch } from "@/lib/output-summary"
 import { useShellStore } from "@/studio/shell-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { capacityLimits, useMachineInfo } from "@/lib/capacity"
 
 const RECONCILE_INTERVAL_MS = 750
 
@@ -148,7 +151,7 @@ export function BroadcastOutputsDialog({
   }
 
   const handleToggle = (output: BroadcastOutput, enabled: boolean) =>
-    void withBusy(output.id, () => (enabled ? enableOutput(output) : disableOutput(output)))
+    void withBusy(output.id, async () => (enabled ? (await confirmStart(output)) && enableOutput(output) : disableOutput(output)))
 
   const handleRemove = (output: BroadcastOutput) =>
     void withBusy(output.id, async () => {
@@ -191,7 +194,9 @@ export function BroadcastOutputsDialog({
       useBroadcastStore.getState().updateOutput(next.id, outputEditPatch(next))
       if (wasOnAir && transportChanged) {
         const updated = useBroadcastStore.getState().outputs.find((o) => o.id === next.id)
-        if (updated) await enableOutput(updated)
+        // A new frame rate or type is asked about like turning it on (60 fps on a smaller computer).
+        if (updated && (await confirmStart(updated))) await enableOutput(updated)
+        else if (updated) toast.info(`Saved. ${updated.name} is off: turn it on when you are ready.`)
       }
     })
     setEditingId(null)
@@ -203,6 +208,10 @@ export function BroadcastOutputsDialog({
     if (!monitor || at === null) return undefined
     return `${monitor.name ?? `Display ${at + 1}`} · ${monitor.size.width}×${monitor.size.height}`
   }
+
+  const machine = useMachineInfo()
+  const overrides = useSettingsStore((s) => s.capacityLimits)
+  const limits = capacityLimits(machine, overrides)
 
   const onAirCount = outputs.filter((o) => {
     const status = outputStatus[o.id]
@@ -257,7 +266,8 @@ export function BroadcastOutputsDialog({
           </ScrollArea>
 
           <p className="text-xs text-muted-foreground">
-            {onAirCount} of {outputs.length} {outputs.length === 1 ? "output" : "outputs"} on air
+            {onAirCount} of {outputs.length} {outputs.length === 1 ? "output" : "outputs"} on air · this computer suits about {limits.outputs} at once
+            {limits.ndiSenders < limits.outputs ? `, ${limits.ndiSenders} of them NDI` : ""} (Settings → Outputs)
           </p>
         </DialogContent>
       </Dialog>

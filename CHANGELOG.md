@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Capacity limits, 60 fps NDI and this computer in Show health (#243, #246)
+- Rhema now knows how much this computer can run at once (outputs, NDI senders, browser feeds, cameras, outputs showing live video), worked out from its cores and memory. Turning on one output too many asks first and says the computer may drop frames; nothing is refused. The limits can be changed in **Settings → Outputs → How much this computer runs**.
+- **60 fps NDI** on a computer below 6 cores and 16 GB asks before starting (once per output each session), and the output editor says so under Frame rate.
+- **Production → Show health** shows this computer's CPU load, memory, heat (on Intel Macs) and network (Wi-Fi or cable, and speed), every few seconds while it is open, what is running against the limits, and how many frames a second each NDI sender really sends and to how many receivers. All of it is read on this computer; nothing is sent anywhere.
+
 ### This computer's name in the Desk menu; a fuller setup summary (#298, #299)
 - The Desk menu now shows and edits **this computer's name** (with a short Desk ID), says **what this desk may do** (all controls on the main desk, or what the host's role allows), and leads to Production → Operators, or **Leave this host** on a joined desk. Joining a host suggests "your name · this computer" as the name the host sees.
 - After Rhema closed unexpectedly, **Not now** on the banner no longer throws the offer away: the Desk menu keeps **Put back the last session's screens** (it asks once more first).

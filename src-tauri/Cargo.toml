@@ -96,6 +96,10 @@ qa-bridge = []
 [lints]
 workspace = true
 
+# Network links for Show health (getifaddrs).
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 # FR-03: one running copy. A second launch would open the same database,
