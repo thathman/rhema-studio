@@ -828,7 +828,8 @@ struct VoiceOffer {
 
 /// `POST /api/v1/voice`: a paired desk joins the talk channel (Rhema Comms C3, ADR 0002). Its
 /// complete WebRTC offer goes to the host window, which answers within ten seconds; the answer is
-/// this request's reply. The host stamps who it is from the key.
+/// this request's reply. The host stamps who it is from the key: its name for people to read, and
+/// its key id (`byId`), by which the talk channel routes a private call (#251), never by the name.
 async fn voice_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -839,8 +840,8 @@ async fn voice_handler<S: CommandSink + 'static>(
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
     // The talk channel stays open to a paused desk: only its commands wait.
-    let name = match live_reader(&state, peer, &headers) {
-        Ok(who) => who.name,
+    let who = match live_reader(&state, peer, &headers) {
+        Ok(who) => who,
         Err(code) => return code.into_response(),
     };
     if offer.sdp.len() > 64 * 1024 || !offer.sdp.starts_with("v=0") {
@@ -848,7 +849,7 @@ async fn voice_handler<S: CommandSink + 'static>(
     }
     let id = uuid::Uuid::new_v4().to_string();
     let rx = state.voice.wait(&id);
-    if state.sink.emit_event("remote:voice_offer", &serde_json::json!({ "id": id, "by": name, "sdp": offer.sdp }).to_string()).is_err() {
+    if state.sink.emit_event("remote:voice_offer", &serde_json::json!({ "id": id, "by": who.name, "byId": who.hash, "sdp": offer.sdp }).to_string()).is_err() {
         state.voice.forget(&id);
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
@@ -1269,16 +1270,16 @@ mod tests {
         }
     }
 
-    /// Plays the host window: answers each voice offer with the desk's name in the SDP.
+    /// Plays the host window: answers each voice offer with the desk's name and key id in the SDP.
     struct VoiceSink(SharedVoice);
     impl CommandSink for VoiceSink {
         fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
             if event == "remote:voice_offer" {
                 let v: serde_json::Value = serde_json::from_str(payload).unwrap();
-                let (id, by) = (v["id"].as_str().unwrap().to_string(), v["by"].as_str().unwrap().to_string());
+                let (id, by, by_id) = (v["id"].as_str().unwrap().to_string(), v["by"].as_str().unwrap().to_string(), v["byId"].as_str().unwrap().to_string());
                 assert!(v["sdp"].as_str().unwrap().starts_with("v=0"));
                 let hub = self.0.clone();
-                tokio::spawn(async move { assert!(hub.answer(&id, format!("v=0 answer for {by}"))) });
+                tokio::spawn(async move { assert!(hub.answer(&id, format!("v=0 answer for {by} key {by_id}"))) });
             }
             Ok(())
         }
@@ -1323,13 +1324,19 @@ mod tests {
         let voice = new_voice_hub();
         let keys = new_key_set();
         keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k1"), name: "Ade bible".into(), role: crate::keys::Role::Bible, paused: false });
+        keys.write().unwrap().entries.push(crate::keys::KeyEntry { hash: crate::keys::hash_key("k2"), name: "\u{410}de bible".into(), role: crate::keys::Role::Present, paused: false });
         keys.write().unwrap().require_auth = true;
         let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, voice: voice.clone(), ..Default::default() };
         let result = start_http_server(config, Arc::new(VoiceSink(voice.clone())), new_shared_status()).await.expect("bind");
         let port = result.bound_port;
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let ok = raw_http_request_with(port, "POST", "/api/v1/voice", Some(r#"{"sdp":"v=0 offer"}"#), "X-Rhema-Key: k1\r\n").await;
-        assert!(ok.contains("200 OK") && ok.contains("v=0 answer for Ade bible"), "{ok}");
+        assert!(ok.contains("200 OK") && ok.contains(&format!("v=0 answer for Ade bible key {}", crate::keys::hash_key("k1"))), "{ok}");
+        // A desk paired under a name that looks the same (a Cyrillic "А") is a different key: the host
+        // tells the two apart by it, so a private call to one never reaches the other (#251).
+        let lookalike = raw_http_request_with(port, "POST", "/api/v1/voice", Some(r#"{"sdp":"v=0 offer"}"#), "X-Rhema-Key: k2\r\n").await;
+        assert!(lookalike.contains(&format!("v=0 answer for \u{410}de bible key {}", crate::keys::hash_key("k2"))), "{lookalike}");
+        assert_ne!(crate::keys::hash_key("k1"), crate::keys::hash_key("k2"));
         assert!(raw_http_request_with(port, "POST", "/api/v1/voice", Some(r#"{"sdp":"v=0 offer"}"#), "X-Rhema-Key: wrong\r\n").await.contains("401"));
         assert!(raw_http_request_with(port, "POST", "/api/v1/voice", Some(r#"{"sdp":"not sdp"}"#), "X-Rhema-Key: k1\r\n").await.contains("400"));
         assert!(!voice.answer("nobody-waits", "v=0".into()), "a late answer is dropped");

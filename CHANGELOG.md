@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Private calls by key; ask for a song, hymn or camera; Preview or Show (#251)
+- A private call in Talk (**Talk to → Only…**) now goes to the desk or phone you picked by its pairing key, not by its name. A desk paired under a name that looks the same (a copied name, a look-alike letter) never hears a call meant for someone else; if two desks have exactly the same name when you pick, nobody hears the call rather than the wrong one.
+- Action requests can now ask to **show a song or hymn** (type its title; Rhema suggests titles from the library) and ask **if a camera is ready** (the camera operator answers Ready or Unable).
+- For a verse or a song, the person asked can now press **Preview** instead of Show: it goes into the main desk's Preview only and nothing goes live. Either way the notice answers **Ready** only when the main desk accepted it.
+
 ### Countdown to the next item or a milestone; the run of show on every desk (#196)
 - New clocks count down to **the next item** (when it is now expected to start) or to **a milestone**: the end of the main service, or an item's "end by". Use them in a scene's clock layer (Production → Programs → Clock → Shows), on the stage display (Design → Stage → Countdown) and in Production → Timekeeper. They move as the service runs late or early and count across midnight. On the congregation screens they stop at 0:00; the stage and Timekeeper say how far over it is.
 - Timekeeper can **chime** on this computer at a chosen number of minutes before, and again at zero. It is off until you turn it on, and the screens, stage and online feed never hear it.

@@ -29,14 +29,34 @@ export function talkName(talk: string, hostName = "Main desk"): string {
   return CHANNELS.find((c) => c.id === talk)?.name ?? talk
 }
 
-/** Whether `from` (talking to `talk`) is heard by a listener named `to` who listens to `listen`. */
-export function hears(talk: string, to: string, listen: readonly string[]): boolean {
+/**
+ * Whether a voice talking to `talk` is heard by the listener whose key id is `listener` ("host" for
+ * the main desk) and who listens to `listen`. A private call ("to:…") reaches only the key it was
+ * resolved to when it was chosen (`toId`), never a name: a desk named like another (a look-alike
+ * letter, a copied name) never hears a call meant for the other (#251).
+ */
+export function hears(talk: string, listener: string, listen: readonly string[], toId?: string | null): boolean {
   if (talk === "all" || talk === PRIORITY) return true
-  if (talk.startsWith("to:")) return talk.slice(3) === to
+  if (talk.startsWith("to:")) return !!toId && toId === listener
   return listen.includes(talk)
 }
 
+/**
+ * Whose key a private call to `talk` ("to:<name>") goes to, decided once, when it is chosen: "host"
+ * for the main desk, else the one desk in the talk channel with exactly that name. None when no
+ * desk, or more than one, has it: then nobody hears the call rather than the wrong person.
+ */
+export function callTarget(talk: string, people: Iterable<[string, { name: string }]>): string | undefined {
+  if (!talk.startsWith("to:")) return undefined
+  const name = talk.slice(3)
+  if (name === HOST) return HOST
+  const found = [...people].filter(([, p]) => p.name === name)
+  return found.length === 1 ? found[0][0] : undefined
+}
+
 export interface VoicePerson {
+  /** The desk's key id: on the main desk only, never sent to joined desks. */
+  id?: string
   name: string
   /** Whom they talk to ("all", a channel, "to:<name>"). */
   talk?: string
@@ -59,9 +79,11 @@ interface VoiceState {
   /** The main desk's channels (besides All crew) and whom it talks to. */
   hostListen: string[]
   hostTalkTo: string
+  /** Whose key the main desk's private call goes to (see callTarget). */
+  hostTalkToId: string | null
 }
 
-export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, micNote: null, volume: 1, hostListen: [...CHANNEL_IDS], hostTalkTo: "all" }))
+export const useVoice = create<VoiceState>(() => ({ peers: [], hostTalking: false, hostSpeaking: false, micError: null, micNote: null, volume: 1, hostListen: [...CHANNEL_IDS], hostTalkTo: "all", hostTalkToId: null }))
 
 /** How loud the main desk hears the crew (its own output only). */
 export function setVoiceVolume(v: number): void {
@@ -133,6 +155,8 @@ function rms(a: AnalyserNode, buf: Float32Array<ArrayBuffer>): number {
 // ---------------------------------------------------------------- host: the hub that mixes
 
 interface Peer {
+  /** The name its key was paired under: for people to read only. */
+  name: string
   pc: RTCPeerConnection
   /** What this desk hears: everyone but itself. */
   mix: MediaStreamAudioDestinationNode
@@ -142,26 +166,29 @@ interface Peer {
   talking: boolean
   listen: string[]
   talkTo: string
+  /** Whose key its private call goes to, found when it chose it. */
+  toId?: string
 }
 
 let ctx: AudioContext | null = null
 let monitor: GainNode | null = null
+/** The desks in the talk channel, by key id (the host's server stamps it; never a name). */
 const peers = new Map<string, Peer>()
 let hostMic: { stream: MediaStream; source: AudioNode; gate: GainNode; analyser: AnalyserNode } | null = null
-/** One gain per speaker → listener (from → to → route); 1 when the speaker's talk reaches that listener. */
+/** One gain per speaker → listener (key ids, from → to → route); 1 when the speaker's talk reaches that listener. */
 const routes = new Map<string, Map<string, { gain: GainNode; source: AudioNode }>>()
 
 /**
  * Wire every speaker to every listener through its own gain and set each by the talk rules: All
- * crew reaches everyone, a channel its listeners, "to:<name>" only that person. Nobody hears
- * themselves. Called whenever someone joins, leaves or changes channels.
+ * crew reaches everyone, a channel its listeners, a private call only the key it was chosen for.
+ * Nobody hears themselves. Called whenever someone joins, leaves or changes channels.
  */
 function rewire() {
   if (!ctx) return
   const v = useVoice.getState()
-  const ends = new Map<string, { source: AudioNode | null; sink: AudioNode; listen: readonly string[]; talk: string }>()
-  if (monitor) ends.set(HOST, { source: hostMic?.gate ?? null, sink: monitor, listen: v.hostListen, talk: v.hostTalkTo })
-  for (const [name, p] of peers) ends.set(name, { source: p.analyser, sink: p.mix, listen: p.listen, talk: p.talkTo })
+  const ends = new Map<string, { source: AudioNode | null; sink: AudioNode; listen: readonly string[]; talk: string; toId?: string | null }>()
+  if (monitor) ends.set(HOST, { source: hostMic?.gate ?? null, sink: monitor, listen: v.hostListen, talk: v.hostTalkTo, toId: v.hostTalkToId })
+  for (const [id, p] of peers) ends.set(id, { source: p.analyser, sink: p.mix, listen: p.listen, talk: p.talkTo, toId: p.toId })
   // Routes whose speaker or listener left, or whose speaker's node changed, go.
   for (const [from, row] of routes) {
     for (const [to, r] of row) {
@@ -187,14 +214,23 @@ function rewire() {
       }
       // While the main desk talks with priority, everyone else is quieter for every listener.
       const ducked = v.hostTalking && v.hostTalkTo === PRIORITY && from !== HOST
-      r.gain.gain.value = hears(a.talk, to, b.listen) ? (ducked ? DUCKED : 1) : 0
+      r.gain.gain.value = hears(a.talk, to, b.listen, a.toId) ? (ducked ? DUCKED : 1) : 0
     }
   }
 }
 
-/** The main desk's channels and talk target. */
-export function setHostChannels(listen: string[], talkTo: string): void {
-  useVoice.setState({ hostListen: listen.filter((c) => CHANNEL_IDS.includes(c)), hostTalkTo: validTalk(talkTo) })
+/** How loud `from` reaches `to` now (key ids, "host" for the main desk): for tests and QA. Undefined when there is no route yet. */
+export function routeLevel(from: string, to: string): number | undefined {
+  return routes.get(from)?.get(to)?.gain.gain.value
+}
+
+/**
+ * The main desk's channels and talk target. A private call ("to:<name>") goes to `toId`, the key
+ * the main desk picked from the crew list, or else the one desk in the channel with that name now.
+ */
+export function setHostChannels(listen: string[], talkTo: string, toId?: string): void {
+  const talk = validTalk(talkTo)
+  useVoice.setState({ hostListen: listen.filter((c) => CHANNEL_IDS.includes(c)), hostTalkTo: talk, hostTalkToId: talk.startsWith("to:") ? toId ?? callTarget(talk, peers) ?? null : null })
   rewire()
 }
 
@@ -220,13 +256,14 @@ async function audio(): Promise<AudioContext> {
 }
 
 function publishPeers() {
-  useVoice.setState({ peers: [...peers.entries()].map(([name, p]) => ({ name, talk: p.talkTo, talking: p.talking, speaking: !!useVoice.getState().peers.find((x) => x.name === name)?.speaking })) })
+  const before = useVoice.getState().peers
+  useVoice.setState({ peers: [...peers.entries()].map(([id, p]) => ({ id, name: p.name, talk: p.talkTo, talking: p.talking, speaking: !!before.find((x) => x.id === id)?.speaking })) })
 }
 
-function drop(name: string) {
-  const p = peers.get(name)
+function drop(id: string) {
+  const p = peers.get(id)
   if (!p) return
-  peers.delete(name)
+  peers.delete(id)
   p.voice?.disconnect()
   p.analyser?.disconnect()
   p.pc.close()
@@ -241,13 +278,21 @@ function connected(pc: RTCPeerConnection): boolean {
   return pc.connectionState === "connected" || pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed"
 }
 
-/** A desk's offer: answer it with what that desk should hear. */
-async function answer(id: string, by: string, sdp: string) {
+/**
+ * Which desk a talk event is from: its key id, stamped by the host's server. This computer itself,
+ * with keys off, has no key and is known by its name then.
+ */
+function talker(p: { by?: unknown; byId?: unknown }): string {
+  return typeof p.byId === "string" && p.byId ? p.byId : `name:${String(p.by ?? "")}`
+}
+
+/** A desk's offer: answer it with what that desk should hear. `by` is its key id, `name` for people to read. */
+async function answer(id: string, by: string, name: string, sdp: string) {
   const a = await audio()
   drop(by) // a desk that reconnects replaces its old connection
   const pc = new RTCPeerConnection({ iceServers: [] })
   const mix = a.createMediaStreamDestination()
-  const peer: Peer = { pc, mix, voice: null, analyser: null, talking: false, listen: [...CHANNEL_IDS], talkTo: "all" }
+  const peer: Peer = { name, pc, mix, voice: null, analyser: null, talking: false, listen: [...CHANNEL_IDS], talkTo: "all" }
   peers.set(by, peer)
   rewire()
   pc.ontrack = (e) => {
@@ -358,38 +403,40 @@ export function startVoiceHub(): () => void {
   if (hosting) return () => {}
   hosting = true
   // A device whose key is revoked leaves the talk channel at once (its next request would be
-  // refused anyway, but an open call would carry on).
+  // refused anyway, but an open call would carry on). Known by its key, as everywhere here.
   const offSettings = useSettingsStore.subscribe((s, p) => {
     // Another headset chosen for this computer: the crew is heard there now, the microphone from the next Talk.
     if (s.talkOutputId !== p.talkOutputId && ctx) void toOutput(ctx, s.talkOutputId)
     if (s.talkInputId !== p.talkInputId) closeHostMic()
     if (s.remoteDevices === p.remoteDevices) return
-    const paired = new Set(s.remoteDevices.map((d) => d.name))
-    for (const name of [...peers.keys()]) if (!paired.has(name) && name !== "Shared key" && name !== "This computer") drop(name)
+    const kept = new Set(s.remoteDevices.map((d) => d.hash))
+    for (const d of p.remoteDevices) if (!kept.has(d.hash)) drop(d.hash)
   })
   const offs = [
     listen<string>("remote:voice_offer", (e) => {
       try {
-        const p = JSON.parse(e.payload) as { id: string; by: string; sdp: string }
-        void answer(p.id, p.by, p.sdp).catch((err) => console.warn("[voice] could not answer", p.by, err))
+        const p = JSON.parse(e.payload) as { id: string; by: string; byId?: string; sdp: string }
+        void answer(p.id, talker(p), String(p.by), p.sdp).catch((err) => console.warn("[voice] could not answer", p.by, err))
       } catch {
         // not an offer
       }
     }),
     listen<string>("remote:voice_leave", (e) => {
       try {
-        drop((JSON.parse(e.payload) as { by: string }).by)
+        drop(talker(JSON.parse(e.payload) as { by?: string; byId?: string }))
       } catch {
         // ignore
       }
     }),
     listen<string>("remote:voice_channels", (e) => {
       try {
-        const p = JSON.parse(e.payload) as { by: string; listen: string[]; talk: string }
-        const peer = peers.get(p.by)
+        const p = JSON.parse(e.payload) as { by: string; byId?: string; listen: string[]; talk: string }
+        const peer = peers.get(talker(p))
         if (!peer) return
         peer.listen = (Array.isArray(p.listen) ? p.listen : []).filter((c) => CHANNEL_IDS.includes(c))
         peer.talkTo = validTalk(String(p.talk))
+        // A private call: whose key it goes to is found now, when it is chosen.
+        peer.toId = callTarget(peer.talkTo, peers)
         rewire()
         publishPeers()
       } catch {
@@ -398,8 +445,8 @@ export function startVoiceHub(): () => void {
     }),
     listen<string>("remote:voice_talk", (e) => {
       try {
-        const p = JSON.parse(e.payload) as { on: boolean; by: string }
-        const peer = peers.get(p.by)
+        const p = JSON.parse(e.payload) as { on: boolean; by: string; byId?: string }
+        const peer = peers.get(talker(p))
         if (peer) {
           peer.talking = !!p.on
           publishPeers()
@@ -413,7 +460,7 @@ export function startVoiceHub(): () => void {
   const meter = setInterval(() => {
     const s = useVoice.getState()
     const next = s.peers.map((x) => {
-      const a = peers.get(x.name)?.analyser
+      const a = x.id ? peers.get(x.id)?.analyser : undefined
       return { ...x, speaking: !!a && rms(a, buf) > SPEAKING }
     })
     const hostSpeaking = !!hostMic && s.hostTalking && rms(hostMic.analyser, buf) > SPEAKING
@@ -424,7 +471,7 @@ export function startVoiceHub(): () => void {
     clearInterval(meter)
     offSettings()
     for (const off of offs) void off.then((f) => f())
-    for (const name of [...peers.keys()]) drop(name)
+    for (const id of [...peers.keys()]) drop(id)
   }
 }
 

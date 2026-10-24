@@ -74,7 +74,7 @@ describe("production notices", () => {
     expect(onAction).not.toHaveBeenCalled()
     const show = [...el.querySelectorAll("button")].find((b) => b.textContent === "Show Romans 8:28")!
     await act(async () => show.click())
-    expect(onAction).toHaveBeenCalledWith({ kind: "bible", value: "Romans 8:28" })
+    expect(onAction).toHaveBeenCalledWith({ kind: "bible", value: "Romans 8:28" }, "show")
     expect(onAnswer).toHaveBeenCalledWith(n.id, "ready")
     // A scene request switches the outputs already showing a scene, else the main output.
     expect(sceneTargets([{ id: "main", sceneId: null }, { id: "obs", sceneId: "s1" }])).toEqual(["obs"])

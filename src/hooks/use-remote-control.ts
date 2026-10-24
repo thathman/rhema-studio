@@ -12,7 +12,8 @@ import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
 import { useEventClock } from "@/stores/event-clock-store"
-import { activateBibleReference } from "@/lib/bible-activate"
+import { activateBibleReference, previewBibleReference } from "@/lib/bible-activate"
+import { songRequest } from "@/lib/song-request"
 import { cameraSourceId, isStateSource, type AnySourceId } from "@/lib/live-sources"
 import { useNotices } from "@/stores/notices-store"
 
@@ -131,6 +132,21 @@ export function useRemoteControl() {
       const asSource = (v: unknown): AnySourceId | undefined =>
         SOURCES.find((s) => s === v) ?? (typeof v === "string" && isStateSource(v) && useSettingsStore.getState().cameras.some((c) => cameraSourceId(c.name) === v) ? v : undefined)
       await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120)) })
+      // An action request answered on a joined desk (Comms C2): a verse to Preview only, or a song or
+      // hymn by title. What could not be done is said here, where the operator can act on it.
+      const notDone = (p: Record<string, unknown>, what: string, why: string) => toast.warning(`${what} not shown`, { description: `${byOf(p)}${why}` })
+      await withPayload(REMOTE_EVENTS.bible_preview, (p) => {
+        if (typeof p.reference !== "string") return
+        const ref = p.reference.slice(0, 120)
+        void previewBibleReference(ref).then((r) => { if (r !== "previewed") notDone(p, ref, r === null ? "that is not a Bible reference" : "that verse was not found") })
+      })
+      for (const [event, mode] of [[REMOTE_EVENTS.song_show, "show"], [REMOTE_EVENTS.song_preview, "preview"]] as const) {
+        await withPayload(event, (p) => {
+          if (typeof p.title !== "string") return
+          const title = p.title.slice(0, 120)
+          void songRequest(title, mode).then((why) => { if (why) notDone(p, title, why) })
+        })
+      }
       await withPayload(REMOTE_EVENTS.clear_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().clearSource(id) })
       await withPayload(REMOTE_EVENTS.restore_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().restoreSource(id) })
       await withPayload(REMOTE_EVENTS.take_scene, (p) => {
