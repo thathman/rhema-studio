@@ -32,9 +32,18 @@ interface JoinState {
   pair: (address: string, code: string, name: string) => Promise<void>
   connect: () => Promise<void>
   leave: (forget?: boolean) => Promise<void>
-  /** A host command (the event clock, …): refused by the host if the role does not allow it. */
-  send: (command: { command: string; value?: string | number | Record<string, unknown> }) => Promise<void>
+  /**
+   * A host command (the event clock, …): refused by the host if the role does not allow it, if the
+   * main desk has taken back control, or if it is for another service. Says whether the host did it,
+   * and if not, why in the host's words.
+   */
+  send: (command: { command: string; value?: string | number | Record<string, unknown> }) => Promise<SendResult>
 }
+
+export type SendResult = { ok: true } | { ok: false; error: string }
+
+/** What a desk shows when the host is on another service and the command was not sent. */
+const OTHER_SERVICE_NOTE = "The main desk is on a different service now, so that was not sent. This desk has refreshed: check what is live, then try again."
 
 /**
  * The service this desk is looking at, sent with each command (#246 C16): "" when the host has no
@@ -122,14 +131,21 @@ export const useJoin = create<JoinState>((set, get) => ({
     try {
       await invoke("join_command", { address, token, command, service: serviceOf(get().live) })
       set({ error: null, note: null })
+      return { ok: true }
     } catch (e) {
       const msg = String(e)
       // join_command marks the two refusals this desk handles itself (src-tauri/src/commands/join.rs).
-      if (msg.startsWith("paused:")) set({ paused: true, error: null })
-      else if (msg.startsWith("other-service:")) {
-        set({ error: null, note: "The main desk is on a different service now, so that was not sent. This desk has refreshed: check what is live, then try again." })
+      if (msg.startsWith("paused:")) {
+        set({ paused: true, error: null })
+        return { ok: false, error: msg.slice("paused:".length).trim() || "The main desk has taken back control" }
+      }
+      if (msg.startsWith("other-service:")) {
+        set({ error: null, note: OTHER_SERVICE_NOTE })
         void get().connect()
-      } else set({ error: msg })
+        return { ok: false, error: "The main desk is on a different service now" }
+      }
+      set({ error: msg })
+      return { ok: false, error: msg }
     }
   },
 }))

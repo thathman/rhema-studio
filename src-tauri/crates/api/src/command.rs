@@ -77,9 +77,9 @@ pub struct VoiceChannelsIn {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoticeIn {
     pub text: String,
-    /// "all", "host" or a role ("timekeeper", "bible", "screens", "present").
+    /// "all", "host", a role ("timekeeper", "bible", "screens", "present"), or one desk by name.
     #[serde(default)]
-    pub to: Option<String>,
+    pub to: Option<NoticeTo>,
     /// "normal" or "urgent".
     #[serde(default)]
     pub priority: Option<String>,
@@ -90,6 +90,24 @@ pub struct NoticeIn {
     /// on their desk for them to act on; nothing runs by itself.
     #[serde(default)]
     pub action: Option<NoticeAction>,
+}
+
+/// Who a notice is for: a group ("all", "host" or a role), or one desk or person by its paired
+/// name (`{"name": "Ade's phone"}`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum NoticeTo {
+    Group(String),
+    Named { name: String },
+}
+
+impl fmt::Display for NoticeTo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NoticeTo::Group(g) => write!(f, "{g}"),
+            NoticeTo::Named { name } => write!(f, "{name}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,7 +173,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
             RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
             RemoteCommand::ReleaseScene(o) => write!(f, "release_scene({o})"),
-            RemoteCommand::NoticeSend(n) => write!(f, "notice_send(to {})", n.to.as_deref().unwrap_or("all")),
+            RemoteCommand::NoticeSend(n) => write!(f, "notice_send(to {})", n.to.as_ref().map_or_else(|| "all".to_string(), ToString::to_string)),
             RemoteCommand::NoticeAck(a) => write!(f, "notice_ack({} {})", a.id, a.state),
             RemoteCommand::VoiceTalk(on) => write!(f, "voice_talk({on})"),
             RemoteCommand::VoiceLeave => write!(f, "voice_leave"),
@@ -480,7 +498,10 @@ mod tests {
         let leave: RemoteCommand = serde_json::from_str(r#"{"command":"voice_leave"}"#).unwrap();
         assert_eq!(leave, RemoteCommand::VoiceLeave);
         let n: RemoteCommand = serde_json::from_str(r#"{"command":"notice_send","value":{"text":"Wrap up in 5","to":"present","priority":"urgent"}}"#).unwrap();
-        assert!(matches!(n, RemoteCommand::NoticeSend(NoticeIn { ref to, .. }) if to.as_deref() == Some("present")));
+        assert!(matches!(n, RemoteCommand::NoticeSend(NoticeIn { ref to, .. }) if *to == Some(NoticeTo::Group("present".into()))));
+        let named: RemoteCommand = serde_json::from_str(r#"{"command":"notice_send","value":{"text":"Mic 2 is yours","to":{"name":"Ade's phone"}}}"#).unwrap();
+        assert!(matches!(named, RemoteCommand::NoticeSend(NoticeIn { ref to, .. }) if *to == Some(NoticeTo::Named { name: "Ade's phone".into() })));
+        assert_eq!(named.to_string(), "notice_send(to Ade's phone)");
         let take: RemoteCommand = serde_json::from_str(r#"{"command":"take_scene","value":{"output":"main","scene":"s1"}}"#).unwrap();
         assert_eq!(take, RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s1".into() }));
     }

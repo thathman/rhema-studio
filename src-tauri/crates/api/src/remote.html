@@ -189,7 +189,7 @@
   // Seen / Ready / Unable. Private: never on a screen.
   let me = null
   const ANSWERS = { seen: "Seen", ready: "Ready", unable: "Unable" }
-  const isFor = (n, role) => n.to === "all" || n.to === role || (role === "configure" && n.to === "present")
+  const isFor = (n, role) => n.to === "all" || n.to === role || (role === "configure" && n.to === "present") || (!!n.to && typeof n.to === "object" && String(n.to.name).toLowerCase() === String(me.name).toLowerCase())
   async function notices(live) {
     if (!me) {
       const r = await fetch("/api/v1/me", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)

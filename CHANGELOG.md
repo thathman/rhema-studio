@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Notices: honest answers, private delivery, kept through a crash (#251)
+- Pressing the button on an action request ("Show Romans 8:28", "Take Sermon split") now answers **Ready** only when it really happened. If the main desk refused it (the desk's role does not allow it, the main desk has taken back control, or it moved to another service), the notice answers **Unable** and the desk shows the reason.
+- Each joined desk and phone now receives only the notices meant for it: those to everyone, to its role, to it by name, or that it sent. The main desk still sees them all. Before, every desk received every notice and only hid the others. Who sent a notice, and who one is for, is decided by each device's pairing key, not its name, so a desk named like the main desk or like someone else gets nothing extra; pairing no longer accepts a name ending in "(main desk)".
+- A notice can now go to **one person**: pick their desk or phone under "One person" in Send to.
+- The main desk keeps the last 100 notices, with their answers, through an unexpected close: after Rhema restarts from a crash they are back (once, if from the last 6 hours), as the service log is.
 ### Talk notices a dropped connection, and your own headset (#251)
 - When the main desk drops off the network, a joined desk stops sending its microphone at once and shows **Talk dropped — reconnecting…**. It joins again by itself for about a minute and a half, then says **Back in the talk channel**. The microphone stays off until you press Talk again, so nobody is heard by surprise.
 - A desk or phone that drops off leaves the main desk's crew list within a few seconds, and its Talk shows as let go straight away. The phone page also stops talking and says so when the computer goes quiet.

@@ -155,13 +155,15 @@ describe("the main desk takes back control (#243)", () => {
     handlers.get("join:live")!({ payload: JSON.stringify(live) })
     expect(useJoin.getState().paused).toBe(true)
     refuseNext = "paused: The main desk has taken back control"
-    await useJoin.getState().send({ command: "event_next" })
+    // Each send says whether the host did it, and if not, why in the host's words (Comms: Ready only on success).
+    expect(await useJoin.getState().send({ command: "event_next" })).toEqual({ ok: false, error: "The main desk has taken back control" })
     expect(useJoin.getState()).toMatchObject({ paused: true, error: null })
     handlers.get("join:live")!({ payload: JSON.stringify({ ...live, paused: [] }) })
     expect(useJoin.getState().paused).toBe(false)
     refuseNext = "this device keeps time"
-    await useJoin.getState().send({ command: "show" })
+    expect(await useJoin.getState().send({ command: "show" })).toEqual({ ok: false, error: "this device keeps time" })
     expect(useJoin.getState().error).toBe("this device keeps time")
+    expect(await useJoin.getState().send({ command: "event_next" })).toEqual({ ok: true })
   })
 })
 
@@ -186,7 +188,7 @@ describe("one service at a time (#246 C16)", () => {
     useJoin.setState({ status: "connected", me: { name: "Femi's laptop", role: "timekeeper" }, live: buildLiveState() })
     calls.length = 0
     refuseNext = "other-service: That desk is looking at a different service; it will refresh"
-    await useJoin.getState().send({ command: "event_next" })
+    expect(await useJoin.getState().send({ command: "event_next" })).toMatchObject({ ok: false, error: expect.stringContaining("different service") })
     await Promise.resolve()
     expect(useJoin.getState().error).toBeNull()
     expect(useJoin.getState().note).toContain("different service")

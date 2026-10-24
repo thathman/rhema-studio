@@ -1000,6 +1000,17 @@ Set Settings → Operator name to "Tolu" first. Have one phone camera in Product
 | 10ec.11 | Turn on Rehearsal. In it: stop the ticker, pause the timer, try the Sources buttons. Leave rehearsal. | In rehearsal the Sources buttons for the ticker, timer and cameras are greyed; the real screens keep the ticker and the timer counting. After rehearsal everything is as before and the log has only rehearsal on/off for that time. | Unverified |
 | 10ec.12 | Quit and reopen Rhema with outputs saved by the previous build (including an older Rhema Ticker \| Alpha made as a signage output). | Every output loads with its name, NDI name and look; the old ticker feed still shows only the ticker. | Unverified |
 
+### 10ed. Notice results, privacy and crash recovery (#251)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ed.1 | Host + a second computer joined with the **Bible** role. On the main desk's bell, send a notice to **Bible** asking to **take a scene** (Ask to take a scene → Sermon split). On the joined desk press **Take Sermon split**. | The scene does not change. The notice on the joined desk answers **Unable** and shows in red: "“Take Sermon split” was not done: this device runs the Bible…". The main desk sees "<desk>: Unable", never Ready. | Unverified |
+| 10ed.2 | Send the same desk a request to **show a verse** (Romans 8:28) and press **Show Romans 8:28**. | The verse goes up (or on the Bible feeds while a song is up); the notice answers **Ready**. | Unverified |
+| 10ed.3 | On the host press **Take back control** for that desk, send it another verse request, press its button on the desk. Give control back. | While paused: nothing goes up, the notice answers **Unable** with "The main desk has taken back control". | Unverified |
+| 10ed.4 | Pair a second desk or phone as **Timekeeper**. From the main desk send one notice to **Timekeeper**, one to **Bible**, one to **Everyone**. | The Bible desk lists the Bible and Everyone notices only; the Timekeeper desk and phone list the Timekeeper and Everyone ones only. The main desk's bell lists all three. | Unverified |
+| 10ed.5 | On a joined desk's computer, open `http://<host>:8080/api/v1/live` with that desk's key (or watch the phone page). | The `notices` list holds only the ones for that key: the Timekeeper notice is not in the Bible key's data at all. | Unverified |
+| 10ed.6 | Main desk: Send to → **One person** → pick the Bible desk by name; send "Mic 2 is yours". | Only that desk (and the main desk) shows it, as "→ <its name>"; the Timekeeper desk and phone do not. | Unverified |
+| 10ed.7 | Send two notices and answer one. Quit Rhema by force (Activity Monitor → Force Quit) and open it again. | The two notices are back in the bell with the answer, and joined desks list them again after they reconnect. Quit normally and reopen: the bell starts empty. | Unverified |
 ### 10ee. Talk notices a dropped connection; the talk headset (#251)
 
 | # | Step | Expected | Result |

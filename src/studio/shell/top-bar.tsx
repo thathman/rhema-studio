@@ -57,6 +57,8 @@ function HostNotices() {
   const me = operator ? `${operator} (main desk)` : "Main desk"
   const scenes = useBroadcastStore((s) => s.scenes)
   const rundown = useQueueStore((s) => s.items)
+  const devices = useSettingsStore((s) => s.remoteDevices)
+  const people = devices.map((d) => d.name)
   const unread = notices.filter((n) => n.from !== me && (n.to === "host" || n.to === "all") && !read.includes(n.id))
   return (
     <Popover onOpenChange={(o) => { if (o) useNotices.getState().markRead(notices.map((n) => n.id)) }}>
@@ -73,11 +75,12 @@ function HostNotices() {
           role="host"
           me={me}
           eventTitle={event?.reference ?? null}
-          onSend={(n) => useNotices.getState().send({ ...n, from: me, event: event ? { id: event.id, title: event.reference } : null })}
+          onSend={(n) => useNotices.getState().send({ ...n, from: me, fromId: "host", event: event ? { id: event.id, title: event.reference } : null })}
           onAnswer={(id, state) => useNotices.getState().answer(id, me, state)}
           onAction={runNoticeAction}
           scenes={scenes}
           rundown={rundown}
+          people={people}
         />
         <button type="button" className="mt-2 text-[0.6875rem] text-muted-foreground underline" onClick={() => useShellStore.getState().goTo("team")}>Team activity: approvals and comments</button>
       </PopoverContent>
@@ -85,14 +88,36 @@ function HostNotices() {
   )
 }
 
-/** Do what an action request asks, on the main desk, when its button is pressed (Comms C2). */
-function runNoticeAction(a: NoticeAction) {
-  if (a.kind === "bible") void activateBibleReference(a.value)
-  else if (a.kind === "event") useEventClock.getState().start(a.value)
-  else {
-    const b = useBroadcastStore.getState()
-    for (const id of sceneTargets(b.outputs.filter((o) => (o.role ?? "congregation") === "congregation"))) b.takeScene(id, a.value)
+/** Why a verse asked for did not go up, by how presenting it ended. */
+const NOT_SHOWN: Record<string, string> = {
+  empty: "that verse was not found",
+  missing_translation: "the Bible translation is not on this computer",
+  held_for_approval: "it is waiting for approval",
+  superseded: "something else was shown first",
+}
+
+/**
+ * Do what an action request asks, on the main desk, when its button is pressed (Comms C2): null
+ * when it was done, else why not, so the answer is Ready only when it really happened.
+ */
+async function runNoticeAction(a: NoticeAction): Promise<string | null> {
+  if (a.kind === "bible") {
+    const outcome = await activateBibleReference(a.value)
+    if (outcome === null) return "that is not a Bible reference"
+    return outcome === "presented" ? null : NOT_SHOWN[outcome] ?? "it was not shown"
   }
+  if (a.kind === "event") {
+    if (!useQueueStore.getState().items.some((i) => i.id === a.value)) return "that item is no longer in the run of show"
+    if (useBroadcastStore.getState().rehearsal) return "rehearsal is on, so the event clock does not move"
+    useEventClock.getState().start(a.value)
+    return null
+  }
+  const b = useBroadcastStore.getState()
+  if (!b.scenes.some((x) => x.id === a.value)) return "that scene is no longer there"
+  const targets = sceneTargets(b.outputs.filter((o) => (o.role ?? "congregation") === "congregation"))
+  if (targets.length === 0) return "there is no congregation output"
+  for (const id of targets) b.takeScene(id, a.value)
+  return null
 }
 
 /** The main desk's Talk (Rhema Comms voice): hold to talk; who is speaking shows beside it. */

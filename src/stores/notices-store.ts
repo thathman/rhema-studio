@@ -1,12 +1,16 @@
 import { create } from "zustand"
+import { useSettingsStore } from "@/stores/settings-store"
 
 /**
  * Production notices (Rhema Comms C1, #251): short private messages between the host desk and the
- * operators who joined it, each answered Seen, Ready or Unable. They live only on the host for this
- * session (the last 100), travel in its Live State so a reconnecting desk catches up, and never
- * reach a screen, the stage, a feed or the service log.
+ * operators who joined it, each answered Seen, Ready or Unable. They live on the host (the last
+ * 100, kept through a crash like the service log), travel in its Live State so a reconnecting desk
+ * catches up (each desk gets only the ones for it), and never reach a screen, the stage, a feed or
+ * the service log.
  */
 export type NoticeTo = "all" | "host" | "timekeeper" | "bible" | "screens" | "present"
+/** A group, or one paired desk or person by name. */
+export type NoticeTarget = NoticeTo | { name: string }
 export type NoticeAnswer = "seen" | "ready" | "unable"
 /**
  * An action request (Comms C2): what the recipient is asked to do. It is only offered on their desk
@@ -18,7 +22,15 @@ export interface NoticeAction { kind: "bible" | "scene" | "event"; value: string
 export interface Notice {
   id: string
   from: string
-  to: NoticeTo
+  /**
+   * Who sent it, as the host knows it: the sending key's id (stamped by the host's server, never
+   * taken from a message) or "host" for the main desk. The server decides "sent by this desk" by it,
+   * not by the name. Absent on notices from before it.
+   */
+  fromId?: string
+  to: NoticeTarget
+  /** For one person: that paired device's key id, found from the name when the notice is made. */
+  toId?: string
   priority: "normal" | "urgent"
   text: string
   /** The run-of-show event it is about. */
@@ -36,21 +48,28 @@ interface NoticesState {
   notices: Notice[]
   /** Notices this desk has read (ids), for the unread count. */
   read: string[]
-  send: (n: { from: string; to?: string; priority?: string; text: string; event?: { id: string; title: string } | null; action?: unknown }) => Notice | null
+  send: (n: { from: string; fromId?: string; to?: unknown; priority?: string; text: string; event?: { id: string; title: string } | null; action?: unknown }) => Notice | null
   answer: (id: string, by: string, state: string) => void
   markRead: (ids: string[]) => void
+  /** Notices kept from the run that closed unexpectedly (src/lib/live-recovery.ts), behind any sent since. */
+  restore: (kept: Notice[], read: string[]) => void
 }
 
 export const useNotices = create<NoticesState>((set, get) => ({
   notices: [],
   read: [],
-  send: ({ from, to, priority, text, event, action }) => {
+  send: ({ from, fromId, to, priority, text, event, action }) => {
     const body = text.trim().slice(0, 280)
     if (!body) return null
+    const target = asTarget(to)
+    // One person: the paired device of that name now, by its key (the host's server delivers by it).
+    const toId = typeof target === "object" ? useSettingsStore.getState().remoteDevices.find((d) => d.name.trim().toLowerCase() === target.name.toLowerCase())?.hash : undefined
     const notice: Notice = {
       id: crypto.randomUUID(),
       from: from.trim().slice(0, 60) || "Someone",
-      to: NOTICE_TARGETS.find((t) => t === to) ?? "all",
+      ...(fromId ? { fromId } : {}),
+      to: target,
+      ...(toId ? { toId } : {}),
       priority: priority === "urgent" ? "urgent" : "normal",
       text: body,
       event: event ?? null,
@@ -68,10 +87,34 @@ export const useNotices = create<NoticesState>((set, get) => ({
     set({ notices: get().notices.map((n) => (n.id === id ? { ...n, answers: [...n.answers.filter((a) => a.by !== who), { by: who, state: s, at: Date.now() }] } : n)) })
   },
   markRead: (ids) => set({ read: [...new Set([...get().read, ...ids])].slice(-500) }),
+  restore: (kept, read) => {
+    const have = new Set(get().notices.map((n) => n.id))
+    const back = kept.filter((n) => n && typeof n.id === "string" && !have.has(n.id) && typeof n.text === "string" && Array.isArray(n.answers)).map((n) => ({ ...n, to: asTarget(n.to) }))
+    set({ notices: [...get().notices, ...back].slice(0, MAX), read: [...new Set([...get().read, ...read])].slice(-500) })
+  },
 }))
 
-/** Whether a notice is for a desk with this role ("host" for the main desk). */
-export function isFor(n: Notice, role: string): boolean {
+/** A known group or one named desk; anything else is everyone. */
+export function asTarget(to: unknown): NoticeTarget {
+  if (to && typeof to === "object" && typeof (to as { name?: unknown }).name === "string") {
+    const name = (to as { name: string }).name.trim().slice(0, 60)
+    if (name) return { name }
+  }
+  return NOTICE_TARGETS.find((t) => t === to) ?? "all"
+}
+
+/** Who a notice is addressed to, in words. */
+export function targetName(to: NoticeTarget): string {
+  return typeof to === "object" ? to.name : TARGET_NAMES[to]
+}
+export const TARGET_NAMES: Record<NoticeTo, string> = { all: "Everyone", host: "The main desk", timekeeper: "Timekeeper", bible: "Bible", screens: "Screens", present: "Present desks" }
+
+/**
+ * Whether a notice is for a desk with this role ("host" for the main desk) and, for one sent to a
+ * person, this name. The host's server applies the same rule before a desk receives it.
+ */
+export function isFor(n: Notice, role: string, name?: string): boolean {
+  if (typeof n.to === "object") return !!name && n.to.name.trim().toLowerCase() === name.trim().toLowerCase()
   return n.to === "all" || n.to === role || (role === "configure" && n.to === "present")
 }
 

@@ -29,6 +29,18 @@ pub enum Role {
 }
 
 impl Role {
+    /// As saved and as notices address it: "present", "configure", "timekeeper", "bible", "screens".
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Role::Present => "present",
+            Role::Configure => "configure",
+            Role::Timekeeper => "timekeeper",
+            Role::Bible => "bible",
+            Role::Screens => "screens",
+        }
+    }
+
     #[must_use]
     pub fn allows(self, cmd: &RemoteCommand) -> bool {
         match cmd {
@@ -212,7 +224,13 @@ fn unique_name(asked: &str, entries: &[KeyEntry]) -> String {
     if base.is_empty() {
         base = "Paired device".into();
     }
-    if ["host", "main desk"].contains(&base.to_lowercase().as_str()) {
+    // Never a name that reads as the main desk ("Main desk", "Tolu (main desk)"): a desk is told
+    // apart by its key, but people read names.
+    let lower = base.to_lowercase();
+    if let Some(stem) = lower.strip_suffix("(main desk)") {
+        let stem = base[..stem.len()].trim_end().to_string();
+        base = if stem.is_empty() { "Main desk (device)".into() } else { format!("{stem} (device)") };
+    } else if ["host", "main desk"].contains(&lower.as_str()) {
         base = format!("{base} (device)");
     }
     let taken = |n: &str| entries.iter().any(|e| e.name.eq_ignore_ascii_case(n));
@@ -234,6 +252,8 @@ mod tests {
         assert_eq!(unique_name("  phone ", &have), "phone 2");
         assert_eq!(unique_name("host", &have), "host (device)");
         assert_eq!(unique_name("Main Desk", &have), "Main Desk (device)");
+        assert_eq!(unique_name("Tolu (Main Desk)", &have), "Tolu (device)", "never the main desk's label");
+        assert_eq!(unique_name(" (main desk) ", &have), "Main desk (device)");
         assert_eq!(unique_name("", &have), "Paired device");
         assert_eq!(unique_name("Ade", &have), "Ade");
     }

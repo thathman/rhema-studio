@@ -210,15 +210,19 @@ function JoinedDesk() {
               eventTitle={live.rundown.find((r) => r.id === live.event.currentId)?.reference ?? null}
               onSend={(n) => void useJoin.getState().send({ command: "notice_send", value: { text: n.text, to: n.to, priority: n.priority, ...(live.event.currentId ? { event: live.event.currentId } : {}), ...(n.action ? { action: n.action } : {}) } })}
               onAnswer={(id, state) => void useJoin.getState().send({ command: "notice_ack", value: { id, state } })}
-              onAction={(a) => {
-                // The host checks this desk's role for each, as for its own buttons.
+              onAction={async (a) => {
+                // The host checks this desk's role for each, as for its own buttons; its refusal is the reason.
                 const send = useJoin.getState().send
-                if (a.kind === "bible") void send({ command: "bible_activate", value: a.value })
-                else if (a.kind === "event") void send({ command: "event_start", value: a.value })
-                else for (const output of sceneTargets(live.outputs)) void send({ command: "take_scene", value: { output, scene: a.value } })
+                const results = a.kind === "bible" ? [await send({ command: "bible_activate", value: a.value })]
+                  : a.kind === "event" ? [await send({ command: "event_start", value: a.value })]
+                    : await Promise.all(sceneTargets(live.outputs).map((output) => send({ command: "take_scene", value: { output, scene: a.value } })))
+                if (results.length === 0) return "the host has no congregation output"
+                const refused = results.find((r) => !r.ok)
+                return refused && !refused.ok ? refused.error : null
               }}
               scenes={live.scenes}
               rundown={live.rundown}
+              people={live.crew ?? []}
             />
           </section>
         </>
