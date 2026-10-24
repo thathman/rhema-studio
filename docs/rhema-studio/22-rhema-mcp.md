@@ -1,7 +1,9 @@
 # Rhema MCP (issue #252) — what is built
 
 AI assistants that speak the Model Context Protocol can read this church's Rhema Studio to help
-plan a service. MCP-001 reads; MCP-002 lets an assistant propose a whole service as a **draft** that people review.
+plan a service. MCP-001 reads; MCP-002 lets an assistant propose a whole service as a **draft** that people review;
+MCP-006 offers the same data as read-only **resources**. Why it is built this way (stdio, opt-in, drafts only, no
+lyrics, revisions, text as data, remote access left to the owner): `24-adr-0003-mcp.md`.
 
 ## How it runs
 
@@ -18,8 +20,8 @@ plan a service. MCP-001 reads; MCP-002 lets an assistant propose a whole service
 
 ## Rules
 
-- **Opt-in:** every tool answers "turn it on in Settings → AI assistants" until `mcpEnabled` is on in
-  the app's settings file.
+- **Opt-in:** every tool and every resource read answers "turn it on in Settings → AI assistants"
+  until `mcpEnabled` is on in the app's settings file.
 - **Read-only:** the content database is opened with SQLite's read-only flag
   (`ContentDb::open_read_only`, which also refuses a database from a newer Rhema) and the Bible
   database is immutable. Nothing can change a service, a song, a setting or a screen.
@@ -44,6 +46,35 @@ plan a service. MCP-001 reads; MCP-002 lets an assistant propose a whole service
 | `rhema_list_service_drafts` | The drafts waiting for review: id, title, date, items, revision, made / revised, by which assistant (MCP-003) |
 | `rhema_get_service_draft` | One waiting draft as saved: phases, groups, items with end-by times, assumptions, revision (MCP-005) |
 | `rhema_update_service_draft` | Replaces a waiting draft with a revised one (same id, checked like create, `updated_at` set). Needs the `revision` the assistant read; if the draft changed since, nothing is saved and the error says to read it again (MCP-005). Refused once people removed it; services people already saved from it are never touched (MCP-003) |
+
+## Resources (MCP-006)
+
+Read-only documents an assistant can open by address (in Claude Desktop, the + / attach menu lists
+them). The server advertises `resources` (no subscriptions, no change notifications) and answers
+`resources/list`, `resources/templates/list` and `resources/read`; each read is one
+`application/json` text.
+
+| Resource | Contains |
+| --- | --- |
+| `rhema://services` | Saved services and templates, not archived, newest first: id, its `uri`, title, date, template, approved (and the approved revision) |
+| `rhema://services/{id}` | One service's run of show: `phases` (name, rule, role, start time), each with its own `items` and its `groups` (name, items); an item has kind, title (or reference and translation for a verse), song id, planned minutes, end by. No lyrics, no slide text, no notes |
+| `rhema://songs` | Every song and hymn (up to 5000, `truncated` says if there are more): id, title, other titles, kind `song` / `hymn`, numbers, languages. No lyrics, no first line |
+| `rhema://translations` | Installed Bible editions (abbreviation, title, language) |
+| `rhema://looks` | Look names (built-in and the church's own) and scene names |
+| `rhema://drafts` | Drafts waiting for review, as `rhema_list_service_drafts` |
+| `rhema://drafts/{id}` | One waiting draft as saved, with its revision, as `rhema_get_service_draft` |
+
+- `resources/list` gives the five fixed resources and, with access on, each service (up to 50) and
+  each waiting draft by its own address. With access off it gives only the five fixed ones (no
+  church data) and every read is refused with error `-32001` and "turn it on in Settings → AI
+  assistants".
+- `resources/templates/list` gives `rhema://services/{id}` and `rhema://drafts/{id}`.
+- An address Rhema does not have (an unknown service or draft id, any other `rhema://` path, any
+  other scheme) is error `-32002` "Resource not found", with the address in `data.uri`.
+- Tests (`mcp.rs`): `resources_are_listed_with_templates_and_advertised`,
+  `every_resource_reads_and_none_hands_out_lyrics` (every listed resource read whole and searched
+  for the test songs' lyric lines in English and Yorùbá, and a slide's text),
+  `unknown_resources_are_not_found_and_access_off_refuses`.
 
 ## Prompts (MCP-003)
 
