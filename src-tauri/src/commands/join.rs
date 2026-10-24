@@ -309,7 +309,7 @@ pub async fn host_discover() -> Result<Vec<Found>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Moved to the shared crate with Rhema Companion (#209); still checked here as this app uses them.
+    // Moved to the shared crate with Rhema Studio Companion (#209); still checked here as this app uses them.
     use rhema_join::discover::{found_hosts, lan_ip as tv_ip};
     use rhema_join::host::sse_data;
 

@@ -1,11 +1,11 @@
-# Rhema Companion (#209): the small app for a computer that runs OBS only. It finds the church's
+# Rhema Studio Companion (#209): the small app for a computer that runs OBS only. It finds the church's
 # Rhema, pairs with it (its certificate pinned), and adds the church's cameras to this computer's
 # OBS. No speech, Bible, NDI, models or content database: it builds without models/ or data/.
 [package]
 name = "rhema-companion"
 # The app is 1.0.0.0 (A.B.C.D); Cargo and Tauri take three parts.
 version = "1.0.0"
-description = "Rhema Companion - the church's cameras in OBS on a second computer"
+description = "Rhema Studio Companion - the church's cameras in OBS on a second computer"
 authors = ["Faithful"]
 license = "MIT"
 repository = "https://github.com/openbezal/rhema"
@@ -20,7 +20,7 @@ name = "rhema_companion_lib"
 crate-type = ["rlib"]
 
 [[bin]]
-# "Rhema Companion.exe" / "Rhema Companion.app" (tauri.conf.json mainBinaryName); Cargo names have no spaces.
+# "Rhema Studio Companion.exe" / "Rhema Studio Companion.app" (tauri.conf.json mainBinaryName); Cargo names have no spaces.
 name = "rhema-companion"
 path = "src/main.rs"
 

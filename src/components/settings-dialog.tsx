@@ -625,7 +625,7 @@ interface RemoteStatus {
   lan?: boolean
   /** HTTP only: the https port for phone pages, when https is on. */
   tls_port?: number | null
-  /** HTTP only: this computer's certificate (its local CA's fingerprint) while https runs, as Rhema Companion shows it (#209). */
+  /** HTTP only: this computer's certificate (its local CA's fingerprint) while https runs, as Rhema Studio Companion shows it (#209). */
   tls_certificate?: string | null
 }
 
@@ -814,7 +814,7 @@ function RemoteControlSection() {
           {httpStatus.running && httpStatus.tls_certificate && (
             <span className="mt-1 block">
               This computer's certificate <code className="rounded bg-muted px-1.5 py-0.5 font-mono tracking-wide">{certificateWords(httpStatus.tls_certificate)}</code>
-              <span className="block text-muted-foreground">Rhema Companion on an OBS computer shows the same before it pairs. If it shows another, do not pair it.</span>
+              <span className="block text-muted-foreground">Rhema Studio Companion on an OBS computer shows the same before it pairs. If it shows another, do not pair it.</span>
             </span>
           )}
         </span>

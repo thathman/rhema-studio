@@ -8,7 +8,7 @@ import { themeDraftChanged } from "@/stores/broadcast-store"
 
 /**
  * Rhema as an OBS companion, or the full studio again (#209), on a computer with the full app. Kept
- * apart from the companion's working state so Rhema Companion, the small app, does not load the
+ * apart from the companion's working state so Rhema Studio Companion, the small app, does not load the
  * studio's service, song and queue stores.
  */
 

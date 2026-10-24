@@ -8,7 +8,7 @@ import { CompanionScreen } from "@/studio/companion/companion-screen"
 import { trayName } from "@/lib/companion-app"
 
 /**
- * Rhema Companion (#209), the small app for a computer that runs OBS only: the companion screen,
+ * Rhema Studio Companion (#209), the small app for a computer that runs OBS only: the companion screen,
  * joined only over the host's secure page, and this app's own choices. It joins its host again by
  * itself when it starts, since it may start with the computer with nobody at it.
  */
@@ -19,7 +19,7 @@ export function CompanionApp() {
   }, [])
   return (
     <>
-      <ErrorBoundary name="Rhema Companion">
+      <ErrorBoundary name="Rhema Studio Companion">
         <CompanionScreen secure>
           <ThisApp />
         </CompanionScreen>
@@ -45,12 +45,12 @@ function ThisApp() {
     <section aria-label="This app" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-xs">
       <label className="flex items-center gap-2 font-medium">
         <input type="checkbox" checked={start === true} disabled={start === null} onChange={(e) => void change(e.target.checked)} />
-        Start Rhema Companion with the computer
+        Start Rhema Studio Companion with the computer
       </label>
       <p className="text-muted-foreground">
         It then waits in {trayName()} and joins the host by itself. Closing this window keeps it running there, so OBS's cameras stay current; quit it from its icon.
       </p>
-      {version && <p className="text-muted-foreground">Rhema Companion {version}</p>}
+      {version && <p className="text-muted-foreground">Rhema Studio Companion {version}</p>}
     </section>
   )
 }

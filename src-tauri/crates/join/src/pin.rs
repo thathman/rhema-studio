@@ -1,4 +1,4 @@
-//! Rhema Companion talks to its host over https with the host's certificate pinned (#209), as a
+//! Rhema Studio Companion talks to its host over https with the host's certificate pinned (#209), as a
 //! Rhema Receiver TV pins the certificate it is sent (#198). What is pinned is the host's local
 //! certificate authority, made once per host computer (`tls/rhema-ca.pem` in its data folder): the
 //! host's own https certificate is made again when its address changes, its CA is not. At pairing
@@ -21,7 +21,7 @@ use crate::host::{base_url, Host};
 /// What the operator is told when the host shows a certificate this computer did not pair with.
 pub const NOT_THE_PAIRED_HOST: &str = "The host's certificate is not the one this computer paired with, so nothing was sent: pair again if the host computer was reinstalled (Leave this host, then join with a new code). Otherwise another computer may be pretending to be the host.";
 /// What the operator is told when the host does not have its secure page on.
-pub const NO_SECURE_PAGE: &str = "The host's secure page is off. On the host: Settings → Remote control → turn on \"Secure page for phones (https)\", then stop and start the listener. Rhema Companion talks to the host only over its secure page.";
+pub const NO_SECURE_PAGE: &str = "The host's secure page is off. On the host: Settings → Remote control → turn on \"Secure page for phones (https)\", then stop and start the listener. Rhema Studio Companion talks to the host only over its secure page.";
 /// Marks a refusal by this module in an error chain.
 const REFUSED: &str = "rhema-companion: not the pinned certificate";
 

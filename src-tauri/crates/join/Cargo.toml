@@ -2,14 +2,14 @@
 name = "rhema-join"
 version = "0.1.0"
 edition = "2021"
-description = "Joining a Rhema host on the church network (find it, pair, follow it), shared by Rhema and Rhema Companion"
+description = "Joining a Rhema host on the church network (find it, pair, follow it), shared by Rhema and Rhema Studio Companion"
 
 [lints]
 workspace = true
 
 [features]
 default = []
-# Rhema Companion (#209): https to the host, its certificate pinned at pairing (rustls with ring:
+# Rhema Studio Companion (#209): https to the host, its certificate pinned at pairing (rustls with ring:
 # no OpenSSL, builds with the MSVC toolchain on Windows).
 pinned = ["dep:rustls", "dep:sha2", "reqwest/rustls-tls-manual-roots"]
 # Saved keys and passwords in the system's credential store (RG-08).

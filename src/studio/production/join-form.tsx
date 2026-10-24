@@ -125,7 +125,7 @@ export function JoinForm({ asCompanion = false, checkCertificate = false }: { as
 const COMPLETE_ADDRESS = /^\S+:\d{1,5}$/
 
 /**
- * Rhema Companion (#209): the certificate of the host being joined, read from its secure page as
+ * Rhema Studio Companion (#209): the certificate of the host being joined, read from its secure page as
  * soon as a whole address is there. Pairing pins it; the operator compares it with the host's.
  */
 function useHostCertificate(address: string | null) {
@@ -151,7 +151,7 @@ function useHostCertificate(address: string | null) {
 }
 
 function CertificateLine({ checking, certificate, error, complete }: ReturnType<typeof useHostCertificate>) {
-  if (!complete) return <p className="text-muted-foreground">Rhema Companion talks to the host only over its secure page, and shows the host's certificate here before you join.</p>
+  if (!complete) return <p className="text-muted-foreground">Rhema Studio Companion talks to the host only over its secure page, and shows the host's certificate here before you join.</p>
   if (checking) return <p role="status" className="text-muted-foreground">Checking the host's secure page…</p>
   if (error) return <p role="alert" className="font-semibold">{error}</p>
   return (

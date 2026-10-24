@@ -126,17 +126,17 @@ with a cable, or read fewer cameras.
 The computer that streams with OBS does not need the whole studio. There are two ways to give it
 the church's cameras; both show the same screen and do the same work in OBS.
 
-| | **Rhema Companion** (a small app of its own) | **OBS companion mode** (inside Rhema) |
+| | **Rhema Studio Companion** (a small app of its own) | **OBS companion mode** (inside Rhema) |
 |---|---|---|
-| What you install | Only Rhema Companion (a 4 MB Windows installer, about 10 MB installed; Windows or Mac) | The whole Rhema app, models included |
+| What you install | Only Rhema Studio Companion (a 4 MB Windows installer, about 10 MB installed; Windows or Mac) | The whole Rhema app, models included |
 | How it talks to the main computer | Only over its secure page, with the main computer's certificate shown before you join and kept after | Over the plain network page, like a joined desk |
 | Where it runs | In the notification area (Windows) or menu bar (Mac); closing the window keeps it running; can start with the computer and join by itself | In Rhema's window |
 | Choose it when | The OBS computer only ever runs OBS (the usual case) | The same computer is sometimes the full studio |
 
-**Rhema Companion.** On the main computer, Settings → Remote control: turn on **Accept commands from
+**Rhema Studio Companion.** On the main computer, Settings → Remote control: turn on **Accept commands from
 other devices on this network** and **Secure page for phones (https)**, then start (or stop and
 start) the listener. That setting now shows **This computer's certificate**, four-character groups
-such as `3F2A 9C11 07BD 44E0 A1C3`. On the OBS computer, open Rhema Companion, pick the main
+such as `3F2A 9C11 07BD 44E0 A1C3`. On the OBS computer, open Rhema Studio Companion, pick the main
 computer (or type its address): it shows **Host's certificate** with the same groups. Only if they
 match, type the pairing code and **Join**. From then on it talks only to that computer; if another
 computer answers at that address it refuses, and says to pair again only if the main computer was

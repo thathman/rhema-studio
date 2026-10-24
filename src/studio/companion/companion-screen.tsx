@@ -21,7 +21,7 @@ const NEW_SCENE = "\u0000new"
  * whatever the host's screens show. Rhema here never changes the host's screens.
  *
  * The same screen is Rhema's OBS companion mode (`aside`: the way back to the full studio) and the
- * whole of Rhema Companion, the small app (`secure`: it joins only over the host's secure page,
+ * whole of Rhema Studio Companion, the small app (`secure`: it joins only over the host's secure page,
  * with the host's certificate shown before pairing and pinned).
  */
 export function CompanionScreen({ aside, secure = false, children }: { aside?: ReactNode; secure?: boolean; children?: ReactNode } = {}) {
@@ -50,7 +50,7 @@ function Header({ aside, secure }: { aside?: ReactNode; secure: boolean }) {
     <header className="flex flex-wrap items-start gap-3 border-b border-border pb-4">
       <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CameraIcon className="size-5" /></span>
       <div className="min-w-0 flex-1">
-        <p className="text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">{secure ? "Rhema Companion" : "OBS companion"}{device ? ` · ${device}` : ""}</p>
+        <p className="text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">{secure ? "Rhema Studio Companion" : "OBS companion"}{device ? ` · ${device}` : ""}</p>
         <h1 className="text-xl font-bold tracking-[-0.02em]">The church's cameras, in this computer's OBS</h1>
         <p className="mt-0.5 max-w-[640px] text-xs text-muted-foreground">Each phone sends its picture once, to the camera router on the main Rhema computer. This OBS takes the cameras it wants from there, on the church network only, and cuts between them on its own: the screens in church are not changed from here.</p>
       </div>
@@ -105,7 +105,7 @@ function HostCard({ secure }: { secure: boolean }) {
   )
 }
 
-/** Rhema Companion: the host's certificate this computer paired with, the only one it accepts. */
+/** Rhema Studio Companion: the host's certificate this computer paired with, the only one it accepts. */
 function PinnedCertificate() {
   const [paired, setPaired] = useState<PairedHost | null>(null)
   useEffect(() => {

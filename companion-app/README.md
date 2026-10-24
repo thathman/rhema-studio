@@ -1,4 +1,4 @@
-# Rhema Companion
+# Rhema Studio Companion
 
 A small app for a second computer that runs **OBS only**. It finds the church's Rhema on the
 network, pairs with it, lists the church's phone cameras, and adds the ones you pick to this
@@ -10,7 +10,7 @@ Version 1.0.0.0 (the build tools take three parts, so files say 1.0.0).
 
 ## App or mode?
 
-| | Rhema Companion (this app) | OBS companion mode in Rhema |
+| | Rhema Studio Companion (this app) | OBS companion mode in Rhema |
 |---|---|---|
 | Install | Only this small app (a 4 MB Windows installer; the app is about 10 MB) | The whole Rhema app with its speech and Bible models |
 | Talks to the host | Only over the host's secure page, with the host's certificate shown before pairing and pinned after | Over the host's plain http page |
@@ -43,7 +43,7 @@ Everything is its own, never the studio app's (identifier `com.openbezal.rhema.c
   address, delay buffer) and `companion.json` (the paired host and its certificate fingerprint).
 - macOS: `~/Library/Application Support/com.openbezal.rhema.companion/`.
 - The pairing key and the OBS password go in the system's credential store under
-  "Rhema Companion" (Windows Credential Manager, macOS Keychain); the settings file keeps them only
+  "Rhema Studio Companion" (Windows Credential Manager, macOS Keychain); the settings file keeps them only
   where there is no credential store.
 - Its log: `%LOCALAPPDATA%\com.openbezal.rhema.companion\logs\` (Windows),
   `~/Library/Logs/com.openbezal.rhema.companion/` (macOS).
@@ -78,17 +78,17 @@ bun run companion:build
 
 The results:
 
-- `companion-app\src-tauri\target\release\Rhema Companion.exe` — runs as it is.
-- `companion-app\src-tauri\target\release\bundle\nsis\Rhema Companion_1.0.0_x64-setup.exe` — the
+- `companion-app\src-tauri\target\release\Rhema Studio Companion.exe` — runs as it is.
+- `companion-app\src-tauri\target\release\bundle\nsis\Rhema Studio Companion_1.0.0_x64-setup.exe` — the
   installer (per-user, no administrator needed).
 
-First build on the Windows workstation (2026-10-24): about 6 minutes; `Rhema Companion.exe` 10.3 MB,
+First build on the Windows workstation (2026-10-24): about 6 minutes; `Rhema Studio Companion.exe` 10.3 MB,
 the installer 4.0 MB. The Mac `.app` (Intel) is 8.2 MB.
 
 While working on it: `bun run companion:dev` (a window with live reload; the page is served on port
 3001, so it runs beside the studio's dev server).
 
-The first start asks the **Windows Defender Firewall** whether Rhema Companion may use networks:
+The first start asks the **Windows Defender Firewall** whether Rhema Studio Companion may use networks:
 allow **Private networks**. It needs that to find hosts (mDNS, UDP 5353) and to read the cameras
 (SRT from the host's camera router). It listens on no port of its own. OBS's own firewall prompt is
 separate.
@@ -96,7 +96,7 @@ separate.
 ## Build and run on macOS
 
 Xcode Command Line Tools, Rust stable and Bun, then `bun install` and `bun run companion:build`.
-The app is `companion-app/src-tauri/target/release/bundle/macos/Rhema Companion.app` (ad-hoc
+The app is `companion-app/src-tauri/target/release/bundle/macos/Rhema Studio Companion.app` (ad-hoc
 signed; the first open needs right-click → Open). On an Intel Mac building for Intel:
 `bun run companion:build -- --target x86_64-apple-darwin`.
 
@@ -119,3 +119,6 @@ signed; the first open needs right-click → Open). On an Intel Mac building for
   shared crate `src-tauri/crates/join` (`rhema-join`), which Rhema itself uses too; this app adds
   the pinned https link, its own files, the tray and starting with the computer. No NDI, speech,
   models, Bible, content database or camera router.
+- `companion-app/src-tauri/icons`: the owner's approved Rhema Studio icon from the brand pack
+  (`04_Launcher_Assets`): `icon.ico`, `icon.icns` and `512x512.png` (Companion-Launcher-512) byte for
+  byte; the 32, 128 and 256 pixel PNGs are scaled down from that 512 PNG, never redrawn.
