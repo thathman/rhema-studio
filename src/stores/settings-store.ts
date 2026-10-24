@@ -545,8 +545,6 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 let tauriStore: Store | null = null
 let hydrationPromise: Promise<void> | null = null
-/** Settings found at the top of the file (the layout before the three parts): removed there by the next save. */
-const flatKeys = new Set<string>()
 
 /** A saved value as this build uses it, or undefined when it is missing or of the wrong shape (the default stays). */
 function readSetting(key: string, value: unknown): unknown {
@@ -609,12 +607,9 @@ export function hydrateSettings(): Promise<void> {
       }
       for (const key of PERSISTED_KEYS) {
         const part = parts[sectionOf(key)!]
-        let value: unknown
-        if (part && key in part) value = part[key]
-        else {
-          value = await store.get(key)
-          if (value !== undefined && value !== null) flatKeys.add(key)
-        }
+        // The top-level copy wins: an older Rhema reads and writes only that one (see persistAll).
+        let value: unknown = await store.get(key)
+        if ((value === undefined || value === null) && part && key in part) value = part[key]
         const read = readSetting(key, value)
         if (read !== undefined) (patch as Record<string, unknown>)[key] = read
       }
@@ -708,13 +703,15 @@ async function persistAll(state: SettingsState): Promise<void> {
     let file: Partial<SettingsState> = {}
     if (ok) for (const name of SECRET_NAMES) file = withSecret(file, name, "", state)
     for (const name of SECTION_NAMES) {
-      await store.set(name, Object.fromEntries(SETTINGS_SECTIONS[name].map((key) => [key, (key in file ? file[key] : state[key]) as unknown])))
+      const entries = SETTINGS_SECTIONS[name].map((key) => [key, (key in file ? file[key] : state[key]) as unknown] as const)
+      await store.set(name, Object.fromEntries(entries))
+      // ponytail: each setting is also kept at the top of the file, so an older Rhema opened on this
+      // computer still reads it (it knows only that layout). Drop the copies once no older build is in use.
+      for (const [key, value] of entries) await store.set(key, value)
     }
     await store.set("settingsLayout", SETTINGS_LAYOUT)
     await store.set("secretsInKeychain", keychainUnreadable || (ok && json !== ""))
-    for (const key of [...flatKeys]) await store.delete(key)
     await store.save()
-    flatKeys.clear()
     if (useSettingsStore.getState().settingsSaveFailed) useSettingsStore.setState({ settingsSaveFailed: false })
   } catch {
     console.warn("[settings] Failed to persist settings")

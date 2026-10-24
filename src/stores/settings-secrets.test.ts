@@ -54,12 +54,12 @@ describe("secrets in the system keychain (RG-08)", () => {
     await settle()
     expect(useSettingsStore.getState().deepgramApiKey).toBe("dg-1234567890")
     expect(JSON.parse(keychain!)).toEqual({ deepgramApiKey: "dg-1234567890", remoteSecret: "sunday-key-1", obsPassword: "obs-pass-99" })
-    // Saved in the machine part (#298 M11), blanked there; the old top-level copies are gone.
+    // Saved in the machine part (#298 M11) and at the top for older builds, blanked in both.
     const machine = file.get("machine") as Record<string, unknown>
     expect(machine.deepgramApiKey).toBe("")
     expect(machine.remoteSecret).toBe("")
     expect((machine.obs as { password: string }).password).toBe("")
-    expect(file.has("deepgramApiKey") || file.has("remoteSecret") || file.has("obs")).toBe(false)
+    expect([file.get("deepgramApiKey"), file.get("remoteSecret"), (file.get("obs") as { password: string }).password]).toEqual(["", "", ""])
     expect(file.get("secretsInKeychain")).toBe(true)
 
     vi.resetModules()

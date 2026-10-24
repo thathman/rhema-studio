@@ -83,7 +83,7 @@ describe("settings in three parts: church, machine, operator (#298 M11)", () => 
     expect(sectionOf("secretsInKeychain")).toBeNull()
   })
 
-  it("an old flat file loads field by field, and the next save moves every field into its part", async () => {
+  it("an old flat file loads field by field, and the next save writes every field into its part as well", async () => {
     for (const [k, v] of Object.entries(OLD_FILE)) file.set(k, structuredClone(v))
     const { hydrateSettings, useSettingsStore, SETTINGS_SECTIONS, SECTION_NAMES } = await import("./settings-store")
     await hydrateSettings()
@@ -107,7 +107,8 @@ describe("settings in three parts: church, machine, operator (#298 M11)", () => 
     expect(operator.operatorName).toBe("Tolu")
     expect(operator.onboardingComplete).toBe(true)
     // The old top-level copies are gone; the file's own marker stays.
-    for (const key of Object.keys(OLD_FILE)) if (key !== "secretsInKeychain") expect(file.has(key), key).toBe(false)
+    // The top-level copies stay, written again, so an older Rhema on this computer still reads its settings.
+    for (const key of Object.keys(OLD_FILE)) if (key !== "secretsInKeychain") expect(file.get(key), key).toEqual(key === "gain" ? 1.5 : OLD_FILE[key as keyof typeof OLD_FILE])
     expect(file.get("secretsInKeychain")).toBe(false)
 
     // Read again: nothing lost on the way.
@@ -121,17 +122,17 @@ describe("settings in three parts: church, machine, operator (#298 M11)", () => 
     }
   })
 
-  it("a part wins over an old top-level copy; a setting its part does not have yet is read at the top", async () => {
+  it("the top-level copy wins over its part (an older build may have changed it); a setting only in a part is read there", async () => {
     file.set("settingsLayout", 2)
     file.set("operator", { operatorName: "Femi" })
-    file.set("operatorName", "Tolu") // left by an older build
-    file.set("gain", 2) // not in the machine part yet
+    file.set("operatorName", "Tolu") // changed since by an older build, which writes only the top
+    file.set("machine", { gain: 2 }) // only in its part
     file.set("church", "damaged") // a damaged part is ignored, its settings read at the top
     file.set("brandKit", { version: 1, churchName: "Grace Chapel" })
     const { hydrateSettings, useSettingsStore } = await import("./settings-store")
     await hydrateSettings()
     const s = useSettingsStore.getState()
-    expect(s.operatorName).toBe("Femi")
+    expect(s.operatorName).toBe("Tolu")
     expect(s.gain).toBe(2)
     expect(s.brandKit.churchName).toBe("Grace Chapel")
   })
