@@ -53,13 +53,13 @@ fn bible_path() -> Option<PathBuf> {
 }
 
 /// The Rhema settings file, for the opt-in switch and the church's name.
-fn settings(dir: &Path) -> Value {
+pub(crate) fn settings(dir: &Path) -> Value {
     std::fs::read_to_string(dir.join("settings.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null)
 }
 
 /// One setting from the settings file: in its part ("church", "machine" or "operator", #298), or at
 /// the top in a file from before the parts.
-fn setting<'a>(s: &'a Value, part: &str, key: &str) -> Option<&'a Value> {
+pub(crate) fn setting<'a>(s: &'a Value, part: &str, key: &str) -> Option<&'a Value> {
     s.get(part).and_then(|p| p.get(key)).or_else(|| s.get(key))
 }
 

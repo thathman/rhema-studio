@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### OBS companion: the church's cameras in OBS on a second computer (#209)
+- A computer that streams with OBS can now run Rhema as an **OBS companion**: choose **This computer runs OBS only (companion)** in the first-run setup or the Desk menu. It shows one small screen (join the main computer, connect to OBS here, the cameras) and loads none of the studio, the Bible models or speech.
+- **Add to OBS** puts a camera into this computer's OBS as a Media Source, in a new scene named after it or a scene you pick. Each phone still sends once; OBS cuts between the cameras on its own. Rhema keeps the cameras' addresses current in OBS, says when OBS is not receiving a camera and starts it again, and never removes anything you made in OBS.
+- Companions read the cameras encrypted (SRT), each with its own sign-in; unpairing one or taking back control from it disconnects it at once.
+- The main computer's **Production → Cameras** now names who watches each camera (its screens, TVs, desks, OBS here and each OBS companion), shows **On OBS** when a companion has the camera on its program, and adds up the network load, with a plain warning when it is high for Wi-Fi.
+
 ### New desk roles: Worship, Stage, Camera, OBS director; scenes changed from a joined desk (#243, #215)
 - Four new roles for a paired desk (Settings → Remote control, with a line on what each may do): **Worship** (songs and hymns), **Stage** (the stage message), **Camera** (camera-ready, hiding a camera from scenes, the camera boxes in scenes) and **OBS director** (switches OBS scenes through the main computer's OBS connection; never in rehearsal). Each gets its own desk in Production → Operators, and the main computer checks every command.
 - A Screens desk can now **make and change scenes** from another computer. A new scene, or a change to a scene on no screen, goes in at once; a change to a scene on a screen, deleting one, or any scene change while Approvals is on, waits in the main desk's notices for **Accept** or **Decline**.

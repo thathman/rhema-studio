@@ -188,6 +188,9 @@ pub fn run() {
             commands::join::host_discover,
             commands::join::join_me,
             commands::join::join_command,
+            commands::join::join_cameras,
+            commands::join::join_tally,
+            commands::companion::app_restart,
             commands::join::join_voice,
             commands::cameras::whep_offer,
             commands::camera_router::camera_router_start,
@@ -270,6 +273,12 @@ pub fn run() {
 
             #[cfg(feature = "qa-bridge")]
             qa_bridge::spawn(app.handle());
+
+            // An OBS companion (#209) loads only what its one screen needs: no Bible search models.
+            let companion = app.path().app_data_dir().is_ok_and(|d| commands::companion::companion_mode(&d));
+            if companion {
+                log::info!("OBS companion mode: the Bible search models are not loaded");
+            }
 
             // User content (services, rundowns) lives in the app data dir.
             // Failure here must not stop the app: live presentation does not
@@ -360,7 +369,9 @@ pub fn run() {
             let embeddings_path = base_dir.join("embeddings/kjv-qwen3-0.6b.bin");
             let ids_path = base_dir.join("embeddings/kjv-qwen3-0.6b-ids.bin");
 
-            if model_path.exists() && tokenizer_path.exists() {
+            if companion {
+                // Nothing to load: the companion screen never searches the Bible.
+            } else if model_path.exists() && tokenizer_path.exists() {
                 use rhema_detection::semantic::embedder::TextEmbedder;
                 use rhema_detection::semantic::index::VectorIndex;
                 match rhema_detection::OnnxEmbedder::load(&model_path, &tokenizer_path) {

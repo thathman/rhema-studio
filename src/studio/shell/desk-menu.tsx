@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { getVersion } from "@tauri-apps/api/app"
-import { ChevronsUpDownIcon, CircleHelpIcon, ClipboardCheckIcon, FileTextIcon, HistoryIcon, InfoIcon, KeyboardIcon, ListChecksIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react"
+import { CameraIcon, ChevronsUpDownIcon, CircleHelpIcon, ClipboardCheckIcon, FileTextIcon, HistoryIcon, InfoIcon, KeyboardIcon, ListChecksIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useTheme } from "@/components/theme-provider"
 import { openSettings } from "@/lib/settings-dialog"
@@ -13,6 +13,7 @@ import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
+import { switchMode } from "@/stores/companion-store"
 import { useSetupStatus } from "@/studio/setup/use-setup-status"
 
 /** The roles a host can give a joined computer, as the Desk menu names them. */
@@ -67,6 +68,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
   const [draft, setDraft] = useState(name)
   const [deviceDraft, setDeviceDraft] = useState(deviceName)
   const [confirmPutBack, setConfirmPutBack] = useState(false)
+  const [confirmCompanion, setConfirmCompanion] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const nameBox = useRef<HTMLInputElement>(null)
@@ -104,6 +106,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
       setDraft(name)
       setDeviceDraft(deviceName)
       setConfirmPutBack(false)
+      setConfirmCompanion(false)
     } else {
       commit()
       commitDevice()
@@ -283,6 +286,19 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               <ListChecksIcon /> Complete setup
             </button>
             <SetupStatusRow onOpen={() => run(() => useShellStore.getState().setSetupStatusOpen(true))} />
+            {confirmCompanion ? (
+              <div role="group" aria-label="Use this computer for OBS only" className="mx-1 mb-1 rounded-md border border-border bg-muted/50 px-2 py-1.5 text-xs">
+                <p className="font-medium">Make this computer an OBS companion? Rhema starts again with one small screen: join the main computer and add its cameras to OBS here. The studio comes back from that screen.</p>
+                <div className="mt-1.5 flex gap-1.5">
+                  <Button size="xs" onClick={() => run(() => void switchMode(true))}>Start as OBS companion</Button>
+                  <Button size="xs" variant="ghost" onClick={() => setConfirmCompanion(false)}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className={ROW} onClick={() => setConfirmCompanion(true)}>
+                <CameraIcon /> This computer runs OBS only…
+              </button>
+            )}
             <button type="button" className={ROW} onClick={() => run(() => setShortcuts(true))}>
               <KeyboardIcon /> Keyboard shortcuts
             </button>

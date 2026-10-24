@@ -13,6 +13,7 @@ export const REMOTE_ROLES: readonly { id: RemoteRole; name: string; may: string 
   { id: "stage", name: "Stage", may: "Writes, takes off and puts back the stage message. Nothing the congregation sees." },
   { id: "camera", name: "Camera", may: "Answers camera-ready requests, hides a camera from scenes or shows it again, and changes the camera boxes in scenes." },
   { id: "obs", name: "OBS director", may: "Switches OBS scenes through the host's own OBS connection (Preview, Take or switch). Never in rehearsal." },
+  { id: "obs-companion", name: "OBS companion", may: "A computer that runs OBS only: reads the church's cameras into its own OBS (encrypted, its own sign-in) and says which are on its program. Sends nothing to the service." },
   { id: "present", name: "Present only", may: "Moves through the service, shows and hides, the Bible, songs, scenes and the event clock. Not settings." },
   { id: "configure", name: "Present and change settings", may: "Everything Present does, plus looks, the on-air switch and making or changing scenes." },
 ]

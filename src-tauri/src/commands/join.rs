@@ -45,13 +45,18 @@ struct PairReply {
     error: Option<String>,
 }
 
-/// Pair with the host while its pairing window is open; the token comes back once.
+/// Pair with the host while its pairing window is open; the token comes back once. `role` asks
+/// for a role that does less than Present (an OBS companion, #209); the host decides.
 #[tauri::command]
-pub async fn join_pair(address: String, code: String, name: String) -> Result<String, String> {
+pub async fn join_pair(address: String, code: String, name: String, role: Option<String>) -> Result<String, String> {
     let url = format!("{}/api/v1/pair", base_url(&address)?);
+    let mut body = serde_json::json!({ "code": code.trim(), "name": name.trim() });
+    if let Some(r) = role.filter(|r| r == "obs-companion") {
+        body["role"] = serde_json::Value::String(r);
+    }
     let reply: PairReply = client(Some(Duration::from_secs(10)))?
         .post(url)
-        .json(&serde_json::json!({ "code": code.trim(), "name": name.trim() }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("Could not reach the host: {e}"))?
@@ -73,6 +78,35 @@ pub async fn join_me(address: String, token: String) -> Result<serde_json::Value
         return Err(if r.status().as_u16() == 401 { "The host no longer knows this computer: pair again".into() } else { format!("The host answered {}", r.status()) });
     }
     r.json().await.map_err(|e| e.to_string())
+}
+
+/// What an OBS companion is told by its host (#209): the church's cameras, who reads them, and
+/// its own way to read them while the host's camera router runs.
+#[tauri::command]
+pub async fn join_cameras(address: String, token: String) -> Result<serde_json::Value, String> {
+    let url = format!("{}/api/v1/cameras/watch", base_url(&address)?);
+    let r = client(Some(Duration::from_secs(8)))?.get(url).header("X-Rhema-Key", token).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
+    let status = r.status().as_u16();
+    let v = r.json::<serde_json::Value>().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        return Ok(v);
+    }
+    let why = v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from);
+    Err(if status == 423 { format!("paused: {why}") } else { why })
+}
+
+/// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
+/// OBS plays, for the host's Production → Cameras.
+#[tauri::command]
+pub async fn join_tally(address: String, token: String, tally: serde_json::Value) -> Result<(), String> {
+    let url = format!("{}/api/v1/cameras/tally", base_url(&address)?);
+    let r = client(Some(Duration::from_secs(5)))?.post(url).header("X-Rhema-Key", token).json(&tally).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
+    if r.status().is_success() {
+        return Ok(());
+    }
+    let status = r.status().as_u16();
+    let v = r.json::<serde_json::Value>().await.unwrap_or_default();
+    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from))
 }
 
 /// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this

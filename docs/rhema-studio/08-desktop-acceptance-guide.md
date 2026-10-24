@@ -1400,6 +1400,30 @@ The host with a saved service (a main service with a start time, Welcome 5, Serm
 | 10fa.9 | Optional, long: run a service for more than an hour with Remote presses or verse steps every few seconds (or leave a joined Bible desk stepping), past 2000 log lines (Keep log shows the count). Open Prepare → Run of show. | The first items still show their actual start and Done, never Skipped; the expected end has not jumped. | Unverified |
 | 10fa.10 | Mid-service, with an item running, set the Mac's clock 1 minute ahead (System Settings → Date & Time, automatic off), wait 2 minutes, put it right again. Then force-quit Rhema (Activity Monitor → Force Quit), open it again and accept the kept log. | The service log comes back with "Service log kept from before Rhema closed unexpectedly". Run of show: the item that was running across the clock change shows the same time on air it had before the force-quit (not a minute more or less). | Unverified |
 
+### 10fc. OBS companion: the church's cameras in OBS on a second computer (#209)
+
+Two computers on the church network, no internet needed: **A** is the main Rhema (camera router
+on, at least two cameras added and sending from phones), **B** runs OBS (28 or later) and this
+build of Rhema. On B, OBS → Tools → WebSocket Server Settings → Enable (note the password). Wired
+first, then repeat 10fc.6 to 10fc.9 with B on Wi-Fi.
+
+| # | Step | Expected | Result |
+|---|------|----------|--------|
+| 10fc.1 | B, first run: choose **This computer runs OBS only (companion)**. (On an existing install: Desk menu → **This computer runs OBS only…** → Start as OBS companion.) | Rhema starts again with one screen, "The church's cameras, in this computer's OBS": Join a host, OBS, Cameras. No sidebar, no Present, no output windows. Rhema's log says "OBS companion mode: the Bible search models are not loaded"; Activity Monitor shows Rhema on B well below the studio's memory. With unsaved work in the studio, the Desk menu refuses with "Save your work first". | Unverified |
+| 10fc.2 | A: Settings → Remote control → Pair a device. B: pick A under Join a host, type the code, Join. | B shows A's church name, Connected. On A, Settings → Remote control and Production → Operators list B with the role **OBS companion**. | Unverified |
+| 10fc.3 | B: in the OBS card, tick Connect to OBS, address 127.0.0.1, port 4455, the password, Save. | Connected. The Cameras list shows A's cameras with Sending / Not sending, codec, size and Mbit/s, and who watches each. | Unverified |
+| 10fc.4 | B: **Add to OBS** on Pulpit (A scene named "Pulpit"). | Toast "Pulpit is in OBS". In OBS: a scene **Pulpit** with a Media Source "Pulpit (Rhema camera)" filling the canvas: Local File unticked, the input an `srt://<A>:8890?streamid=read:companion/pulpit:read-…` address, Restart playback when source becomes active ticked, hardware decoding on. The picture plays within a few seconds; the camera's line says "OBS is receiving it". | Unverified |
+| 10fc.5 | B: pick an existing OBS scene in Choir's list → Add to OBS; then **Add all to OBS**. Rename and crop an input in OBS. | Choir goes into that scene; every other camera gets its own scene. Nothing in OBS is removed or moved; the renamed input keeps playing and is still listed as that camera. | Unverified |
+| 10fc.6 | In OBS on B, switch the program to Pulpit (or Studio Mode: Choir in preview). | A's Production → Cameras: Pulpit says **On OBS** "On the program of <B>'s OBS" (Choir "OBS preview") within ~3 s; B's list shows **On OBS program**. A's screens and scenes do not change; taking a scene on A does not change OBS. | Unverified |
+| 10fc.7 | A: Production → Cameras. | Each camera names who reads it ("Rhema screens on this computer", a TV by address, "<B> (OBS companion)"), and the network line adds up the load ("about N Mbit/s, M readers"). With many readers (e.g. 4 cameras into 2 companions and 2 TVs) above ~25 Mbit/s it warns "That is a lot for Wi-Fi". | Unverified |
+| 10fc.8 | A: **New link** on Pulpit, re-open the camera page on the phone. Then quit and reopen Rhema on A (router on again). | B's OBS gets the new address by itself within a few seconds (the input's address changes; the picture comes back); no scene in OBS is touched. | Unverified |
+| 10fc.9 | Stop the Pulpit phone's camera page; start it again. | B says once "Pulpit has stopped sending"; when the phone is back, OBS plays it again by itself (Rhema restarts the input if OBS had ended it). | Unverified |
+| 10fc.10 | B: Delay buffer → Wi-Fi (400 ms). | Within a few seconds each camera's input in OBS has `latency=400000`; the picture is a little later and survives a brief Wi-Fi drop. | Unverified |
+| 10fc.11 | Measure: point a phone camera at a running stopwatch on A's screen; compare with OBS's program on B (photo of both). Note cable / Wi-Fi, buffer. | Record the figure for cable and Wi-Fi. Expected well under a second wired at Normal; this could not be measured on the build Mac (see the PR). | Unverified |
+| 10fc.12 | A: **Take back control** of B in Operators. Then give it back. Then revoke B in Settings → Remote control. | Taken back: within ~2 s B's OBS stops receiving (A's router disconnects it and it cannot sign in again) and B says "The main desk has taken back control". Given back: the cameras play again by themselves. Revoked: B says it must pair again; OBS on B cannot read the cameras. | Unverified |
+| 10fc.13 | Security: on a third device, try `srt://<A>:8890?streamid=read:companion/pulpit` (VLC or ffplay) without B's sign-in, and with B's old sign-in after 10fc.12. | Refused both times. (Plain `rtsp://<A>:8554/pulpit` and WHEP still play on the church network, as before; see cameras.md.) | Unverified |
+| 10fc.14 | B: **Open the full studio…** → Start the full studio. | Rhema starts again as the whole studio (sidebar, Present, Bible search); the cameras stay in OBS. Desk menu → This computer runs OBS only… goes back. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

@@ -30,7 +30,8 @@ interface JoinState {
    * count as skew. Null until one arrives.
    */
   clockSkewMs: number | null
-  pair: (address: string, code: string, name: string) => Promise<void>
+  /** `asCompanion`: this computer runs OBS only (#209) and pairs as an OBS companion, which the host may change. */
+  pair: (address: string, code: string, name: string, asCompanion?: boolean) => Promise<void>
   connect: () => Promise<void>
   leave: (forget?: boolean) => Promise<void>
   /**
@@ -123,10 +124,10 @@ export const useJoin = create<JoinState>((set, get) => ({
   live: null,
   receivedAt: 0,
   clockSkewMs: null,
-  pair: async (address, code, name) => {
+  pair: async (address, code, name, asCompanion = false) => {
     set({ status: "connecting", error: null })
     try {
-      const token = await invoke<string>("join_pair", { address, code, name })
+      const token = await invoke<string>("join_pair", asCompanion ? { address, code, name, role: "obs-companion" } : { address, code, name })
       useSettingsStore.getState().setJoin({ joinAddress: address.trim(), joinName: name.trim(), joinToken: token })
       await get().connect()
     } catch (e) {

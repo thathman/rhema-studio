@@ -133,7 +133,7 @@ type FoundHost = { name: string; address: string }
  * picking one fills its address, or type it. Nothing is filled in by itself and the pairing code is
  * always typed: a computer on the network can call itself anything, and the host checks the code.
  */
-function JoinForm() {
+export function JoinForm({ asCompanion = false }: { asCompanion?: boolean } = {}) {
   const error = useJoin((s) => s.error)
   const address = useSettingsStore((s) => s.joinAddress)
   const token = useSettingsStore((s) => s.joinToken)
@@ -166,7 +166,9 @@ function JoinForm() {
   }
   return (
     <Card kicker="Another computer" title="Join a host">
-      <p className="text-muted-foreground">Follow the Rhema that runs the service and help from here, as its host allows. On the host: Settings → Remote control → Pair a device. Then pick the host below (check its address matches the one on its screen) or type its address, and type its code.</p>
+      <p className="text-muted-foreground">
+        {asCompanion ? "Pair with the Rhema that runs the service, to take its cameras into OBS here." : "Follow the Rhema that runs the service and help from here, as its host allows."} On the host: Settings → Remote control → Pair a device. Then pick the host below (check its address matches the one on its screen) or type its address, and type its code.
+      </p>
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Rhema hosts on this network">
         {hosts?.map((h) => (
           <Button key={h.address} type="button" size="sm" variant={form.address.trim() === h.address ? "secondary" : "outline"} aria-pressed={form.address.trim() === h.address} onClick={() => pick(h)} title={h.address}>
@@ -195,7 +197,7 @@ function JoinForm() {
         className="flex flex-col gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          void useJoin.getState().pair(form.address, form.code, form.name || "Operator")
+          void useJoin.getState().pair(form.address, form.code, form.name || (asCompanion ? "OBS computer" : "Operator"), asCompanion)
         }}
       >
         <label className="flex flex-col gap-0.5">

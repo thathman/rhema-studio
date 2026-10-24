@@ -25,6 +25,14 @@ export interface RouterPath {
   source: string | null
   readers: number
   tracks: string[]
+  /** Its picture size and what it sends (kbit/s), when the router knows (#209). Absent from an older build. */
+  width?: number | null
+  height?: number | null
+  kbps?: number | null
+  /** Who reads it: Rhema screens, TVs, OBS here, OBS companions, by name; `remote` = over the network. */
+  watchers?: { kind: string; name: string; remote: boolean }[]
+  /** What each OBS companion said: on its program, in its preview, receiving it. */
+  obs?: { desk: string; program: boolean; preview: boolean; receiving: boolean }[]
 }
 
 export interface RouterStatus {

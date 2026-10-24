@@ -70,6 +70,32 @@ describe("Cameras panel (#209)", () => {
     expect(text).toContain(`srt://192.168.1.20:8890?streamid=publish:pulpit:cam-pulpit:${cam.token}&pkt_size=1316`)
   })
 
+  it("names who reads each camera, which OBS companion has it on program, and warns when the network load is high for Wi-Fi", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }, { name: "choir", label: "Choir", token: "b".repeat(32) }] })
+    const watchers = [
+      { kind: "screen", name: "Rhema screens on this computer", remote: false },
+      { kind: "screen", name: "A screen or TV at 192.168.1.40", remote: true },
+      { kind: "companion", name: "Media desk (OBS companion)", remote: true },
+    ]
+    answers.camera_router_status = router({ paths: [
+      { name: "pulpit", live: true, source: "webRTCSession", readers: 3, tracks: ["H264"], width: 1280, height: 720, kbps: 4000, watchers, obs: [{ desk: "Media desk", program: true, preview: false, receiving: true }] },
+      { name: "choir", live: true, source: "webRTCSession", readers: 1, tracks: ["H264"], kbps: 4000, watchers: [watchers[2]], obs: [{ desk: "Media desk", program: false, preview: true, receiving: false }] },
+    ] })
+    const el = await mount()
+    const text = el.textContent ?? ""
+    expect(text).toContain("H264 · 1280×720 · 4.0 Mbit/s")
+    expect(text).toContain("Read by: Rhema screens on this computer, A screen or TV at 192.168.1.40, Media desk (OBS companion)")
+    expect(text).toContain("On the program of Media desk's OBS")
+    expect(text).toContain("In the preview of Media desk's OBS (its OBS is not receiving it)")
+    // 4 Mbit/s × 2 network readers + 4 × 1 = 12 Mbit/s: fine for Wi-Fi.
+    expect(text).toContain("about 12.0 Mbit/s (3 readers on other computers and TVs)")
+    expect(el.querySelector('[role="alert"]')?.textContent ?? "").not.toContain("a lot for Wi-Fi")
+    answers.camera_router_status = router({ paths: [{ name: "pulpit", live: true, readers: 8, tracks: ["H264"], kbps: 4000, watchers: Array.from({ length: 8 }, (_, i) => ({ kind: "screen", name: `TV ${i}`, remote: true })), obs: [] }] })
+    const busy = await mount()
+    expect(busy.textContent).toContain("about 32.0 Mbit/s")
+    expect(busy.textContent).toContain("That is a lot for Wi-Fi")
+  })
+
   it("New link gives the camera a new secret, which the router and listener are told", async () => {
     useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }] })
     const stop = startCameras()
