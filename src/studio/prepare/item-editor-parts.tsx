@@ -11,8 +11,11 @@ import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
 
-import { GO_LIVE_CUES, isImageItem, isSlideItem, isSongItem, type GoLiveCue, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem } from "@/types"
-import { CUE_ACTIONS } from "@/lib/cues"
+import { GO_LIVE_CUES, isImageItem, isSlideItem, isSongItem, isVerseItem, type GoLiveCue, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
+import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
+import { cleanTakeSteps, obsStep, parseTakeStep, sceneStep, takeSteps, type ParsedTakeStep } from "@/lib/item-intent"
+import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useObsStore } from "@/stores/obs-store"
 import { formatDuration, parseDuration } from "@/lib/run-of-show"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSoundStore } from "@/stores/sound-store"
@@ -382,6 +385,156 @@ export function GoLiveCues({ item }: { item: QueueItem }) {
           {GO_LIVE_CUES.map((c) => <option key={c} value={c}>{CUE_ACTIONS[c].label}</option>)}
         </select>
       </label>
+    </section>
+  )
+}
+
+const fieldLabel = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
+const fieldSelect = "h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs"
+
+/** One kind of Take step replaced (or removed, with null); the rest kept, in the order they run. */
+function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeStep | null) {
+  useQueueStore.getState().updateItem(itemId, (i) => {
+    const rest = cleanTakeSteps(i.on_take).filter((s) => parseTakeStep(s)?.kind !== kind)
+    const next = cleanTakeSteps(step ? [...rest, step] : rest)
+    return { ...i, on_take: next.length ? next : null }
+  })
+}
+
+/**
+ * Prepare: how this item is meant to look (#299 6.6, #243 RS.3): a congregation scene, a look and a
+ * camera, chosen from the church's own. Present shows them under Preview as the plan; none is taken
+ * by itself (Signals → When you Take it can arm the scene for your Take).
+ */
+export function LookAndScene({ item }: { item: QueueItem }) {
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const looks = useBroadcastStore((s) => s.themes)
+  const cameras = useSettingsStore((s) => s.cameras)
+  const update = (patch: Partial<Pick<QueueItem, "scene_id" | "look_id" | "camera">>) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, ...patch }))
+  const setScene = (id: string | null) => {
+    update({ scene_id: id })
+    // A scene armed for the Take follows the item's scene (and goes when it has none).
+    const armed = takeSteps(item).find((s) => s.kind === "scene")
+    if (armed && armed.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id, armed.outputId) : null)
+  }
+  const pick = (value: string) => (value === "" ? null : value)
+  // A saved choice this computer does not have stays selected, and says so.
+  const unknown = (id: string | null | undefined, known: boolean) => (id && !known ? <option value={id}>Not on this computer</option> : null)
+  return (
+    <section className="mt-4 ml-7 flex flex-col gap-2 border-t border-border pt-3 pl-2 text-xs" aria-labelledby={`look-${item.id}`}>
+      <h3 id={`look-${item.id}`} className="text-sm font-semibold">Look and scene</h3>
+      <p className="text-muted-foreground">The plan for this item. Present shows it under Preview; nothing here changes a screen. The look is how Preview above draws it.</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <label className="min-w-0">
+          <span className={fieldLabel}>Scene</span>
+          <select aria-label={`Scene for ${item.reference}`} value={item.scene_id ?? ""} onChange={(e) => setScene(pick(e.target.value))} className={fieldSelect}>
+            <option value="">None</option>
+            {unknown(item.scene_id, scenes.some((s) => s.id === item.scene_id))}
+            {scenes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0">
+          <span className={fieldLabel}>Look</span>
+          <select aria-label={`Look for ${item.reference}`} value={item.look_id ?? ""} onChange={(e) => update({ look_id: pick(e.target.value) })} className={fieldSelect}>
+            <option value="">The screen's own</option>
+            {unknown(item.look_id, looks.some((l) => l.id === item.look_id))}
+            {looks.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0">
+          <span className={fieldLabel}>Camera</span>
+          <select aria-label={`Camera for ${item.reference}`} value={item.camera ?? ""} onChange={(e) => update({ camera: pick(e.target.value) })} className={fieldSelect}>
+            <option value="">None</option>
+            {unknown(item.camera, cameras.some((c) => c.name === item.camera))}
+            {cameras.map((c) => <option key={c.name} value={c.name}>{c.label}</option>)}
+          </select>
+        </label>
+      </div>
+      {scenes.length === 0 && cameras.length === 0 && <p className="text-muted-foreground">Scenes are made in Production → Programs, cameras in Production → Cameras.</p>}
+    </section>
+  )
+}
+
+/**
+ * Prepare: what your own Take of this item also does (#243 RS.4, OB.2): take its scene, switch OBS,
+ * or (a reading) go to the Bible feeds only. Runs once as you, or a joined desk, take it on air;
+ * never for a timed move or a phase running by itself, and none of it puts anything live by itself.
+ */
+export function TakeSteps({ item }: { item: QueueItem }) {
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const obsScenes = useObsStore((s) => s.scenes)
+  const obsOn = useSettingsStore((s) => s.obs.enabled)
+  const steps = takeSteps(item)
+  const sceneArmed = steps.find((s) => s.kind === "scene")
+  const obs = steps.find((s) => s.kind === "obs")
+  const sourceOnly = steps.some((s) => s.kind === "source")
+  const [obsText, setObsText] = useState<string | null>(null)
+  const sceneName = scenes.find((s) => s.id === item.scene_id)?.name
+  const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
+  const impact = takeImpact(item.on_take)
+  const listId = `obs-scenes-${item.id}`
+  const applyObs = () => {
+    if (obsText === null) return
+    setTakeStep(item.id, "obs", obsText.trim() ? obsStep(obsText.trim()) : null)
+    setObsText(null)
+  }
+  return (
+    <section className="mt-4 ml-7 flex flex-col gap-2 border-t border-border pt-3 pl-2 text-xs" aria-labelledby={`take-${item.id}`}>
+      <h3 id={`take-${item.id}`} className="text-sm font-semibold">When you Take it</h3>
+      <p className="text-muted-foreground">Runs once when you (or a joined desk) take this item on air: not for a timed move or a phase running by itself. In rehearsal a scene Take is practice and OBS is never changed.</p>
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          className="mt-0.5 size-4"
+          checked={!!sceneArmed}
+          disabled={!item.scene_id && !sceneArmed}
+          onChange={(e) => setTakeStep(item.id, "scene", e.target.checked && item.scene_id ? sceneStep(item.scene_id) : null)}
+        />
+        <span>
+          <span className="font-medium">Take its scene{sceneName ? `, ${sceneName}` : ""}</span>
+          <span className="block text-muted-foreground">{item.scene_id ? "Arranges the screen as the scene; what is live stays live." : "Choose its scene first (Slides → Look and scene)."}</span>
+        </span>
+      </label>
+      {sceneArmed?.kind === "scene" && congregation.length > 1 && (
+        <label className="ml-6 min-w-0">
+          <span className={fieldLabel}>On</span>
+          <select aria-label={`Screen for the scene of ${item.reference}`} value={sceneArmed.outputId ?? ""} onChange={(e) => setTakeStep(item.id, "scene", sceneStep(sceneArmed.sceneId, e.target.value || null))} className={fieldSelect}>
+            <option value="">Every congregation screen</option>
+            {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </label>
+      )}
+      <label className="min-w-0">
+        <span className={fieldLabel}>Switch OBS to</span>
+        <Input
+          aria-label={`OBS scene when ${item.reference} is taken`}
+          list={listId}
+          value={obsText ?? (obs?.kind === "obs" ? obs.scene : "")}
+          placeholder={obsOn ? "An OBS scene, e.g. Sermon" : "Connect OBS in Production → OBS first"}
+          maxLength={180}
+          className="h-7 text-xs"
+          onChange={(e) => setObsText(e.target.value)}
+          onBlur={applyObs}
+          onKeyDown={(e) => { if (e.key === "Enter") applyObs(); if (e.key === "Escape") setObsText(null) }}
+        />
+        <datalist id={listId}>{obsScenes.map((n) => <option key={n} value={n} />)}</datalist>
+        <span className="mt-0.5 block text-muted-foreground">In OBS's Studio Mode it waits in OBS's preview for OBS's own Take.</span>
+      </label>
+      {isVerseItem(item) && (
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-0.5 size-4" checked={sourceOnly} onChange={(e) => setTakeStep(item.id, "source", e.target.checked ? "source.only" : null)} />
+          <span>
+            <span className="font-medium">Bible feeds only</span>
+            <span className="block text-muted-foreground">Take sends this reading to the feeds that follow Bible (an OBS lower third, a scene's Bible box); the main screens keep what they show.</span>
+          </span>
+        </label>
+      )}
+      {impact.length > 0 && (
+        <ul className="list-disc pl-4 text-muted-foreground" aria-label="What your Take of it also touches">
+          {impact.map((line) => <li key={line}>{line}</li>)}
+        </ul>
+      )}
     </section>
   )
 }

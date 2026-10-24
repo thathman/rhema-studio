@@ -4,11 +4,12 @@ import { SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { draftAuthor, draftDiff, draftToRundown, itemKey, leaveOut, type AiDraft, type AiDraftItem } from "@/lib/ai-drafts"
+import { draftAuthor, draftDiff, draftToRundown, itemKey, leaveOut, matchSuggestions, type AiDraft, type AiDraftItem, type DraftNames } from "@/lib/ai-drafts"
 import type { QueueItem } from "@/types"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useBroadcastStore } from "@/stores/broadcast-store"
 
 /**
  * Prepare → AI drafts (Rhema MCP, #252): services an assistant proposed, waiting for review.
@@ -28,6 +29,10 @@ export function AiDrafts() {
   const rundown = useQueueStore((s) => s.items)
   const count = rundown.length
   const dirty = useServiceStore((s) => s.dirty)
+  // The church's looks and scenes: a suggestion naming one becomes the item's look or scene.
+  const looks = useBroadcastStore((s) => s.themes)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const names: DraftNames = { looks, scenes }
   const load = useCallback(() => invoke<AiDraft[]>("ai_drafts_list").then(setDrafts).catch(() => setDrafts([])), [])
   useEffect(() => {
     void load()
@@ -39,7 +44,7 @@ export function AiDrafts() {
     const queue = useQueueStore.getState()
     if (!discard && (useServiceStore.getState().dirty || queue.items.length > 0)) return setReplace(d)
     if (useServiceStore.getState().closeProgram({ discard: true }) !== "closed") return
-    const { items, headers } = draftToRundown(leaveOut(d, outOf(d)))
+    const { items, headers } = draftToRundown(leaveOut(d, outOf(d)), undefined, names)
     useQueueStore.setState({ items, headers, activeIndex: null })
     setReplace(null)
     setPicking(null)
@@ -60,7 +65,7 @@ export function AiDrafts() {
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Services an AI assistant proposed</DialogTitle>
-            <DialogDescription>Each was checked against your library and Bible editions. Opening one puts it in the rundown you edit here in Prepare, as an unsaved service to check and save; nothing is approved or shown until you do.</DialogDescription>
+            <DialogDescription>Each was checked against your library and Bible editions. Opening one puts it in the rundown you edit here in Prepare, as an unsaved service to check and save; nothing is approved or shown until you do. A suggested look or scene your church has is set on its item for Preview; it is never taken live.</DialogDescription>
           </DialogHeader>
           {drafts.length > 0 && (count > 0 || current) && (
             <p className="rounded-md bg-muted p-2 text-xs">
@@ -87,13 +92,13 @@ export function AiDrafts() {
                   </div>
                   <p>{items.length < all ? `${items.length} of ${all}` : items.length} items · {minutes} min planned{missing.length > 0 ? <span className="font-semibold text-confidence-mid"> · {missing.length} missing from the library</span> : null}</p>
                   {choosing ? (
-                    <ChooseItems draft={d} out={out} onChange={(next) => setPicking({ id: d.id, out: next })} />
+                    <ChooseItems draft={d} out={out} names={names} onChange={(next) => setPicking({ id: d.id, out: next })} />
                   ) : (
                     <ol className="flex flex-col gap-0.5 text-muted-foreground">
-                      {d.phases.map((p, i) => <li key={i}><span className="font-semibold text-foreground">{p.name}</span>{p.starts_at ? ` · ${p.starts_at}` : ""}: {p.items.map((it, ii) => `${it.group && it.group !== p.items[ii - 1]?.group ? `[${it.group}] ` : ""}${label(it)}${it.end_by ? ` (by ${it.end_by})` : ""}${suggestion(it)}`).join(" · ")}</li>)}
+                      {d.phases.map((p, i) => <li key={i}><span className="font-semibold text-foreground">{p.name}</span>{p.starts_at ? ` · ${p.starts_at}` : ""}: {p.items.map((it, ii) => `${it.group && it.group !== p.items[ii - 1]?.group ? `[${it.group}] ` : ""}${label(it)}${it.end_by ? ` (by ${it.end_by})` : ""}${suggestion(it, names)}`).join(" · ")}</li>)}
                     </ol>
                   )}
-                  {current && <Differences title={current.title} draft={draftToRundown(chosen, () => "").items} open={rundown} />}
+                  {current && <Differences title={current.title} draft={draftToRundown(chosen, () => "", names).items} open={rundown} />}
                   {d.assumptions && d.assumptions.length > 0 && <p className="text-muted-foreground">Assumed: {d.assumptions.join("; ")}</p>}
                   {replace?.id === d.id ? (
                     <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md bg-muted p-2">
@@ -124,7 +129,7 @@ const label = (it: AiDraftItem) => it.song?.title ?? it.reference ?? it.title ??
  * Every item of a draft with a tick box, under its phase and group: untick what to leave out.
  * A group's box ticks or unticks all of it.
  */
-function ChooseItems({ draft, out, onChange }: { draft: AiDraft; out: Set<string>; onChange: (out: Set<string>) => void }) {
+function ChooseItems({ draft, out, names, onChange }: { draft: AiDraft; out: Set<string>; names: DraftNames; onChange: (out: Set<string>) => void }) {
   const set = (keys: string[], keep: boolean) => {
     const next = new Set(out)
     for (const k of keys) {
@@ -164,7 +169,7 @@ function ChooseItems({ draft, out, onChange }: { draft: AiDraft; out: Set<string
                     <label key={key} className={`flex items-center gap-2 ${run.group ? "pl-6" : ""}`}>
                       <input type="checkbox" className="size-4" checked={!out.has(key)} onChange={(e) => set([key], e.target.checked)} />
                       <span className={it.kind === "missing" ? "text-confidence-mid" : ""}>{it.kind === "missing" ? `Missing ${it.wanted === "hymn" ? "hymn" : "song"}: ` : ""}{label(it)}</span>
-                      <span className="text-muted-foreground">{[it.planned_minutes ? `${it.planned_minutes} min` : null, it.end_by ? `by ${it.end_by}` : null].filter(Boolean).join(" · ")}{suggestion(it)}</span>
+                      <span className="text-muted-foreground">{[it.planned_minutes ? `${it.planned_minutes} min` : null, it.end_by ? `by ${it.end_by}` : null].filter(Boolean).join(" · ")}{suggestion(it, names)}</span>
                     </label>
                   ))}
                 </div>
@@ -196,8 +201,13 @@ function Differences({ title, draft, open }: { title: string; draft: QueueItem[]
   )
 }
 
-/** The assistant's look / scene suggestion for an item, to apply by hand if wanted (MCP-004). */
-function suggestion(it: AiDraftItem): string {
-  const parts = [it.suggested_look ? `look: ${it.suggested_look}` : null, it.suggested_scene ? `scene: ${it.suggested_scene}` : null].filter(Boolean)
+/**
+ * The assistant's look / scene suggestion for an item (MCP-004): set on the item when the church has
+ * one by that name, otherwise only shown, to choose by hand in the item's Look and scene.
+ */
+function suggestion(it: AiDraftItem, names: DraftNames): string {
+  const { look, scene } = matchSuggestions(it, names)
+  const part = (what: string, m: { name: string; id: string | null } | null) => (m ? `${what}: ${m.name}${m.id ? "" : " (none here by that name)"}` : null)
+  const parts = [part("look", look), part("scene", scene)].filter(Boolean)
   return parts.length ? ` (${parts.join(", ")})` : ""
 }

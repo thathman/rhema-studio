@@ -384,7 +384,7 @@ mod tests {
             .unwrap();
         let p = home.create_program("Sunday", Some("2026-10-25")).unwrap();
         let items = vec![
-            ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), translation: Some("KJV".into()), ..Default::default() },
+            ItemInput { kind: "verse".into(), reference: "John 3:16".into(), book_number: Some(43), chapter: Some(3), verse: Some(16), translation: Some("KJV".into()), payload: Some(serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"] }).to_string()), ..Default::default() },
             ItemInput { kind: "song".into(), reference: "Amazing Grace".into(), payload: Some(serde_json::json!({ "song_id": s.song.id, "arrangement_id": s.arrangements[0].id, "languages": ["en"], "background_media_id": pic.id }).to_string()), ..Default::default() },
             ItemInput { kind: "image".into(), reference: "Welcome.png".into(), payload: Some(serde_json::json!({ "media_id": pic.id, "fit": "cover" }).to_string()), ..Default::default() },
         ];
@@ -404,6 +404,9 @@ mod tests {
         let new_pic = church.find_media_by_hash(&hash).unwrap().unwrap();
         let image_payload: serde_json::Value = serde_json::from_str(r.program.items[2].payload.as_deref().unwrap()).unwrap();
         assert_eq!(image_payload["media_id"], new_pic.id);
+        // #243 RS.3/RS.4: the item's scene, look, camera and Take steps travel unchanged.
+        let verse_payload: serde_json::Value = serde_json::from_str(r.program.items[0].payload.as_deref().unwrap()).unwrap();
+        assert_eq!(verse_payload, serde_json::json!({ "scene_id": "scene-1", "look_id": "classic-dark", "camera": "pulpit", "on_take": ["source.only", "obs.scene:Sermon"] }));
         let song_payload: serde_json::Value = serde_json::from_str(r.program.items[1].payload.as_deref().unwrap()).unwrap();
         assert_eq!(song_payload["background_media_id"], new_pic.id);
         assert_eq!(song_payload["song_id"], s.song.id);

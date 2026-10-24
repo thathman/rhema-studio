@@ -92,4 +92,27 @@ describe("a service's phases and groups", () => {
     expect(items.map((i) => i.auto_advance)).toEqual([true, null])
     expect(JSON.parse(toItemInputs(items, undefined, undefined, headers)[0].payload!)).toMatchObject({ planned_minutes: 2, auto_advance: true })
   })
+
+  it("an item's scene, look, camera and Take steps are saved and come back (#243 RS.3, RS.4)", () => {
+    const plan = { scene_id: "scene-1", look_id: "classic-dark", camera: "pulpit", on_take: ["obs.scene:Sermon", "scene.take:scene-1@main", "quick.black", "source.only"] }
+    const saved = program([row("a", "verse", "John 3:16", JSON.stringify(plan)), row("b", "slide", "Welcome", JSON.stringify({ title: "Welcome", body: "", scene_id: "", camera: 7, on_take: "obs.scene:x" }))])
+    const { items, headers } = toQueueItems(saved, 1, [])
+    // Steps in the order they run; one this build does not know is dropped.
+    expect(items[0]).toMatchObject({ scene_id: "scene-1", look_id: "classic-dark", camera: "pulpit", on_take: ["source.only", "scene.take:scene-1@main", "obs.scene:Sermon"] })
+    expect(items[0].payload_extra).toBeUndefined()
+    // Broken values are left out, not guessed.
+    expect(["scene_id", "look_id", "camera", "on_take"].filter((k) => k in items[1])).toEqual([])
+    const back = toItemInputs(items, undefined, undefined, headers)
+    expect(JSON.parse(back[0].payload!)).toEqual({ scene_id: "scene-1", look_id: "classic-dark", camera: "pulpit", on_take: ["source.only", "scene.take:scene-1@main", "obs.scene:Sermon"] })
+    expect(JSON.parse(back[1].payload!)).toEqual({ title: "Welcome", body: "" })
+  })
+
+  it("a service saved before items had a plan opens and saves exactly as before", () => {
+    const saved = program([row("a", "verse", "John 3:16"), row("b", "slide", "Welcome", JSON.stringify({ title: "Welcome", body: "Tea", planned_minutes: 3 }))])
+    const { items, headers } = toQueueItems(saved, 1, [])
+    expect(items.every((i) => !("scene_id" in i) && !("on_take" in i))).toBe(true)
+    const back = toItemInputs(items, undefined, undefined, headers)
+    expect(back[0].payload).toBeUndefined()
+    expect(JSON.parse(back[1].payload!)).toEqual({ title: "Welcome", body: "Tea", planned_minutes: 3 })
+  })
 })

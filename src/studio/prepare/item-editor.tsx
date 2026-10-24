@@ -8,7 +8,7 @@ import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type
 import { SlideList } from "@/studio/present/rundown-list"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { PreviewPanel } from "@/components/panels/preview-panel"
-import { BackgroundPicker, CommentsEditor, CustomSlideEditor, ImageItemControls, NoteEditor, GoLiveCues, PlannedMinutes, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
+import { BackgroundPicker, CommentsEditor, CustomSlideEditor, ImageItemControls, LookAndScene, NoteEditor, GoLiveCues, PlannedMinutes, TakeSteps, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
 
 const KIND: Record<string, [string, React.ReactNode]> = {
   song: ["Song", <MusicIcon key="i" />],
@@ -53,7 +53,7 @@ export function ItemEditor() {
         <TabsContent value="content" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           {/* The congregation's view of this item, as in the approved design's Slides tab. */}
           <div className="mx-2 mt-3 mb-1 h-56 overflow-hidden rounded-lg [&>div]:h-full">
-            <PreviewPanel />
+            <PreviewPanel itemLook />
           </div>
           {isSongItem(item) && (
             <>
@@ -65,6 +65,7 @@ export function ItemEditor() {
           {isImageItem(item) && <ImageItemControls item={item} />}
           {kind === "verse" && <p className="px-2 pt-3 text-xs text-muted-foreground">Shown in the translation it was added with (or the service's, if the operator overrides it in Present).</p>}
           {!isImageItem(item) && <BackgroundPicker item={item} />}
+          <LookAndScene item={item} />
         </TabsContent>
         <TabsContent value="notes" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           <NoteEditor item={item} />
@@ -77,6 +78,7 @@ export function ItemEditor() {
         <TabsContent value="signals" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           <p className="px-2 pt-3 text-xs text-muted-foreground">Signals belong to this item, not the whole service. They never take anything live by themselves.</p>
           <GoLiveCues item={item} />
+          <TakeSteps item={item} />
           <TimedAdvance item={item} />
         </TabsContent>
         <TabsContent value="timing" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">

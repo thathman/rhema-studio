@@ -87,7 +87,7 @@ async function step(run: PhaseRun) {
   const item = items[index]
   presenting = true
   try {
-    await presentQueueItem(index)
+    await presentQueueItem(index, 0, undefined, { automatic: true })
   } finally {
     presenting = false
   }

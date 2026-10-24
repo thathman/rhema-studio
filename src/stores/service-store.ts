@@ -19,6 +19,7 @@ import type {
 import { GO_LIVE_CUES, isImageItem, isSlideItem, isVerseItem, type OnLive } from "@/types"
 import { safeLink } from "@/lib/qr-bulletin"
 import { cleanComments, parseComments } from "@/lib/comments"
+import { intentPayload, parseItemIntent } from "@/lib/item-intent"
 import { interleave, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
@@ -160,6 +161,8 @@ function itemInputs(
     ...(cleanComments(i.comments).length ? { comments: cleanComments(i.comments) } : {}),
     ...(cleanOnLive(i.on_live) ? { on_live: cleanOnLive(i.on_live) } : {}),
     ...(i.auto_advance ? { auto_advance: true } : {}),
+    // Its scene, look and camera, and the steps armed for its Take (#243 RS.3, RS.4).
+    ...intentPayload(i),
   })
   return items.map((i): ItemInput =>
     isImageItem(i)
@@ -237,7 +240,7 @@ export function cleanName(raw: string | null | undefined): string {
 }
 
 /** The payload keys this build reads and writes, per item kind; anything else is kept untouched (FR-03). */
-const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "starts_at", "gap_minutes", "prepared_by", "comments", "on_live", "auto_advance"]
+const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "starts_at", "gap_minutes", "prepared_by", "comments", "on_live", "auto_advance", "scene_id", "look_id", "camera", "on_take"]
 const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
@@ -429,7 +432,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "slide") {
@@ -438,7 +441,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
@@ -456,7 +459,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
       })
       continue
     }
@@ -487,7 +490,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
   return { items, headers, unsupported, missingTranslations: [...missing] }

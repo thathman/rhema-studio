@@ -939,6 +939,23 @@ struct ExtrasPayload {
     #[serde(default)]
     #[allow(dead_code)]
     auto_advance: Option<bool>,
+    /// How the item is meant to look (#243 RS.3): a congregation scene, a look and a camera, by id.
+    /// Hints for Present's Preview; only their shape is checked here.
+    #[serde(default)]
+    scene_id: Option<String>,
+    #[serde(default)]
+    look_id: Option<String>,
+    #[serde(default)]
+    camera: Option<String>,
+    /// Steps armed for the operator's own Take of the item (#243 RS.4), e.g. "obs.scene:Sermon".
+    /// The app checks each step again before it runs one.
+    #[serde(default)]
+    on_take: Option<Vec<String>>,
+}
+
+/// A scene, look or camera id on an item: one short line.
+fn valid_intent_id(id: &str) -> bool {
+    !id.trim().is_empty() && id.chars().count() <= 80 && !id.chars().any(char::is_control)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1001,6 +1018,12 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
         if on.cue.as_deref().is_some_and(|c| !GO_LIVE_CUES.contains(&c)) {
             return Err(ContentError::Invalid(format!("item {i}: a go-live cue may only start, pause or reset the timer or clear the stage message")));
         }
+    }
+    if [&p.scene_id, &p.look_id, &p.camera].into_iter().any(|id| id.as_deref().is_some_and(|id| !valid_intent_id(id))) {
+        return Err(ContentError::Invalid(format!("item {i}: a scene, look or camera must be a short id")));
+    }
+    if p.on_take.as_ref().is_some_and(|steps| steps.len() > 8 || steps.iter().any(|s| s.is_empty() || s.chars().count() > 200 || s.chars().any(char::is_control))) {
+        return Err(ContentError::Invalid(format!("item {i}: at most 8 Take steps, each one short line")));
     }
     Ok(())
 }
@@ -1359,6 +1382,28 @@ mod tests {
             (r#"{"on_live":{"stage_message":"two\nlines"}}"#, false),
         ] {
             assert_eq!(validate_items(&[with(payload)]).is_ok(), ok, "{payload}");
+        }
+    }
+
+    #[test]
+    fn an_item_may_name_its_scene_look_camera_and_take_steps() {
+        let with = |payload: &str| ItemInput { payload: Some(payload.into()), ..verse("John 3:16", 43, 3, 16) };
+        let long = "x".repeat(81);
+        let many = serde_json::json!({ "on_take": vec!["source.only"; 9] }).to_string();
+        for (payload, ok) in [
+            (r#"{"scene_id":"scene-1","look_id":"classic-dark","camera":"pulpit"}"#.to_string(), true),
+            (r#"{"on_take":["scene.take:scene-1@main","obs.scene:Sermon","source.only"]}"#.to_string(), true),
+            (r#"{"on_take":["obs.scene:a newer step this build does not run"]}"#.to_string(), true),
+            (format!(r#"{{"scene_id":"{long}"}}"#), false),
+            (r#"{"camera":"two
+lines"}"#.to_string(), false),
+            (r#"{"look_id":"  "}"#.to_string(), false),
+            (r#"{"scene_id":7}"#.to_string(), false),
+            (r#"{"on_take":["obs.scene:a	tab"]}"#.to_string(), false),
+            (r#"{"on_take":[""]}"#.to_string(), false),
+            (many, false),
+        ] {
+            assert_eq!(validate_items(&[with(&payload)]).is_ok(), ok, "{payload}");
         }
     }
 

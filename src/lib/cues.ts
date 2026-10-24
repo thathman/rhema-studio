@@ -7,13 +7,16 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useTimerStore } from "@/stores/timer-store"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { useSettingsStore, type CustomMacro } from "@/stores/settings-store"
+import { cleanTakeSteps, parseTakeStep } from "@/lib/item-intent"
+import type { TakeStep } from "@/types"
 
 /**
  * What a cue step touches (ADR 0001, #246 C04), so a cue can say what it will do before it runs.
  * program: what the main screens show; screen: a quick screen over it; override: Black or Logo
- * over every screen and feed; timer, stage, ticker; rehearsal: leaving it.
+ * over every screen and feed; timer, stage, ticker; rehearsal: leaving it. An item's Take steps
+ * (take-steps.ts): scene, a screen's arrangement; obs, OBS's scenes; source, the Bible feeds alone.
  */
-export type CueScope = "program" | "screen" | "override" | "timer" | "stage" | "ticker" | "rehearsal"
+export type CueScope = "program" | "screen" | "override" | "timer" | "stage" | "ticker" | "rehearsal" | "scene" | "obs" | "source"
 
 const IMPACT: Record<CueScope, string> = {
   rehearsal: "Leaves rehearsal: the real program comes back",
@@ -23,6 +26,9 @@ const IMPACT: Record<CueScope, string> = {
   timer: "Changes the service timer",
   stage: "Changes the stage message",
   ticker: "Starts or stops the ticker",
+  scene: "Arranges a congregation screen as a scene: what is live stays live",
+  obs: "Changes OBS's preview or program (never in rehearsal)",
+  source: "Sends the reading to the Bible feeds only: the main screens keep what they show",
 }
 
 /**
@@ -141,4 +147,11 @@ export function cueImpact(steps: readonly CueId[]): string[] {
     if (scope && !seen.includes(scope)) seen.push(scope)
   }
   return seen.map((s) => IMPACT[s])
+}
+
+const TAKE_SCOPE = { scene: "scene", obs: "obs", source: "source" } as const satisfies Record<string, CueScope>
+
+/** What an item's Take steps will touch, one line per kind, in the order they run. */
+export function takeImpact(steps: readonly TakeStep[] | null | undefined): string[] {
+  return cleanTakeSteps(steps).map((s) => IMPACT[TAKE_SCOPE[parseTakeStep(s)!.kind]])
 }
