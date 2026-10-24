@@ -18,6 +18,8 @@ interface QueueItemBase {
   starts_at?: string | null
   /** A planned pause before it, in minutes (#196 R3); lateness before it uses this up first. */
   gap_minutes?: number | null
+  /** Its timing rules beyond the plan (#196 R1.2): a milestone, a soft end, its own warning. Absent: none. */
+  timing?: ItemTiming | null
   /**
    * Who is preparing this item (CL-007), as one short line. Older builds read and edit only this;
    * this build keeps it as the names in `assignees` joined ("Tolu, Ade").
@@ -130,6 +132,18 @@ export function isSlideItem(item: QueueItem): item is SlideQueueItem {
 
 export function isImageItem(item: QueueItem): item is ImageQueueItem {
   return item.kind === "image"
+}
+
+/**
+ * An item's timing rules (#196 R1.2). `milestone`: a moment, not a stretch of time (it takes no
+ * minutes; "Livestream begins"). `soft_end_minutes`: its planned minutes are the aim, and it may run
+ * to this many before it counts as over. `warn_minutes`: how long before its end its timer turns
+ * amber and the stage warns (otherwise 2 minutes, and the stage look's own warning).
+ */
+export interface ItemTiming {
+  milestone?: boolean
+  soft_end_minutes?: number
+  warn_minutes?: number
 }
 
 /** One team comment on a rundown item (CL-007). `at` is an ISO time. */

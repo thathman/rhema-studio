@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react"
+import { RUN_STATE_WORDS } from "@/lib/timing-state"
+import { validTimeZone } from "@/lib/church-time"
 import { MonitorIcon, PinIcon, SearchIcon } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
@@ -29,7 +31,8 @@ const DESKS: Record<string, readonly Desk[]> = {
   timekeeper: ["clock"], bible: ["bible"], screens: ["scenes"], worship: ["songs"], stage: ["stage"], camera: ["cameras", "scenes"], obs: ["obs"],
   present: ["clock", "bible", "songs", "scenes", "stage"], configure: ["clock", "bible", "songs", "scenes", "stage"],
 }
-const hhmm = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+// The host's times on the church's clock when the host says which (#196 R1.1), else this computer's.
+const hhmm = (ms: number, zone?: string) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", ...(zone && validTimeZone(zone) ? { timeZone: zone } : {}) })
 
 /** How fresh this desk's view of the host is, looked at again every second (#196 R5). */
 function useFreshness() {
@@ -324,7 +327,9 @@ function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
     <section aria-label="Event clock desk" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className={cn("font-semibold", stale && "opacity-50")}>Now: {current ? current.reference : "no event yet"}</span>
-        {live.timing && <span className={cn("tabular-nums", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground", stale && "opacity-50")}>ends {hhmm(live.timing.expectedEnd)}{late !== 0 ? ` · ${Math.abs(late)} min ${late > 0 ? "late" : "early"}` : " · on time"}</span>}
+        {/* The host's run state (#196 R3.7; absent from older hosts). */}
+        {live.timing?.state && live.timing.state !== "running" && <span className={cn("rounded-sm bg-muted px-1.5 text-[0.6875rem] font-semibold", live.timing.state === "untrusted" && "text-confidence-mid")}>{RUN_STATE_WORDS[live.timing.state] ?? live.timing.state}</span>}
+        {live.timing && <span className={cn("tabular-nums", late > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground", stale && "opacity-50")}>ends {hhmm(live.timing.expectedEnd, live.timing?.timeZone)}{late !== 0 ? ` · ${Math.abs(late)} min ${late > 0 ? "late" : "early"}` : " · on time"}</span>}
         {live.timing?.offsetMinutes ? <span className="text-muted-foreground">({live.timing.offsetMinutes > 0 ? "+" : "−"}{Math.abs(live.timing.offsetMinutes)} min{live.timing.offsetBy ? ` by ${live.timing.offsetBy}` : ""})</span> : null}
         <span className="flex-1" />
         <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "event_offset", value: -5 })}>−5 min</Button>
@@ -384,11 +389,11 @@ function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
                 })()}
                 <tr className={cn("border-t border-border/60", r.time.state === "live" && "bg-primary/10 font-semibold", r.time.state === "skipped" && "text-muted-foreground")}>
                   <td className="max-w-40 truncate px-1.5 py-1">{r.label}</td>
-                  <td className={td}>{r.time.fixed && <PinIcon className="mr-0.5 inline size-3" aria-label="Fixed start" />}{hhmm(r.time.plan[0])}–{hhmm(r.time.plan[1])}</td>
-                  <td className={td}>{r.time.state === "done" ? (r.time.actual !== undefined ? `ran ${hhmm(r.time.actual)}${r.time.ranMs !== undefined ? ` · ${formatMs(r.time.ranMs)}` : ""}` : "") : r.time.state === "skipped" ? "" : `${hhmm(r.time.expected[0])}–${hhmm(r.time.expected[1])}`}</td>
+                  <td className={td}>{r.time.fixed && <PinIcon className="mr-0.5 inline size-3" aria-label="Fixed start" />}{hhmm(r.time.plan[0], live.timing?.timeZone)}–{hhmm(r.time.plan[1], live.timing?.timeZone)}</td>
+                  <td className={td}>{r.time.state === "done" ? (r.time.actual !== undefined ? `ran ${hhmm(r.time.actual, live.timing?.timeZone)}${r.time.ranMs !== undefined ? ` · ${formatMs(r.time.ranMs)}` : ""}` : "") : r.time.state === "skipped" ? "" : `${hhmm(r.time.expected[0], live.timing?.timeZone)}–${hhmm(r.time.expected[1], live.timing?.timeZone)}`}</td>
                   <td className={cn(td, r.offsetMinutes !== null && r.offsetMinutes > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{r.offsetMinutes === null ? "" : offsetText(r.offsetMinutes)}</td>
-                  <td className={td}>{r.time.endBy !== undefined ? hhmm(r.time.endBy) : ""}</td>
-                  <td className={cn("px-1.5 py-1", r.time.cut ? "font-semibold text-destructive" : r.time.conflict && "font-semibold text-confidence-mid")}>{r.time.cut ? "Cut short" : r.time.conflict ? "Late for its fixed start" : STATUS[r.time.state]}</td>
+                  <td className={td}>{r.time.endBy !== undefined ? hhmm(r.time.endBy, live.timing?.timeZone) : ""}</td>
+                  <td className={cn("px-1.5 py-1", r.time.cut ? "font-semibold text-destructive" : r.time.conflict && "font-semibold text-confidence-mid")}>{r.time.cut ? "Cut short" : r.time.conflict ? "Late for its fixed start" : r.time.untrusted ? "Time not trusted" : r.time.milestone && r.time.state !== "skipped" ? (r.time.state === "upcoming" ? "Milestone" : "Reached") : r.time.overrun && r.time.state === "live" ? `${STATUS.live} · over` : STATUS[r.time.state]}</td>
                 </tr>
                 </Fragment>
               ))}
@@ -396,7 +401,7 @@ function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
           </table>
         </div>
       )}
-      {live.timing && <p className="text-muted-foreground">Main service: planned to end {hhmm(live.timing.plannedEnd)}, now expected {hhmm(live.timing.expectedEnd)}.</p>}
+      {live.timing && <p className="text-muted-foreground">Main service: planned to end {hhmm(live.timing.plannedEnd, live.timing?.timeZone)}, now expected {hhmm(live.timing.expectedEnd, live.timing?.timeZone)}.</p>}
     </section>
   )
 }
@@ -444,7 +449,7 @@ function DeskHold({ live }: { live: LiveStateV1 }) {
   if (live.hold) {
     return (
       <div role="status" aria-label="The host's service is on hold" className="flex flex-wrap items-center gap-2 rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-1.5">
-        <span className="min-w-0 flex-1"><b>On hold</b> since {hhmm(live.hold.since)}: {live.hold.reason}{live.hold.by ? ` · by ${live.hold.by}` : ""}</span>
+        <span className="min-w-0 flex-1"><b>On hold</b> since {hhmm(live.hold.since, live.timing?.timeZone)}: {live.hold.reason}{live.hold.by ? ` · by ${live.hold.by}` : ""}</span>
         <Button size="sm" disabled={off} onClick={() => void send({ command: "resume" })}>Resume</Button>
       </div>
     )

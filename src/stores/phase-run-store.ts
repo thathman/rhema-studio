@@ -4,6 +4,8 @@ import { clockInstant, clockMinutes, dwellSeconds, nextInPhase, phaseRange, plan
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useHold } from "@/stores/hold-store"
+import { validTimeZone } from "@/lib/church-time"
+import { useSettingsStore } from "@/stores/settings-store"
 
 /**
  * A loop or run-once phase running by itself in Present (issue #193). Nothing runs until the
@@ -70,7 +72,8 @@ function warmupDue(now: number): number | null {
   const { items, headers } = useQueueStore.getState()
   const at = clockMinutes(planTimeline(items, headers)?.warmupStart)
   if (at === null) return null
-  const due = clockInstant(at, now)
+  // On the church's clock (#196 R1.1).
+  const due = clockInstant(at, now, validTimeZone(useSettingsStore.getState().setup.timeZone))
   return due > now ? due : null
 }
 

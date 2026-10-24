@@ -1,5 +1,6 @@
 import { serviceTiming } from "@/lib/timing-engine"
-import { clockMinutes, clockText, type OutlineHeader } from "@/lib/run-of-show"
+import { clockAt } from "@/lib/church-time"
+import { clockMinutes, type OutlineHeader } from "@/lib/run-of-show"
 import type { QueueItem } from "@/types"
 
 export type ReadinessStatus = "ok" | "warn" | "info"
@@ -203,14 +204,14 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
   return { ready: checks.every((c) => c.status !== "warn"), checks }
 }
 
-/** The plan's end and any item planned past its end by (nothing that happened, only the plan). */
-export function planCheck(items: QueueItem[], headers: OutlineHeader[]): NonNullable<ReadinessInput["timing"]> | undefined {
+/** The plan's end and any item planned past its end by (nothing that happened, only the plan), on the church's clock (`zone`). */
+export function planCheck(items: QueueItem[], headers: OutlineHeader[], zone = ""): NonNullable<ReadinessInput["timing"]> | undefined {
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
   if (!main) return undefined
   if (clockMinutes(main.starts_at) === null) return { startSet: false, plannedEnd: null, overruns: [] }
-  const t = serviceTiming({ items, headers, firstOnAir: new Map(), onAirMs: new Map(), liveItemId: null, now: Date.now() })
+  const t = serviceTiming({ items, headers, firstOnAir: new Map(), onAirMs: new Map(), liveItemId: null, now: Date.now(), timeZone: zone })
   if (!t) return undefined
-  const hm = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+  const hm = (ms: number) => clockAt(ms, zone)
   return {
     startSet: true,
     plannedEnd: hm(t.plannedEnd),

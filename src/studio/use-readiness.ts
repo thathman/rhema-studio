@@ -1,4 +1,5 @@
 import { outputOnAir } from "@/lib/output-on-air"
+import { validTimeZone } from "@/lib/church-time"
 import { useEffect, useRef, useState } from "react"
 import { useApprovalGateStore } from "@/stores/approval-gate-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -54,6 +55,7 @@ export function useReadiness() {
   }, [])
   // Cameras and browser feeds as the signal watch last saw them (#213; Home, Present, Production).
   const cameras = useSettingsStore((s) => s.cameras)
+  const zone = validTimeZone(useSettingsStore((s) => s.setup.timeZone))
   const router = useRouterHealth()
   const feeds = useFeedHealthStore()
   const isLive = useBroadcastStore((s) => s.isLive)
@@ -135,7 +137,7 @@ export function useReadiness() {
     // With "Use my translation" on, those verses show in the operator's translation.
     missingTranslations: overrideTranslations ? [] : missingTranslations,
     unsupportedItems: unsupportedItems.length,
-    timing: planCheck(items, headers),
+    timing: planCheck(items, headers, zone),
     camerasWithoutAddress: scenes.filter((sc) => sc.layers.some((l) => l.kind === "camera" && !l.cameraUrl)).map((sc) => sc.name),
     camerasNotSending: cameraHealth(cameras, scenes, outputs, outputStatus, router.checked ? router.status : undefined)
       .filter((c) => c.assigned.length > 0 && (c.state === "not-sending" || c.state === "router-off"))

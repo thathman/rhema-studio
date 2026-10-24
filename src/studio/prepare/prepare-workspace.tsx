@@ -1,4 +1,6 @@
 import { useState } from "react"
+import { timeText } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
 import { Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -173,7 +175,7 @@ function RundownFooter() {
   )
 }
 
-const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+const hhmm = (ms: number) => timeText(ms, churchTimeZone())
 
 /** The event at a glance (approved design): what and when, how long, and when it should end; the service controls under it. */
 function EventOverview() {

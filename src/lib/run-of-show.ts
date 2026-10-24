@@ -1,3 +1,5 @@
+import { dayAt } from "@/lib/church-time"
+
 /**
  * The run of show's structure (issue #193): phases (pre-service loop, warm-up,
  * main service, post-service loop, or named ones) and groups inside them, kept
@@ -130,15 +132,14 @@ export function clockMinutes(t: string | undefined | null): number | null {
 /**
  * The instant (wall ms) of a clock time nearest `ref`: yesterday's, today's or tomorrow's, so a
  * service around midnight keeps its times on the right day. Calendar days, not 24 h, so the
- * 23- and 25-hour days of a clock change land on the right local time.
+ * 23- and 25-hour days of a clock change land on the right local time. `zone`: the church's time
+ * zone (#196 R1.1); "" is this computer's clock.
  */
-export function clockInstant(minutes: number, ref: number): number {
+export function clockInstant(minutes: number, ref: number, zone = ""): number {
   let best = NaN
   for (const days of [-1, 0, 1]) {
-    const d = new Date(ref)
-    d.setDate(d.getDate() + days)
-    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
-    if (Number.isNaN(best) || Math.abs(d.getTime() - ref) < Math.abs(best - ref)) best = d.getTime()
+    const t = dayAt(ref, days, minutes, zone)
+    if (Number.isNaN(best) || Math.abs(t - ref) < Math.abs(best - ref)) best = t
   }
   return best
 }

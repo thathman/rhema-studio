@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core"
-import { eventStarts, eventTimes } from "@/lib/journal"
 import { CONTENT_TYPES } from "@/types/broadcast"
-import { serviceTiming, type EventState, type ServiceTiming } from "@/lib/timing-engine"
+import { serviceTiming, type EventState, type OffsetMode, type ServiceTiming } from "@/lib/timing-engine"
+import type { RunState } from "@/lib/timing-state"
+import { runStateNow, timingInputNow } from "@/stores/timing-input"
+import { useTimingTrust } from "@/stores/timing-trust-store"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { cameraSourceId, lowerThirdWords, tickerWords, timerWords } from "@/lib/live-sources"
 import { cameraSending, useRouterHealth, whepUrl } from "@/lib/cameras"
@@ -45,8 +47,14 @@ export interface LiveStateV1 {
   event: { mode: "screens" | "own"; currentId: string | null }
   /** Each item; `time` for those in the main service once it has a start time (#196 R4; absent from older hosts). */
   rundown: { id: string; reference: string; plannedMinutes: number | null; time?: RundownTime }[]
-  /** offsetMinutes: the shared running-late offset and who set it (#196). */
-  timing: { plannedEnd: number; expectedEnd: number; lateMs: number; offsetMinutes?: number; offsetBy?: string | null } | null
+  /**
+   * offsetMinutes: the shared running-late offset and who set it (#196). From this slice (#196 R1.1,
+   * R3.4, R3.7; absent from older hosts): `offsetMode` (absorbed by pauses, or pushed through
+   * everything), `state` (the service's run state), `timeZone` (the church's, for showing the
+   * host's times on its clock; absent: the desk's own) and `untrusted` (after a restart, the item
+   * whose time is not trusted yet).
+   */
+  timing: { plannedEnd: number; expectedEnd: number; lateMs: number; offsetMinutes?: number; offsetBy?: string | null; offsetMode?: OffsetMode; state?: RunState; timeZone?: string; untrusted?: string } | null
   stageMessage: string
   /** The service timer (#196 R5) when this was sent: a desk counts on from when it arrived. `revision`: one more for each start, pause or correction (#196 R7; absent from older hosts). */
   timer?: { durationMs: number; elapsedMs: number; running: boolean; revision?: number }
@@ -122,6 +130,10 @@ export interface RundownTime {
   conflict?: true
   /** The planned pause before it and how much of it lateness is expected to take up (ms), when it has one. */
   pause?: [number, number]
+  /** A milestone (no minutes), running past its end, its time not trusted after a restart (#196; absent from older hosts). */
+  milestone?: true
+  overrun?: true
+  untrusted?: true
 }
 
 /** The run of show's times by item id, as the Live State carries them. */
@@ -132,13 +144,17 @@ export function rundownTimes(timing: ServiceTiming | null, onAirMs: Map<string, 
       plan: [e.plannedStart, e.plannedEnd],
       expected: [e.expectedStart, e.expectedEnd],
       ...(e.actualStart !== null ? { actual: e.actualStart } : {}),
-      ...(e.state === "done" ? { ranMs: Math.round(onAirMs.get(e.id) ?? 0) } : {}),
+      // How long it ran is left out while it can't be trusted: no time is made up (#196 R3.8).
+      ...(e.state === "done" && !e.untrusted ? { ranMs: Math.round(onAirMs.get(e.id) ?? 0) } : {}),
       state: e.state,
       ...(e.hardStop !== null ? { endBy: e.hardStop } : {}),
       ...(e.squeezed ? { cut: true as const } : {}),
       ...(e.fixedStart !== null ? { fixed: true as const } : {}),
       ...(e.conflict ? { conflict: true as const } : {}),
       ...(e.gapMs > 0 ? { pause: [e.gapMs, e.absorbedMs] as [number, number] } : {}),
+      ...(e.milestone ? { milestone: true as const } : {}),
+      ...(e.overrun ? { overrun: true as const } : {}),
+      ...(e.untrusted ? { untrusted: true as const } : {}),
     })
   }
   return out
@@ -151,9 +167,9 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
   const b = useBroadcastStore.getState()
   const q = useQueueStore.getState()
   const clock = useEventClock.getState()
-  const entries = useJournalStore.getState().entries
-  const onAirMs = eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0))
-  const timing = serviceTiming({ items: q.items, headers: q.headers, firstOnAir: eventStarts(entries), onAirMs, liveItemId: clock.currentId, now, adjustMinutes: useServiceOffset.getState().minutes })
+  const input = timingInputNow(now)
+  const onAirMs = input.onAirMs
+  const timing = serviceTiming(input)
   const times = rundownTimes(timing, onAirMs)
   const current = useServiceStore.getState().current
   return {
@@ -171,7 +187,13 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     ],
     event: { mode: clock.mode, currentId: clock.currentId },
     rundown: q.items.map((i) => { const time = times.get(i.id); return { id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null, ...(time ? { time } : {}) } }),
-    timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by } : null,
+    timing: timing
+      ? {
+          plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by,
+          offsetMode: useServiceOffset.getState().mode, state: runStateNow(), ...(input.timeZone ? { timeZone: input.timeZone } : {}),
+          ...(useTimingTrust.getState().untrusted ? { untrusted: useTimingTrust.getState().untrusted!.itemId } : {}),
+        }
+      : null,
     stageMessage: b.stageMessage,
     timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null, revision: timerRevision } })(),
     scenes: (() => { const on = scenesOnScreen(b); return b.scenes.map((s) => sceneForDesk(s, on.has(s.id))) })(),
@@ -247,7 +269,8 @@ export function startLiveStatePublisher(): () => void {
     useHold.subscribe((s, p) => { if (s.hold !== p.hold) soon() }),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
-    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit || s.requireApproval !== p.requireApproval) soon() }),
+    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit || s.requireApproval !== p.requireApproval || s.setup.timeZone !== p.setup.timeZone) soon() }),
+    useTimingTrust.subscribe(() => soon()),
     useObsStore.subscribe((s, p) => { if (s.status !== p.status || s.scenes !== p.scenes || s.program !== p.program || s.preview !== p.preview || s.studioMode !== p.studioMode) soon() }),
     useRouterHealth.subscribe(() => soon()),
   ]

@@ -1,4 +1,9 @@
 import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
+import { RUN_STATE_WORDS } from "@/lib/timing-state"
+import type { SectionTiming } from "@/lib/timing-engine"
+import { useTimingTrust } from "@/stores/timing-trust-store"
+import { timeText } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
 import { useSettingsStore } from "@/stores/settings-store"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useEffect, useState } from "react"
@@ -51,7 +56,8 @@ const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["operators", "Operators"],
 ]
 
-const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+// On the church's clock (#196 R1.1).
+const hhmm = (ms: number) => timeText(ms, churchTimeZone())
 
 function Card({ title, kicker, badge, children, className }: { title: string; kicker?: string; badge?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
@@ -131,9 +137,10 @@ function Timekeeper() {
   useTimerStore((s) => s.tick)
   const now = monotonicNow()
   const running = isRunning(timer)
-  const tone = timerTone(timer, now)
+  const { timing, state } = useServiceTiming()
+  // The item happening may warn earlier or later than two minutes before its end (#196 R1.3).
+  const tone = timerTone(timer, now, timing?.events.find((e) => e.state === "live")?.warnMs)
   const shown = timer.durationMs > 0 ? remainingMs(timer, now) : elapsedMs(timer, now)
-  const { timing } = useServiceTiming()
   const correct = (minutes: number) => {
     useTimerStore.getState().adjustMinutes(minutes)
     useJournalStore.getState().add({ kind: "timing", label: `timer corrected by ${minutes > 0 ? "+" : "−"}${Math.abs(minutes)} min` })
@@ -141,6 +148,7 @@ function Timekeeper() {
   const late = timing ? Math.round(timing.lateMs / 60_000) : 0
   return (
     <div className="grid gap-[18px] lg:grid-cols-2">
+      <UntrustedTime />
       <Card kicker="Service clock" title="The service timer" badge={<Badge tone={running ? "ok" : "off"}>{running ? "Running" : "Paused"}</Badge>}>
         <div className="rounded-[10px] bg-[#182c32] px-[22px] py-5 text-[#eef6f0]">
           <p className="text-[0.625rem] font-extrabold tracking-[0.12em] text-[#b8cec6] uppercase">{timer.durationMs > 0 ? "Remaining" : "Elapsed"}</p>
@@ -164,7 +172,7 @@ function Timekeeper() {
         <RunningLate />
         <HoldControl />
       </Card>
-      <Card kicker="Planned vs expected" title="The run of show" badge={<Button size="sm" variant="ghost" onClick={() => useShellStore.getState().setWorkspace("prepare")}>Edit run of show</Button>}>
+      <Card kicker="Planned vs expected" title="The run of show" badge={<div className="flex items-center gap-2"><Badge tone={state === "running" ? "ok" : state === "held" || state === "untrusted" ? "warn" : "off"}>{RUN_STATE_WORDS[state]}</Badge><Button size="sm" variant="ghost" onClick={() => useShellStore.getState().setWorkspace("prepare")}>Edit run of show</Button></div>}>
         <EventClockBar />
         {!timing ? (
           <p className="text-xs text-muted-foreground">Give the main service a start time in Prepare to see planned and expected times here.</p>
@@ -176,8 +184,12 @@ function Timekeeper() {
                 <li key={e.id} className="flex items-baseline gap-3 py-1.5">
                   <span className="w-12 shrink-0 font-mono text-muted-foreground tabular-nums">{hhmm(e.plannedStart)}</span>
                   <span className="min-w-0 flex-1 truncate font-medium">{e.label}</span>
+                  {e.milestone && <span className="text-muted-foreground">milestone</span>}
+                  {e.untrusted && <span className="font-semibold text-confidence-mid">time not trusted</span>}
+                  {e.overrun && e.state === "live" && <span className="font-semibold text-destructive">{e.softEnd !== null ? "past its soft end" : "running over"}</span>}
+                  {e.state === "live" && e.heldMs > 0 && <span className="text-muted-foreground tabular-nums">held {formatMs(e.heldMs)}</span>}
                   {e.state === "live" && <Badge tone="live">Now</Badge>}
-                  {e.state === "done" && <span className="text-muted-foreground">done</span>}
+                  {e.state === "done" && <span className="text-muted-foreground">{e.milestone ? "reached" : "done"}</span>}
                   {e.state === "skipped" && <span className="text-muted-foreground">skipped</span>}
                   {e.state === "upcoming" && off !== 0 && <span className={cn("tabular-nums", off > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>→ {hhmm(e.expectedStart)}</span>}
                   {e.squeezed && <span className="font-semibold text-destructive">cut short</span>}
@@ -186,6 +198,7 @@ function Timekeeper() {
             })}
           </ol>
         )}
+        {timing && <SectionFinishes sections={timing.sections} />}
       </Card>
       <CountdownCard />
       <Card kicker="Independent" title="Other timers">
@@ -630,6 +643,7 @@ function EventClockBar() {
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={at <= 0} onClick={() => useEventClock.getState().previous()}>Back one</Button>
         <Button size="sm" disabled={!next} onClick={() => useEventClock.getState().next()}>{next ? `Start ${next.reference}` : "Last event"}</Button>
+        <FinishService />
         <span className="text-muted-foreground">{mode === "screens" ? "Each item's event starts when it goes on air; you can also move it on here." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
       </div>
     </div>
@@ -638,7 +652,7 @@ function EventClockBar() {
 
 /** The service's shared running-late offset (#196): the same one Prepare and a Timekeeper desk move. */
 function RunningLate() {
-  const { minutes, by } = useServiceOffset()
+  const { minutes, by, mode } = useServiceOffset()
   const me = useSettingsStore((s) => s.operatorName.trim()) || "Main desk"
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Running late or early">
@@ -646,7 +660,81 @@ function RunningLate() {
       <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(-5, me)}>−5 min</Button>
       <Button size="sm" variant="outline" onClick={() => useServiceOffset.getState().adjust(5, me)}>+5 min</Button>
       {minutes !== 0 && <Button size="sm" variant="ghost" onClick={() => useServiceOffset.getState().reset(me)}>On schedule</Button>}
-      <span className="text-muted-foreground" role="status">{offsetWords(minutes)}{minutes !== 0 && by ? ` (${by})` : ""}; moves only what is expected, not the plan or the screens.</span>
+      {/* How the delay reaches what is to come (#196 R3.4). */}
+      <select aria-label="How the delay reaches what is to come" value={mode} onChange={(e) => useServiceOffset.getState().setMode(e.target.value === "push" ? "push" : "absorb", me)} className="h-7 rounded-md border border-input bg-card px-1.5">
+        <option value="absorb">Pauses take it up</option>
+        <option value="push">Push everything</option>
+      </select>
+      <span className="text-muted-foreground" role="status">{offsetWords(minutes)}{minutes !== 0 && by ? ` (${by})` : ""}; {mode === "push" ? "every item still to come moves by it, pauses and fixed starts too" : "pauses take it up first and fixed starts keep their time"}. It moves only what is expected, not the plan or the screens.</span>
+    </div>
+  )
+}
+
+/** Finish the service (#196 R3.7): the event clock stops, and whatever never started counts as skipped. Nothing on a screen changes. */
+function FinishService() {
+  const { state } = useServiceTiming()
+  const [armed, setArmed] = useState(false)
+  const [refused, setRefused] = useState<string | null>(null)
+  const me = useSettingsStore((s) => s.operatorName.trim()) || undefined
+  if (state === "finished") return <span className="font-semibold text-muted-foreground">Service finished</span>
+  return (
+    <>
+      <Button size="sm" variant={armed ? "default" : "outline"} disabled={state === "idle"} onClick={() => {
+        if (!armed) return setArmed(true)
+        setArmed(false)
+        setRefused(useEventClock.getState().finish(me))
+      }} onBlur={() => setArmed(false)}>{armed ? "Finish now" : "Finish service"}</Button>
+      {refused && <span className="text-muted-foreground" role="status">{refused}</span>}
+    </>
+  )
+}
+
+/**
+ * After Rhema closed unexpectedly (#196 R3.8): the item that was running has a known start but
+ * not a known run time. Until the operator says the time is right or starts it again, it says so
+ * here and wherever its time shows; nothing is put on a screen.
+ */
+function UntrustedTime() {
+  const untrusted = useTimingTrust((s) => s.untrusted)
+  const me = useSettingsStore((s) => s.operatorName.trim()) || undefined
+  if (!untrusted) return null
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-confidence-mid/50 bg-confidence-mid/10 px-3 py-2 text-xs lg:col-span-2">
+      <TriangleAlertIcon className="size-4 text-confidence-mid" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <b>{untrusted.label}: its elapsed time can't be trusted.</b> Rhema closed unexpectedly while it was running (last saved {hhmm(untrusted.lastSeen)}, started again {hhmm(untrusted.restartedAt)}). Its start is in the service log; how long it has run since is not known. Check it, then say so or start it again.
+      </span>
+      <Button size="sm" variant="outline" onClick={() => useTimingTrust.getState().confirm(me)}><CheckIcon /> The time is right</Button>
+      <Button size="sm" onClick={() => useEventClock.getState().retake(untrusted.itemId)}>Start it again now</Button>
+    </div>
+  )
+}
+
+/** When each phase and each group of the main service is planned and expected to finish (#196 R1.5). */
+function SectionFinishes({ sections }: { sections: SectionTiming[] }) {
+  const shown = sections.filter((x) => x.plannedEnd !== null || x.expectedEnd !== null || x.loop)
+  if (shown.length < 2) return null
+  return (
+    <div className="mt-3 border-t border-border pt-2 text-xs">
+      <p className="mb-1 text-[0.625rem] font-bold tracking-[0.06em] text-muted-foreground uppercase">Finishes</p>
+      <ul className="flex flex-col gap-0.5" aria-label="When each phase and group finishes">
+        {shown.map((x) => {
+          const late = x.plannedEnd !== null && x.expectedEnd !== null ? Math.round((x.expectedEnd - x.plannedEnd) / 60_000) : 0
+          return (
+            <li key={x.id} className={cn("flex items-baseline gap-2", x.type === "group" && "pl-3", x.state === "done" && "text-muted-foreground")}>
+              <span className={cn("min-w-0 flex-1 truncate", x.type === "phase" && "font-semibold")}>{x.name}</span>
+              {x.loop && x.expectedEnd === null ? (
+                <span className="text-muted-foreground">loops until stopped</span>
+              ) : (
+                <>
+                  <span className="font-mono tabular-nums text-muted-foreground">{x.plannedEnd !== null ? hhmm(x.plannedEnd) : "—"}</span>
+                  <span className={cn("w-24 text-right tabular-nums", late > 0 && x.state !== "done" && "font-semibold text-confidence-mid")}>{x.state === "done" ? "done" : x.expectedEnd !== null ? `→ ${hhmm(x.expectedEnd)}${late ? ` (${late > 0 ? "+" : "−"}${Math.abs(late)})` : ""}` : ""}</span>
+                </>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }

@@ -1,12 +1,14 @@
-import { eventStarts, eventTimes } from "@/lib/journal"
-import { clockText } from "@/lib/run-of-show"
+import { clockAt } from "@/lib/church-time"
 import { serviceTiming } from "@/lib/timing-engine"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { monotonicNow } from "@/stores/timer-store"
 import { useServiceOffset } from "@/stores/service-offset-store"
+import { useHold } from "@/stores/hold-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { timingInputNow } from "@/stores/timing-input"
+import { useTimingTrust } from "@/stores/timing-trust-store"
 import { countdownLine, countdownTarget, countdownTargets, steadyTargets } from "@/lib/countdown"
 
 /**
@@ -18,26 +20,17 @@ import { countdownLine, countdownTarget, countdownTargets, steadyTargets } from 
 let last = ""
 
 export function updateStageFinish() {
-  const q = useQueueStore.getState()
   const b = useBroadcastStore.getState()
-  const entries = useJournalStore.getState().entries
-  const now = Math.max(Date.now(), entries.at(-1)?.at ?? 0)
-  const t = serviceTiming({
-    items: q.items,
-    headers: q.headers,
-    firstOnAir: eventStarts(entries),
-    onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)),
-    liveItemId: useEventClock.getState().currentId,
-    now,
-    adjustMinutes: useServiceOffset.getState().minutes,
-  })
-  const targets = steadyTargets(b.countdowns, countdownTargets(t), now)
+  const input = timingInputNow()
+  const now = input.now
+  const t = serviceTiming(input)
+  const targets = steadyTargets(b.countdowns, countdownTargets(t, input.timeZone), now)
   if (JSON.stringify(targets) !== JSON.stringify(b.countdowns)) {
     b.setCountdowns(targets)
     refreshStageCountdown(now)
   }
-  const end = t ? new Date(t.expectedEnd) : null
-  const finish = t && end ? { time: clockText(end.getHours() * 60 + end.getMinutes()), lateMin: Math.round(t.lateMs / 60_000) } : null
+  // On the church's clock (#196 R1.1).
+  const finish = t ? { time: clockAt(t.expectedEnd, input.timeZone), lateMin: Math.round(t.lateMs / 60_000) } : null
   const key = JSON.stringify(finish)
   if (key === last) return
   last = key
@@ -56,7 +49,10 @@ export function refreshStageCountdown(now = Date.now()) {
 useQueueStore.subscribe((s, prev) => { if (s.items !== prev.items || s.headers !== prev.headers) updateStageFinish() })
 useJournalStore.subscribe((s, prev) => { if (s.entries !== prev.entries) updateStageFinish() })
 useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId) updateStageFinish() })
-useServiceOffset.subscribe((s, prev) => { if (s.minutes !== prev.minutes) updateStageFinish() })
+useServiceOffset.subscribe((s, prev) => { if (s.minutes !== prev.minutes || s.mode !== prev.mode) updateStageFinish() })
+useHold.subscribe((s, prev) => { if (s.hold !== prev.hold) updateStageFinish() })
+useTimingTrust.subscribe((s, prev) => { if (s.untrusted !== prev.untrusted) updateStageFinish() })
+useSettingsStore.subscribe((s, prev) => { if (s.setup.timeZone !== prev.setup.timeZone) updateStageFinish() })
 useBroadcastStore.subscribe((s, prev) => { if (s.stageStyle !== prev.stageStyle) refreshStageCountdown() })
 setInterval(updateStageFinish, 15_000)
 setInterval(() => refreshStageCountdown(), 1_000)

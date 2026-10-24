@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import type { OffsetMode } from "@/lib/timing-engine"
 import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
 
@@ -11,6 +12,13 @@ import { useServiceStore } from "@/stores/service-store"
 interface OffsetState {
   minutes: number
   by: string | null
+  /**
+   * How it reaches what is still to come (#196 R3.4): taken up by pauses, with fixed starts keeping
+   * their time ("absorb", as before), or pushed through everything ("push"). A choice for the
+   * running service, kept when another service opens.
+   */
+  mode: OffsetMode
+  setMode: (mode: OffsetMode, by?: string) => void
   /** Move the offset by `delta` minutes (−120 … +240 in all). */
   adjust: (delta: number, by?: string) => void
   reset: (by?: string) => void
@@ -22,6 +30,12 @@ const words = (m: number) => (m === 0 ? "on schedule" : m > 0 ? `running ${m} mi
 export const useServiceOffset = create<OffsetState>((set, get) => ({
   minutes: 0,
   by: null,
+  mode: "absorb",
+  setMode: (mode, by) => {
+    if (mode === get().mode) return
+    set({ mode })
+    useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}${mode === "push" ? "lateness now pushes everything still to come, pauses and fixed starts too" : "pauses take up lateness again, and fixed starts keep their time"}` })
+  },
   adjust: (delta, by) => {
     const minutes = clamp(get().minutes + delta)
     if (minutes === get().minutes) return

@@ -98,12 +98,12 @@ own.
 
 - Persisting a delay into the plan "after approval", and an absolute "running behind until 10:45"
   delay; R3 keeps one relative offset.
-- Gap policy choices (a pause that must not absorb, or a fixed start that may slide); today every
-  pause absorbs and every fixed start holds.
+- Gap policy choices per pause or per fixed start (a pause that must not absorb, or a fixed start
+  that may slide). One service-wide choice now exists: §8.4.
 - Time-of-day automation (start an item by itself at its fixed start). A fixed start is a promise on
   paper; somebody still presses Start.
-- Explicit church timezone and stored instants per service instance (two services in one day from
-  one template). Clock times are still local to the host computer.
+- Stored instants per service instance (two services in one day from one template). The church's
+  time zone is decided and built: §8.1.
 
 ## 7. Comparison with Ontime (concepts, not code)
 
@@ -122,3 +122,68 @@ data; this compares ideas so that a church technician who knows Ontime can find 
 | Absolute vs relative offset mode | Offset is measured against the wall clock (absolute) or against the rundown's actual start (relative, for rehearsals and recordings). | Measured against the wall clock once the service has begun; before that expected is the plan, so rehearsing on another day is not "late". |
 | Groups, milestones / flags | Groups total their events; flags mark moments to count to. | Phases and groups total their items; countdowns go to the next item, the service end or an item's end by. |
 | Count to end | A timer that finishes at its scheduled end whatever the start. | A hard stop (end by) and the countdown to a milestone. |
+
+## 8. Decided and built, 2026-10-24 (R1.1, R1.2, R1.3, R1.5, R2.10, R3.4, R3.7, R3.8)
+
+The integrator decided these for this slice; the owner's acceptance of the ADR as a whole is still
+open (it stays "Proposed"). Code: `src/lib/church-time.ts`, `src/lib/timing-engine.ts`,
+`src/lib/timing-state.ts`, `src/lib/item-timing.ts`, `src/stores/timing-input.ts` (the one snapshot
+every view uses), `src/stores/timing-trust-store.ts`, `src/stores/hold-store.ts`,
+`src/stores/event-clock-store.ts`.
+
+1. **Church time zone.** When Setup has a time zone, the engine works out every clock time ("10:00",
+   a fixed start, an end by, the warm-up's start) on that zone's calendar, and the timing views,
+   the stage finish line and the countdown labels show times on it. With none set, the computer's
+   clock is used exactly as before (the same code path, so nothing changes for a church that never
+   picks one). A joined desk receives the zone in the Live State (`timing.timeZone`) and shows the
+   host's times on it. The time-of-day clock layer in scenes still uses the computer's clock (it
+   belongs to the clock slice).
+2. **Holds count in expected times.** The host keeps this service's holds (since, until). While an
+   item is live, the time held during it is added to its expected end: its time does not run out
+   while the service waits. While a hold is on, nothing still to come is expected before now, even
+   before the service has begun. Holds that ended before an item began are already in what really
+   happened.
+3. **Item rules** (an optional `timing` object in the item's payload; older builds keep it untouched):
+   a **milestone** takes no minutes (marking one clears its planned minutes), is "reached" once
+   something after it starts (never "skipped"), and if taken it lasts no time; a **soft end**
+   (`soft_end_minutes`) lets the item run to that length before it counts as over, while expected
+   times still follow the plan and what is happening; a **warning** (`warn_minutes`, default 2)
+   sets when its timer turns amber and when the stage's "minutes left" message comes. Each item
+   also reports `overrun`: live past its end (its soft end if it has one, plus time held), or done
+   after running past it.
+4. **Delay modes** for the shared offset, chosen in Timekeeper and logged with who chose it:
+   **absorb** (the default, as §3 rule 6) or **push**: the whole offset moves every item still to
+   come, pauses and fixed starts included (a fixed start pushed late says "Late for its fixed
+   start"). Real lateness is still taken up by pauses in both modes. A hard stop still cuts, and
+   what it cuts is no longer carried to the items after it. Persisting a delay into the plan and an
+   absolute ("behind until 10:45") delay stay open (§6).
+5. **Expected finish per group and per phase.** `sections`: the main service and each of its groups
+   from its items; a run-once phase before it (the warm-up) is planned to end at the service start,
+   expected from when it really began, and over once the next phase begins; a phase after the main
+   service follows its expected end; a loop has no end of its own, and nothing after a loop has a
+   time. Shown under Timekeeper's run of show as "Finishes".
+6. **Run state machine** (`src/lib/timing-state.ts`): idle → running ⇄ held → finished, plus
+   untrusted. The state is worked out from what happened (the service log, the hold, the trust
+   flag), never stored beside it. Commands are checked against it and refused with a reason:
+   Hold once finished ("The service has finished."), Finish before anything started or while held,
+   Resume when nothing is held, Confirm when nothing is untrusted. Starting an item while held keeps
+   the hold; starting one after Finish opens the service again. **Finish service** (Timekeeper) is
+   an event-clock entry with no item: the last item's time stops there and anything never started
+   counts as skipped. Items keep their own states (upcoming, live, done, skipped) with `overrun`.
+   The Live State carries `timing.state`.
+7. **Untrusted after a restart.** When the service log is brought back after Rhema closed
+   unexpectedly, the item whose event was last started (unless the service had been finished) is
+   flagged. Its start is in the log and stays its actual start; how long it ran is not known. Until
+   the operator presses **The time is right** (logged) or takes that item again (a new event start;
+   putting the screens back is not taking it again), the engine keeps it as the item happening when
+   nothing else has started, Timekeeper shows a banner and "time not trusted", Prepare and the
+   table show its start without a length, and the Live State leaves out its `ranMs` and marks it
+   `untrusted`. Nothing is shown on a screen and no cue is run because of it.
+
+Tests: `church-time.test.ts`, `timing-engine.test.ts` (zone, holds, milestones, zero-length items,
+soft ends, warnings, push, finish, restart, sections, repeated groups, a plan that overlaps
+itself), `timing-state.test.ts`, `item-timing.test.ts`, `stores/timing-run-state.test.ts`, and the
+3-hour soak (`timing-soak.test.ts`) now runs with the church zone set, a milestone, soft ends, the
+hold feeding the sermon, a spell of push mode, Finish, and the run state checked each minute.
+Desktop acceptance: 10fd (unverified).
+

@@ -1,16 +1,19 @@
 import { LockIcon, PinIcon } from "lucide-react"
+import { clockAt } from "@/lib/church-time"
+import { churchTimeZone } from "@/stores/timing-input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useQueueStore } from "@/stores"
 import { cuesheet, pauseWords } from "@/lib/cuesheet"
 import { mmss } from "@/lib/journal"
-import { clockText } from "@/lib/run-of-show"
+
 import { formatMinutes } from "@/lib/service-timing"
 import { cn } from "@/lib/utils"
 import { itemAssignees } from "@/lib/assignees"
 import { DurationInput } from "@/studio/prepare/item-editor-parts"
 import { useServiceTiming } from "@/studio/use-service-timing"
 
-const wallClock = (ms: number) => { const d = new Date(ms); return clockText(d.getHours() * 60 + d.getMinutes()) }
+// On the church's clock (#196 R1.1).
+const wallClock = (ms: number) => clockAt(ms, churchTimeZone())
 const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}${formatMinutes(Math.abs(m) * 60_000)}`)
 const STATUS = { done: "Done", live: "On now", upcoming: "", skipped: "Skipped" } as const
 
@@ -81,7 +84,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                           onChange={(m) => useQueueStore.getState().updateItem(r.event.id, (i) => ({ ...i, planned_minutes: m }))}
                         />
                       </td>
-                      <td className={td}>{r.event.actualStart === null ? "" : `${wallClock(r.event.actualStart)} · ${mmss(r.actualMs ?? 0)}`}</td>
+                      <td className={td}>{r.event.actualStart === null ? "" : r.event.untrusted ? `${wallClock(r.event.actualStart)} · not trusted` : `${wallClock(r.event.actualStart)} · ${mmss(r.actualMs ?? 0)}`}</td>
                       <td className={td}>{r.event.state === "done" || r.event.state === "skipped" ? "" : `${wallClock(r.event.expectedStart)}–${wallClock(r.event.expectedEnd)}`}</td>
                       <td className={cn(td, r.offsetMinutes !== null && r.offsetMinutes > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{r.offsetMinutes === null ? "" : offsetText(r.offsetMinutes)}</td>
                       <td className={td}>

@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The church's time zone, holds that count, milestones, soft ends, delay modes, Finish and a restart that doesn't guess (#196)
+- When Setup has the church's **time zone**, every planned and expected time, the stage finish line and each joined desk use it; with none set, the computer's clock is used as before.
+- A **hold** now moves the expected times: the item on now is expected to end later by the time held. Production → Timekeeper shows when each **phase and group** is now expected to finish, and has **Finish service** (anything never started counts as skipped) and a state badge (Not started, Running, On hold, Finished).
+- Prepare → an item → Timing: mark a **milestone** (a moment with no minutes), give a **soft end** ("may run to 25 min" before it counts as over), and choose when its timer **warns** before the end. Running late can now **push everything** still to come, pauses and fixed starts too, instead of letting pauses take it up.
+- After Rhema closes unexpectedly mid-service, the item that was running says **its elapsed time can't be trusted** until you press **The time is right** or start it again; Rhema makes up no length for it meanwhile.
 ### AI assistants: more to read, richer drafts, off means off (#252)
 - An assistant can now also read the church's time zone, Brand Kit colours and fonts, cameras, screens and feeds (what each follows), media names, who prepares each item, the approved version of a service, and each song's arrangements and licence. No links, keys, passwords or logo, and still no lyrics.
 - A draft can plan a stage message, a cue as the item goes live, a camera, a second Bible translation, a song's languages and arrangement, and steps for your own Take. Prepare → AI drafts shows the check's warnings, such as a song with no licence recorded. Slides the assistant wrote say **AI suggestion** until you accept them.
