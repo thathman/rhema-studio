@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Find the host instead of typing its address (#197)
+- **Join a host** (Production → Operators) now lists the Rhema hosts on the church network by name (the church name from the Brand Kit, or "Rhema · " and the computer's name). Pick one to fill in its address; **Find hosts** looks again. Typing the address still works.
+- A host announces itself only while its remote control accepts other devices on the network, never when it listens to this computer only, and stops when the listener stops or Rhema quits.
+- Nothing is filled in by itself and the pairing code is always typed: the list only finds the address, and the host still checks the code.
 ### Notices: honest answers, private delivery, kept through a crash (#251)
 - Pressing the button on an action request ("Show Romans 8:28", "Take Sermon split") now answers **Ready** only when it really happened. If the main desk refused it (the desk's role does not allow it, the main desk has taken back control, or it moved to another service), the notice answers **Unable** and the desk shows the reason.
 - Each joined desk and phone now receives only the notices meant for it: those to everyone, to its role, to it by name, or that it sent. The main desk still sees them all. Before, every desk received every notice and only hid the others. Who sent a notice, and who one is for, is decided by each device's pairing key, not its name, so a desk named like the main desk or like someone else gets nothing extra; pairing no longer accepts a name ending in "(main desk)".

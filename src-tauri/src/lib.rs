@@ -161,6 +161,7 @@ pub fn run() {
             commands::remote::start_http,
             commands::remote::stop_http,
             commands::remote::get_http_status,
+            commands::remote::host_set_name,
             commands::remote::remote_set_keys,
             commands::remote::remote_pair_start,
             commands::app_close::set_unsaved_work,
@@ -184,6 +185,7 @@ pub fn run() {
             commands::join::tv_show,
             commands::join::tv_status,
             commands::join::tv_discover,
+            commands::join::host_discover,
             commands::join::join_me,
             commands::join::join_command,
             commands::join::join_voice,
@@ -419,6 +421,7 @@ pub fn run() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 commands::camera_router::shutdown(app);
+                commands::remote::shutdown(app);
                 commands::app_close::clear_running(app);
             }
         });

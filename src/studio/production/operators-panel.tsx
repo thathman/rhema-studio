@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { MonitorIcon, SearchIcon } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -112,15 +113,72 @@ function HostCard() {
 
 function JoinCard() {
   const status = useJoin((s) => s.status)
+  if (status !== "off") return <JoinedDesk />
+  return <JoinForm />
+}
+
+/** A Rhema host heard on the network (host_discover): its name and ip:port. */
+type FoundHost = { name: string; address: string }
+
+/**
+ * Join a host: Rhema looks for hosts on the network when this opens (Find hosts looks again), and
+ * picking one fills its address, or type it. Nothing is filled in by itself and the pairing code is
+ * always typed: a computer on the network can call itself anything, and the host checks the code.
+ */
+function JoinForm() {
   const error = useJoin((s) => s.error)
   const address = useSettingsStore((s) => s.joinAddress)
   const token = useSettingsStore((s) => s.joinToken)
   const [form, setForm] = useState({ address, code: "", name: useSettingsStore.getState().joinName || useSettingsStore.getState().operatorName })
-  const joined = status !== "off"
-  if (joined) return <JoinedDesk />
+  // null until the first look is back; it starts as soon as this opens.
+  const [hosts, setHosts] = useState<FoundHost[] | null>(null)
+  const [finding, setFinding] = useState(true)
+  const [findError, setFindError] = useState<string | null>(null)
+  const codeInput = useRef<HTMLInputElement>(null)
+  const look = () =>
+    invoke<FoundHost[]>("host_discover")
+      .then(
+        (found) => {
+          setHosts(Array.isArray(found) ? found : [])
+          setFindError(null)
+        },
+        (e) => setFindError(String(e)),
+      )
+      .finally(() => setFinding(false))
+  useEffect(() => {
+    void look()
+  }, []) // once, when the form opens
+  const pick = (host: FoundHost) => {
+    setForm((f) => ({ ...f, address: host.address }))
+    codeInput.current?.focus()
+  }
   return (
     <Card kicker="Another computer" title="Join a host">
-      <p className="text-muted-foreground">Follow the Rhema that runs the service and help from here, as its host allows. On the host: Settings → Remote control → Pair a device, then type its address and code here.</p>
+      <p className="text-muted-foreground">Follow the Rhema that runs the service and help from here, as its host allows. On the host: Settings → Remote control → Pair a device. Then pick the host below (check its address matches the one on its screen) or type its address, and type its code.</p>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Rhema hosts on this network">
+        {hosts?.map((h) => (
+          <Button key={h.address} type="button" size="sm" variant={form.address.trim() === h.address ? "secondary" : "outline"} aria-pressed={form.address.trim() === h.address} onClick={() => pick(h)} title={h.address}>
+            <MonitorIcon aria-hidden />
+            {h.name}
+            <span className="text-muted-foreground tabular-nums">{h.address}</span>
+          </Button>
+        ))}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={finding}
+          onClick={() => {
+            setFinding(true)
+            void look()
+          }}
+        >
+          <SearchIcon aria-hidden />
+          {finding ? "Looking for hosts…" : "Find hosts"}
+        </Button>
+      </div>
+      {!finding && hosts?.length === 0 && !findError && <p className="text-muted-foreground">No host found. Is Remote control on at the host, accepting other devices, on the same network? You can also type its address.</p>}
+      {findError && <p className="text-muted-foreground">{findError}. You can type the host's address.</p>}
       <form
         className="flex flex-col gap-2"
         onSubmit={(e) => {
@@ -135,7 +193,7 @@ function JoinCard() {
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col gap-0.5">
             <span className="text-[0.625rem] text-muted-foreground">Pairing code</span>
-            <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} inputMode="numeric" required className="h-8 rounded-md border border-input bg-transparent px-2 tracking-widest" />
+            <input ref={codeInput} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} inputMode="numeric" required className="h-8 rounded-md border border-input bg-transparent px-2 tracking-widest" />
           </label>
           <label className="flex flex-col gap-0.5">
             <span className="text-[0.625rem] text-muted-foreground">This computer's name</span>

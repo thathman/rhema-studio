@@ -5,6 +5,13 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — Find the host on the network (#197)
+
+- **Branch / PR:** `arch-007/host-discovery` (from `main` da3a4b9).
+- **Behaviour:** Host side (`src-tauri/src/commands/host_advert.rs`): pure `host_advert(bind_host, port, tls_port, church, computer)` → `_rhema-host._tcp.local.` on the http port, instance = church name (dots and control characters removed, spaces collapsed, ≤ 63 bytes) else "Rhema · <host name without .local>" else "Rhema", host name `rhema-<computer>.local.` (not the computer's own), TXT `v=1` and `tls=<port>` when https is on; None for 127.0.0.1 / ::1 / localhost / unparsable bind or port 0. `HttpRuntime::refresh_advert` (remote.rs) re-registers only when the plan changes: called by `start_http`, `stop_http` and the new `host_set_name` command; `remote::shutdown` unregisters on `RunEvent::Exit`. mdns-sd `ServiceDaemon` per announcement with `enable_addr_auto`; stop sends the goodbye (unregister, ≤ 300 ms) and shuts the daemon down. The frontend pushes the Brand Kit church name (`syncHostName` in `use-remote-control.ts`, on start and on settings change). Joining side (`join.rs`): `host_discover` (2.5 s browse) → `[{name, address:"ip:port"}]`; the TV shaping became generic `found(seen, port_ok, name)` (private then link-local IPv4, deduped by address, sorted by name) with `found_tvs` (port 8095) and `found_hosts` (any port but 0); `FoundTv` renamed `Found`. Join form: hosts listed when it opens, **Find hosts** looks again, a pick fills only the address and focuses the code; nothing auto-fills.
+- **Tests:** Rust `host_advert` (never announced on loopback/localhost/unparsable/port 0; names; TXT and host name), `join` `host_discovery_lists_hosts_on_any_port_with_their_lan_address` (escaped dot unescaped, loopback/public/port 0 dropped, dedupe); existing TV discovery tests unchanged. `studio/production/find-hosts.test.tsx`: one look on open, pick fills the address only, never auto-fills even one host, code stays empty, Find hosts again, no host / search error messages.
+- **Next:** desktop acceptance 10eh (needs two computers on one network). Not done: two hosts announcing the same church name at once show as one entry (the network name collides); a host's IPv6-only address is not listed (as with TVs).
+
 ## 2026-10-23 — Notice results, privacy and crash recovery (#251)
 
 - **Branch / PR:** `comms-006/notice-results-privacy` (from `main` c898867).

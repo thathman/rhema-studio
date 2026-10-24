@@ -220,6 +220,10 @@ pub struct HttpRuntime {
     tls_port: Option<u16>,
     /// Phone cameras and the camera router (#209); kept across restarts of the listener.
     cameras: rhema_api::SharedCameras,
+    /// The church name (Brand Kit) this host announces itself by (#197).
+    church: String,
+    /// This host's announcement on the network, while the listener is reachable from it (#197).
+    advert: Option<super::host_advert::Advertising>,
 }
 
 impl HttpRuntime {
@@ -234,6 +238,31 @@ impl HttpRuntime {
             feeds: new_feed_hub(),
             voice: new_voice_hub(),
             cameras: rhema_api::new_camera_hub(),
+            church: String::new(),
+            advert: None,
+        }
+    }
+
+    /// Announce this host on the network as it is now (#197): started, moved to another port or
+    /// renamed → announced again; stopped or on this computer only → no longer announced.
+    fn refresh_advert(&mut self) {
+        let bind = if self.lan { "0.0.0.0" } else { "127.0.0.1" };
+        let plan = self.bound_port.and_then(|port| super::host_advert::host_advert(bind, port, self.tls_port, &self.church, &super::host_advert::computer_name()));
+        if self.advert.as_ref().map(|a| &a.plan) == plan.as_ref() {
+            return;
+        }
+        if let Some(old) = self.advert.take() {
+            super::host_advert::stop(old);
+        }
+        if let Some(plan) = plan {
+            match super::host_advert::start(plan) {
+                Ok(ad) => {
+                    log::info!("Announcing this host on the network as \"{}\"", ad.plan.instance);
+                    self.advert = Some(ad);
+                }
+                // Joining computers can still type the address.
+                Err(e) => log::warn!("Could not announce this host on the network: {e}"),
+            }
         }
     }
 
@@ -310,6 +339,7 @@ pub async fn start_http(
         runtime.bound_port = Some(bound_port);
         runtime.tls_port = result.tls_port;
         runtime.lan = bind_host(lan) != "127.0.0.1";
+        runtime.refresh_advert();
     }
 
     log::info!("HTTP API server started on port {bound_port}");
@@ -326,6 +356,7 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
             handle.stop();
             runtime.bound_port = None;
             runtime.tls_port = None;
+            runtime.refresh_advert();
             log::info!("HTTP API server stopped");
             Ok(())
         }
@@ -346,6 +377,27 @@ pub async fn get_http_status(
         port: runtime.bound_port,
         tls_port: runtime.tls_port,
     })
+}
+
+/// The church name this host announces itself by on the network (#197); announced again at once
+/// when it changes while hosting.
+#[tauri::command]
+pub fn host_set_name(state: State<'_, Mutex<HttpRuntime>>, name: String) -> Result<(), String> {
+    let mut runtime = state.lock().map_err(|e| e.to_string())?;
+    runtime.church = name.chars().take(120).collect();
+    runtime.refresh_advert();
+    Ok(())
+}
+
+/// When the app quits: stop announcing this host, so joining computers stop listing it.
+pub fn shutdown(app: &AppHandle) {
+    if let Some(state) = app.try_state::<Mutex<HttpRuntime>>() {
+        if let Ok(mut runtime) = state.lock() {
+            if let Some(ad) = runtime.advert.take() {
+                super::host_advert::stop(ad);
+            }
+        }
+    }
 }
 
 /// The local CA (made once, kept in the app's data folder, its key readable only by this user) and
