@@ -51,4 +51,12 @@ describe("a hold in the service (issue #196)", () => {
     useHold.getState().resume()
     expect(useBroadcastStore.getState().stageMessage).toBe("Mic 2 is off")
   })
+
+  it("a hold from a joined desk puts up the stage message as that desk's, not this desk's operator's", () => {
+    useHold.getState().start("Waiting for the pastor", "QA Timekeeper")
+    expect(useBroadcastStore.getState().stateSources.stage?.by).toBe("QA Timekeeper")
+    useHold.getState().resume("QA Timekeeper")
+    expect(useBroadcastStore.getState().stateSources.stage?.by).toBe("QA Timekeeper")
+    expect(useBroadcastStore.getState().stateSources.stage?.on).toBe(false)
+  })
 })

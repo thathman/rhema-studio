@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { formatMs } from "@/lib/timer"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { actingAs, useBroadcastStore } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
 
 /**
@@ -34,12 +34,14 @@ export const useHold = create<HoldState>((set, get) => ({
     set({ hold: { reason, since: Date.now(), ...(by ? { by } : {}) } })
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}hold: ${reason}` })
     heldMessage = `On hold: ${reason}`
-    useBroadcastStore.getState().setStageMessage(heldMessage)
+    // The stage message is the hold's: recorded as the asking desk's, not this desk's operator's.
+    const message = heldMessage
+    actingAs(by, () => useBroadcastStore.getState().setStageMessage(message))
   },
   resume: (by) => {
     const h = get().hold
     if (!h) return
-    if (heldMessage !== null && useBroadcastStore.getState().stageMessage === heldMessage) useBroadcastStore.getState().setStageMessage("")
+    if (heldMessage !== null && useBroadcastStore.getState().stageMessage === heldMessage) actingAs(by, () => useBroadcastStore.getState().setStageMessage(""))
     heldMessage = null
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}resumed after ${formatMs(Date.now() - h.since)}` })
     set({ hold: null })
