@@ -27,7 +27,7 @@ export function CloudSpeechConsent() {
         </DialogHeader>
         <ul className="list-disc space-y-1 pl-5 text-sm">
           <li>While listening, the sound from the chosen microphone (the sermon, prayers, anything said near it) is streamed to Deepgram, a company in the United States, using your church's own Deepgram key.</li>
-          <li>Deepgram sends back the words; Rhema uses them only to suggest Bible references. Nothing goes on screen without the operator.</li>
+          <li>Deepgram sends back the words; Rhema Studio uses them only to suggest Bible references. Nothing goes on screen without the operator.</li>
           <li>Short pieces of the recognised text can appear in this computer's logs (Settings → Diagnostics hides keys, not speech).</li>
           <li>Deepgram's own terms decide what it keeps. Tell the congregation if your church's policy asks for it.</li>
         </ul>

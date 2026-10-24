@@ -116,7 +116,7 @@ pub(super) fn outputs(s: &Server) -> Result<Value, Refused> {
         }
         row
     }).collect()).unwrap_or_default();
-    Ok(json!({ "outputs": outputs, "note": if outputs.is_empty() { "No outputs saved yet: Rhema has its main screen." } else { "" } }))
+    Ok(json!({ "outputs": outputs, "note": if outputs.is_empty() { "No outputs saved yet: Rhema Studio has its main screen." } else { "" } }))
 }
 
 /// The media library by name and kind (#252 RS11): enough to name a picture or video, nothing more.
@@ -197,7 +197,7 @@ fn services(c: &rhema_content::ContentDb) -> Vec<rhema_content::Program> {
 /// `resources/read`: the resource as one JSON text, or why not.
 pub(super) fn read(s: &Server, uri: &str) -> Result<Value, Refused> {
     if !s.enabled {
-        return Err(refused(ACCESS_OFF, "Rhema's AI assistant access is off. Turn it on in Rhema → Settings → AI assistants (MCP), then ask again."));
+        return Err(refused(ACCESS_OFF, "Rhema Studio's AI assistant access is off. Turn it on in Rhema Studio → Settings → AI assistants (MCP), then ask again."));
     }
     let not_found = || refused(NOT_FOUND, "Resource not found");
     let path = uri.strip_prefix("rhema://").ok_or_else(not_found)?;

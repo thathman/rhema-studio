@@ -119,7 +119,7 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
     <section aria-label="OBS desk" className={box}>
       <p className="font-semibold">OBS <span className="font-normal text-muted-foreground">· through the host's OBS connection</span></p>
       {!obs ? (
-        <p className="text-muted-foreground">The host is an older Rhema that does not share OBS: update it to switch OBS from here.</p>
+        <p className="text-muted-foreground">The host is an older Rhema Studio that does not share OBS: update it to switch OBS from here.</p>
       ) : !obs.connected ? (
         <p className="text-muted-foreground">OBS is not connected on the host (Settings → Remote control → OBS there).</p>
       ) : (

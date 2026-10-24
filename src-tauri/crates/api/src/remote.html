@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<title>Rhema remote</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%0A%3Crect x=%224%22 y=%224%22 width=%2256%22 height=%2256%22 rx=%2216%22 fill=%22%23000000%22/%3E%3Cpath fill=%22%23FFFFFF%22 d=%22M21 15H34.2C42.63 15 48 19.73 48 27.06C48 32.79 44.9 36.9 39.36 38.5L48.8 49H39L31.2 39.68H29V49H21V15ZM29 22V32.22H34.06C37.61 32.22 39.9 30.28 39.9 27.11C39.9 23.83 37.61 22 34.06 22H29Z%22/%3E%3Cpath fill=%22%23FFFFFF%22 transform=%22translate%288 8.3%29 scale%280.54%29%22 d=%22M5.53672 15.7561C4.11705 15.7561 2.83934 15.1861 1.70361 14.0461C0.567869 12.8654 0 11.1351 0 8.85517C0 6.24951 0.689555 4.13241 2.06866 2.50388C3.48834 0.834626 5.49616 0 8.09213 0C9.02505 0 9.75517 0.0610694 10.2825 0.183208V2.99244C9.71461 2.91101 8.98449 2.8703 8.09213 2.8703C6.71302 2.8703 5.59756 3.3385 4.74576 4.27491C3.93452 5.08918 3.46805 6.16808 3.34637 7.51163C3.87367 6.86021 4.72548 6.53451 5.90178 6.53451C7.11864 6.53451 8.15297 6.962 9.00477 7.81698C9.85657 8.63125 10.2825 9.71015 10.2825 11.0537C10.2825 12.438 9.83629 13.5779 8.94393 14.4736C8.05156 15.3286 6.91583 15.7561 5.53672 15.7561ZM17.6445 15.7561C16.2248 15.7561 14.9471 15.1861 13.8114 14.0461C12.6756 12.8654 12.1078 11.1351 12.1078 8.85517C12.1078 6.24951 12.7973 4.13241 14.1764 2.50388C15.5961 0.834626 17.6039 0 20.1999 0C21.0923 0 21.8224 0.0610694 22.3902 0.183208V2.99244C21.8224 2.91101 21.0923 2.8703 20.1999 2.8703C18.8208 2.8703 17.7053 3.3385 16.8535 4.27491C16.0423 5.08918 15.5758 6.16808 15.4541 7.51163C15.9814 6.86021 16.8332 6.53451 18.0095 6.53451C19.2264 6.53451 20.2607 6.962 21.1125 7.81698C21.9643 8.63125 22.3902 9.71015 22.3902 11.0537C22.3902 12.438 21.9441 13.5779 21.0517 14.4736C20.1593 15.3286 19.0236 15.7561 17.6445 15.7561Z%22/%3E%0A%3C/svg%3E">
+<title>Rhema Studio remote</title>
 <style>
   :root { color-scheme: dark; --bg:#111; --card:#1c1c1c; --fg:#f2f2f2; --muted:#9a9a9a; --live:#d93636; --line:#333; }
   * { box-sizing: border-box; }
   body { margin:0; font:16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); padding:16px; padding-bottom:max(16px, env(safe-area-inset-bottom)); }
-  h1 { font-size:18px; margin:0 0 12px; }
+  h1 { font-size:18px; margin:0 0 12px; display:flex; align-items:center; gap:10px; }
+  h1 svg { width:30px; height:30px; flex:none; }
   p { margin:0 0 12px; color:var(--muted); font-size:14px; }
   .status { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:16px; min-height:64px; }
   .status b { display:block; color:var(--fg); font-size:17px; margin-top:2px; overflow-wrap:anywhere; }
@@ -68,9 +70,12 @@
 </head>
 <body>
 <main>
-  <h1>Rhema remote</h1>
+  <!-- The approved Rhema Studio mark (brand/01_Master_Mark/Rhema-Studio-Mark-Light.svg, as is). -->
+  <h1><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<rect x="4" y="4" width="56" height="56" rx="16" fill="#FFFFFF"/><path fill="#000000" d="M21 15H34.2C42.63 15 48 19.73 48 27.06C48 32.79 44.9 36.9 39.36 38.5L48.8 49H39L31.2 39.68H29V49H21V15ZM29 22V32.22H34.06C37.61 32.22 39.9 30.28 39.9 27.11C39.9 23.83 37.61 22 34.06 22H29Z"/><path fill="#000000" transform="translate(8 8.3) scale(0.54)" d="M5.53672 15.7561C4.11705 15.7561 2.83934 15.1861 1.70361 14.0461C0.567869 12.8654 0 11.1351 0 8.85517C0 6.24951 0.689555 4.13241 2.06866 2.50388C3.48834 0.834626 5.49616 0 8.09213 0C9.02505 0 9.75517 0.0610694 10.2825 0.183208V2.99244C9.71461 2.91101 8.98449 2.8703 8.09213 2.8703C6.71302 2.8703 5.59756 3.3385 4.74576 4.27491C3.93452 5.08918 3.46805 6.16808 3.34637 7.51163C3.87367 6.86021 4.72548 6.53451 5.90178 6.53451C7.11864 6.53451 8.15297 6.962 9.00477 7.81698C9.85657 8.63125 10.2825 9.71015 10.2825 11.0537C10.2825 12.438 9.83629 13.5779 8.94393 14.4736C8.05156 15.3286 6.91583 15.7561 5.53672 15.7561ZM17.6445 15.7561C16.2248 15.7561 14.9471 15.1861 13.8114 14.0461C12.6756 12.8654 12.1078 11.1351 12.1078 8.85517C12.1078 6.24951 12.7973 4.13241 14.1764 2.50388C15.5961 0.834626 17.6039 0 20.1999 0C21.0923 0 21.8224 0.0610694 22.3902 0.183208V2.99244C21.8224 2.91101 21.0923 2.8703 20.1999 2.8703C18.8208 2.8703 17.7053 3.3385 16.8535 4.27491C16.0423 5.08918 15.5758 6.16808 15.4541 7.51163C15.9814 6.86021 16.8332 6.53451 18.0095 6.53451C19.2264 6.53451 20.2607 6.962 21.1125 7.81698C21.9643 8.63125 22.3902 9.71015 22.3902 11.0537C22.3902 12.438 21.9441 13.5779 21.0517 14.4736C20.1593 15.3286 19.0236 15.7561 17.6445 15.7561Z"/>
+</svg>Rhema Studio remote</h1>
   <section id="pair" hidden>
-    <p>Pair this phone with the presentation computer. In Rhema: Settings → Remote → Pair a device, then scan its code or type the six digits here.</p>
+    <p>Pair this phone with the presentation computer. In Rhema Studio: Settings → Remote → Pair a device, then scan its code or type the six digits here.</p>
     <form id="pairForm">
       <label for="code">Pairing code</label>
       <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>

@@ -26,18 +26,18 @@ export function AssistantsSection() {
       </p>
       <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
         <span>
-          <span className="block font-medium">Let AI assistants read Rhema</span>
+          <span className="block font-medium">Let AI assistants read Rhema Studio</span>
           <span className="block text-xs text-muted-foreground">Drafts only: an assistant cannot change a service, a song, a setting or anything on a screen, and cannot take anything live. Off: its very next request is refused and it is told to ask you to turn this on.</span>
         </span>
-        <Switch checked={enabled} onCheckedChange={(on) => useSettingsStore.getState().setMcpEnabled(on)} aria-label="Let AI assistants read Rhema" />
+        <Switch checked={enabled} onCheckedChange={(on) => useSettingsStore.getState().setMcpEnabled(on)} aria-label="Let AI assistants read Rhema Studio" />
       </label>
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold">Add Rhema to the assistant's MCP settings</span>
+        <span className="text-xs font-semibold">Add Rhema Studio to the assistant's MCP settings</span>
         <pre className="overflow-x-auto rounded-md border border-border bg-muted p-3 text-[0.6875rem] leading-relaxed select-all">{config}</pre>
         <div><Button size="sm" variant="outline" onClick={() => void copy()}>Copy</Button></div>
       </div>
       <p className="text-xs text-muted-foreground">
-        The assistant starts Rhema in the background on this computer and talks to it directly; Rhema itself sends nothing anywhere. What the assistant does with what it reads is up to the assistant and its provider: an online assistant sends your questions and these answers to its own service. Rhema answers at most 30 requests a minute from an assistant.
+        The assistant starts Rhema Studio in the background on this computer and talks to it directly; Rhema Studio itself sends nothing anywhere. What the assistant does with what it reads is up to the assistant and its provider: an online assistant sends your questions and these answers to its own service. Rhema answers at most 30 requests a minute from an assistant.
       </p>
     </div>
   )

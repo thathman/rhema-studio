@@ -44,7 +44,7 @@ function Studio() {
       .then((files) => {
         for (const [name, aside, recovered] of files ?? []) {
           const what = name === "settings.json" ? "Settings (paired phones, remote key, cues, your name)" : "Custom themes and outputs"
-          toast.warning(recovered ? `${what} could not be read; they were put back as they were when Rhema last started` : `${what} could not be read and were reset`, {
+          toast.warning(recovered ? `${what} could not be read; they were put back as they were when Rhema Studio last started` : `${what} could not be read and were reset`, {
             description: `${recovered ? "Changes made since then need making again. " : "Set them again, or send the damaged file to whoever supports you. "}The damaged file was kept as ${aside} in the app folder (Diagnostics shows where).`,
             duration: 30_000,
           })

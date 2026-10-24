@@ -17,7 +17,7 @@ describe("Settings → AI assistants (Rhema MCP, #252)", () => {
     const config = JSON.parse(el.querySelector("pre")!.textContent!)
     expect(config.mcpServers["rhema-studio"]).toEqual({ command: "/Applications/Rhema.app/Contents/MacOS/Rhema", args: ["--mcp"] })
     expect(el.textContent).toContain("never lyrics")
-    const sw = el.querySelector('[aria-label="Let AI assistants read Rhema"]') as HTMLButtonElement
+    const sw = el.querySelector('[aria-label="Let AI assistants read Rhema Studio"]') as HTMLButtonElement
     expect(sw.getAttribute("aria-checked")).toBe("false")
     await act(async () => sw.click())
     expect(useSettingsStore.getState().mcpEnabled).toBe(true)

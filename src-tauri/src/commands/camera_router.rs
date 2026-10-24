@@ -129,7 +129,7 @@ fn new_srt_passphrase() -> String {
 /// 8000 by default).
 pub fn config_yaml(ports: &Ports, lan_ip: Option<&str>, cameras: &[(String, String)], readers: &[(String, String)], api_placeholder: &str) -> Result<String, String> {
     if !valid_secret(api_placeholder) {
-        return Err("The router's API password is not one Rhema made".into());
+        return Err("The router's API password is not one Rhema Studio made".into());
     }
     let hosts = lan_ip.filter(|ip| ip.parse::<std::net::Ipv4Addr>().is_ok()).map(|ip| format!("\"{ip}\"")).unwrap_or_default();
     let prefix = rhema_api::PUBLISH_PREFIX;
@@ -390,7 +390,7 @@ fn write_config(path: &Path, text: &str) -> Result<(), String> {
 /// `cameras_set`). Starting it while it runs leaves it as it is.
 #[tauri::command]
 pub fn camera_router_start(app: AppHandle, router: State<'_, CameraRouter>, http: State<'_, Mutex<HttpRuntime>>, keys: State<'_, super::remote::RemoteKeys>) -> Result<(), String> {
-    let binary = locate().ok_or("The camera router is not installed with this copy of Rhema.")?;
+    let binary = locate().ok_or("The camera router is not installed with this copy of Rhema Studio.")?;
     if router.lock().want {
         return Ok(());
     }
@@ -650,7 +650,7 @@ pub fn build_watch(paths: &serde_json::Value, sessions: &[Session], names: &Name
             match (s.kind, here) {
                 ("rtsp", true) => local_obs += 1,
                 ("webrtc", true) => local_screens += 1,
-                ("webrtc", false) => watchers.push(rhema_api::Watcher { kind: "screen".into(), name: s.ip.and_then(names.desk).map_or_else(|| format!("A screen or TV at {at}"), |d| format!("{d} (Rhema desk)")), remote: true }),
+                ("webrtc", false) => watchers.push(rhema_api::Watcher { kind: "screen".into(), name: s.ip.and_then(names.desk).map_or_else(|| format!("A screen or TV at {at}"), |d| format!("{d} (Rhema Studio desk)")), remote: true }),
                 ("rtsp", false) => watchers.push(rhema_api::Watcher { kind: "obs".into(), name: s.ip.and_then(names.desk).map_or_else(|| format!("OBS or a player at {at}"), |d| format!("OBS or a player on {d}")), remote: true }),
                 _ => watchers.push(rhema_api::Watcher { kind: "player".into(), name: if here { "A player on this computer".into() } else { format!("A player at {at}") }, remote: !here }),
             }
@@ -669,7 +669,7 @@ pub fn build_watch(paths: &serde_json::Value, sessions: &[Session], names: &Name
             watchers.insert(0, rhema_api::Watcher { kind: "obs".into(), name: count(local_obs, "OBS on this computer"), remote: false });
         }
         if local_screens > 0 {
-            watchers.insert(0, rhema_api::Watcher { kind: "screen".into(), name: count(local_screens, "Rhema screens on this computer"), remote: false });
+            watchers.insert(0, rhema_api::Watcher { kind: "screen".into(), name: count(local_screens, "Rhema Studio screens on this computer"), remote: false });
         }
         cam.readers = local_obs + local_screens + one_each;
         cam.watchers = watchers;
@@ -975,10 +975,10 @@ mod tests {
         let p = &w[0];
         let named: Vec<(&str, &str, bool)> = p.watchers.iter().map(|x| (x.kind.as_str(), x.name.as_str(), x.remote)).collect();
         assert_eq!(named, vec![
-            ("screen", "Rhema screens on this computer", false),
+            ("screen", "Rhema Studio screens on this computer", false),
             ("obs", "OBS on this computer", false),
             ("screen", "A screen or TV at 192.168.1.40", true),
-            ("screen", "Balcony laptop (Rhema desk)", true),
+            ("screen", "Balcony laptop (Rhema Studio desk)", true),
             ("companion", "Media desk (OBS companion)", true),
         ]);
         assert_eq!(p.readers, 5, "the router filling the companion name is not counted");

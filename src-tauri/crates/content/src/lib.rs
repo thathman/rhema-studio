@@ -234,7 +234,7 @@ impl ContentDb {
         }
         let applied = db.applied_migrations()?;
         if MIGRATIONS.iter().any(|(k, _)| !applied.iter().any(|v| v == k)) {
-            return Err(ContentError::Invalid("this Rhema has not opened its data since it was updated: open Rhema once, then ask again".into()));
+            return Err(ContentError::Invalid("this Rhema Studio has not opened its data since it was updated: open Rhema Studio once, then ask again".into()));
         }
         Ok(db)
     }
@@ -1220,7 +1220,7 @@ mod tests {
         let conn = Connection::open(&path).unwrap();
         conn.execute("DELETE FROM schema_migrations WHERE version IN ('9999_from_the_future', ?1)", [MIGRATIONS.last().unwrap().0]).unwrap();
         drop(conn);
-        assert!(matches!(ContentDb::open_read_only(&path), Err(ContentError::Invalid(m)) if m.contains("open Rhema once")));
+        assert!(matches!(ContentDb::open_read_only(&path), Err(ContentError::Invalid(m)) if m.contains("open Rhema Studio once")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

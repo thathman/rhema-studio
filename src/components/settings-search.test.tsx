@@ -109,7 +109,7 @@ describe("Settings page search", () => {
     useShellStore.setState({ goRequest: null, designRequest: null })
     useProductionTab.setState({ requested: null })
     await type("camera")
-    const group = host.querySelector('[role="group"][aria-label="Elsewhere in Rhema"]')!
+    const group = host.querySelector('[role="group"][aria-label="Elsewhere in Rhema Studio"]')!
     expect(group.textContent).toContain("Cameras and the camera router")
     expect(group.textContent).toContain("Production → Cameras")
     expect(host.querySelector('[role="status"]')!.textContent).toContain("Not in Settings")
@@ -118,16 +118,16 @@ describe("Settings page search", () => {
     expect(useShellStore.getState().goRequest).toBe("production")
 
     await type("church name")
-    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema"] button')!.click())
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')!.click())
     expect(useShellStore.getState().designRequest).toBe("brand")
 
     const before = useShellStore.getState().deskMenuRequest
     await type("dark")
-    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema"] button')!.click())
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="Elsewhere in Rhema Studio"] button')!.click())
     expect(useShellStore.getState().deskMenuRequest).toBe(before + 1)
 
     await type("")
-    expect(host.querySelector('[aria-label="Elsewhere in Rhema"]')).toBeNull()
+    expect(host.querySelector('[aria-label="Elsewhere in Rhema Studio"]')).toBeNull()
   })
 
   it("says so when nothing matches, and Esc clears the search", async () => {

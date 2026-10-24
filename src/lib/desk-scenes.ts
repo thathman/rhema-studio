@@ -209,7 +209,7 @@ export function receiveDeskScene(p: Record<string, unknown>, deleting = false): 
 /** Accept a waiting scene change (the main desk's notice button): null when done, else why not. */
 export function acceptSceneRequest(id: string): string | null {
   const r = useSceneRequests.getState().requests.find((x) => x.id === id)
-  if (!r) return "that change was already answered, or Rhema restarted since"
+  if (!r) return "that change was already answered, or Rhema Studio restarted since"
   useSceneRequests.setState((s) => ({ requests: s.requests.filter((x) => x.id !== id) }))
   if (savedAt(r.sceneId) !== r.savedAt) return "the scene changed here since it was asked; they can make the change again"
   apply(r, true)

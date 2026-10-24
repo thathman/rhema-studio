@@ -73,7 +73,7 @@ export function SongFiles() {
       </div>
       <div className="rounded-lg border border-border p-3">
         <p className="mb-2 font-medium">Import</p>
-        <p className="mb-2 text-xs text-muted-foreground">A Rhema songs file, or OpenLyrics .xml files from OpenLP (one song each). Nothing changes until the files read correctly.</p>
+        <p className="mb-2 text-xs text-muted-foreground">A Rhema Studio songs file, or OpenLyrics .xml files from OpenLP (one song each). Nothing changes until the files read correctly.</p>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={mode} onValueChange={(v) => setMode(v as ImportMode)}>
             <SelectTrigger className="h-8 w-80 text-xs" aria-label="If a song is already here"><SelectValue /></SelectTrigger>
@@ -136,7 +136,7 @@ export function DatabaseBlock() {
     <div className="text-sm">
       {busy === "restore" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95" role="alert" aria-busy="true">
-          <p className="rounded-lg border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema open.</p>
+          <p className="rounded-lg border border-border bg-card px-5 py-4 text-sm font-medium shadow-modal">Restoring the backup… keep Rhema Studio open.</p>
         </div>
       )}
       <p className="mb-2 text-xs text-muted-foreground">

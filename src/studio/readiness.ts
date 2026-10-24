@@ -110,7 +110,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
   const checks: ReadinessCheck[] = [
     i.translationsLoaded > 0
       ? { id: "bible", status: "ok", label: `Bible library loaded (${i.translationsLoaded} translation${i.translationsLoaded === 1 ? "" : "s"})` }
-      : { id: "bible", status: "warn", label: "Bible library not loaded", detail: "Scripture search and verse lookup will not work. Reinstalling Rhema puts the Bible library back; save a log for whoever supports you if it stays.", fix: "settings", fixLabel: "Save a log" },
+      : { id: "bible", status: "warn", label: "Bible library not loaded", detail: "Scripture search and verse lookup will not work. Reinstalling Rhema Studio puts the Bible library back; save a log for whoever supports you if it stays.", fix: "settings", fixLabel: "Save a log" },
     i.activeThemeName
       ? { id: "theme", status: "ok", label: `Theme: ${i.activeThemeName}` }
       : { id: "theme", status: "warn", label: "No theme selected", fix: "outputs", fixLabel: "Open outputs" },
@@ -167,7 +167,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
       ? [{ id: "missing-translations", status: "warn" as const, label: `Some verses are saved for ${i.missingTranslations.join(", ")}, which ${i.missingTranslations.length === 1 ? "is" : "are"} not installed here`, detail: 'They will not show. Install the translation, or turn on "Use my translation" in Present to show them in yours.', fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
     ...(i.unsupportedItems
-      ? [{ id: "unsupported-items", status: "warn" as const, label: `${i.unsupportedItems} item${i.unsupportedItems === 1 ? "" : "s"} from a newer version of Rhema`, detail: "This version cannot show them. Update Rhema on this computer.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
+      ? [{ id: "unsupported-items", status: "warn" as const, label: `${i.unsupportedItems} item${i.unsupportedItems === 1 ? "" : "s"} from a newer version of Rhema Studio`, detail: "This version cannot show them. Update Rhema Studio on this computer.", fix: "prepare" as const, fixLabel: "Open Prepare" }]
       : []),
     ...(i.missingMedia
       ? [{ id: "missing-media", status: "warn" as const, label: `${i.missingMedia} picture${i.missingMedia === 1 ? "" : "s"}, video${i.missingMedia === 1 ? "" : "s"} or sound${i.missingMedia === 1 ? "" : "s"} in the service ${i.missingMedia === 1 ? "is" : "are"} missing ${i.missingMedia === 1 ? "its" : "their"} file`, detail: "They would show or play nothing. Import the files again or remove the items.", fix: "prepare" as const, fixLabel: "Open Prepare" }]

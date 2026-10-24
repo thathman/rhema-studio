@@ -46,11 +46,11 @@ function Header() {
       <div className="min-w-0 flex-1">
         <p className="text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">OBS companion{device ? ` · ${device}` : ""}</p>
         <h1 className="text-xl font-bold tracking-[-0.02em]">The church's cameras, in this computer's OBS</h1>
-        <p className="mt-0.5 max-w-[640px] text-xs text-muted-foreground">Each phone sends its picture once, to the camera router on the main Rhema computer. This OBS takes the cameras it wants from there, on the church network only, and cuts between them on its own: the screens in church are not changed from here.</p>
+        <p className="mt-0.5 max-w-[640px] text-xs text-muted-foreground">Each phone sends its picture once, to the camera router on the main Rhema Studio computer. This OBS takes the cameras it wants from there, on the church network only, and cuts between them on its own: the screens in church are not changed from here.</p>
       </div>
       {asking ? (
         <div role="group" aria-label="Open the full studio" className="flex max-w-[320px] flex-col gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs">
-          <p>Use this computer as a full Rhema studio again? Rhema starts again; the cameras stay in OBS.</p>
+          <p>Use this computer as the full Rhema Studio again? Rhema Studio starts again; the cameras stay in OBS.</p>
           <div className="flex gap-1.5">
             <Button size="xs" onClick={() => void switchMode(false)}>Start the full studio</Button>
             <Button size="xs" variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
@@ -91,7 +91,7 @@ function HostCard() {
   const heard = useCompanion((s) => s.heard)
   const wrongRole = status === "connected" && me && me.role !== "obs-companion"
   return (
-    <Card kicker="The main Rhema computer" title={church || address || "The host"}>
+    <Card kicker="The main Rhema Studio computer" title={church || address || "The host"}>
       <div className="flex flex-wrap items-center gap-2">
         <span role="status"><Tone tone={status === "connected" ? "ok" : "warn"}>{status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}</Tone></span>
         <span className="text-muted-foreground">{address}{me ? ` · this computer is "${me.name}"` : ""}</span>
@@ -126,7 +126,7 @@ function Cameras() {
   return (
     <Card kicker="From the host's camera router" title="Cameras">
       {status !== "connected" ? (
-        <p className="text-muted-foreground">Join the main Rhema computer above to see its cameras.</p>
+        <p className="text-muted-foreground">Join the main Rhema Studio computer above to see its cameras.</p>
       ) : cameras.length === 0 ? (
         <p className="text-muted-foreground">No cameras on the host yet. They are added there: Production → Cameras.</p>
       ) : (
@@ -180,7 +180,7 @@ function CameraRow({ name, canAdd, scenes }: { name: string; canAdd: boolean; sc
         {input ? <> · <span className={cn(problem && "font-semibold text-foreground")}>{receivingWords(input.state ?? undefined)}</span> (“{input.input}”)</> : null}
       </p>
       {cam.watchers.length > 0 && <p className="text-muted-foreground">Watching: {cam.watchers.map((w) => w.name).join(", ")}</p>}
-      {problem && <p role="alert" className="font-semibold">OBS is not receiving {label}. Rhema is starting it again in OBS; if it keeps stopping, choose a bigger delay buffer below.</p>}
+      {problem && <p role="alert" className="font-semibold">OBS is not receiving {label}. Rhema Studio is starting it again in OBS; if it keeps stopping, choose a bigger delay buffer below.</p>}
       <div className="flex flex-wrap items-center gap-2">
         <select aria-label={`Where to add ${label} in OBS`} value={scene} onChange={(e) => setScene(e.target.value)} disabled={!canAdd} className="h-8 max-w-[260px] rounded-md border border-input bg-card px-2">
           <option value={NEW_SCENE}>A scene named “{label}”</option>

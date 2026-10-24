@@ -726,13 +726,13 @@ export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: str
   )
 }
 
-/** A Rhema Receiver Rhema heard on the network (tv_discover). */
+/** A Rhema Studio Receiver Rhema Studio heard on the network (tv_discover). */
 type FoundTv = { name: string; address: string }
 
 /**
- * Send this feed to a Google TV running Rhema Receiver (#198). Rhema looks for TVs on the network
+ * Send this feed to a Google TV running Rhema Studio Receiver (#198). Rhema Studio looks for TVs on the network
  * when this opens (Find TVs looks again); picking one fills its address, or type it. The code on the
- * TV's screen is still needed, and Rhema checks it with the TV before the link is sent (tv_show).
+ * TV's screen is still needed, and Rhema Studio checks it with the TV before the link is sent (tv_show).
  * `url` is the feed's https link; without one (the secure page is off) nothing can be sent.
  */
 export function ShowOnTv({ url, onShown }: { url: string | null; onShown?: (tv: ReceiverTv) => void }) {
@@ -784,10 +784,10 @@ export function ShowOnTv({ url, onShown }: { url: string | null; onShown?: (tv: 
   return (
     <fieldset className="flex flex-col gap-1.5 rounded-md border border-border p-2">
       <legend className="px-1 font-medium">Show on a Google TV</legend>
-      <p className="text-muted-foreground">Open Rhema Receiver on the TV: it shows its name, address and a code. Pick the TV with the same address, then type the code.</p>
+      <p className="text-muted-foreground">Open Rhema Studio Receiver on the TV: it shows its name, address and a code. Pick the TV with the same address, then type the code.</p>
       {!url && (
         <p role="status" className="text-muted-foreground">
-          Turn on the secure page in Settings → Remote control (<span className="font-medium">Secure page for phones</span>), then stop and start the listener: Rhema sends a TV only the feed&apos;s secure link.
+          Turn on the secure page in Settings → Remote control (<span className="font-medium">Secure page for phones</span>), then stop and start the listener: Rhema Studio sends a TV only the feed&apos;s secure link.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="TVs on this network">
@@ -804,7 +804,7 @@ export function ShowOnTv({ url, onShown }: { url: string | null; onShown?: (tv: 
         </Button>
       </div>
       {!finding && tvs?.length === 0 && !findError && (
-        <p className="text-muted-foreground">No TV found. Is Rhema Receiver open on it, on the same network? You can also type the address it shows.</p>
+        <p className="text-muted-foreground">No TV found. Is Rhema Studio Receiver open on it, on the same network? You can also type the address it shows.</p>
       )}
       {findError && <p className="text-muted-foreground">{findError}. You can type the address the TV shows.</p>}
       <div className="flex flex-wrap items-center gap-2">

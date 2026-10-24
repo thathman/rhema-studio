@@ -217,7 +217,7 @@ export function churchSetup(i: ChurchSetupInput): ChurchSetup {
       ? { id: "bible", label: "Bible on this computer", state: "done" }
       : bible === "checking"
         ? { id: "bible", label: "Bible on this computer", state: "checking", detail: "Looking for the Bible library…" }
-        : { id: "bible", label: "Bible on this computer", state: "attention", detail: "No Bible edition was found. Reinstalling Rhema puts the bundled library back." },
+        : { id: "bible", label: "Bible on this computer", state: "attention", detail: "No Bible edition was found. Reinstalling Rhema Studio puts the bundled library back." },
     i.settingsSaveFailed
       ? { id: "saving", label: "Settings are saved", state: "attention", detail: "The last change could not be written to disk. Save a log in Settings → Diagnostics for whoever supports you." }
       : { id: "saving", label: "Settings are saved", state: "done" },

@@ -159,7 +159,7 @@ export function BroadcastOutputsDialog({
       // while NDI is still running for that output.
       // If the sender did not stop, keep the output: removed, nothing could stop it any more.
       if ((await disableOutput(output)) === false) {
-        toast.error(`${output.name} was not removed`, { description: "Its NDI sender did not stop. Try again, or restart Rhema." })
+        toast.error(`${output.name} was not removed`, { description: "Its NDI sender did not stop. Try again, or restart Rhema Studio." })
         return
       }
       useBroadcastStore.getState().removeOutput(output.id)

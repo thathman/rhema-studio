@@ -57,7 +57,7 @@ function ReviewNotice() {
       <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><ClipboardCheckIcon className="size-4" /></span>
       <div className="min-w-0 flex-1">
         <h2 id="review-setup" className="text-sm font-semibold">Review your setup</h2>
-        <p className="text-xs text-muted-foreground">Rhema now has a short setup: this computer's name, sound, backups and a summary of what is set. Your services, songs and screens stay as they are.</p>
+        <p className="text-xs text-muted-foreground">Rhema Studio now has a short setup: this computer's name, sound, backups and a summary of what is set. Your services, songs and screens stay as they are.</p>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <Button size="sm" onClick={review}>Review setup</Button>

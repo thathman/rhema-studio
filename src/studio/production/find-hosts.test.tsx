@@ -27,7 +27,7 @@ async function open() {
   await act(async () => root.render(<OperatorsPanel />))
   const address = () => el.querySelector<HTMLInputElement>('input[placeholder="192.168.1.20:8080"]')!.value
   const code = () => el.querySelector<HTMLInputElement>('input[inputmode="numeric"]')!.value
-  const hosts = () => [...el.querySelectorAll<HTMLButtonElement>('[aria-label="Rhema hosts on this network"] button[aria-pressed]')]
+  const hosts = () => [...el.querySelectorAll<HTMLButtonElement>('[aria-label="Rhema Studio hosts on this network"] button[aria-pressed]')]
   const discovers = () => invoke.mock.calls.filter(([cmd]) => cmd === "host_discover").length
   return { el, root, address, code, hosts, discovers }
 }
@@ -65,7 +65,7 @@ describe("Join a host: Find hosts", { timeout: 30_000 }, () => {
   it("says why when it could not look, and the address can still be typed", async () => {
     invoke.mockReset()
     invoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "host_discover") throw "Could not look for Rhema hosts on the network: no network"
+      if (cmd === "host_discover") throw "Could not look for Rhema Studio hosts on the network: no network"
       return null
     })
     const { el, root, address, hosts } = await open()

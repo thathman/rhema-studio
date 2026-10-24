@@ -66,7 +66,7 @@ export function UnsavedCloseDialog() {
     if (r === "saved") quit()
     else setError({
       conflict: "Not saved: this service was changed elsewhere. Keep working and reload it, or close without saving.",
-      unsupported: "Not saved: this service has items this version of Rhema cannot save (see Prepare). Keep working, or close without saving.",
+      unsupported: "Not saved: this service has items this version of Rhema Studio cannot save (see Prepare). Keep working, or close without saving.",
       nothing: "A save is already running. Wait a moment and press Save and close again.",
     }[r as string] ?? "Could not save. Keep working and try Save, or close without saving.")
   }

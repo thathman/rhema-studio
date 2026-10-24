@@ -51,13 +51,13 @@ beforeEach(() => {
 const FP = "ab".repeat(32)
 
 describe("Cameras panel (#209)", () => {
-  it("offers the Rhema Camera app's pairing link while the router serves RTSPS", async () => {
+  it("offers the Rhema Studio Cam app's pairing link while the router serves RTSPS", async () => {
     answers.camera_router_status = router({ ports: { ...PORTS, rtsps: 8322 }, rtspsFingerprint: FP })
     useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit cam", token: "c".repeat(32) }] })
     const el = await mount()
     const text = el.textContent ?? ""
     expect(text).toContain(`rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=${"c".repeat(32)}&fp=${FP}&label=Pulpit%20cam`)
-    expect(el.querySelector('img[alt="QR code of the Pulpit cam Rhema Camera link"]')).toBeTruthy()
+    expect(el.querySelector('img[alt="QR code of the Pulpit cam Rhema Studio Cam link"]')).toBeTruthy()
   })
 
   it("explains what the app needs when the router has no RTSPS (no certificate yet, or an older build)", async () => {
@@ -91,7 +91,7 @@ describe("Cameras panel (#209)", () => {
   it("names who reads each camera, which OBS companion has it on program, and warns when the network load is high for Wi-Fi", async () => {
     useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "a".repeat(32) }, { name: "choir", label: "Choir", token: "b".repeat(32) }] })
     const watchers = [
-      { kind: "screen", name: "Rhema screens on this computer", remote: false },
+      { kind: "screen", name: "Rhema Studio screens on this computer", remote: false },
       { kind: "screen", name: "A screen or TV at 192.168.1.40", remote: true },
       { kind: "companion", name: "Media desk (OBS companion)", remote: true },
     ]
@@ -102,7 +102,7 @@ describe("Cameras panel (#209)", () => {
     const el = await mount()
     const text = el.textContent ?? ""
     expect(text).toContain("H264 · 1280×720 · 4.0 Mbit/s")
-    expect(text).toContain("Read by: Rhema screens on this computer, A screen or TV at 192.168.1.40, Media desk (OBS companion)")
+    expect(text).toContain("Read by: Rhema Studio screens on this computer, A screen or TV at 192.168.1.40, Media desk (OBS companion)")
     expect(text).toContain("On the program of Media desk's OBS")
     expect(text).toContain("In the preview of Media desk's OBS (its OBS is not receiving it)")
     // 4 Mbit/s × 2 network readers + 4 × 1 = 12 Mbit/s: fine for Wi-Fi.

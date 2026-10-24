@@ -164,10 +164,10 @@ describe("the setup wizard", () => {
     expect(useProductionTab.getState().requested).toBe("operators")
   })
 
-  it("Use Rhema now closes and does not open by itself again", async () => {
+  it("Use Rhema Studio now closes and does not open by itself again", async () => {
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
-    await click("Use Rhema now, finish later")
+    await click("Use Rhema Studio now, finish later")
     expect(useShellStore.getState().setupOpen).toBe(false)
     expect(useSettingsStore.getState().setup.dismissedAt).not.toBe("")
   })

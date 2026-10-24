@@ -294,13 +294,13 @@ struct TvChallengeReply {
     error: Option<String>,
 }
 
-const OLD_RECEIVER: &str = "Update Rhema Receiver on the TV (1.3 or later): this one cannot take Rhema's secure link, so the feed link was not sent.";
+const OLD_RECEIVER: &str = "Update Rhema Studio Receiver on the TV (1.3 or later): this one cannot take Rhema Studio's secure link, so the feed link was not sent.";
 /// Rhema sends a TV only its https link, so the link and the page stay private on the network.
-const NO_TLS: &str = "Turn on the secure page in Settings → Remote control (Secure page for phones, https), then stop and start the listener: Rhema sends a TV only its secure link. The feed link was not sent.";
-const NOT_THIS_TV: &str = "That code is not the one on this TV's screen, or this is not a real Rhema Receiver. Check the code on the TV and try again; the feed link was not sent.";
+const NO_TLS: &str = "Turn on the secure page in Settings → Remote control (Secure page for phones, https), then stop and start the listener: Rhema Studio sends a TV only its secure link. The feed link was not sent.";
+const NOT_THIS_TV: &str = "That code is not the one on this TV's screen, or this is not a real Rhema Studio Receiver. Check the code on the TV and try again; the feed link was not sent.";
 
 fn tv_unreachable(_: reqwest::Error) -> String {
-    "Could not reach the TV: is Rhema Receiver open on it, on the same network?".to_string()
+    "Could not reach the TV: is Rhema Studio Receiver open on it, on the same network?".to_string()
 }
 
 /// The TV's IPv4 address and port exactly as Rhema reaches it: the TV's proof names this address.
@@ -390,7 +390,7 @@ fn tv_status_from(reply: TvStatusReply, not_found: bool) -> Result<TvStatus, Str
     if reply.ok {
         Ok(TvStatus { name: reply.name.unwrap_or_default(), feed: reply.feed.filter(|f| !f.is_empty()), problem: reply.problem.filter(|p| !p.is_empty()) })
     } else if not_found {
-        Err("This TV's Rhema Receiver is too old to be checked: install version 1.1 or newer on it.".into())
+        Err("This TV's Rhema Studio Receiver is too old to be checked: install version 1.1 or newer on it.".into())
     } else {
         Err(reply.error.unwrap_or_else(|| "The TV did not say".into()))
     }
@@ -403,7 +403,7 @@ pub async fn tv_status(address: String) -> Result<TvStatus, String> {
         .get(format!("{}/status", tv_url(&address)?))
         .send()
         .await
-        .map_err(|_| "Could not reach the TV: is it on, with Rhema Receiver open, on the same network?".to_string())?;
+        .map_err(|_| "Could not reach the TV: is it on, with Rhema Studio Receiver open, on the same network?".to_string())?;
     let not_found = r.status() == reqwest::StatusCode::NOT_FOUND;
     let reply: TvStatusReply = r.json().await.map_err(|e| format!("The TV's answer was not understood: {e}"))?;
     tv_status_from(reply, not_found)
@@ -508,7 +508,7 @@ fn found_hosts(seen: BTreeMap<String, (u16, Vec<Ipv4Addr>)>) -> Vec<Found> {
 pub async fn host_discover() -> Result<Vec<Found>, String> {
     tokio::task::spawn_blocking(|| browse(super::host_advert::HOST_SERVICE, Duration::from_millis(2500), "Rhema hosts").map(found_hosts))
         .await
-        .map_err(|e| format!("Could not look for Rhema hosts on the network: {e}"))?
+        .map_err(|e| format!("Could not look for Rhema Studio hosts on the network: {e}"))?
 }
 
 #[cfg(test)]

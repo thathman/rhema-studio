@@ -89,7 +89,7 @@ fn read_package(path: &Path) -> std::result::Result<(ServicePackage, PackagePayl
         return Err("too large to open".into());
     }
     let raw = std::fs::read(path).map_err(|e| e.to_string())?;
-    let pkg: ServicePackage = serde_json::from_slice(&raw).map_err(|_| "not a Rhema service file".to_string())?;
+    let pkg: ServicePackage = serde_json::from_slice(&raw).map_err(|_| "not a Rhema Studio service file".to_string())?;
     if !(1..=crate::PACKAGE_VERSION).contains(&pkg.version) {
         return Err(format!("made by a different version (package v{})", pkg.version));
     }

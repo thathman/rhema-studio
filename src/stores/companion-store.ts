@@ -60,7 +60,7 @@ export const useCompanion = create<CompanionState>((set, get) => ({
     try {
       const r = await addCameraToObs(obsRequest as ObsRequest, { name: cam.name, label: cam.label, url }, scene)
       set({ inputs: { ...get().inputs, [cam.name]: { input: r.inputName, state: null } } })
-      toast.success(r.done === "added" ? `${cam.label} is in OBS` : `${cam.label} is in "${r.sceneName}" too`, { description: `In the scene "${r.sceneName}" as "${r.inputName}". Arrange it in OBS as you like; Rhema keeps its address up to date.` })
+      toast.success(r.done === "added" ? `${cam.label} is in OBS` : `${cam.label} is in "${r.sceneName}" too`, { description: `In the scene "${r.sceneName}" as "${r.inputName}". Arrange it in OBS as you like; Rhema Studio keeps its address up to date.` })
       void look()
       return r
     } catch (e) {
@@ -159,8 +159,8 @@ async function followObs(): Promise<void> {
     }
     const problem = !srt ? null : cam && !cam.live ? "stopped" : cam?.live && state && state !== "playing" && state !== "opening" && state !== "buffering" ? "not-receiving" : null
     warnOnce(name, problem, () => {
-      if (problem === "stopped") toast.warning(`${label} has stopped sending`, { description: "Check the phone for that angle: on the church Wi-Fi, charging, with Rhema's camera page open. OBS shows it again by itself when it is back." })
-      else toast.warning(`OBS is not receiving ${label}`, { description: "Rhema is starting it again in OBS. If it keeps happening, check this computer's network, or choose a bigger delay buffer below." })
+      if (problem === "stopped") toast.warning(`${label} has stopped sending`, { description: "Check the phone for that angle: on the church Wi-Fi, charging, with Rhema Studio's camera page open. OBS shows it again by itself when it is back." })
+      else toast.warning(`OBS is not receiving ${label}`, { description: "Rhema Studio is starting it again in OBS. If it keeps happening, check this computer's network, or choose a bigger delay buffer below." })
     })
   }
   useCompanion.setState({ inputs })

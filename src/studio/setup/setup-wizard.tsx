@@ -13,10 +13,11 @@ import { openProductionTab } from "@/studio/production/production-tab"
 import { BibleStep, BrandStep, ChurchStep, ConnectionsStep, FinishStep, OperatorStep, ScreensStep } from "@/studio/setup/setup-steps"
 import { RestoreView } from "@/studio/setup/restore-view"
 import { switchMode } from "@/stores/companion-store"
+import { BrandMark } from "@/components/brand-mark"
 
 /** Each step's name in the step list, its heading, and whether it may be skipped. */
 const STEP_INFO: Record<SetupStepId, { short: string; title: string; description: string; optional: boolean }> = {
-  church: { short: "Church", title: "Church identity", description: "The church's name is the only thing Rhema needs. The rest is optional.", optional: false },
+  church: { short: "Church", title: "Church identity", description: "The church's name is the only thing Rhema Studio needs. The rest is optional.", optional: false },
   operator: { short: "You and this computer", title: "You and this computer", description: "Who is at this desk, and what this computer is called.", optional: false },
   brand: { short: "Brand and looks", title: "Brand and starter looks", description: "Logo, colours and fonts once; Apply makes matching themes. Skip to keep the built-in looks.", optional: true },
   bible: { short: "Bible and library", title: "Bible and library", description: "The Bible editions on this computer, and where songs and hymns come from.", optional: true },
@@ -135,7 +136,7 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[200px_minmax(0,1fr)] max-[720px]:grid-cols-1">
       <nav aria-label="Setup steps" className="flex min-h-0 flex-col gap-1 overflow-y-auto border-r border-border bg-muted/40 px-3 py-5 max-[720px]:hidden">
-        <p className="px-2 pb-2 text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">Set up Rhema</p>
+        <p className="px-2 pb-2 text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">Set up Rhema Studio</p>
         <ol className="flex flex-col gap-0.5">
           {SETUP_STEPS.map((id, i) => {
             const state = setup.stepsDone[id]
@@ -211,16 +212,21 @@ function SetupBody({ onFinishLater }: { onFinishLater: () => void }) {
 function Welcome({ onMain, onJoin, onCompanion, onRestore, onLater }: { onMain: () => void; onJoin: () => void; onCompanion: () => void; onRestore: () => void; onLater: () => void }) {
   const choices = [
     { icon: <LaptopIcon />, title: "Set up this computer as the main desk", text: "This computer runs the service with every control. Volunteers, phones and other computers can join later; nobody else is needed.", note: "Recommended", onClick: onMain },
-    { icon: <LinkIcon />, title: "Join an existing church host", text: "This computer follows another Rhema at your church. Opens Production → Operators to pair with it; nothing here is replaced.", onClick: onJoin },
-    { icon: <CameraIcon />, title: "This computer runs OBS only (companion)", text: "For the computer that streams with OBS: it takes the church's phone cameras from the main Rhema computer into OBS here. Rhema shows one small screen and nothing else.", onClick: onCompanion },
+    { icon: <LinkIcon />, title: "Join an existing church host", text: "This computer follows another Rhema Studio at your church. Opens Production → Operators to pair with it; nothing here is replaced.", onClick: onJoin },
+    { icon: <CameraIcon />, title: "This computer runs OBS only (companion)", text: "For the computer that streams with OBS: it takes the church's phone cameras from the main Rhema Studio computer into OBS here. Rhema Studio shows one small screen and nothing else.", onClick: onCompanion },
     { icon: <ArchiveRestoreIcon />, title: "Bring in a previous installation", text: "Services, songs, settings and looks from a backup file, or services from a service file or the church folder. You see what comes in before anything here is replaced.", onClick: onRestore },
-    { icon: <TimerIcon />, title: "Use Rhema now, finish later", text: "Start with the built-in looks. Home keeps a short reminder of what is left.", onClick: onLater },
+    { icon: <TimerIcon />, title: "Use Rhema Studio now, finish later", text: "Start with the built-in looks. Home keeps a short reminder of what is left.", onClick: onLater },
   ]
   return (
     // The welcome sizes to its four choices (data-setup-welcome) rather than the steps' fixed height.
     <div data-setup-welcome className="flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-8 max-[720px]:px-5">
-      <p className="text-[0.625rem] font-bold tracking-[0.16em] text-muted-foreground uppercase">First time on this computer</p>
-      <DialogTitle className="mt-1 text-2xl font-bold tracking-[-0.035em]">Welcome to Rhema Studio</DialogTitle>
+      <div className="flex items-center gap-3">
+        <BrandMark tone="auto" className="size-11" />
+        <div>
+          <p className="text-[0.625rem] font-bold tracking-[0.16em] text-muted-foreground uppercase">First time on this computer</p>
+          <DialogTitle className="mt-1 text-2xl font-bold tracking-[-0.035em]">Welcome to Rhema Studio</DialogTitle>
+        </div>
+      </div>
       <DialogDescription id="setup-step-description" className="mt-1 max-w-[560px] text-sm text-muted-foreground">
         A few short steps: your church's name, who is at this desk, and the optional extras. Everything saves as you go, works without the internet, and can be finished later.
       </DialogDescription>
