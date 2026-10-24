@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### AI drafts: times, groups and choosing items (#252)
+- A service an AI assistant proposes can now give items a **finish-by time** (the sermon by 11:20) and put them in **named groups** within a phase (Praise and worship, Offering). Opening the draft puts both in the run of show. Rhema warns the assistant about times that are not real, or that the plan cannot meet.
+- In **Prepare → AI drafts**, **Choose items** lets you untick songs, readings, slides or whole groups to leave out before opening the draft. Only what is ticked goes into the rundown.
+- When a service is open, each draft says what opening it would change: items that are new, items it does not have, and items with a different time.
+- An assistant can no longer overwrite a draft that changed since it read it; it is told to read it again. Older drafts still open as before.
+
 ### The ticker, the timer and cameras in Present → Sources (#243)
 - **Present → Live → Sources** now also lists the **Ticker** (running, held still or off, with its first words), the **service timer** (running or paused, with the time left) and **each camera** (sending or not), each saying who changed it last and when.
 - Take the ticker off and **Restore** the same words; pause and resume the timer; **Hide a camera from scenes** so every scene with it shows its fallback words instead, without changing the scenes. Each change is in the service log with who made it, and joined desks and the phone page see and can do the same (with the Present role).
