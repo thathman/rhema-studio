@@ -1,0 +1,99 @@
+---
+title: Main desk and volunteer desks
+description: What the main desk can do, and what each role on a joined desk or paired phone may do, side by side.
+icon: Users
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+<Callout title="Rhema Studio" type="info">
+This page describes Rhema Studio, the church fork of Rhema. **Built** means in the app on `main`;
+**Planned** means not built yet; **Owner decision** means it waits for the church's owner. The
+matrix below is taken from the host's own permission check (`Role::allows` in
+`src-tauri/crates/api/src/keys.rs`), so a desk cannot do more than it shows, whatever its screen
+offers. Rows checked on a real desktop run name their row of the
+[desktop acceptance guide](https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/08-desktop-acceptance-guide.md);
+the rest are built, not yet checked on the desktop.
+</Callout>
+
+One computer, the **main desk** (the host), runs the service. It keeps every control whether or
+not anyone joins: with no volunteers nothing is greyed out. Other computers (Production →
+Operators → **Join a host**) and paired phones help, each with a **role** the host gives it in
+Production → Operators or Settings → Remote Control. A role is a permission, not a job title.
+
+## The roles
+
+| Role (as Rhema names it) | For |
+| --- | --- |
+| **Timekeeper** | The event clock and the service timer; never a screen |
+| **Bible** | A typed reference, its verses and the Bible source only |
+| **Screens** | Congregation scenes only |
+| **Present** | All of the above, and moving through the service |
+| **Present and settings** | Present, plus the look, opacity, confidence and the on-air switch |
+
+A phone paired with the QR code starts as **Present**. A device paired before roles existed keeps
+full access (**Present and settings**).
+
+## What each desk may do
+
+✓ allowed · — refused by the host
+
+| Action | Main desk | Present and settings | Present | Timekeeper | Bible | Screens |
+| --- | --- | --- | --- | --- | --- | --- |
+| Notices to the team, answer Seen / Ready / Unable; the talk channel | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Start the next event, go back one, start any event | ✓ | ✓ | ✓ | ✓ | — | — |
+| Running late or early (±5 min) | ✓ | ✓ | ✓ | ✓ | — | — |
+| Service timer: start, pause, ±1 min | ✓ | ✓ | ✓ | ✓ | — | — |
+| Hold the service with a reason, Resume | ✓ | ✓ | ✓ | ✓ | — | — |
+| Activate a typed Bible reference, or put it in Preview | ✓ | ✓ | ✓ | — | ✓ | — |
+| Next verse / Previous verse | ✓ | ✓ | ✓ | — | ✓ | — |
+| Take the Bible source off, Restore it | ✓ | ✓ | ✓ | — | ✓ | — |
+| Take any other source off and back (songs, ticker, lower third, stage message, timer, cameras) | ✓ | ✓ | ✓ | — | — | — |
+| Show a song or hymn by title, or put it in Preview | ✓ | ✓ | ✓ | — | — | — |
+| Take a congregation scene, back to its own feed | ✓ | ✓ | ✓ | — | — | ✓ |
+| Next / Previous item, Take live, show or hide the output, step the Bible panel, add to the service queue, run a cue | ✓ | ✓ | ✓ | — | — | — |
+| Change the look, opacity, confidence, the on-air switch | ✓ | ✓ | — | — | — | — |
+
+An **action request** in a notice ("Show Romans 8:28", "Take Camera + lyrics") runs with the
+permissions of the desk that presses it, so a Timekeeper can start an item but not show a verse.
+
+## Only on the main desk
+
+| What | Status |
+| --- | --- |
+| Build and edit the service (Prepare), the library and looks (Design) | Built: main desk only |
+| Make and edit scenes (Production → Scenes, Present → New scene / Edit scene) | Built on the main desk; editing from a joined desk is **Planned** (#243) |
+| Change OBS's scenes (Production → OBS); a joined desk sees the list only | Built: main desk only |
+| Pair devices, set roles, **Take back control** / **Give control back** | Built; a paused desk refused (checked, 10dq.3) |
+| Talk to **All crew, priority** (everyone else turned down) | Built; checked (10dd.1) |
+| Rehearsal, Black and quick screens directly, Settings, backups and restore | Built: main desk only. A cue run from a Present desk can include quick-screen and rehearsal-off steps |
+
+## Safety rules for every desk
+
+- **Take back control** stops a desk's commands at once without unpairing it; it still sees the
+  service, notices and Talk. Commands from a paused desk are refused (checked, 10dq.3).
+- **One service at a time:** a desk looking at another service than the host's is refused until it
+  catches up (checked, 10dq.5).
+- A Bible desk's verse reaches only the Bible feeds while a song, hymn, slide or quick screen is on
+  the main screens.
+- Losing a desk never changes the host. A desk that hears nothing for 5 seconds says
+  **Last update N s ago** and dims its clock; it reconnects by itself.
+- Every command from a desk goes into the service log with its name; notices and Talk never do.
+
+## Not built yet
+
+| What | Status |
+| --- | --- |
+| Editing scenes from a joined desk | Planned (#243) |
+| Roles for a worship leader (songs and hymns only), a camera operator or an OBS director | Planned (#243) |
+| Changing OBS from a joined desk (today a desk sees OBS's scenes only) | Planned |
+| An approval step for new looks made by a desk during a service | Owner decision (#243) |
+
+## Checked on the desktop so far
+
+On one Mac, with the joined desks simulated by their keys (no second computer): a Bible key cannot Hold (10ef.4),
+a paused desk's commands are refused (10dq.3), a desk on another service is refused (10dq.5),
+running late and the timer from a joined desk (10de.2, 10de.3), Timekeeper commands and a screen
+command refused (10cu.2, 10cu.3), notices (10cu.8), priority talk and revoking a talking desk
+(10dd.1, 10dd.2). Hold and Resume from a desk are partly checked (10ef.2, 10ef.3). A run with two
+real computers is not yet checked (10cu.1, 10eq.3).
