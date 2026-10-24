@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Scenes: video backgrounds, cameras by name, a language and a fade per box, scenes from Present (#243, #299)
+- A scene can have a **Video** layer: a Library video playing on a loop without sound, under the words, on the screens, NDI and browser feeds (Google TV, OBS). New ready-made scene **Lyrics on video**.
+- A camera layer now picks the church's cameras **by name**; typing a stream address is still there under Advanced. Each live content box has its own **Language** (both, first or second) and **When it changes** (cut or a fade).
+- Present's Scenes strip has **New scene / Edit scene**: a basic scene (background, one content box, lower third, camera) without leaving the live console. Production's **Programs** tab is now called **Scenes**.
+- Each output card in Production → Screens shows its **safe area**, outlined on its look's preview.
 ### Present: one go-live control, honest verse buttons, bigger touch targets, Preview on small windows (#299, #215)
 - In Present's Standard view the Live panel no longer has its own **Go live** switch next to **Take live**: it shows **On air**, **Off air** or **Rehearsal** instead. The switch is still in the Advanced view.
 - While a song, hymn, slide, picture or quick screen is up, **Next verse** and **Previous verse** say why they wait ("A song is on air: verse steps continue a Bible reading…") and do nothing, instead of quietly changing Preview behind it.

@@ -43,7 +43,7 @@ describe("Design → Library (#299)", () => {
     expect(card(el, "Clean · Name strip").textContent).toContain("OBS overlay")
   })
 
-  it("Use and edit on a camera scene adds the copy and opens it in Production → Programs", async () => {
+  it("Use and edit on a camera scene adds the copy and opens it in Production → Scenes", async () => {
     const el = await render()
     const scene = card(el, "Clean · Camera and scripture")
     const edit = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Use and edit")) as HTMLButtonElement

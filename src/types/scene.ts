@@ -1,5 +1,5 @@
 import type { BroadcastTheme, ContentType, VerseRenderData } from "./broadcast"
-import type { LowerThird, Ticker } from "./broadcast-output"
+import type { BroadcastOutputLanguage, LowerThird, Ticker } from "./broadcast-output"
 
 /**
  * What a "time until" clock counts down to (#196 R2): the next item's expected start, the main
@@ -25,13 +25,13 @@ export interface SceneCrop {
 
 /**
  * feed: live content (the sources it follows) in an approved look; color and picture: a
- * background; camera: a camera on the church network (a WHEP stream, e.g. from MediaMTX; #209); clock: the
+ * background; video: a library video playing on a loop, without sound (a moving background); camera: a camera on the church network (a WHEP stream, e.g. from MediaMTX; #209); clock: the
  * service timer in a look (a countdown before the service); ticker: the running ticker, in its box;
  * lowerThird: the lower third on air, in its box; logo: the church's Brand Kit logo, fitted in its box.
  * A scene with a ticker (or lower third) layer owns that source on its output: the output does not
  * also draw it over the whole frame.
  */
-export type SceneLayerKind = "feed" | "color" | "picture" | "camera" | "clock" | "ticker" | "lowerThird" | "logo"
+export type SceneLayerKind = "feed" | "color" | "picture" | "video" | "camera" | "clock" | "ticker" | "lowerThird" | "logo"
 
 /**
  * A clock as an output draws it: counting down to `at`, up from `at` (wall-clock ms), or still at
@@ -65,9 +65,17 @@ export interface SceneLayer {
   themeId?: string
   /** color: the fill. */
   color?: string
-  /** picture: a library picture, and its picture as a data URL (so outputs need nothing else). */
+  /** picture, video: a library picture or video. A picture also keeps its picture as a data URL (so outputs need nothing else). */
   mediaId?: string
   imageUrl?: string
+  /** video: where this computer's output windows play it from (the media folder, streamed). */
+  videoUrl?: string
+  /** video: its file in the media folder, which a browser feed asks the host for. */
+  mediaFile?: string
+  /** feed: which language of a bilingual verse or song this layer shows; absent = the output's own setting. */
+  language?: BroadcastOutputLanguage
+  /** How this layer changes when what it shows changes (a new verse, picture or video): a cut, or a cross-fade of this many ms. Absent: a cut. */
+  fadeMs?: number
   box: SceneBox
   crop?: SceneCrop
   /** 0–1 */
@@ -103,6 +111,13 @@ export interface SceneLayerFrame {
   verse?: VerseRenderData | null
   color?: string
   imageUrl?: string | null
+  /** video: where an output window plays it from. */
+  videoUrl?: string
+  /** video: its file in the media folder (a browser feed plays it from the host). */
+  mediaFile?: string
+  /** Cross-fade to new content in this many ms (0 or absent: cut); `key` says when the content is new. */
+  fadeMs?: number
+  key?: string
   clock?: SceneClock | null
   /** camera: its WHEP stream address. */
   cameraUrl?: string

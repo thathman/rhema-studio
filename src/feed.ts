@@ -1,6 +1,7 @@
 import "./broadcast-fonts.css"
 import { drawLowerThird, onThemeFontsLoaded, renderVerse } from "@/lib/verse-renderer"
-import { drawScene, drawTickerLayer, sceneOverlay } from "@/lib/scene-renderer"
+import { drawScene, drawTickerLayer, LayerFader, sceneOverlay } from "@/lib/scene-renderer"
+import { syncSceneVideos, videoReady } from "@/lib/scene-videos"
 import { feedMotion, tickerStrips } from "@/lib/feed-motion"
 import { drawStage } from "@/lib/stage-canvas"
 import { drawTicker } from "@/lib/ticker-draw"
@@ -16,7 +17,8 @@ import type { LowerThird, SceneFrame, StagePayload, Ticker } from "@/types"
  * A browser feed (ARCH-002): an output drawn by a web page on the church network, for OBS Browser
  * Source or a TV's browser. The same drawing code as the output windows; frames arrive as server-
  * sent events from the host (`/api/v1/feed/<id>/events?k=<secret>`). A keyed look stays transparent.
- * Videos do not play here (their files are on the host computer).
+ * A video item does not play here (its file is on the host computer); a scene's video layer does,
+ * from the host (`/api/v1/feed/<id>/media/<file>`, only while the feed shows it).
  */
 interface Frame {
   off?: boolean
@@ -48,10 +50,17 @@ const whep = async (url: string, sdp: string) => {
  * Google TV managed ~39 fps that way, #198). A cropped camera is still drawn into the canvas.
  */
 const below = document.getElementById("cameras") as HTMLDivElement
+/** The scene's video layers (#243 SC.9), looping and silent, shown under the canvas like the cameras. */
+const videos = new Map<string, HTMLVideoElement>()
+/** Layers that cross-fade to new content (a new verse, another picture). */
+const fader = new LayerFader()
 const shownBelow = (id: string) => {
   const l = frame?.scene?.layers.find((x) => x.id === id)
-  return !!l && !l.crop && !!cameras.get(id)?.ready
+  if (!l || l.crop) return false
+  return l.kind === "video" ? videoReady(videos.get(id)) : !!cameras.get(id)?.ready
 }
+/** The element the page shows under the canvas for a layer: its camera's or its video's. */
+const belowElement = (id: string) => videos.get(id) ?? cameras.get(id)?.video
 /** Where the canvas's picture is on screen (object-fit: contain). */
 function onScreen(width: number, height: number) {
   const scale = Math.min(innerWidth / width, innerHeight / height)
@@ -63,14 +72,17 @@ function placeCameras() {
   if (f?.theme && f.scene && !f.off) {
     const { width, height } = f.theme.resolution
     const { scale, ox, oy } = onScreen(width, height)
+    const order: HTMLVideoElement[] = []
     for (const l of f.scene.layers) {
-      const p = cameras.get(l.id)
-      if (l.kind !== "camera" || !p || !shownBelow(l.id)) continue
-      const v = p.video
-      Object.assign(v.style, { position: "absolute", objectFit: "cover", left: `${ox + (width * scale * l.box.x) / 100}px`, top: `${oy + (height * scale * l.box.y) / 100}px`, width: `${(width * scale * l.box.w) / 100}px`, height: `${(height * scale * l.box.h) / 100}px` })
-      if (v.parentElement !== below) below.appendChild(v)
+      const v = belowElement(l.id)
+      if ((l.kind !== "camera" && l.kind !== "video") || !v || !shownBelow(l.id)) continue
+      Object.assign(v.style, { position: "absolute", objectFit: "cover", opacity: String(l.opacity), left: `${ox + (width * scale * l.box.x) / 100}px`, top: `${oy + (height * scale * l.box.y) / 100}px`, width: `${(width * scale * l.box.w) / 100}px`, height: `${(height * scale * l.box.h) / 100}px` })
+      order.push(v)
       keep.add(v)
     }
+    // Bottom layer first. Moved only when the order is wrong, so a playing video is not disturbed.
+    const now = [...below.querySelectorAll("video")].filter((v) => keep.has(v))
+    if (now.length !== order.length || order.some((v, i) => now[i] !== v)) for (const v of order) below.appendChild(v)
   }
   for (const v of [...below.querySelectorAll("video")]) if (!keep.has(v)) v.remove()
 }
@@ -190,7 +202,9 @@ function draw() {
       now: Date.now() + offset,
       imageCache: themeImageCache(),
       camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
+      video: (id) => { const v = videos.get(id); return videoReady(v) ? v : null },
       cameraBelow: shownBelow,
+      fader,
       tickerAbove: (id) => strips.has(id),
       layerCanvas: (id) => {
         let c = layers.get(id)
@@ -227,7 +241,8 @@ function draw() {
  */
 function animate() {
   const f = frame
-  const { picture, crawl } = feedMotion(f, { now: Date.now(), hostNow: Date.now() + offset, fading: !!fade, cameraInCanvas: [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)), strips: onStrips() })
+  const inCanvas = [...cameras.entries()].some(([id, p]) => p.ready && !shownBelow(id)) || [...videos.entries()].some(([id, v]) => videoReady(v) && !v.paused && !shownBelow(id))
+  const { picture, crawl } = feedMotion(f, { now: Date.now(), hostNow: Date.now() + offset, fading: !!fade || fader.busy(), cameraInCanvas: inCanvas, strips: onStrips() })
   if (picture) draw()
   drawStrips()
   if (picture || crawl) requestAnimationFrame(animate)
@@ -267,7 +282,10 @@ function show(next: Frame) {
   frame = next.theme ? { ...next, theme: normalizeTheme(next.theme), scene: next.scene ? { ...next.scene, layers: next.scene.layers.map((l) => (l.theme ? { ...l, theme: normalizeTheme(l.theme) } : l)) } : undefined } : next
   stripped = tickerStrips(frame.scene, !!frame.overlay && frame.verse?.screen !== "black")
   if (frame.theme) preloadThemeImages(frame.theme, draw)
-  syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, () => { placeCameras(); draw(); if (!ticking) { ticking = true; requestAnimationFrame(animate) } })
+  const moved = () => { placeCameras(); draw(); if (!ticking) { ticking = true; requestAnimationFrame(animate) } }
+  syncCameras(cameras, frame.off ? [] : (frame.scene?.layers ?? []), whep, moved)
+  // A video layer's file comes from the host, which serves it only while this feed shows it.
+  syncSceneVideos(videos, frame.off ? [] : (frame.scene?.layers ?? []), (l) => (l.mediaFile ? `/api/v1/feed/${encodeURIComponent(id)}/media/${l.mediaFile}?k=${encodeURIComponent(key)}` : undefined), moved)
   placeCameras()
   for (const l of frame.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, draw)
   // Pictures behind a scene's own tickers or lower third (a ticker may be on its strip).

@@ -70,6 +70,12 @@ fn safe_file_name(name: &str) -> Option<&str> {
     ok.then_some(name)
 }
 
+/// A media folder file by its name, if the name is a bare hash name and the file is there
+/// (a browser feed playing a scene's video layer, #243 SC.9).
+pub fn media_file_path(media: &MediaState, file: &str) -> Option<PathBuf> {
+    media_path(media.0.get()?, file).filter(|p| p.is_file())
+}
+
 /// The asset's path inside the media folder, or None when the stored name is
 /// not a bare hash name (treated as missing, never touched).
 fn media_path(dir: &Path, file: &str) -> Option<PathBuf> {

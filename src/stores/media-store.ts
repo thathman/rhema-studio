@@ -44,11 +44,13 @@ function measure(url: string): Promise<{ width: number; height: number } | null>
   })
 }
 
-/** Where a picture is used outside saved services: the rundown on screen and signage loops. */
+/** Where a picture or video is used outside saved services: the rundown on screen, signage loops and scenes' video layers. */
 export function mediaUsedHere(id: string): string[] {
   const uses = (i: QueueItem) => i.background?.media_id === id || (isImageItem(i) && i.image.media_id === id)
   const where: string[] = []
   if (useQueueStore.getState().items.some(uses)) where.push("the service on screen")
+  // A scene's video layer plays the file itself (a picture layer keeps its own copy).
+  for (const sc of useBroadcastStore.getState().scenes) if (sc.layers.some((l) => l.kind === "video" && l.mediaId === id)) where.push(`the scene ${sc.name}`)
   for (const o of useBroadcastStore.getState().outputs) {
     const lists = [o.signage?.mediaIds ?? [], ...(o.signage?.playlists ?? []).map((p) => p.mediaIds)]
     if (lists.some((l) => l.includes(id))) where.push(`the picture loop on ${o.name}`)

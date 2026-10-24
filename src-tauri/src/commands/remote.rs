@@ -79,6 +79,11 @@ impl CommandSink for TauriSink {
         Some((asset.bytes().to_vec(), asset.mime_type().to_string()))
     }
 
+    fn media_file(&self, file: &str) -> Option<std::path::PathBuf> {
+        let media = self.app.try_state::<super::media::MediaState>()?;
+        super::media::media_file_path(media.inner(), file)
+    }
+
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         self.app
             .emit(event, payload.to_string())

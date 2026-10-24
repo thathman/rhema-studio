@@ -90,7 +90,7 @@ describe("cue steps say what they touch (C04)", () => {
 })
 
 /**
- * Scenes in rehearsal (#246, C02): a Take from Production → Programs, the Present scenes strip or a
+ * Scenes in rehearsal (#246, C02): a Take from Production → Scenes, the Present scenes strip or a
  * joined Screens desk changes the rehearsal only. The real screens keep their scene through it and
  * have exactly it when rehearsal ends, Show this live included.
  */
@@ -156,12 +156,12 @@ describe("a scene taken in rehearsal never reaches the real screens", () => {
     expect(main().sceneId).toBeUndefined()
   })
 
-  it("Production → Programs: Take in rehearsal is not red and stays in the app", async () => {
+  it("Production → Scenes: Take in rehearsal is not red and stays in the app", async () => {
     const el = document.createElement("div")
     document.body.appendChild(el)
     const root = createRoot(el)
     await act(async () => root.render(createElement(ProductionWorkspace)))
-    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Programs") as HTMLButtonElement
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Scenes") as HTMLButtonElement
     await act(async () => tab.click())
     const button = (text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement
     await act(async () => button("Camera with the Bible").click())

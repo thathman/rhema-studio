@@ -1246,6 +1246,24 @@ Rhema with a saved service that has phases (pre-service loop, warm-up, main serv
 | 10eo.7 | Production → Cameras (a camera added), Timekeeper (Count down to, the chime, "Follows the screens") and Settings → Audio → Talk headset, in light and dark. | The drop-down lists look like Rhema's other lists (border, quiet chevron, teal focus ring, dark lists in dark mode); tick boxes are teal; they open and choose as before. **New link** is an outlined button. | Unverified |
 | 10eo.8 | First run (or Home → setup): the welcome, then step 1. | The welcome window fits its four choices with no empty lower half. "Service languages" shows a grey "e.g. English, Yorùbá" that disappears when you type. | Unverified |
 
+### 10eu. Scenes: video backgrounds, cameras by name, a language and a fade per box, scenes from Present (#243, #299)
+
+Rhema with a congregation output on a screen, one NDI output seen in OBS, a browser feed open on a Google TV (or a browser on another computer), a short video (MP4) and a picture in Library → Media, one camera in Production → Cameras with the camera router on and the phone sending, and a service with a two-language song (English and Yorùbá) and John 3:16 with a second translation.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10eu.1 | Production. | The tab after Show health reads **Scenes** (not Programs); it is the Scene Composer. | Unverified |
+| 10eu.2 | Scenes → New from **Lyrics on video**. Select the Video background layer and choose the MP4 under Video. Take it to the congregation output; put the song live. | The preview reads "Video background · video". On the screen the video loops without sound under the lyrics in the lower third; it keeps looping. | Unverified |
+| 10eu.3 | Look at the same scene on the NDI output in OBS and on the browser feed (Google TV or a browser). | Both show the video moving under the words, looping, with no sound. The words stay sharp. | Unverified |
+| 10eu.4 | Library → Media: try to delete the MP4 while the scene uses it. | Refused, naming "the scene …". | Unverified |
+| 10eu.5 | Add a Camera layer. Under **Camera**, open the list. | It lists the camera by its name (e.g. Pulpit). Choosing it plays it in the box; "Advanced: type a stream address" is folded and shows the WHEP address when opened. With the router off, the note says to turn it on in Production → Cameras. | Unverified |
+| 10eu.6 | New from **Bible and lyrics**. Select the Bible layer: **Language** → First language only; the Lyrics layer: Second language only. Take it; put John 3:16 (two translations) live, then the two-language song. | The Bible box shows only the first translation; the lyrics box only the Yorùbá lines; the output's own language setting is unchanged elsewhere (a full-screen feed still shows both). | Unverified |
+| 10eu.7 | Bible layer: **When it changes** → Fade 0.5 s. Save. Go from John 3:16 to Romans 8:28 on air; watch the screen, NDI and the browser feed. | The Bible box cross-fades to the new verse in about half a second; the lyrics box (Cut) changes at once; the scene itself is not re-taken. With Cut it changes at once as before. | Unverified |
+| 10eu.8 | Present (Standard view), with at least one saved scene: in the Scenes strip press **New scene**. Name it "Sermon", background a colour, content box Bible in the lower third, tick Lower third and Camera, choose the camera. **Save scene**. | The panel shows a live preview; Save adds "Sermon" to the strip; no screen changes (nothing is taken). | Unverified |
+| 10eu.9 | Pick "Sermon" in the strip: **Edit scene**; change the background to the picture; **Save scene**. Take it; then edit it again. | The picture becomes the background. While "Sermon" is on the screen the panel warns that saving changes that screen at once, and saving does. | Unverified |
+| 10eu.10 | **Edit scene** on a fuller scene (e.g. Welcome), tick Lower third, save; then **Open in the composer**. | Its logo, countdown and ticker stay where they were; only the lower third is added. Open in the composer lands on Production → Scenes with that scene open. | Unverified |
+| 10eu.11 | Production → Screens: look at each output card. | A **Safe area** row ("5% at each edge (its look)" or per edge) on congregation and signage outputs, with a dashed outline on the look's little preview. Change the look's Safe area in Design: the card follows. | Unverified |
+| 10eu.12 | Open a scene saved before this version (and a church folder or backup made before). | It loads and shows exactly as before; layers without the new settings cut and follow the output's language. | Unverified |
 ### 10et. Present transport and touch targets (#299, #215)
 
 Rhema with a saved service that has a Bible reading, a song and a slide, phases with a pre-service loop, at least one congregation output, two saved scenes, and one reading whose **Look and scene** (Prepare → Slides) names one of those scenes. A touch screen or trackpad helps for step 6.

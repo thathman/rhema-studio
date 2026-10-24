@@ -17,6 +17,11 @@ pub trait CommandSink: Send + Sync {
     fn asset(&self, _path: &str) -> Option<(Vec<u8>, String)> {
         None
     }
+    /// Where a file of the media folder is (`<hash>.<ext>`, already checked), for a browser feed
+    /// that plays a scene's video layer (#243 SC.9). None where there is none.
+    fn media_file(&self, _file: &str) -> Option<std::path::PathBuf> {
+        None
+    }
 }
 
 /// A sink that adds `"by"` (the sender) to every frontend event it carries.

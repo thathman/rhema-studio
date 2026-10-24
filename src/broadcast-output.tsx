@@ -18,7 +18,8 @@ import "./broadcast-fonts.css"
 import { useState } from "react"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, NdiConfigEventPayload, SceneFrame, StagePayload, Ticker } from "@/types"
-import { drawScene, sceneMoving, sceneOverlay, sceneTicker } from "@/lib/scene-renderer"
+import { drawScene, LayerFader, sceneMoving, sceneOverlay, sceneTicker } from "@/lib/scene-renderer"
+import { stopVideo, syncSceneVideos, videoReady, videosPlaying } from "@/lib/scene-videos"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -46,7 +47,12 @@ let sceneRunning = false
 let paceFps = 0
 /** Cameras on the church network in the scene up (OP-009): one WHEP player per camera layer. */
 const cameras = new Map<string, WhepPlayer>()
-const cameraPlaying = () => [...cameras.values()].some((p) => p.ready)
+/** The scene's video layers (#243 SC.9): looping and silent, played from the media folder. */
+const sceneVideos = new Map<string, HTMLVideoElement>()
+/** Layers that cross-fade to new content (a new verse, another picture). */
+const fader = new LayerFader()
+// A camera or a video layer moves with every frame.
+const cameraPlaying = () => [...cameras.values()].some((p) => p.ready) || videosPlaying(sceneVideos)
 // Scene transitions (ARCH-002): the picture before a scene change, faded out over the new one.
 let fadeFrom: HTMLCanvasElement | null = null
 let fadeStart = 0
@@ -164,6 +170,8 @@ function BroadcastCanvas() {
             imageCache: themeImageCache(),
             layerCanvas: sceneLayerCanvas,
             camera: (id) => { const p = cameras.get(id); return p?.ready ? p.video : null },
+            video: (id) => { const v = sceneVideos.get(id); return videoReady(v) ? v : null },
+            fader,
             tickerVideo: tickerPlayer?.element() ?? null,
             lowerThirdVideo: backingPlayer?.element() ?? null,
             image: (url) => {
@@ -392,7 +400,7 @@ function BroadcastCanvas() {
     const motion = (): "ticker" | "full" | null => {
       const d = latestData.current
       if (!d || stageRef.current) return null
-      if (fadeFrom || cameraPlaying() || sceneMoving(d.scene, Date.now()) || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
+      if (fadeFrom || fader.busy() || cameraPlaying() || sceneMoving(d.scene, Date.now()) || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
       return d.ticker && !d.ticker.pausedAt ? "ticker" : null
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
@@ -403,7 +411,7 @@ function BroadcastCanvas() {
     const syncPace = () => {
       // A camera moves with every frame: the pacer draws it on screens too (a covered or locked
       // window gets no animation frames). A running clock needs one a second.
-      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() ? 30 : clockRunning() ? 1 : 0
+      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() || fader.busy() ? 30 : clockRunning() ? 1 : 0
       if (fps === paceFps) return
       paceFps = fps
       void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})
@@ -493,6 +501,8 @@ function BroadcastCanvas() {
       for (const l of latestData.current.scene?.layers ?? []) if (l.theme) preloadThemeImages(l.theme, () => { draw(); pushNdiBurstRef.current?.() })
       // The scene's cameras: start new ones, stop the ones it no longer has.
       syncCameras(cameras, latestData.current.scene?.layers ?? [], (url, sdp) => invoke<string>("whep_offer", { url, sdp }), camerasChanged)
+      // Its videos, the same way: each one starts when the scene comes up and stops when it goes.
+      syncSceneVideos(sceneVideos, latestData.current.scene?.layers ?? [], (l) => l.videoUrl, camerasChanged)
       // A new screen clears the operator's warning, so a failure to draw it must be reported again.
       frameFailing = false
       videoPlayer?.sync(event.payload.verse?.video)
@@ -536,6 +546,8 @@ function BroadcastCanvas() {
       })
       draw()
       pushNdiBurst()
+      // A layer that began a cross-fade in that drawing keeps the pacer drawing until it is done.
+      syncPace()
       // Send-to-drawn time, batched into the log file (QA-007 benchmarks read it from a diagnostics export).
       if (!picture) logLatency()
     })
@@ -597,6 +609,8 @@ function BroadcastCanvas() {
       unsubscribeFonts()
       for (const p of cameras.values()) p.close()
       cameras.clear()
+      for (const v of sceneVideos.values()) stopVideo(v)
+      sceneVideos.clear()
       unlisten.then((fn) => fn())
       unlistenNdiConfig.then((fn) => fn())
     }

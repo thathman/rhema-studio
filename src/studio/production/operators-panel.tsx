@@ -491,7 +491,7 @@ function ScenesDesk({ live }: { live: LiveStateV1 }) {
             <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || s.id === output.sceneId} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>Take {s.name}</Button>
           </li>
         ))}
-        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet: they are made on the host (Production → Programs).</li>}
+        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet: they are made on the host (Production → Scenes).</li>}
       </ul>
       {output.sceneId && <div><Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button></div>}
     </section>

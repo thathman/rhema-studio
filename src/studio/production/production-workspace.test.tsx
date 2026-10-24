@@ -37,13 +37,13 @@ describe("Production control", () => {
     expect(panel.textContent).not.toContain("Not built yet")
   })
 
-  it("Programs is the Scene Composer: a ready-made arrangement, Take, and back to the output's own feed", async () => {
+  it("Scenes (once Programs) is the Scene Composer: a ready-made arrangement, Take, and back to the output's own feed", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useBroadcastStore.setState({ scenes: [], sceneReturn: {} })
     const el = document.createElement("div")
     document.body.appendChild(el)
     await act(async () => mount(el))
-    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Programs") as HTMLButtonElement
+    const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "Scenes") as HTMLButtonElement
     await act(async () => tab.click())
     const button = (text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement
     await act(async () => button("Bible and lyrics").click())
@@ -58,7 +58,7 @@ describe("Production control", () => {
     expect(button("Restore Bible and lyrics")).toBeTruthy()
   })
 
-  it("opens Programs at the scene another page asked for (Design → Library's Use and edit)", async () => {
+  it("opens Scenes at the scene another page asked for (Design → Library's Use and edit)", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const scene = (id: string, name: string) => ({ id, name, background: "#000000", layers: [], createdAt: 0, updatedAt: 0 })
     useBroadcastStore.setState({ scenes: [scene("a", "First scene"), scene("b", "Clean · Camera and scripture")], sceneReturn: {} })
@@ -71,13 +71,14 @@ describe("Production control", () => {
     useProductionTab.setState({ requested: null })
   })
 
-  it("OBS sits beside Programs and says it is OBS's program, separate from Rhema's congregation scenes", async () => {
+  it("OBS sits beside Scenes and says it is OBS's program, separate from Rhema's congregation scenes", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const el = document.createElement("div")
     document.body.appendChild(el)
     await act(async () => mount(el))
     const tabs = [...el.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
-    expect(tabs.indexOf("OBS")).toBe(tabs.indexOf("Programs") + 1)
+    expect(tabs).not.toContain("Programs")
+    expect(tabs.indexOf("OBS")).toBe(tabs.indexOf("Scenes") + 1)
     const tab = [...el.querySelectorAll('[role="tab"]')].find((t) => t.textContent === "OBS") as HTMLButtonElement
     await act(async () => tab.click())
     const panel = el.querySelector('[role="tabpanel"]')!

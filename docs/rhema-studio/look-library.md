@@ -7,9 +7,9 @@ were made for Rhema: no picture, template or font was copied from anywhere else.
 
 - A library look never changes and is never put on a screen itself.
 - **Use** adds your own copy to your looks: a theme (Design → Themes), a lower-third style
-  (Design → Lower thirds), or a scene (Production → Programs). Nothing on the screens changes until you
+  (Design → Lower thirds), or a scene (Production → Scenes). Nothing on the screens changes until you
   choose the copy for an output in its settings, or take the scene (ADR 0001: no look goes live by itself).
-- **Use and edit** does the same and opens the copy to change; a camera scene opens in Production → Programs.
+- **Use and edit** does the same and opens the copy to change; a camera scene opens in Production → Scenes.
 - **Use with church colours** (themes, name bands, camera scenes) adds the copy in the Brand Kit's colours
   and fonts: the words in its text colour and body font; the reference, second language and verse numbers
   in its accent; the reference in its heading font; a name band's bar in the accent. The look's background
@@ -60,8 +60,8 @@ scene. The library adds looks and scenes; it never edits an output.
 
 Lower thirds have a transparent background, as the built-in Lower Thirds theme does: on an NDI output
 with alpha or an OBS browser feed the camera shows through everywhere but the band. The camera scenes are
-a full-frame camera layer with the family's lower-third look over it; set the camera's stream address in
-Production → Programs.
+a full-frame camera layer with the family's lower-third look over it; choose the camera by name in
+Production → Scenes.
 
 ## Previews
 

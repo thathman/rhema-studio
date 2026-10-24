@@ -32,8 +32,8 @@ them in congregation scenes, on TVs and in OBS, without any app to buy and witho
    **Live**, and the camera's card in Rhema says **Sending**.
 4. **In a scene:** on the camera's card, **Use in a scene…** puts the camera into a scene: into an
    empty camera place if the scene has one, or as a full-frame camera underneath the other layers.
-   A scene that is on air is not changed; take it off first. You can also copy the WHEP address
-   into a camera layer in Production → Programs.
+   A scene that is on air is not changed; take it off first. You can also choose the camera by name
+   in a camera layer in Production → Scenes, or in Present's New / Edit scene panel.
 5. **In OBS:** add a **Media Source**, untick "Local File" and paste the camera's RTSP address
    (`rtsp://<this computer>:8554/pulpit`).
 
