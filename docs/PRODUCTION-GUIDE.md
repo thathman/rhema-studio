@@ -123,7 +123,28 @@ with a cable, or read fewer cameras.
 
 ## A second computer for OBS
 
-The computer that streams with OBS does not need the whole studio. Install Rhema on it and, in the
+The computer that streams with OBS does not need the whole studio. There are two ways to give it
+the church's cameras; both show the same screen and do the same work in OBS.
+
+| | **Rhema Companion** (a small app of its own) | **OBS companion mode** (inside Rhema) |
+|---|---|---|
+| What you install | Only Rhema Companion (about 10–20 MB; Windows or Mac) | The whole Rhema app, models included |
+| How it talks to the main computer | Only over its secure page, with the main computer's certificate shown before you join and kept after | Over the plain network page, like a joined desk |
+| Where it runs | In the notification area (Windows) or menu bar (Mac); closing the window keeps it running; can start with the computer and join by itself | In Rhema's window |
+| Choose it when | The OBS computer only ever runs OBS (the usual case) | The same computer is sometimes the full studio |
+
+**Rhema Companion.** On the main computer, Settings → Remote control: turn on **Accept commands from
+other devices on this network** and **Secure page for phones (https)**, then start (or stop and
+start) the listener. That setting now shows **This computer's certificate**, four-character groups
+such as `3F2A 9C11 07BD 44E0 A1C3`. On the OBS computer, open Rhema Companion, pick the main
+computer (or type its address): it shows **Host's certificate** with the same groups. Only if they
+match, type the pairing code and **Join**. From then on it talks only to that computer; if another
+computer answers at that address it refuses, and says to pair again only if the main computer was
+reinstalled. Its icon's menu has **Open**, **Start with the computer** (off until you tick it; also
+in its window) and **Quit**. How to build and install it: `companion-app/README.md`. The steps below
+are the same in the app, without **Open the full studio…**.
+
+**OBS companion mode.** Install Rhema on it and, in the
 first-run setup, choose **This computer runs OBS only (companion)** (or Desk menu → **This computer
 runs OBS only…** later). Rhema starts again with one small screen and nothing else: no services,
 screens, Bible models or speech.

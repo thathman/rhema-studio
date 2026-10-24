@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { UnsavedCloseDialog } from "@/components/unsaved-close-dialog"
 import { useSettingsStore } from "@/stores/settings-store"
 import { CompanionScreen } from "@/studio/companion/companion-screen"
+import { FullStudioSwitch } from "@/studio/companion/full-studio-switch"
 
 /**
  * The whole window: the studio, or on a computer that runs OBS only, the OBS companion screen
@@ -24,7 +25,7 @@ export function App() {
   if (companion) {
     return (
       <>
-        <ErrorBoundary name="the OBS companion"><CompanionScreen /></ErrorBoundary>
+        <ErrorBoundary name="the OBS companion"><CompanionScreen aside={<FullStudioSwitch />} /></ErrorBoundary>
         <Toaster position="bottom-right" />
       </>
     )

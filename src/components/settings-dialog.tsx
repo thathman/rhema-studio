@@ -49,6 +49,7 @@ import { asRemoteRole, REMOTE_ROLES } from "@/lib/remote-roles"
 import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
+import { certificateWords } from "@/lib/host-certificate"
 
 /* -------------------------------------------------------------------------- */
 /*  Nav definition                                                            */
@@ -624,6 +625,8 @@ interface RemoteStatus {
   lan?: boolean
   /** HTTP only: the https port for phone pages, when https is on. */
   tls_port?: number | null
+  /** HTTP only: this computer's certificate (its local CA's fingerprint) while https runs, as Rhema Companion shows it (#209). */
+  tls_certificate?: string | null
 }
 
 interface CommandLogEntry {
@@ -808,6 +811,12 @@ function RemoteControlSection() {
           <span className="block text-xs text-muted-foreground">
             A phone can talk in the crew's talk channel only from a secure page. With this on, the phone page is also served over https on the next port ({(Number(httpPort) || 8080) + 1}), with a certificate this computer makes for itself. Each phone either accepts its browser's warning once, or installs this computer's certificate (the link appears below once the listener runs) to trust it. Nothing goes outside the church network. Takes effect when the HTTP listener is started.
           </span>
+          {httpStatus.running && httpStatus.tls_certificate && (
+            <span className="mt-1 block">
+              This computer's certificate <code className="rounded bg-muted px-1.5 py-0.5 font-mono tracking-wide">{certificateWords(httpStatus.tls_certificate)}</code>
+              <span className="block text-muted-foreground">Rhema Companion on an OBS computer shows the same before it pairs. If it shows another, do not pair it.</span>
+            </span>
+          )}
         </span>
       </label>
       <label className="flex items-start gap-2 text-xs">

@@ -13,7 +13,7 @@ import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
-import { switchMode } from "@/stores/companion-store"
+import { switchMode } from "@/stores/companion-mode"
 import { useSetupStatus } from "@/studio/setup/use-setup-status"
 
 /** The roles a host can give a joined computer, as the Desk menu names them. */
