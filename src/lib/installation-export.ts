@@ -1,5 +1,5 @@
 import { looksForBackup, restoreLooksFromBackup, useBroadcastStore, type LooksBackup } from "@/stores/broadcast-store"
-import { restoreSettingsFromBackup, sectionOf, settingsForBackup, useSettingsStore, type SettingsSection } from "@/stores/settings-store"
+import { restoreSettingsFromBackup, sameObs, sectionOf, settingsForBackup, useSettingsStore, type SettingsSection } from "@/stores/settings-store"
 
 /**
  * The installation in a backup file (#298 E6): this computer's settings in their three parts and
@@ -71,6 +71,11 @@ export function installationChanges(here: InstallationExport, incoming: Installa
   const hName = (hs.machine?.setup as { deviceName?: string } | undefined)?.deviceName
   const iName = (is.machine?.setup as { deviceName?: string } | undefined)?.deviceName
   if (is.machine && "setup" in is.machine && !same(hName, iName)) out.push({ what: "This computer's name", here: words(hName), incoming: words(iName) })
+  const hObs = hs.machine?.obs as { host?: string; port?: number } | undefined
+  const iObs = is.machine?.obs as { host?: string; port?: number } | undefined
+  if (iObs && hObs && !sameObs(iObs, { host: String(hObs.host ?? ""), port: Number(hObs.port) })) {
+    out.push({ what: "OBS connection", here: `${words(hObs.host)}:${hObs.port}`, incoming: `${words(iObs.host)}:${iObs.port}, turned off and without a password until you type it` })
+  }
 
   const hl = here.looks
   const il = incoming.looks

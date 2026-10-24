@@ -194,7 +194,8 @@ describe("settings in a backup file (#298 E6)", () => {
     expect(s.gain).toBe(1.7)
     expect(s.deepgramApiKey).toBe("dg-here-123456")
     expect(s.remoteDevices).toHaveLength(1)
-    expect(s.obs).toEqual({ enabled: true, host: "10.0.0.5", port: 4455, password: "here-pass" })
+    // Another OBS than this computer's: never sent this computer's password; it starts off.
+    expect(s.obs).toEqual({ enabled: false, host: "10.0.0.5", port: 4455, password: "" })
     expect(s.cameras.find((c) => c.name === "pulpit")).toEqual({ name: "pulpit", label: "Pulpit cam", token: "h".repeat(32) })
     expect(s.cameras.find((c) => c.name === "choir")?.token).toMatch(/^[0-9a-f]{32}$/)
     expect(s.setup.deviceId).toBe("dev-here")
@@ -202,5 +203,18 @@ describe("settings in a backup file (#298 E6)", () => {
     expect(Number.isFinite(s.cooldownMs)).toBe(true)
     expect([s.remoteListeners.http, s.mcpEnabled, s.cloudSpeechConsentAt]).toEqual([false, false, ""])
     expect(restoreSettingsFromBackup("junk")).toEqual([])
+  })
+
+  it("restoring the same OBS (host and port) keeps this computer's OBS password", async () => {
+    const { useSettingsStore, restoreSettingsFromBackup, settingsForBackup } = await import("./settings-store")
+    useSettingsStore.setState({ obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "here-pass" } })
+    const backup = settingsForBackup({ ...useSettingsStore.getState(), obs: { enabled: true, host: "127.0.0.1", port: 4455, password: "" } })
+    restoreSettingsFromBackup(backup)
+    expect(useSettingsStore.getState().obs).toEqual({ enabled: true, host: "127.0.0.1", port: 4455, password: "here-pass" })
+    // Same host, another port: another OBS.
+    useSettingsStore.setState({ obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "here-pass" } })
+    restoreSettingsFromBackup(settingsForBackup({ ...useSettingsStore.getState(), obs: { enabled: true, host: "127.0.0.1", port: 4456, password: "" } }))
+    expect(useSettingsStore.getState().obs.password).toBe("")
+    expect(useSettingsStore.getState().obs.enabled).toBe(false)
   })
 })

@@ -467,6 +467,12 @@ export function settingsForBackup(state: SettingsState = useSettingsStore.getSta
   return out
 }
 
+/** The same OBS: host (any case, no spaces) and port as this computer's. */
+export function sameObs(a: object, b: { host: string; port: number }): boolean {
+  const o = a as { host?: unknown; port?: unknown }
+  return typeof o.host === "string" && o.host.trim().toLowerCase() === b.host.trim().toLowerCase() && Number(o.port) === b.port
+}
+
 /**
  * Put a backup's settings in place, part by part and value by value, as the settings file is
  * read: a value of the wrong shape is skipped. What a backup never carries stays as it is here
@@ -483,7 +489,9 @@ export function restoreSettingsFromBackup(parts: unknown): string[] {
     for (const key of SETTINGS_SECTIONS[name]) {
       if (notInBackup(key) || !(key in part)) continue
       let raw = (part as Record<string, unknown>)[key]
-      if (key === "obs" && typeof raw === "object" && raw !== null) raw = { ...raw, password: here.obs.password }
+      // This computer's OBS password stays only for the same OBS: a backup naming another host would
+      // otherwise send that host an answer made from it. A different OBS starts off, with no password.
+      if (key === "obs" && typeof raw === "object" && raw !== null) raw = sameObs(raw, here.obs) ? { ...raw, password: here.obs.password } : { ...raw, password: "", enabled: false }
       if (key === "cameras" && Array.isArray(raw)) {
         raw = raw.map((c) => (typeof c === "object" && c !== null ? { ...c, token: here.cameras.find((h) => h.name === (c as CameraSource).name)?.token ?? newFeedToken() } : c))
       }
