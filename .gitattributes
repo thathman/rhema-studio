@@ -1,0 +1,4 @@
+# Rhema Companion (#209): a Tauri build on Windows rewrites its Cargo files with CRLF; keep them LF
+# so a build leaves no diff.
+companion-app/src-tauri/*.toml text eol=lf
+companion-app/src-tauri/Cargo.lock text eol=lf

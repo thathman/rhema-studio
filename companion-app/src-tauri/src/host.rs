@@ -1,5 +1,5 @@
 //! The companion's link to the church's Rhema (#209): the same commands the studio's join store
-//! calls (join_pair, join_me, join_cameras, join_tally, join_connect…), but always over the host's
+//! calls (`join_pair`, `join_me`, `join_cameras`, `join_tally`, `join_connect`…), but always over the host's
 //! secure page with its certificate pinned. Before pairing, `join_host_certificate` reads the
 //! host's certificate and the window shows its fingerprint (the host shows the same one in
 //! Settings → Remote control); pairing pins it, in companion.json in this app's data folder.
@@ -24,7 +24,7 @@ pub struct Paired {
 }
 
 /// companion.json: what this computer keeps about its host.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 struct Kept {
     host: Option<Paired>,
 }
@@ -33,8 +33,10 @@ struct Kept {
 pub struct Link {
     /// The certificate shown before pairing, waiting for the code.
     shown: Mutex<Option<Paired>>,
-    /// The paired host (read from companion.json once).
-    paired: Mutex<Option<Option<Paired>>>,
+    /// The paired host, once companion.json has been read.
+    paired: Mutex<Kept>,
+    /// companion.json has been read.
+    read: std::sync::atomic::AtomicBool,
     /// Stops following the host's Live State.
     stop: Mutex<Option<watch::Sender<bool>>>,
 }
@@ -75,10 +77,10 @@ fn pinned_for(paired: Option<&Paired>, address: &str) -> Result<Host, String> {
 impl Link {
     fn paired(&self, app: &AppHandle) -> Option<Paired> {
         let mut cache = self.paired.lock().ok()?;
-        if cache.is_none() {
-            *cache = Some(kept_path(app).ok().and_then(|p| read_kept(&p)));
+        if !self.read.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            cache.host = kept_path(app).ok().and_then(|p| read_kept(&p));
         }
-        cache.clone().flatten()
+        cache.host.clone()
     }
 
     fn host(&self, app: &AppHandle, address: &str) -> Result<Host, String> {
@@ -122,7 +124,8 @@ pub async fn join_pair(app: AppHandle, link: State<'_, Link>, address: String, c
     let token = rhema_join::host::pair(&host, &code, &name, role.as_deref()).await?;
     write_kept(&kept_path(&app)?, Some(&p)).map_err(|e| format!("Paired, but this computer could not keep the host's certificate: {e}"))?;
     if let Ok(mut cache) = link.paired.lock() {
-        *cache = Some(Some(p));
+        cache.host = Some(p);
+        link.read.store(true, std::sync::atomic::Ordering::SeqCst);
     }
     log::info!("Paired with the host at {}", address.trim());
     Ok(token)

@@ -128,7 +128,7 @@ the church's cameras; both show the same screen and do the same work in OBS.
 
 | | **Rhema Companion** (a small app of its own) | **OBS companion mode** (inside Rhema) |
 |---|---|---|
-| What you install | Only Rhema Companion (about 10–20 MB; Windows or Mac) | The whole Rhema app, models included |
+| What you install | Only Rhema Companion (a 4 MB Windows installer, about 10 MB installed; Windows or Mac) | The whole Rhema app, models included |
 | How it talks to the main computer | Only over its secure page, with the main computer's certificate shown before you join and kept after | Over the plain network page, like a joined desk |
 | Where it runs | In the notification area (Windows) or menu bar (Mac); closing the window keeps it running; can start with the computer and join by itself | In Rhema's window |
 | Choose it when | The OBS computer only ever runs OBS (the usual case) | The same computer is sometimes the full studio |

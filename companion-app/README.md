@@ -12,7 +12,7 @@ Version 1.0.0.0 (the build tools take three parts, so files say 1.0.0).
 
 | | Rhema Companion (this app) | OBS companion mode in Rhema |
 |---|---|---|
-| Install | Only this small app (about 10–20 MB) | The whole Rhema app with its speech and Bible models |
+| Install | Only this small app (a 4 MB Windows installer; the app is about 10 MB) | The whole Rhema app with its speech and Bible models |
 | Talks to the host | Only over the host's secure page, with the host's certificate shown before pairing and pinned after | Over the host's plain http page |
 | Runs | In the menu bar / notification area; can start with the computer | In Rhema's window |
 | Use it when | The OBS computer is a separate machine you set up once | The computer sometimes runs Rhema's full studio too |
@@ -81,6 +81,9 @@ The results:
 - `companion-app\src-tauri\target\release\Rhema Companion.exe` — runs as it is.
 - `companion-app\src-tauri\target\release\bundle\nsis\Rhema Companion_1.0.0_x64-setup.exe` — the
   installer (per-user, no administrator needed).
+
+First build on the Windows workstation (2026-10-24): about 6 minutes; `Rhema Companion.exe` 10.3 MB,
+the installer 4.0 MB. The Mac `.app` (Intel) is 8.2 MB.
 
 While working on it: `bun run companion:dev` (a window with live reload; the page is served on port
 3001, so it runs beside the studio's dev server).

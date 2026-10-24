@@ -3,6 +3,7 @@
 //! notification area that keeps it running when the window is closed, and nothing else: no
 //! speech, Bible, NDI, models or content database. Its settings and the host it paired with are
 //! its own (in the com.openbezal.rhema.companion data folder), never the studio app's.
+#![allow(clippy::needless_pass_by_value, reason = "Tauri commands take their arguments by value")]
 
 mod host;
 mod tray;
@@ -103,11 +104,13 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("Rhema Companion could not start")
-        .run(|_app, _event| {
+        .run(|app, event| {
             // The Dock icon clicked while the window is closed (macOS).
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = _event {
-                show(_app);
+            if let tauri::RunEvent::Reopen { .. } = event {
+                show(app);
             }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
         });
 }
