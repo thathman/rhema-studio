@@ -450,7 +450,7 @@ export function LookAndScene({ item }: { item: QueueItem }) {
           </select>
         </label>
       </div>
-      {scenes.length === 0 && cameras.length === 0 && <p className="text-muted-foreground">Scenes are made in Production → Programs, cameras in Production → Cameras.</p>}
+      {scenes.length === 0 && cameras.length === 0 && <p className="text-muted-foreground">Scenes are made in Production → Scenes, cameras in Production → Cameras.</p>}
     </section>
   )
 }

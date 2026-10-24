@@ -152,6 +152,13 @@ impl FeedHub {
     fn knows(&self, id: &str, token: &str) -> bool {
         self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| crate::command::same_key(token, &f.token))
     }
+
+    /// The feed's frame shown now names this media file (a scene's video layer): only then may its page fetch it.
+    fn shows_file(&self, id: &str, token: &str, file: &str) -> bool {
+        let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let needle = format!("\"mediaFile\":\"{file}\"");
+        feeds.get(id).is_some_and(|f| crate::command::same_key(token, &f.token) && f.current.as_ref().is_some_and(|(_, json)| json.contains(&needle)))
+    }
 }
 
 pub type SharedFeeds = Arc<FeedHub>;
@@ -403,6 +410,7 @@ where
         .route("/api/v1/feed/{id}/events", get(feed_events_handler::<S>))
         .route("/api/v1/voice", post(voice_handler::<S>))
         .route("/api/v1/feed/{id}/ack", post(feed_ack_handler::<S>))
+        .route("/api/v1/feed/{id}/media/{file}", get(feed_media_handler::<S>))
         .route("/assets/{*path}", get(asset_handler::<S>))
         .route("/remote", get(remote_page))
         .route("/camera", get(camera_page_handler::<S>))
@@ -739,6 +747,100 @@ async fn feed_page_handler<S: CommandSink + 'static>(
     match state.sink.asset("feed.html") {
         Some((bytes, _)) => ([(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8"), (axum::http::header::CACHE_CONTROL, "no-store")], bytes).into_response(),
         None => (StatusCode::NOT_FOUND, "The feed page is not in this build.").into_response(),
+    }
+}
+
+/// A media folder video's name (`<sha256 hex>.<ext>`) and its type; anything else is never served.
+fn media_video(file: &str) -> Option<&'static str> {
+    let (hash, ext) = file.split_once('.')?;
+    if hash.len() != 64 || !hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return None;
+    }
+    Some(match ext {
+        "mp4" | "m4v" => "video/mp4",
+        "mov" => "video/quicktime",
+        "webm" => "video/webm",
+        _ => return None,
+    })
+}
+
+/// The bytes asked for by a `Range: bytes=…` header of a file `len` long, at most `MEDIA_CHUNK` of them;
+/// None: the whole file; Err: a range outside the file.
+fn byte_range(header: Option<&str>, len: u64) -> Result<Option<(u64, u64)>, ()> {
+    let Some(spec) = header.and_then(|h| h.trim().strip_prefix("bytes=")) else {
+        return Ok(None);
+    };
+    // One range only (a player asks for one); a list is answered with its first.
+    let spec = spec.split(',').next().unwrap_or("").trim();
+    let (a, b) = spec.split_once('-').ok_or(())?;
+    let (start, end) = match (a.trim(), b.trim()) {
+        ("", "") => return Err(()),
+        ("", n) => {
+            let n: u64 = n.parse().map_err(|_| ())?;
+            (len.saturating_sub(n), len.saturating_sub(1))
+        }
+        (s, "") => (s.parse().map_err(|_| ())?, len.saturating_sub(1)),
+        (s, e) => (s.parse().map_err(|_| ())?, e.parse::<u64>().map_err(|_| ())?.min(len.saturating_sub(1))),
+    };
+    if len == 0 || start >= len || end < start {
+        return Err(());
+    }
+    Ok(Some((start, end.min(start + MEDIA_CHUNK - 1))))
+}
+
+/// The most bytes one range answer carries; the player asks again for the rest.
+const MEDIA_CHUNK: u64 = 4 * 1024 * 1024;
+
+/// `GET /api/v1/feed/{id}/media/{file}?k=<secret>`: a video a scene on this feed shows, for its page
+/// to play (#243 SC.9). Only with the feed's secret, only a file its current frame names, and in
+/// ranges, so a TV can start and loop it without the whole file at once.
+async fn feed_media_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    axum::extract::Path((id, file)): axum::extract::Path<(String, String)>,
+    axum::extract::Query(q): Query,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    use axum::http::header;
+    use tokio::io::{AsyncReadExt, AsyncSeekExt};
+    let Some(mime) = media_video(&file) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if !state.feeds.shows_file(&id, q.get("k").map_or("", String::as_str), &file) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Some(path) = state.sink.media_file(&file) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Ok(mut f) = tokio::fs::File::open(&path).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Ok(len) = f.metadata().await.map(|m| m.len()) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let common = [(header::CONTENT_TYPE, mime.to_string()), (header::ACCEPT_RANGES, "bytes".to_string()), (header::CACHE_CONTROL, "no-store".to_string())];
+    match byte_range(headers.get(header::RANGE).and_then(|v| v.to_str().ok()), len) {
+        Err(()) => (StatusCode::RANGE_NOT_SATISFIABLE, [(header::CONTENT_RANGE, format!("bytes */{len}"))]).into_response(),
+        Ok(Some((start, end))) => {
+            let mut buf = vec![0u8; usize::try_from(end - start + 1).unwrap_or(0)];
+            if f.seek(std::io::SeekFrom::Start(start)).await.is_err() || f.read_exact(&mut buf).await.is_err() {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            (StatusCode::PARTIAL_CONTENT, common, [(header::CONTENT_RANGE, format!("bytes {start}-{end}/{len}"))], buf).into_response()
+        }
+        Ok(None) => {
+            // The whole file, read as it is sent.
+            let stream = futures_util::stream::unfold(f, |mut f| async move {
+                let mut buf = vec![0u8; 64 * 1024];
+                match f.read(&mut buf).await {
+                    Ok(0) | Err(_) => None,
+                    Ok(n) => {
+                        buf.truncate(n);
+                        Some((Ok::<_, std::io::Error>(axum::body::Bytes::from(buf)), f))
+                    }
+                }
+            });
+            (common, [(header::CONTENT_LENGTH, len.to_string())], axum::body::Body::from_stream(stream)).into_response()
+        }
     }
 }
 
@@ -1385,6 +1487,64 @@ mod tests {
         assert!(!voice.answer("nobody-waits", "v=0".into()), "a late answer is dropped");
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    /// Serves one media folder file from a temporary folder.
+    struct MediaSink(std::path::PathBuf);
+    impl CommandSink for MediaSink {
+        fn emit_event(&self, _e: &str, _p: &str) -> Result<(), CommandError> { Ok(()) }
+        fn invoke_backend(&self, _a: &str, _p: &str) -> Result<(), CommandError> { Ok(()) }
+        fn media_file(&self, file: &str) -> Option<std::path::PathBuf> {
+            Some(self.0.join(file))
+        }
+    }
+
+    #[test]
+    fn byte_ranges_follow_what_a_video_player_asks() {
+        assert_eq!(byte_range(None, 100), Ok(None));
+        assert_eq!(byte_range(Some("bytes=0-"), 100), Ok(Some((0, 99))));
+        assert_eq!(byte_range(Some("bytes=10-19"), 100), Ok(Some((10, 19))));
+        assert_eq!(byte_range(Some("bytes=90-200"), 100), Ok(Some((90, 99))));
+        assert_eq!(byte_range(Some("bytes=-10"), 100), Ok(Some((90, 99))));
+        assert_eq!(byte_range(Some("bytes=100-"), 100), Err(()));
+        assert_eq!(byte_range(Some("bytes=5-2"), 100), Err(()));
+        assert_eq!(byte_range(Some("bytes=0-"), 10 * MEDIA_CHUNK), Ok(Some((0, MEDIA_CHUNK - 1))), "a large file goes in pieces");
+        assert!(media_video(&format!("{}.mp4", "a".repeat(64))).is_some());
+        assert!(media_video(&format!("{}.png", "a".repeat(64))).is_none(), "videos only");
+        assert!(media_video("../../etc/passwd.mp4").is_none());
+        assert!(media_video(&format!("{}.mp4", "A".repeat(64))).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_browser_feed_plays_only_the_video_its_scene_shows() {
+        let dir = std::env::temp_dir().join(format!("rhema-feed-media-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = format!("{}.mp4", "b".repeat(64));
+        let other = format!("{}.mp4", "c".repeat(64));
+        std::fs::write(dir.join(&file), b"0123456789").unwrap();
+        std::fs::write(dir.join(&other), b"secret").unwrap();
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret-feed".into())]);
+        feeds.publish("tv", format!(r#"{{"scene":{{"layers":[{{"kind":"video","mediaFile":"{file}"}}]}}}}"#));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MediaSink(dir.clone())), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let url = |f: &str, k: &str| format!("/api/v1/feed/tv/media/{f}?k={k}");
+        assert!(get_with(port, &url(&file, "wrong"), "", None).await.contains("403"));
+        assert!(get_with(port, &url(&other, "s3cret-feed"), "", None).await.contains("403"), "a file the scene does not show");
+        assert!(get_with(port, &url("notes.mp4", "s3cret-feed"), "", None).await.contains("404"));
+        let whole = get_with(port, &url(&file, "s3cret-feed"), "", None).await;
+        assert!(whole.starts_with("HTTP/1.1 200") && whole.contains("video/mp4") && whole.ends_with("0123456789"), "{whole}");
+        let part = get_with(port, &url(&file, "s3cret-feed"), "Range: bytes=2-5\r\n", None).await;
+        assert!(part.starts_with("HTTP/1.1 206") && part.contains("bytes 2-5/10") && part.ends_with("2345"), "{part}");
+        assert!(get_with(port, &url(&file, "s3cret-feed"), "Range: bytes=20-\r\n", None).await.contains("416"));
+        // Once the scene goes, so does the file.
+        feeds.publish("tv", "{}".into());
+        assert!(get_with(port, &url(&file, "s3cret-feed"), "", None).await.contains("403"));
+        let mut h = result.handle;
+        h.stop();
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[tokio::test]

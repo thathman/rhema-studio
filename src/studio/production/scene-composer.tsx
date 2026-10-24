@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
 import { drawScene } from "@/lib/scene-renderer"
-import { copyScene, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneFrame, type ScenePreset } from "@/lib/scenes"
+import { copyScene, FADES, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneFrame, type ScenePreset } from "@/lib/scenes"
+import { cameraOfUrl, routerStatus, whepUrl, type RouterStatus } from "@/lib/cameras"
 import { overlayFor } from "@/lib/lower-third-style"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
@@ -16,7 +17,7 @@ import { ConfirmDelete } from "@/studio/ui/confirm-delete"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
-import type { BroadcastOutput, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
+import type { BroadcastOutput, BroadcastOutputLanguage, Scene, SceneBox, SceneLayer, SceneLayerKind } from "@/types"
 
 /**
  * The congregation Scene Composer (ADR 0001, ARCH-002): arrange live sources, colours, pictures and
@@ -132,11 +133,12 @@ function describe(l: SceneLayer): string {
   if (l.kind === "feed") return l.shows?.length ? l.shows.map((k) => CONTENT_NAMES[k]).join(" + ") + (l.held ? " · held" : "") : "whatever is on air" + (l.held ? " · held" : "")
   if (l.kind === "color") return "colour"
   if (l.kind === "picture") return "picture"
+  if (l.kind === "video") return l.videoUrl ? "video, looping, no sound" : "video (none chosen yet)"
   if (l.kind === "clock") return "clock"
   if (l.kind === "ticker") return "the running ticker"
   if (l.kind === "lowerThird") return "the lower third on air"
   if (l.kind === "logo") return "the church logo"
-  return l.cameraUrl ? "camera" : "camera (no stream yet)"
+  return l.cameraUrl ? "camera" : "camera (none chosen yet)"
 }
 
 /** The new-scene menu: the ready-made arrangements, then the church's own presets (rename, delete). */
@@ -195,7 +197,7 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
 }
 
 function AddLayer({ onAdd }: { onAdd: (kind: SceneLayerKind) => void }) {
-  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["clock", "Clock"], ["camera", "Camera"], ["ticker", "Ticker"], ["lowerThird", "Lower third"], ["logo", "Logo"]]
+  const kinds: [SceneLayerKind, string][] = [["feed", "Live content"], ["color", "Colour"], ["picture", "Picture"], ["video", "Video"], ["clock", "Clock"], ["camera", "Camera"], ["ticker", "Ticker"], ["lowerThird", "Lower third"], ["logo", "Logo"]]
   return (
     <div role="group" aria-label="Add a layer" className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">Add</span>
@@ -337,7 +339,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
     onChange({ held: feedFrame(s, layer.shows) })
   }
   useEffect(() => {
-    if (layer.kind === "picture" && assets.length === 0) void useMediaStore.getState().list().catch(() => [])
+    if ((layer.kind === "picture" || layer.kind === "video") && assets.length === 0) void useMediaStore.getState().list().catch(() => [])
   }, [layer.kind, assets.length])
   return (
     <div className="flex flex-col gap-2.5">
@@ -360,6 +362,14 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
               <option value="">{target ? `${target.name}'s looks` : "The output's looks"}</option>
               {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">Language</span>
+            <select aria-label="Layer language" value={layer.language ?? ""} onChange={(e) => onChange({ language: (e.target.value || undefined) as BroadcastOutputLanguage | undefined })} className="h-8 rounded-md border border-input bg-card px-1.5">
+              <option value="">{target ? `As ${target.name} is set (${LANGUAGE_NAMES[target.language ?? "both"].toLowerCase()})` : "As the output is set"}</option>
+              {(Object.keys(LANGUAGE_NAMES) as BroadcastOutputLanguage[]).map((k) => <option key={k} value={k}>{LANGUAGE_NAMES[k]}</option>)}
+            </select>
+            <span className="text-muted-foreground">For a verse or song in two languages: this box can show both, or one of them, whatever the screen shows elsewhere.</span>
           </label>
           {layer.held ? (
             <Button size="sm" variant="outline" onClick={() => onChange({ held: null })}><PinOffIcon /> Follow live again <span className="truncate text-muted-foreground">({layer.held.reference || "held"})</span></Button>
@@ -393,6 +403,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
           </select>
         </label>
       )}
+      {layer.kind === "video" && <VideoPicker layer={layer} onChange={onChange} />}
       {layer.kind === "clock" && (
         <>
           <label className="flex flex-col gap-0.5">
@@ -427,13 +438,7 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
           </label>
         </>
       )}
-      {layer.kind === "camera" && (
-        <label className="flex flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">Stream address (WHEP)</span>
-          <input aria-label="Camera stream address" value={layer.cameraUrl ?? ""} placeholder="http://192.168.1.10:8889/pulpit/whep" onChange={(e) => onChange({ cameraUrl: e.target.value.trim() || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
-          <span className="text-muted-foreground">A camera relayed on the church network (MediaMTX: http://&lt;its computer&gt;:8889/&lt;camera&gt;/whep). Each screen plays it directly, without sound; until it connects the scene's background shows there. Only addresses on the church network are used.</span>
-        </label>
-      )}
+      {layer.kind === "camera" && <CameraPicker layer={layer} onChange={onChange} />}
       {layer.kind === "camera" && (
         <label className="flex flex-col gap-0.5">
           <span className="text-xs text-muted-foreground">While the camera is not playing, show</span>
@@ -457,6 +462,18 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
           <Num label="Crop bottom" value={crop.b} max={90 - crop.t} onChange={(bb) => onChange({ crop: { ...crop, b: bb } })} />
         </div>
       )}
+      {FADES(layer.kind) && (
+        <label className="flex flex-col gap-0.5">
+          <span className="text-xs text-muted-foreground">When it changes</span>
+          <select aria-label="How this layer changes" value={layer.fadeMs ?? 0} onChange={(e) => { const ms = Number(e.target.value); onChange({ fadeMs: ms > 0 ? ms : undefined }) }} className="h-8 rounded-md border border-input bg-card px-1.5">
+            <option value={0}>Cut</option>
+            <option value={300}>Fade 0.3 s</option>
+            <option value={500}>Fade 0.5 s</option>
+            <option value={1000}>Fade 1 s</option>
+          </select>
+          <span className="text-muted-foreground">How this layer goes to something new (the next verse or slide, another picture). How the whole scene comes on air is the scene's Take setting.</span>
+        </label>
+      )}
       <label className="flex items-center gap-2">
         <span className="w-16 shrink-0">Opacity</span>
         <input type="range" aria-label="Opacity" min={0} max={100} value={Math.round(layer.opacity * 100)} onChange={(e) => onChange({ opacity: Number(e.target.value) / 100 })} className="flex-1" />
@@ -470,6 +487,81 @@ function Inspector({ layer, onChange, onRemove, target }: { layer: SceneLayer; o
   )
 }
 
+const LANGUAGE_NAMES: Record<BroadcastOutputLanguage, string> = { both: "Both languages, as prepared", first: "First language only", second: "Second language only" }
+
+/** A library video for a video layer: it loops without sound on every screen that shows the scene. */
+export function VideoPicker({ layer, onChange }: { layer: SceneLayer; onChange: (p: Partial<SceneLayer>) => void }) {
+  const assets = useMediaStore((s) => s.assets)
+  const videos = assets.filter((a) => a.kind === "video" && a.present !== false)
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="text-xs text-muted-foreground">Video (from Library)</span>
+      <select
+        aria-label="Video"
+        value={layer.mediaId ?? ""}
+        onChange={async (e) => {
+          const id = e.target.value
+          if (!id) return onChange({ mediaId: undefined, videoUrl: undefined, mediaFile: undefined })
+          const url = await useMediaStore.getState().fileUrl(id).catch(() => null)
+          const file = useMediaStore.getState().assets.find((a) => a.id === id)?.file
+          onChange({ mediaId: id, videoUrl: url ?? undefined, mediaFile: file })
+        }}
+        className="h-8 rounded-md border border-input bg-card px-1.5"
+      >
+        <option value="">Choose a video…</option>
+        {videos.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </select>
+      <span className="text-muted-foreground">{videos.length === 0 ? "No videos in the Library yet: add one in Library → Media." : "Plays on a loop without sound, under the layers above it, on every screen and browser feed that shows this scene."}</span>
+    </label>
+  )
+}
+
+/**
+ * The church's cameras (Production → Cameras) by name, for a camera layer; typing a stream address
+ * stays possible under Advanced (a camera relayed somewhere else on the church network).
+ */
+export function CameraPicker({ layer, onChange }: { layer: SceneLayer; onChange: (p: Partial<SceneLayer>) => void }) {
+  const cameras = useSettingsStore((s) => s.cameras)
+  const [router, setRouter] = useState<RouterStatus | null>(null)
+  useEffect(() => {
+    let live = true
+    void routerStatus().then((r) => { if (live) setRouter(r) })
+    return () => { live = false }
+  }, [])
+  const host = router?.lanAddress ?? null
+  const chosen = cameraOfUrl(layer.cameraUrl, cameras)
+  const value = chosen ?? (layer.cameraUrl ? "typed" : "")
+  const pick = (name: string) => {
+    const cam = cameras.find((c) => c.name === name)
+    if (!name || !cam) return onChange({ cameraUrl: undefined })
+    if (!host || !router) return
+    onChange({ cameraUrl: whepUrl(host, router.ports, cam.name), ...(layer.name === "Camera" ? { name: `${cam.label} camera` } : {}) })
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="flex flex-col gap-0.5">
+        <span className="text-xs text-muted-foreground">Camera</span>
+        <select aria-label="Camera" value={value} onChange={(e) => pick(e.target.value)} className="h-8 rounded-md border border-input bg-card px-1.5">
+          <option value="">No camera yet</option>
+          {cameras.map((c) => <option key={c.name} value={c.name} disabled={!host && c.name !== chosen}>{c.label}</option>)}
+          {value === "typed" && <option value="typed" disabled>An address typed under Advanced</option>}
+        </select>
+        <span className="text-muted-foreground">
+          {cameras.length === 0 ? "No cameras yet: add the phones or cameras for each angle in Production → Cameras." : !host ? "Turn on the camera router in Production → Cameras to choose a camera here." : "Each screen plays it straight from the camera router, without sound; until it connects the scene's background shows there."}
+        </span>
+      </label>
+      <details open={value === "typed"} className="text-xs">
+        <summary className="cursor-pointer text-muted-foreground">Advanced: type a stream address</summary>
+        <label className="mt-1 flex flex-col gap-0.5">
+          <span className="text-xs text-muted-foreground">Stream address (WHEP)</span>
+          <input aria-label="Camera stream address" value={layer.cameraUrl ?? ""} placeholder="http://192.168.1.10:8889/pulpit/whep" onChange={(e) => onChange({ cameraUrl: e.target.value.trim() || undefined })} className="h-8 rounded-md border border-input bg-transparent px-2" />
+          <span className="text-muted-foreground">A camera relayed somewhere else on the church network (MediaMTX: http://&lt;its computer&gt;:8889/&lt;camera&gt;/whep). Only addresses on the church network are used.</span>
+        </label>
+      </details>
+    </div>
+  )
+}
+
 function LogoNote() {
   const logoUrl = useSettingsStore((s) => s.brandKit.logoUrl)
   return <p className="text-muted-foreground">{logoUrl ? "The church logo from the Brand Kit (Design), fitted whole in this box. A new logo there shows here too." : "No church logo yet: add it in Design → Brand Kit, and it shows here."}</p>
@@ -479,7 +571,7 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   return <button type="button" aria-pressed={on} onClick={onClick} className={cn("rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary-text" : "border-border text-muted-foreground hover:bg-muted")}>{children}</button>
 }
 
-/** The program of one congregation output: which scene it shows, Take, back to its own feed, Restore. */
+/** What one congregation output shows: which scene, Take, back to its own feed, Restore. */
 function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTake }: { congregation: BroadcastOutput[]; target: BroadcastOutput | undefined; onTarget: (id: string) => void; draft: Scene | null; dirty: boolean; onSave: () => void; onTake: () => void }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const back = useBroadcastStore((s) => (target ? s.sceneReturn[target.id] : undefined))
@@ -489,8 +581,8 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
   if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Production → Screens) to take a scene to it.</p>
   return (
     // The live console's own colours (dark ink, in every theme), from its tokens.
-    <section aria-label="Program" className="dark present-surface flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-foreground">
-      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">Program</span>
+    <section aria-label="On the screen" className="dark present-surface flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-xs text-foreground">
+      <span className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">On the screen</span>
       <select aria-label="Congregation output" value={target.id} onChange={(e) => onTarget(e.target.value)} className="h-8 rounded-md border border-input bg-secondary px-1.5 text-foreground">
         {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>

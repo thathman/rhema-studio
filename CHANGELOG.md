@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Scenes: video backgrounds, cameras by name, a language and a fade per box, scenes from Present (#243, #299)
+- A scene can have a **Video** layer: a Library video playing on a loop without sound, under the words, on the screens, NDI and browser feeds (Google TV, OBS). New ready-made scene **Lyrics on video**.
+- A camera layer now picks the church's cameras **by name**; typing a stream address is still there under Advanced. Each live content box has its own **Language** (both, first or second) and **When it changes** (cut or a fade).
+- Present's Scenes strip has **New scene / Edit scene**: a basic scene (background, one content box, lower third, camera) without leaving the live console. Production's **Programs** tab is now called **Scenes**.
+- Each output card in Production → Screens shows its **safe area**, outlined on its look's preview.
 ### This computer's name in the Desk menu; a fuller setup summary (#298, #299)
 - The Desk menu now shows and edits **this computer's name** (with a short Desk ID), says **what this desk may do** (all controls on the main desk, or what the host's role allows), and leads to Production → Operators, or **Leave this host** on a joined desk. Joining a host suggests "your name · this computer" as the name the host sees.
 - After Rhema closed unexpectedly, **Not now** on the banner no longer throws the offer away: the Desk menu keeps **Put back the last session's screens** (it asks once more first).

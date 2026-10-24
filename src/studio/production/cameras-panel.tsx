@@ -194,7 +194,7 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
     // An empty camera place gets this camera; otherwise a full-frame camera goes underneath everything.
     const layers = empty ? scene.layers.map((l) => (l.id === empty.id ? { ...l, cameraUrl: whep } : l)) : [newLayer("camera", { name: `${cam.label} camera`, cameraUrl: whep }), ...scene.layers]
     useBroadcastStore.getState().saveScene({ ...scene, layers })
-    toast.success(`${cam.label} is in "${scene.name}"`, { description: empty ? `Its camera place "${empty.name}" now plays this camera.` : "Added as a full-frame camera underneath the other layers; arrange it in Programs." })
+    toast.success(`${cam.label} is in "${scene.name}"`, { description: empty ? `Its camera place "${empty.name}" now plays this camera.` : "Added as a full-frame camera underneath the other layers; arrange it in Production → Scenes." })
   }
   return (
     <li>
@@ -217,7 +217,7 @@ function CameraCard({ cam, host, router, path, phonePage }: { cam: CameraSource;
               <div className="flex flex-col gap-1.5">
                 <Copyable label="For Rhema scenes and TVs (WHEP)" value={whep} />
                 <select aria-label={`Use ${cam.label} in a scene`} value="" disabled={scenes.length === 0} onChange={(e) => { if (e.target.value) putInScene(e.target.value) }} className="h-8 w-fit rounded-md border border-input bg-card px-2">
-                  <option value="">{scenes.length === 0 ? "No scenes yet (Programs)" : "Use in a scene…"}</option>
+                  <option value="">{scenes.length === 0 ? "No scenes yet (Production → Scenes)" : "Use in a scene…"}</option>
                   {scenes.map((s) => {
                     const onAir = outputs.some((o) => o.sceneId === s.id)
                     return <option key={s.id} value={s.id} disabled={onAir}>{s.name}{onAir ? " (on air: take it off first)" : ""}</option>

@@ -124,3 +124,19 @@ export function applyLook(t: BroadcastTheme, change: LookChange): BroadcastTheme
 export function applyDirection(t: BroadcastTheme, d: Pick<Look, "words" | "accent"> & { background: string }): BroadcastTheme {
   return applyLook(applyLook(applyLook(t, { background: d.background }), { words: d.words }), { accent: d.accent })
 }
+
+/** A look's safe area (#299 4.9): the space it keeps clear at each edge, in % of the frame. */
+export function safeArea(theme: BroadcastTheme): { left: number; right: number; top: number; bottom: number } {
+  const { width, height } = theme.resolution
+  const p = theme.layout.padding
+  const pct = (n: number, of: number) => Math.round((Math.max(0, n) / Math.max(1, of)) * 100)
+  return { left: pct(p.left, width), right: pct(p.right, width), top: pct(p.top, height), bottom: pct(p.bottom, height) }
+}
+
+/** The safe area in words: "5% at each edge", or each edge when they differ. */
+export function safeAreaWords(theme: BroadcastTheme): string {
+  const a = safeArea(theme)
+  if (a.left === a.right && a.top === a.bottom && a.left === a.top) return `${a.left}% at each edge`
+  if (a.left === a.right && a.top === a.bottom) return `${a.left}% left and right, ${a.top}% top and bottom`
+  return `${a.left}% left, ${a.right}% right, ${a.top}% top, ${a.bottom}% bottom`
+}

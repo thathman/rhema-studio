@@ -5,6 +5,7 @@ import { drawScene } from "@/lib/scene-renderer"
 import { sceneFrame } from "@/lib/scenes"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { SceneSheetButton } from "@/studio/present/scene-sheet"
 import type { BroadcastOutput, Scene } from "@/types"
 
 /** Window heights at which the scenes start folded (a 1440×900 laptop and smaller). */
@@ -19,7 +20,7 @@ export const SCENES_REHEARSAL_NOTE = "Rehearsal: a Take here is practice. The sc
  * Scenes in Present (ADR 0001): change what a congregation screen is arranged to show (camera and
  * Bible, lyrics on a picture…) without leaving the live console. Taking a scene changes the
  * screen's layout, not what is live: the words come from the live sources either way. Scenes are
- * made and edited in Production → Programs; this only takes them, goes back to the screen's own
+ * made and edited in Production → Scenes (a basic one here too: New / Edit scene); this takes them, goes back to the screen's own
  * feed, and restores the last one. Shown only when there is a congregation screen and a saved scene.
  */
 export function ScenesStrip({ className }: { className?: string }) {
@@ -149,6 +150,7 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
           reason={restoreReason}
           onClick={() => restorable && b().takeScene(output.id, restorable.id)}
         />
+        <SceneSheetButton output={output} scene={picked} />
         <span className="min-w-0 flex-1 truncate text-right text-[0.6875rem] text-muted-foreground">
           {rehearsal && "Rehearsal · "}
           {showing ? <>Shows <strong className="font-semibold text-foreground">{showing.name}</strong></> : "Shows its own feed"}

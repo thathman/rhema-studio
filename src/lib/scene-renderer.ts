@@ -17,8 +17,12 @@ export interface SceneDrawOptions {
   now?: number
   /** A camera layer's video, when it is playing (outputs only). */
   camera?: (layerId: string) => HTMLVideoElement | null
-  /** The page shows this playing camera itself, under the canvas: leave its box see-through. */
+  /** A video layer's player, once it has a picture (outputs only). */
+  video?: (layerId: string) => HTMLVideoElement | null
+  /** The page shows this playing camera or video itself, under the canvas: leave its box see-through. */
   cameraBelow?: (layerId: string) => boolean
+  /** Layer cross-fades (outputs only); without it every layer cuts. */
+  fader?: LayerFader
   /** The page draws this ticker layer itself, on a strip over the canvas: leave it out here. */
   tickerAbove?: (layerId: string) => boolean
   /** The ticker's looping video backing, where one plays. */
@@ -108,10 +112,150 @@ function inBox(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number
 }
 
 /**
+ * Layer cross-fades: what each layer drew last, so a layer with a fade can go from it to new
+ * content (a new verse, another picture) over its time. One per output page; kept outside the
+ * frames, which carry only each layer's content key.
+ */
+export class LayerFader {
+  private layers = new Map<string, { key: string; canvas: HTMLCanvasElement; from: HTMLCanvasElement | null; start: number; ms: number }>()
+  private readonly make: () => HTMLCanvasElement
+  readonly clock: () => number
+  constructor(make: () => HTMLCanvasElement = () => document.createElement("canvas"), clock: () => number = () => performance.now()) {
+    this.make = make
+    this.clock = clock
+  }
+
+  /** A fade is running: keep drawing. */
+  busy(now = this.clock()): boolean {
+    return [...this.layers.values()].some((l) => l.from && now - l.start < l.ms)
+  }
+
+  /** Forget layers no longer drawn (another scene came up), so coming back is never a fade from old content. */
+  keep(ids: ReadonlySet<string>): void {
+    for (const id of this.layers.keys()) if (!ids.has(id)) this.layers.delete(id)
+  }
+
+  /**
+   * The canvas to paint this layer's content into now, and the old content with how far it has
+   * faded out (0–1, 1 = gone). A layer seen for the first time does not fade (its scene has just come up).
+   */
+  begin(id: string, key: string, ms: number, w: number, h: number): { canvas: HTMLCanvasElement; from: HTMLCanvasElement | null; p: number } {
+    const now = this.clock()
+    let l = this.layers.get(id)
+    if (!l) this.layers.set(id, (l = { key, canvas: this.make(), from: null, start: 0, ms }))
+    else if (l.key !== key) {
+      const old = l.canvas
+      l.canvas = l.from ?? this.make()
+      l.from = old
+      l.key = key
+      l.start = now
+      l.ms = ms
+    }
+    if (l.canvas.width !== w || l.canvas.height !== h) {
+      l.canvas.width = w
+      l.canvas.height = h
+    }
+    const p = l.from && l.ms > 0 ? Math.min(1, (now - l.start) / l.ms) : 1
+    if (p >= 1) l.from = null
+    return { canvas: l.canvas, from: l.from, p }
+  }
+}
+
+/** Where a camera's or video's picture goes in a layer: cover the box, keeping its shape (like a picture). */
+function drawCover(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, v: HTMLVideoElement): void {
+  const s = source(l, v.videoWidth, v.videoHeight)
+  const scale = Math.max(r.w / s.sw, r.h / s.sh)
+  const cw = r.w / scale, ch = r.h / scale
+  ctx.drawImage(v, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
+}
+
+/** One layer's content in its box (`ctx`'s alpha is already the layer's opacity). */
+function paintLayer(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions): void {
+  if (l.kind === "color") {
+    ctx.fillStyle = l.color ?? "#000"
+    ctx.fillRect(r.x, r.y, r.w, r.h)
+  } else if (l.kind === "picture" && l.imageUrl) {
+    const img = opts.image(l.imageUrl)
+    if (img && img.naturalWidth > 0) {
+      const s = source(l, img.naturalWidth, img.naturalHeight)
+      // Cover the box, keeping the picture's shape.
+      const scale = Math.max(r.w / s.sw, r.h / s.sh)
+      const cw = r.w / scale, ch = r.h / scale
+      ctx.drawImage(img, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
+    }
+  } else if (l.kind === "camera" || l.kind === "video") {
+    const v = (l.kind === "camera" ? opts.camera?.(l.id) : opts.video?.(l.id)) ?? null
+    // A camera not playing (not connected yet, or dropped): its fallback words, if it has them (#213).
+    if ((!v || v.videoWidth === 0) && l.fallback && !opts.preview) fitText(ctx, l.fallback, r, l.theme)
+    else if (v && v.videoWidth > 0 && opts.cameraBelow?.(l.id)) {
+      // Cut its box out of whatever is below, as much as the layer is opaque.
+      ctx.globalCompositeOperation = "destination-out"
+      ctx.fillRect(r.x, r.y, r.w, r.h)
+    } else if (v && v.videoWidth > 0) drawCover(ctx, l, r, v)
+  } else if (l.kind === "logo" && l.imageUrl) {
+    const img = opts.image(l.imageUrl)
+    if (img && img.naturalWidth > 0) {
+      const s = source(l, img.naturalWidth, img.naturalHeight)
+      // Fitted inside the box, whole and centred, keeping its shape.
+      const scale = Math.min(r.w / s.sw, r.h / s.sh)
+      const w = s.sw * scale, h = s.sh * scale
+      ctx.drawImage(img, s.sx, s.sy, s.sw, s.sh, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h)
+    }
+  } else if (l.kind === "ticker" && l.ticker && !opts.tickerAbove?.(l.id)) {
+    const now = opts.now ?? Date.now()
+    inBox(ctx, l, r, opts, (c, w, h) => drawTickerLayer(c, w, h, l, height, { imageCache: opts.imageCache, video: opts.tickerVideo, now }))
+  } else if (l.kind === "lowerThird" && l.overlay) {
+    // Laid out in its box as it would be on a frame of that size.
+    const lt = l.overlay
+    const now = opts.now ?? Date.now()
+    inBox(ctx, l, r, opts, (c, w, h) => drawLowerThird(c, w, h, lt, l.fontFamily, { imageCache: opts.imageCache, video: opts.lowerThirdVideo ?? null, progress: entranceProgress(lt, now) }))
+  } else if (l.kind === "clock" && l.theme && l.clock) {
+    // The time fills its box in the look's text style; whatever is behind shows around it.
+    fitText(ctx, clockText(l.clock, opts.now ?? Date.now()), r, l.theme, 0.8)
+  } else if (l.kind === "feed" && l.theme && l.verse) {
+    const lc = opts.layerCanvas(l.id)
+    const { width: tw, height: th } = l.theme.resolution
+    if (lc.width !== tw || lc.height !== th) {
+      lc.width = tw
+      lc.height = th
+    }
+    const lctx = lc.getContext("2d")
+    if (lctx) {
+      lctx.clearRect(0, 0, tw, th)
+      renderVerse(lctx, l.theme, l.verse, { scale: 1, imageCache: opts.imageCache })
+      const s = source(l, tw, th)
+      ctx.drawImage(lc, s.sx, s.sy, s.sw, s.sh, r.x, r.y, r.w, r.h)
+    }
+  }
+}
+
+/**
+ * A layer with a fade: its content painted into a canvas of its own and placed over the old
+ * content fading out. A camera or video the page shows under the canvas cannot fade there: it cuts.
+ */
+function paintFading(ctx: CanvasRenderingContext2D, l: SceneLayerFrame, r: { x: number; y: number; w: number; h: number }, height: number, opts: SceneDrawOptions, fader: LayerFader): void {
+  const w = Math.max(1, Math.round(r.w)), h = Math.max(1, Math.round(r.h))
+  const { canvas, from, p } = fader.begin(l.id, l.key ?? "", l.fadeMs ?? 0, w, h)
+  const c = canvas.getContext("2d")
+  if (!c) return paintLayer(ctx, l, r, height, opts)
+  c.save()
+  c.clearRect(0, 0, w, h)
+  c.translate(-r.x, -r.y)
+  paintLayer(c, { ...l, opacity: 1 }, r, height, opts)
+  c.restore()
+  if (from) {
+    ctx.globalAlpha = l.opacity * (1 - p)
+    ctx.drawImage(from, r.x, r.y, r.w, r.h)
+  }
+  ctx.globalAlpha = l.opacity * p
+  ctx.drawImage(canvas, r.x, r.y, r.w, r.h)
+}
+
+/**
  * Draw a scene: the background, then each layer in its box, bottom first. A feed layer is its look
  * drawn whole (a transparent look stays transparent) and then cropped and scaled into its box, so a
  * layer looks exactly like the same look on an output of its own. A feed with nothing live shows
- * nothing.
+ * nothing. With a fader, a layer that has a fade cross-fades to new content.
  */
 export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: number, frame: SceneFrame, opts: SceneDrawOptions): void {
   ctx.clearRect(0, 0, width, height)
@@ -119,85 +263,25 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
     ctx.fillStyle = frame.background
     ctx.fillRect(0, 0, width, height)
   }
+  opts.fader?.keep(new Set(frame.layers.map((l) => l.id)))
   for (const l of frame.layers) {
     const r = rect(l, width, height)
     ctx.save()
     ctx.globalAlpha = l.opacity
-    if (l.kind === "color") {
-      ctx.fillStyle = l.color ?? "#000"
-      ctx.fillRect(r.x, r.y, r.w, r.h)
-    } else if (l.kind === "picture" && l.imageUrl) {
-      const img = opts.image(l.imageUrl)
-      if (img && img.naturalWidth > 0) {
-        const s = source(l, img.naturalWidth, img.naturalHeight)
-        // Cover the box, keeping the picture's shape.
-        const scale = Math.max(r.w / s.sw, r.h / s.sh)
-        const cw = r.w / scale, ch = r.h / scale
-        ctx.drawImage(img, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
-      }
-    } else if (l.kind === "camera") {
-      const v = opts.camera?.(l.id) ?? null
-      // Not playing (not connected yet, or dropped): its fallback words, if it has them (#213).
-      if ((!v || v.videoWidth === 0) && l.fallback && !opts.preview) fitText(ctx, l.fallback, r, l.theme)
-      else if (v && v.videoWidth > 0 && opts.cameraBelow?.(l.id)) {
-        // Cut its box out of whatever is below, as much as the layer is opaque.
-        ctx.globalCompositeOperation = "destination-out"
-        ctx.fillRect(r.x, r.y, r.w, r.h)
-      } else if (v && v.videoWidth > 0) {
-        const s = source(l, v.videoWidth, v.videoHeight)
-        // Cover the box, keeping the camera's shape (like a picture).
-        const scale = Math.max(r.w / s.sw, r.h / s.sh)
-        const cw = r.w / scale, ch = r.h / scale
-        ctx.drawImage(v, s.sx + (s.sw - cw) / 2, s.sy + (s.sh - ch) / 2, cw, ch, r.x, r.y, r.w, r.h)
-      }
-    } else if (l.kind === "logo" && l.imageUrl) {
-      const img = opts.image(l.imageUrl)
-      if (img && img.naturalWidth > 0) {
-        const s = source(l, img.naturalWidth, img.naturalHeight)
-        // Fitted inside the box, whole and centred, keeping its shape.
-        const scale = Math.min(r.w / s.sw, r.h / s.sh)
-        const w = s.sw * scale, h = s.sh * scale
-        ctx.drawImage(img, s.sx, s.sy, s.sw, s.sh, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h)
-      }
-    } else if (l.kind === "ticker" && l.ticker && !opts.tickerAbove?.(l.id)) {
-      const now = opts.now ?? Date.now()
-      inBox(ctx, l, r, opts, (c, w, h) => drawTickerLayer(c, w, h, l, height, { imageCache: opts.imageCache, video: opts.tickerVideo, now }))
-    } else if (l.kind === "lowerThird" && l.overlay) {
-      // Laid out in its box as it would be on a frame of that size.
-      const lt = l.overlay
-      const now = opts.now ?? Date.now()
-      inBox(ctx, l, r, opts, (c, w, h) => drawLowerThird(c, w, h, lt, l.fontFamily, { imageCache: opts.imageCache, video: opts.lowerThirdVideo ?? null, progress: entranceProgress(lt, now) }))
-    } else if (l.kind === "clock" && l.theme && l.clock) {
-      // The time fills its box in the look's text style; whatever is behind shows around it.
-      fitText(ctx, clockText(l.clock, opts.now ?? Date.now()), r, l.theme, 0.8)
-    } else if (l.kind === "feed" && l.theme && l.verse) {
-      const lc = opts.layerCanvas(l.id)
-      const { width: tw, height: th } = l.theme.resolution
-      if (lc.width !== tw || lc.height !== th) {
-        lc.width = tw
-        lc.height = th
-      }
-      const lctx = lc.getContext("2d")
-      if (lctx) {
-        lctx.clearRect(0, 0, tw, th)
-        renderVerse(lctx, l.theme, l.verse, { scale: 1, imageCache: opts.imageCache })
-        const s = source(l, tw, th)
-        ctx.drawImage(lc, s.sx, s.sy, s.sw, s.sh, r.x, r.y, r.w, r.h)
-      }
-    }
+    if (opts.fader && l.fadeMs && !opts.preview && !opts.cameraBelow?.(l.id)) paintFading(ctx, l, r, height, opts, opts.fader)
+    else paintLayer(ctx, l, r, height, opts)
     if (opts.preview && l.label) {
       ctx.globalAlpha = 1
+      ctx.globalCompositeOperation = "source-over"
       ctx.setLineDash([Math.max(6, width / 160), Math.max(4, width / 240)])
       ctx.lineWidth = Math.max(2, width / 480)
       ctx.strokeStyle = "rgba(255,255,255,0.55)"
       ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2)
-      if (l.label) {
-        ctx.fillStyle = "rgba(255,255,255,0.85)"
-        ctx.font = `600 ${Math.max(12, Math.round(height / 36))}px "IBM Plex Sans", sans-serif`
-        ctx.textAlign = "center"
-        ctx.textBaseline = "middle"
-        ctx.fillText(l.label, r.x + r.w / 2, r.y + r.h / 2, r.w - 16)
-      }
+      ctx.fillStyle = "rgba(255,255,255,0.85)"
+      ctx.font = `600 ${Math.max(12, Math.round(height / 36))}px "IBM Plex Sans", sans-serif`
+      ctx.textAlign = "center"
+      ctx.textBaseline = "middle"
+      ctx.fillText(l.label, r.x + r.w / 2, r.y + r.h / 2, r.w - 16)
     }
     ctx.restore()
   }

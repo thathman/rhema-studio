@@ -59,6 +59,19 @@ export function whepUrl(host: string, ports: RouterPorts, name: string): string 
   return `http://${host}:${ports.webrtc}/${name}/whep`
 }
 
+/** Which of the church's cameras a WHEP address plays (a scene's camera layer), or null for an address typed by hand. */
+export function cameraOfUrl(url: string | undefined, cameras: Pick<CameraSource, "name">[]): string | null {
+  if (!url) return null
+  let path: string
+  try {
+    path = new URL(url).pathname
+  } catch {
+    return null
+  }
+  const name = /^\/([^/]+)\/whep\/?$/.exec(path)?.[1]
+  return cameras.find((c) => c.name === name)?.name ?? null
+}
+
 /** What OBS reads (Media Source, not a local file). */
 export function rtspUrl(host: string, ports: RouterPorts, name: string): string {
   return `rtsp://${host}:${ports.rtsp}/${name}`

@@ -16,6 +16,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
 import { outputDestination, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
+import { safeArea, safeAreaWords } from "@/lib/theme-look"
 import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, ReceiverTv, Scene } from "@/types"
 import { useJournalStore } from "@/stores/journal-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -40,7 +41,8 @@ const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["timekeeper", "Timekeeper"],
   ["screens", "Screens"],
   ["health", "Show health"],
-  ["programs", "Programs"],
+  // Scenes (the id stays "programs", so saved links and other pages keep working).
+  ["programs", "Scenes"],
   ["obs", "OBS"],
   ["cameras", "Cameras"],
   ["operators", "Operators"],
@@ -292,6 +294,7 @@ const ROLE_NAMES = { congregation: "Congregation", stage: "Stage", signage: "Sig
 const LANGUAGE_NAMES = { both: "Both languages, as prepared", first: "First language only", second: "Second language only" } as const
 const SAMPLE_VERSE = { reference: "John 3:16", segments: [{ text: "For God so loved the world" }] }
 
+
 function OutputInspector({ output: o, status: st, frame, scenes, themes }: { output: BroadcastOutput; status: BroadcastOutputStatus | undefined; frame: OutputFrame | undefined; scenes: Scene[]; themes: BroadcastTheme[] }) {
   const on = outputOnAir(o, st)
   const feed = useFeedHealth(o.id, o.type === "browser" && on)
@@ -321,10 +324,17 @@ function OutputInspector({ output: o, status: st, frame, scenes, themes }: { out
         {role === "congregation" && row("Language", LANGUAGE_NAMES[o.language ?? "both"])}
         {role !== "stage" && row("Look", (
           <span className="flex items-center gap-2">
-            {theme && <span className="w-16 shrink-0 overflow-hidden rounded-[3px] border border-border bg-[#1d2327]"><CanvasVerse theme={theme} verse={SAMPLE_VERSE} className="w-full" /></span>}
+            {theme && (
+              <span className="relative w-16 shrink-0 overflow-hidden rounded-[3px] border border-border bg-[#1d2327]">
+                <CanvasVerse theme={theme} verse={SAMPLE_VERSE} className="w-full" />
+                {/* The safe area, outlined. */}
+                <span aria-hidden data-testid="safe-area-outline" className="pointer-events-none absolute border border-dashed border-white/50" style={{ left: `${safeArea(theme).left}%`, right: `${safeArea(theme).right}%`, top: `${safeArea(theme).top}%`, bottom: `${safeArea(theme).bottom}%` }} />
+              </span>
+            )}
             <span className="min-w-0">{theme?.name ?? "A look that is no longer saved"}{ownLooks > 0 && <span className="block text-muted-foreground">+ {ownLooks} content-specific {ownLooks === 1 ? "look" : "looks"}</span>}</span>
           </span>
         ))}
+        {role !== "stage" && theme && row("Safe area", <span title="The space its look keeps clear at the screen's edges, so nothing is cut off. Change it in Design → the look → Composition → Safe area.">{safeAreaWords(theme)} <span className="text-muted-foreground">(its look)</span></span>)}
         {row("Now", <span className="block truncate">{showing(o, frame, scenes, on)}</span>)}
         {o.type === "ndi" && on && typeof st?.ndiReceivers === "number" && row("Signal", `${st.ndiReceivers} ${st.ndiReceivers === 1 ? "receiver" : "receivers"}`)}
         {o.type === "browser" && on && feedHealthLabel(feed) && row("Signal", <span className={cn(feed?.behind && "text-destructive")}>{feedHealthLabel(feed)}</span>)}

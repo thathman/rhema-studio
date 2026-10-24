@@ -195,7 +195,7 @@ function LookCard({ look, favourite, onFavourite, onOpen }: { look: LibraryLook;
         {copies.length > 0 && <p className="text-[0.6875rem] text-muted-foreground">{COPIES_WHERE[look.kind]}: {copies.map((c) => c.name).join(", ")}</p>}
         <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
           <Button size="xs" onClick={() => void addLook(look, false, onOpen)} title="Add your own copy to your looks"><PlusIcon /> Use</Button>
-          <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title={look.kind === "scene" ? "Add your own copy and open it in Production → Programs" : "Add your own copy and open it to edit"}><PencilIcon /> Use and edit</Button>
+          <Button size="xs" variant="outline" onClick={() => void addLook(look, true, onOpen)} title={look.kind === "scene" ? "Add your own copy and open it in Production → Scenes" : "Add your own copy and open it to edit"}><PencilIcon /> Use and edit</Button>
           {brandable(look) && <ChurchColoursButton look={look} onOpen={onOpen} />}
           {copies.length > 0 && <ResetMenu look={look} copies={copies} />}
         </div>
@@ -328,9 +328,9 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
       toast(`The stage display now uses “${look.name}”.`)
       return
     case "scene":
-      // Programs opens the copy in the composer: arranging it there changes nothing on air until Take.
+      // Scenes opens the copy in the composer: arranging it there changes nothing on air until Take.
       if (edit && added.scene) openProductionTab("programs", { sceneId: added.scene.id })
-      toast(`Added the scene “${added.scene?.name}”${added.themes.length ? ` and its look “${added.themes.map((t) => t.name).join("”, “")}”` : ""}.`, { description: `${keptNote}Set its camera and take it in Production → Programs; nothing is on air yet.` })
+      toast(`Added the scene “${added.scene?.name}”${added.themes.length ? ` and its look “${added.themes.map((t) => t.name).join("”, “")}”` : ""}.`, { description: `${keptNote}Set its camera and take it in Production → Scenes; nothing is on air yet.` })
       return
   }
 }
