@@ -9,6 +9,7 @@ members = [
     "crates/api",
     "crates/notes",
     "crates/content",
+    "crates/join",
 ]
 resolver = "2"
 
@@ -64,6 +65,8 @@ rhema-broadcast = { path = "crates/broadcast" }
 rhema-detection = { path = "crates/detection", features = ["onnx", "vector-search"] }
 rhema-api = { path = "crates/api" }
 rhema-content = { path = "crates/content" }
+# Find, pair with and follow a host; shared with Rhema Studio Companion (#209).
+rhema-join = { path = "crates/join", features = ["keychain"] }
 crossbeam-channel = "0.5"
 dotenvy = "0.15"
 sha2 = "0.10"

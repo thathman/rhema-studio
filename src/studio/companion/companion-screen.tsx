@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react"
-import { CameraIcon, LaptopIcon, PlusIcon } from "lucide-react"
+import { useEffect, useState, type ReactNode } from "react"
+import { invoke } from "@tauri-apps/api/core"
+import { CameraIcon, PlusIcon, ShieldCheckIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 import { cn } from "@/lib/utils"
 import { LATENCY_CHOICES, readMbps, receivingWords } from "@/lib/obs-companion"
-import { cameraLabel, startCompanion, switchMode, useCompanion } from "@/stores/companion-store"
+import { cameraLabel, startCompanion, useCompanion } from "@/stores/companion-store"
 import { useJoin } from "@/stores/join-store"
 import { useObsStore } from "@/stores/obs-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import { JoinForm } from "@/studio/production/operators-panel"
+import { JoinForm } from "@/studio/production/join-form"
+import { certificateWords, type PairedHost } from "@/lib/host-certificate"
 import { roleLabel } from "@/lib/remote-roles"
 
 const NEW_SCENE = "\u0000new"
@@ -17,48 +19,42 @@ const NEW_SCENE = "\u0000new"
  * The OBS companion (#209): what a computer that runs OBS only shows instead of the studio. Join
  * the church's Rhema, see its cameras, and add each to OBS here; OBS cuts between them on its own,
  * whatever the host's screens show. Rhema here never changes the host's screens.
+ *
+ * The same screen is Rhema's OBS companion mode (`aside`: the way back to the full studio) and the
+ * whole of Rhema Studio Companion, the small app (`secure`: it joins only over the host's secure page,
+ * with the host's certificate shown before pairing and pinned).
  */
-export function CompanionScreen() {
+export function CompanionScreen({ aside, secure = false, children }: { aside?: ReactNode; secure?: boolean; children?: ReactNode } = {}) {
   useEffect(() => startCompanion(), [])
   const status = useJoin((s) => s.status)
   return (
     <main aria-label="OBS companion" className="min-h-dvh overflow-y-auto bg-background text-foreground">
       <div className="mx-auto flex max-w-[960px] flex-col gap-4 px-6 py-6 max-[720px]:px-4">
-        <Header />
+        <Header aside={aside} secure={secure} />
         <div className="grid gap-3 lg:grid-cols-2">
-          {status === "off" ? <JoinForm asCompanion /> : <HostCard />}
+          {status === "off" ? <JoinForm asCompanion checkCertificate={secure} /> : <HostCard secure={secure} />}
           <Card kicker="This computer" title="OBS">
             <ObsSettingsBlock />
           </Card>
         </div>
         <Cameras />
+        {children}
       </div>
     </main>
   )
 }
 
-function Header() {
+function Header({ aside, secure }: { aside?: ReactNode; secure: boolean }) {
   const device = useSettingsStore((s) => s.setup.deviceName.trim())
-  const [asking, setAsking] = useState(false)
   return (
     <header className="flex flex-wrap items-start gap-3 border-b border-border pb-4">
       <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CameraIcon className="size-5" /></span>
       <div className="min-w-0 flex-1">
-        <p className="text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">OBS companion{device ? ` · ${device}` : ""}</p>
+        <p className="text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">{secure ? "Rhema Studio Companion" : "OBS companion"}{device ? ` · ${device}` : ""}</p>
         <h1 className="text-xl font-bold tracking-[-0.02em]">The church's cameras, in this computer's OBS</h1>
         <p className="mt-0.5 max-w-[640px] text-xs text-muted-foreground">Each phone sends its picture once, to the camera router on the main Rhema computer. This OBS takes the cameras it wants from there, on the church network only, and cuts between them on its own: the screens in church are not changed from here.</p>
       </div>
-      {asking ? (
-        <div role="group" aria-label="Open the full studio" className="flex max-w-[320px] flex-col gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs">
-          <p>Use this computer as a full Rhema studio again? Rhema starts again; the cameras stay in OBS.</p>
-          <div className="flex gap-1.5">
-            <Button size="xs" onClick={() => void switchMode(false)}>Start the full studio</Button>
-            <Button size="xs" variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
-          </div>
-        </div>
-      ) : (
-        <Button size="sm" variant="outline" onClick={() => setAsking(true)}><LaptopIcon /> Open the full studio…</Button>
-      )}
+      {aside}
     </header>
   )
 }
@@ -80,7 +76,7 @@ function Tone({ tone, children }: { tone: "ok" | "warn" | "off" | "live"; childr
   return <span className={cn("shrink-0 rounded-[5px] px-[7px] py-[5px] text-[0.625rem] font-bold tracking-[0.04em] uppercase", cls)}>{children}</span>
 }
 
-function HostCard() {
+function HostCard({ secure }: { secure: boolean }) {
   const status = useJoin((s) => s.status)
   const error = useJoin((s) => s.error)
   const me = useJoin((s) => s.me)
@@ -100,11 +96,27 @@ function HostCard() {
       {wrongRole && <p role="alert" className="font-semibold">The host has this computer as {roleLabel(me.role)}. On the host: Settings → Remote control, set "{me.name}" to OBS companion, so it may read the cameras.</p>}
       {!wrongRole && hostError && <p role="alert" className="font-semibold">{hostError}</p>}
       {status === "connected" && heard && !hostError && !router && <p className="font-semibold">The camera router is off on the host. Turn it on there: Production → Cameras.</p>}
+      {secure && <PinnedCertificate />}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave(true)}>Leave this host</Button>
         {status === "refused" && <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().connect()}>Try again</Button>}
       </div>
     </Card>
+  )
+}
+
+/** Rhema Studio Companion: the host's certificate this computer paired with, the only one it accepts. */
+function PinnedCertificate() {
+  const [paired, setPaired] = useState<PairedHost | null>(null)
+  useEffect(() => {
+    invoke<PairedHost | null>("join_paired_host").then((p) => setPaired(p ?? null), () => setPaired(null))
+  }, [])
+  if (!paired) return null
+  return (
+    <p className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+      <ShieldCheckIcon aria-hidden className="size-3.5 text-primary-text" />
+      Secure link, host's certificate <code className="rounded bg-muted px-1.5 py-0.5 font-mono tracking-wide text-foreground">{certificateWords(paired.certificate)}</code>
+    </p>
   )
 }
 

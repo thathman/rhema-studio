@@ -12,7 +12,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { BibleStep, BrandStep, ChurchStep, ConnectionsStep, FinishStep, OperatorStep, ScreensStep } from "@/studio/setup/setup-steps"
 import { RestoreView } from "@/studio/setup/restore-view"
-import { switchMode } from "@/stores/companion-store"
+import { switchMode } from "@/stores/companion-mode"
 
 /** Each step's name in the step list, its heading, and whether it may be skipped. */
 const STEP_INFO: Record<SetupStepId, { short: string; title: string; description: string; optional: boolean }> = {

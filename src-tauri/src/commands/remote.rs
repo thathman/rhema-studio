@@ -229,6 +229,8 @@ pub struct HttpRuntime {
     tls_port: Option<u16>,
     /// SHA-256 of the https certificate, sent to a Rhema Receiver TV with a feed's https link (#198).
     tls_fingerprint: Option<String>,
+    /// SHA-256 of this computer's local CA, which Rhema Studio Companion pins when it pairs (#209).
+    tls_ca_fingerprint: Option<String>,
     /// Phone cameras and the camera router (#209); kept across restarts of the listener.
     cameras: rhema_api::SharedCameras,
     /// The church name (Brand Kit) this host announces itself by (#197).
@@ -244,6 +246,7 @@ impl HttpRuntime {
             bound_port: None,
             tls_port: None,
             tls_fingerprint: None,
+            tls_ca_fingerprint: None,
             lan: false,
             status: new_shared_status(),
             live: new_live_hub(),
@@ -333,6 +336,7 @@ pub async fn start_http(
         None
     };
     let fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&t.server).ok());
+    let ca_fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert: t.ca_cert.clone(), key: String::new() }).ok());
     let config = HttpConfig {
         port,
         host: bind_host(lan).into(),
@@ -358,6 +362,7 @@ pub async fn start_http(
         runtime.bound_port = Some(bound_port);
         runtime.tls_port = result.tls_port;
         runtime.tls_fingerprint = result.tls_port.and(fingerprint);
+        runtime.tls_ca_fingerprint = result.tls_port.and(ca_fingerprint);
         runtime.lan = bind_host(lan) != "127.0.0.1";
         runtime.refresh_advert();
     }
@@ -377,6 +382,7 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
             runtime.bound_port = None;
             runtime.tls_port = None;
             runtime.tls_fingerprint = None;
+            runtime.tls_ca_fingerprint = None;
             runtime.refresh_advert();
             log::info!("HTTP API server stopped");
             Ok(())
@@ -397,6 +403,7 @@ pub async fn get_http_status(
         lan: runtime.lan,
         port: runtime.bound_port,
         tls_port: runtime.tls_port,
+        tls_certificate: runtime.tls_ca_fingerprint.clone(),
     })
 }
 
@@ -582,6 +589,9 @@ pub struct HttpStatus {
     pub lan: bool,
     /// The https port for phone pages, when https is on.
     pub tls_port: Option<u16>,
+    /// The fingerprint of this computer's certificate (its local CA) while https runs: Rhema
+    /// Companion shows the same one when it pairs, and pins it (#209).
+    pub tls_certificate: Option<String>,
 }
 
 /// Where the listeners bind: the whole network (default, what existing setups
