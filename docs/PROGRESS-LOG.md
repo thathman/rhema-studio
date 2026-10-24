@@ -5,6 +5,14 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — Night results recorded (acceptance)
+
+- **Main checked:** e315649 (24 PRs merged overnight: #297, #300–#322).
+- **Recorded:** acceptance results from the overnight QA builds and the Google TV, each marked Pass only where checked; "Partial" where the look by eye or a step is still to do (10di, 10dk, 10dl, 10dm, 10do, 10dr, 10ds, 10dt, 10dy, 10dz, 10ea, 10eb, 10ec).
+- **Smoke after every merge:** Bible (John 3:16, Yorùbá), song + Next, CAC hymn + Next verse, slide, timer, browser feed frames.
+- **TV:** Rhema Receiver 1.2.0.0, normal (non-debug) build installed on the Chromecast with Google TV HD.
+- **Owner next:** eye check of the new screens; phone camera → TV end to end; two computers / headsets / OBS; decisions on Black scope and audio routing (#246 C14).
+
 ## 2026-10-24 — Ticker, timer and cameras as live sources (#243)
 
 - **Branch / PR:** `ls-011/ticker-timer-camera-sources` (from `main` a4a99fb).
