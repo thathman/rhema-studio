@@ -84,6 +84,8 @@ mdns-sd = { version = "0.21", default-features = false }
 num-bigint = "0.4"
 hmac = "0.12"
 getrandom = "0.2"
+# #198: /show to a TV is AES-256-GCM; ring is already here for https (rustls), so no new crate.
+ring = "0.17"
 
 [features]
 default = ["whisper"]

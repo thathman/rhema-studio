@@ -120,7 +120,8 @@ describe("Show health: cameras and Google TVs (#213)", () => {
 
 describe("Show on a Google TV remembers the TV (#213)", () => {
   it("adds the TV to the feed's output, saved or not", async () => {
-    answers.get_http_status = { running: true, lan: true, port: 8080 }
+    // A TV gets only the https link, so the secure page is on (#198).
+    answers.get_http_status = { running: true, lan: true, port: 8080, tls_port: 8081 }
     answers.remote_lan_address = "192.168.1.20"
     answers.tv_show = "Hall TV"
     const hall: BroadcastOutput = { ...foyer, id: "hall", name: "Hall", tvs: undefined }
@@ -136,7 +137,7 @@ describe("Show on a Google TV remembers the TV (#213)", () => {
     await type("Code on the TV", "123456")
     await act(async () => button(document.body, "Show on TV")!.click())
     await flush()
-    expect(calls.find((c) => c.cmd === "tv_show")?.args).toMatchObject({ address: "192.168.1.41", code: "123456" })
+    expect(calls.find((c) => c.cmd === "tv_show")?.args).toMatchObject({ address: "192.168.1.41", code: "123456", url: expect.stringMatching(/^https:\/\/192\.168\.1\.20:8081\/feed\/hall\?k=/) })
     expect(useBroadcastStore.getState().outputs.find((o) => o.id === "hall")?.tvs).toEqual([{ name: "Hall TV", address: "192.168.1.41", sentAt: expect.any(Number) }])
     expect(document.body.textContent).toContain("Show health lists it under this feed")
   })

@@ -218,6 +218,8 @@ pub struct HttpRuntime {
     voice: SharedVoice,
     /// The https port for phone pages, when https is on.
     tls_port: Option<u16>,
+    /// SHA-256 of the https certificate, sent to a Rhema Receiver TV with a feed's https link (#198).
+    tls_fingerprint: Option<String>,
     /// Phone cameras and the camera router (#209); kept across restarts of the listener.
     cameras: rhema_api::SharedCameras,
     /// The church name (Brand Kit) this host announces itself by (#197).
@@ -232,6 +234,7 @@ impl HttpRuntime {
             handle: None,
             bound_port: None,
             tls_port: None,
+            tls_fingerprint: None,
             lan: false,
             status: new_shared_status(),
             live: new_live_hub(),
@@ -274,6 +277,12 @@ impl HttpRuntime {
     pub fn shared_status(&self) -> SharedStatus {
         self.status.clone()
     }
+
+    /// The https port and its certificate's fingerprint, while https runs: what Show on a Google
+    /// TV needs (#198); None means a TV cannot be sent a feed.
+    pub fn tv_pin(&self) -> Option<(u16, String)> {
+        self.tls_port.zip(self.tls_fingerprint.clone())
+    }
 }
 
 impl Default for HttpRuntime {
@@ -314,6 +323,7 @@ pub async fn start_http(
     } else {
         None
     };
+    let fingerprint = tls.as_ref().and_then(|t| rhema_api::tls::fingerprint(&t.server).ok());
     let config = HttpConfig {
         port,
         host: bind_host(lan).into(),
@@ -338,6 +348,7 @@ pub async fn start_http(
         runtime.handle = Some(result.handle);
         runtime.bound_port = Some(bound_port);
         runtime.tls_port = result.tls_port;
+        runtime.tls_fingerprint = result.tls_port.and(fingerprint);
         runtime.lan = bind_host(lan) != "127.0.0.1";
         runtime.refresh_advert();
     }
@@ -356,6 +367,7 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
             handle.stop();
             runtime.bound_port = None;
             runtime.tls_port = None;
+            runtime.tls_fingerprint = None;
             runtime.refresh_advert();
             log::info!("HTTP API server stopped");
             Ok(())
@@ -406,21 +418,57 @@ fn phone_tls(app: &AppHandle, port: u16) -> Result<rhema_api::TlsListener, Strin
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("tls");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let (cert_path, key_path) = (dir.join("rhema-ca.pem"), dir.join("rhema-ca.key"));
-    let ca = match (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path)) {
-        (Ok(cert), Ok(key)) => rhema_api::tls::Pem { cert, key },
+    let (ca, new_ca) = match (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path)) {
+        (Ok(cert), Ok(key)) => (rhema_api::tls::Pem { cert, key }, false),
         _ => {
             let ca = rhema_api::tls::make_ca()?;
             std::fs::write(&cert_path, &ca.cert).map_err(|e| e.to_string())?;
             write_private(&key_path, &ca.key)?;
-            ca
+            (ca, true)
         }
     };
     let mut names = vec!["127.0.0.1".to_string(), "localhost".to_string()];
     if let Some(ip) = remote_lan_address() {
         names.insert(0, ip);
     }
-    let server = rhema_api::tls::make_server(&ca, &names)?;
+    let server = server_cert(&dir, &ca, &names, new_ca, now_secs())?;
     Ok(rhema_api::TlsListener { port, server, ca_cert: ca.cert })
+}
+
+/// A server certificate expires after 397 days; a new one is made after this many.
+const SERVER_CERT_DAYS: u64 = 365;
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+/// This computer's https certificate, kept while its addresses stay the same (for about a year), so
+/// a Google TV that was sent this certificate's fingerprint with its feed (#198) still opens it after
+/// Rhema restarts, and a phone that accepted the warning once is not asked again. A new address,
+/// a new CA or an old certificate gets a new one (a TV then needs its feed sent again; so does its
+/// link, which has the address in it).
+fn server_cert(dir: &std::path::Path, ca: &rhema_api::tls::Pem, names: &[String], new_ca: bool, now: u64) -> Result<rhema_api::tls::Pem, String> {
+    let (cert_path, key_path, about_path) = (dir.join("rhema-server.pem"), dir.join("rhema-server.key"), dir.join("rhema-server.txt"));
+    // "<made at, unix seconds>\n<names, one per line>"
+    let about = |made: u64| format!("{made}\n{}", names.join("\n"));
+    if !new_ca {
+        if let (Ok(cert), Ok(key), Ok(saved)) = (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path), std::fs::read_to_string(&about_path)) {
+            let made = saved.lines().next().and_then(|l| l.trim().parse::<u64>().ok());
+            if let Some(made) = made.filter(|m| *m <= now && now - m < SERVER_CERT_DAYS * 86_400) {
+                if saved == about(made) && rhema_api::tls::fingerprint(&rhema_api::tls::Pem { cert: cert.clone(), key: String::new() }).is_ok() {
+                    return Ok(rhema_api::tls::Pem { cert, key });
+                }
+            }
+        }
+    }
+    let server = rhema_api::tls::make_server(ca, names)?;
+    // Not kept is only a new certificate at the next start, as before.
+    let kept = std::fs::write(&cert_path, &server.cert).and_then(|()| std::fs::write(&about_path, about(now)));
+    if kept.is_err() || write_private(&key_path, &server.key).is_err() {
+        log::warn!("Could not keep the https certificate; a new one is made at the next start");
+        let _ = std::fs::remove_file(&about_path);
+    }
+    Ok(server)
 }
 
 fn write_private(path: &std::path::Path, text: &str) -> Result<(), String> {
@@ -555,4 +603,38 @@ pub fn voice_answer(state: State<'_, Mutex<HttpRuntime>>, id: String, sdp: Strin
 pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<Option<rhema_api::FeedStatus>, String> {
     let hub = state.lock().map_err(|e| e.to_string())?.feeds.clone();
     Ok(hub.status(&id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_https_certificate_is_kept_while_the_addresses_stay_the_same() {
+        let dir = std::env::temp_dir().join(format!("rhema-tls-test-{}-{}", std::process::id(), now_secs()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ca = rhema_api::tls::make_ca().unwrap();
+        let names = vec!["192.168.1.20".to_string(), "127.0.0.1".to_string(), "localhost".to_string()];
+        let day = 86_400;
+        let t0 = 1_800_000_000;
+        let first = server_cert(&dir, &ca, &names, false, t0).unwrap();
+        let fp = |p: &rhema_api::tls::Pem| rhema_api::tls::fingerprint(p).unwrap();
+        // Restarted the next day: the same certificate and key, so a TV's fingerprint still matches.
+        let again = server_cert(&dir, &ca, &names, false, t0 + day).unwrap();
+        assert_eq!(fp(&again), fp(&first));
+        assert_eq!(again.key, first.key);
+        assert!(rhema_api::tls::server_config(&again, &ca.cert).is_ok());
+        // Another address, a new CA, or a year old: a new one.
+        let moved = server_cert(&dir, &ca, &["192.168.1.21".to_string(), "127.0.0.1".into(), "localhost".into()], false, t0 + 2 * day).unwrap();
+        assert_ne!(fp(&moved), fp(&first));
+        let back = server_cert(&dir, &ca, &names, false, t0 + 3 * day).unwrap();
+        assert_ne!(fp(&back), fp(&moved), "the address came back: made again for it");
+        assert_ne!(fp(&server_cert(&dir, &ca, &names, true, t0 + 4 * day).unwrap()), fp(&back));
+        let latest = server_cert(&dir, &ca, &names, false, t0 + 5 * day).unwrap();
+        assert_ne!(fp(&server_cert(&dir, &ca, &names, false, t0 + 5 * day + SERVER_CERT_DAYS * day).unwrap()), fp(&latest));
+        // A clock set back before it was made: a new one, never one "from the future".
+        let now = server_cert(&dir, &ca, &names, false, t0 + 900 * day).unwrap();
+        assert_ne!(fp(&server_cert(&dir, &ca, &names, false, t0).unwrap()), fp(&now));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
