@@ -77,13 +77,17 @@ export function CountdownDesigner() {
     return () => cancelAnimationFrame(raf)
   }, [look, total, leftMs, stageMessage])
 
-  // Quick places on the slider: the start, each step as it comes on, and overtime.
+  // Quick places on the slider, in the order they come: the start, each step as it comes on, overtime.
   const thresholds = stepThresholds(look.steps, total)
   const jumps = [
     { label: "Start", at: 100 },
     ...look.steps.map((s, i) => ({ label: s.when === "percent" ? `${s.at}%` : s.at === 0 ? "Time's up" : `${timeLeftText(s.at)} left`, at: Math.max(0, Math.min(100, Math.floor((thresholds[i] / total) * 100))) })).sort((a, b) => b.at - a.at),
     { label: "Over", at: -10 },
   ]
+  // The slider reads left to right as time passes: the start at the left, 0:00 at 80 % of the
+  // track, overtime after it. Its value is the share of the time gone (100 − the share left).
+  const OVER = 25
+  const zeroAt = 100 / (100 + OVER)
 
   return (
     <div className="flex flex-col gap-4">
@@ -91,11 +95,29 @@ export function CountdownDesigner() {
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
         <div className="flex min-w-0 flex-col gap-2 xl:sticky xl:top-0">
           <canvas ref={canvas} width={1280} height={720} className="aspect-video w-full rounded-lg border border-border" role="img" aria-label={`Countdown display preview at ${countdownText(total, leftMs)}`} />
-          <label className="flex items-center gap-3 text-xs">
-            <span className="shrink-0 text-muted-foreground">{look.counts === "until" || look.counts === "start" ? `The last ${look.leadMinutes} minutes` : "A 10-minute timer"} at</span>
-            <input type="range" aria-label="Preview the time left" min={-25} max={100} step={1} value={at} onChange={(e) => setAt(Number(e.target.value))} className="min-w-0 flex-1 accent-primary" />
-            <span className="w-24 shrink-0 text-right tabular-nums">{countdownText(total, leftMs)} {at >= 0 ? `· ${at}%` : "· over"}</span>
-          </label>
+          <div className="flex items-start gap-3 text-xs">
+            <span className="shrink-0 pt-0.5 text-muted-foreground">{look.counts === "until" || look.counts === "start" ? `The last ${look.leadMinutes} minutes` : "A 10-minute timer"} at</span>
+            <span className="relative min-w-0 flex-1 pb-4">
+              <input
+                type="range"
+                aria-label="Preview the time left"
+                aria-valuetext={at >= 0 ? `${countdownText(total, leftMs)} left` : `${countdownText(total, leftMs)} over`}
+                min={0}
+                max={100 + OVER}
+                step={1}
+                value={100 - at}
+                onChange={(e) => setAt(100 - Number(e.target.value))}
+                className="block w-full accent-primary"
+              />
+              {/* Where the time is up; overtime is the stretch after it. The thumb is about 16 px wide. */}
+              <span aria-hidden className="absolute top-5 flex -translate-x-1/2 flex-col items-center text-[0.6875rem] leading-none text-muted-foreground" style={{ left: `calc(${zeroAt * 100}% + ${(0.5 - zeroAt) * 16}px)` }}>
+                <span className="mb-0.5 h-1.5 w-px bg-muted-foreground" />
+                0:00
+              </span>
+              <span aria-hidden className="absolute top-5 right-0 pt-2 text-[0.6875rem] leading-none text-muted-foreground">over</span>
+            </span>
+            <span className="w-24 shrink-0 pt-0.5 text-right tabular-nums">{countdownText(total, leftMs)} {at >= 0 ? `· ${at}% left` : "· over"}</span>
+          </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label="Preview at">
             {jumps.map((j, i) => <Button key={i} size="xs" variant={at === j.at ? "secondary" : "outline"} onClick={() => setAt(j.at)}>{j.label}</Button>)}
             <label className="ml-auto flex items-center gap-1.5 text-muted-foreground">
@@ -131,10 +153,13 @@ export function CountdownDesigner() {
           )}
           {look.counts === "item" && <p className="-mt-1 text-xs text-muted-foreground">From when the item went on air, for its planned minutes (Prepare). An item with its own warning time turns to the first step then.</p>}
 
-          <Row label="Starts in">
-            <Colour label="Starting background" value={look.background} onChange={(background) => patch({ background })} />
-            <Colour label="Starting text colour" value={look.text} onChange={(text) => patch({ text })} />
-          </Row>
+          <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Before any step</span>
+            <span className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-1.5">background <Colour label="Background before any step" value={look.background} onChange={(background) => patch({ background })} /></label>
+              <label className="flex items-center gap-1.5">text <Colour label="Text colour before any step" value={look.text} onChange={(text) => patch({ text })} /></label>
+            </span>
+          </div>
 
           <fieldset className="flex flex-col gap-2 text-xs">
             <legend className="mb-1 text-muted-foreground">Colour steps (each holds until a later one comes on; the order here does not matter)</legend>
