@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Present: one go-live control, honest verse buttons, bigger touch targets, Preview on small windows (#299, #215)
+- In Present's Standard view the Live panel no longer has its own **Go live** switch next to **Take live**: it shows **On air**, **Off air** or **Rehearsal** instead. The switch is still in the Advanced view.
+- While a song, hymn, slide, picture or quick screen is up, **Next verse** and **Previous verse** say why they wait ("A song is on air: verse steps continue a Bible reading…") and do nothing, instead of quietly changing Preview behind it.
+- Quick screens, Back, the Scenes strip, running-order rows and a song's slides in Present, Prepare's move and remove buttons, and the automated phases' Start and Stop are at least 44 pixels to touch.
+- On a window narrower than 1200 pixels (where the Preview panel has no room) a one-line **Preview** with a small picture sits right above Take live. The Scenes strip picks the scene planned for the item in Preview (marked **For Preview**); Take scene is still yours to press.
 ### This computer's name in the Desk menu; a fuller setup summary (#298, #299)
 - The Desk menu now shows and edits **this computer's name** (with a short Desk ID), says **what this desk may do** (all controls on the main desk, or what the host's role allows), and leads to Production → Operators, or **Leave this host** on a joined desk. Joining a host suggests "your name · this computer" as the name the host sees.
 - After Rhema closed unexpectedly, **Not now** on the banner no longer throws the offer away: the Desk menu keeps **Put back the last session's screens** (it asks once more first).

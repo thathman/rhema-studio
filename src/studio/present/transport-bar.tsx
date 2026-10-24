@@ -3,10 +3,11 @@ import { ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon,
 import { cn } from "@/lib/utils"
 import { outputOnAir } from "@/lib/output-on-air"
 import { buildSlides } from "@/lib/lyrics"
-import { useBibleStore, useBroadcastStore, useQueueStore } from "@/stores"
+import { useBroadcastStore, useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { presentActions } from "@/studio/present-actions"
 import { isSongItem } from "@/types"
+import { usePreviewLabel } from "@/hooks/use-preview-label"
 
 /** "Next: Chorus" while a song is live, else the keyboard hint. */
 function useNextHint(): string {
@@ -24,17 +25,8 @@ function useNextHint(): string {
   return next ? `Next: ${next.sectionLabel}` : "→ / PgDn"
 }
 
-/** What is in Preview, in words: what Take live will put up. Null when Preview is empty. */
-function usePreviewLabel(): string | null {
-  return useBibleStore((s) => {
-    if (s.selectedSlide) {
-      const { item, index } = s.selectedSlide
-      return isSongItem(item) ? `${item.reference} · slide ${index + 1}` : item.reference
-    }
-    const v = s.selectedVerse
-    return v ? `${v.book_name} ${v.chapter}:${v.verse}`.trim() : null
-  })
-}
+/** What is up, in words, when it is not a Bible reading. */
+const NOT_A_READING: Record<string, string> = { song: "A song", hymn: "A hymn", slide: "A slide", picture: "A picture" }
 
 type Tone = "neutral" | "danger" | "take"
 
@@ -118,6 +110,12 @@ function TransportButton({
 export function TransportBar({ className }: { className?: string }) {
   const isLive = useBroadcastStore((s) => s.isLive)
   const hasLiveItem = useBroadcastStore((s) => s.liveVerse !== null)
+  // What is up when it is not a Bible reading: the verse steps then have nothing to continue.
+  const notReading = useBroadcastStore((s) => {
+    const v = s.liveVerse
+    if (!v || s.liveSourceVerse || v.content === "bible") return null
+    return v.quickScreen ? "A quick screen" : (v.content && NOT_A_READING[v.content]) || "A slide or picture"
+  })
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const onAir = useBroadcastStore((s) => s.outputs.filter((o) => outputOnAir(o, s.outputStatus[o.id])).length)
   const count = useQueueStore((s) => s.items.length)
@@ -126,7 +124,13 @@ export function TransportBar({ className }: { className?: string }) {
   const targetId = useId()
 
   const emptyRundown = count === 0 ? "The running order is empty: add items in Prepare or with Find & cue" : null
-  const noLiveItem = hasLiveItem ? null : "Nothing has been live yet: take a verse live first"
+  // Verse steps continue the Bible reading on the screens. While a song, slide, picture or quick screen
+  // is up they would only change Preview behind it, so the buttons say why and wait (#299 5.3).
+  const noReading = !hasLiveItem
+    ? "Nothing has been live yet: take a verse live first"
+    : notReading
+      ? `${notReading} ${isLive ? "is on air" : "was the last thing shown"}: verse steps continue a Bible reading. ${notReading === "A quick screen" ? "Press Back, or take a verse live" : "Take a verse live"} first`
+      : null
   const where = rehearsal ? "this console only (rehearsal)" : onAir === 0 ? "the Live panel only: no screen is on" : `the main screens · ${onAir} ${onAir === 1 ? "output" : "outputs"} on`
 
   return (
@@ -155,7 +159,7 @@ export function TransportBar({ className }: { className?: string }) {
               icon={<ChevronsLeftIcon />}
               label="Previous verse"
               title="Previous verse: the verse before the live one (Shift+←)"
-              reason={noLiveItem}
+              reason={noReading}
               onClick={() => presentActions.versePrev()}
               className="w-11 px-0"
             />
@@ -164,7 +168,7 @@ export function TransportBar({ className }: { className?: string }) {
               icon={<ChevronsRightIcon />}
               label="Next verse"
               title="Next verse: the verse after the live one, same translations (Shift+→)"
-              reason={noLiveItem}
+              reason={noReading}
               onClick={() => presentActions.verseNext()}
               className="w-11 px-0"
             />

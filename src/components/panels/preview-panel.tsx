@@ -10,13 +10,18 @@ import { useSongStore } from "@/stores/song-store"
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { ItemPlan } from "@/studio/prepare/item-plan"
+import { planLines } from "@/lib/item-intent"
+import { useSettingsStore } from "@/stores/settings-store"
+import { usePreviewLabel } from "@/hooks/use-preview-label"
 
 /**
  * What Show live will present, only for the operator. Under it, the previewed rundown item's plan
  * (its scene, look, camera and Take steps). `itemLook` (Prepare): drawn in the item's own look,
  * when it has one, to see how it is meant to look; Present keeps the look Show live will use.
+ * `compact` (Present below 1200 px wide, where the full panel has no room): one line, a small
+ * picture with what it is in words, so the operator still sees Preview before Take live.
  */
-export function PreviewPanel({ itemLook = false }: { itemLook?: boolean } = {}) {
+export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?: boolean; compact?: boolean } = {}) {
   const selectedVerse = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
   const previewSongId = selectedSlide && isSongItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
@@ -59,6 +64,11 @@ export function PreviewPanel({ itemLook = false }: { itemLook?: boolean } = {}) 
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
 
   const previewed = useSelectedItem()?.item ?? null
+  const label = usePreviewLabel()
+  // For the compact line's plan (the full panel's ItemPlan reads its own).
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const cameras = useSettingsStore((s) => s.cameras)
   const ownLook = itemLook && previewed?.look_id ? themes.find((t) => t.id === previewed.look_id) : undefined
   const activeTheme = ownLook ?? themes.find((t) => t.id === activeThemeId) ?? themes[0]
   // Label the preview with the translation the verse is actually in.
@@ -81,6 +91,25 @@ export function PreviewPanel({ itemLook = false }: { itemLook?: boolean } = {}) 
     const slides = previewSong ? buildSlides(previewSong, selectedSlide.item.song.arrangement_id, selectedSlide.item.song.languages) : []
     const slide = slides[Math.min(selectedSlide.index, slides.length - 1)]
     verseData = previewSong && slide ? toLyricRenderData(previewSong, slide) : null
+  }
+
+  if (compact) {
+    const plan = previewed ? planLines(previewed, { scenes, looks: themes, cameras, outputs }) : []
+    return (
+      <section data-slot="preview-panel" aria-label="Preview" className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border bg-card p-1.5 pr-3">
+        <div className="w-20 shrink-0 overflow-hidden rounded-sm">
+          <CanvasVerse theme={activeTheme} verse={verseData} />
+        </div>
+        <div className="min-w-0 flex-1 text-xs leading-tight">
+          <p className="flex items-baseline gap-2">
+            <span className="text-[0.625rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">Preview</span>
+            <span className="truncate text-[0.6875rem] text-muted-foreground">Only you see this</span>
+          </p>
+          <p className="truncate font-medium text-foreground">{label ?? "Nothing in Preview: click a running-order item or find a verse"}</p>
+          {plan.length > 0 && <p className="truncate text-[0.6875rem] text-muted-foreground" title={plan.join(" · ")}>Planned · {plan.join(" · ")}</p>}
+        </div>
+      </section>
+    )
   }
 
   return (

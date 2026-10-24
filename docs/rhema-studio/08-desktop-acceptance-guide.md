@@ -1246,6 +1246,19 @@ Rhema with a saved service that has phases (pre-service loop, warm-up, main serv
 | 10eo.7 | Production → Cameras (a camera added), Timekeeper (Count down to, the chime, "Follows the screens") and Settings → Audio → Talk headset, in light and dark. | The drop-down lists look like Rhema's other lists (border, quiet chevron, teal focus ring, dark lists in dark mode); tick boxes are teal; they open and choose as before. **New link** is an outlined button. | Unverified |
 | 10eo.8 | First run (or Home → setup): the welcome, then step 1. | The welcome window fits its four choices with no empty lower half. "Service languages" shows a grey "e.g. English, Yorùbá" that disappears when you type. | Unverified |
 
+### 10et. Present transport and touch targets (#299, #215)
+
+Rhema with a saved service that has a Bible reading, a song and a slide, phases with a pre-service loop, at least one congregation output, two saved scenes, and one reading whose **Look and scene** (Prepare → Slides) names one of those scenes. A touch screen or trackpad helps for step 6.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10et.1 | Present, Standard view: look at the Live panel's header, then take the reading live, Clear it, and turn Rehearsal on and off. | No Go live switch beside Auto: a small badge says **Off air**, then **On air** (red), **Off air** after Clear, **Rehearsal** in rehearsal. Take live, Clear and Restore are the only go-live controls. Switch to **Advanced**: the Live panel there still has its Go live switch. | Unverified |
+| 10et.2 | Take the song live. Hover, then click, **Next verse** and **Previous verse**. Press Shift+→. | The buttons look unavailable; their tooltip says "A song is on air: verse steps continue a Bible reading. Take a verse live first". A click changes nothing (Preview and the screens stay). Shift+→ behaves as before. Same for the slide ("A slide…") and a quick screen ("…Press Back, or take a verse live first"). | Unverified |
+| 10et.3 | Take the reading live, then Next verse. | The next verse goes on air as before. | Unverified |
+| 10et.4 | Window 1024×600, then 1280×800, 1440×900 and full screen; at each, click the reading in the running order. | Below 1200 px wide a one-line **Preview** (small picture, "John 3:16", "Planned · Scene: …") sits right above Take live; wider, the full Preview panel shows instead (never both). Nothing overlaps; the transport is never covered. | Unverified |
+| 10et.5 | Still with the planned reading in Preview, open the Scenes strip (at 1280×800 and 1440×900 too). | The planned scene is already picked and marked **For Preview**; nothing changes on a screen until you press **Take scene**. Folded, the line ends "Preview's item: <scene>". Pick another scene: it stays picked until you preview an item with a different planned scene (or none). The Live picture keeps its size; the column scrolls to reach the scenes. | Unverified |
+| 10et.6 | Touch or click: quick screens, Back, the Scenes fold, screen buttons, scene thumbnails, Take scene / Own feed / Restore, running-order rows and a song's slides, Start Pre-service loop. Prepare: hover a row and use Move up / Move down / Remove. | Each is easy to hit (about a fingertip, 44 px). In Prepare the arrows and × appear over the end of the row on hover and the title keeps its room; a click on the row without hovering the buttons still selects it. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

@@ -1,7 +1,7 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 import { ArrowUpIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, LayoutGridIcon, LayoutPanelLeftIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dashboard } from "@/components/layout/dashboard"
@@ -162,7 +162,18 @@ export function PresentWorkspace() {
   )
 }
 
+/** Below this width Standard view has no room for the Preview panel: a one-line Preview sits over the transport. */
+const NARROW_PRESENT_QUERY = "(max-width: 1199.98px)"
+function subscribeNarrow(onChange: () => void): () => void {
+  const mq = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_PRESENT_QUERY) : null
+  mq?.addEventListener?.("change", onChange)
+  return () => mq?.removeEventListener?.("change", onChange)
+}
+const isNarrow = () => typeof window.matchMedia === "function" && window.matchMedia(NARROW_PRESENT_QUERY).matches
+
 function StandardView() {
+  // One Preview at a time (the panel also follows translation changes): full when it fits, else the line.
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false)
   const isLive = useBroadcastStore((s) => s.isLive)
   const count = useQueueStore((s) => s.items.length)
   const hasTimedItems = useQueueStore((s) => s.items.some((i) => i.auto_advance))
@@ -207,18 +218,24 @@ function StandardView() {
       {/* On a wide window these sit in the grid itself; on a narrow one (1024×600 and up) they share one
           column that scrolls when it must, so nothing in it is ever drawn over another part. */}
       <div className="contents max-[1200px]:row-span-3 max-[1200px]:flex max-[1200px]:min-h-0 max-[1200px]:flex-col max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
-      <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:hidden [&>div]:h-full">
-        <PreviewPanel />
-      </div>
+      {!narrow && (
+        <div className="min-h-0 overflow-hidden rounded-xl [&>div]:h-full">
+          <PreviewPanel />
+        </div>
+      )}
       {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
           Opening the scenes on a short window scrolls this column instead of covering the transport. */}
       <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:flex-1 max-[1200px]:overflow-visible">
-        <div className="min-h-[8rem] flex-1 overflow-hidden rounded-xl max-[1200px]:min-h-[11rem] [&>div]:h-full" data-studio-live>
-          <LiveOutputPanel />
+        {/* Never shorter than a readable picture with its sources, however many lines they take: the open
+            scenes scroll under it instead. */}
+        <div className="min-h-min flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
+          <LiveOutputPanel goLiveSwitch={false} />
         </div>
         <ScenesStrip />
       </div>
 
+      {/* What Take live will put up, right over it, when the window is too narrow for the Preview panel. */}
+      {narrow && <div className="shrink-0"><PreviewPanel compact /></div>}
       <TransportBar className="col-span-2 max-[1200px]:shrink-0" />
 
       <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0">
@@ -236,7 +253,7 @@ function StandardView() {
               <h2 className="text-sm font-semibold tracking-tight">One-touch moments</h2>
               <p className="text-xs text-muted-foreground">Temporary screens, with safe return</p>
             </div>
-            <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-10 min-w-0" />
+            <BigButton icon={<UndoIcon />} label="Back" hint="to what was live" disabled={!held} onClick={presentActions.back} className="h-11 min-w-0" />
           </div>
           {/* Four across, two rows: on a small window the icons give way so every screen stays in view. */}
           <div className="-m-1 grid min-h-0 grid-cols-4 content-start gap-2 overflow-y-auto p-1 max-[1200px]:gap-1.5">
@@ -250,7 +267,7 @@ function StandardView() {
                   label={{ welcome: "Welcome", stand: "Please stand", pray: "Let us pray", offering: "Offering", technical: "Technical issue", logo: "Logo", black: "Black" }[s]}
                   tone={onAir ? "live" : "neutral"}
                   aria-pressed={onAir}
-                  className="h-10 min-w-0 justify-start gap-1.5 px-2.5 text-[0.8125rem] leading-tight max-[1200px]:justify-center max-[1200px]:px-1.5 max-[1200px]:text-xs max-[1200px]:[&>span:first-child]:hidden [@media(max-height:700px)]:h-9 [&_svg]:!size-4"
+                  className="h-11 min-w-0 justify-start gap-1.5 px-2.5 text-[0.8125rem] leading-tight max-[1200px]:justify-center max-[1200px]:px-1.5 max-[1200px]:text-xs max-[1200px]:[&>span:first-child]:hidden [&_svg]:!size-4"
                   onClick={() => presentActions.quickScreen(s)}
                 />
               )

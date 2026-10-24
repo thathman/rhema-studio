@@ -26,17 +26,18 @@ export function PhaseStrip() {
         <b className="text-xs text-[#eef6f2]">Automated phases</b>
         <span className="block [@media(max-height:860px)]:hidden">Loops repeat and the warm-up runs once; the main service always stays manual.</span>
       </p>
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Small buttons with a 44 px touch area (touch-hit); the wider row gap keeps two rows' areas apart. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-4">
         {auto.map((h) => {
           const range = phaseRange(items.length, headers, h.id)
           const empty = !range || range.end <= range.start
           const on = run?.headerId === h.id
           return on ? (
-            <Button key={h.id} size="sm" className="bg-[#c3e6d4] text-[#14352f] hover:bg-[#b3dcc7]" onClick={() => usePhaseRun.getState().stop()}>
+            <Button key={h.id} size="sm" className="touch-hit bg-[#c3e6d4] text-[#14352f] hover:bg-[#b3dcc7]" onClick={() => usePhaseRun.getState().stop()}>
               <SquareIcon /> Stop {h.name}
             </Button>
           ) : (
-            <Button key={h.id} size="sm" variant="outline" disabled={empty} onClick={() => usePhaseRun.getState().start(h.id)} title={empty ? "Nothing in this phase yet" : h.rule === "loop" ? "Its items go live in turn and repeat until you stop it or take something else" : "Its items go live in turn, each for its planned minutes, starting when it is due"}>
+            <Button key={h.id} size="sm" variant="outline" className="touch-hit" disabled={empty} onClick={() => usePhaseRun.getState().start(h.id)} title={empty ? "Nothing in this phase yet" : h.rule === "loop" ? "Its items go live in turn and repeat until you stop it or take something else" : "Its items go live in turn, each for its planned minutes, starting when it is due"}>
               <PlayIcon /> Start {h.name}{h.rule === "auto_once" ? " · once" : ""}
             </Button>
           )

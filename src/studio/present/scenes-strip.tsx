@@ -5,6 +5,8 @@ import { drawScene } from "@/lib/scene-renderer"
 import { sceneFrame } from "@/lib/scenes"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { cleanIntentId } from "@/lib/item-intent"
+import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import type { BroadcastOutput, Scene } from "@/types"
 
 /** Window heights at which the scenes start folded (a 1440×900 laptop and smaller). */
@@ -30,6 +32,7 @@ export function ScenesStrip({ className }: { className?: string }) {
   const [open, setOpen] = useState(() => !(typeof window.matchMedia === "function" && window.matchMedia(SCENES_FOLDED_QUERY).matches))
   const [targetId, setTargetId] = useState<string | null>(null)
   const bodyId = useId()
+  const planned = usePlannedScene(scenes)
   if (congregation.length === 0 || scenes.length === 0) return null
   const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
   const sceneName = (o: BroadcastOutput) => scenes.find((s) => s.id === o.sceneId)?.name ?? "its own feed"
@@ -42,12 +45,13 @@ export function ScenesStrip({ className }: { className?: string }) {
         aria-controls={bodyId}
         onClick={() => setOpen(!open)}
         title={open ? "Hide the scenes" : "Show the scenes"}
-        className="flex min-w-0 items-center gap-2 rounded-lg px-3 py-1.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-3 py-1.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <LayersIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="text-[0.625rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">Scenes</span>
         <span className="min-w-0 flex-1 truncate text-[0.6875rem] text-muted-foreground">
           {congregation.map((o) => `${o.name}: ${sceneName(o)}`).join(" · ")}
+          {planned && !open && ` · Preview's item: ${planned.name}`}
         </span>
         <ChevronDownIcon aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
@@ -61,27 +65,47 @@ export function ScenesStrip({ className }: { className?: string }) {
                   type="button"
                   aria-pressed={o.id === target.id}
                   onClick={() => setTargetId(o.id)}
-                  className={cn("rounded-full border px-2.5 py-0.5 text-[0.6875rem] font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", o.id === target.id ? "border-foreground/40 bg-muted text-foreground" : "border-border text-muted-foreground hover:bg-muted")}
+                  className={cn("h-11 rounded-full border px-3 text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50", o.id === target.id ? "border-foreground/40 bg-muted text-foreground" : "border-border text-muted-foreground hover:bg-muted")}
                 >
                   {o.name}
                 </button>
               ))}
             </div>
           )}
-          <ScenePicker key={target.id} output={target} scenes={scenes} />
+          <ScenePicker key={target.id} output={target} scenes={scenes} planned={planned} />
         </div>
       )}
     </section>
   )
 }
 
-/** One congregation screen: its saved scenes to pick from, and Take scene, its own feed, Restore. */
-function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scene[] }) {
+/** The scene the previewed rundown item is planned with (its `scene_id`, #243 RS.3), when it is a saved one. */
+function usePlannedScene(scenes: Scene[]): Scene | null {
+  const id = cleanIntentId(useSelectedItem()?.item.scene_id)
+  return (id && scenes.find((s) => s.id === id)) || null
+}
+
+/**
+ * One congregation screen: its saved scenes to pick from, and Take scene, its own feed, Restore.
+ * The previewed item's planned scene starts picked (never taken: Take scene stays the operator's);
+ * a pick of the operator's own holds until Preview's planned scene changes.
+ */
+function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; scenes: Scene[]; planned: Scene | null }) {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
   const back = useBroadcastStore((s) => s.sceneReturn[output.id])
   const covered = useBroadcastStore((s) => (s.isLive ? s.liveVerse?.screen : undefined))
-  const [pickedId, setPickedId] = useState<string | null>(null)
+  // The operator's own pick (null: none); undefined follows the plan.
+  const [own, setOwn] = useState<string | null | undefined>(undefined)
+  const plannedId = planned?.id ?? null
+  const [seenPlanned, setSeenPlanned] = useState(plannedId)
+  if (seenPlanned !== plannedId) {
+    setSeenPlanned(plannedId)
+    setOwn(undefined)
+  }
   const showing = scenes.find((s) => s.id === output.sceneId)
+  // Already on this screen: nothing to pre-pick.
+  const suggested = planned && planned.id !== showing?.id ? planned : null
+  const pickedId = own !== undefined ? own : (suggested?.id ?? null)
   const picked = scenes.find((s) => s.id === pickedId) ?? null
   const restorable = back ? scenes.find((s) => s.id === back) : undefined
   const b = useBroadcastStore.getState
@@ -102,11 +126,11 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
               key={s.id}
               type="button"
               aria-pressed={s.id === pickedId}
-              aria-label={`${s.name}${onAir ? `, ${onAirWord.toLowerCase()}` : ""}`}
-              onClick={() => setPickedId(s.id === pickedId ? null : s.id)}
-              title={onAir ? `${s.name} is on ${output.name}${rehearsal ? " in rehearsal" : ""}` : `Pick ${s.name}, then Take scene`}
+              aria-label={`${s.name}${onAir ? `, ${onAirWord.toLowerCase()}` : s.id === planned?.id ? ", planned for the item in Preview" : ""}`}
+              onClick={() => setOwn(s.id === pickedId ? null : s.id)}
+              title={onAir ? `${s.name} is on ${output.name}${rehearsal ? " in rehearsal" : ""}` : `Pick ${s.name}, then Take scene${s.id === planned?.id ? " (the scene planned for the item in Preview)" : ""}`}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-md border p-1 pr-2 text-left text-[0.6875rem] outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                "flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border p-1 pr-2 text-left text-[0.6875rem] outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 s.id === pickedId ? "border-primary bg-primary/10 text-foreground" : "border-border hover:bg-muted"
               )}
             >
@@ -114,6 +138,7 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
               <span className="flex max-w-28 flex-col leading-tight">
                 <span className="truncate font-semibold">{s.name}</span>
                 {onAir && <span className={cn("text-[0.625rem] font-bold tracking-wide uppercase", rehearsal ? "text-tone-amber-foreground" : "text-live-pulse")}>{onAirWord}</span>}
+                {!onAir && s.id === planned?.id && <span className="text-[0.625rem] font-bold tracking-wide text-primary-text uppercase">For Preview</span>}
               </span>
             </button>
           )
@@ -129,7 +154,8 @@ function ScenePicker({ output, scenes }: { output: BroadcastOutput; scenes: Scen
           onClick={() => {
             if (!picked) return
             b().takeScene(output.id, picked.id)
-            setPickedId(null)
+            // Nothing stays picked after a Take, so a second click never takes another scene.
+            setOwn(null)
           }}
           primary
         />
@@ -177,7 +203,7 @@ function SceneAction({ icon, label, text, title, reason, onClick, primary }: { i
         title={reason ?? title}
         onClick={off ? undefined : onClick}
         className={cn(
-          "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 [&_svg]:size-3.5",
+          "inline-flex h-11 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 [&_svg]:size-3.5",
           primary ? "border-primary/70 bg-card text-primary-text hover:bg-primary/10 aria-disabled:hover:bg-card" : "border-border bg-card text-foreground hover:bg-muted aria-disabled:hover:bg-card"
         )}
       >

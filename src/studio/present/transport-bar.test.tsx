@@ -38,7 +38,7 @@ function reasonOf(name: string): string | null {
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  useBroadcastStore.setState({ outputs: [], outputStatus: {}, isLive: false, liveVerse: null, liveSlide: null, rehearsal: false })
+  useBroadcastStore.setState({ outputs: [], outputStatus: {}, isLive: false, liveVerse: null, liveSourceVerse: null, liveSlide: null, rehearsal: false })
   useQueueStore.setState({ items: [] })
   useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
 })
@@ -61,7 +61,7 @@ describe("Present's transport bar", () => {
     }
     useQueueStore.setState({ items: [item] })
     useBibleStore.setState({ selectedVerse: verse })
-    useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [], content: "bible" } })
+    useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [], content: "bible" }, liveSourceVerse: verse })
     await render()
 
     await click("Previous")
@@ -107,10 +107,36 @@ describe("Present's transport bar", () => {
     expect(onAir).not.toHaveBeenCalled()
 
     // On air: Clear can act, Restore says it is already up.
-    await act(async () => useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [], content: "bible" } }))
+    await act(async () => useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [], content: "bible" }, liveSourceVerse: verse }))
     expect(reasonOf("Clear")).toBeNull()
     expect(reasonOf("Restore")).toMatch(/Already on the screens/)
     expect(reasonOf("Next verse")).toBeNull()
+  })
+
+  it("with a song, slide or quick screen up, the verse buttons say why and do nothing (#299 5.3)", async () => {
+    const versePrev = vi.spyOn(remoteActions, "versePrev").mockImplementation(() => Promise.resolve())
+    const verseNext = vi.spyOn(remoteActions, "verseNext").mockImplementation(() => Promise.resolve())
+    useQueueStore.setState({ items: [item] })
+    // A song on air: there is no Bible reading for the verse steps to continue.
+    useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "Amazing Grace", segments: [], content: "song" } as never, liveSourceVerse: null, liveSlide: { itemId: "song-1", songId: "s1", index: 0, total: 4 } as never })
+    await render()
+    expect(reasonOf("Next verse")).toMatch(/^A song is on air: verse steps continue a Bible reading/)
+    expect(reasonOf("Previous verse")).toMatch(/^A song is on air/)
+    await click("Next verse")
+    await click("Previous verse")
+    expect(verseNext).not.toHaveBeenCalled()
+    expect(versePrev).not.toHaveBeenCalled()
+
+    await act(async () => useBroadcastStore.setState({ liveSlide: null, liveVerse: { reference: "", segments: [], lines: ["Please stand"], quickScreen: "stand" } as never }))
+    expect(reasonOf("Next verse")).toMatch(/^A quick screen is on air: .*Press Back/)
+    await act(async () => useBroadcastStore.setState({ isLive: false, liveVerse: { reference: "Notices", segments: [], lines: ["Notices"] } as never }))
+    expect(reasonOf("Next verse")).toMatch(/^A slide or picture was the last thing shown/)
+
+    // A Bible reading: they continue it.
+    await act(async () => useBroadcastStore.setState({ isLive: true, liveVerse: { reference: "John 3:16", segments: [], content: "bible" }, liveSourceVerse: verse }))
+    expect(reasonOf("Next verse")).toBeNull()
+    await click("Next verse")
+    expect(verseNext).toHaveBeenCalledTimes(1)
   })
 
   it("has one Take live, which says what it puts up and where", async () => {

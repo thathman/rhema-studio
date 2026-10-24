@@ -9,7 +9,9 @@ import { createRoot, type Root } from "react-dom/client"
 import { ScenesStrip, SCENES_FOLDED_QUERY, SCENES_REHEARSAL_NOTE } from "./scenes-strip"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { SCENE_PRESETS, newScene } from "@/lib/scenes"
-import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput } from "@/types"
+import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput, type QueueItem, type Verse } from "@/types"
+import { useBibleStore } from "@/stores/bible-store"
+import { useQueueStore } from "@/stores/queue-store"
 
 const original = { takeScene: useBroadcastStore.getState().takeScene, releaseScene: useBroadcastStore.getState().releaseScene }
 const camera = { ...newScene("Camera with the Bible", SCENE_PRESETS[3]), id: "cam" }
@@ -52,6 +54,8 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   el.remove()
+  useQueueStore.setState({ items: [] })
+  useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
   useBroadcastStore.setState({ ...original, rehearsal: false })
 })
 
@@ -172,6 +176,48 @@ describe("Present's scenes", () => {
       await click(toggle)
       expect(toggle.getAttribute("aria-expanded")).toBe("true")
       expect(el.querySelector('[aria-label^="Scenes for"]')).not.toBeNull()
+    } finally {
+      window.matchMedia = before
+    }
+  })
+
+  it("pre-picks the scene planned for the item in Preview, and leaves the Take to the operator", async () => {
+    const verse: Verse = { id: 1, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "For God so loved the world" }
+    const sermon: QueueItem = { id: "it-1", reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, verse, scene_id: "lyr" }
+    const plain: QueueItem = { ...sermon, id: "it-2", reference: "John 3:17", verse: { ...verse, verse: 17 }, scene_id: undefined }
+    useQueueStore.setState({ items: [sermon, plain] })
+    useBibleStore.setState({ selectedVerse: verse, selectedSlide: null })
+    await render()
+    expect(sceneButton("Lyrics on a picture").getAttribute("aria-pressed")).toBe("true")
+    expect(sceneButton("Lyrics on a picture").getAttribute("aria-label")).toBe("Lyrics on a picture, planned for the item in Preview")
+    expect(take).not.toHaveBeenCalled()
+
+    // The operator's own pick holds while Preview stays on that item.
+    await click(sceneButton("Camera with the Bible"))
+    expect(sceneButton("Camera with the Bible").getAttribute("aria-pressed")).toBe("true")
+    expect(sceneButton("Lyrics on a picture").getAttribute("aria-pressed")).toBe("false")
+    await click(sceneButton("Camera with the Bible"))
+    expect(button("Take scene").getAttribute("aria-disabled")).toBe("true")
+
+    // A different item in Preview: its plan (none here) decides again.
+    await act(async () => useBibleStore.setState({ selectedVerse: { ...verse, verse: 17 } }))
+    expect(el.querySelector('[aria-label^="Scenes for"] [aria-pressed="true"]')).toBeNull()
+    await act(async () => useBibleStore.setState({ selectedVerse: verse }))
+    await click(button("Take scene Lyrics on a picture to Sanctuary"))
+    expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, "lyr")
+    // Now on the screen: nothing left to pre-pick.
+    expect(el.querySelector('[aria-label^="Scenes for"] [aria-pressed="true"]')).toBeNull()
+  })
+
+  it("folded, says which scene the item in Preview is planned with", async () => {
+    const before = window.matchMedia
+    window.matchMedia = ((q: string) => ({ matches: q === SCENES_FOLDED_QUERY, media: q, addEventListener() {}, removeEventListener() {} })) as never
+    try {
+      const verse: Verse = { id: 1, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "" }
+      useQueueStore.setState({ items: [{ id: "it-1", reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, verse, scene_id: "cam" }] })
+      useBibleStore.setState({ selectedVerse: verse, selectedSlide: null })
+      await render()
+      expect(el.querySelector('section[aria-label="Scenes"] > button')?.textContent).toContain("Preview's item: Camera with the Bible")
     } finally {
       window.matchMedia = before
     }

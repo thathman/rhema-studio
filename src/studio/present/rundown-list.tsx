@@ -79,7 +79,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
           <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"}>
             <div
               className={cn(
-                "group flex min-h-11 items-center gap-2 rounded-md border px-2 py-1 transition-colors",
+                "group relative flex items-center gap-2 rounded-md border px-2 transition-colors",
                 onAir
                   ? "border-live-pulse/50 bg-live-pulse/10"
                   : isSelected
@@ -89,7 +89,8 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
             >
               <button
                 type="button"
-                className="flex min-h-7 min-w-0 flex-1 items-center gap-2 self-stretch text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
+                // The whole row height is the button: a 44 px target to touch (#215).
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-2 self-stretch py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded"
                 aria-current={isSelected ? "true" : undefined}
                 onClick={() => preview(item)}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
@@ -141,16 +142,18 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 )}
               </button>
               {mode === "prepare" && (
-                <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                  <Button variant="ghost" size="icon-xs" className="size-8" aria-label="Move up" disabled={index === 0}
+                // 44 px buttons (#215) laid over the row's right end on hover or focus, so they never take
+                // the title's room; until then they let clicks through to the row.
+                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-r-md bg-card/95 pl-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+                  <Button variant="ghost" size="icon-xs" className="size-11" aria-label="Move up" disabled={index === 0}
                     onClick={() => useQueueStore.getState().reorderItems(index, index - 1)}>
                     <ArrowUpIcon />
                   </Button>
-                  <Button variant="ghost" size="icon-xs" className="size-8" aria-label="Move down" disabled={index === items.length - 1}
+                  <Button variant="ghost" size="icon-xs" className="size-11" aria-label="Move down" disabled={index === items.length - 1}
                     onClick={() => useQueueStore.getState().reorderItems(index, index + 1)}>
                     <ArrowDownIcon />
                   </Button>
-                  <Button variant="ghost" size="icon-xs" className="size-8" aria-label={`Remove ${item.reference}`}
+                  <Button variant="ghost" size="icon-xs" className="size-11" aria-label={`Remove ${item.reference}`}
                     onClick={(e) => {
                       keepFocusInList(e.currentTarget, 'button[aria-label^="Remove "]')
                       useQueueStore.getState().removeItem(item.id)
@@ -285,7 +288,9 @@ export function SlideList({ item, index, mode }: { item: SongQueueItem; index: n
               onClick={() => presentActions.previewSlide(shownItem, slide.index, liveSnapshot?.song)}
               onDoubleClick={mode === "present" ? () => void presentQueueItem(index, slide.index, songAs) : undefined}
               className={cn(
-                "flex h-7 w-full min-w-0 items-center gap-2 rounded px-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                // Present's slides are touch targets (44 px); Prepare keeps them compact.
+                "flex w-full min-w-0 items-center gap-2 rounded px-2 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                mode === "present" ? "h-11" : "h-7",
                 live ? "bg-live-pulse/15 text-destructive" : sel ? "bg-primary/10" : "hover:bg-muted/50"
               )}
             >

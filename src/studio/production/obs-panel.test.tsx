@@ -118,6 +118,9 @@ async function render() {
 describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => {
   beforeEach(() => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    // The store asks OBS for its record status every 2 s. Under load that poll could land between a
+    // click and the check of OBS's last request; with the interval faked it only runs when a test says.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] })
     vi.stubGlobal("WebSocket", FakeObs)
     FakeObs.last = null
   })
@@ -127,6 +130,7 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     const { useObsStore } = await import("@/stores/obs-store")
     useObsStore.getState().disconnect()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it("loads OBS's scene list in OBS's order, its program, and Studio Mode, subscribing to scene and Studio Mode events", async () => {
