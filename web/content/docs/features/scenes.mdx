@@ -1,0 +1,78 @@
+---
+title: Scenes
+description: Arrange the Bible, lyrics, a camera, a video, a clock, the ticker and the logo on one frame for a congregation screen, and take it without changing what is live.
+icon: Layers
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+<Callout title="Rhema Studio" type="info">
+This page describes Rhema Studio, the church fork of Rhema. Each feature below is marked
+**Built** (in the app on `main`), **Checked** (also passed on a real desktop run; the row of the
+[desktop acceptance guide](https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/08-desktop-acceptance-guide.md)
+is named), **Planned** (not built yet) or **Owner decision** (waits for the church's owner).
+Anything not marked Checked is built but not yet checked on the desktop.
+</Callout>
+
+A **scene** arranges one congregation screen: the verse in a box over the preacher's camera,
+the lyrics on a looping video, a countdown before the service. Taking a scene changes how a
+screen is laid out, never what is live: the next verse still goes wherever it went before, and
+OBS and the other screens do not change.
+
+## Where scenes are made
+
+- **Production → Scenes** is the full composer (this tab was called *Programs* before).
+  **New from** offers ready-made scenes: Full screen, Bible and lyrics, Lyrics on a picture,
+  Lyrics on video, Camera with the Bible, Full camera, Camera in a corner, Sermon split and
+  Welcome. **Save as preset** keeps your own arrangement.
+- **Present → Scenes** (under Live, Standard view) takes saved scenes and has **New scene** /
+  **Edit scene** for a basic scene without leaving the live console: a background, one content
+  box, the lower third and a camera.
+- **Prepare → an item → Look and scene** records the scene an item is meant to have. Present
+  then has that scene picked (**For Preview**); you still press **Take scene**, unless the item's
+  **Signals → When you Take it → Take its scene** is ticked.
+
+## What a scene can hold
+
+| Layer | What it shows | Status |
+| --- | --- | --- |
+| Content (feed) | Bible, songs, hymns, slides or pictures, or whatever is on air, in a look from Design | Built |
+| Hold | Keeps one box on the verse it shows while the rest follows; **Follow live again** releases it | Built |
+| Colour, picture | A colour or a Library picture | Built |
+| Video | A Library video on a loop, without sound, under the words | Built |
+| Camera | A church camera chosen by name (or a typed WHEP address under Advanced); fallback words while it is not playing | Built; fallback words Checked (10dc.4); a camera scene on a Google TV Checked (10dh.8) |
+| Clock | The service timer, the time of day, a countdown to a time, to the next item or to a milestone | Built |
+| Ticker, lower third | The running ticker or the name band, inside the box (the scene then owns it on that screen) | Built; a smooth ticker layer on a Google TV Checked (10eb.1) |
+| Logo | The Brand Kit logo | Built |
+| Language per box | Both languages, only the first or only the second, whatever the screen shows elsewhere | Built |
+| Fade per box | Cut, or a 0.3, 0.5 or 1 second fade when a box changes to something new | Built |
+
+## Taking a scene
+
+- **Take** puts the scene on the chosen congregation screen, with a cut or a 0.3, 0.5 or 1 second
+  cross-fade. **Back to its own feed** (**Own feed** in Present) returns the screen to full frame;
+  **Restore** takes the last scene again.
+- **Black** and **Logo** cover every screen and feed, scenes included.
+- In **rehearsal** a Take shows in Rhema only (marked *In rehearsal*); every screen has its own
+  scene again when rehearsal ends.
+- Every Take goes into the service log with who took it.
+- A joined desk with the **Screens** or **Present** role can take and release scenes
+  ([main desk and volunteer desks](/docs/features/desk-control)).
+
+## Not built yet
+
+| What | Status |
+| --- | --- |
+| Editing scenes from a joined desk (today a desk can take and release them; making and saving them is on the main desk) | Planned (#243) |
+| An approval step for new looks made during a service | Owner decision (#243) |
+| Black for one screen or one program only (today Black covers every public screen and feed) | Owner decision (#243) |
+| Sound from a camera or video layer (today they are silent on purpose: the room hears the room) | Owner decision (#243) |
+| Hold in Present's transport bar (today Hold is per scene box) | Planned, waits for the #243 Hold rules |
+| A second, separate Bible source for two different verses at once (today: Hold one box) | Owner decision (#243) |
+
+## Checked on the desktop so far
+
+Fallback words in a camera's box (10dc.4), a camera scene on a Google TV (10dh.8) and a smooth
+ticker layer on a Google TV (10eb.1). The composer, Take, presets, video, language and fades
+per box, and scenes from Present are built, not yet checked on the desktop (acceptance 10cs, 10ds,
+10dr, 10eu).

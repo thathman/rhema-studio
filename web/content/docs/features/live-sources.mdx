@@ -1,0 +1,78 @@
+---
+title: Live sources
+description: Each kind of live content keeps its own value, so a Bible feed for OBS keeps the verse while a hymn is on the projector, and nobody has to pick destinations.
+icon: Activity
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+<Callout title="Rhema Studio" type="info">
+This page describes Rhema Studio, the church fork of Rhema. Each feature below is marked
+**Built** (in the app on `main`), **Checked** (also passed on a real desktop run; the row of the
+[desktop acceptance guide](https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/08-desktop-acceptance-guide.md)
+is named), **Planned** or **Owner decision**. Anything not marked Checked is built but not yet
+checked on the desktop. The design is in
+[ADR 0001](https://github.com/thathman/rhema-studio/blob/main/docs/rhema-studio/21-adr-0001-live-sources-scenes.md).
+</Callout>
+
+On a Sunday the projector shows the hymn while the stream's lower third should keep the
+verse the preacher read. Rhema does this with **live sources**: the Bible, songs, hymns, slides and
+pictures, the ticker, the timer, the lower third, the stage message and each camera each keep their
+own live value. An output (or a box in a scene) **follows** the sources it is set to, and changes
+the moment one of them does.
+
+## The sources
+
+| Source | Its live value | Taken off and back | Status |
+| --- | --- | --- | --- |
+| Bible, Songs, Hymns, Slides, Pictures | What was last shown of that kind | × in Sources, **Restore** | Built |
+| Quick screen | Welcome, Offering, Please stand… | Ends with the next thing shown; **Back** | Built |
+| Ticker | The running ticker | Stop, or × in Sources; **Restore** starts the same words again | Built; Checked in Sources (10ec.1) |
+| Timer | The service timer | Pause and resume | Built |
+| Lower third | The name band that is up | Hide, or × in Sources; **Restore** | Built |
+| Stage message | The message to the stage screens (never on a public screen) | × in Sources; **Restore** sends it again | Built |
+| Each camera | Sending, not sending, or the camera router off | **Hide from scenes** shows each scene's fallback there; **Restore** | Built |
+
+## What an output follows
+
+In an output's settings, **What this output follows**:
+
+- **Everything put on air** (the default): the latest thing shown, as a projector does.
+- **Only these**: chosen sources (Bible, Songs, Hymns, Slides, Pictures, the Ticker, the Lower
+  third). A Bible feed for OBS keeps the verse through a hymn and changes with the next verse.
+
+**Production → Screens → Add a ready-made feed** adds named feeds for OBS that follow the right
+sources ("Rhema Bible | Lower third", "Rhema Lyrics | Full", "Rhema Ticker | Alpha", "Rhema Lower
+third | Presenter", "Rhema Clock" and others). A stage display can follow chosen sources too.
+
+## Activating a verse on the Bible feeds only
+
+Once an output (or a scene box) follows the Bible, a verse can go to the **Bible feeds alone**:
+Present → Quick find → **Bible feeds**, or **Activate on Bible feeds** in Detections. OBS lower
+thirds and Bible browser feeds change; the projector keeps the song. A joined **Bible** desk follows
+one rule: while a song, hymn, slide or quick screen is on the main screens its verse reaches only
+the Bible feeds; otherwise the main screens too.
+
+## What every source does the same way
+
+- **Present → Live → Sources** lists each source with what it holds, how many feeds show it and
+  who changed it last ("Romans 8:28 · by Tolu 10:42": the operator, a joined desk, a phone or Auto).
+- Every change goes into the service log with who made it.
+- **Black** and **Logo** cover every feed and scene; **Back** returns to exactly what was there.
+- In **rehearsal** the Sources buttons wait: rehearsal never touches the real ticker, timer or
+  cameras.
+- Joined desks and the phone page see the same list. What they may change follows their role
+  ([main desk and volunteer desks](/docs/features/desk-control)).
+
+## Not built yet
+
+| What | Status |
+| --- | --- |
+| Roles for a worship leader (songs and hymns only), a camera operator or an OBS director | Planned (#243) |
+| Black for one output only | Owner decision (#243) |
+| A second Bible source, for two different verses on two feeds at once | Owner decision (#243) |
+
+## Checked on the desktop so far
+
+The ticker as a source in Present → Sources (10ec.1). The rest is built, not yet checked on the
+desktop (acceptance 10cr, 10ec, 10es, 10dp).
