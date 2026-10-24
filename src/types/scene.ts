@@ -88,6 +88,8 @@ export interface Scene {
   fadeMs?: number
   createdAt: number
   updatedAt: number
+  /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
+  libraryLookId?: string
 }
 
 /** One layer as an output draws it. */

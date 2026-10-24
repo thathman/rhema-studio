@@ -1164,6 +1164,22 @@ Rhema on the church network with the HTTP listener on the network. The Chromecas
 | 10en.9 | From another computer: `nc <TV> 8095` and type nothing; at once press **Check TV** in Show health. Then `python3 -c "print('{' + '[' * 8000)" > deep.json; curl -i -X POST -H 'Content-Type: application/json' --data-binary @deep.json http://<TV>:8095/challenge`. | Check TV answers while nc is open; nc is closed by the TV after about 5 s. The deep body gets 400 "That is not what Rhema sends"; Rhema Receiver keeps running and showing the feed. | Partial (2026-10-24, Chromecast with Google TV HD, QA build of main + #336, the TV reaching Rhema through adb (the https port 9091 forwarded)): 8,000 nested [ → 400 and the app kept running; the slow-connection (nc) case not tried. |
 | 10en.10 | A scene with a camera (camera router on) on the TV's feed. | The camera plays on the TV as before (10dh.8). | Unverified |
 
+### 10er. Look library gaps and setup starter looks (#299, #298)
+
+A profile with the Main Display off and a second display output that is **on** (a window open), and a stage output. Brand Kit with the church's own colours applied (Design → Brand Kit → Apply).
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10er.1 | Design → Library. Look at each of Church Classic, Broadcast Clean, Contemporary, Warm Editorial and High Contrast. | Each has an announcement look ("Classic · Announcement", "Editorial · Notice page"…) whose preview shows "This week" as a title with two notice lines under it; no verse numbers. | Unverified |
+| 10er.2 | Click the **OBS overlay** filter. | Only lower thirds (scripture and lyrics bands, name bands) and tickers, all on the transparent checkerboard, each card saying "OBS overlay"; no full-screen look and no camera scene. | Unverified |
+| 10er.3 | On "Clean · Camera and scripture" click **Use and edit**. | Rhema goes to Production → Programs with the new copy open in the composer (its name in the name box). Nothing is taken: every output shows what it showed. | Unverified |
+| 10er.4 | Back in Design → Library, the same card. Open its **…** menu; reset the copy. Then take that scene to an output in Programs, come back and open the menu again. | The card says "In your scenes: …". Reset puts the layers back where the template has them (the camera's stream address stays). While the scene is on an output the entry is greyed with "(on <output>)". | Unverified |
+| 10er.5 | Use a name band (e.g. "Classic · Name and title"), change its colour in Design → Lower thirds, then **…** → reset it. Show a name in Present with that style and open the menu again. | The style is back as the library has it, same name. While the band is on air the entry is greyed "(on the name band on air)". | Unverified |
+| 10er.6 | Use a ticker look; start the ticker; open that card's **…** menu. Stop the ticker and reset. | While running: "Your ticker look (on the ticker running now)", greyed. Stopped: Reset works. Same for a stage look with a stage screen on and off. | Unverified |
+| 10er.7 | Help → Setup (or a fresh profile), step 3 **Brand and starter looks**. Click **Church Classic**. | Four previews (Scripture, Songs and hymns, Notices, Over a camera) in the church colours; the plan lists the five themes, the name band, the two camera scenes, the ticker and stage looks; outputs: Main Display "gets the full-screen looks (it is off)", the open output "left as it is, on now", the stage output "left as it is". Design → Themes has no new themes yet. | Unverified |
+| 10er.8 | **Apply…**, then **Cancel**; then **Apply…** and **Apply starter looks**. | Cancel adds nothing. Apply: "Added the Church Classic looks and set them on Main Display."; the window that was on still shows exactly what it did (same look); Outputs → Main Display now uses "Classic · Scripture · <church>" with Songs/Hymns/Slides set to the pack's looks; Production → Programs has the two camera scenes. | Unverified |
+| 10er.9 | Quit and reopen Rhema. | The pack's themes, name band, scenes, ticker and stage looks and Main Display's looks are all still there; the library cards list the copies. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

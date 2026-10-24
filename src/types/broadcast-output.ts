@@ -54,6 +54,8 @@ export interface TickerStyle {
   motion: "crawl" | "pages"
   /** Pages: seconds each announcement stays. */
   pageSeconds: number
+  /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
+  libraryLookId?: string
 }
 
 /** A saved set of announcements to load into the ticker. */
@@ -98,6 +100,8 @@ export interface LowerThirdStyle {
   accent: { enabled: boolean; color: string; width: number }
   /** How it comes on screen. */
   animation: "none" | "fade" | "slide"
+  /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
+  libraryLookId?: string
 }
 
 /** A `signage` output: pictures on a loop, independent of what is live in the sanctuary. */
@@ -191,6 +195,8 @@ export interface StageStyle {
   warnWhenOver: boolean
   /** A countdown on the stage to the next item or a milestone (#196 R2); absent: none. */
   countdown?: CountdownTo
+  /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
+  libraryLookId?: string
 }
 
 export interface BroadcastOutputNdiSettings {

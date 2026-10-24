@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Starter looks in setup; announcement looks, OBS overlay filter and Reset for every library look (#298, #299)
+- Setup step 3 (**Brand and starter looks**) now offers **starter looks**: pick a family (Church Classic, Broadcast Clean, Contemporary, Warm Editorial, High Contrast) to see its scripture, song, notice and over-the-camera looks drawn in your church colours. Nothing is added until you press **Apply…** and confirm; then the looks are copied into your own looks and set on the outputs that are **off**. An output that is on, the stage display and signage screens are left as they are.
+- **Design → Library** has an announcement (notice slide) look in each main family, and an **OBS overlay** filter (the lower thirds and tickers with nothing behind them, to lay over the camera in OBS).
+- **Use and edit** on a camera scene now opens your copy in **Production → Programs**.
+- **Reset** (the card's **…** menu) now also works for copies of name bands, camera scenes, the ticker look and the stage look, not only themes. It is refused while that copy is on air.
+
 ### Google TV: the feed link and page travel encrypted; a sturdier Rhema Receiver (#198)
 - **Show on a Google TV** now sends the TV the feed's secure (https) link, encrypted, with this computer's certificate; the TV opens the feed only from this computer, so nobody else on the Wi-Fi can read the link or what the feed shows. It needs **Secure page for phones (https)** in Settings → Remote control; without it Rhema says so and sends nothing.
 - It needs **Rhema Receiver 1.3** on the TV (Rhema asks you to update an older one). After updating, send the TV its feed again once. The https certificate now stays the same while this computer's address does, so TVs and phones keep working after Rhema restarts.

@@ -75,6 +75,9 @@ const cameraWith = (shows: "bible" | "lyrics", lookId: string): SceneTemplateLay
     : { kind: "feed", name: "Lyrics", shows: ["song", "hymn"], box: { x: 0, y: 0, w: 100, h: 100 }, lookId },
 ]
 
+/** No verse numbers: an announcement slide has a title and lines, not verses. */
+const NO_NUMBERS = (color: string): BroadcastTheme["verseNumbers"] => ({ visible: false, fontSize: 22, color, superscript: true })
+
 // ── Church Classic ───────────────────────────────────────────────────────
 const CC = { ink: "#14202b", paper: "#f6f1e7", gold: "#c9a86a" }
 const classic: LibraryLook[] = [
@@ -114,6 +117,15 @@ const classic: LibraryLook[] = [
       secondaryVerseText: words(SERIF, 40, 400, CC.gold, { lineHeight: 1.3 }),
       reference: reference(PLEX, 26, 600, CC.gold, { uppercase: true, letterSpacing: 2 }),
       layout: band("center", 30, 92, 40),
+    }) },
+  { kind: "theme", id: "look-classic-announcement", family: "church-classic", name: "Classic · Announcement", purpose: "A notice slide for the main screens: the title in gold above, the details beneath.", layout: "fullscreen", content: "announcements", background: "dark", aspect: "16:9",
+    theme: theme("look-classic-announcement", "Classic · Announcement", {
+      background: solid("#16222d"),
+      verseText: words(SERIF, 56, 400, CC.paper, { lineHeight: 1.45 }),
+      secondaryVerseText: words(SERIF, 48, 400, CC.gold, { lineHeight: 1.4 }),
+      verseNumbers: NO_NUMBERS(CC.gold),
+      reference: reference(SERIF, 64, 600, CC.gold, { letterSpacing: 1 }),
+      layout: fullFrame("center"),
     }) },
   { kind: "lower-third", id: "look-classic-speaker", family: "church-classic", name: "Classic · Name and title", purpose: "The preacher's or reader's name with a gold rule.", layout: "lower-third", content: "speaker", background: "transparent", aspect: "16:9",
     style: speaker("look-classic-speaker", "Classic · Name and title", {
@@ -170,6 +182,15 @@ const clean: LibraryLook[] = [
       verseNumbers: { visible: false, fontSize: 22, color: BC.teal, superscript: true },
       reference: reference(INTER, 22, 600, "#b8c4c9", { uppercase: true, letterSpacing: 2, position: "below" }),
       layout: band("center", 26),
+    }) },
+  { kind: "theme", id: "look-clean-announcement", family: "broadcast-clean", name: "Clean · Announcement", purpose: "A plain notice slide: a bold title in teal, the details in white, set to the left.", layout: "fullscreen", content: "announcements", background: "dark", aspect: "16:9",
+    theme: theme("look-clean-announcement", "Clean · Announcement", {
+      background: solid("#101418"),
+      verseText: words(INTER, 54, 500, BC.white, { horizontalAlign: "left", lineHeight: 1.45 }),
+      secondaryVerseText: words(INTER, 46, 400, BC.teal, { horizontalAlign: "left", lineHeight: 1.4 }),
+      verseNumbers: NO_NUMBERS(BC.teal),
+      reference: reference(INTER, 62, 700, BC.teal, { horizontalAlign: "left" }),
+      layout: fullFrame("left", 140),
     }) },
   { kind: "lower-third", id: "look-clean-speaker", family: "broadcast-clean", name: "Clean · Name strip", purpose: "Speaker's name and role with a teal bar, slides in for the stream.", layout: "lower-third", content: "speaker", background: "transparent", aspect: "16:9",
     style: speaker("look-clean-speaker", "Clean · Name strip", {
@@ -232,6 +253,15 @@ const contemporary: LibraryLook[] = [
       verseNumbers: { visible: false, fontSize: 22, color: CT.amber, superscript: true },
       reference: reference(MONO, 22, 500, "#e6e6e6", { uppercase: true, letterSpacing: 3, position: "below", horizontalAlign: "center" }),
       layout: band("center", 26, 90, 30),
+    }) },
+  { kind: "theme", id: "look-contemporary-announcement", family: "contemporary", name: "Contemporary · Announcement", purpose: "A big, tight title with the details small beneath: youth nights, events, sign-ups.", layout: "fullscreen", content: "announcements", background: "dark", aspect: "16:9",
+    theme: theme("look-contemporary-announcement", "Contemporary · Announcement", {
+      background: solid(CT.char),
+      verseText: words(GEIST, 50, 500, CT.sand, { horizontalAlign: "left", lineHeight: 1.35 }),
+      secondaryVerseText: words(GEIST, 44, 500, CT.amber, { horizontalAlign: "left", lineHeight: 1.3 }),
+      verseNumbers: NO_NUMBERS(CT.amber),
+      reference: reference(GEIST, 78, 700, "#ffffff", { horizontalAlign: "left", letterSpacing: -1 }),
+      layout: fullFrame("left", 150, 110),
     }) },
   { kind: "lower-third", id: "look-contemporary-speaker", family: "contemporary", name: "Contemporary · Name pill", purpose: "A centred, rounded name tag for youth nights and guest speakers.", layout: "lower-third", content: "speaker", background: "transparent", aspect: "16:9",
     style: speaker("look-contemporary-speaker", "Contemporary · Name pill", {
@@ -297,6 +327,15 @@ const editorial: LibraryLook[] = [
       verseNumbers: { visible: false, fontSize: 20, color: WE.rule, superscript: true },
       reference: reference(PLEX, 22, 600, WE.brass, { uppercase: true, letterSpacing: 2, position: "below" }),
       layout: band("center", 28, 90, 40),
+    }) },
+  { kind: "theme", id: "look-editorial-announcement", family: "warm-editorial", name: "Editorial · Notice page", purpose: "Notices set like a printed bulletin on warm paper.", layout: "fullscreen", content: "announcements", background: "light", aspect: "16:9",
+    theme: theme("look-editorial-announcement", "Editorial · Notice page", {
+      background: solid(WE.paper),
+      verseText: words(SERIF, 54, 400, WE.ink, { horizontalAlign: "left", lineHeight: 1.5 }),
+      secondaryVerseText: words(SERIF, 46, 400, "#7a5b33", { horizontalAlign: "left", lineHeight: 1.45 }),
+      verseNumbers: NO_NUMBERS(WE.rule),
+      reference: reference(SERIF, 64, 600, WE.ink, { horizontalAlign: "left" }),
+      layout: fullFrame("left", 160, 100),
     }) },
   { kind: "lower-third", id: "look-editorial-speaker", family: "warm-editorial", name: "Editorial · Name card", purpose: "A paper name card with a brass rule.", layout: "lower-third", content: "speaker", background: "transparent", aspect: "16:9",
     style: speaker("look-editorial-speaker", "Editorial · Name card", {
@@ -365,6 +404,16 @@ const contrast: LibraryLook[] = [
       verseNumbers: { visible: false, fontSize: 26, color: HC.yellow, superscript: true },
       reference: reference(INTER, 28, 700, HC.yellow, { position: "below" }),
       layout: band("center", 34, 90, 54),
+      transition: { type: "none", duration: 0, easing: "linear", direction: "up" },
+    }) },
+  { kind: "theme", id: "look-contrast-announcement", family: "high-contrast", name: "High Contrast · Announcement", purpose: "Large notices: a yellow title and white details on black, without motion.", layout: "fullscreen", content: "announcements", background: "dark", aspect: "16:9",
+    theme: theme("look-contrast-announcement", "High Contrast · Announcement", {
+      background: solid(HC.black),
+      verseText: words(INTER, 66, 700, HC.white, { horizontalAlign: "left", lineHeight: 1.35 }),
+      secondaryVerseText: words(INTER, 58, 600, HC.yellow, { horizontalAlign: "left", lineHeight: 1.3 }),
+      verseNumbers: NO_NUMBERS(HC.yellow),
+      reference: reference(INTER, 80, 800, HC.yellow, { horizontalAlign: "left" }),
+      layout: fullFrame("left", 120, 96),
       transition: { type: "none", duration: 0, easing: "linear", direction: "up" },
     }) },
   { kind: "lower-third", id: "look-contrast-speaker", family: "high-contrast", name: "High Contrast · Name band", purpose: "A large name in white over black with a yellow bar; comes on without animation.", layout: "lower-third", content: "speaker", background: "transparent", aspect: "16:9",

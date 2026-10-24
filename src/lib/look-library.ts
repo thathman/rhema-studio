@@ -1,10 +1,11 @@
 import type { BroadcastTheme, ContentType } from "@/types/broadcast"
-import type { BroadcastOutput, LowerThirdStyle, StageStyle, TickerStyle } from "@/types/broadcast-output"
+import type { BroadcastOutput, BroadcastOutputStatus, LowerThird, LowerThirdStyle, StageStyle, Ticker, TickerStyle } from "@/types/broadcast-output"
 import type { Scene, SceneBox, SceneLayerKind } from "@/types/scene"
 import { themeIdsOf } from "@/lib/output-themes"
 import { newLayer } from "@/lib/scenes"
 import { brandLowerThirdStyle, brandTheme, type BrandKit } from "@/lib/brand-kit"
 import { BUNDLED_FONTS } from "@/lib/fonts"
+import { outputOnAir } from "@/lib/output-on-air"
 
 /**
  * The built-in look library (#299 UX15-3). A library look is never edited or
@@ -23,6 +24,13 @@ export type LookContent = "bible" | "lyrics" | "speaker" | "announcements" | "st
 export type LookBackground = "dark" | "light" | "transparent"
 /** A language a look reads right in: English, or Yorùbá (its dotted letters and tone marks). */
 export type LookLanguage = "en" | "yo"
+/** The frame's shape: wide (every screen and stream today) or tall (a phone or a portrait screen). */
+export type LookAspect = "16:9" | "9:16"
+/**
+ * Sound: "silent" looks make none of their own, so they sit over any feed that carries the service's
+ * sound (an NDI or OBS stream); an "own-sound" look plays a video with sound that would mix with it.
+ */
+export type LookAudio = "silent" | "own-sound"
 
 export interface LookFamily {
   id: LookFamilyId
@@ -48,7 +56,10 @@ interface LookMeta {
   layout: LookLayout
   content: LookContent
   background: LookBackground
-  aspect: "16:9"
+  /** Every look is drawn 16:9 today; a 9:16 look would need a tall output to show it. */
+  aspect: LookAspect
+  /** Absent: "silent" (no look in the library has sound of its own yet). */
+  audio?: LookAudio
   /**
    * The languages it reads right in. Absent: worked out from its fonts (every bundled font carries
    * Yorùbá's letters). Set it when a look has words of one language built in (a ticker's "NOTICES" tag).
@@ -71,6 +82,9 @@ export const LAYOUT_NAMES: Record<LookLayout, string> = {
   stage: "Stage",
 }
 
+/** The OBS overlay filter's name: keyed lower thirds and tickers, to lay over the camera in OBS. */
+export const OBS_OVERLAY = "OBS overlay"
+
 export const CONTENT_LABELS: Record<LookContent, string> = {
   bible: "Bible",
   lyrics: "Songs and hymns",
@@ -80,11 +94,14 @@ export const CONTENT_LABELS: Record<LookContent, string> = {
 }
 
 export interface LookFilter {
-  layout: LookLayout | "all"
+  /** "obs-overlay": keyed lower thirds and tickers (see `isObsOverlay`). */
+  layout: LookLayout | "obs-overlay" | "all"
   family: LookFamilyId | "all"
   background: LookBackground | "all"
   /** "both": looks that show two languages at once (a bilingual verse or song). Absent: any. */
   language?: LookLanguage | "both" | "all"
+  /** Absent: any. */
+  aspect?: LookAspect | "all"
   /** Only the favourites (ids in `favourites`). */
   favouritesOnly?: boolean
   favourites?: ReadonlySet<string>
@@ -93,12 +110,32 @@ export interface LookFilter {
 /** The looks a filter keeps, in library order. `looks` is the whole library (a scene's layers name looks in it). */
 export function filterLooks(looks: readonly LibraryLook[], f: LookFilter): LibraryLook[] {
   const language = f.language ?? "all"
+  const aspect = f.aspect ?? "all"
   return looks.filter((l) =>
-    (f.layout === "all" || l.layout === f.layout) &&
+    (f.layout === "all" || (f.layout === "obs-overlay" ? isObsOverlay(l) : l.layout === f.layout)) &&
+    (aspect === "all" || l.aspect === aspect) &&
     (f.family === "all" || l.family === f.family) &&
     (f.background === "all" || l.background === f.background) &&
     (language === "all" || (language === "both" ? showsTwoLanguages(l, looks) : lookLanguages(l, looks).includes(language))) &&
     (!f.favouritesOnly || (f.favourites?.has(l.id) ?? false)))
+}
+
+/**
+ * An OBS overlay: a lower third or ticker with nothing behind it, so OBS (over NDI with alpha, or a
+ * browser source) lays it over the camera. Worked out from the look, not a separate list to keep.
+ */
+export function isObsOverlay(look: Pick<LibraryLook, "layout" | "background">): boolean {
+  return look.background === "transparent" && (look.layout === "lower-third" || look.layout === "ticker")
+}
+
+/** Whether the look plays sound of its own. */
+export function lookAudio(look: Pick<LibraryLook, "audio">): LookAudio {
+  return look.audio ?? "silent"
+}
+
+/** The frame shapes the library has looks in, wide first. */
+export function lookAspects(looks: readonly LibraryLook[]): LookAspect[] {
+  return (["16:9", "9:16"] as const).filter((a) => looks.some((l) => l.aspect === a))
 }
 
 /** The fonts a look's words use; a scene's are its layers' looks'. */
@@ -189,6 +226,8 @@ interface AdoptOptions {
    * the library look is never changed). Only for looks `brandable` allows.
    */
   brand?: BrandKit
+  /** Layer looks the church already has a copy of (library look id → theme id): a scene uses those instead of new copies. */
+  reuse?: ReadonlyMap<string, string>
 }
 
 const randomId = () => crypto.randomUUID()
@@ -228,15 +267,15 @@ export function adoptLook(look: LibraryLook, opts: AdoptOptions = {}): AdoptedLo
     case "theme":
       return withKept({ themes: [theme(look.theme, look.id, look.name)] })
     case "lower-third":
-      return withKept({ themes: [], lowerThirdStyle: branded({ ...structuredClone(look.style), id: newId(), name: name(look.name) }, brandLowerThirdStyle) })
+      return withKept({ themes: [], lowerThirdStyle: branded({ ...structuredClone(look.style), id: newId(), name: name(look.name), libraryLookId: look.id }, brandLowerThirdStyle) })
     case "ticker":
-      return { themes: [], tickerStyle: structuredClone(look.style) }
+      return { themes: [], tickerStyle: { ...structuredClone(look.style), libraryLookId: look.id } }
     case "stage":
-      return { themes: [], stageStyle: structuredClone(look.style) }
+      return { themes: [], stageStyle: { ...structuredClone(look.style), libraryLookId: look.id } }
     case "scene": {
       // Each look the scene's layers show in becomes the church's own theme once.
       const themes: BroadcastTheme[] = []
-      const copied = new Map<string, string>()
+      const copied = new Map<string, string>(opts.reuse ?? [])
       for (const l of look.scene.layers) {
         if (!l.lookId || copied.has(l.lookId)) continue
         const source = (opts.library ?? []).find((x) => x.id === l.lookId)
@@ -252,20 +291,104 @@ export function adoptLook(look: LibraryLook, opts: AdoptOptions = {}): AdoptedLo
         ...(l.shows ? { shows: [...l.shows] } : {}),
         ...(l.lookId && copied.has(l.lookId) ? { themeId: copied.get(l.lookId) } : {}),
       }))
-      return withKept({ themes, scene: { id: newId(), name: name(look.name), background: look.scene.background, layers, createdAt: now, updatedAt: now } })
+      return withKept({ themes, scene: { id: newId(), name: name(look.name), background: look.scene.background, layers, createdAt: now, updatedAt: now, libraryLookId: look.id } })
     }
   }
 }
 
+export type LookOf<K extends LibraryLook["kind"]> = Extract<LibraryLook, { kind: K }>
+
+/** The library look of this kind a copy came from, when it still exists. */
+export function libraryLookOf<K extends LibraryLook["kind"]>(kind: K, libraryLookId: string | undefined, library: readonly LibraryLook[]): LookOf<K> | null {
+  const look = libraryLookId ? library.find((l) => l.id === libraryLookId) : undefined
+  return look?.kind === kind ? (look as LookOf<K>) : null
+}
+
 /** The library look a theme was copied from, when it still exists. */
-export function sourceLook(theme: Pick<BroadcastTheme, "libraryLookId">, library: readonly LibraryLook[]): Extract<LibraryLook, { kind: "theme" }> | null {
-  const look = theme.libraryLookId ? library.find((l) => l.id === theme.libraryLookId) : undefined
-  return look?.kind === "theme" ? look : null
+export function sourceLook(theme: Pick<BroadcastTheme, "libraryLookId">, library: readonly LibraryLook[]): LookOf<"theme"> | null {
+  return libraryLookOf("theme", theme.libraryLookId, library)
 }
 
 /** A copy put back as the library look has it; its id, name, favourite pin and date added stay. */
 export function resetCopy(copy: BroadcastTheme, look: Extract<LibraryLook, { kind: "theme" }>, now = Date.now()): BroadcastTheme {
   return { ...copyTheme(look.theme, look.id, copy.name, copy.id, now), pinned: copy.pinned, createdAt: copy.createdAt }
+}
+
+/** A lower-third style put back as the library look has it; its id and name stay. */
+export function resetLowerThirdCopy(copy: LowerThirdStyle, look: LookOf<"lower-third">): LowerThirdStyle {
+  return { ...structuredClone(look.style), id: copy.id, name: copy.name, libraryLookId: look.id }
+}
+
+/** The church's ticker or stage look put back as the library look has it. */
+export function resetSingleLook<T extends TickerStyle | StageStyle>(look: { style: T; id: string }): T {
+  return { ...structuredClone(look.style), libraryLookId: look.id }
+}
+
+/**
+ * A scene copy put back as the library template has it: its id, name and date added stay; its
+ * layers come back as the template places them. The looks its layers showed in are used again
+ * (not reset, other scenes or outputs may show them); only a missing one is copied anew. A camera
+ * layer keeps its stream address and the words shown while it is not playing.
+ */
+export function resetSceneCopy(copy: Scene, look: LookOf<"scene">, opts: AdoptOptions & { themes: readonly BroadcastTheme[] }): { scene: Scene; themes: BroadcastTheme[] } {
+  const now = opts.now ?? Date.now()
+  const reuse = new Map<string, string>()
+  for (const l of copy.layers) {
+    const t = l.themeId ? opts.themes.find((x) => x.id === l.themeId) : undefined
+    if (t?.libraryLookId && !reuse.has(t.libraryLookId)) reuse.set(t.libraryLookId, t.id)
+  }
+  const fresh = adoptLook(look, { ...opts, now, brand: undefined, reuse })
+  const cameras = copy.layers.filter((l) => l.kind === "camera")
+  let next = 0
+  const layers = (fresh.scene?.layers ?? []).map((l) => {
+    if (l.kind !== "camera") return l
+    const was = cameras[next++]
+    return was ? { ...l, ...(was.cameraUrl ? { cameraUrl: was.cameraUrl } : {}), ...(was.cameraFallback ? { cameraFallback: was.cameraFallback } : {}) } : l
+  })
+  return { scene: { ...(fresh.scene as Scene), id: copy.id, name: copy.name, layers, createdAt: copy.createdAt, updatedAt: now }, themes: fresh.themes }
+}
+
+/** One of the church's copies of a library look, and what shows it now (Reset is refused while anything does). */
+export interface LookCopy {
+  id: string
+  name: string
+  usedBy: string[]
+}
+
+/** The church's looks, scenes and what is on air, for finding a library look's copies. */
+export interface ChurchLooks {
+  themes: readonly BroadcastTheme[]
+  lowerThirdStyles: readonly LowerThirdStyle[]
+  scenes: readonly Scene[]
+  tickerStyle: TickerStyle
+  stageStyle: StageStyle
+  outputs: readonly BroadcastOutput[]
+  outputStatus?: Readonly<Record<string, BroadcastOutputStatus>>
+  lowerThird?: LowerThird | null
+  ticker?: Ticker | null
+}
+
+/**
+ * The church's copies of a library look, each with what shows it now: outputs using a theme (or a
+ * scene with it), the name band on air in a lower-third style, outputs showing a scene, the ticker
+ * running, stage screens that are on.
+ */
+export function lookCopies(look: LibraryLook, s: ChurchLooks): LookCopy[] {
+  switch (look.kind) {
+    case "theme":
+      return s.themes.filter((t) => t.libraryLookId === look.id).map((t) => ({ id: t.id, name: t.name, usedBy: themeUsedBy(t.id, s.outputs, s.scenes) }))
+    case "lower-third":
+      return s.lowerThirdStyles.filter((x) => x.libraryLookId === look.id).map((x) => ({ id: x.id, name: x.name, usedBy: s.lowerThird?.style?.id === x.id ? ["the name band on air"] : [] }))
+    case "scene":
+      return s.scenes.filter((x) => x.libraryLookId === look.id).map((x) => ({ id: x.id, name: x.name, usedBy: s.outputs.filter((o) => o.sceneId === x.id).map((o) => o.name) }))
+    case "ticker":
+      return s.tickerStyle.libraryLookId === look.id ? [{ id: "ticker", name: "Your ticker look", usedBy: s.ticker ? ["the ticker running now"] : [] }] : []
+    case "stage": {
+      if (s.stageStyle.libraryLookId !== look.id) return []
+      const on = s.outputs.filter((o) => o.role === "stage" && outputOnAir(o, s.outputStatus?.[o.id])).map((o) => o.name)
+      return [{ id: "stage", name: "Your stage display look", usedBy: on }]
+    }
+  }
 }
 
 /**

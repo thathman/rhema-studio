@@ -18,6 +18,7 @@ import { ChurchFolderBlock } from "@/studio/library/library-blocks"
 import { useSetupStatus } from "@/studio/setup/use-setup-status"
 import { EssentialRow, StatusRow } from "@/studio/setup/status-rows"
 import { ScreenTestRow } from "@/studio/setup/screen-test"
+import { StarterPackChooser } from "@/studio/setup/starter-pack"
 
 type Leave = (open: () => void) => void
 
@@ -112,7 +113,7 @@ export function OperatorStep({ error, onJoin }: { error: string | null; onJoin: 
   )
 }
 
-/** Step 3: the Brand Kit editor from Design, as it is. */
+/** Step 3: the Brand Kit editor from Design, as it is, and the starter looks (#298 S3.2). */
 export function BrandStep({ onLeave }: { onLeave: Leave }) {
   return (
     <div className="flex flex-col gap-4">
@@ -121,6 +122,7 @@ export function BrandStep({ onLeave }: { onLeave: Leave }) {
       </p>
       <BrandDesigner />
       <Button variant="outline" className="self-start" onClick={() => onLeave(() => useShellStore.getState().openDesign("brand"))}>Open Design → Brand for more room</Button>
+      <StarterPackChooser />
     </div>
   )
 }
