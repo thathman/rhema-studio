@@ -29,6 +29,7 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.security.SecureRandom;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * Rhema Receiver (#198): shows one Rhema browser feed full screen and keeps showing it, across
@@ -49,7 +50,7 @@ public class MainActivity extends Activity {
     private ShowServer server;
     private String code;
     private int triesLeft;
-    private String problem;
+    private volatile String problem;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -197,6 +198,19 @@ public class MainActivity extends Activity {
         ui.removeCallbacksAndMessages(null);
         web.destroy();
         super.onDestroy();
+    }
+
+    /** For Rhema's Check TV (GET /status): the id of the feed shown (never its secret link), or null. */
+    String feedShown() {
+        String url = shown();
+        if (url == null) return null;
+        List<String> p = Uri.parse(url).getPathSegments();
+        return p.size() >= 2 && "feed".equals(p.get(0)) ? p.get(1) : null;
+    }
+
+    /** What the screen says is wrong now (Rhema not found, link no longer works), or null. */
+    String problem() {
+        return problem;
     }
 
     /** What this TV is called on the network, for Rhema's reply. */

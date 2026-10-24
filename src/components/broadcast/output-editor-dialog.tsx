@@ -33,6 +33,7 @@ import { useBroadcastStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
 import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
 import { withThemeFor } from "@/lib/output-themes"
+import { rememberTv } from "@/lib/show-health"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import type {
   BroadcastOutput,
@@ -40,6 +41,7 @@ import type {
   NdiAlphaMode,
   NdiFrameRate,
   NdiResolution,
+  ReceiverTv,
   SignageSettings,
   SignagePlaylist,
 } from "@/types"
@@ -302,7 +304,17 @@ export function OutputEditorDialog({
             </span>
 
             {form.type === "browser" ? (
-              <FeedLink id={form.id} token={form.feedToken} onRenew={() => patch({ feedToken: newFeedToken() })} />
+              <FeedLink
+                id={form.id}
+                token={form.feedToken}
+                onRenew={() => patch({ feedToken: newFeedToken() })}
+                onTv={(tv) => {
+                  // Remembered for Show health (#213): on the form (kept when saved) and on the saved output (kept if not).
+                  setForm((f) => ({ ...f, tvs: rememberTv(f.tvs, tv) }))
+                  const saved = useBroadcastStore.getState().outputs.find((o) => o.id === form.id)
+                  if (saved) useBroadcastStore.getState().updateOutput(saved.id, { tvs: rememberTv(saved.tvs, tv) })
+                }}
+              />
             ) : form.type === "display" ? (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
@@ -644,7 +656,7 @@ function SignagePicker({ value, onChange }: { value: SignageSettings; onChange: 
 }
 
 /** A browser feed's link (ARCH-002): what to paste into OBS Browser Source or a TV's browser. */
-export function FeedLink({ id, token, onRenew }: { id: string; token?: string; onRenew: () => void }) {
+export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: string; onRenew: () => void; onTv?: (tv: ReceiverTv) => void }) {
   const [where, setWhere] = useState<{ host: string | null; port: number | null; lan: boolean } | null>(null)
   useEffect(() => {
     void (async () => {
@@ -681,7 +693,7 @@ export function FeedLink({ id, token, onRenew }: { id: string; token?: string; o
             <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(url).catch(() => {})}>Copy link</Button>
             <Button type="button" size="sm" variant="ghost" onClick={onRenew} title="The old link stops working when you save">New link</Button>
           </div>
-          {where?.lan && <ShowOnTv url={url} />}
+          {where?.lan && <ShowOnTv url={url} onShown={onTv} />}
         </>
       )}
       <p className="text-muted-foreground">OBS: add a Browser source with this link at the feed's size (1920×1080). Anyone with the link can watch this feed on the network; a new link closes the old one. Videos do not play in a browser feed.</p>
@@ -690,7 +702,7 @@ export function FeedLink({ id, token, onRenew }: { id: string; token?: string; o
 }
 
 /** Send this feed to a Google TV running Rhema Receiver (#198): the address and code it shows. */
-function ShowOnTv({ url }: { url: string }) {
+function ShowOnTv({ url, onShown }: { url: string; onShown?: (tv: ReceiverTv) => void }) {
   const [address, setAddress] = useState("")
   const [code, setCode] = useState("")
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
@@ -700,8 +712,9 @@ function ShowOnTv({ url }: { url: string }) {
     setStatus(null)
     try {
       const name = await invoke<string>("tv_show", { address, code, url })
-      setStatus({ ok: true, text: `${name || "The TV"} is showing this feed. It shows it again by itself after a restart.` })
+      setStatus({ ok: true, text: `${name || "The TV"} is showing this feed. It shows it again by itself after a restart; Show health lists it under this feed.` })
       setCode("")
+      onShown?.({ name, address: address.trim(), sentAt: Date.now() })
     } catch (e) {
       setStatus({ ok: false, text: String(e) })
     } finally {

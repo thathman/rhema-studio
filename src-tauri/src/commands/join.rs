@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::watch;
 
@@ -258,9 +258,62 @@ pub async fn tv_show(address: String, code: String, url: String) -> Result<Strin
     if reply.ok { Ok(reply.name.unwrap_or_default()) } else { Err(reply.error.unwrap_or_else(|| "The TV refused".into())) }
 }
 
+#[derive(Deserialize)]
+struct TvStatusReply {
+    ok: bool,
+    name: Option<String>,
+    feed: Option<String>,
+    problem: Option<String>,
+    error: Option<String>,
+}
+
+/// What a Rhema Receiver says it shows (#213 Check TV): the feed's id, never its secret link.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct TvStatus {
+    name: String,
+    feed: Option<String>,
+    problem: Option<String>,
+}
+
+/// A receiver's answer in plain words; a receiver before 1.1 has no status to give (404).
+fn tv_status_from(reply: TvStatusReply, not_found: bool) -> Result<TvStatus, String> {
+    if reply.ok {
+        Ok(TvStatus { name: reply.name.unwrap_or_default(), feed: reply.feed.filter(|f| !f.is_empty()), problem: reply.problem.filter(|p| !p.is_empty()) })
+    } else if not_found {
+        Err("This TV's Rhema Receiver is too old to be checked: install version 1.1 or newer on it.".into())
+    } else {
+        Err(reply.error.unwrap_or_else(|| "The TV did not say".into()))
+    }
+}
+
+/// Ask a Rhema Receiver what it is showing (#213): its name, the feed and any problem on its screen.
+#[tauri::command]
+pub async fn tv_status(address: String) -> Result<TvStatus, String> {
+    let r = client(Some(Duration::from_secs(5)))?
+        .get(format!("{}/status", tv_url(&address)?))
+        .send()
+        .await
+        .map_err(|_| "Could not reach the TV: is it on, with Rhema Receiver open, on the same network?".to_string())?;
+    let not_found = r.status() == reqwest::StatusCode::NOT_FOUND;
+    let reply: TvStatusReply = r.json().await.map_err(|e| format!("The TV's answer was not understood: {e}"))?;
+    tv_status_from(reply, not_found)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tv_says_which_feed_it_shows_and_an_old_one_says_it_cannot() {
+        let reply = |v: serde_json::Value| serde_json::from_value::<TvStatusReply>(v).unwrap();
+        assert_eq!(
+            tv_status_from(reply(serde_json::json!({ "ok": true, "name": "Foyer TV", "feed": "foyer" })), false),
+            Ok(TvStatus { name: "Foyer TV".into(), feed: Some("foyer".into()), problem: None })
+        );
+        assert_eq!(tv_status_from(reply(serde_json::json!({ "ok": true, "name": "TV" })), false).unwrap().feed, None, "nothing shown yet");
+        let old = tv_status_from(reply(serde_json::json!({ "ok": false, "error": "Rhema Receiver only takes POST /show" })), true).unwrap_err();
+        assert!(old.contains("1.1"), "{old}");
+    }
 
     #[test]
     fn a_tv_address_may_leave_out_the_port() {

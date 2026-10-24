@@ -10,8 +10,9 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 /**
- * The one thing Rhema asks a receiver (#198): POST /show {"code","url"} → {"ok","name"|"error"}.
- * One request at a time, small bodies only; nothing else is served.
+ * What Rhema asks a receiver (#198): POST /show {"code","url"} → {"ok","name"|"error"}, and
+ * (#213, 1.1) GET /status → {"ok","name","feed","problem"}: the id of the feed shown, never its
+ * secret link. One request at a time, small bodies only; nothing else is served.
  */
 final class ShowServer extends Thread {
     private static final int MAX_BODY = 8 * 1024;
@@ -63,9 +64,11 @@ final class ShowServer extends Thread {
         }
         JSONObject reply = new JSONObject();
         int status = 200;
-        if (request.length < 2 || !"POST".equals(request[0]) || !"/show".equals(request[1])) {
+        if (request.length >= 2 && "GET".equals(request[0]) && "/status".equals(request[1])) {
+            reply.put("ok", true).put("name", app.name()).put("feed", app.feedShown()).put("problem", app.problem());
+        } else if (request.length < 2 || !"POST".equals(request[0]) || !"/show".equals(request[1])) {
             status = 404;
-            reply.put("ok", false).put("error", "Rhema Receiver only takes POST /show");
+            reply.put("ok", false).put("error", "Rhema Receiver only takes POST /show and GET /status");
         } else if (length <= 0 || length > MAX_BODY) {
             status = 400;
             reply.put("ok", false).put("error", "No link was sent");

@@ -32,6 +32,7 @@ import { startBrowserFeeds } from "@/lib/browser-feeds"
 import { startCameras } from "@/lib/cameras"
 import { startLiveRecovery } from "@/lib/live-recovery"
 import { RecoveryBanner } from "@/studio/shell/recovery-banner"
+import { SignalWatch } from "@/studio/shell/signal-watch"
 import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
 import { SetupWizard } from "@/studio/setup/setup-wizard"
@@ -173,6 +174,7 @@ export function AppShell() {
       <div className={cn("flex min-h-0 min-w-0 flex-col bg-background text-foreground", workspace === "present" && "dark present-surface")}>
         <TopBar title={TITLES[workspace]} />
         <RecoveryBanner />
+        <SignalWatch />
         <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
           {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
           <ErrorBoundary key={workspace} name={`the ${TITLES[workspace]} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>
