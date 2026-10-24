@@ -2,14 +2,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const { invoke, summary } = vi.hoisted(() => {
-  const summary = { services: 24, songs: 310, newest_service: "Harvest Sunday", newest_date: "2026-10-12", last_changed: "2026-10-12T11:00:00Z", newer: false }
+  const summary: Record<string, unknown> = { services: 24, songs: 310, newest_service: "Harvest Sunday", newest_date: "2026-10-12", last_changed: "2026-10-12T11:00:00Z", newer: false, installation: null }
   const invoke = vi.fn(async (cmd: string, ...args: unknown[]): Promise<unknown> => {
     void args
     switch (cmd) {
       case "content_inspect_backup":
         return { ...summary }
       case "content_restore":
-        return { snapshot: "/data/studio.db.before-restore-1.bak", migrations: [] }
+        return { snapshot: "/data/studio.db.before-restore-1.bak", migrations: [], installation: summary.installation }
       case "content_list_programs":
         return [{ id: "p1" }, { id: "p2" }]
       default:
@@ -27,6 +27,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { SetupWizard } from "./setup-wizard"
 import { defaultSetup } from "@/lib/setup-readiness"
 import { defaultBrandKit } from "@/lib/brand-kit"
+import { buildInstallationExport } from "@/lib/installation-export"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -57,11 +58,11 @@ beforeEach(async () => {
   root = null
   document.body.replaceChildren()
   invoke.mockClear()
-  Object.assign(summary, { newer: false })
+  Object.assign(summary, { newer: false, installation: null })
   useSettingsStore.setState({ setup: defaultSetup(), brandKit: defaultBrandKit(), operatorName: "", churchFolder: "" })
   useShellStore.setState({ setupOpen: false, outputsDialogOpen: false })
   useServiceStore.setState({ programs: [{ id: "here" }] as never, dirty: false, current: null })
-  useBroadcastStore.setState({ isLive: false, liveVerse: null })
+  useBroadcastStore.setState({ isLive: false, liveVerse: null, outputStatus: {} })
 })
 
 describe("Bring in a previous installation (#298)", () => {
@@ -69,6 +70,7 @@ describe("Bring in a previous installation (#298)", () => {
     await open()
     expect(text()).toContain("What the church already has")
     await click("Choose a backup file")
+    expect(text()).toContain("services and songs only")
     const region = document.querySelector('[aria-label="What this backup brings in"]')!
     expect(region.textContent).toContain("rhema-studio-backup-2026-10-12.db")
     expect(region.textContent).toContain("24 services · 310 songs")
@@ -90,7 +92,7 @@ describe("Bring in a previous installation (#298)", () => {
     await open()
     await click("Choose a backup file")
     await click("Restore this backup")
-    expect(restores()).toEqual([["content_restore", { path: "/Volumes/USB/rhema-studio-backup-2026-10-12.db" }]])
+    expect(restores()).toEqual([["content_restore", { path: "/Volumes/USB/rhema-studio-backup-2026-10-12.db", current: expect.any(String) }]])
     expect(text()).toContain("Restored: 24 services and 310 songs.")
     // The lists on screen are read again from the restored database.
     expect(useServiceStore.getState().programs).toHaveLength(2)
@@ -127,10 +129,10 @@ describe("Bring in a previous installation (#298)", () => {
     expect(restores()).toEqual([])
   })
 
-  it("says plainly what is not brought in yet, and goes on to the church step or back", async () => {
+  it("says plainly what is never in a backup, and goes on to the church step or back", async () => {
     await open()
-    expect(text()).toContain("Not brought in yet")
-    expect(text()).toContain("settings, outputs, looks, the Brand Kit, paired phones and saved keys are not in a backup file")
+    expect(text()).toContain("Never in a backup:")
+    expect(text()).toContain("saved keys and passwords, paired phones and desks")
     expect(text()).toContain("One service as a file")
     expect(text()).toContain("Church folder")
     await click("Back")
@@ -141,5 +143,56 @@ describe("Bring in a previous installation (#298)", () => {
     expect(useSettingsStore.getState().setup.mode).toBe("main")
     // The restore view is never a place to resume: a restart opens at the welcome or the step.
     expect(useSettingsStore.getState().setup.lastStep).toBe("church")
+  })
+
+  it("shows what the backup's settings and looks would change, restores them after confirming, and keeps this computer's keys", async () => {
+    // A backup made on the old computer, with this computer's keys never in it.
+    useSettingsStore.setState({ brandKit: { ...defaultBrandKit(), churchName: "Grace Chapel" }, operatorName: "Tolu", deepgramApiKey: null })
+    const backup = buildInstallationExport()
+    Object.assign(summary, { installation: JSON.stringify(backup) })
+    useSettingsStore.setState({ brandKit: { ...defaultBrandKit(), churchName: "" }, operatorName: "", deepgramApiKey: "dg-here-123456" })
+    // What is here is sent along, to be kept in the snapshot (and undone from it).
+    const here = JSON.parse(JSON.stringify(buildInstallationExport()))
+    await open()
+    await click("Choose a backup file")
+    const list = document.querySelector('[aria-label="What would change"]')!
+    expect(list.textContent).toContain("Church name")
+    expect(list.textContent).toContain("Grace Chapel")
+    expect(list.textContent).toContain("Your name")
+    expect(text()).toContain("and the settings and looks above")
+    expect(useSettingsStore.getState().brandKit.churchName).toBe("") // nothing yet
+    await click("Restore this backup")
+    const sent = JSON.parse((restores()[0][1] as { current: string }).current)
+    expect(sent.settings.church.brandKit).toEqual(here.settings.church.brandKit)
+    expect(JSON.stringify(sent)).not.toContain("dg-here-123456")
+    const s = useSettingsStore.getState()
+    expect(s.brandKit.churchName).toBe("Grace Chapel")
+    expect(s.operatorName).toBe("Tolu")
+    expect(s.deepgramApiKey).toBe("dg-here-123456")
+    expect(text()).toContain("with the settings, outputs and looks")
+  })
+
+  it("Undo looks inside the snapshot and puts it back only after confirming", async () => {
+    await open()
+    await click("Choose a backup file")
+    await click("Restore this backup")
+    invoke.mockClear()
+    await click("Undo this restore")
+    expect(invoke).toHaveBeenCalledWith("content_inspect_backup", { path: "/data/studio.db.before-restore-1.bak" })
+    expect(restores()).toEqual([])
+    expect(text()).toContain("Undoing puts back")
+    await click("Undo the restore")
+    expect(restores()[0][1]).toMatchObject({ path: "/data/studio.db.before-restore-1.bak" })
+    expect(text()).toContain("Put back: 24 services and 310 songs")
+    expect(button("Undo this restore")).toBeUndefined()
+  })
+
+  it("an output that is on holds a restore that brings outputs and looks", async () => {
+    Object.assign(summary, { installation: JSON.stringify(buildInstallationExport()) })
+    useBroadcastStore.setState({ outputStatus: { main: { previewOpen: true, ndiActive: false } } })
+    await open()
+    await click("Choose a backup file")
+    expect(text()).toContain("An output is on")
+    expect(button("Restore this backup")?.disabled).toBe(true)
   })
 })

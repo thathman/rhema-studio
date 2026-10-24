@@ -147,11 +147,16 @@ export interface BackupSummary {
   last_changed: string | null
   /** Made by a newer Rhema Studio: this one cannot restore it. */
   newer: boolean
+  /** The installation's settings and looks kept in it (#298 E6, JSON); null or absent in a services-and-songs backup. */
+  installation?: string | null
 }
 
 export interface RestoreReport {
+  /** The database as it was before (with this computer's settings and looks): restoring it undoes the restore. */
   snapshot: string | null
   migrations: string[]
+  /** The backup's settings and looks (JSON), for the app to put in place. */
+  installation?: string | null
 }
 
 /** A saved service log (migration 0008): the text kept after a service. */

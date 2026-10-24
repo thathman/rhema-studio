@@ -18,6 +18,7 @@ import { pairingLabel } from "@/lib/setup-readiness"
 import { deskFreshness, skewWords } from "@/lib/desk-freshness"
 import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
+import { HostLookOffer } from "@/studio/production/host-look-offer"
 
 const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event clock only)", bible: "Bible (the Bible source only)", screens: "Screens (congregation scenes only)", present: "Present", configure: "Present and settings" }
 /** Which desks a role gets on a joined computer (the host checks every command again). */
@@ -246,6 +247,7 @@ function JoinedDesk() {
         </p>
       )}
       {note && <p role="status" className="text-muted-foreground">{note}</p>}
+      {live && <HostLookOffer look={live.churchLook} church={live.church} />}
       {live && fresh.skewMs !== null && (
         <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
           <span className="font-semibold">This computer's clock is {skewWords(fresh.skewMs)} the host's.</span> <span className="text-muted-foreground">Timers here follow the host, but times of day may not agree: set both computers to set their time automatically.</span>

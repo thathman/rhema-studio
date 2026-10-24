@@ -1246,6 +1246,25 @@ Rhema with a saved service that has phases (pre-service loop, warm-up, main serv
 | 10eo.7 | Production → Cameras (a camera added), Timekeeper (Count down to, the chime, "Follows the screens") and Settings → Audio → Talk headset, in light and dark. | The drop-down lists look like Rhema's other lists (border, quiet chevron, teal focus ring, dark lists in dark mode); tick boxes are teal; they open and choose as before. **New link** is an outlined button. | Unverified |
 | 10eo.8 | First run (or Home → setup): the welcome, then step 1. | The welcome window fits its four choices with no empty lower half. "Service languages" shows a grey "e.g. English, Yorùbá" that disappears when you type. | Unverified |
 
+### 10ev. Church look from the host, settings in three parts, full backup and restore (#298)
+
+Two computers on the same network: A (the host, church name and Brand Kit set, a custom theme, two outputs, a scene, an OBS connection with a password, a Deepgram key) and B (joins A). A USB stick or folder for a backup file.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ev.1 | On B: Production → Operators → join A. | B shows **The host's church look changed** with A's church name ("Grace Chapel's Brand Kit…"), **Use it** and **Not now**. B's Brand Kit and themes have not changed. | Unverified |
+| 10ev.2 | On B: **Use it**, then **Keep this computer's**. | Nothing on B changes; the offer stays. | Unverified |
+| 10ev.3 | On B: **Use it** → **Use the host's look**. | "Using the host's church look". Design → Brand Kit on B shows A's name, colours, fonts and logo; B's Scripture/Lyrics/Announcements themes look like A's. B's operator name, computer name (Desk menu), microphone, outputs and Settings keys are as they were. The offer is gone. | Unverified |
+| 10ev.4 | On A: change the Brand Kit accent colour. On B: wait a few seconds; **Not now**. | B offers the new look; after Not now it is gone and B keeps its look. Change A's colour once more: B offers it again. | Unverified |
+| 10ev.5 | On A: Archive → Backups → **Back up now…** to the USB stick. | The backup is saved as before (one .db file). | Unverified |
+| 10ev.6 | On A: change the church name, delete the custom theme and one output. Desk → Complete setup → (Back to the first page) → **Bring in a previous installation** → **Choose a backup file…** → the file from 10ev.5. | Before anything changes: services and songs counts, and **What would change here** lists Church name (now → backup), Outputs, Your own looks… Nothing is replaced yet. | Unverified |
+| 10ev.7 | Turn an output on and look at the same screen. | "An output is on. Turn the outputs off first…"; Restore is greyed. Turn it off again. | Unverified |
+| 10ev.8 | **Restore this backup**. | "Restored: … with the settings, outputs and looks". The church name, the deleted theme and output are back; Settings still has the OBS password and Deepgram key that were on A (they were never in the file); paired phones still work. | Unverified |
+| 10ev.9 | **Undo this restore…** → **Undo the restore**. | What would change lists the changes from 10ev.6 the other way; after Undo, the church name, theme and output are as they were before 10ev.8 ("Put back: …"). | Unverified |
+| 10ev.10 | Quit Rhema and open it again (A). | Everything from 10ev.9 is still there. Settings load as before (name, keys, outputs, phones paired). | Unverified |
+| 10ev.11 | Integrator only, on a test profile: copy a settings.json from before this version into the data folder, open Rhema, change any setting, quit. | Every setting from the old file is there in the app. The file now has `church`, `machine` and `operator` parts and `settingsLayout: 2`; the old top-level copies are gone. Rhema MCP (if on) still sees the church name, and a Diagnostics export still hides the keys. | Unverified |
+| 10ev.12 | An older backup (made before this version): Bring in a previous installation → choose it. | "This backup has services and songs only…"; restoring it leaves settings and looks as they are. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

@@ -84,11 +84,12 @@ import { load, type Store } from "@tauri-apps/plugin-store"
 import { defaultBrandKit, type BrandKit } from "@/lib/brand-kit"
 import { defaultSetup, normalizeSetup, type SetupProfile } from "@/lib/setup-readiness"
 import { isCountdownTo } from "@/lib/countdown"
+import { newFeedToken } from "@/lib/output-on-air"
 import type { CountdownTo } from "@/types"
 
 type SttProvider = "deepgram" | "whisper"
 
-interface SettingsState {
+export interface SettingsState {
   deepgramApiKey: string | null
   openaiApiKey: string | null
   claudeApiKey: string | null
@@ -164,6 +165,12 @@ interface SettingsState {
   /** First-install setup (#298): where it was left, this computer's name, and Home's reminder. */
   setup: SetupProfile
   setSetup: (patch: Partial<SetupProfile>) => void
+  /**
+   * The host's church look (#298 E4) this desk last used or put aside, by its revision, so the offer
+   * to use it shows once per change; "" = none yet.
+   */
+  hostLookSeen: string
+  setHostLookSeen: (revision: string) => void
   /** The last settings save failed (not saved itself): setup shows "Settings are saved" as needing attention. */
   settingsSaveFailed: boolean
   /** Cameras on the church network (#209), sent through the camera router shipped with Rhema. */
@@ -234,6 +241,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
   setup: defaultSetup(),
   setSetup: (patch) => set((s) => ({ setup: { ...s.setup, ...patch } })),
+  hostLookSeen: "",
+  setHostLookSeen: (hostLookSeen) => set({ hostLookSeen }),
   settingsSaveFailed: false,
   cameras: [],
   setCameras: (cameras) => set({ cameras }),
@@ -318,6 +327,7 @@ function acceptable(key: string, value: unknown): boolean {
     case "talkOutputId":
     case "churchFolder":
     case "cloudSpeechConsentAt":
+    case "hostLookSeen":
       return typeof value === "string"
     case "obs": {
       const o = value as Partial<ObsSettings>
@@ -362,43 +372,132 @@ function acceptable(key: string, value: unknown): boolean {
   }
 }
 
-const PERSISTED_KEYS = [
-  "brandKit",
-  "operatorName",
-  "hymnFirstLanguage",
-  "customMacros",
-  "churchFolder",
-  "requireApproval",
-  "cloudSpeechConsentAt",
-  "openedPackages",
-  "openedFrom",
-  "commentsSeen",
-  "remoteSecret",
-  "mcpEnabled",
-  "joinAddress",
-  "joinName",
-  "joinToken",
-  "talkInputId",
-  "talkOutputId",
-  "timekeeperCountdown",
-  "remoteDevices",
-  "remoteAuthRequired",
-  "remoteListeners",
-  "obs",
-  "setup",
-  "cameras",
-  "cameraRouterAuto",
-  "deepgramApiKey",
-  "openaiApiKey",
-  "claudeApiKey",
-  "audioDeviceId",
-  "gain",
-  "autoMode",
-  "confidenceThreshold",
-  "cooldownMs",
-  "onboardingComplete",
-  "sttProvider",
-] as const satisfies readonly (keyof SettingsState)[]
+/**
+ * The settings in three parts (#298 M11), in memory and in settings.json:
+ * - church: the church's own, the same on every computer (the host shares its Brand Kit with desks that join);
+ * - machine: this computer's (its setup and name, screens' sound, ports, connections, saved keys);
+ * - operator: the person at this desk (their name, what they have read, how detection behaves for them).
+ * Every saved setting is in exactly one part (settings-sections.test.ts checks it).
+ */
+export const SETTINGS_SECTIONS = {
+  church: ["brandKit", "customMacros", "requireApproval", "hymnFirstLanguage"],
+  machine: [
+    "setup",
+    "churchFolder",
+    "openedPackages",
+    "openedFrom",
+    "mcpEnabled",
+    "remoteSecret",
+    "joinAddress",
+    "joinName",
+    "joinToken",
+    "hostLookSeen",
+    "talkInputId",
+    "talkOutputId",
+    "remoteDevices",
+    "remoteAuthRequired",
+    "remoteListeners",
+    "obs",
+    "cameras",
+    "cameraRouterAuto",
+    "deepgramApiKey",
+    "openaiApiKey",
+    "claudeApiKey",
+    "audioDeviceId",
+    "gain",
+    "sttProvider",
+    "cloudSpeechConsentAt",
+  ],
+  operator: ["operatorName", "onboardingComplete", "commentsSeen", "timekeeperCountdown", "autoMode", "confidenceThreshold", "cooldownMs"],
+} as const satisfies Record<string, readonly (keyof SettingsState)[]>
+
+export type SettingsSection = keyof typeof SETTINGS_SECTIONS
+export const SECTION_NAMES = Object.keys(SETTINGS_SECTIONS) as SettingsSection[]
+export type ChurchSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.church)[number]>
+export type MachineSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.machine)[number]>
+export type OperatorSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.operator)[number]>
+type PersistedKey = (typeof SETTINGS_SECTIONS)[SettingsSection][number]
+
+/** In the store but never saved: worked out while Rhema runs. */
+export const RUNTIME_ONLY_SETTINGS = ["settingsSaveFailed"] as const satisfies readonly (keyof SettingsState)[]
+
+const PERSISTED_KEYS: readonly PersistedKey[] = SECTION_NAMES.flatMap((n) => SETTINGS_SECTIONS[n])
+
+/** settings.json with the three parts (#298 M11); a file without it has its settings at the top (still read). */
+export const SETTINGS_LAYOUT = 2
+
+/** Which part a saved setting belongs to. */
+export function sectionOf(key: string): SettingsSection | null {
+  return SECTION_NAMES.find((n) => (SETTINGS_SECTIONS[n] as readonly string[]).includes(key)) ?? null
+}
+
+/** One part of the settings as it is now (a plain copy of its values). */
+export function settingsSection(state: SettingsState, section: "church"): ChurchSettings
+export function settingsSection(state: SettingsState, section: "machine"): MachineSettings
+export function settingsSection(state: SettingsState, section: "operator"): OperatorSettings
+export function settingsSection(state: SettingsState, section: SettingsSection): Record<string, unknown> {
+  return Object.fromEntries(SETTINGS_SECTIONS[section].map((k) => [k, state[k]]))
+}
+
+// ── settings in a backup file (#298 E6) ─────────────────────────────────
+
+/**
+ * Never in a backup: the saved keys and passwords; the phones and desks paired with this computer
+ * and the host it joins; and what lets others in (the remote listeners, the remote key rule, the
+ * AI assistant switch, cloud speech consent), which each computer's operator turns on there (#298 M9).
+ */
+export const NOT_IN_BACKUP = [
+  "deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken",
+  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "mcpEnabled", "cloudSpeechConsentAt",
+] as const satisfies readonly PersistedKey[]
+const notInBackup = (key: string) => (NOT_IN_BACKUP as readonly string[]).includes(key)
+
+/**
+ * The settings for a backup file, in their three parts, with no secrets: no saved keys or
+ * passwords (the OBS password is blank), no paired devices, and no camera link secrets.
+ */
+export function settingsForBackup(state: SettingsState = useSettingsStore.getState()): Record<SettingsSection, Record<string, unknown>> {
+  const out = { church: {}, machine: {}, operator: {} } as Record<SettingsSection, Record<string, unknown>>
+  for (const name of SECTION_NAMES) {
+    for (const key of SETTINGS_SECTIONS[name]) {
+      if (notInBackup(key)) continue
+      out[name][key] = key === "obs" ? { ...state.obs, password: "" } : key === "cameras" ? state.cameras.map((c) => ({ ...c, token: "" })) : state[key]
+    }
+  }
+  return out
+}
+
+/**
+ * Put a backup's settings in place, part by part and value by value, as the settings file is
+ * read: a value of the wrong shape is skipped. What a backup never carries stays as it is here
+ * (NOT_IN_BACKUP), and so do this computer's id and each camera's link (a camera this computer
+ * does not have gets a new one). Returns the settings that changed.
+ */
+export function restoreSettingsFromBackup(parts: unknown): string[] {
+  if (typeof parts !== "object" || parts === null) return []
+  const here = useSettingsStore.getState()
+  const patch: Record<string, unknown> = {}
+  for (const name of SECTION_NAMES) {
+    const part = (parts as Record<string, unknown>)[name]
+    if (typeof part !== "object" || part === null || Array.isArray(part)) continue
+    for (const key of SETTINGS_SECTIONS[name]) {
+      if (notInBackup(key) || !(key in part)) continue
+      let raw = (part as Record<string, unknown>)[key]
+      if (key === "obs" && typeof raw === "object" && raw !== null) raw = { ...raw, password: here.obs.password }
+      if (key === "cameras" && Array.isArray(raw)) {
+        raw = raw.map((c) => (typeof c === "object" && c !== null ? { ...c, token: here.cameras.find((h) => h.name === (c as CameraSource).name)?.token ?? newFeedToken() } : c))
+      }
+      let value = readSetting(key, raw)
+      if (value === undefined) continue
+      if (key === "setup") value = { ...(value as SetupProfile), deviceId: here.setup.deviceId }
+      if (JSON.stringify(value) !== JSON.stringify(here[key])) patch[key] = value
+    }
+  }
+  if (Object.keys(patch).length === 0) return []
+  useSettingsStore.setState(patch as Partial<SettingsState>)
+  if ("operatorName" in patch) void invoke("content_set_actor", { name: useSettingsStore.getState().operatorName.trim() || null }).catch(() => {})
+  return Object.keys(patch)
+}
 
 // ── secrets in the OS credential store (RG-08) ──────────────────────────
 // All secrets are one JSON entry in the system keychain (one read, at most
@@ -438,6 +537,18 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 let tauriStore: Store | null = null
 let hydrationPromise: Promise<void> | null = null
+/** Settings found at the top of the file (the layout before the three parts): removed there by the next save. */
+const flatKeys = new Set<string>()
+
+/** A saved value as this build uses it, or undefined when it is missing or of the wrong shape (the default stays). */
+function readSetting(key: string, value: unknown): unknown {
+  if (value === undefined || value === null || !acceptable(key, value)) return undefined
+  // One damaged cue must not cost the church all the others.
+  if (key === "customMacros") return (value as unknown[]).filter(isCustomMacro)
+  if (key === "setup") return normalizeSetup(value)
+  if (key === "cameras") return (value as unknown[]).filter(isCameraSource)
+  return value
+}
 
 async function getStore(): Promise<Store> {
   if (!tauriStore) {
@@ -481,12 +592,23 @@ export function hydrateSettings(): Promise<void> {
     try {
       const store = await getStore()
       const patch: Partial<SettingsState> = {}
+      // A file from before the three parts (#298 M11) has every setting at the top: each is read
+      // there when its part does not have it, and the next save writes it into its part.
+      const parts: Partial<Record<SettingsSection, Record<string, unknown>>> = {}
+      for (const name of SECTION_NAMES) {
+        const part = await store.get(name)
+        if (typeof part === "object" && part !== null && !Array.isArray(part)) parts[name] = part as Record<string, unknown>
+      }
       for (const key of PERSISTED_KEYS) {
-        const value = await store.get(key)
-        if (value !== undefined && value !== null && acceptable(key, value)) {
-          // One damaged cue must not cost the church all the others.
-          ;(patch as Record<string, unknown>)[key] = key === "customMacros" ? (value as unknown[]).filter(isCustomMacro) : key === "setup" ? normalizeSetup(value) : key === "cameras" ? (value as unknown[]).filter(isCameraSource) : value
+        const part = parts[sectionOf(key)!]
+        let value: unknown
+        if (part && key in part) value = part[key]
+        else {
+          value = await store.get(key)
+          if (value !== undefined && value !== null) flatKeys.add(key)
         }
+        const read = readSetting(key, value)
+        if (read !== undefined) (patch as Record<string, unknown>)[key] = read
       }
       // Secrets the file says are in the keychain come from there (a value still in the file wins); any in the file move there on the next save.
       const merged = () => ({ ...useSettingsStore.getState(), ...patch }) as SettingsState
@@ -577,11 +699,14 @@ async function persistAll(state: SettingsState): Promise<void> {
     }
     let file: Partial<SettingsState> = {}
     if (ok) for (const name of SECRET_NAMES) file = withSecret(file, name, "", state)
-    for (const key of PERSISTED_KEYS) {
-      await store.set(key, (key in file ? file[key] : state[key]) as unknown)
+    for (const name of SECTION_NAMES) {
+      await store.set(name, Object.fromEntries(SETTINGS_SECTIONS[name].map((key) => [key, (key in file ? file[key] : state[key]) as unknown])))
     }
+    await store.set("settingsLayout", SETTINGS_LAYOUT)
     await store.set("secretsInKeychain", keychainUnreadable || (ok && json !== ""))
+    for (const key of [...flatKeys]) await store.delete(key)
     await store.save()
+    flatKeys.clear()
     if (useSettingsStore.getState().settingsSaveFailed) useSettingsStore.setState({ settingsSaveFailed: false })
   } catch {
     console.warn("[settings] Failed to persist settings")

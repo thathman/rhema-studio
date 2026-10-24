@@ -152,13 +152,13 @@ fn header(
 /// diagnostics file: API keys, the remote-control key, the OBS password.
 fn configured_secrets(settings_json: &str) -> Vec<String> {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(settings_json) else { return vec![] };
-    let mut out: Vec<String> = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret"]
-        .iter()
-        .filter_map(|k| v.get(*k).and_then(|x| x.as_str()))
-        .map(str::to_string)
-        .collect();
-    if let Some(p) = v.get("obs").and_then(|o| o.get("password")).and_then(|x| x.as_str()) {
-        out.push(p.to_string());
+    // Both layouts: the keys in the file's "machine" part (#298), and at the top in an older file.
+    let mut out: Vec<String> = Vec::new();
+    for place in [v.get("machine"), Some(&v)].into_iter().flatten() {
+        out.extend(["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken"].iter().filter_map(|k| place.get(*k).and_then(|x| x.as_str())).map(str::to_string));
+        if let Some(p) = place.get("obs").and_then(|o| o.get("password")).and_then(|x| x.as_str()) {
+            out.push(p.to_string());
+        }
     }
     // Short values would redact ordinary words; a real key or password worth hiding is longer.
     out.retain(|s| s.trim().len() >= 6);
@@ -309,6 +309,9 @@ mod tests {
         assert_eq!(out.lines().count(), 4);
         // Short values are not treated as secrets; a bad settings file yields none.
         assert!(configured_secrets(r#"{"remoteSecret":"abc"}"#).is_empty());
+        // A file with the three parts (#298 M11): the keys are in "machine".
+        let parts = r#"{"settingsLayout":2,"machine":{"deepgramApiKey":"dg-987654321","obs":{"password":"obs-pass-77"},"joinToken":"join-token-55"},"church":{"brandKit":{}}}"#;
+        assert_eq!(configured_secrets(parts), vec!["dg-987654321", "join-token-55", "obs-pass-77"]);
         assert!(configured_secrets("not json").is_empty());
         // A marker with no value next to multi-byte text must not panic.
         assert_eq!(redact_line("token=&é ẹ́ token=,ọ́"), "token=&é ẹ́ token=,ọ́");

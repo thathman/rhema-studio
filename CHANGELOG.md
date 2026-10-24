@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The church look from the host; settings in three parts; backups bring back the whole installation (#298)
+- A computer that joined a host is offered the host's **church look** (Brand Kit and the themes made from it) when it changes: **The host's church look changed — Use it**. Nothing changes until its operator confirms, and then only its Brand Kit and brand themes; its own name, computer, screens and keys stay. **Not now** puts that change aside.
+- **Back up now** also keeps the settings, outputs, looks (themes, lower thirds, ticker, stage, scenes) and Brand Kit in the backup file, never saved keys, passwords, paired phones or link secrets; remote control, the AI assistant connector and cloud speech consent stay as each computer has them.
+- **Bring in a previous installation** shows what a backup would change here before restoring it, restores the settings and looks with the services and songs, and keeps what was here as a snapshot: **Undo this restore…** puts it back.
+- Settings are saved in three parts, church, this computer and the operator. Older settings files load as before and move to the new layout on the next save.
 ### This computer's name in the Desk menu; a fuller setup summary (#298, #299)
 - The Desk menu now shows and edits **this computer's name** (with a short Desk ID), says **what this desk may do** (all controls on the main desk, or what the host's role allows), and leads to Production → Operators, or **Leave this host** on a joined desk. Joining a host suggests "your name · this computer" as the name the host sees.
 - After Rhema closed unexpectedly, **Not now** on the banner no longer throws the offer away: the Desk menu keeps **Put back the last session's screens** (it asks once more first).

@@ -97,7 +97,7 @@ export function SongFiles() {
 }
 
 /**
- * Back up everything (services and songs) or restore a backup. While a restore runs the whole
+ * Back up everything (services and songs, with the settings and looks) or restore a backup's services and songs. While a restore runs the whole
  * app is covered: edits made meanwhile would be saved to the database being replaced.
  */
 export function DatabaseBlock() {
@@ -154,6 +154,7 @@ export function DatabaseBlock() {
           </PopoverTrigger>
           <PopoverContent align="start" className="w-80">
             <p className="mb-3 text-sm">Replace all services and songs on this computer with a backup file? The current database is kept next to it as a snapshot, and nothing changes if the file is not a valid backup.</p>
+            <p className="mb-3 text-xs text-muted-foreground">Settings, outputs and looks stay as they are here. To bring those back too, and see what would change first, use Desk → Complete setup, then Bring in a previous installation on the setup's first page.</p>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setConfirmRestore(false)}>Keep current</Button>
               <Button variant="destructive" size="sm" onClick={() => void doRestore()}>Choose backup…</Button>
