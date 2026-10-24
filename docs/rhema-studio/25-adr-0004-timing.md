@@ -1,4 +1,4 @@
-# ADR 0003 — Run-of-show timing: three schedules, start rules, pauses and the offset
+# ADR 0004 — Run-of-show timing: three schedules, start rules, pauses and the offset
 
 - **Status:** Proposed (T0 of #196; describes the engine on `main` plus the R3 slice that adds fixed
   starts and pauses).
