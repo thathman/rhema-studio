@@ -39,7 +39,7 @@ describe("show health", () => {
   const cameras = [{ name: "pulpit", label: "Pulpit", token: "p".repeat(32) }, { name: "choir", label: "Choir", token: "c".repeat(32) }]
   const cam = (id: string, url: string, extra = {}) => ({ id, name: `${id} layer`, kind: "camera" as const, cameraUrl: url, box: { x: 0, y: 0, w: 1, h: 1 }, ...extra })
   const scenes = [
-    { id: "s1", name: "Sermon split", background: "#000", layers: [cam("a", "http://192.168.1.20:8889/pulpit/whep", { cameraFallback: "We'll be right back" }), cam("b", "http://192.168.1.20:8889/choir/whep")] },
+    { id: "s1", name: "Sermon split", background: "#000", layers: [cam("a", "http://192.168.1.20:8889/pulpit/whep", { cameraFallback: "We'll be right back", noSignal: "words" }), cam("b", "http://192.168.1.20:8889/choir/whep")] },
     { id: "s2", name: "Wide", background: "#000", layers: [cam("c", "http://10.0.0.9:8080/stream")] },
   ] as never[]
 
@@ -73,11 +73,11 @@ describe("show health", () => {
     const rows = cameraHealth(cameras, scenes, outputs, status, router([{ name: "pulpit", live: false }, { name: "choir", live: true }]))
     const a = attention(outputs, status, {}, { cameras: rows, scenes })
     expect(a).toEqual([{ level: "high", outputId: "main", text: 'Pulpit camera is not sending; "Sermon split" on Main shows its fallback words there' }])
-    // The choir camera stops too: no fallback words, so the scene's background shows in its box.
+    // The choir camera stops too: it says nothing, so its box shows colour bars (the default).
     const off = cameraHealth(cameras, scenes, outputs, status, router([], false))
     expect(attention(outputs, status, {}, { cameras: off, scenes }).map((x) => x.text)).toEqual([
       'Pulpit camera is not sending (the camera router is not running); "Sermon split" on Main shows its fallback words there',
-      'Choir camera is not sending (the camera router is not running); "Sermon split" on Main shows its background there',
+      'Choir camera is not sending (the camera router is not running); "Sermon split" on Main shows colour bars there',
     ])
   })
 

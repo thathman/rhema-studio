@@ -25,6 +25,8 @@ import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
 import { drawStage } from "@/lib/stage-canvas"
+import { sceneStatic } from "@/lib/no-signal"
+import { outputPace } from "@/lib/output-pace"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
@@ -396,11 +398,13 @@ function BroadcastCanvas() {
       fps: () => (ndiConfigRef.current.active ? ndiConfigRef.current.fps : 30),
     })
     tickerPlayer = tickerVideo
+    // A camera in the scene that is not sending shows moving static (when the scene says so).
+    const staticShown = () => !stageRef.current && sceneStatic(latestData.current?.scene, (id) => !!cameras.get(id)?.ready)
     // What is moving: only the ticker (its band is all that changes), or more (an entrance, a video).
     const motion = (): "ticker" | "full" | null => {
       const d = latestData.current
       if (!d || stageRef.current) return null
-      if (fadeFrom || fader.busy() || cameraPlaying() || sceneMoving(d.scene, Date.now()) || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
+      if (fadeFrom || fader.busy() || cameraPlaying() || staticShown() || sceneMoving(d.scene, Date.now()) || (d.overlay && entranceProgress(d.overlay, Date.now()) < 1) || playing(videoPlayer) || playing(backingPlayer)) return "full"
       return d.ticker && !d.ticker.pausedAt ? "ticker" : null
     }
     // An NDI window is hidden, and WebKit runs a hidden page's timers about once a second: while
@@ -411,7 +415,8 @@ function BroadcastCanvas() {
     const syncPace = () => {
       // A camera moves with every frame: the pacer draws it on screens too (a covered or locked
       // window gets no animation frames). A running clock needs one a second.
-      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() || fader.busy() ? 30 : clockRunning() ? 1 : 0
+      // A camera showing static moves NOISE_FPS times a second, and only while it shows.
+      const fps = outputPace({ ndi: ndiConfigRef.current.active, ndiFps: ndiConfigRef.current.fps, moving: !!motion(), cameraPlaying: cameraPlaying(), fading: fader.busy(), staticShown: staticShown(), clockRunning: clockRunning() })
       if (fps === paceFps) return
       paceFps = fps
       void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})

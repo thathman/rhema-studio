@@ -6,7 +6,7 @@ import { overLimits, type CapacityLimits, type CapacityUse } from "@/lib/capacit
 import { cameraPathOf } from "@/lib/live-sources"
 import type { OutputFrame } from "@/stores/broadcast-store"
 import type { CameraSource } from "@/stores/settings-store"
-import type { BroadcastOutput, BroadcastOutputStatus, ReceiverTv, Scene } from "@/types"
+import type { BroadcastOutput, BroadcastOutputStatus, ReceiverTv, Scene, SceneLayer } from "@/types"
 
 /** Browser feed health by output id, as the open cards last saw it (#213 show health). */
 export const useFeedHealthStore = create<Record<string, FeedHealth | null>>(() => ({}))
@@ -122,6 +122,14 @@ export function tvCheckWords(reply: { name: string; feed: string | null; problem
   return { ok: false, text: "Not showing a feed: it shows its address and code" }
 }
 
+/** What a camera layer's box shows while its camera is not sending, in a few words. */
+function whenOff(l: SceneLayer): string {
+  const mode = l.noSignal ?? "bars"
+  if (mode === "bars") return "colour bars"
+  if (mode === "static") return "TV static"
+  return mode === "words" && l.cameraFallback?.trim() ? "its fallback words" : "its background"
+}
+
 /**
  * What needs the operator's attention on the outputs, most serious first (#213 P1 "attention
  * required"): only real signals Rhema has (NDI failures and receivers, browser feed pages and
@@ -139,7 +147,7 @@ export function attention(outputs: BroadcastOutput[], status: Record<string, Bro
       const c = cams!.cameras.find((x) => x.urls.includes(l.cameraUrl!))
       if (c?.state !== "not-sending" && c?.state !== "router-off") continue
       const why = c.state === "router-off" ? " (the camera router is not running)" : ""
-      const text = `${cameraWords(c.label)} is not sending${why}; "${scene!.name}" on ${o.name} shows its ${l.cameraFallback?.trim() ? "fallback words" : "background"} there`
+      const text = `${cameraWords(c.label)} is not sending${why}; "${scene!.name}" on ${o.name} shows ${whenOff(l)} there`
       if (!out.some((a) => a.text === text)) out.push({ level: "high", outputId: o.id, text })
     }
     if (o.type === "ndi" && st?.ndiError) out.push({ level: "high", outputId: o.id, text: `${o.name}: the NDI sender is failing (${st.ndiError})` })

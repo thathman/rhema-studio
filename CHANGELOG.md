@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Colour bars or TV static while a camera is not sending (#213)
+- A camera in a scene that is not sending (not connected yet, dropped, or hidden from scenes) now shows **colour bars** in its box by default, like a broadcast test card, instead of the scene's background. Existing scenes switch to bars; their words are kept.
+- Choose what it shows under **When the camera isn't sending** on the Camera layer (Production → Scenes) or under Camera in Present's **New scene / Edit scene**: **Colour bars**, **TV static** (grey noise that moves), **Words** (the words you set before) or **Nothing**. Tick **Show the camera's name on the bars** for a small label such as "Pulpit".
+- The previews show the same as the screens, and every screen, TV and NDI output goes back to the camera picture as soon as it sends. Static redraws the screens about 12 times a second only while it shows; bars cost nothing.
+
 ### New desk roles: Worship, Stage, Camera, OBS director; scenes changed from a joined desk (#243, #215)
 - Four new roles for a paired desk (Settings → Remote control, with a line on what each may do): **Worship** (songs and hymns), **Stage** (the stage message), **Camera** (camera-ready, hiding a camera from scenes, the camera boxes in scenes) and **OBS director** (switches OBS scenes through the main computer's OBS connection; never in rehearsal). Each gets its own desk in Production → Operators, and the main computer checks every command.
 - A Screens desk can now **make and change scenes** from another computer. A new scene, or a change to a scene on no screen, goes in at once; a change to a scene on a screen, deleting one, or any scene change while Approvals is on, waits in the main desk's notices for **Accept** or **Decline**.

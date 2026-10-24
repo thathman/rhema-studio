@@ -20,6 +20,8 @@ export interface BasicScene {
   lowerThird: boolean
   /** A full-frame camera over the background: its stream ("" = a camera place, not chosen yet). null: none. */
   camera: string | null
+  /** The camera's box while it is not sending (absent: colour bars), as the composer has it. */
+  cameraWhenOff?: Pick<SceneLayer, "noSignal" | "noSignalName" | "cameraFallback">
 }
 
 export type BasicPlace = "full" | "lower" | "left" | "right" | "custom"
@@ -55,6 +57,7 @@ export function basicOf(scene: Scene): BasicScene {
     content: feed ? { shows: feed.shows, place } : null,
     lowerThird: scene.layers.some((l) => l.kind === "lowerThird"),
     camera: cam ? (cam.cameraUrl ?? "") : null,
+    ...(cam ? { cameraWhenOff: { noSignal: cam.noSignal, noSignalName: cam.noSignalName, cameraFallback: cam.cameraFallback } } : {}),
   }
 }
 
@@ -79,8 +82,8 @@ export function withBasic(scene: Scene | null, b: BasicScene): Scene {
   // The camera: full frame, just over the background.
   const cam = layers.find((l) => l.kind === "camera")
   if (b.camera === null) layers = layers.filter((l) => l.id !== cam?.id)
-  else if (cam) layers = layers.map((l) => (l.id === cam.id ? { ...l, cameraUrl: b.camera || undefined } : l))
-  else layers.splice(under(), 0, newLayer("camera", { cameraUrl: b.camera || undefined }))
+  else if (cam) layers = layers.map((l) => (l.id === cam.id ? { ...l, cameraUrl: b.camera || undefined, ...b.cameraWhenOff } : l))
+  else layers.splice(under(), 0, newLayer("camera", { cameraUrl: b.camera || undefined, ...b.cameraWhenOff }))
   // The content box: under the lower third, over everything else.
   const feed = layers.find((l) => l.kind === "feed")
   if (!b.content) layers = layers.filter((l) => l.id !== feed?.id)

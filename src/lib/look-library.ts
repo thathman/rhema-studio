@@ -343,7 +343,7 @@ export function resetSceneCopy(copy: Scene, look: LookOf<"scene">, opts: AdoptOp
   const layers = (fresh.scene?.layers ?? []).map((l) => {
     if (l.kind !== "camera") return l
     const was = cameras[next++]
-    return was ? { ...l, ...(was.cameraUrl ? { cameraUrl: was.cameraUrl } : {}), ...(was.cameraFallback ? { cameraFallback: was.cameraFallback } : {}) } : l
+    return was ? { ...l, ...(was.cameraUrl ? { cameraUrl: was.cameraUrl } : {}), ...(was.cameraFallback ? { cameraFallback: was.cameraFallback } : {}), ...(was.noSignal ? { noSignal: was.noSignal } : {}), ...(was.noSignalName ? { noSignalName: true } : {}) } : l
   })
   return { scene: { ...(fresh.scene as Scene), id: copy.id, name: copy.name, layers, createdAt: copy.createdAt, updatedAt: now }, themes: fresh.themes }
 }

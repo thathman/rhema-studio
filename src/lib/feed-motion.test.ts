@@ -85,21 +85,21 @@ describe("tickerStrips: a strip only for a ticker layer that is top-most in its 
 describe("feedMotion: the main picture is redrawn only while it moves", () => {
   it("a scene ticker on its strip crawls without moving the picture; in the canvas it moves the picture", () => {
     const f = { scene: frameOf({ kind: "color" }, band) }
-    expect(feedMotion(f, { ...still, strips: tickerStrips(f.scene) })).toEqual({ picture: false, crawl: true })
-    expect(feedMotion(f, { ...still, strips: new Set() })).toEqual({ picture: true, crawl: false })
+    expect(feedMotion(f, { ...still, strips: tickerStrips(f.scene) })).toEqual({ picture: false, crawl: true, noise: false })
+    expect(feedMotion(f, { ...still, strips: new Set() })).toEqual({ picture: true, crawl: false, noise: false })
   })
 
   it("a paused or see-through ticker on its strip does not keep the page drawing", () => {
     const paused = { scene: frameOf({ ...band, ticker: { ...ticker, pausedAt: 2_000 } }) }
-    expect(feedMotion(paused, { ...still, strips: tickerStrips(paused.scene) })).toEqual({ picture: false, crawl: false })
+    expect(feedMotion(paused, { ...still, strips: tickerStrips(paused.scene) })).toEqual({ picture: false, crawl: false, noise: false })
     const clear = { scene: frameOf({ ...band, opacity: 0 }) }
-    expect(feedMotion(clear, { ...still, strips: tickerStrips(clear.scene) })).toEqual({ picture: false, crawl: false })
+    expect(feedMotion(clear, { ...still, strips: tickerStrips(clear.scene) })).toEqual({ picture: false, crawl: false, noise: false })
   })
 
   it("the full-frame ticker crawls; a fade, a camera in the canvas or a lower third coming in move the picture", () => {
     const none = new Set<string>()
-    expect(feedMotion({ ticker }, { ...still, strips: none })).toEqual({ picture: false, crawl: true })
-    expect(feedMotion({ ticker: { ...ticker, pausedAt: 3_000 } }, { ...still, strips: none })).toEqual({ picture: false, crawl: false })
+    expect(feedMotion({ ticker }, { ...still, strips: none })).toEqual({ picture: false, crawl: true, noise: false })
+    expect(feedMotion({ ticker: { ...ticker, pausedAt: 3_000 } }, { ...still, strips: none })).toEqual({ picture: false, crawl: false, noise: false })
     expect(feedMotion({}, { ...still, fading: true, strips: none }).picture).toBe(true)
     expect(feedMotion({}, { ...still, cameraInCanvas: true, strips: none }).picture).toBe(true)
     expect(feedMotion({ overlay }, { ...still, now: 1_200, strips: none }).picture).toBe(true)
@@ -111,7 +111,7 @@ describe("feedMotion: the main picture is redrawn only while it moves", () => {
   })
 
   it("nothing moves with no frame or the feed off", () => {
-    expect(feedMotion(null, { ...still, fading: true, strips: new Set() })).toEqual({ picture: false, crawl: false })
-    expect(feedMotion({ off: true, ticker }, { ...still, strips: new Set() })).toEqual({ picture: false, crawl: false })
+    expect(feedMotion(null, { ...still, fading: true, strips: new Set() })).toEqual({ picture: false, crawl: false, noise: false })
+    expect(feedMotion({ off: true, ticker }, { ...still, strips: new Set() })).toEqual({ picture: false, crawl: false, noise: false })
   })
 })

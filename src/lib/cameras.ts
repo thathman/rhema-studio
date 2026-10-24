@@ -72,6 +72,12 @@ export function cameraOfUrl(url: string | undefined, cameras: Pick<CameraSource,
   return cameras.find((c) => c.name === name)?.name ?? null
 }
 
+/** The name the church gave the camera a WHEP address plays (e.g. "Pulpit"), or undefined. */
+export function cameraLabelOf(url: string, cameras: Pick<CameraSource, "name" | "label">[]): string | undefined {
+  const name = cameraOfUrl(url, cameras)
+  return cameras.find((c) => c.name === name)?.label
+}
+
 /** What OBS reads (Media Source, not a local file). */
 export function rtspUrl(host: string, ports: RouterPorts, name: string): string {
   return `rtsp://${host}:${ports.rtsp}/${name}`

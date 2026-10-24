@@ -50,4 +50,5 @@ export type {
   ServiceLog,
   ServiceLogSummary, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
 } from "./content"
-export type { CountdownTo, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind } from "./scene"
+export type { CountdownTo, NoSignal, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind } from "./scene"
+export { NO_SIGNALS } from "./scene"

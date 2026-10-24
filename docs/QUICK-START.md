@@ -162,13 +162,13 @@ A Chromecast with Google TV (or another Android TV) can show a browser feed full
 
 ## Cameras
 
-Phones on the church Wi-Fi can be cameras. Production → Cameras → type a name ("Pulpit") → **Add camera**; scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; a scene's Camera layer picks it by name, and OBS takes its RTSP address in a Media Source. Phones need the secure phone page (Settings → Remote Control → **Secure page for phones (https)**). Nothing goes to the internet. **New link** closes the old link. Step by step: [cameras](rhema-studio/cameras.md).
+Phones on the church Wi-Fi can be cameras. Production → Cameras → type a name ("Pulpit") → **Add camera**; scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; a scene's Camera layer picks it by name, and OBS takes its RTSP address in a Media Source. While a camera is not sending, its box in a scene shows colour bars (or TV static, words or nothing: **When the camera isn't sending** on the Camera layer). Phones need the secure phone page (Settings → Remote Control → **Secure page for phones (https)**). Nothing goes to the internet. **New link** closes the old link. Step by step: [cameras](rhema-studio/cameras.md).
 
 ![Production → Cameras: the camera router on, Add a camera, and the Pulpit camera sending, with its QR code, the camera page link, its address for Rhema scenes and TVs, and its address for OBS](images/manual/production-cameras.png)
 
 *In the picture the Production tab is still called **Programs**; it is **Scenes** now.*
 
-*Checked on the desktop: the router's own page needs a password (10do.12), words in a camera's box while it is not playing (10dc.4), a camera that stops sending in Show health (10dy.4), a camera scene on a Google TV (10dh.8). Adding a phone end to end is not yet checked (acceptance 10do).*
+*Checked on the desktop: the router's own page needs a password (10do.12), words in a camera's box while it is not playing (10dc.4; now the **Words** choice; colour bars and TV static are 10fg, not yet checked), a camera that stops sending in Show health (10dy.4), a camera scene on a Google TV (10dh.8). Adding a phone end to end is not yet checked (acceptance 10do).*
 
 ## OBS
 

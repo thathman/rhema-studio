@@ -172,6 +172,16 @@ describe("what a desk may put in a scene (security review)", () => {
     expect(mergeDeskScene({ id: "s", layers: [layer({ kind: "camera", cameraUrl: "http://10.0.0.5:8889/old/whep" })] }, had, { cameras, themes })!.layers[0].cameraUrl).toBe("http://10.0.0.5:8889/old/whep")
   })
 
+  it("keeps what a camera shows without a signal only as one of its four choices", () => {
+    const cam = (over: Record<string, unknown>) => merge({ id: "s", layers: [layer({ kind: "camera", ...over })] })!.layers[0]
+    expect(cam({ noSignal: "static", noSignalName: true })).toMatchObject({ noSignal: "static", noSignalName: true })
+    for (const mode of ["bars", "words", "none"]) expect(cam({ noSignal: mode }).noSignal).toBe(mode)
+    const bad = cam({ noSignal: "javascript:x", noSignalName: "yes" })
+    expect("noSignal" in bad || "noSignalName" in bad).toBe(false)
+    // Only a camera has them.
+    expect(merge({ id: "s", layers: [layer({ noSignal: "static", noSignalName: true })] })!.layers[0]).not.toHaveProperty("noSignal")
+  })
+
   it("a desk's unsafe scene never reaches the host's scenes", () => {
     receiveDeskScene({ scene: { id: "bad", background: "url(http://x)", layers: [] }, by: "Ade screens" })
     expect(useBroadcastStore.getState().scenes.some((s) => s.id === "bad")).toBe(false)

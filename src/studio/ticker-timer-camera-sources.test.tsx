@@ -138,7 +138,7 @@ describe("the service timer as a live source", () => {
 describe("cameras as live sources", () => {
   const sceneWithCameras = () => {
     const scene = newScene("Sermon")
-    scene.layers = [newLayer("camera", { name: "Pulpit camera", cameraUrl: PULPIT, cameraFallback: "Camera back shortly" }), newLayer("camera", { name: "Choir camera", cameraUrl: CHOIR })]
+    scene.layers = [newLayer("camera", { name: "Pulpit camera", cameraUrl: PULPIT, cameraFallback: "Camera back shortly", noSignal: "words" }), newLayer("camera", { name: "Choir camera", cameraUrl: CHOIR })]
     return scene
   }
 

@@ -175,7 +175,7 @@ describe("preflight: the plan and cameras (#213, #196)", () => {
     const cam = r.checks.find((c) => c.id === "cameras-sending")!
     expect(cam).toMatchObject({ status: "warn", label: "Pulpit camera is not sending", fix: "cameras" })
     expect(cam.detail).toContain("Main Display (on air now)")
-    expect(cam.detail).toContain("fallback words")
+    expect(cam.detail).toContain("colour bars, TV static or words")
     expect(r.checks.find((c) => c.id === "feeds-unwatched")).toMatchObject({ status: "info", label: "Foyer TV: no screen is watching" })
     const two = computeReadiness({ ...good, camerasNotSending: [{ camera: "Pulpit camera", outputs: ["Main"], onAir: false, routerOff: true }, { camera: "Choir camera", outputs: ["Main"], onAir: false, routerOff: true }] })
     expect(two.checks.find((c) => c.id === "cameras-sending")?.label).toBe("2 cameras are not sending: Pulpit camera, Choir camera")
