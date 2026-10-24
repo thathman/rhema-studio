@@ -3,7 +3,8 @@ import type { FeedHealth } from "@/lib/browser-feeds"
 import type { RouterStatus } from "@/lib/cameras"
 import { outputOnAir } from "@/lib/output-on-air"
 import { overLimits, type CapacityLimits, type CapacityUse } from "@/lib/capacity"
-import { cameraPathOf } from "@/lib/live-sources"
+import { cameraPathOf, cameraSourceId, type StateSources } from "@/lib/live-sources"
+import { measuredFps, playbackTrouble, type ScreenPlayback } from "@/lib/camera-playback"
 import type { OutputFrame } from "@/stores/broadcast-store"
 import type { CameraSource } from "@/stores/settings-store"
 import type { BroadcastOutput, BroadcastOutputStatus, ReceiverTv, Scene, SceneLayer } from "@/types"
@@ -20,10 +21,10 @@ export interface Attention {
 
 /**
  * How a camera is doing, from the camera router (#213): checking (no answer yet), router-off,
- * not-sending, sending, or elsewhere (a camera layer whose address is not Rhema's router: Rhema
- * cannot see whether it sends).
+ * not-sending, frozen (connected, but nothing arriving for over 3 s), sending, or elsewhere (a
+ * camera layer whose address is not Rhema's router: Rhema cannot see whether it sends).
  */
-export type CameraState = "checking" | "router-off" | "not-sending" | "sending" | "elsewhere"
+export type CameraState = "checking" | "router-off" | "not-sending" | "frozen" | "sending" | "elsewhere"
 
 export interface CameraHealth {
   /** The router's name for it, or the layer's address when it is not one of the router's. */
@@ -41,6 +42,18 @@ export interface CameraHealth {
   /** Outputs set to one of those scenes, and those of them on air now. */
   assigned: string[]
   onAir: string[]
+  /** As the router measures it (#213): kbit/s, the picture size, ms since anything arrived. */
+  kbps?: number | null
+  width?: number | null
+  height?: number | null
+  dataAgeMs?: number | null
+  /** Frames a second it shows on Rhema's screens and TVs (the highest measured); null: none plays it. */
+  fps?: number | null
+  /** Each screen that plays it, as that screen measures it. */
+  screens?: ScreenPlayback[]
+  /** The operator's controls now: switched to its backup (that camera's label), frozen. */
+  onBackup?: string
+  held?: boolean
 }
 
 // Kept here for its callers; it lives with the camera sources now.
@@ -55,14 +68,24 @@ export function cameraWords(label: string): string {
  * Every camera Rhema knows (#213): those added in Production → Cameras and every camera layer in a
  * scene, with what the router says about each and where it is used. `router` undefined: no answer yet.
  */
-export function cameraHealth(cameras: CameraSource[], scenes: Scene[], outputs: BroadcastOutput[], status: Record<string, BroadcastOutputStatus | undefined>, router: RouterStatus | null | undefined): CameraHealth[] {
+export function cameraHealth(cameras: CameraSource[], scenes: Scene[], outputs: BroadcastOutput[], status: Record<string, BroadcastOutputStatus | undefined>, router: RouterStatus | null | undefined, more: { screens?: ScreenPlayback[]; controls?: StateSources } = {}): CameraHealth[] {
   const rows = new Map<string, CameraHealth>()
   const row = (key: string, label: string, ours: boolean) => {
     let r = rows.get(key)
     if (!r) {
       const path = router?.paths.find((p) => p.name === key)
-      const state: CameraState = !ours ? "elsewhere" : router === undefined ? "checking" : !router?.running ? "router-off" : path?.live ? "sending" : "not-sending"
-      r = { key, label, state, tracks: state === "sending" ? (path?.tracks ?? []) : [], readers: state === "sending" ? (path?.readers ?? 0) : 0, urls: [], scenes: [], assigned: [], onAir: [] }
+      const state: CameraState = !ours ? "elsewhere" : router === undefined ? "checking" : !router?.running ? "router-off" : !path?.live ? "not-sending" : path.frozen ? "frozen" : "sending"
+      const live = state === "sending" || state === "frozen"
+      r = { key, label, state, tracks: live ? (path?.tracks ?? []) : [], readers: live ? (path?.readers ?? 0) : 0, urls: [], scenes: [], assigned: [], onAir: [] }
+      if (live && path) Object.assign(r, { kbps: path.kbps ?? null, width: path.width ?? null, height: path.height ?? null, dataAgeMs: path.dataAgeMs ?? null })
+      if (ours) {
+        const screens = (more.screens ?? []).filter((s) => s.camera === key)
+        if (more.screens) Object.assign(r, { screens, fps: measuredFps(key, screens) })
+        const ctl = more.controls?.[cameraSourceId(key)]
+        const backup = cameras.find((c) => c.name === key)?.backup
+        if (ctl?.backup && backup) r.onBackup = cameras.find((c) => c.name === backup)?.label ?? backup
+        if (ctl?.hold) r.held = true
+      }
       rows.set(key, r)
     }
     return r
@@ -92,8 +115,19 @@ export function cameraStateWords(c: CameraHealth): string {
   if (c.state === "router-off") return "Camera router not running"
   if (c.state === "not-sending") return "Not sending"
   if (c.state === "elsewhere") return "Not from Rhema Studio's camera router: Rhema Studio cannot see whether it is sending"
+  if (c.state === "frozen") return `Frozen: connected, but nothing has arrived for ${Math.max(3, Math.round((c.dataAgeMs ?? 3000) / 1000))} s`
   const watched = `watched by ${c.readers} ${c.readers === 1 ? "screen or program" : "screens or programs"}`
-  return `Sending${c.tracks.length ? ` (${c.tracks.join(", ")})` : ""} · ${watched}`
+  return [`Sending${c.tracks.length ? ` (${c.tracks.join(", ")})` : ""}`, ...cameraMeasures(c), watched].join(" · ")
+}
+
+/** What is measured of a sending camera: its size and rate at the router, its frames on the screens. */
+export function cameraMeasures(c: Pick<CameraHealth, "width" | "height" | "kbps" | "fps" | "screens">): string[] {
+  const out: string[] = []
+  if (c.width && c.height) out.push(`${c.width}×${c.height}`)
+  if (typeof c.kbps === "number") out.push(`${(c.kbps / 1000).toFixed(1)} Mbit/s`)
+  if (typeof c.fps === "number") out.push(`${Math.round(c.fps * 10) / 10} fps on the screens`)
+  else if (c.screens) out.push("fps: no Rhema screen plays it now")
+  return out
 }
 
 /** A browser feed's screens in a few words for Show health: off, checking, nobody, behind or current. */
@@ -122,12 +156,14 @@ export function tvCheckWords(reply: { name: string; feed: string | null; problem
   return { ok: false, text: "Not showing a feed: it shows its address and code" }
 }
 
-/** What a camera layer's box shows while its camera is not sending, in a few words. */
-function whenOff(l: SceneLayer): string {
-  const mode = l.noSignal ?? "bars"
+/** What a camera layer's box shows on an output while its camera is not sending, in a few words (the output's own choice first). */
+function whenOff(l: SceneLayer, o?: BroadcastOutput): string {
+  const own = o?.cameraFallback
+  if (own?.mode === "camera") return own.camera ? `the ${own.camera} camera (if it sends)` : "its background"
+  const mode = own?.mode ?? l.noSignal ?? "bars"
   if (mode === "bars") return "colour bars"
   if (mode === "static") return "TV static"
-  return mode === "words" && l.cameraFallback?.trim() ? "its fallback words" : "its background"
+  return mode === "words" && (own ? own.words : l.cameraFallback)?.trim() ? "its fallback words" : "its background"
 }
 
 /**
@@ -135,7 +171,7 @@ function whenOff(l: SceneLayer): string {
  * required"): only real signals Rhema has (NDI failures and receivers, browser feed pages and
  * whether they drew the newest frame, cameras the router says are not sending), nothing guessed.
  */
-export function attention(outputs: BroadcastOutput[], status: Record<string, BroadcastOutputStatus | undefined>, feeds: Record<string, FeedHealth | null>, cams?: { cameras: CameraHealth[]; scenes: Scene[] }): Attention[] {
+export function attention(outputs: BroadcastOutput[], status: Record<string, BroadcastOutputStatus | undefined>, feeds: Record<string, FeedHealth | null>, cams?: { cameras: CameraHealth[]; scenes: Scene[]; screens?: ScreenPlayback[] }): Attention[] {
   const out: Attention[] = []
   for (const o of outputs) {
     const st = status[o.id]
@@ -145,10 +181,22 @@ export function attention(outputs: BroadcastOutput[], status: Record<string, Bro
     for (const l of scene?.layers ?? []) {
       if (l.kind !== "camera" || !l.cameraUrl) continue
       const c = cams!.cameras.find((x) => x.urls.includes(l.cameraUrl!))
-      if (c?.state !== "not-sending" && c?.state !== "router-off") continue
+      if (c?.state !== "not-sending" && c?.state !== "router-off" && c?.state !== "frozen") continue
+      if (c.held) continue
       const why = c.state === "router-off" ? " (the camera router is not running)" : ""
-      const text = `${cameraWords(c.label)} is not sending${why}; "${scene!.name}" on ${o.name} shows ${whenOff(l)} there`
+      const what = c.state === "frozen" ? "is frozen (connected, but nothing arriving)" : `is not sending${why}`
+      const text = `${cameraWords(c.label)} ${what}; "${scene!.name}" on ${o.name} shows ${whenOff(l, o)} there`
       if (!out.some((a) => a.text === text)) out.push({ level: "high", outputId: o.id, text })
+    }
+    // A screen that plays a camera badly (measured there): few frames, many dropped, no new frame.
+    for (const p of cams?.screens ?? []) {
+      if (p.outputId !== o.id) continue
+      const trouble = playbackTrouble(p)
+      const cam = cams!.cameras.find((c) => c.key === p.camera)
+      // A camera already said to be down is not said twice.
+      if (!trouble || (cam && cam.state !== "sending")) continue
+      const text = `${p.where}: ${cameraWords(cam?.label ?? (p.camera || "A"))} ${trouble}`
+      if (!out.some((a) => a.text === text)) out.push({ level: "medium", outputId: o.id, text })
     }
     if (o.type === "ndi" && st?.ndiError) out.push({ level: "high", outputId: o.id, text: `${o.name}: the NDI sender is failing (${st.ndiError})` })
     else if (o.type === "ndi" && st?.ndiReceivers === 0) out.push({ level: "medium", outputId: o.id, text: `${o.name}: no NDI receiver is watching it` })

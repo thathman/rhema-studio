@@ -82,6 +82,12 @@ export interface StateSource {
   lowerThird?: LowerThird
   /** Stage message: the one up, or cleared (for Restore). */
   message?: string
+  /** Camera (#213): switched to its backup camera (Production → Cameras); its scenes' camera layers play that one. */
+  backup?: boolean
+  /** Camera: frozen: the screens hold its last frame. */
+  hold?: boolean
+  /** Camera: how many times the operator pressed Retry (each makes every screen start its reader again). */
+  retry?: number
 }
 
 export type StateSources = Partial<Record<StateSourceId, StateSource>>
@@ -99,6 +105,18 @@ export function cameraPathOf(url: string): string | null {
     return m ? decodeURIComponent(m[1]) : null
   } catch {
     return null
+  }
+}
+
+/** The same camera address for another of the router's cameras (…/pulpit/whep → …/choir/whep); the address itself if it is not one. */
+export function withCameraPath(url: string, name: string): string {
+  try {
+    const u = new URL(url)
+    if (!/^\/[^/]+\/whep\/?$/.test(u.pathname)) return url
+    u.pathname = `/${encodeURIComponent(name)}/whep`
+    return u.toString()
+  } catch {
+    return url
   }
 }
 

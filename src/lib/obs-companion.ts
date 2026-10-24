@@ -95,6 +95,29 @@ export function companionUrl(host: string, srt: CompanionSrt, name: string, late
   return `srt://${host}:${srt.port}?streamid=read:${srt.path}${name}:${srt.user}:${srt.pass}&passphrase=${srt.passphrase}&latency=${Math.round(latencyMs * 1000)}&mode=caller`
 }
 
+/**
+ * Which of the church's cameras an OBS input plays, read either way OBS reads them: from the
+ * router on this computer (RTSP, `rtsp://…:8554/pulpit`) or as a companion (SRT). Null for anything else.
+ */
+export function cameraOfObsInput(url: unknown): string | null {
+  if (typeof url !== "string") return null
+  return cameraOfInput(url) ?? /^rtsps?:\/\/[^/]+\/([a-z0-9][a-z0-9_-]{0,39})\/?$/.exec(url.trim())?.[1] ?? null
+}
+
+/** The cameras OBS's program shows now (its visible inputs that play one), or null when OBS cannot say. */
+export async function programCameras(request: ObsRequest, program: string | null): Promise<string[]> {
+  if (!program) return []
+  const list = await request<{ inputs?: { inputName?: string }[] }>("GetInputList", { inputKind: "ffmpeg_source" })
+  const inputs = new Map<string, { input: string }[]>()
+  for (const i of list.inputs ?? []) {
+    if (typeof i.inputName !== "string") continue
+    const s = await request<{ inputSettings?: { input?: unknown } }>("GetInputSettings", { inputName: i.inputName }).catch(() => null)
+    const cam = cameraOfObsInput(s?.inputSettings?.input)
+    if (cam) inputs.set(cam, [...(inputs.get(cam) ?? []), { input: i.inputName }])
+  }
+  return (await obsTally(request, program, null, inputs)).program
+}
+
 /** Which camera an OBS input plays, from its address (null for anything Rhema did not add). */
 export function cameraOfInput(url: unknown, path = "companion/"): string | null {
   if (typeof url !== "string" || !url.startsWith("srt://")) return null

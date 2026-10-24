@@ -494,7 +494,7 @@ fn conns_of(list: &serde_json::Value, users: &[String]) -> Vec<String> {
 fn look_regularly(router: CameraRouter, hub: rhema_api::SharedCameras, generation: u64) {
     tauri::async_runtime::spawn(async move {
         let Ok(client) = reqwest::Client::builder().timeout(Duration::from_millis(1500)).build() else { return };
-        let mut before: std::collections::HashMap<String, (u64, Instant)> = std::collections::HashMap::new();
+        let mut before: std::collections::HashMap<String, Seen> = std::collections::HashMap::new();
         loop {
             let (password, running) = {
                 let mut s = router.lock();
@@ -627,11 +627,22 @@ pub struct Names<'a> {
     pub desk: &'a dyn Fn(std::net::IpAddr) -> Option<String>,
 }
 
+/// A camera's byte count at the last look, and when it last grew (#213: connected is not sending).
+#[derive(Debug, Clone, Copy)]
+pub struct Seen {
+    bytes: u64,
+    at: Instant,
+    grew: Instant,
+}
+
+/// Nothing received for longer than this, while the router still has the camera: Frozen.
+pub const FROZEN_AFTER: Duration = Duration::from_secs(3);
+
 /// The cameras as Production → Cameras shows them: each camera's own name (never a companion name)
 /// with who reads it, over the network or on this computer, and what it sends (from the bytes it
 /// sent since the last look, kept in `before`). One local RTSP reader of a camera is the router
 /// filling its companion name, not a person: it is left out while that name is in use.
-pub fn build_watch(paths: &serde_json::Value, sessions: &[Session], names: &Names<'_>, local: &[std::net::IpAddr], before: &mut std::collections::HashMap<String, (u64, Instant)>, now: Instant) -> Vec<RouterPath> {
+pub fn build_watch(paths: &serde_json::Value, sessions: &[Session], names: &Names<'_>, local: &[std::net::IpAddr], before: &mut std::collections::HashMap<String, Seen>, now: Instant) -> Vec<RouterPath> {
     let companion = rhema_api::COMPANION_PATH;
     let all = parse_paths(paths);
     let inbound = |name: &str| -> Option<u64> {
@@ -673,18 +684,33 @@ pub fn build_watch(paths: &serde_json::Value, sessions: &[Session], names: &Name
         }
         cam.readers = local_obs + local_screens + one_each;
         cam.watchers = watchers;
-        // What it sends: the bytes it received since the last look.
+        // What it sends: the bytes it received since the last look; and when they last grew, so a
+        // camera the router still has but that sends nothing shows as Frozen (#213), not as sending.
         if let Some(bytes) = inbound(&cam.name) {
-            if let Some((was, at)) = before.get(&cam.name) {
-                let secs = now.duration_since(*at).as_secs_f64();
-                if secs >= 0.5 && bytes >= *was {
-                    cam.kbps = u32::try_from(((bytes - was) as f64 * 8.0 / 1000.0 / secs).round() as u64).ok();
+            let seen = match before.get(&cam.name) {
+                Some(was) => {
+                    let secs = now.duration_since(was.at).as_secs_f64();
+                    if secs >= 0.5 && bytes >= was.bytes {
+                        let per_sec = (bytes - was.bytes) as f64 / secs;
+                        cam.kbps = u32::try_from((per_sec * 8.0 / 1000.0).round() as u64).ok();
+                        cam.bytes_per_sec = Some(per_sec.round() as u64);
+                    }
+                    // A count that went down is a new connection: that is news too.
+                    let grew = if bytes != was.bytes { now } else { was.grew };
+                    let age = now.duration_since(grew);
+                    cam.data_age_ms = u64::try_from(age.as_millis()).ok();
+                    cam.frozen = cam.live && age > FROZEN_AFTER;
+                    Seen { bytes, at: now, grew }
                 }
-            }
-            before.insert(cam.name.clone(), (bytes, now));
+                None => Seen { bytes, at: now, grew: now },
+            };
+            before.insert(cam.name.clone(), seen);
         }
         if !cam.live {
             cam.kbps = None;
+            cam.bytes_per_sec = None;
+            cam.data_age_ms = None;
+            cam.frozen = false;
         }
         out.push(cam);
     }
@@ -986,8 +1012,41 @@ mod tests {
         assert_eq!(p.kbps, None, "not known until the second look");
         let w = build_watch(&paths(1_500_000), &sessions, &names, &local, &mut before, t0 + Duration::from_secs(2));
         assert_eq!(w[0].kbps, Some(2000), "500 kB in 2 s is 2000 kbit/s");
+        assert_eq!(w[0].bytes_per_sec, Some(250_000));
+        assert_eq!((w[0].data_age_ms, w[0].frozen), (Some(0), false));
         assert_eq!(w[1].kbps, None);
         assert!(w[1].watchers.is_empty());
+    }
+
+    #[test]
+    fn a_camera_connected_but_sending_nothing_is_frozen() {
+        let paths = |bytes: u64, ready: bool| serde_json::json!({ "items": [{ "name": "pulpit", "ready": ready, "source": { "type": "rtspSession" }, "tracks": ["H264"], "inboundBytes": bytes, "readers": [] }] });
+        let (reader, desk) = (|_: &str| None, |_: std::net::IpAddr| None);
+        let names = Names { reader: &reader, desk: &desk };
+        let mut before = std::collections::HashMap::new();
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        let first = build_watch(&paths(1000, true), &[], &names, &[], &mut before, t0);
+        assert_eq!((first[0].data_age_ms, first[0].frozen), (None, false), "not known on the first look");
+        // Growing: sending.
+        let w = build_watch(&paths(5000, true), &[], &names, &[], &mut before, at(2));
+        assert_eq!((w[0].data_age_ms, w[0].frozen, w[0].bytes_per_sec), (Some(0), false, Some(2000)));
+        // One look without growth (2 s): not yet.
+        let w = build_watch(&paths(5000, true), &[], &names, &[], &mut before, at(4));
+        assert_eq!((w[0].data_age_ms, w[0].frozen, w[0].kbps), (Some(2000), false, Some(0)));
+        // Two (4 s, over 3 s): Frozen, though the router still has it live.
+        let w = build_watch(&paths(5000, true), &[], &names, &[], &mut before, at(6));
+        assert!(w[0].live && w[0].frozen, "{:?}", w[0]);
+        assert_eq!(w[0].data_age_ms, Some(4000));
+        // It sends again: no longer frozen.
+        let w = build_watch(&paths(9000, true), &[], &names, &[], &mut before, at(8));
+        assert!(!w[0].frozen);
+        // A camera that went (not live) is "not sending", never Frozen.
+        let w = build_watch(&paths(9000, false), &[], &names, &[], &mut before, at(20));
+        assert!(!w[0].frozen && w[0].data_age_ms.is_none());
+        // A new connection starts its count again: news, not frozen.
+        let w = build_watch(&paths(100, true), &[], &names, &[], &mut before, at(30));
+        assert_eq!((w[0].frozen, w[0].data_age_ms), (false, Some(0)));
     }
 
     /// For checking the router by hand (#209 acceptance 10fc): writes this code's settings, with

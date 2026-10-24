@@ -84,6 +84,8 @@ struct Feed {
     /// The newest frame a page said it drew, and when (receiver trust, #246 item 9).
     acked: u64,
     acked_at: Option<std::time::Instant>,
+    /// What its pages last said about the cameras they play (#213).
+    video: crate::feed_video::FeedVideo,
 }
 
 /// A browser feed's health for the operator: pages following it, and whether one drew the latest frame.
@@ -94,6 +96,8 @@ pub struct FeedStatus {
     pub acked: u64,
     /// Milliseconds since a page last said it drew a frame; None if none has.
     pub acked_ago_ms: Option<u64>,
+    /// Each page that reported lately: the cameras it plays, frames shown and dropped (#213).
+    pub video: Vec<crate::feed_video::PageVideo>,
 }
 
 impl FeedHub {
@@ -102,7 +106,7 @@ impl FeedHub {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         feeds.retain(|id, f| list.iter().any(|(i, t)| i == id && *t == f.token));
         for (id, token) in list {
-            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None });
+            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, video: crate::feed_video::FeedVideo::default() });
         }
     }
 
@@ -117,7 +121,7 @@ impl FeedHub {
     }
 
     /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent).
-    fn ack(&self, id: &str, token: &str, seq: u64) -> bool {
+    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>) -> bool {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(f) = feeds.get_mut(id).filter(|f| crate::command::same_key(token, &f.token)) else {
             return false;
@@ -125,6 +129,9 @@ impl FeedHub {
         if seq <= f.seq && seq >= f.acked {
             f.acked = seq;
             f.acked_at = Some(std::time::Instant::now());
+        }
+        if let Some((from, cameras)) = video {
+            f.video.report(from, cameras, std::time::Instant::now());
         }
         true
     }
@@ -139,6 +146,7 @@ impl FeedHub {
             seq: f.seq,
             acked: f.acked,
             acked_ago_ms: f.acked_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
+            video: f.video.pages(std::time::Instant::now()),
         })
     }
 
@@ -1208,6 +1216,9 @@ async fn voice_handler<S: CommandSink + 'static>(
 #[derive(Deserialize)]
 struct FeedAck {
     seq: u64,
+    /// The cameras the page plays, sent every few seconds while it plays any (#213); absent from older pages.
+    #[serde(default)]
+    video: Option<Vec<crate::feed_video::CameraPlayback>>,
 }
 
 /// `POST /api/v1/feed/{id}/ack?k=<secret>`: the page drew frame `seq` (receiver trust).
@@ -1221,7 +1232,7 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS;
     }
-    if state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN }
+    if state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v))) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN }
 }
 
 /// `GET /api/v1/feed/{id}/events?k=<secret>`: the feed's frames as server-sent events.
@@ -1898,6 +1909,15 @@ mod tests {
         let st = feeds.status("l3").unwrap();
         assert_eq!((st.seq, st.acked), (2, 2), "a frame never sent is not acknowledged");
         assert!(st.acked_ago_ms.is_some());
+        assert!(st.video.is_empty(), "no page said what it plays yet");
+        // A page playing a camera says how it plays (#213), with its acknowledgement.
+        let report = r#"{"seq":2,"video":[{"camera":"pulpit","playing":true,"fps":29.8,"decoded":900,"dropped":2,"droppedPct":0.2,"frameAgeMs":40,"width":1920,"height":1080}]}"#;
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=s3cret", Some(report), "").await.contains("204"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=wrong", Some(report), "").await.contains("403"));
+        let st = feeds.status("l3").unwrap();
+        assert_eq!(st.video.len(), 1);
+        assert_eq!(st.video[0].from, "127.0.0.1");
+        assert_eq!((st.video[0].cameras[0].camera.as_str(), st.video[0].cameras[0].fps, st.video[0].cameras[0].dropped_pct), ("pulpit", Some(29.8), Some(0.2)));
         // A new secret (the link was renewed) closes the old link.
         feeds.set(&[("l3".into(), "n3w".into())]);
         assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("403"));

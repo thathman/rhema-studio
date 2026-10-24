@@ -10,7 +10,7 @@ import { useRef, useEffect, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { onThemeFontsLoaded, renderVerse, drawLowerThird } from "@/lib/verse-renderer"
-import { syncCameras, WhepPlayer } from "@/lib/whep"
+import { cameraReports, syncCameras, WhepPlayer } from "@/lib/whep"
 import { paintFrame } from "@/lib/output-paint"
 import { loadThemeImage, preloadThemeImages, themeImageCache } from "@/lib/theme-image-cache"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -612,6 +612,11 @@ function BroadcastCanvas() {
       pushNdiBurst()
     })
 
+    // How this screen really plays its scene's cameras (#213), every 2 s while it plays any: for Show health.
+    const cameraTimer = setInterval(() => {
+      if (cameras.size > 0) void currentWindow.emitTo("main", "broadcast:camera-playback", { outputId: OUTPUT_ID, cameras: cameraReports(cameras) }).catch(() => {})
+    }, 2000)
+
     void currentWindow.emitTo("main", "broadcast:output-ready", { outputId: OUTPUT_ID }).then(() => {
       logDebug("Sent broadcast:output-ready")
     }).catch(() => {
@@ -630,6 +635,7 @@ function BroadcastCanvas() {
       paceFps = 0
       unlistenPace.then((fn) => fn())
       unsubscribeFonts()
+      clearInterval(cameraTimer)
       for (const p of cameras.values()) p.close()
       cameras.clear()
       for (const v of sceneVideos.values()) stopVideo(v)

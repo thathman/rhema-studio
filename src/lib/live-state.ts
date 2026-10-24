@@ -40,7 +40,7 @@ export interface LiveStateV1 {
    * content sources: "ticker", "timer", "lowerThird", "stage" and each "camera:<name>" (reference: the
    * ticker's first words, the timer's state, the lower third's lines, the stage message, the camera's
    * name), with `state`: running / paused / off, up / down (lower third, stage message), or sending /
-   * not-sending / router-off / hidden (a camera hidden from scenes; absent before the router answers).
+   * frozen (connected, nothing arriving) / not-sending / router-off / hidden (a camera hidden from scenes; absent before the router answers).
    * "lowerThird" and "stage" are absent from older hosts.
    */
   sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string; state?: string }[]

@@ -325,6 +325,22 @@ export interface BroadcastOutput {
   ndi: BroadcastOutputNdiSettings
   /** Browser feeds: the Google TVs Rhema sent this feed to (Show on a Google TV), to check on them in Show health (#213). */
   tvs?: ReceiverTv[]
+  /** What a scene's camera box shows on this output while its camera is not sending (#213); absent: the scene's own choice. */
+  cameraFallback?: OutputCameraFallback
+}
+
+/**
+ * One output's own choice for a camera that is not sending (or is hidden, or frozen at the router):
+ * colour bars, TV static, words or nothing as a scene's camera layer offers, or another camera.
+ */
+export interface OutputCameraFallback {
+  mode: "bars" | "static" | "words" | "none" | "camera"
+  /** "words": what it says. */
+  words?: string
+  /** "camera": the router's name of the camera shown instead (when that one sends). */
+  camera?: string
+  /** "bars": the camera's name on the bars. */
+  name?: boolean
 }
 
 /** A Google TV running Rhema Studio Receiver that was sent a feed: its name and the address on its screen. */

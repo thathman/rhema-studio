@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { useBroadcastStore } from "@/stores"
 import { disableOutput, enableOutput } from "@/lib/broadcast-output-control"
+import { useWindowPlayback } from "@/lib/camera-playback"
+import type { CameraPlayback } from "@/lib/whep"
 
 /** One automatic restart per output per minute; after that the operator decides. */
 const lastRestart = new Map<string, number>()
@@ -100,7 +102,14 @@ export function useBroadcastOutputs(): void {
       if (store.presentWarning === renderWarning(outputName(event.payload?.outputId))) store.setPresentWarning(null)
     })
 
+    // How each output window really plays its scene's cameras (#213), for Show health.
+    const unlistenPlayback = listen<{ outputId?: string; cameras?: CameraPlayback[] }>("broadcast:camera-playback", (event) => {
+      const id = event.payload?.outputId
+      if (typeof id === "string" && Array.isArray(event.payload?.cameras)) useWindowPlayback.setState({ [id]: { at: Date.now(), cameras: event.payload.cameras.slice(0, 16) } })
+    })
+
     return () => {
+      void unlistenPlayback.then((unlisten) => unlisten())
       void unlistenRender.then((unlisten) => unlisten())
       void unlistenRenderOk.then((unlisten) => unlisten())
       for (const id of timeouts) clearTimeout(id)

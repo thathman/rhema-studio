@@ -15,6 +15,10 @@ import { resetTimerLogged } from "@/lib/timer-reset"
 import { openSettings } from "@/lib/settings-dialog"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
+import { CameraControls } from "@/studio/production/camera-controls"
+import { useObsProgramCameras, useScreenPlayback } from "@/studio/production/camera-hooks"
+import { playbackWords } from "@/lib/camera-playback"
+import { cameraPathOf } from "@/lib/live-sources"
 import { attention, cameraHealth, cameraStateWords, cameraWords, capacityAttention, cpuWords, feedSummary, heatWords, memoryWords, ndiRateWords, networkWords, showing, tvCheckWords, useFeedHealthStore, type Attention, type CameraHealth, type HealthLine } from "@/lib/show-health"
 import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, capacityLimits, capacityUse, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { useMachineHealth, type NdiMeasure } from "@/studio/production/use-machine-health"
@@ -273,14 +277,16 @@ function Screens() {
   )
 }
 
-/** Every camera Rhema knows, with what the router last said (#213); undefined router: no answer yet. */
+/** Every camera Rhema knows, with what the router last said and how each screen plays it (#213); undefined router: no answer yet. */
 function useCameraHealth(): CameraHealth[] {
   const cameras = useSettingsStore((s) => s.cameras)
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const status = useBroadcastStore((s) => s.outputStatus)
+  const controls = useBroadcastStore((s) => s.stateSources)
   const router = useRouterHealth()
-  return cameraHealth(cameras, scenes, outputs, status, router.checked ? router.status : undefined)
+  const screens = useScreenPlayback()
+  return cameraHealth(cameras, scenes, outputs, status, router.checked ? router.status : undefined, { screens, controls })
 }
 
 /** What needs attention now: outputs, browser feeds and the cameras of scenes on air. */
@@ -290,8 +296,9 @@ function useNeeds(): Attention[] {
   const scenes = useBroadcastStore((s) => s.scenes)
   const feeds = useFeedHealthStore()
   const cameras = useCameraHealth()
+  const screens = useScreenPlayback()
   const use = useCapacity()
-  return [...attention(outputs, status, feeds, { cameras, scenes }), ...capacityAttention(use.use, use.limits)]
+  return [...attention(outputs, status, feeds, { cameras, scenes, screens }), ...capacityAttention(use.use, use.limits)]
 }
 
 /** What is running against what this computer suits (#243 G13). */
@@ -364,6 +371,7 @@ function OutputInspector({ output: o, status: st, frame, scenes, themes }: { out
         ))}
         {role !== "stage" && theme && row("Safe area", <span title="The space its look keeps clear at the screen's edges, so nothing is cut off. Change it in Design → the look → Composition → Safe area.">{safeAreaWords(theme)} <span className="text-muted-foreground">(its look)</span></span>)}
         {row("Now", <span className="block truncate">{showing(o, frame, scenes, on)}</span>)}
+        {role === "congregation" && <CameraFollowsObs output={o} scenes={scenes} row={row} />}
         {o.type === "ndi" && on && typeof st?.ndiReceivers === "number" && row("Signal", `${st.ndiReceivers} ${st.ndiReceivers === 1 ? "receiver" : "receivers"}`)}
         {o.type === "browser" && on && feedHealthLabel(feed) && row("Signal", <span className={cn(feed?.behind && "text-destructive")}>{feedHealthLabel(feed)}</span>)}
       </dl>
@@ -372,6 +380,22 @@ function OutputInspector({ output: o, status: st, frame, scenes, themes }: { out
       </div>
     </li>
   )
+}
+
+/**
+ * "Camera follows OBS" (#208 D3): the camera this output's scene plays is the one on OBS's program
+ * now, so the room sees the same angle as the stream. Information only; nothing is changed.
+ */
+function CameraFollowsObs({ output, scenes, row }: { output: BroadcastOutput; scenes: Scene[]; row: (label: string, value: React.ReactNode) => React.ReactNode }) {
+  const router = useRouterHealth()
+  const onObs = useObsProgramCameras(router.status)
+  const cameras = useSettingsStore((s) => s.cameras)
+  const scene = output.sceneId ? scenes.find((s) => s.id === output.sceneId) : undefined
+  const names = [...new Set((scene?.layers ?? []).filter((l) => l.kind === "camera" && l.visible && l.cameraUrl).map((l) => cameraPathOf(l.cameraUrl!)).filter((n): n is string => !!n))]
+  if (names.length === 0) return null
+  const same = names.filter((n) => onObs.has(n))
+  const label = (n: string) => cameras.find((c) => c.name === n)?.label ?? n
+  return row("Camera", same.length > 0 ? <span><Badge tone="off">Camera follows OBS</Badge> <span className="text-muted-foreground">{same.map(label).join(", ")} is on OBS's program too</span></span> : <span className="text-muted-foreground">{names.map(label).join(", ")}{onObs.size > 0 ? " · not the camera on OBS's program" : ""}</span>)
 }
 
 const ICON: Record<ReadinessCheck["status"], React.ReactNode> = {
@@ -516,6 +540,9 @@ function Preflight({ ready, checks, fix }: { ready: boolean; checks: ReadinessCh
  */
 function CamerasHealth() {
   const cams = useCameraHealth()
+  const sources = useSettingsStore((s) => s.cameras)
+  const router = useRouterHealth()
+  const onObs = useObsProgramCameras(router.status)
   const ours = cams.filter((c) => c.state !== "elsewhere")
   const sending = ours.filter((c) => c.state === "sending").length
   return (
@@ -525,7 +552,8 @@ function CamerasHealth() {
       ) : (
         <ul aria-label="Camera signals" className="flex flex-col divide-y divide-border">
           {cams.map((c) => {
-            const bad = c.state === "not-sending" || c.state === "router-off"
+            const bad = c.state === "not-sending" || c.state === "router-off" || c.state === "frozen"
+            const source = sources.find((s) => s.name === c.key)
             return (
               <li key={c.key} aria-label={c.label} className="flex items-start gap-3 py-2.5 text-xs">
                 <VideoIcon aria-hidden className={cn("mt-px size-4 shrink-0", c.state === "sending" ? "text-confidence-high" : bad && c.onAir.length > 0 ? "text-destructive" : "text-muted-foreground")} />
@@ -536,6 +564,22 @@ function CamerasHealth() {
                     {c.scenes.length === 0 ? "Not in a scene yet" : `In ${c.scenes.join(", ")}`}
                     {c.onAir.length > 0 ? ` · on air on ${c.onAir.join(", ")}` : c.assigned.length > 0 ? ` · set on ${c.assigned.join(", ")}` : ""}
                   </span>
+                  {(c.onBackup || c.held || onObs.has(c.key)) && (
+                    <span className="mt-1 flex flex-wrap gap-1">
+                      {c.onBackup && <Badge tone="warn">On backup: {c.onBackup}</Badge>}
+                      {c.held && <Badge tone="warn">Frozen by you</Badge>}
+                      {onObs.has(c.key) && <Badge tone="off">On OBS's program</Badge>}
+                    </span>
+                  )}
+                  {(c.screens ?? []).length > 0 && (
+                    <ul aria-label={`${c.label} on each screen`} className="mt-1 flex flex-col">
+                      {c.screens!.map((s) => {
+                        const w = playbackWords(s)
+                        return <li key={`${s.outputId}|${s.where}`} className={cn(w.tone === "warn" ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{s.where}: {w.text}</li>
+                      })}
+                    </ul>
+                  )}
+                  {source && <span className="mt-1.5 block"><CameraControls cam={source} /></span>}
                 </span>
               </li>
             )
@@ -572,6 +616,7 @@ function FeedsHealth() {
                   <span className="min-w-0 flex-1 font-semibold">{o.name}</span>
                   <span className={cn(sum.tone === "warn" ? "font-semibold text-confidence-mid" : sum.tone === "ok" ? "text-foreground" : "text-muted-foreground")}>{sum.text}</span>
                 </span>
+                <FeedPlayback output={o} />
                 {(o.tvs ?? []).length > 0 && (
                   <ul aria-label={`Google TVs showing ${o.name}`} className="ml-7 flex flex-col gap-1">
                     {o.tvs!.map((tv) => <TvRow key={tv.address} output={o} tv={tv} />)}
@@ -584,6 +629,22 @@ function FeedsHealth() {
       )}
       <p className="text-xs text-muted-foreground">A screen counts once its page shows the feed; Show on a Google TV (in the feed's output settings) adds the TV here.</p>
     </Card>
+  )
+}
+
+/** How each page of a feed (a Google TV, OBS Browser Source) plays the scene's cameras, as it measured (#213). */
+function FeedPlayback({ output }: { output: BroadcastOutput }) {
+  const cameras = useSettingsStore((s) => s.cameras)
+  const screens = useScreenPlayback().filter((s) => s.outputId === output.id && !s.where.endsWith("(this computer)"))
+  if (screens.length === 0) return null
+  return (
+    <ul aria-label={`Cameras on ${output.name}'s screens`} className="ml-7 flex flex-col gap-0.5">
+      {screens.map((s) => {
+        const w = playbackWords(s)
+        const name = cameraWords(cameras.find((c) => c.name === s.camera)?.label ?? (s.camera || "A"))
+        return <li key={`${s.where}|${s.camera}`} className={cn(w.tone === "warn" ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{s.where}: {name.charAt(0).toLowerCase() + name.slice(1)} {w.text}</li>
+      })}
+    </ul>
   )
 }
 
