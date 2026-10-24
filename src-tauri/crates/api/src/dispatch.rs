@@ -87,6 +87,11 @@ impl CommandDispatcher {
             // The reason is a short line for the stage and the log (80 characters, one line).
             RemoteCommand::Hold(r) => sink.emit_event("remote:hold", &serde_json::json!({ "reason": r.as_deref().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(80).collect::<String>(), "by": by }).to_string()),
             RemoteCommand::Resume => sink.emit_event("remote:resume", &serde_json::json!({ "by": by }).to_string()),
+            // A scene from a joined desk (#243 SC.16) names the sending key, so a change that waits for
+            // the main desk is a request from that desk, which it then sees answered. The host logs
+            // what it did with it itself.
+            RemoteCommand::SaveScene(s) => sink.emit_event("remote:save_scene", &serde_json::json!({ "scene": s.scene, "request": s.request, "by": by, "byId": by_id }).to_string()),
+            RemoteCommand::DeleteScene(d) => sink.emit_event("remote:delete_scene", &serde_json::json!({ "id": d.id.chars().take(100).collect::<String>(), "request": d.request, "by": by, "byId": by_id }).to_string()),
             RemoteCommand::VoiceChannels(c) => sink.emit_event("remote:voice_channels", &serde_json::json!({ "listen": c.listen.iter().take(8).map(|s| s.chars().take(80).collect::<String>()).collect::<Vec<_>>(), "talk": c.talk.chars().take(84).collect::<String>(), "by": by, "byId": by_id }).to_string()),
             other => {
                 // Who sent it rides along in the command's own event, so the host can say who
@@ -107,7 +112,7 @@ impl CommandDispatcher {
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => Self::dispatch_as(cmd, sink, "a remote"),
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {
@@ -146,6 +151,11 @@ impl CommandDispatcher {
             RemoteCommand::RestoreSource(id) => sink.emit_event("remote:restore_source", &serde_json::json!({ "id": id }).to_string()),
             RemoteCommand::TakeScene(t) => sink.emit_event("remote:take_scene", &serde_json::json!({ "output": t.output, "scene": t.scene }).to_string()),
             RemoteCommand::ReleaseScene(output) => sink.emit_event("remote:release_scene", &serde_json::json!({ "output": output }).to_string()),
+            // One line of at most 120 characters, as the main desk's own stage message box.
+            RemoteCommand::StageMessage(text) => sink.emit_event("remote:stage_message", &serde_json::json!({ "text": text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect::<String>() }).to_string()),
+            RemoteCommand::ObsPreview(scene) => sink.emit_event("remote:obs_preview", &serde_json::json!({ "scene": scene.chars().take(200).collect::<String>() }).to_string()),
+            RemoteCommand::ObsTake => sink.emit_event("remote:obs_take", "{}"),
+            RemoteCommand::ObsProgram(scene) => sink.emit_event("remote:obs_program", &serde_json::json!({ "scene": scene.chars().take(200).collect::<String>() }).to_string()),
             RemoteCommand::Show => sink.invoke_backend("show_broadcast", "{}"),
             RemoteCommand::Hide => sink.invoke_backend("hide_broadcast", "{}"),
             RemoteCommand::Confidence(val) => {
@@ -352,6 +362,33 @@ mod tests {
             let (event, payload) = sink.last_event();
             assert_eq!(event, name);
             assert!(payload.contains(has), "{payload}");
+        }
+    }
+
+    #[test]
+    fn scene_edits_name_the_desk_and_the_new_commands_emit_events() {
+        let sink = MockSink::new();
+        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1", "name": "Sermon" }), request: true });
+        CommandDispatcher::dispatch_from(&save, &sink, "Ade screens", Some("k1")).unwrap();
+        let (event, payload) = sink.last_event();
+        assert_eq!(event, "remote:save_scene");
+        let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!((v["scene"]["name"].as_str(), v["request"].as_bool(), v["by"].as_str(), v["byId"].as_str()), (Some("Sermon"), Some(true), Some("Ade screens"), Some("k1")));
+        assert_eq!(sink.event_count(), 1, "the host logs scene edits itself: no separate audit line");
+        let del = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false });
+        CommandDispatcher::dispatch(&del, &sink).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&sink.last_event().1).unwrap();
+        assert_eq!((sink.last_event().0.as_str(), v["id"].as_str(), v["by"].as_str()), ("remote:delete_scene", Some("s1"), Some("a remote")));
+        CommandDispatcher::dispatch(&RemoteCommand::StageMessage(format!("  Wrap \n up {}", "x".repeat(200))), &sink).unwrap();
+        let (event, payload) = sink.last_event();
+        let text = serde_json::from_str::<serde_json::Value>(&payload).unwrap()["text"].as_str().unwrap().to_string();
+        assert_eq!(event, "remote:stage_message");
+        assert!(text.starts_with("Wrap up x") && text.chars().count() == 120, "{text}");
+        for (cmd, name) in [(RemoteCommand::ObsPreview("Sermon".into()), "remote:obs_preview"), (RemoteCommand::ObsTake, "remote:obs_take"), (RemoteCommand::ObsProgram("Wide".into()), "remote:obs_program")] {
+            CommandDispatcher::dispatch_as(&cmd, &sink, "OBS desk").unwrap();
+            let all = sink.events.lock().unwrap().clone();
+            assert_eq!(all[all.len() - 2].0, name);
+            assert_eq!(all[all.len() - 1].0, "remote:audit", "an OBS switch from a desk is in the service log with who");
         }
     }
 

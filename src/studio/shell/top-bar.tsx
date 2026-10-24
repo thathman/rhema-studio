@@ -10,6 +10,7 @@ import { sceneTargets, useNotices, type ActionMode, type NoticeAction } from "@/
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { activateBibleReference, previewBibleReference } from "@/lib/bible-activate"
 import { songRequest } from "@/lib/song-request"
+import { acceptSceneRequest, declineSceneRequest } from "@/lib/desk-scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -78,7 +79,12 @@ function HostNotices() {
           me={me}
           eventTitle={event?.reference ?? null}
           onSend={(n) => useNotices.getState().send({ ...n, from: me, fromId: "host", event: event ? { id: event.id, title: event.reference } : null })}
-          onAnswer={(id, state, why) => useNotices.getState().answer(id, me, state, why)}
+          onAnswer={(id, state, why) => {
+            useNotices.getState().answer(id, me, state, why)
+            // Unable on a desk's scene change is Decline: the scene stays as it is.
+            const a = notices.find((n) => n.id === id)?.action
+            if (state === "unable" && a?.kind === "sceneEdit") declineSceneRequest(a.value)
+          }}
           onAction={runNoticeAction}
           scenes={scenes}
           rundown={rundown}
@@ -106,6 +112,8 @@ const NOT_SHOWN: Record<string, string> = {
  */
 async function runNoticeAction(a: NoticeAction, mode: ActionMode = "show"): Promise<string | null> {
   if (a.kind === "camera") return null // answering is the action
+  // A joined desk's scene change waiting for the main desk (#243 SC.17): Accept puts it in.
+  if (a.kind === "sceneEdit") return acceptSceneRequest(a.value)
   if (a.kind === "song") return songRequest(a.value, mode)
   if (a.kind === "bible" && mode === "preview") {
     const outcome = await previewBibleReference(a.value)

@@ -4,7 +4,7 @@ import { autoModeOf, useBroadcastStore, type AutoMode } from "@/stores/broadcast
 import { AssistantsSection } from "@/components/settings/assistants-section"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { transcriptionActions } from "@/hooks/use-transcription"
-import { useState, useEffect, useRef } from "react"
+import { Fragment, useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 
 import { Button } from "@/components/ui/button"
@@ -45,6 +45,7 @@ import { useObsStore } from "@/stores/obs-store"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
 import { qrDataUrl } from "@/lib/qr-bulletin"
 import { setDeskControl } from "@/lib/desk-control"
+import { asRemoteRole, REMOTE_ROLES } from "@/lib/remote-roles"
 import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
 import { useShellStore } from "@/studio/shell-store"
 import type { DeviceInfo } from "@/types/audio"
@@ -868,14 +869,11 @@ function RemoteControlSection() {
                 <select
                   aria-label={`What ${d.name} may do`}
                   value={d.role ?? "configure"}
-                  onChange={(e) => setRemoteDeviceRole(d.hash, (["present", "timekeeper", "bible", "screens"] as const).find((r) => r === e.target.value) ?? "configure")}
-                  className="h-6 rounded border border-border bg-background px-1 text-[0.6875rem]"
+                  title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "configure"))?.may}
+                  onChange={(e) => setRemoteDeviceRole(d.hash, asRemoteRole(e.target.value) ?? "configure")}
+                  className="h-6 max-w-44 rounded border border-border bg-background px-1 text-[0.6875rem]"
                 >
-                  <option value="timekeeper">Timekeeper (the event clock only)</option>
-                  <option value="bible">Bible (activates and steps the Bible only)</option>
-                  <option value="screens">Screens (congregation scenes only)</option>
-                  <option value="present">Present only</option>
-                  <option value="configure">Present and change settings</option>
+                  {REMOTE_ROLES.map((r) => <option key={r.id} value={r.id} title={r.may}>{r.name}</option>)}
                 </select>
                 <span className="shrink-0 text-[0.6875rem] text-muted-foreground">{d.paused === true ? "paused" : `paired ${new Date(d.paired_at).toLocaleDateString()}`}</span>
                 <Button size="sm" variant="outline" className="text-xs" aria-pressed={d.paused === true} aria-label={d.paused === true ? `Give control back to ${d.name}` : `Take back control from ${d.name}`} onClick={() => setDeskControl(d.hash, d.paused !== true)}>
@@ -886,6 +884,7 @@ function RemoteControlSection() {
             ))}
           </ul>
         )}
+        {remoteDevices.length > 0 && <RoleGuide />}
       </div>
       <ObsSettingsBlock />
       {/* OSC */}
@@ -1368,5 +1367,23 @@ function CloudConsentLine() {
       </button>
       (stops cloud listening now; asks again next time)
     </p>
+  )
+}
+
+/** What each role may do, in plain words, under the paired devices (#215 G10). */
+function RoleGuide() {
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer text-muted-foreground">What each role may do</summary>
+      <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+        {REMOTE_ROLES.map((r) => (
+          <Fragment key={r.id}>
+            <dt className="font-semibold">{r.name}</dt>
+            <dd className="text-muted-foreground">{r.may}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      <p className="mt-1 text-muted-foreground">The main desk can always do everything. A change from a desk to a scene that is on a screen, or any scene change while Approvals is on, waits in the main desk's notices for Accept or Decline.</p>
+    </details>
   )
 }

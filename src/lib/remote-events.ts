@@ -44,6 +44,12 @@ export const REMOTE_EVENTS = {
   restore_source: "remote:restore_source",
   take_scene: "remote:take_scene",
   release_scene: "remote:release_scene",
+  save_scene: "remote:save_scene",
+  delete_scene: "remote:delete_scene",
+  stage_message: "remote:stage_message",
+  obs_preview: "remote:obs_preview",
+  obs_take: "remote:obs_take",
+  obs_program: "remote:obs_program",
   notice_send: "remote:notice_send",
   notice_ack: "remote:notice_ack",
 } as const

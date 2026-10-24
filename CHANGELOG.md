@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### New desk roles: Worship, Stage, Camera, OBS director; scenes changed from a joined desk (#243, #215)
+- Four new roles for a paired desk (Settings → Remote control, with a line on what each may do): **Worship** (songs and hymns), **Stage** (the stage message), **Camera** (camera-ready, hiding a camera from scenes, the camera boxes in scenes) and **OBS director** (switches OBS scenes through the main computer's OBS connection; never in rehearsal). Each gets its own desk in Production → Operators, and the main computer checks every command.
+- A Screens desk can now **make and change scenes** from another computer. A new scene, or a change to a scene on no screen, goes in at once; a change to a scene on a screen, deleting one, or any scene change while Approvals is on, waits in the main desk's notices for **Accept** or **Decline**.
+- A change made from an older copy of a scene is refused like any other late command (*Someone changed this first — look again*), and the desk's editor shows the main desk's version to change again. The main computer accepts from a desk only a plain scene: one background colour, known layers, and cameras from the church's own list.
+
 ### Two desks pressing at once; reasons for Unable; a long service's log (#196, #251)
 - When two joined desks act on the same thing at once (both take a scene on the same screen, one takes while the other clears, one holds while the other resumes, the timer, the event clock or a live source such as the ticker), the main computer carries out the first and refuses the other: that desk shows **Someone changed this first — look again**, and its view already shows what changed. Phones, Stream Decks and older desks work as before.
 - A refusal on a joined desk now stays until its next command, instead of disappearing within 2 seconds.

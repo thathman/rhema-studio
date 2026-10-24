@@ -241,12 +241,29 @@ impl Revisions {
                 out.push((format!("output:{id}"), serde_json::json!([o["sceneId"], o["sceneRevision"]]).to_string()));
             }
         }
+        // Each scene's arrangement (#243 SC.16): whether it is on a screen is not a change to it.
+        for sc in v["scenes"].as_array().into_iter().flatten() {
+            if let Some(id) = sc["id"].as_str() {
+                out.push((format!("scene:{id}"), serde_json::json!([sc["name"], sc["background"], sc["fadeMs"], sc["layers"]]).to_string()));
+            }
+        }
         out
     }
 
-    /// A new Live State: each part that looks different from the last one goes up by one.
+    /// A new Live State: each part that looks different from the last one goes up by one. A scene
+    /// that is no longer there has changed too (it was deleted), so a desk's change to it is refused.
     fn observe(&mut self, v: &serde_json::Value) {
-        for (part, fp) in Self::fingerprints(v) {
+        let now = Self::fingerprints(v);
+        let gone: Vec<String> = self.parts.keys().filter(|k| k.starts_with("scene:") && !now.iter().any(|(p, _)| p == *k)).cloned().collect();
+        for part in gone {
+            if let Some((n, old)) = self.parts.get_mut(&part) {
+                if old != "gone" {
+                    *n += 1;
+                    *old = "gone".into();
+                }
+            }
+        }
+        for (part, fp) in now {
             match self.parts.get_mut(&part) {
                 Some((n, old)) if *old != fp => {
                     *n += 1;
@@ -288,6 +305,8 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
         RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => format!("source:{id}"),
         RemoteCommand::TakeScene(t) => format!("output:{}", t.output),
         RemoteCommand::ReleaseScene(output) => format!("output:{output}"),
+        RemoteCommand::SaveScene(sc) => format!("scene:{}", sc.id()),
+        RemoteCommand::DeleteScene(d) => format!("scene:{}", d.id),
         _ => return None,
     })
 }
@@ -374,6 +393,26 @@ pub fn notices_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String
         if let Some(o) = n.as_object_mut() {
             o.remove("fromId");
             o.remove("toId");
+        }
+    }
+    v.to_string()
+}
+
+/// The Live State as one paired desk gets it: only its notices (`notices_for`), and the scenes'
+/// full definitions only for a desk that may change scenes (#243 SC.16); the others get each
+/// scene's name and id, as before, which keeps a phone's copy small.
+#[must_use]
+pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
+    let filtered = notices_for(json, reader);
+    let Some(reader) = reader else { return filtered };
+    if reader.role.edits_scenes() || !filtered.contains("\"layers\"") {
+        return filtered;
+    }
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&filtered) else { return filtered };
+    let Some(list) = v.get_mut("scenes").and_then(serde_json::Value::as_array_mut) else { return filtered };
+    for scene in list.iter_mut() {
+        if let Some(o) = scene.as_object_mut() {
+            o.retain(|k, _| matches!(k.as_str(), "id" | "name" | "onScreen"));
         }
     }
     v.to_string()
@@ -718,15 +757,33 @@ impl RecentIds {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 struct CommandResponse {
     success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
-    /// Which refusal a 409 is, for a desk to act on: "stale" (look again) or "other-service" (refresh).
+    /// Which refusal it is, for a desk to act on: "stale" (someone changed it first: look again),
+    /// "other-service" (refresh), and for a scene change "role" or "bad-scene".
     #[serde(skip_serializing_if = "Option::is_none")]
     code: Option<&'static str>,
+    /// A note on a command that was taken (a scene change sent to the main desk to accept).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
 }
+
+impl CommandResponse {
+    fn refused(error: impl Into<String>) -> Json<Self> {
+        Json(Self { success: false, error: Some(error.into()), ..Default::default() })
+    }
+}
+
+/// Whether the host is in rehearsal, from its Live State (false before it has said).
+fn in_rehearsal(live: Option<&str>) -> bool {
+    live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).and_then(|v| v.get("program")?.get("rehearsal")?.as_bool()) == Some(true)
+}
+
+/// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
+const OBS_REHEARSAL_MESSAGE: &str = "Rehearsal is on: OBS is the live stream, so Rhema doesn't change it while you practise";
 
 #[derive(Deserialize)]
 struct PairRequest {
@@ -823,7 +880,7 @@ async fn live_handler<S: CommandSink + 'static>(
         Err(code) => return code.into_response(),
     };
     match state.live.current() {
-        Some(json) => ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], notices_for(&json, reader.as_ref())).into_response(),
+        Some(json) => ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], live_for(&json, reader.as_ref())).into_response(),
         None => StatusCode::NO_CONTENT.into_response(),
     }
 }
@@ -843,13 +900,13 @@ async fn live_events_handler<S: CommandSink + 'static>(
     let first = state.live.current();
     let stream = futures_util::stream::unfold((rx, first, reader), |(mut rx, first, reader)| async move {
         if let Some(json) = first {
-            let data = notices_for(&json, reader.as_ref());
+            let data = live_for(&json, reader.as_ref());
             return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(data)), (rx, None, reader)));
         }
         loop {
             match rx.recv().await {
                 Ok(json) => {
-                    let data = notices_for(&json, reader.as_ref());
+                    let data = live_for(&json, reader.as_ref());
                     return Some((Ok(Event::default().event("live").data(data)), (rx, None, reader)));
                 }
                 // Slow reader: skip to the newest; the next message is the whole state anyway.
@@ -1164,78 +1221,100 @@ async fn command_handler<S: CommandSink + 'static>(
 ) -> impl IntoResponse {
     if !state.rate.allow(peer.ip()) {
         log::warn!("HTTP command refused: too many from {}", peer.ip());
-        return (StatusCode::TOO_MANY_REQUESTS, Json(CommandResponse { success: false, error: Some("too many commands; slow down".into()), code: None }));
+        return (StatusCode::TOO_MANY_REQUESTS, CommandResponse::refused("too many commands; slow down"));
     }
     let by = match check_key(&state.keys, presented_key(&headers)) {
         Err(reason) => {
             log::warn!("HTTP command refused: {reason}");
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(CommandResponse { success: false, error: Some(format!("{reason} (X-Rhema-Key)")), code: None }),
-            );
+            return (StatusCode::UNAUTHORIZED, CommandResponse::refused(format!("{reason} (X-Rhema-Key)")));
         }
         Ok(Some(entry)) if entry.paused_for(&request.command) => {
             log::info!("HTTP command refused for {}: the main desk has taken back control", entry.name);
-            return (StatusCode::LOCKED, Json(CommandResponse { success: false, error: Some(crate::keys::PAUSED_MESSAGE.into()), code: None }));
+            return (StatusCode::LOCKED, CommandResponse::refused(crate::keys::PAUSED_MESSAGE));
         }
         Ok(Some(entry)) if !entry.role.allows(&request.command) => {
-            let why = match entry.role {
-                crate::keys::Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
-                crate::keys::Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
-                crate::keys::Role::Screens => "this device runs the congregation screens: it may take and release scenes only",
-                _ => "this device may present but not change settings",
-            };
+            let why = refusal_for(entry.role, &request.command);
             log::warn!("HTTP command refused for {}: {why}", entry.name);
-            return (
-                StatusCode::FORBIDDEN,
-                Json(CommandResponse { success: false, error: Some(why.into()), code: None }),
-            );
+            return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
         }
-        Ok(Some(entry)) => (entry.name, Some(entry.hash)),
-        Ok(None) => ("an open remote".to_string(), None),
+        Ok(Some(entry)) => (entry.name, Some(entry.hash), entry.role),
+        // An open remote (no keys) may do everything, as before.
+        Ok(None) => ("an open remote".to_string(), None, crate::keys::Role::Configure),
     };
-    let (by, by_id) = by;
+    let (by, by_id, role) = by;
+    let mut command = request.command;
     // Several services must never share state (#246 C16): a desk still showing the 9 AM service
     // cannot move the 11 AM one. Crew talk is not about a service.
-    if !request.command.is_comms() {
+    if !command.is_comms() {
         if let (Some(sent), Some(host)) = (request.service.as_deref(), state.live.service()) {
             if sent != host {
                 log::info!("HTTP command from {by} refused: it is for another service");
-                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()), code: Some("other-service") }));
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(OTHER_SERVICE_MESSAGE.into()), code: Some("other-service"), note: None }));
             }
         }
+    }
+    // OBS is the online stream: never switched from a desk in rehearsal (the host refuses it too).
+    if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_)) && in_rehearsal(state.live.current().as_deref()) {
+        return (StatusCode::FORBIDDEN, CommandResponse::refused(OBS_REHEARSAL_MESSAGE));
     }
     // From here one command at a time, so two desks pressing at once are checked one after the other.
     let _turn = state.gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if request.id.as_deref().is_some_and(|id| state.recent.seen(id)) {
-        log::info!("HTTP command {:?} already carried out (a retry); not repeated", request.command);
-        return (StatusCode::OK, Json(CommandResponse { success: true, error: None, code: None }));
+        log::info!("HTTP command {command:?} already carried out (a retry); not repeated");
+        return (StatusCode::OK, Json(CommandResponse { success: true, ..Default::default() }));
     }
     // Acting on what it saw (#196 R7): if someone changed that part of the service since, the desk
-    // looks again rather than undo or repeat their change.
-    let part = revision_part(&request.command);
+    // looks again rather than undo or repeat their change. A scene a desk edits is one such part.
+    let part = revision_part(&command);
     if let (Some(part), Some(seen)) = (part.as_deref(), request.seen.as_ref()) {
         if let (Some(sent), Some(now)) = (seen.get(part), state.live.revision(part)) {
             if *sent != now {
-                log::info!("HTTP command {:?} from {by} refused: {part} changed since (revision {sent}, now {now})", request.command);
-                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale") }));
+                log::info!("HTTP command {command:?} from {by} refused: {part} changed since (revision {sent}, now {now})");
+                return (StatusCode::CONFLICT, Json(CommandResponse { success: false, error: Some(STALE_MESSAGE.into()), code: Some("stale"), note: None }));
             }
         }
+    }
+    // A scene from a desk (#243 SC.16, SC.17): what its role may change, and the approval rule,
+    // against the host's scenes as it last published them.
+    // Only the fields a desk may send for a scene go on to the checks and the app.
+    if let RemoteCommand::SaveScene(sc) = &mut command {
+        crate::scene_edits::strip(&mut sc.scene);
+    }
+    let mut note = None;
+    let mut waits = false;
+    match crate::scene_edits::judge(state.live.current().as_deref(), role, &command) {
+        Err(r) => {
+            log::info!("HTTP scene change from {by} refused: {}", r.message);
+            let status = StatusCode::from_u16(r.status).unwrap_or(StatusCode::BAD_REQUEST);
+            let message = if r.code == "stale" { STALE_MESSAGE.to_string() } else { r.message };
+            return (status, Json(CommandResponse { success: false, error: Some(message), code: Some(r.code), note: None }));
+        }
+        Ok(Some(crate::scene_edits::Verdict::Request(why))) => {
+            match &mut command {
+                RemoteCommand::SaveScene(s) => s.request = true,
+                RemoteCommand::DeleteScene(d) => d.request = true,
+                _ => {}
+            }
+            waits = true;
+            note = Some(format!("Sent to the main desk to accept, because {why}"));
+        }
+        Ok(_) => {}
     }
     if let Some(id) = request.id.as_deref() {
         state.recent.first_time(id);
     }
-    if let Some(part) = part.as_deref() {
+    // A change that waits for the main desk has not changed the scene yet: another desk may still act on it.
+    if let Some(part) = part.as_deref().filter(|_| !waits) {
         state.live.bump(part);
     }
     let why = request.why.as_deref().map(|w| w.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect::<String>()).filter(|w| !w.is_empty());
-    let done = match (&request.command, why) {
-        (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&request.command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
-        _ => CommandDispatcher::dispatch_from(&request.command, &*state.sink, &by, by_id.as_deref()),
+    let done = match (&command, why) {
+        (RemoteCommand::NoticeAck(_), Some(why)) => CommandDispatcher::dispatch_from(&command, &WithWhy { inner: &*state.sink, why: &why }, &by, by_id.as_deref()),
+        _ => CommandDispatcher::dispatch_from(&command, &*state.sink, &by, by_id.as_deref()),
     };
     match done {
-        Ok(()) => (StatusCode::OK, Json(CommandResponse { success: true, error: None, code: None })),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(CommandResponse { success: false, error: Some(e.to_string()), code: None })),
+        Ok(()) => (StatusCode::OK, Json(CommandResponse { success: true, note, ..Default::default() })),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, CommandResponse::refused(e.to_string())),
     }
 }
 
@@ -1260,6 +1339,23 @@ impl CommandSink for WithWhy<'_> {
     }
 }
 
+/// Why a desk's role does not allow a command, in words for the person at that desk.
+fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
+    use crate::keys::Role;
+    match role {
+        Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
+        Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
+        Role::Screens => "this device runs the congregation screens: it may take, release, make and change scenes only",
+        Role::Worship => "this device runs worship: it may show songs and hymns and take the lyrics off and back only",
+        Role::Stage => "this device runs the stage: it may change the stage message only",
+        Role::Camera => "this device runs the cameras: it may hide or show a camera and change the camera boxes in scenes only",
+        Role::Obs => "this device is the OBS director: it may switch OBS scenes only",
+        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_)) => "only a desk the main desk made OBS director may switch OBS",
+        _ if matches!(cmd, RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_)) => "this device may present but not make or change scenes",
+        _ => "this device may present but not change settings",
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1277,6 +1373,8 @@ mod tests {
         commands: Mutex<Vec<String>>,
         /// The last production notice's event, as the app would receive it.
         notice: Mutex<Option<String>>,
+        /// The last scene change's event payload.
+        scene: Mutex<Option<String>>,
     }
 
     impl MockSink {
@@ -1284,6 +1382,7 @@ mod tests {
             Self {
                 commands: Mutex::new(Vec::new()),
                 notice: Mutex::new(None),
+                scene: Mutex::new(None),
             }
         }
 
@@ -1296,6 +1395,9 @@ mod tests {
         fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
             if event == "remote:notice_send" {
                 *self.notice.lock().unwrap() = Some(payload.to_string());
+            }
+            if event == "remote:save_scene" || event == "remote:delete_scene" {
+                *self.scene.lock().unwrap() = Some(payload.to_string());
             }
             // Commands only: the service log's record of each (remote:audit) is not a command.
             if event != "remote:audit" {
@@ -1960,6 +2062,69 @@ mod tests {
         assert!(raw_http_request_with(port, "POST", "/api/v1/command", Some(r#"{"command":"event_next"}"#), key).await.contains("200 OK"), "control given back");
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert_eq!(sink.command_count(), 4, "next, talk, notice, then event_next once given back");
+        let mut handle = result.handle;
+        handle.stop();
+    }
+
+    /// Scenes from a joined desk (#243 SC.16, SC.17): saved at once, sent to the main desk to accept,
+    /// or refused when made from an older copy; full scenes only for desks that change them.
+    #[tokio::test]
+    async fn a_desk_saves_scenes_through_the_host_with_its_revision() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("scr", "Screens desk", Role::Screens), entry("bib", "Bible desk", Role::Bible), entry("obs", "OBS desk", Role::Obs)] }));
+        let live = new_live_hub();
+        let state = |welcome: &str| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":false}},"scenes":[{{"id":"off","name":"{welcome}","onScreen":false,"layers":[]}},{{"id":"on","name":"Sermon","onScreen":true,"layers":[{{"id":"b","kind":"feed"}}]}}]}}"#);
+        live.publish(state("Welcome"));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |body: String, key: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(&body), key).await };
+        let scr = "X-Rhema-Key: scr\r\n";
+        let (off, on) = (live.revision("scene:off").unwrap(), live.revision("scene:on").unwrap());
+
+        let direct = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"off","name":"Welcome 2","layers":[]}}}},"seen":{{"scene:off":{off}}}}}"#), scr).await;
+        assert!(direct.contains("200 OK") && !direct.contains("note"), "{direct}");
+        let sent: serde_json::Value = serde_json::from_str(sink.scene.lock().unwrap().as_deref().unwrap()).unwrap();
+        assert_eq!((sent["request"].as_bool(), sent["by"].as_str(), sent["byId"].as_str()), (Some(false), Some("Screens desk"), Some(hash_key("scr").as_str())));
+        // A second desk still on the old copy is refused, as for any other command.
+        let stale = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"off","layers":[]}}}},"seen":{{"scene:off":{off}}}}}"#), scr).await;
+        assert!(stale.contains("409") && stale.contains(r#""code":"stale""#) && stale.contains("Someone changed this first"), "{stale}");
+        // The main desk saving the scene moves its revision too.
+        live.publish(state("Welcome 3"));
+        let now = live.revision("scene:off").unwrap();
+        assert!(now > off + 1, "the server's accept and the host's change");
+
+        let waits = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"on","name":"Sermon","layers":[]}},"request":false}},"seen":{{"scene:on":{on}}}}}"#), scr).await;
+        assert!(waits.contains("200 OK") && waits.contains("Sent to the main desk to accept, because that scene is on a screen"), "{waits}");
+        let sent: serde_json::Value = serde_json::from_str(sink.scene.lock().unwrap().as_deref().unwrap()).unwrap();
+        assert_eq!(sent["request"].as_bool(), Some(true), "a desk cannot say it needs no approval");
+        assert_eq!(live.revision("scene:on"), Some(on), "a change that waits has not changed the scene");
+
+        // A scene deleted on the main desk: a change from before is refused.
+        live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":false},"scenes":[]}"#.into());
+        let gone = send(format!(r#"{{"command":"save_scene","value":{{"scene":{{"id":"on","layers":[]}}}},"seen":{{"scene:on":{on}}}}}"#), scr).await;
+        assert!(gone.contains("409") && gone.contains(r#""code":"stale""#), "{gone}");
+        live.publish(state("Welcome"));
+        let bible = send(r#"{"command":"save_scene","value":{"scene":{"id":"n","layers":[]}}}"#.into(), "X-Rhema-Key: bib\r\n").await;
+        assert!(bible.contains("403") && bible.contains("activate, step and clear the Bible only"), "{bible}");
+
+        // The Bible desk gets each scene's name; the screens desk gets the whole scene to edit.
+        let read = |key: &'static str| async move { get_with(port, "/api/v1/live", key, None).await };
+        let b = read("X-Rhema-Key: bib\r\n").await;
+        assert!(b.contains("Sermon") && !b.contains("layers"), "{b}");
+        assert!(read(scr).await.contains(r#""layers""#));
+
+        // OBS through the host, never in rehearsal; and only for the OBS director.
+        assert!(send(r#"{"command":"obs_take"}"#.into(), "X-Rhema-Key: obs\r\n").await.contains("200 OK"));
+        assert!(send(r#"{"command":"obs_take"}"#.into(), scr).await.contains("403"));
+        live.publish(r#"{"v":1,"program":{"onAir":true,"rehearsal":true},"scenes":[]}"#.into());
+        let rehearsal = send(r#"{"command":"obs_program","value":"Wide"}"#.into(), "X-Rhema-Key: obs\r\n").await;
+        assert!(rehearsal.contains("403") && rehearsal.contains("Rehearsal is on"), "{rehearsal}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.command_count(), 3, "two scene saves and one OBS take reached the app");
         let mut handle = result.handle;
         handle.stop();
     }

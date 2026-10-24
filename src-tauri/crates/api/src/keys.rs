@@ -13,9 +13,13 @@ use crate::command::{same_key, RemoteCommand};
 
 /// What a key may do. `Present` is the volunteer's set (move through the
 /// service, show/hide, the event clock); `Configure` adds theme, opacity,
-/// confidence and the on-air switch; `Timekeeper` may only move the event
+/// confidence, the on-air switch and editing scenes; `Timekeeper` may only move the event
 /// clock, the service timer and a hold (Host/Join, ARCH-004), never a screen; `Bible` activates, steps and
-/// clears the Bible source only; `Screens` takes scenes to congregation outputs.
+/// clears the Bible source only; `Screens` takes, makes and changes congregation scenes. The
+/// specialist roles (#215 G10, #243 VL.5): `Worship` shows songs and hymns and takes the lyrics off
+/// and back; `Stage` writes the stage message; `Camera` hides a camera from scenes and changes the
+/// camera boxes of scenes; `Obs` (OBS director) switches OBS scenes through the host's OBS
+/// connection, which no other joined desk may do.
 /// Existing entries without a role are `Configure`, as before.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -26,10 +30,15 @@ pub enum Role {
     Timekeeper,
     Bible,
     Screens,
+    Worship,
+    Stage,
+    Camera,
+    Obs,
 }
 
 impl Role {
-    /// As saved and as notices address it: "present", "configure", "timekeeper", "bible", "screens".
+    /// As saved and as notices address it: "present", "configure", "timekeeper", "bible", "screens",
+    /// "worship", "stage", "camera", "obs".
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -38,7 +47,18 @@ impl Role {
             Role::Timekeeper => "timekeeper",
             Role::Bible => "bible",
             Role::Screens => "screens",
+            Role::Worship => "worship",
+            Role::Stage => "stage",
+            Role::Camera => "camera",
+            Role::Obs => "obs",
         }
+    }
+
+    /// Whether this desk may change scenes, and so gets their full definitions in the Live State:
+    /// the settings desk and the screens operator wholly, a camera desk its camera boxes only.
+    #[must_use]
+    pub fn edits_scenes(self) -> bool {
+        matches!(self, Role::Configure | Role::Screens | Role::Camera)
     }
 
     #[must_use]
@@ -48,11 +68,26 @@ impl Role {
             RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => true,
             RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => matches!(self, Role::Present | Role::Configure | Role::Timekeeper),
             RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
-            // Songs and hymns are the main screens' content: the Present desks only.
-            RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) => matches!(self, Role::Present | Role::Configure),
-            RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => matches!(self, Role::Present | Role::Configure) || (self == Role::Bible && id == "bible"),
+            // Songs and hymns are the main screens' content: the Present desks and the worship desk.
+            RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
+            RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => match self {
+                Role::Present | Role::Configure => true,
+                Role::Bible => id == "bible",
+                Role::Worship => id == "song" || id == "hymn",
+                Role::Stage => id == "stage",
+                // Hiding a camera from scenes (it is not framed yet) and showing it again.
+                Role::Camera => id.starts_with("camera:"),
+                _ => false,
+            },
             RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => matches!(self, Role::Present | Role::Configure | Role::Screens),
-            _ if matches!(self, Role::Timekeeper | Role::Bible | Role::Screens) => false,
+            // Making and changing scenes (#243 SC.16): the host still decides whether a change goes in
+            // at once or waits for the main desk (crate::scene_edits); a camera desk only its camera boxes.
+            RemoteCommand::SaveScene(_) => self.edits_scenes(),
+            RemoteCommand::DeleteScene(_) => matches!(self, Role::Configure | Role::Screens),
+            RemoteCommand::StageMessage(_) => matches!(self, Role::Present | Role::Configure | Role::Stage),
+            // OBS is the online stream: only a desk the main desk made OBS director switches it.
+            RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => self == Role::Obs,
+            _ if !matches!(self, Role::Present | Role::Configure) => false,
             RemoteCommand::Theme(_) | RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_) | RemoteCommand::OnAir(_) => self == Role::Configure,
             RemoteCommand::Next
             | RemoteCommand::Prev
@@ -341,6 +376,65 @@ mod tests {
             assert!(Role::Present.allows(&cmd) && Role::Configure.allows(&cmd), "{cmd}");
             assert!(!Role::Bible.allows(&cmd) && !Role::Screens.allows(&cmd) && !Role::Timekeeper.allows(&cmd), "{cmd}");
         }
+    }
+
+    #[test]
+    fn the_specialist_desks_do_only_their_part() {
+        let save = RemoteCommand::SaveScene(crate::command::SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false });
+        let delete = RemoteCommand::DeleteScene(crate::command::SceneDelete { id: "s1".into(), request: false });
+        let obs = [RemoteCommand::ObsPreview("Sermon".into()), RemoteCommand::ObsTake, RemoteCommand::ObsProgram("Wide".into())];
+        let take = RemoteCommand::TakeScene(crate::command::SceneTake { output: "main".into(), scene: "s".into() });
+        // Worship: songs and hymns, and taking the lyrics off and back; nothing else on a screen.
+        for cmd in [RemoteCommand::SongShow("Amazing Grace".into()), RemoteCommand::SongPreview("x".into()), RemoteCommand::ClearSource("song".into()), RemoteCommand::RestoreSource("hymn".into())] {
+            assert!(Role::Worship.allows(&cmd), "{cmd}");
+        }
+        for cmd in [RemoteCommand::ClearSource("bible".into()), RemoteCommand::BibleActivate("x".into()), RemoteCommand::Next, RemoteCommand::EventNext, take.clone(), save.clone(), RemoteCommand::StageMessage("x".into())] {
+            assert!(!Role::Worship.allows(&cmd), "{cmd}");
+        }
+        // Stage: the stage message only.
+        for cmd in [RemoteCommand::StageMessage("Wrap up".into()), RemoteCommand::ClearSource("stage".into()), RemoteCommand::RestoreSource("stage".into())] {
+            assert!(Role::Stage.allows(&cmd) && Role::Present.allows(&cmd) && Role::Configure.allows(&cmd), "{cmd}");
+        }
+        for cmd in [RemoteCommand::ClearSource("lowerThird".into()), RemoteCommand::SongShow("x".into()), RemoteCommand::Next, take.clone(), RemoteCommand::Hold(None)] {
+            assert!(!Role::Stage.allows(&cmd), "{cmd}");
+        }
+        assert!(!Role::Bible.allows(&RemoteCommand::StageMessage("x".into())) && !Role::Screens.allows(&RemoteCommand::StageMessage("x".into())));
+        // Camera: hide or show a camera in scenes, and the camera boxes of a scene (checked by the host).
+        for cmd in [RemoteCommand::ClearSource("camera:pulpit".into()), RemoteCommand::RestoreSource("camera:pulpit".into()), save.clone()] {
+            assert!(Role::Camera.allows(&cmd), "{cmd}");
+        }
+        for cmd in [delete.clone(), take.clone(), RemoteCommand::ClearSource("bible".into()), RemoteCommand::Next] {
+            assert!(!Role::Camera.allows(&cmd), "{cmd}");
+        }
+        // Scenes are made and changed by the screens and settings desks; never Present, Bible, Timekeeper.
+        for role in [Role::Screens, Role::Configure] {
+            assert!(role.allows(&save) && role.allows(&delete), "{role:?}");
+        }
+        for role in [Role::Present, Role::Bible, Role::Timekeeper, Role::Worship, Role::Stage, Role::Obs] {
+            assert!(!role.allows(&save) && !role.allows(&delete), "{role:?}");
+        }
+        // OBS: the OBS director only; not even the settings desk switches the stream from another computer.
+        for cmd in &obs {
+            assert!(Role::Obs.allows(cmd), "{cmd}");
+            for role in [Role::Present, Role::Configure, Role::Timekeeper, Role::Bible, Role::Screens, Role::Worship, Role::Stage, Role::Camera] {
+                assert!(!role.allows(cmd), "{role:?} {cmd}");
+            }
+        }
+        for cmd in [RemoteCommand::Next, take, RemoteCommand::BibleActivate("x".into()), RemoteCommand::OnAir(true), RemoteCommand::Macro("x".into())] {
+            assert!(!Role::Obs.allows(&cmd), "{cmd}");
+        }
+        // Everyone keeps the notices and the talk channel.
+        let notice = RemoteCommand::NoticeSend(crate::command::NoticeIn { text: "ready".into(), to: None, priority: None, event: None, action: None });
+        for role in [Role::Worship, Role::Stage, Role::Camera, Role::Obs] {
+            assert!(role.allows(&notice) && role.allows(&RemoteCommand::VoiceTalk(true)), "{role:?}");
+        }
+        for (role, name) in [(Role::Worship, "worship"), (Role::Stage, "stage"), (Role::Camera, "camera"), (Role::Obs, "obs")] {
+            assert_eq!(role.as_str(), name);
+            assert_eq!(serde_json::to_string(&role).unwrap(), format!("\"{name}\""));
+            assert_eq!(serde_json::from_str::<Role>(&format!("\"{name}\"")).unwrap(), role);
+        }
+        assert!(Role::Camera.edits_scenes() && Role::Screens.edits_scenes() && Role::Configure.edits_scenes());
+        assert!(!Role::Present.edits_scenes() && !Role::Bible.edits_scenes() && !Role::Obs.edits_scenes());
     }
 
     #[test]

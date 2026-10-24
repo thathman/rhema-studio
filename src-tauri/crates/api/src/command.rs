@@ -60,6 +60,18 @@ pub enum RemoteCommand {
     /// Put a scene on a congregation output, or send the output back to its own feed.
     TakeScene(SceneTake),
     ReleaseScene(String),
+    /// Make or change a scene from a joined desk (#243 SC.16): the whole scene as the desk has it.
+    /// The host checks the revision the desk saw, the desk's role and its approval rule
+    /// (`crate::scene_edits`), and makes it right with its own rules before it is saved.
+    SaveScene(SceneSave),
+    DeleteScene(SceneDelete),
+    /// The message on the stage display (one short line; "" clears it). Never the congregation.
+    StageMessage(String),
+    /// OBS through the host's own OBS connection (OBS director only): a scene to OBS's Preview,
+    /// Take the Preview, or (without Studio Mode) switch OBS's program. Never in rehearsal.
+    ObsPreview(String),
+    ObsTake,
+    ObsProgram(String),
     /// Rhema Comms (#251): a private production notice to everyone or a role, and its answer.
     /// The host stamps who sent it from the device's key; nothing here reaches a screen.
     NoticeSend(NoticeIn),
@@ -132,6 +144,34 @@ pub struct NoticeAckIn {
     pub state: String,
 }
 
+/// A scene sent from a joined desk to be saved: the scene, checked and made safe on the host. Like
+/// every command, it carries the revisions the desk saw (`seen`, "scene:<id>"), so a change made
+/// from an older copy is refused (`crate::http`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SceneSave {
+    pub scene: serde_json::Value,
+    /// Set by the host's server only, never by a desk: the change waits for the main desk to accept it.
+    #[serde(default, skip_deserializing)]
+    pub request: bool,
+}
+
+/// A scene to delete, by id.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SceneDelete {
+    pub id: String,
+    /// As for `SceneSave`: set by the host's server only.
+    #[serde(default, skip_deserializing)]
+    pub request: bool,
+}
+
+impl SceneSave {
+    /// The scene's id, as the desk sent it ("" when it has none).
+    #[must_use]
+    pub fn id(&self) -> &str {
+        self.scene.get("id").and_then(serde_json::Value::as_str).unwrap_or("")
+    }
+}
+
 /// Which scene goes on which output (ids, as the host's Live State lists them).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SceneTake {
@@ -184,6 +224,12 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
             RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
             RemoteCommand::ReleaseScene(o) => write!(f, "release_scene({o})"),
+            RemoteCommand::SaveScene(s) => write!(f, "save_scene({})", s.id()),
+            RemoteCommand::DeleteScene(d) => write!(f, "delete_scene({})", d.id),
+            RemoteCommand::StageMessage(m) => write!(f, "stage_message({m})"),
+            RemoteCommand::ObsPreview(scene) => write!(f, "obs_preview({scene})"),
+            RemoteCommand::ObsTake => write!(f, "obs_take"),
+            RemoteCommand::ObsProgram(scene) => write!(f, "obs_program({scene})"),
             RemoteCommand::NoticeSend(n) => write!(f, "notice_send(to {})", n.to.as_ref().map_or_else(|| "all".to_string(), ToString::to_string)),
             RemoteCommand::NoticeAck(a) => write!(f, "notice_ack({} {})", a.id, a.state),
             RemoteCommand::VoiceTalk(on) => write!(f, "voice_talk({on})"),
@@ -470,6 +516,12 @@ mod tests {
             RemoteCommand::RestoreSource("bible".into()),
             RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
             RemoteCommand::ReleaseScene("main".into()),
+            RemoteCommand::SaveScene(SceneSave { scene: serde_json::json!({ "id": "s1" }), request: false }),
+            RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false }),
+            RemoteCommand::StageMessage("Wrap up".into()),
+            RemoteCommand::ObsPreview("Sermon".into()),
+            RemoteCommand::ObsTake,
+            RemoteCommand::ObsProgram("Wide".into()),
             RemoteCommand::NoticeSend(NoticeIn { text: "Pulpit mic is ready".into(), to: None, priority: None, event: None, action: None }),
             RemoteCommand::NoticeAck(NoticeAckIn { id: "n1".into(), state: "seen".into() }),
             RemoteCommand::VoiceTalk(true),
@@ -496,11 +548,12 @@ mod tests {
                 RemoteCommand::AddToQueue => {}
                 RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => {}
                 RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
+                RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::StageMessage(_) | RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => {}
                 RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 37);
+        assert_eq!(cmds.len(), 43);
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#).unwrap(), RemoteCommand::TimerAdjust(1));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_start"}"#).unwrap(), RemoteCommand::TimerStart);
         let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
@@ -532,6 +585,23 @@ mod tests {
         assert_eq!(RemoteCommand::Hold(Some("tech".into())).to_string(), "hold(tech)");
         assert_eq!(RemoteCommand::Hold(None).to_string(), "hold");
         assert!(!RemoteCommand::Hold(None).is_comms() && !RemoteCommand::Resume.is_comms(), "a paused desk cannot hold the service");
+    }
+
+    #[test]
+    fn scene_edits_parse_and_a_desk_cannot_say_they_need_no_approval() {
+        let save: RemoteCommand = serde_json::from_str(r#"{"command":"save_scene","value":{"scene":{"id":"s1","name":"Sermon"},"request":false}}"#).unwrap();
+        let RemoteCommand::SaveScene(ref s) = save else { panic!("save_scene") };
+        assert_eq!((s.id(), s.request), ("s1", false));
+        let asked: RemoteCommand = serde_json::from_str(r#"{"command":"save_scene","value":{"scene":{"id":"s1"},"request":true}}"#).unwrap();
+        assert!(matches!(asked, RemoteCommand::SaveScene(SceneSave { request: false, .. })), "only the host's server sets request");
+        assert_eq!(save.to_string(), "save_scene(s1)");
+        let del: RemoteCommand = serde_json::from_str(r#"{"command":"delete_scene","value":{"id":"s1"}}"#).unwrap();
+        assert_eq!(del, RemoteCommand::DeleteScene(SceneDelete { id: "s1".into(), request: false }));
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"stage_message","value":"Wrap up"}"#).unwrap(), RemoteCommand::StageMessage("Wrap up".into()));
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_take"}"#).unwrap(), RemoteCommand::ObsTake);
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_preview","value":"Sermon"}"#).unwrap(), RemoteCommand::ObsPreview("Sermon".into()));
+        assert_eq!(RemoteCommand::ObsProgram("Wide".into()).to_string(), "obs_program(Wide)");
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"save_scene","value":{"name":"x"}}"#).is_err(), "a scene is needed");
     }
 
     #[test]

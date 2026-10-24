@@ -71,7 +71,7 @@ export function TeamWorkspace() {
               <input type="checkbox" className="mt-1" checked={requireApproval} onChange={(e) => useSettingsStore.getState().setRequireApproval(e.target.checked)} />
               <span>
                 Ask before showing an unapproved service
-                <span className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Take live asks first. Quick screens and rehearsal are never held.</span>
+                <span className="block text-xs text-muted-foreground">When the open service is not approved, or changed after approval, the first Take live asks first. Quick screens and rehearsal are never held. While this is on, a scene change from a joined desk also waits for the main desk to accept it.</span>
               </span>
             </label>
           </section>

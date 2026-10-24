@@ -5,6 +5,9 @@ import { NOTICE_TARGETS, TARGET_NAMES, canPreview, isFor, noteUnableReason, targ
 import { useSongStore } from "@/stores/song-store"
 
 const ANSWER_NAMES: Record<NoticeAnswer, string> = { seen: "Seen", ready: "Ready", unable: "Unable" }
+/** A scene change waiting for the main desk is answered Accepted (Ready) or Declined (Unable). */
+const SCENE_EDIT_ANSWERS: Record<NoticeAnswer, string> = { seen: "Seen", ready: "Accepted", unable: "Declined" }
+const answerName = (n: Notice, a: NoticeAnswer) => (n.action?.kind === "sceneEdit" ? SCENE_EDIT_ANSWERS : ANSWER_NAMES)[a]
 const ago = (at: number) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
 /** Songs and hymns in this computer's library whose title matches, for asking for one by title. */
@@ -64,6 +67,7 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
   const actionName = (a: NoticeAction) =>
     a.kind === "bible" || a.kind === "song" ? `Show ${a.value}`
       : a.kind === "camera" ? `Is ${a.value} framed?`
+        : a.kind === "sceneEdit" ? "Accept the scene change"
         : a.kind === "scene" ? `Take ${scenes.find((s) => s.id === a.value)?.name ?? "the scene"}`
           : `Start ${rundown.find((r) => r.id === a.value)?.reference ?? "the item"}`
   const mine = notices.filter((n) => role === "host" || isFor(n, role, me) || n.from === me)
@@ -162,17 +166,18 @@ export function NoticesPanel({ notices, role, me, onSend, onAnswer, onAction, ev
               </div>
               <p className="text-sm">{n.text}</p>
               {n.action && (!forMe || n.action.kind === "camera") && <p className="text-muted-foreground">Asks: {actionName(n.action)}{forMe ? " Answer Ready when it is, or Unable." : ""}</p>}
-              {n.answers.length > 0 && <p className="text-muted-foreground">{n.answers.map((a) => `${a.by}: ${ANSWER_NAMES[a.state]}`).join(" · ")}</p>}
+              {n.answers.length > 0 && <p className="text-muted-foreground">{n.answers.map((a) => `${a.by}: ${answerName(n, a.state)}`).join(" · ")}</p>}
               {/* Whoever sent it sees why each Unable could not be done, in the answering desk's words. */}
               {!forMe && n.answers.filter((a) => a.state === "unable" && a.why).map((a) => <p key={a.by} role="alert" className="text-destructive">{a.by} could not do it: {a.why}</p>)}
               {forMe && failed[n.id] && <p role="alert" className="text-destructive">{failed[n.id]}. Answered Unable.</p>}
-              {forMe && (
+              {forMe && !(n.action?.kind === "sceneEdit" && answered && answered.state !== "seen") && (
                 <div role="group" aria-label={`Answer ${n.from}`} className="flex flex-wrap gap-1">
                   {n.action && n.action.kind !== "camera" && <Button size="xs" disabled={busy === n.id} onClick={() => void act(n, "show")}>{actionName(n.action)}</Button>}
                   {/* Preview only: the main desk's Preview, nothing goes live. */}
                   {n.action && canPreview(n.action) && <Button size="xs" variant="outline" disabled={busy === n.id} aria-label={`Preview ${n.action.value}`} title="Put it in the main desk's Preview only: nothing goes live" onClick={() => void act(n, "preview")}>Preview</Button>}
-                  {(["seen", "ready", "unable"] as const).map((s) => (
-                    <Button key={s} size="xs" variant={answered?.state === s ? "default" : "outline"} onClick={() => onAnswer(n.id, s)}>{ANSWER_NAMES[s]}</Button>
+                  {/* A scene change is accepted with its own button (above) or declined: no bare Ready. */}
+                  {(n.action?.kind === "sceneEdit" ? (["unable"] as const) : (["seen", "ready", "unable"] as const)).map((s) => (
+                    <Button key={s} size="xs" variant={answered?.state === s ? "default" : "outline"} onClick={() => onAnswer(n.id, s)}>{n.action?.kind === "sceneEdit" ? "Decline" : ANSWER_NAMES[s]}</Button>
                   ))}
                 </div>
               )}
