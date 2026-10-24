@@ -12,20 +12,20 @@ function fakeStorage(initial: Record<string, string> = {}): StorageLike & { map:
 
 describe("shell prefs", () => {
   it("defaults to home + standard with no storage", () => {
-    expect(readShellPrefs(null)).toEqual({ workspace: "home", presentView: "standard" })
+    expect(readShellPrefs(null)).toEqual({ workspace: "home", presentView: "standard", sidebarCollapsed: false })
   })
 
   it("round-trips through storage", () => {
     const s = fakeStorage()
-    writeShellPrefs(s, { workspace: "present", presentView: "production" })
-    expect(readShellPrefs(s)).toEqual({ workspace: "present", presentView: "production" })
+    writeShellPrefs(s, { workspace: "present", presentView: "production", sidebarCollapsed: true })
+    expect(readShellPrefs(s)).toEqual({ workspace: "present", presentView: "production", sidebarCollapsed: true })
   })
 
   it("reopens on Production; More (no way in since #218) reopens on Home", () => {
     const s = fakeStorage()
-    writeShellPrefs(s, { workspace: "production", presentView: "standard" })
+    writeShellPrefs(s, { workspace: "production", presentView: "standard", sidebarCollapsed: false })
     expect(readShellPrefs(s).workspace).toBe("production")
-    writeShellPrefs(s, { workspace: "more", presentView: "standard" })
+    writeShellPrefs(s, { workspace: "more", presentView: "standard", sidebarCollapsed: false })
     expect(readShellPrefs(s).workspace).toBe("home")
   })
 
@@ -33,12 +33,19 @@ describe("shell prefs", () => {
     const s = fakeStorage({
       [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "nope", presentView: "production" }),
     })
-    expect(readShellPrefs(s)).toEqual({ workspace: "home", presentView: "production" })
+    expect(readShellPrefs(s)).toEqual({ workspace: "home", presentView: "production", sidebarCollapsed: false })
+  })
+
+  it("prefs saved before the sidebar could fold open expanded; a bad value does too (#299)", () => {
+    const old = fakeStorage({ [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "present", presentView: "standard" }) })
+    expect(readShellPrefs(old)).toEqual({ workspace: "present", presentView: "standard", sidebarCollapsed: false })
+    const bad = fakeStorage({ [SHELL_PREFS_KEY]: JSON.stringify({ workspace: "present", presentView: "standard", sidebarCollapsed: "yes" }) })
+    expect(readShellPrefs(bad).sidebarCollapsed).toBe(false)
   })
 
   it("survives corrupt JSON", () => {
     const s = fakeStorage({ [SHELL_PREFS_KEY]: "{not json" })
-    expect(readShellPrefs(s)).toEqual({ workspace: "home", presentView: "standard" })
+    expect(readShellPrefs(s)).toEqual({ workspace: "home", presentView: "standard", sidebarCollapsed: false })
   })
 })
 

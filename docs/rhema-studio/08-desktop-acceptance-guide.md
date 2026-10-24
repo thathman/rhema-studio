@@ -981,6 +981,17 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10ea. Collapsible sidebar (#299)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ea.1 | Window wider than 1180 px. Click **Collapse** at the foot of the sidebar (just above your name). | The sidebar folds to icons in a short slide; the page widens by the same amount and nothing else moves. The button now shows the open-panel icon and its tooltip reads "Expand sidebar (⌘B / Ctrl+B)". | Unverified |
+| 10ea.2 | Folded: hover or Tab to each icon, then the avatar. | Each icon shows its name and keys in a tooltip to its right (e.g. "Library (⌘4 / Ctrl+4)"); the focus ring is visible; the avatar opens the Desk menu beside the sidebar. | Unverified |
+| 10ea.3 | Quit and reopen Rhema. | The sidebar is still folded. Press ⌘B (Ctrl+B on Windows): it opens out with labels. Press again: folded. | Unverified |
+| 10ea.4 | Folded, go to Present with something live; press ⌘B twice. Open a dialog (Desk menu → Keyboard shortcuts) and press ⌘B. | The live console only widens and narrows with the sidebar, nothing overlaps it; the live dot stays on the Present icon. With a dialog open ⌘B does nothing. | Unverified |
+| 10ea.5 | Expanded, drag the window narrower than 1180 px, then wider again. | Narrow: icons only and the Collapse button is hidden (⌘B does nothing); wide again: the labels come back, as chosen. | Unverified |
+| 10ea.6 | macOS System Settings → Accessibility → Display → Reduce motion on; fold and open the sidebar. | It changes at once, no slide. | Unverified |
+
 ### 10dx. Church colours on library looks, language filter, ready-made feeds (#299)
 
 | # | Step | Expected | Result |

@@ -85,18 +85,18 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
             aria-label={`Your desk: ${label}, ${role}`}
             title={`${label} · ${role}`}
             className={cn(
-              "mt-1.5 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left outline-none hover:bg-sidebar-hover focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 max-[1180px]:justify-center max-[1180px]:px-0",
+              "mt-1.5 flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left outline-none hover:bg-sidebar-hover focus-visible:ring-3 focus-visible:ring-sidebar-ring/60 compact:justify-center compact:px-0",
               (active || open) && "bg-sidebar-accent",
             )}
           >
             <span aria-hidden className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#e6f0eb] text-xs font-bold text-[#28685f]">
               {initials(name) || <UserRoundIcon className="size-4" />}
             </span>
-            <span className="flex min-w-0 flex-1 flex-col max-[1180px]:sr-only">
+            <span className="flex min-w-0 flex-1 flex-col compact:sr-only">
               <span className={cn("truncate text-xs font-semibold", name ? "text-[#f2f6f3]" : "text-[#a7c9ba]")}>{label}</span>
               <span className="truncate text-[0.6875rem] text-[#8d9ab2]">{role}</span>
             </span>
-            <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-[#8d9ab2] max-[1180px]:hidden" />
+            <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-[#8d9ab2] compact:hidden" />
           </button>
         </PopoverTrigger>
         <PopoverContent

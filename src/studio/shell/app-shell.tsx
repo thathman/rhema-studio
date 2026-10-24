@@ -129,7 +129,7 @@ export function AppShell() {
     })
   }, [])
 
-  // Cmd/Ctrl+1..7 go to a place from anywhere; Cmd/Ctrl+, opens Settings.
+  // Cmd/Ctrl+1..8 go to a place from anywhere; Cmd/Ctrl+, opens Settings. (Cmd/Ctrl+B is the sidebar's own.)
   useEffect(() => {
     const items: NavItem[] = [...WORKSPACE_ITEMS, ...church]
     const onKey = (e: KeyboardEvent) => {

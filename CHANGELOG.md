@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Fold the sidebar to icons (#299)
+- A **Collapse** button above your name at the foot of the sidebar folds it to icons only, giving the page more room; the same button (or **⌘B / Ctrl+B**) opens it out again.
+- Folded, each icon shows its name in a tooltip, and your desk is just your initials with the same menu.
+- Rhema remembers the choice on this computer. A narrow window shows icons only, as before, whatever you chose.
+
 ### Church colours on library looks, a language filter, ready-made feeds (#299)
 - Design → Library: **Use with church colours** adds a copy of a look in your Brand Kit's colours and fonts. The library look and every look a screen uses stay as they were. If your colour would be hard to read on that look, the copy keeps the look's own colour and the message says so.
 - Before the Brand Kit has your colours, the button says where to set them (Design → Brand Kit).
