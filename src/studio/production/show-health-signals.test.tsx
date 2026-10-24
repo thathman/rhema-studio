@@ -87,7 +87,7 @@ describe("Show health: cameras and Google TVs (#213)", () => {
     const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
     await flush()
     expect(el.querySelector('[aria-label="Needs attention"]')).toBeNull()
-    expect(el.querySelector('li[aria-label="Pulpit"]')?.textContent).toContain("Sending (H264) · watched by 3 screens or programs")
+    expect(el.querySelector('li[aria-label="Pulpit"]')?.textContent).toContain("Sending (H264) · fps: no Rhema screen plays it now · watched by 3 screens or programs")
     expect(el.querySelector('li[aria-label="Foyer TV"]')?.textContent).toContain("2 screens showing the latest")
   })
 
@@ -109,12 +109,22 @@ describe("Show health: cameras and Google TVs (#213)", () => {
   })
 
   it("stops asking when Production, Present and Home are all closed", async () => {
+    useBroadcastStore.setState({ outputStatus: { foyer: { previewOpen: false, ndiActive: false, feedActive: true } } })
     await mount(<SignalWatch />)
     expect(calls.some((c) => c.cmd === "camera_router_status")).toBe(true)
     await act(async () => useShellStore.setState({ workspace: "library" }))
     calls.length = 0
     await act(async () => { await new Promise((r) => setTimeout(r, 2200)) })
     expect(calls.filter((c) => c.cmd === "camera_router_status" || c.cmd === "feed_status")).toEqual([])
+  })
+
+  it("keeps asking the router while a scene with a camera is on air, wherever the operator is (#213)", async () => {
+    await mount(<SignalWatch />)
+    await act(async () => useShellStore.setState({ workspace: "library" }))
+    calls.length = 0
+    await act(async () => { await new Promise((r) => setTimeout(r, 2200)) })
+    expect(calls.some((c) => c.cmd === "camera_router_status")).toBe(true)
+    expect(calls.some((c) => c.cmd === "feed_status")).toBe(false)
   })
 })
 

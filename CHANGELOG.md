@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Cameras: what really arrives and what each screen really shows, and recovery controls (#213, #208)
+- Connected is no longer counted as working. Production → Cameras and Show health show each camera's picture size, its rate in Mbit/s, and the frames a second Rhema's own screens and TVs really show. A camera the router still has but that sends nothing for more than 3 seconds shows **Frozen** (with how long nothing has arrived), and its screens show the camera's fallback (colour bars, static, words) instead of a still picture passed off as live.
+- Each Google TV and browser page that plays a camera reports how it plays it: Show health says, for example, "Foyer TV: pulpit camera 29.8 fps, 0.2% dropped", and lists a screen that is dropping frames, showing too few, or getting no new frame.
+- Recovery controls for each camera (Production → Cameras and Show health): **Retry** (every screen and TV connects to it again), **Switch to backup** (choose a backup camera in Cameras; its scenes play that one until **Back to …**), and **Freeze** (the screens hold the last frame until **Unfreeze**). They are logged with who and when, like any live source, and do nothing in rehearsal.
+- Each output can choose its own **When a camera isn't sending** (Edit output): as each scene says, colour bars, TV static, words, nothing, or **another camera** that steps in while the scene's camera is down and that one sends.
+- **Camera follows OBS**: an output whose scene plays the camera now on OBS's program says so (from OBS on this computer and from OBS companions). Information only; Rhema changes nothing in OBS.
 ### Rhema Studio Companion: a small app for the OBS computer (#209)
 - **Rhema Studio Companion** (1.0.0.0) is a separate small app for a computer that runs OBS only, Windows first, Mac too: the same companion screen as OBS companion mode, without installing the whole studio (no speech, Bible, NDI or models).
 - It joins the main computer only over its secure page. Before you join it shows the main computer's certificate, which the main computer now shows in Settings → Remote control; after pairing it talks to no other computer.

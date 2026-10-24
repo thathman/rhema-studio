@@ -15,7 +15,8 @@ import { capacityLimits, useMachineInfo } from "@/lib/capacity"
 import { readMbps, WIFI_COMFORT_MBPS } from "@/lib/obs-companion"
 import { cameraMeasures } from "@/lib/show-health"
 import { measuredFps, playbackWords } from "@/lib/camera-playback"
-import { CameraControls, useObsProgramCameras, useScreenPlayback } from "@/studio/production/camera-controls"
+import { CameraControls } from "@/studio/production/camera-controls"
+import { useObsProgramCameras, useScreenPlayback } from "@/studio/production/camera-hooks"
 
 interface HttpStatus {
   running: boolean

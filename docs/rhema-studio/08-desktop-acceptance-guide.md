@@ -1418,6 +1418,23 @@ The host with a saved service (a main service with a start time, Welcome 5, Serm
 | 10fa.9 | Optional, long: run a service for more than an hour with Remote presses or verse steps every few seconds (or leave a joined Bible desk stepping), past 2000 log lines (Keep log shows the count). Open Prepare → Run of show. | The first items still show their actual start and Done, never Skipped; the expected end has not jumped. | Unverified |
 | 10fa.10 | Mid-service, with an item running, set the Mac's clock 1 minute ahead (System Settings → Date & Time, automatic off), wait 2 minutes, put it right again. Then force-quit Rhema (Activity Monitor → Force Quit), open it again and accept the kept log. | The service log comes back with "Service log kept from before Rhema closed unexpectedly". Run of show: the item that was running across the clock change shows the same time on air it had before the force-quit (not a minute more or less). | Unverified |
 
+### 10fl. Camera signal truth: frozen cameras, frames each screen shows, recovery controls (#213, #208)
+
+One Mac with a projector output, a browser feed on a Google TV, the camera router on and two phone cameras ("Pulpit", "Choir") sending. A scene "Sermon" with the Pulpit camera full screen, on the projector and the TV feed. OBS on this computer with a Media Source reading Pulpit (its RTSP address) for 10fl.9.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fl.1 | Production → Cameras, with both phones sending. | Each card says **Sending** with the picture size, Mbit/s and "NN fps on the screens"; Pulpit lists each screen ("Projector (this computer): 29.9 fps, 0% dropped, 1920×1080", the TV by its name). | Unverified |
+| 10fl.2 | On the Pulpit phone, leave the app connected but stop the picture (lock the screen or cover the camera app so it stops sending; for Rhema Camera, background it). | Within about 4 s Pulpit's card says **Frozen** "Connected, but nothing has arrived for N s"; Show health lists "Pulpit camera is frozen (connected, but nothing arriving); "Sermon" on … shows colour bars there", and the projector and TV show the scene's fallback, not a still picture. When it sends again the picture returns. | Unverified |
+| 10fl.3 | Production → Show health → Browser feeds and Google TVs. | Under the TV feed: "<TV name> (<feed>): pulpit camera 29.8 fps, 0.2% dropped" (numbers as measured), updating every few seconds. | Unverified |
+| 10fl.4 | Cameras → Pulpit → **Retry**. | Every screen and the TV reconnect to Pulpit (a brief fallback, then the picture within a few seconds); the router log shows new readers. | Unverified |
+| 10fl.5 | Pulpit → Backup camera: **Choir**; press **Switch to backup (Choir)**. Then **Back to Pulpit**. | The projector and TV show Choir in Pulpit's place at once; Show health shows "On backup: Choir". Back returns Pulpit. Present → Sources shows who did it and when on the Pulpit chip. | Unverified |
+| 10fl.6 | Pulpit → **Freeze**, wait 10 s, then **Unfreeze**. | The projector and TV hold the last frame (Show health "Frozen by the operator: holding the last frame", no attention item); Unfreeze shows live again. | Unverified |
+| 10fl.7 | Turn on Rehearsal; try Retry, Switch to backup and Freeze. | The buttons are disabled ("Rehearsal is on…"); the real screens do not change. | Unverified |
+| 10fl.8 | Edit the TV feed output → **When a camera isn't sending**: **Another camera** → Choir. Stop the Pulpit phone. Then choose **Words** "Back shortly" instead. | The TV shows Choir while Pulpit is down (the projector keeps the scene's own fallback); when Pulpit sends again the TV goes back to Pulpit. With Words, the TV shows "Back shortly" while Pulpit is down. | Unverified |
+| 10fl.9 | OBS: put the scene with the Pulpit Media Source on program; then another scene. | Show health → Screens → the projector's card: **Camera follows OBS** "Pulpit is on OBS's program too"; Cameras → Pulpit shows **On OBS**. After switching OBS away (within 10 s), the label goes. Nothing in OBS is changed by Rhema. | Unverified |
+| 10fl.10 | Leave Production for Library with "Sermon" on air, stop the Pulpit phone's picture as in 10fl.2. | The screens still show the fallback within a few seconds (the router is watched while a camera scene is on air). | Unverified |
+
 ### 10fh. Countdown display (owner request)
 
 A saved service with a main service start time and items with planned minutes (Welcome 5, Sermon 30). One stage output on a second screen (or an NDI viewer), and for 10fh.8 a Google TV or a browser on another computer.
