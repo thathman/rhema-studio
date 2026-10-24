@@ -246,6 +246,7 @@ export function useRemoteControl() {
     // changes, not a timer: a hidden or covered window slows timers to about once a minute),
     // and every few seconds anyway in case the server restarted.
     const unsubscribe = [useBroadcastStore, useQueueStore, useApprovalGateStore, useSettingsStore].map((store) => store.subscribe(() => syncStatusSnapshot()))
+    unsubscribe.push(useSettingsStore.subscribe(syncHostName))
     const statusInterval = setInterval(() => {
       syncStatusSnapshot(true)
     }, 5000)
@@ -311,7 +312,19 @@ function parsePayload(raw: unknown): Record<string, unknown> | null {
   return null
 }
 
+let lastHostName: string | null = null
+/** The church name (Brand Kit) this computer announces itself by when it hosts (#197). */
+function syncHostName() {
+  const name = useSettingsStore.getState().brandKit.churchName.trim()
+  if (name === lastHostName) return
+  lastHostName = name
+  invoke("host_set_name", { name }).catch(() => {
+    // An older backend: the host is announced by this computer's name.
+  })
+}
+
 export async function restartRemoteListeners(): Promise<void> {
+  syncHostName()
   const settings = useSettingsStore.getState()
   const { osc, http, oscPort, httpPort, lan, https } = settings.remoteListeners
   if (!osc && !http) return

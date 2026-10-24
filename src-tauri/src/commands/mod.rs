@@ -9,6 +9,7 @@ pub mod content;
 pub mod detection;
 pub mod diagnostics;
 pub mod fonts;
+pub mod host_advert;
 pub mod join;
 pub mod media;
 pub mod remote;
