@@ -4,6 +4,9 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Smoother scene tickers on Google TV browser feeds (#198)
+- A scene's Ticker layer on a browser feed (a Google TV, a TV browser, OBS Browser source) now crawls on its own strip, so the rest of the picture is no longer redrawn 60 times a second. Cameras and the ticker should stay smooth together on a Chromecast with Google TV, as the full-screen ticker already does.
+- It looks exactly as before. A ticker layer that has another layer over it (a logo, a picture, a lower third that is up) is still drawn in the picture, in its place, so nothing changes order; the smooth strip is used when nothing sits on top of the ticker's box.
 ### Fold the sidebar to icons (#299)
 - A **Collapse** button above your name at the foot of the sidebar folds it to icons only, giving the page more room; the same button (or **⌘B / Ctrl+B**) opens it out again.
 - Folded, each icon shows its name in a tooltip, and your desk is just your initials with the same menu.

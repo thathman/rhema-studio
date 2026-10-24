@@ -981,6 +981,19 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10eb. Scene ticker layers smooth on a Google TV (#198)
+
+Measure on the Chromecast with Google TV (Rhema Receiver debug build, adb connected): `adb shell dumpsys gfxinfo com.openbezal.rhema.receiver reset`, watch for 30 s, then `adb shell dumpsys gfxinfo com.openbezal.rhema.receiver` (Janky frames %, 90th/99th percentile); decoded/dropped fps from the WebView's WebRTC stats (`chrome://inspect` → the receiver page → `chrome://webrtc-internals`, or `getStats()` on the camera's peer connection: `framesPerSecond`, `framesDropped`, `jitterBufferDelay`). Compare with 10dh.8 (0.3 % janky, 30 fps, 0 dropped). Use the package name the receiver was installed with if it differs.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10eb.1 | A browser feed on the TV with a scene: a full-screen camera and a **Ticker** layer along the bottom (nothing over it); start the ticker. Measure 30 s. | The ticker crawls smoothly in its box and looks as it did before (band, tag, words, speed). Janky frames about 1 % or less (not the ~50 % of a whole-picture redraw); camera 30 fps decoded, none dropped. | Unverified |
+| 10eb.2 | Same scene, the Ticker layer at 60 % opacity. | The camera shows through the band as on the output window; still smooth (as 10eb.1). | Unverified |
+| 10eb.3 | Move a **Logo** layer over the ticker's box (above it in the layer list). Measure 30 s. | The logo is drawn over the ticker (correct order). The whole picture redraws again here, so janky % may rise; note the number. Move the logo away: back to 10eb.1's numbers. | Unverified |
+| 10eb.4 | Scene with a camera and a Ticker layer, plus a Lower third layer; put a lower third up, then take it down. Also try a lower third with the scene owning only the ticker. | The lower third comes in over the ticker if its box is above; while it is up the ticker is drawn in the picture (correct order); after it goes, the ticker is smooth again. | Unverified |
+| 10eb.5 | Two scenes with a 1 s fade, both with a Ticker layer; Take one, then the other. | The ticker fades out and in with the picture (no ticker jumping on top or vanishing early); after the fade it is smooth again. | Unverified |
+| 10eb.6 | Pause the ticker (Present → Ticker), then resume. Then an output window and NDI feed with the same scene. | Paused: the band stays still and the TV's WebView CPU drops; resumed: it crawls from where it should. The output window and NDI look exactly as before this change. | Unverified |
+| 10eb.7 | OBS Browser source with the same feed, then the TV rotated through a resize (or a different TV size). | The strip stays exactly over the ticker's box at every size. | Unverified |
 ### 10ea. Collapsible sidebar (#299)
 
 | # | Step | Expected | Result |

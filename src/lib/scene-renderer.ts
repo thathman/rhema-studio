@@ -19,15 +19,30 @@ export interface SceneDrawOptions {
   camera?: (layerId: string) => HTMLVideoElement | null
   /** The page shows this playing camera itself, under the canvas: leave its box see-through. */
   cameraBelow?: (layerId: string) => boolean
+  /** The page draws this ticker layer itself, on a strip over the canvas: leave it out here. */
+  tickerAbove?: (layerId: string) => boolean
   /** The ticker's looping video backing, where one plays. */
   tickerVideo?: HTMLVideoElement | null
   /** The lower third's looping video backing, where one plays. */
   lowerThirdVideo?: HTMLVideoElement | null
 }
 
-/** Something in the scene moves by itself: a ticker running in its box, or a lower third coming in. */
-export function sceneMoving(frame: SceneFrame | undefined, now: number): boolean {
-  return !!frame?.layers.some((l) => (l.kind === "ticker" && !!l.ticker && !l.ticker.pausedAt) || (l.kind === "lowerThird" && !!l.overlay && entranceProgress(l.overlay, now) < 1))
+/**
+ * Something in the scene moves by itself: a ticker running in its box, or a lower third coming in.
+ * `skip`: layers drawn somewhere else (a browser feed's ticker strips), which do not count.
+ */
+export function sceneMoving(frame: SceneFrame | undefined, now: number, skip?: (layerId: string) => boolean): boolean {
+  return !!frame?.layers.some((l) => !skip?.(l.id) && ((l.kind === "ticker" && !!l.ticker && !l.ticker.pausedAt) || (l.kind === "lowerThird" && !!l.overlay && entranceProgress(l.overlay, now) < 1)))
+}
+
+/**
+ * A ticker layer's band, painted into a w×h box as if the box were the whole frame (`frameHeight`
+ * high): the band fills it and the words move at the speed they have over the whole frame.
+ */
+export function drawTickerLayer(c: CanvasRenderingContext2D, w: number, h: number, l: SceneLayerFrame, frameHeight: number, opts: { imageCache?: Map<string, HTMLImageElement>; video?: HTMLVideoElement | null; now: number }): void {
+  const tk = l.ticker
+  if (!tk) return
+  drawTicker(c, w, h, { ...tk, style: { ...tk.style, position: "top", height: 100, speed: (tk.style.speed * frameHeight) / Math.max(1, h) } }, l.fontFamily, { imageCache: opts.imageCache, video: opts.video ?? null, now: opts.now })
 }
 
 /** The ticker a scene draws in a box of its own (for its video or picture backing), or null. */
@@ -144,11 +159,9 @@ export function drawScene(ctx: CanvasRenderingContext2D, width: number, height: 
         const w = s.sw * scale, h = s.sh * scale
         ctx.drawImage(img, s.sx, s.sy, s.sw, s.sh, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2, w, h)
       }
-    } else if (l.kind === "ticker" && l.ticker) {
-      // The band fills its box; the words move at the speed they have over the whole frame.
-      const tk = l.ticker
+    } else if (l.kind === "ticker" && l.ticker && !opts.tickerAbove?.(l.id)) {
       const now = opts.now ?? Date.now()
-      inBox(ctx, l, r, opts, (c, w, h) => drawTicker(c, w, h, { ...tk, style: { ...tk.style, position: "top", height: 100, speed: (tk.style.speed * height) / Math.max(1, h) } }, l.fontFamily, { imageCache: opts.imageCache, video: opts.tickerVideo ?? null, now }))
+      inBox(ctx, l, r, opts, (c, w, h) => drawTickerLayer(c, w, h, l, height, { imageCache: opts.imageCache, video: opts.tickerVideo, now }))
     } else if (l.kind === "lowerThird" && l.overlay) {
       // Laid out in its box as it would be on a frame of that size.
       const lt = l.overlay
