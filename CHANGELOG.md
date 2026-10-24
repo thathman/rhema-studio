@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Two desks pressing at once; reasons for Unable; a long service's log (#196, #251)
+- When two joined desks act on the same thing at once (both take a scene on the same screen, one takes while the other clears, one holds while the other resumes, the timer, the event clock or a live source such as the ticker), the main computer carries out the first and refuses the other: that desk shows **Someone changed this first — look again**, and its view already shows what changed. Phones, Stream Decks and older desks work as before.
+- A refusal on a joined desk now stays until its next command, instead of disappearing within 2 seconds.
+- When a desk cannot do what a notice asked (the verse is not there, the main desk refused it), its **Unable** answer now says why, and whoever sent the notice sees it: "Ade could not do it: …".
+- A long, busy service no longer loses its first items' times once the service log is full (they showed as Skipped), and after Rhema closes unexpectedly an item's time no longer changes if the computer's clock was corrected during the service.
+
 ### People on each item; the two programs named in Production (#299, #215)
 - An item in Prepare can now have several **People** preparing it, as chips: type a name and press Enter (or paste "Tolu, Ade"); names already on the service and the desk's own name are offered. The rundown shows the first and how many more ("· Tolu +2"), and **Run of show** has a People column. An older item's "prepared by" name shows as its one person, and older Rhema builds still see the names as one "prepared by" line.
 - Production now names the two programs the same way everywhere: **Online program (OBS, 720p30)** on the OBS tab and **Congregation program (screens, 1080p)** on Programs and on each congregation output's card in Screens. The format is OBS's real output size and frame rate once OBS is connected, and the congregation NDI outputs' own size and frame rate; otherwise the usual one.
