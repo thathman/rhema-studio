@@ -1,7 +1,7 @@
-import { LockIcon } from "lucide-react"
+import { LockIcon, PinIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useQueueStore } from "@/stores"
-import { cuesheet } from "@/lib/cuesheet"
+import { cuesheet, pauseWords } from "@/lib/cuesheet"
 import { mmss } from "@/lib/journal"
 import { clockText } from "@/lib/run-of-show"
 import { formatMinutes } from "@/lib/service-timing"
@@ -16,7 +16,8 @@ const STATUS = { done: "Done", live: "On now", upcoming: "", skipped: "Skipped" 
 /**
  * The run of show as a cuesheet (#196): plan, actual, expected and offset side by side for every
  * item of the main service, the time typed in place. The plan changes only when a time is typed;
- * running late moves what is expected.
+ * running late moves what is expected. A fixed start has a pin; a pause before an item is its own
+ * thin row with how much lateness it takes up.
  */
 export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useQueueStore((s) => s.items)
@@ -30,7 +31,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Run of show</DialogTitle>
-          <DialogDescription>The plan, what happened and what is now expected. Typing a time changes the plan; running late moves only what is expected.</DialogDescription>
+          <DialogDescription>The plan, what happened and what is now expected. Typing a time changes the plan; running late moves only what is expected. A pinned item has a fixed start: it keeps its time, and ±5 min does not move it. A pause takes up lateness before anything after it moves.</DialogDescription>
         </DialogHeader>
         {!timing ? (
           <p className="text-sm text-muted-foreground">Set the main service's start time to see the run of show.</p>
@@ -55,10 +56,18 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                       <td className={td}>ends {wallClock(r.expectedEnd)}</td>
                       <td colSpan={3} />
                     </tr>
+                  ) : r.kind === "gap" ? (
+                    <GapRow key={r.id} minutes={r.minutes} absorbed={r.absorbedMinutes} beforeFixed={r.beforeFixed} />
                   ) : (
                     <tr key={r.event.id} className={cn("border-t border-border/60", r.event.state === "live" && "bg-primary/10", r.event.state === "skipped" && "text-muted-foreground")}>
                       <td className="max-w-56 truncate px-2 py-1">{r.event.label}</td>
-                      <td className={td}>{wallClock(r.event.plannedStart)}</td>
+                      <td className={td}>
+                        {r.event.fixedStart !== null ? (
+                          <span className="inline-flex items-center gap-1" title="A fixed start: it keeps this time whatever runs before it">
+                            <PinIcon className="size-3" aria-label="Fixed start" />{wallClock(r.event.plannedStart)}
+                          </span>
+                        ) : wallClock(r.event.plannedStart)}
+                      </td>
                       <td className={td}>{wallClock(r.event.plannedEnd)}</td>
                       <td className="px-2 py-1">
                         <DurationInput
@@ -77,7 +86,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                           </span>
                         )}
                       </td>
-                      <td className={cn("px-2 py-1", r.event.squeezed && "font-semibold text-destructive")}>{r.event.squeezed ? "Cut short" : STATUS[r.event.state]}</td>
+                      <td className={cn("px-2 py-1", r.event.squeezed ? "font-semibold text-destructive" : r.event.conflict && "font-semibold text-confidence-mid")}>{r.event.squeezed ? "Cut short" : r.event.conflict ? "Late for its fixed start" : STATUS[r.event.state]}</td>
                     </tr>
                   ),
                 )}
@@ -99,5 +108,17 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         )}
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** A planned pause before an item: a thin row, with how much lateness it is expected to take up. */
+function GapRow({ minutes, absorbed, beforeFixed }: { minutes: number; absorbed: number | null; beforeFixed: boolean }) {
+  const words = pauseWords(minutes, absorbed, beforeFixed)
+  return (
+    <tr className="border-t border-dashed border-border/60 text-[0.6875rem] text-muted-foreground">
+      <td className="px-2 py-0.5 italic">{words.label}</td>
+      <td colSpan={4} />
+      <td colSpan={4} className={cn("px-2 py-0.5", absorbed !== null && absorbed > 0 && "font-semibold text-confidence-mid")}>{words.absorbs}</td>
+    </tr>
   )
 }

@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Fixed starts and pauses in the run of show (#196)
+- An item can now have a **fixed start** (Prepare → the item → Timing → Fixed start): it is expected at that time however early or late the items before it run, and **±5 min** does not move it. If the items before run past it, it starts when they finish and the run of show says **Late for its fixed start**. It has a pin in the run of show, its table and every desk's run of show.
+- An item can have a **pause before** it (Timing → Pause before). Running late uses the pause up first: the next item stays on time until the pause is gone, and only lateness beyond it moves what follows. The table shows each pause as its own thin row with how much lateness it takes up ("absorbs 3 min").
+- Services without fixed starts or pauses keep exactly the times they had. How Rhema works out its times is written up in `docs/rhema-studio/24-adr-0003-timing.md`, with a comparison with Ontime.
 ### OBS's scenes in Production; preview and Take in OBS (#197)
 - New **Production → OBS** tab (beside Programs) lists OBS's own scenes, in OBS's order, and shows which one is on OBS's program (the stream and recording) and, in Studio Mode, which is in OBS's preview. It follows OBS as it changes, including cuts made in OBS itself.
 - With Studio Mode on in OBS: **Set as OBS preview** on a scene, then **Take in OBS** to run OBS's own transition. With Studio Mode off: **Switch OBS to this scene…** asks first ("This changes what the stream shows") before anything changes.

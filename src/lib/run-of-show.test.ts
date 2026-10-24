@@ -87,6 +87,14 @@ describe("the planned day", () => {
     expect(planTimeline(items, phases("23:50"))!.finish).toBe("00:24")
     expect(clockText(-5)).toBe("23:55")
   })
+  it("a fixed start and a pause (#196 R3) are in the plan, the fixed start nearest the item before", () => {
+    const withTimes = items.map((i, k) => (k === 2 ? { ...i, gap_minutes: 3 } : i))
+    expect(planTimeline(withTimes, phases("10:00"))!.rows.map((r) => `${r.time} ${r.label}${r.pause ? ` +${r.pause}` : ""}`).slice(2, 5)).toEqual(["10:00 Hymn", "10:07 Sermon +3", "10:37 Main service ends"])
+    const fixed = items.map((i, k) => (k === 2 ? { ...i, starts_at: "10:10" } : i))
+    expect(planTimeline(fixed, phases("10:00"))!.rows[3]).toMatchObject({ time: "10:10", pause: 6, fixed: true })
+    expect(planTimeline(fixed, phases("10:00"))!.finish).toBe("10:40")
+    expect(planTimeline(items.map((i, k) => (k === 2 ? { ...i, starts_at: "00:05" } : i)), phases("23:50"))!.finish).toBe("00:35")
+  })
   it("gives warm-up items their times from the warm-up's start, main items from the plan", () => {
     expect([...plannedTimes(items, phases("10:00"))]).toEqual([[1, "10:00"], [2, "10:04"], [0, "09:55"]])
     expect(plannedTimes(items, phases()).size).toBe(0)

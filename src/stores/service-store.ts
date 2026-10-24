@@ -154,6 +154,8 @@ function itemInputs(
     ...(i.background ? { background_media_id: i.background.media_id } : {}),
     ...(typeof i.planned_minutes === "number" && i.planned_minutes > 0 ? { planned_minutes: i.planned_minutes } : {}),
     ...(i.end_by && isClockTime(i.end_by) ? { end_by: i.end_by } : {}),
+    ...(i.starts_at && isClockTime(i.starts_at) ? { starts_at: i.starts_at } : {}),
+    ...(isGapMinutes(i.gap_minutes) ? { gap_minutes: i.gap_minutes } : {}),
     ...(cleanName(i.prepared_by) ? { prepared_by: cleanName(i.prepared_by) } : {}),
     ...(cleanComments(i.comments).length ? { comments: cleanComments(i.comments) } : {}),
     ...(cleanOnLive(i.on_live) ? { on_live: cleanOnLive(i.on_live) } : {}),
@@ -235,7 +237,7 @@ export function cleanName(raw: string | null | undefined): string {
 }
 
 /** The payload keys this build reads and writes, per item kind; anything else is kept untouched (FR-03). */
-const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "prepared_by", "comments", "on_live", "auto_advance"]
+const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "starts_at", "gap_minutes", "prepared_by", "comments", "on_live", "auto_advance"]
 const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
@@ -306,6 +308,19 @@ export function parseEndBy(raw: string | null | undefined): string | null {
     return typeof p.end_by === "string" && isClockTime(p.end_by) ? p.end_by : null
   } catch {
     return null
+  }
+}
+
+const isGapMinutes = (m: unknown): m is number => typeof m === "number" && m > 0 && m <= 600
+
+/** `starts_at` (a fixed start) and `gap_minutes` (a pause before) from any item's payload; only those set. */
+export function parseFixedStartAndGap(raw: string | null | undefined): { starts_at?: string; gap_minutes?: number } {
+  if (!raw) return {}
+  try {
+    const p = JSON.parse(raw) as { starts_at?: unknown; gap_minutes?: unknown }
+    return { ...(typeof p.starts_at === "string" && isClockTime(p.starts_at) ? { starts_at: p.starts_at } : {}), ...(isGapMinutes(p.gap_minutes) ? { gap_minutes: p.gap_minutes } : {}) }
+  } catch {
+    return {}
   }
 }
 
@@ -414,7 +429,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "slide") {
@@ -423,7 +438,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
@@ -441,7 +456,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
       })
       continue
     }
@@ -472,7 +487,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), prepared_by: parsePreparedBy(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
   return { items, headers, unsupported, missingTranslations: [...missing] }

@@ -1103,6 +1103,19 @@ Needs two computers on the same network (the host and a joining computer). Some 
 | 10eh.7 | On the host stop the HTTP listener; untick "accept other devices" and start it again (this computer only). On the joiner press **Find hosts** each time. | No host is listed either time ("No host found…"); the address can still be typed. | Unverified |
 | 10eh.8 | Tick accept other devices again, tick https for phones, start the listener on port 9000; then quit Rhema on the host. Press **Find hosts** after each. | First it lists the host at :9000 (`dns-sd -L "CAC Ibadan" _rhema-host._tcp` shows `v=1 tls=9001`). After quitting, no host is listed. | Unverified |
 
+### 10el. Fixed starts and pauses in the run of show (#196)
+
+Prepare: a main service starting about 10 minutes from now with Welcome 5, Worship 20, Notices 10 and Blessing 5. Production → Timekeeper → **I start each event**. A second computer joined to this host (any role) for 10el.7.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10el.1 | Open Notices → Timing. Set **Fixed start** to 5 minutes after Worship's planned end. Open Prepare → Run of show and its **Table**. | The Timing tab says it starts at that time and ±5 does not move it; **Pause before** is greyed. Notices has a pin and its fixed time in the list and the table; a thin row above it says "Pause before the fixed start · 5 min" and "can absorb 5 min". Blessing follows Notices. | Unverified |
+| 10el.2 | Press **+5 min**. | Welcome and Worship move 5 min later; Notices keeps its fixed time; Blessing stays after Notices. The pause row says "absorbs 5 min · used up". A note says items with a fixed start keep their time. Press **On schedule**. | Unverified |
+| 10el.3 | Start Welcome 3 minutes after the service start; let it run its 5 min and start Worship. | Notices still expected at its fixed time; the pause row says "absorbs 3 min". | Unverified |
+| 10el.4 | Let Worship run until it is expected to end past Notices' fixed start (or set Worship's Time to 30 while it runs). | Notices is expected when Worship ends and says **Late for its fixed start** (amber) in Prepare's run of show and its table; Blessing moves after it. | Unverified |
+| 10el.5 | Clear Notices' fixed start. On Blessing → Timing set **Pause before** 4. | The pin goes; Notices follows Worship again. A thin "Pause · 4 min" row appears above Blessing in the table; the run of show says "after a 4 min pause". While Worship or Notices runs late by less than 4 min, Blessing stays on its planned time and the row says how much is absorbed. | Unverified |
+| 10el.6 | Save the service, close and reopen it (or restart Rhema). | The fixed start and the pause are kept. A service saved before this build opens with the same times as before (no pins, no pauses). | Unverified |
+| 10el.7 | On the joined computer, look at its **Run of show** while 10el.4 is happening. | The same pin, the pause row and "Late for its fixed start" as on the host; nothing on it can be pressed. | Unverified |
 ### 10ek. OBS's scenes, preview and Take in OBS (#197)
 
 Needs OBS 28 or later (with its WebSocket server on: Tools → WebSocket Server Settings) on this computer or another on the church network, with at least three scenes (e.g. Wide, Pulpit, Choir). Settings → Remote control → Connect to OBS with its address, port and password. Watch OBS's own window alongside Rhema.

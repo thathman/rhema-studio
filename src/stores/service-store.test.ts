@@ -486,6 +486,20 @@ describe("createFromRundown", () => {
     expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, end_by: "12:30" }]))
   })
 
+  it("saves and reopens a fixed start and a pause before (#196 R3); bad ones are dropped, old items unchanged", () => {
+    const v: VerseQueueItem = { id: "f1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, starts_at: "10:30", gap_minutes: 5 }
+    const [input] = toItemInputs([v])
+    expect(JSON.parse(input.payload ?? "{}")).toMatchObject({ starts_at: "10:30", gap_minutes: 5 })
+    expect(JSON.parse(toItemInputs([{ ...v, starts_at: "25:00", gap_minutes: -1 }])[0].payload ?? "{}")).toEqual({})
+    const reopened = toQueueItems({ program, items: [item("f1", "John 3:16", 43, 3, 16, { payload: input.payload ?? null })] }, 1, [])
+    expect(reopened.items[0]).toMatchObject({ starts_at: "10:30", gap_minutes: 5 })
+    expect(reopened.items[0].payload_extra).toBeUndefined()
+    const old = toQueueItems({ program, items: [item("f2", "John 3:16", 43, 3, 16, { payload: '{"planned_minutes":5}' })] }, 1, [])
+    expect("starts_at" in old.items[0] || "gap_minutes" in old.items[0]).toBe(false)
+    expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, starts_at: null }]))
+    expect(rundownSignature([v])).not.toBe(rundownSignature([{ ...v, gap_minutes: 2 }]))
+  })
+
   it("saves and reopens who prepares an item (CL-007), and it counts as an unsaved change", () => {
     const v: VerseQueueItem = { id: "o1", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, prepared_by: "  Tolu (music)  " }
     const [input] = toItemInputs([v])

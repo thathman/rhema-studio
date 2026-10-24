@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react"
-import { MonitorIcon, SearchIcon } from "lucide-react"
+import { Fragment, useEffect, useRef, useState } from "react"
+import { MonitorIcon, PinIcon, SearchIcon } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -15,7 +15,7 @@ import { JoinedTalk } from "@/studio/talk"
 import { sceneTargets } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { deskFreshness, skewWords } from "@/lib/desk-freshness"
-import { backstageRows } from "@/lib/cuesheet"
+import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
 
 const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event clock only)", bible: "Bible (the Bible source only)", screens: "Screens (congregation scenes only)", present: "Present", configure: "Present and settings" }
@@ -337,7 +337,8 @@ const offsetText = (m: number) => (m === 0 ? "on time" : `${m > 0 ? "+" : "−"}
 
 /**
  * The backstage cuesheet (#196 R4): the host's run of show with its times, for every desk whatever
- * its role. Read only: nothing here starts, moves or changes anything.
+ * its role. Read only: nothing here starts, moves or changes anything. A fixed start has a pin, a
+ * pause its own thin row (R3).
  */
 function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
   const rows = backstageRows(live.rundown)
@@ -360,14 +361,20 @@ function RunOfShowView({ live, stale }: { live: LiveStateV1; stale: boolean }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className={cn("border-t border-border/60", r.time.state === "live" && "bg-primary/10 font-semibold", r.time.state === "skipped" && "text-muted-foreground")}>
+                <Fragment key={r.id}>
+                {r.time.pause && (() => {
+                  const words = pauseWords(r.time.pause[0] / 60_000, r.time.state === "upcoming" ? Math.round(r.time.pause[1] / 60_000) : null, r.time.fixed === true)
+                  return <tr className="border-t border-dashed border-border/60 text-[0.625rem] text-muted-foreground"><td className="px-1.5 py-0.5 italic">{words.label}</td><td /><td colSpan={4} className="px-1.5 py-0.5">{words.absorbs}</td></tr>
+                })()}
+                <tr className={cn("border-t border-border/60", r.time.state === "live" && "bg-primary/10 font-semibold", r.time.state === "skipped" && "text-muted-foreground")}>
                   <td className="max-w-40 truncate px-1.5 py-1">{r.label}</td>
-                  <td className={td}>{hhmm(r.time.plan[0])}–{hhmm(r.time.plan[1])}</td>
+                  <td className={td}>{r.time.fixed && <PinIcon className="mr-0.5 inline size-3" aria-label="Fixed start" />}{hhmm(r.time.plan[0])}–{hhmm(r.time.plan[1])}</td>
                   <td className={td}>{r.time.state === "done" ? (r.time.actual !== undefined ? `ran ${hhmm(r.time.actual)}${r.time.ranMs !== undefined ? ` · ${formatMs(r.time.ranMs)}` : ""}` : "") : r.time.state === "skipped" ? "" : `${hhmm(r.time.expected[0])}–${hhmm(r.time.expected[1])}`}</td>
                   <td className={cn(td, r.offsetMinutes !== null && r.offsetMinutes > 0 ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{r.offsetMinutes === null ? "" : offsetText(r.offsetMinutes)}</td>
                   <td className={td}>{r.time.endBy !== undefined ? hhmm(r.time.endBy) : ""}</td>
-                  <td className={cn("px-1.5 py-1", r.time.cut && "font-semibold text-destructive")}>{r.time.cut ? "Cut short" : STATUS[r.time.state]}</td>
+                  <td className={cn("px-1.5 py-1", r.time.cut ? "font-semibold text-destructive" : r.time.conflict && "font-semibold text-confidence-mid")}>{r.time.cut ? "Cut short" : r.time.conflict ? "Late for its fixed start" : STATUS[r.time.state]}</td>
                 </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
