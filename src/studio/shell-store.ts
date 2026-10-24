@@ -16,11 +16,14 @@ export type PresentView = "standard" | "production"
 export interface ShellPrefs {
   workspace: Workspace
   presentView: PresentView
+  /** The operator folded the sidebar to icons (#299). Below the narrow width it is icons anyway. */
+  sidebarCollapsed: boolean
 }
 
 export const SHELL_PREFS_KEY = "rhema-studio.shell"
 
-const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard" }
+// Prefs saved before the sidebar could fold have no sidebarCollapsed: they open expanded.
+const DEFAULT_PREFS: ShellPrefs = { workspace: "home", presentView: "standard", sidebarCollapsed: false }
 
 // "more" has no way in since the sidebar dropped it (#218), so it is not restored.
 const WORKSPACES: readonly Workspace[] = ["home", "prepare", "present", "production", "library", "design", "team", "archive", "settings"]
@@ -46,6 +49,7 @@ export function readShellPrefs(storage: StorageLike | null): ShellPrefs {
       presentView: VIEWS.includes(parsed.presentView as PresentView)
         ? (parsed.presentView as PresentView)
         : DEFAULT_PREFS.presentView,
+      sidebarCollapsed: typeof parsed.sidebarCollapsed === "boolean" ? parsed.sidebarCollapsed : DEFAULT_PREFS.sidebarCollapsed,
     }
   } catch {
     return DEFAULT_PREFS
@@ -83,6 +87,9 @@ interface ShellState extends ShellPrefs {
   findInPresent: (query: string) => void
   setWorkspace: (workspace: Workspace) => void
   setPresentView: (view: PresentView) => void
+  /** Fold the sidebar to icons or open it out again (the sidebar's button, Cmd/Ctrl+B). */
+  setSidebarCollapsed: (collapsed: boolean) => void
+  toggleSidebar: () => void
   openOutputs: () => void
   /** Open the outputs with this output's editor on top (Design → Used on… → Open output). A new object each time. */
   editOutputRequest: { id: string } | null
@@ -121,6 +128,8 @@ export const useShellStore = create<ShellState>((set) => ({
   findInPresent: (pendingFind) => set({ pendingFind, goRequest: "present" }),
   setWorkspace: (workspace) => set({ workspace }),
   setPresentView: (presentView) => set({ presentView }),
+  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   openOutputs: () => set({ outputsDialogOpen: true }),
   editOutputRequest: null,
   editOutput: (id) => set({ outputsDialogOpen: true, editOutputRequest: { id } }),
@@ -135,7 +144,7 @@ export const useShellStore = create<ShellState>((set) => ({
 }))
 
 useShellStore.subscribe((state, prev) => {
-  if (state.workspace !== prev.workspace || state.presentView !== prev.presentView) {
-    writeShellPrefs(storage, { workspace: state.workspace, presentView: state.presentView })
+  if (state.workspace !== prev.workspace || state.presentView !== prev.presentView || state.sidebarCollapsed !== prev.sidebarCollapsed) {
+    writeShellPrefs(storage, { workspace: state.workspace, presentView: state.presentView, sidebarCollapsed: state.sidebarCollapsed })
   }
 })

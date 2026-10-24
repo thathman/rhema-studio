@@ -5,6 +5,12 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — Collapsible sidebar (#299)
+
+- **Branch / PR:** `ux-018/collapsible-sidebar` (from `integration/night-3`).
+- **Behaviour:** `ShellPrefs.sidebarCollapsed` (field-by-field fallback: missing or not a boolean reads as expanded, so old saved prefs open expanded), `setSidebarCollapsed` / `toggleSidebar`, saved with the other shell prefs. New Tailwind `compact:` variant in `index.css` = `(width < 1180px)` OR inside `[data-collapsed="true"]`; every `max-[1180px]:` in the sidebar and Desk menu became `compact:`, so folding reuses exactly the automatic narrow form. The `<nav>` carries `data-collapsed`, animates width 150 ms (the global reduced-motion rule cuts it). Collapse/Expand button above the Desk menu (`aria-expanded`, `aria-controls`, `aria-keyshortcuts`, tooltip), hidden below 1180 px. Nav buttons: Radix tooltip on the right only when compact (native `title` only when open out, so never two). Cmd/Ctrl+B handled by the sidebar (ignored over an open dialog or in a narrow window; it was free: only the unused shadcn `ui/sidebar.tsx` names it); listed in Keyboard shortcuts.
+- **Tests:** `shell-store.test.ts` (+1: old prefs and a bad value load expanded; round trip includes the field). `sidebar.test.tsx` (3: button folds/opens with aria state and saves to prefs; Cmd+B / Ctrl+B toggle, not without the modifier, over a dialog or when narrow; folded, every place keeps its screen-reader name, has no title, and shows its tooltip).
+- **Next:** desktop acceptance 10ea.
 ## 2026-10-23 — Cameras and Google TVs in Show health; readiness for cameras and feeds (#213)
 
 - **Branch / PR:** `sh-004/health-cameras-tvs` (from `integration/night-3`).

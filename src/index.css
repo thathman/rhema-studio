@@ -12,6 +12,11 @@
 @import "@fontsource/ibm-plex-sans/400-italic.css";
 
 @custom-variant dark (&:is(.dark *));
+/* The sidebar's icons-only form: always below 1180 px wide (COMPACT_SIDEBAR_QUERY), and wider when the operator folds it (#299). */
+@custom-variant compact {
+  @media (width < 1180px) { @slot; }
+  &:where([data-collapsed="true"], [data-collapsed="true"] *) { @slot; }
+}
 
 @theme inline {
     --font-heading: var(--font-sans);

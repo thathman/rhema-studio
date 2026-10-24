@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Fold the sidebar to icons (#299)
+- A **Collapse** button above your name at the foot of the sidebar folds it to icons only, giving the page more room; the same button (or **⌘B / Ctrl+B**) opens it out again.
+- Folded, each icon shows its name in a tooltip, and your desk is just your initials with the same menu.
+- Rhema remembers the choice on this computer. A narrow window shows icons only, as before, whatever you chose.
 ### Cameras and Google TVs in Show health (#213)
 - Production → **Show health** lists every camera with what the camera router says: **Sending (H264) · watched by 2**, **Not sending**, or **Camera router not running**, and the scenes and screens that use it. A scene on air whose camera stops sending goes to the top as **Needs attention** ("Pulpit camera is not sending; "Sermon split" on Main shows its fallback words there").
 - Each browser feed says **2 screens showing the latest**, **Behind** or **No screen watching**. A Google TV you sent the feed to with **Show on a Google TV** is listed under it; **Check TV** asks the TV which feed it shows (needs Rhema Receiver 1.1), **Forget** removes it.
