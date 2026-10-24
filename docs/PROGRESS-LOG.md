@@ -5,6 +5,16 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-24 — OBS tab against real OBS (#333)
+
+- **Main checked:** c4f378e, OBS Studio on this Mac, the "Rhema QA" collection only (the owner's collection untouched; the websocket settings and the collection were backed up and put back afterwards). 10ek.1–9 pass, 10ek.11 partial (no screen reader), 10ek.10 needs a joined computer.
+- **Lesson:** a force-quit OBS asks about Safe Mode on its next start even with `--disable-shutdown-check`; the marker is `~/Library/Application Support/obs-studio/.sentinel/run_*`.
+
+## 2026-10-24 — Phone camera → Google TV, end to end (#209, #198)
+
+- **Main checked:** c4f378e. Android phone (Vsmart V340U, Chrome) on Rhema's camera page → Rhema's built-in camera router (MediaMTX via the WHIP route) → Chromecast with Google TV (receiver 1.3.0.0, secure https feed, pinned certificate) in a scene with the camera and a Bible lower third. The router showed the TV (192.168.3.37) reading pulpit (H264) 3 s after the phone went live. The TV's screen capture can't show the video layer (hardware overlay); the router's reader record is the evidence.
+- **Lesson:** Android gives the camera only to the app in front: the page must be in the foreground (a background tab gets "allow the camera" errors even with permission).
+
 ## 2026-10-24 — Google TV receiver hardening; feed link and page over https, pinned (#198, SEC-001)
 
 - **Branch / PR:** `sec-001/tv-receiver-hardening` (from `main` 07b0aa2). Implements the TV code-check security review (findings 1 to 7; 8 and 9 too).
