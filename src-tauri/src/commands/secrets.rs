@@ -10,7 +10,7 @@
 
 #[cfg(test)]
 use keyring::Entry;
-/// Shared with Rhema Companion, which keeps its own entry (rhema_join::secrets).
+/// Shared with Rhema Studio Companion, which keeps its own entry (rhema_join::secrets).
 pub use rhema_join::secrets::set_verified;
 
 const SERVICE: &str = "Rhema Studio";

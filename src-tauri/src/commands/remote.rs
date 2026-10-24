@@ -229,7 +229,7 @@ pub struct HttpRuntime {
     tls_port: Option<u16>,
     /// SHA-256 of the https certificate, sent to a Rhema Receiver TV with a feed's https link (#198).
     tls_fingerprint: Option<String>,
-    /// SHA-256 of this computer's local CA, which Rhema Companion pins when it pairs (#209).
+    /// SHA-256 of this computer's local CA, which Rhema Studio Companion pins when it pairs (#209).
     tls_ca_fingerprint: Option<String>,
     /// Phone cameras and the camera router (#209); kept across restarts of the listener.
     cameras: rhema_api::SharedCameras,

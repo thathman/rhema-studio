@@ -1526,7 +1526,7 @@ Settings → AI assistants on, and an assistant (Claude Desktop) connected with 
 | 10fe.10 | In the assistant, open the prompt list. Pick **Prepare bilingual worship**. | It plans with songs that have both languages, readings with two editions, and slides in Yorùbá and English with every tone mark kept. | Unverified |
 | 10fe.11 | With two drafts waiting, use **Back up now**. Remove the drafts, then restore that backup (Setup → Bring in a previous installation). | The restore preview says "AI drafts: 2 drafts added from the backup; the ones here stay". After restoring, both drafts are back in Prepare → AI drafts, warnings and Yorùbá text as they were. | Unverified |
 
-### 10fi. Rhema Companion: the small app on the OBS computer (#209)
+### 10fi. Rhema Studio Companion: the small app on the OBS computer (#209)
 
 Two computers on the church network: **A** is the main Rhema built from this branch (camera router
 on, at least two cameras added and sending from phones), **B** is the OBS computer (Windows first;
@@ -1537,16 +1537,16 @@ the full Rhema. Wired first; repeat 10fi.7 with B on Wi-Fi.
 | # | Step | Expected | Result |
 |---|------|----------|--------|
 | 10fi.1 | On B, build from a fresh clone (no `models/`, no `data/rhema.db`) and note the size of the installer / `.app`. | The build finishes without models or the Bible database. The `.exe` / installer (Windows) or `.app` (Mac) is under 20 MB. | Unverified |
-| 10fi.2 | Start Rhema Companion on B. Allow it on **Private networks** when Windows Defender Firewall asks. | One small window (about 420 × 640): "Rhema Companion" at the top, Join a host, OBS, Cameras, and "Start Rhema Companion with the computer" (unticked). No studio, no **Open the full studio…**. An icon appears in the notification area (Windows) / menu bar (Mac). Its data folder is `com.openbezal.rhema.companion` (not `com.openbezal.rhema`). | Unverified |
+| 10fi.2 | Start Rhema Studio Companion on B. Allow it on **Private networks** when Windows Defender Firewall asks. | One small window (about 420 × 640): "Rhema Studio Companion" at the top, Join a host, OBS, Cameras, and "Start Rhema Studio Companion with the computer" (unticked). No studio, no **Open the full studio…**. An icon appears in the notification area (Windows) / menu bar (Mac). Its data folder is `com.openbezal.rhema.companion` (not `com.openbezal.rhema`). | Unverified |
 | 10fi.3 | On A, Settings → Remote control: network on, **Secure page for phones (https)** off; start the listener. On B, pick A under Join a host. | B says the host's secure page is off and how to turn it on; **Join** stays greyed. | Unverified |
 | 10fi.4 | On A, tick **Secure page for phones**, stop and start the listener. Note **This computer's certificate** under it. On B, pick A again (or retype its address). | B shows **Host's certificate** with exactly the same groups as A. **Join** becomes available. | Unverified |
 | 10fi.5 | On A, **Pair a device**; on B, type the code and **Join**. On A, set B's role to OBS companion if it is not. | B joins; the host card says Connected and **Secure link, host's certificate** with the same groups. The cameras list fills. A lists B among paired devices. | Unverified |
 | 10fi.6 | On B, connect OBS (127.0.0.1, 4455, password) and **Add to OBS** on two cameras. Cut between them in OBS. | As 10fc.4–10fc.6: each camera is a Media Source in its own scene and OBS plays it; A's Production → Cameras shows **On OBS** for the one on B's program. | Unverified |
 | 10fi.7 | Close B's window (the X). Wait a minute; cut in OBS; then on A stop and start the camera router. | The app keeps running in the tray/menu bar: A still shows the tally changing, and OBS gets the cameras' new addresses by itself. **Open** from the icon's menu (Windows: a click on the icon) brings the same window back. | Unverified |
-| 10fi.8 | Start Rhema Companion a second time (Start menu / Finder). | No second copy: the running one's window comes forward. | Unverified |
-| 10fi.9 | Tick **Start with the computer** (in the window or the icon's menu). Restart B and log in. | The tick shows in both places. After login Rhema Companion is in the tray with its window closed, and has joined A by itself (A's Cameras shows B's tally once OBS is open). Untick it, restart: it does not start. | Unverified |
+| 10fi.8 | Start Rhema Studio Companion a second time (Start menu / Finder). | No second copy: the running one's window comes forward. | Unverified |
+| 10fi.9 | Tick **Start with the computer** (in the window or the icon's menu). Restart B and log in. | The tick shows in both places. After login Rhema Studio Companion is in the tray with its window closed, and has joined A by itself (A's Cameras shows B's tally once OBS is open). Untick it, restart: it does not start. | Unverified |
 | 10fi.10 | On A, quit Rhema, move its data folder's `tls` folder aside (a new certificate authority, as after a reinstall), start Rhema and the listener with https. Watch B. | B stops getting the cameras and says the host's certificate is not the one it paired with (pair again only if the host was reinstalled). Nothing is sent to the new certificate. **Leave this host** and join again: B shows the new certificate, the same as A's. Put the old `tls` folder back afterwards. | Unverified |
-| 10fi.11 | Quit Rhema Companion from the icon's menu. | The window and the icon go; OBS keeps the Media Sources (it stops getting new addresses). On A the companion reads nothing more after OBS closes its streams. | Unverified |
+| 10fi.11 | Quit Rhema Studio Companion from the icon's menu. | The window and the icon go; OBS keeps the Media Sources (it stops getting new addresses). On A the companion reads nothing more after OBS closes its streams. | Unverified |
 
 ### 10fm. Rhema Camera: smooth viewfinder on slower phones (#209)
 

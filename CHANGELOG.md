@@ -4,8 +4,8 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
-### Rhema Companion: a small app for the OBS computer (#209)
-- **Rhema Companion** (1.0.0.0) is a separate small app for a computer that runs OBS only, Windows first, Mac too: the same companion screen as OBS companion mode, without installing the whole studio (no speech, Bible, NDI or models).
+### Rhema Studio Companion: a small app for the OBS computer (#209)
+- **Rhema Studio Companion** (1.0.0.0) is a separate small app for a computer that runs OBS only, Windows first, Mac too: the same companion screen as OBS companion mode, without installing the whole studio (no speech, Bible, NDI or models).
 - It joins the main computer only over its secure page. Before you join it shows the main computer's certificate, which the main computer now shows in Settings → Remote control; after pairing it talks to no other computer.
 - It lives in the notification area or menu bar: closing its window keeps the cameras current in OBS. **Start with the computer** (off until you turn it on) starts it there and joins the main computer by itself.
 

@@ -11,13 +11,13 @@ struct StartTick(CheckMenuItem<Wry>);
 
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let on = app.autolaunch().is_enabled().unwrap_or(false);
-    let open = MenuItem::with_id(app, "open", "Open Rhema Companion", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Rhema Studio Companion", true, None::<&str>)?;
     let start = CheckMenuItem::with_id(app, "start", "Start with the computer", true, on, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Rhema Companion", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Rhema Studio Companion", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &start, &PredefinedMenuItem::separator(app)?, &quit])?;
     app.manage(StartTick(start));
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Rhema Companion")
+        .tooltip("Rhema Studio Companion")
         .menu(&menu)
         // Windows: a click opens the window, the menu is on the right button. macOS: the menu on a click, as menu bar icons do.
         .show_menu_on_left_click(cfg!(target_os = "macos"))
@@ -52,7 +52,7 @@ fn set_start(app: &AppHandle, on: bool) -> Result<bool, String> {
     if let Some(t) = app.try_state::<StartTick>() {
         let _ = t.0.set_checked(now);
     }
-    done.map_err(|e| format!("Could not change whether Rhema Companion starts with the computer: {e}"))?;
+    done.map_err(|e| format!("Could not change whether Rhema Studio Companion starts with the computer: {e}"))?;
     log::info!("Start with the computer: {now}");
     Ok(now)
 }

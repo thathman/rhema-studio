@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-// Rhema Companion (#209), the small app: its whole window, with the Tauri commands it calls faked.
+// Rhema Studio Companion (#209), the small app: its whole window, with the Tauri commands it calls faked.
 const calls: Array<{ cmd: string; args?: Record<string, unknown> }> = []
 const FP = "3f2a9c1107bd44e0a1c3" + "0".repeat(44)
 let certificate: { ok: true } | { ok: false; error: string } = { ok: true }
@@ -76,16 +76,16 @@ afterEach(() => {
   host.remove()
 })
 
-describe("Rhema Companion's window (#209)", () => {
+describe("Rhema Studio Companion's window (#209)", () => {
   it("is the companion screen only, with no way into a studio it does not have", async () => {
     await act(async () => root.render(<CompanionApp />))
     await settle()
     expect(host.querySelector('[aria-label="OBS companion"]')).not.toBeNull()
-    expect(text()).toContain("Rhema Companion")
+    expect(text()).toContain("Rhema Studio Companion")
     expect(text()).toContain("The church's cameras, in this computer's OBS")
     expect(button("Open the full studio")).toBeUndefined()
     expect(host.querySelector("nav")).toBeNull()
-    expect(text()).toContain("Rhema Companion 1.0.0.0")
+    expect(text()).toContain("Rhema Studio Companion 1.0.0.0")
   })
 
   it("shows the host's certificate before pairing, and joins only once it is read", async () => {
@@ -133,12 +133,12 @@ describe("Rhema Companion's window (#209)", () => {
   it("starts with the computer only when the operator turns it on", async () => {
     await act(async () => root.render(<CompanionApp />))
     await settle()
-    const box = input("Start Rhema Companion with the computer")
+    const box = input("Start Rhema Studio Companion with the computer")
     expect(box.checked).toBe(false)
     expect(calls.some((c) => c.cmd === "autostart_set")).toBe(false)
     await act(async () => box.click())
     await settle()
     expect(calls.find((c) => c.cmd === "autostart_set")?.args).toEqual({ on: true })
-    expect(input("Start Rhema Companion with the computer").checked).toBe(true)
+    expect(input("Start Rhema Studio Companion with the computer").checked).toBe(true)
   })
 })

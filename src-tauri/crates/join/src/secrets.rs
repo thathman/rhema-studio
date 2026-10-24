@@ -52,10 +52,10 @@ mod tests {
     #[test]
     fn each_app_keeps_its_own_entry_and_only_a_json_object_of_strings() {
         keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
-        assert!(set("Rhema Companion", "not json").is_err());
-        assert!(set("Rhema Companion", "[1,2]").is_err());
-        assert!(set("Rhema Companion", r#"{"a":1}"#).is_err());
-        let e = entry("Rhema Companion").unwrap();
+        assert!(set("Rhema Studio Companion", "not json").is_err());
+        assert!(set("Rhema Studio Companion", "[1,2]").is_err());
+        assert!(set("Rhema Studio Companion", r#"{"a":1}"#).is_err());
+        let e = entry("Rhema Studio Companion").unwrap();
         assert_eq!(set_verified(&e, r#"{"joinToken":"t"}"#), Ok(true));
         assert_eq!(set_verified(&e, ""), Ok(true));
         assert_eq!(set_verified(&e, ""), Ok(true), "deleting nothing is fine");

@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
-// Rhema Companion (#209): its own page (companion.html → src/companion-main.tsx), built into
+// Rhema Studio Companion (#209): its own page (companion.html → src/companion-main.tsx), built into
 // companion-app/build, sharing the studio's modules through the same "@/" alias. Port 3001, so it
 // can run beside the studio's dev server.
 const root = path.resolve(__dirname, "..")

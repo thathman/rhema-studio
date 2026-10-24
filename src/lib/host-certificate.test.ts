@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { certificateWords } from "@/lib/host-certificate"
 import { trayName } from "@/lib/companion-app"
 
-describe("Rhema Companion: the host's certificate as people compare it (#209)", () => {
+describe("Rhema Studio Companion: the host's certificate as people compare it (#209)", () => {
   it("is the first 20 hex characters in groups of four, the same on both computers", () => {
     const fp = "3f2a9c1107bd44e0a1c3" + "0".repeat(44)
     expect(certificateWords(fp)).toBe("3F2A 9C11 07BD 44E0 A1C3")

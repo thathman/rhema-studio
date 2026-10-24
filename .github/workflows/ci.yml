@@ -39,7 +39,7 @@ jobs:
         run: bun scripts/check-licenses.ts --js
       - name: Production build (tsc -b && vite build)
         run: bun run build
-      - name: Rhema Companion page build (its own Vite entry, #209)
+      - name: Rhema Studio Companion page build (its own Vite entry, #209)
         run: bun run companion:web
 
   lint:
@@ -109,11 +109,11 @@ jobs:
         run: cargo clippy -p rhema
 
   companion:
-    # Rhema Companion (#209): the small app for an OBS computer, and the crate it shares with the
+    # Rhema Studio Companion (#209): the small app for an OBS computer, and the crate it shares with the
     # studio. Checked and tested here on Linux; nothing is bundled or published. There is no
     # Windows runner in CI: its Windows-only code (tray, start with the computer) is compile-checked
     # only by building it on a Windows computer (companion-app/README.md).
-    name: Rhema Companion (shared crate tests, app tests, clippy)
+    name: Rhema Studio Companion (shared crate tests, app tests, clippy)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:

@@ -25,7 +25,7 @@ import { deskEditable } from "@/lib/desk-scenes"
 import { editsScenes, REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
 import { Card, JoinForm } from "@/studio/production/join-form"
 
-// The join form has its own module so Rhema Companion (#209) shows it without the studio's desks.
+// The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
 
 type Desk = "clock" | "bible" | "scenes" | "songs" | "stage" | "cameras" | "obs"

@@ -1,4 +1,4 @@
-//! Rhema Companion (#209): a small app for a computer that runs OBS only. One window (join the
+//! Rhema Studio Companion (#209): a small app for a computer that runs OBS only. One window (join the
 //! church's Rhema, its cameras, add them to this computer's OBS), an icon in the menu bar or
 //! notification area that keeps it running when the window is closed, and nothing else: no
 //! speech, Bible, NDI, models or content database. Its settings and the host it paired with are
@@ -32,7 +32,7 @@ fn remote_set_keys() {}
 
 /// Saved keys (the host's pairing key, the OBS password) in the system's credential store, under
 /// this app's own name.
-const KEYCHAIN_NAME: &str = "Rhema Companion";
+const KEYCHAIN_NAME: &str = "Rhema Studio Companion";
 
 #[tauri::command(async)]
 fn secrets_get() -> Result<Option<String>, String> {
@@ -75,7 +75,7 @@ pub fn run() {
             if !std::env::args().any(|a| a == STARTED_HIDDEN) {
                 show(app.handle());
             }
-            log::info!("Rhema Companion {VERSION} started");
+            log::info!("Rhema Studio Companion {VERSION} started");
             Ok(())
         })
         // Closing the window keeps the companion running in the tray: OBS keeps its cameras current.
@@ -103,7 +103,7 @@ pub fn run() {
             companion_version,
         ])
         .build(tauri::generate_context!())
-        .expect("Rhema Companion could not start")
+        .expect("Rhema Studio Companion could not start")
         .run(|app, event| {
             // The Dock icon clicked while the window is closed (macOS).
             #[cfg(target_os = "macos")]
