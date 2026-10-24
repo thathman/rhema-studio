@@ -1,6 +1,7 @@
 import { clockMinutes, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
-import { idByName } from "@/lib/item-intent"
-import type { QueueItem } from "@/types"
+import { cleanTakeSteps, idByName, obsStep, sceneStep } from "@/lib/item-intent"
+import { cleanOnLive } from "@/stores/service-store"
+import type { GoLiveCue, OnLive, QueueItem, TakeStep } from "@/types"
 
 /**
  * A service an AI assistant proposed through Rhema MCP (#252), as saved for review: phases of
@@ -23,9 +24,20 @@ export interface AiDraftItem {
    */
   suggested_look?: string | null
   suggested_scene?: string | null
+  /** As it goes live (#193): a line for the stage screens only, and a cue that never changes the congregation's screens. */
+  on_live?: { stage_message?: string; cue?: GoLiveCue } | null
+  /** The camera planned for it, by its name in the camera router (shown in Preview, never switched by itself). */
+  camera?: string | null
+  /** Steps for the operator's own Take, by name; opening the draft arms the ones this church has (#243 RS.4). */
+  on_take?: { scene?: string; obs_scene?: string; bible_feeds_only?: boolean } | null
   song?: { id: string; title: string; primary_language: string; languages: string[]; hymn?: boolean }
+  /** The languages to show, first is the main one (checked against the song). */
+  languages?: string[]
+  arrangement?: { id: string; name: string } | null
   reference?: string
   translation?: string
+  /** A second edition shown with the first (a Yorùbá Bible with KJV). */
+  second_translation?: string | null
   book_number?: number
   book_name?: string
   chapter?: number
@@ -48,6 +60,12 @@ export interface AiDraft {
   revision?: number
   client?: { name?: string; version?: string } | null
   assumptions?: string[]
+  /** What the check warned about when the assistant saved it (absent on older drafts). */
+  warnings?: string[]
+  /** "awaiting review", or "opened" once people opened it in Prepare (#252 UI4): then it stops waiting. */
+  status?: string
+  opened_at?: string
+  opened_by?: string
   phases: { name: string; role?: PhaseRole; rule?: PhaseRule; starts_at?: string; items: AiDraftItem[] }[]
 }
 
@@ -95,10 +113,27 @@ export function draftDiff(draft: QueueItem[], open: QueueItem[]): DraftDiff {
   return { added, missing: left.map((o) => o.reference), changed }
 }
 
-/** The church's looks and congregation scenes, by name, to match a draft's suggestions against. */
+/** The church's looks, congregation scenes and cameras, by name, to match a draft's suggestions against. */
 export interface DraftNames {
   looks: readonly { id: string; name: string }[]
   scenes: readonly { id: string; name: string }[]
+  cameras?: readonly { name: string; label: string }[]
+}
+
+/** People opened it in Prepare: it no longer waits, and the assistant cannot revise it. */
+export const isOpened = (d: Pick<AiDraft, "status">) => d.status === "opened"
+
+/**
+ * An item's planned camera, go-live line and cue, and Take steps, as the rundown keeps them. A
+ * scene the church lacks is left out; nothing here runs: steps wait for a person's own Take.
+ */
+export function draftPlan(it: AiDraftItem, names: DraftNames, verse: boolean): { camera?: string; on_live?: OnLive; on_take?: TakeStep[] } {
+  const want = it.camera?.trim().toLowerCase()
+  const camera = want ? names.cameras?.find((c) => c.name.toLowerCase() === want || c.label.trim().toLowerCase() === want)?.name : undefined
+  const onLive = cleanOnLive(it.on_live ?? null)
+  const sceneId = idByName(it.on_take?.scene, names.scenes)
+  const steps = cleanTakeSteps([verse && it.on_take?.bible_feeds_only ? "source.only" : null, sceneId ? sceneStep(sceneId) : null, it.on_take?.obs_scene?.trim() ? obsStep(it.on_take.obs_scene.trim()) : null])
+  return { ...(camera ? { camera } : {}), ...(onLive ? { on_live: onLive } : {}), ...(steps.length ? { on_take: steps } : {}) }
 }
 
 /** An item's suggested look and scene, each with the id of the church's one by that name (null: none here). */
@@ -125,20 +160,23 @@ export function draftToRundown(d: AiDraft, newId: () => string = () => crypto.ra
       if (g) group = g
       const endBy = clockMinutes(it.end_by) !== null ? it.end_by! : null
       const { look, scene } = matchSuggestions(it, names)
-      const base = { id: newId(), confidence: 1, source: "manual" as const, added_at: now, prepared_by: by, assignees: [by], planned_minutes: it.planned_minutes ?? null, ...(endBy ? { end_by: endBy } : {}), notes: it.notes ?? null, ...(look?.id ? { look_id: look.id } : {}), ...(scene?.id ? { scene_id: scene.id } : {}) }
+      const verse = it.kind === "verse"
+      const base = { id: newId(), confidence: 1, source: "manual" as const, added_at: now, prepared_by: by, assignees: [by], planned_minutes: it.planned_minutes ?? null, ...(endBy ? { end_by: endBy } : {}), notes: it.notes ?? null, ...(look?.id ? { look_id: look.id } : {}), ...(scene?.id ? { scene_id: scene.id } : {}), ...draftPlan(it, names, verse) }
       if (it.kind === "song" && it.song) {
-        const languages = [it.song.primary_language, ...it.song.languages.filter((l) => l !== it.song!.primary_language)]
-        items.push({ ...base, kind: "song", reference: it.song.title, song: { song_id: it.song.id, title: it.song.title, arrangement_id: null, languages } })
-      } else if (it.kind === "verse" && it.book_number && it.chapter && it.verse) {
+        const languages = it.languages?.length ? it.languages : [it.song.primary_language, ...it.song.languages.filter((l) => l !== it.song!.primary_language)]
+        items.push({ ...base, kind: "song", reference: it.song.title, song: { song_id: it.song.id, title: it.song.title, arrangement_id: it.arrangement?.id ?? null, languages } })
+      } else if (verse && it.book_number && it.chapter && it.verse) {
         items.push({
           ...base,
           reference: it.reference ?? `${it.book_name} ${it.chapter}:${it.verse}`,
           verse: { id: 0, translation_id: 0, book_number: it.book_number, book_name: it.book_name ?? "", book_abbreviation: "", chapter: it.chapter, verse: it.verse, text: "" },
           translation: it.translation ?? null,
+          ...(it.second_translation ? { secondary_translation: it.second_translation } : {}),
           ...(it.verses && it.verses > 1 ? { notes: [it.notes, `The reading continues to ${it.reference}: Next verse steps through it.`].filter(Boolean).join(" ") } : {}),
         })
       } else if (it.kind === "slide") {
-        items.push({ ...base, kind: "slide", reference: it.title || it.text?.slice(0, 40) || "Slide", slide: { title: it.title ?? "", body: it.text ?? "" } })
+        // The assistant's own words: a suggestion until a person checks and accepts them (#252).
+        items.push({ ...base, kind: "slide", reference: it.title || it.text?.slice(0, 40) || "Slide", slide: { title: it.title ?? "", body: it.text ?? "" }, ai_suggestion: d.client?.name?.trim().slice(0, 60) || "an assistant" })
       } else {
         // Not in the library: a placeholder for people to source, never invented words.
         const what = it.wanted === "hymn" ? "hymn" : "song"

@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### AI assistants: more to read, richer drafts, off means off (#252)
+- An assistant can now also read the church's time zone, Brand Kit colours and fonts, cameras, screens and feeds (what each follows), media names, who prepares each item, the approved version of a service, and each song's arrangements and licence. No links, keys, passwords or logo, and still no lyrics.
+- A draft can plan a stage message, a cue as the item goes live, a camera, a second Bible translation, a song's languages and arrangement, and steps for your own Take. Prepare → AI drafts shows the check's warnings, such as a song with no licence recorded. Slides the assistant wrote say **AI suggestion** until you accept them.
+- Opening a draft marks it **Opened**, so the assistant cannot revise it any more. Waiting drafts are kept in **Back up now** and come back on restore.
+- Turning AI assistants off refuses the assistant's very next request (before, it waited until the assistant restarted Rhema). Rhema answers at most 30 requests a minute, and a new **Prepare bilingual worship** request (Yorùbá and English) is in the assistant's list.
+
 ### New desk roles: Worship, Stage, Camera, OBS director; scenes changed from a joined desk (#243, #215)
 - Four new roles for a paired desk (Settings → Remote control, with a line on what each may do): **Worship** (songs and hymns), **Stage** (the stage message), **Camera** (camera-ready, hiding a camera from scenes, the camera boxes in scenes) and **OBS director** (switches OBS scenes through the main computer's OBS connection; never in rehearsal). Each gets its own desk in Production → Operators, and the main computer checks every command.
 - A Screens desk can now **make and change scenes** from another computer. A new scene, or a change to a scene on no screen, goes in at once; a change to a scene on a screen, deleting one, or any scene change while Approvals is on, waits in the main desk's notices for **Accept** or **Decline**.

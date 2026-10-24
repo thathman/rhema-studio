@@ -1,6 +1,7 @@
 import { BookOpenIcon, ImageIcon, MusicIcon, PresentationIcon } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { useEffect, useRef } from "react"
 import { useQueueStore } from "@/stores"
 import { drawStage } from "@/lib/stage-canvas"
@@ -38,6 +39,7 @@ export function ItemEditor() {
           <h2 className="truncate text-lg font-bold tracking-[-0.03em]">{item.reference}</h2>
           <Badge variant="accent" className="gap-1">{KIND[kind][1]}{KIND[kind][0]}</Badge>
         </div>
+        {item.ai_suggestion && <AiSuggestion item={item} />}
       </div>
       {/* Keyed by item: a newly selected item opens on what it shows. */}
       <Tabs key={item.id} defaultValue="content" className="flex min-h-0 flex-1 flex-col">
@@ -85,6 +87,16 @@ export function ItemEditor() {
           <PlannedMinutes item={item} />
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+/** Words an AI assistant wrote (an AI draft's slide, #252): marked until a person has checked and accepted them. */
+function AiSuggestion({ item }: { item: QueueItem }) {
+  return (
+    <div role="status" className="mt-2 flex flex-wrap items-center gap-2 rounded-md bg-tone-amber px-2 py-1.5 text-xs text-tone-amber-foreground">
+      <span className="min-w-0 flex-1">AI suggestion: {item.ai_suggestion} wrote these words. Check them, then accept them as yours.</span>
+      <Button size="sm" variant="outline" onClick={() => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, ai_suggestion: null }))}>Accept</Button>
     </div>
   )
 }

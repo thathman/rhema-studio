@@ -6,7 +6,7 @@ import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 import { songToMarkdown } from "@/lib/lyrics"
 import { useSettingsStore } from "@/stores/settings-store"
-import { buildInstallationExport } from "@/lib/installation-export"
+import { installationForBackup } from "@/lib/installation-export"
 
 export interface ImportOutcome {
   /** Files that were read. */
@@ -155,7 +155,7 @@ export async function backupDatabaseToFile(): Promise<string | null> {
     filters: [{ name: "Rhema Studio database", extensions: ["db"] }],
   })
   if (!path) return null
-  await invoke("content_backup", { path, installation: JSON.stringify(buildInstallationExport()) })
+  await invoke("content_backup", { path, installation: JSON.stringify(await installationForBackup()) })
   // The setup's Finish step shows when the last backup was made.
   useSettingsStore.getState().setSetup({ lastBackupAt: new Date().toISOString() })
   return path
@@ -185,4 +185,4 @@ export const inspectBackup = (path: string) => invoke<BackupSummary>("content_in
  * above). This computer's settings and looks go into the snapshot with them, so restoring the
  * snapshot undoes it; the backup's own settings and looks come back in the report for the caller.
  */
-export const restoreDatabaseFrom = (path: string) => invoke<RestoreReport>("content_restore", { path, current: JSON.stringify(buildInstallationExport()) })
+export const restoreDatabaseFrom = async (path: string) => invoke<RestoreReport>("content_restore", { path, current: JSON.stringify(await installationForBackup()) })

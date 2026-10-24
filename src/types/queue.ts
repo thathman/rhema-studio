@@ -41,6 +41,11 @@ interface QueueItemBase {
   camera?: string | null
   /** What the operator's own Take of this item also does (#243 RS.4, OB.2); see `TakeStep`. */
   on_take?: TakeStep[] | null
+  /**
+   * Words an AI assistant wrote (an AI draft's slide, #252), not yet accepted by a person: the
+   * assistant's name. Shown as "AI suggestion" until someone checks the words and accepts it.
+   */
+  ai_suggestion?: string | null
   /** Payload fields this build does not edit (from a newer version or a service file), written back unchanged (FR-03). */
   payload_extra?: Record<string, unknown>
 }

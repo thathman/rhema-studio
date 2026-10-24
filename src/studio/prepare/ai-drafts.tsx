@@ -4,9 +4,10 @@ import { SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { draftAuthor, draftDiff, draftToRundown, itemKey, leaveOut, matchSuggestions, type AiDraft, type AiDraftItem, type DraftNames } from "@/lib/ai-drafts"
+import { draftAuthor, draftDiff, draftToRundown, isOpened, itemKey, leaveOut, matchSuggestions, type AiDraft, type AiDraftItem, type DraftNames } from "@/lib/ai-drafts"
 import type { QueueItem } from "@/types"
 import { formatMinutes } from "@/lib/service-timing"
+import { CUE_ACTIONS } from "@/lib/cues"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -17,7 +18,8 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
  * Opening one puts it in Prepare's rundown (the one being edited, #299) as an unsaved service
  * to edit and save; nothing is saved, approved or shown by opening it. People can untick items
  * to leave out first, and see how it differs from the service that is open. Shown when assistants
- * are allowed or a draft is waiting.
+ * are allowed or a draft is waiting. Opening one marks it opened (#252 UI4): it stops waiting and
+ * the assistant can no longer revise it. The check's warnings are shown with each draft.
  */
 export function AiDrafts() {
   const enabled = useSettingsStore((s) => s.mcpEnabled)
@@ -33,7 +35,9 @@ export function AiDrafts() {
   // The church's looks and scenes: a suggestion naming one becomes the item's look or scene.
   const looks = useBroadcastStore((s) => s.themes)
   const scenes = useBroadcastStore((s) => s.scenes)
-  const names: DraftNames = { looks, scenes }
+  const cameras = useSettingsStore((s) => s.cameras)
+  const names: DraftNames = { looks, scenes, cameras }
+  const waiting = drafts.filter((d) => !isOpened(d)).length
   const load = useCallback(() => invoke<AiDraft[]>("ai_drafts_list").then(setDrafts).catch(() => setDrafts([])), [])
   useEffect(() => {
     void load()
@@ -50,7 +54,10 @@ export function AiDrafts() {
     setReplace(null)
     setPicking(null)
     setOpen(false)
-    toast.success(`${d.title} is now the rundown in Prepare`, { description: "Unsaved: check every item, source anything marked Missing, then use New service to save it." })
+    // It stops waiting: the assistant can no longer revise what people are now working on.
+    void invoke("ai_draft_mark_opened", { id: d.id, by: useSettingsStore.getState().operatorName || null }).catch(() => {}).then(load)
+    const suggestions = items.filter((i) => i.ai_suggestion).length
+    toast.success(`${d.title} is now the rundown in Prepare`, { description: `Unsaved: check every item, source anything marked Missing${suggestions ? `, accept the ${suggestions} ${suggestions === 1 ? "slide" : "slides"} marked AI suggestion` : ""}, then use New service to save it.` })
   }
   const remove = async (d: AiDraft) => {
     await invoke("ai_draft_delete", { id: d.id }).catch(() => {})
@@ -60,13 +67,13 @@ export function AiDrafts() {
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        <SparklesIcon /> AI drafts{drafts.length > 0 ? ` (${drafts.length})` : ""}
+        <SparklesIcon /> AI drafts{waiting > 0 ? ` (${waiting})` : ""}
       </Button>
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); setReplace(null); setPicking(null) }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Services an AI assistant proposed</DialogTitle>
-            <DialogDescription>Each was checked against your library and Bible editions. Opening one puts it in the rundown you edit here in Prepare, as an unsaved service to check and save; nothing is approved or shown until you do. A suggested look or scene your church has is set on its item for Preview; it is never taken live.</DialogDescription>
+            <DialogDescription>Each was checked against your library and Bible editions. Opening one puts it in the rundown you edit here in Prepare, as an unsaved service to check and save; nothing is approved or shown until you do. A suggested look, scene or camera your church has is set on its item for Preview, and steps for your own Take wait for you to Take it; nothing is taken live. Slides the assistant wrote are marked AI suggestion until you accept each one.</DialogDescription>
           </DialogHeader>
           {drafts.length > 0 && (count > 0 || current) && (
             <p className="rounded-md bg-muted p-2 text-xs">
@@ -91,6 +98,7 @@ export function AiDrafts() {
                     <span className="flex-1" />
                     <span className="text-muted-foreground">{draftAuthor(d)} · {new Date(d.created_at).toLocaleString()}{d.updated_at ? ` · revised ${new Date(d.updated_at).toLocaleString()}` : ""}</span>
                   </div>
+                  {isOpened(d) && <p className="font-medium">Opened{d.opened_at ? ` ${new Date(d.opened_at).toLocaleString()}` : ""}{d.opened_by ? ` by ${d.opened_by}` : ""}: no longer waiting, and the assistant cannot revise it. Remove it when you are done.</p>}
                   <p>{items.length < all ? `${items.length} of ${all}` : items.length} items{minutes ? ` · ${formatMinutes(minutes * 60_000)} planned in all` : ""}{missing.length > 0 ? <span className="font-semibold text-confidence-mid"> · {missing.length} missing from the library</span> : null}</p>
                   {choosing ? (
                     <ChooseItems draft={d} out={out} names={names} onChange={(next) => setPicking({ id: d.id, out: next })} />
@@ -101,6 +109,15 @@ export function AiDrafts() {
                   )}
                   {current && <Differences title={current.title} draft={draftToRundown(chosen, () => "", names).items} open={rundown} />}
                   {d.assumptions && d.assumptions.length > 0 && <p className="text-muted-foreground">Assumed: {d.assumptions.join("; ")}</p>}
+                  {d.warnings && d.warnings.length > 0 && (
+                    <div className="rounded-md border border-border p-2">
+                      <p className="font-medium">The check found {d.warnings.length === 1 ? "one thing" : `${d.warnings.length} things`} to look at:</p>
+                      <ul className="list-disc pl-4 text-muted-foreground">
+                        {d.warnings.slice(0, 8).map((w, i) => <li key={i}>{w}</li>)}
+                        {d.warnings.length > 8 && <li>and {d.warnings.length - 8} more</li>}
+                      </ul>
+                    </div>
+                  )}
                   {replace?.id === d.id ? (
                     <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md bg-muted p-2">
                       <span className="flex-1">The rundown has {count} {count === 1 ? "item" : "items"}{dirty ? " and unsaved changes" : ""}. Replace them with this draft?</span>
@@ -109,7 +126,7 @@ export function AiDrafts() {
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      <Button size="sm" disabled={items.length === 0} onClick={() => openDraft(d)} title="Put this draft in the rundown here, as an unsaved service">{items.length < all ? `Open ${items.length} of ${all} items in the rundown` : "Open in the rundown"}</Button>
+                      <Button size="sm" disabled={items.length === 0} onClick={() => openDraft(d)} title="Put this draft in the rundown here, as an unsaved service">{items.length < all ? `Open ${items.length} of ${all} items in the rundown` : isOpened(d) ? "Open again in the rundown" : "Open in the rundown"}</Button>
                       <Button size="sm" variant="outline" aria-expanded={choosing} onClick={() => setPicking(choosing ? null : { id: d.id, out: new Set() })}>{choosing ? "Keep every item" : "Choose items"}</Button>
                       <Button size="sm" variant="ghost" onClick={() => void remove(d)}>Remove</Button>
                     </div>
@@ -209,6 +226,18 @@ function Differences({ title, draft, open }: { title: string; draft: QueueItem[]
 function suggestion(it: AiDraftItem, names: DraftNames): string {
   const { look, scene } = matchSuggestions(it, names)
   const part = (what: string, m: { name: string; id: string | null } | null) => (m ? `${what}: ${m.name}${m.id ? "" : " (none here by that name)"}` : null)
-  const parts = [part("look", look), part("scene", scene)].filter(Boolean)
+  const camera = it.camera ? names.cameras?.find((c) => c.name === it.camera)?.label || it.camera : null
+  const take = [it.on_take?.bible_feeds_only && "Bible feeds only", it.on_take?.scene && `scene ${it.on_take.scene}`, it.on_take?.obs_scene && `OBS ${it.on_take.obs_scene}`].filter(Boolean)
+  const parts = [
+    part("look", look),
+    part("scene", scene),
+    camera && `camera: ${camera}`,
+    it.second_translation && `with ${it.second_translation}`,
+    it.languages?.length && `in ${it.languages.join(" + ")}`,
+    it.arrangement?.name && `arrangement: ${it.arrangement.name}`,
+    it.on_live?.stage_message && `stage: "${it.on_live.stage_message}"`,
+    it.on_live?.cue && CUE_ACTIONS[it.on_live.cue] && `as it goes live: ${CUE_ACTIONS[it.on_live.cue].label.toLowerCase()}`,
+    take.length > 0 && `on your Take: ${take.join(", ")}`,
+  ].filter(Boolean)
   return parts.length ? ` (${parts.join(", ")})` : ""
 }

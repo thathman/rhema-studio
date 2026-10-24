@@ -140,6 +140,17 @@ Open Settings from the Desk menu (or ⌘, / Ctrl+,). The left list groups the se
 
 *Built, not yet checked on the desktop (acceptance 10dt, 10di.12–10di.14, 10es.9, 10ev.11).*
 
+### AI assistants (planning help)
+
+**Settings → AI assistants** lets an assistant that speaks MCP (Claude Desktop, for example) help plan a service on this computer. It is off until you turn it on. Once on, the assistant can read your services (and the version you approved), songs and hymns (titles, arrangements and licences, never lyrics), the Bible editions installed here, and the names of your screens and feeds, cameras, media and Brand Kit colours and fonts. It never sees links, keys or passwords. It cannot change a service or a screen, and it cannot take anything live.
+
+- **What it plans arrives as a draft** in Prepare → **AI drafts**, with the check's warnings (a song with no licence recorded, a camera you do not have). Opening a draft puts it in the rundown unsaved and marks it **Opened**: the assistant can no longer revise it.
+- **Slides the assistant wrote** say **AI suggestion** in the rundown until you check the words and press **Accept** in the item's editor.
+- A draft can plan a stage message, a cue as the item goes live, a camera, a second Bible translation, a song's languages and arrangement, and steps for your own Take. Nothing runs until you Take the item.
+- **Turning it off** refuses the assistant's very next request. Rhema answers at most 30 requests a minute. Drafts that are waiting go into **Back up now** and come back on restore, beside the ones already here.
+
+*Built, not yet checked on the desktop (acceptance 10eg, 10fe).*
+
 ## Your desk, joining a host and volunteer desks
 
 One computer, the **main desk** (the host), runs the service and keeps every control. Other computers and phones can help, each with a **role** the host gives it; nobody else is needed.
