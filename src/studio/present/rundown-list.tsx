@@ -106,6 +106,8 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span className="min-w-0 max-w-full truncate text-sm font-medium">{item.reference}</span>
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 empty:hidden">
+                {/* Words an AI assistant wrote, not accepted yet (#252): accept them in Prepare's item editor. */}
+                {item.ai_suggestion && <span className="shrink-0 rounded-[5px] bg-tone-amber px-1.5 py-0.5 text-[0.6875rem] font-semibold text-tone-amber-foreground" title={`Written by ${item.ai_suggestion}: check the words and accept them in Prepare`}>AI suggestion</span>}
                 {song && <SongBadges item={item} />}
                 {item.planned_minutes ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
                 {(item.on_live || takeImpact(item.on_take).length > 0) && (

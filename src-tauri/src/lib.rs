@@ -176,6 +176,8 @@ pub fn run() {
             commands::remote::mcp_server_command,
             commands::ai_drafts::ai_drafts_list,
             commands::ai_drafts::ai_draft_delete,
+            commands::ai_drafts::ai_draft_mark_opened,
+            commands::ai_drafts::ai_drafts_restore,
             commands::remote::publish_live_state,
             commands::remote::feeds_set,
             commands::remote::feed_publish,

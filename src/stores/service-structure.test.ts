@@ -107,6 +107,17 @@ describe("a service's phases and groups", () => {
     expect(JSON.parse(back[1].payload!)).toEqual({ title: "Welcome", body: "" })
   })
 
+  it("an AI suggestion mark stays through a save until someone accepts it (#252)", () => {
+    const saved = program([row("a", "slide", "Welcome", JSON.stringify({ title: "Welcome", body: "Words an assistant wrote", ai_suggestion: "Claude" })), row("b", "slide", "Notices", JSON.stringify({ title: "Notices", body: "", ai_suggestion: 7 }))])
+    const { items, headers } = toQueueItems(saved, 1, [])
+    expect(items[0].ai_suggestion).toBe("Claude")
+    expect(items[0].payload_extra).toBeUndefined()
+    expect("ai_suggestion" in items[1]).toBe(false)
+    expect(JSON.parse(toItemInputs(items, undefined, undefined, headers)[0].payload!)).toEqual({ title: "Welcome", body: "Words an assistant wrote", ai_suggestion: "Claude" })
+    const accepted = items.map((i) => ({ ...i, ai_suggestion: null }))
+    expect(JSON.parse(toItemInputs(accepted, undefined, undefined, headers)[0].payload!)).toEqual({ title: "Welcome", body: "Words an assistant wrote" })
+  })
+
   it("a service saved before items had a plan opens and saves exactly as before", () => {
     const saved = program([row("a", "verse", "John 3:16"), row("b", "slide", "Welcome", JSON.stringify({ title: "Welcome", body: "Tea", planned_minutes: 3 }))])
     const { items, headers } = toQueueItems(saved, 1, [])

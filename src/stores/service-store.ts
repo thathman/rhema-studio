@@ -165,6 +165,8 @@ function itemInputs(
     ...(i.auto_advance ? { auto_advance: true } : {}),
     // Its scene, look and camera, and the steps armed for its Take (#243 RS.3, RS.4).
     ...intentPayload(i),
+    // Words an AI assistant wrote, until a person accepts them (#252).
+    ...(cleanName(i.ai_suggestion) ? { ai_suggestion: cleanName(i.ai_suggestion) } : {}),
   })
   return items.map((i): ItemInput =>
     isImageItem(i)
@@ -242,7 +244,7 @@ export function cleanName(raw: string | null | undefined): string {
 }
 
 /** The payload keys this build reads and writes, per item kind; anything else is kept untouched (FR-03). */
-const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "starts_at", "gap_minutes", "prepared_by", "assignees", "comments", "on_live", "auto_advance", "scene_id", "look_id", "camera", "on_take"]
+const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "starts_at", "gap_minutes", "prepared_by", "assignees", "comments", "on_live", "auto_advance", "scene_id", "look_id", "camera", "on_take", "ai_suggestion"]
 const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
@@ -291,6 +293,18 @@ export function parseOnLive(raw: string | null | undefined): OnLive | null {
     return p.on_live && typeof p.on_live === "object" ? cleanOnLive(p.on_live as OnLive) : null
   } catch {
     return null
+  }
+}
+
+/** `ai_suggestion` from any item's payload (#252): the assistant whose words are not accepted yet. */
+export function parseAiSuggestion(raw: string | null | undefined): { ai_suggestion?: string } {
+  if (!raw) return {}
+  try {
+    const p = JSON.parse(raw) as { ai_suggestion?: unknown }
+    const by = typeof p.ai_suggestion === "string" ? cleanName(p.ai_suggestion) : ""
+    return by ? { ai_suggestion: by } : {}
+  } catch {
+    return {}
   }
 }
 
@@ -441,7 +455,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "slide") {
@@ -450,7 +464,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
@@ -468,7 +482,7 @@ export function toQueueItems(
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
       })
       continue
     }
@@ -499,7 +513,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
   return { items, headers, unsupported, missingTranslations: [...missing] }

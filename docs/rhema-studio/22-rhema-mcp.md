@@ -20,8 +20,19 @@ lyrics, revisions, text as data, remote access left to the owner): `24-adr-0003-
 
 ## Rules
 
-- **Opt-in:** every tool and every resource read answers "turn it on in Settings → AI assistants"
-  until `mcpEnabled` is on in the app's settings file.
+- **Opt-in, read on every call:** every tool and every resource read answers "turn it on in Settings → AI
+  assistants" until `mcpEnabled` is on in the app's settings file. The switch (and the church's name)
+  is read from the settings file again before every tool call, resource read and resource list, so
+  turning it off refuses the assistant's very next request, with no restart.
+- **Rate limit:** at most 30 tool calls and resource reads a minute per assistant (one `--mcp`
+  process). Over it, a tool answers with the plain error "Too many requests: Rhema answers at most 30
+  a minute. Wait a minute, then ask again." and a resource read with JSON-RPC error `-32003`. Lists
+  (`tools/list`, `resources/list`, `prompts/list`) are not counted.
+- **Protocol versions:** `initialize` answers with the version the client asks for when it is one
+  Rhema speaks (`2025-06-18`, `2025-03-26`, `2024-11-05`), otherwise with the newest; the client
+  decides whether to go on.
+- **Never live:** no tool or resource can put anything on a screen, take an item, switch OBS or a
+  camera, or change a setting. Steps a draft plans for an item's Take run only when a person Takes it.
 - **Read-only:** the content database is opened with SQLite's read-only flag
   (`ContentDb::open_read_only`, which also refuses a database from a newer Rhema) and the Bible
   database is immutable. Nothing can change a service, a song, a setting or a screen.
@@ -36,9 +47,13 @@ lyrics, revisions, text as data, remote access left to the owner): `24-adr-0003-
 | --- | --- |
 | `rhema_get_capabilities` | Church name, read-only flag, counts, installed editions, the rules |
 | `rhema_list_services` | Services and templates (id, title, date, items, approved revision) |
-| `rhema_get_service` | The run of show in order: phases (rule, role, start time), groups, items (kind, title or reference, planned minutes, end by, notes) |
+| `rhema_get_service` | The run of show in order: phases (rule, role, start time), groups, items (kind, title or reference, planned minutes, end by, notes, `assignees`). `release: "approved"` gives the approved release from the service's history instead of the working copy, with `changedSinceApproval` |
 | `rhema_search_songs` | Library songs and hymn-book hymns (kind `song` / `hymn`) by title, number or words, without lyrics |
 | `rhema_list_translations` | Installed Bible editions |
+| `rhema_get_song` | One song or hymn: arrangements (name, default, order as section labels), languages, key, tempo, copyright, CCLI number, licence, licence note and `licenceWarning` (no licence; CCLI with no number; custom with no note). No lyrics |
+| `rhema_get_church_profile` | Church name, time zone (the Setup's, else this computer's; `timeZoneFrom` says which), campus, service languages, Brand Kit colours, fonts and ministry looks (never the logo), cameras by name and label (never their links) |
+| `rhema_list_outputs` | Each output and feed: id, name, kind (screen, NDI feed, browser feed), role, language, what it follows (`shows`, or "whatever is put live"), its scene by name, lower thirds, ticker, NDI name. Never a feed token, a TV's address or a monitor name |
+| `rhema_list_media` | The media library by id, name and kind only |
 | `rhema_lookup_bible_reference` | Exact verse text for "Romans 8:28", "1 Cor 13:4-7", "Psalm 23" (ranges up to 50 verses) |
 | `rhema_validate_service_draft` | Checks a proposed service without saving: songs and hymns matched to the library (id, exact title, other title, hymn number), references looked up in the installed editions, missing items listed, errors to fix, planned minutes |
 | `rhema_create_service_draft` | Saves a checked proposal as `ai-drafts/<id>.json` in the data folder (never the services database), with the assistant's name and the time; at most 50 wait at once |
@@ -63,12 +78,19 @@ them). The server advertises `resources` (no subscriptions, no change notificati
 | `rhema://looks` | Look names (built-in and the church's own) and scene names |
 | `rhema://drafts` | Drafts waiting for review, as `rhema_list_service_drafts` |
 | `rhema://drafts/{id}` | One waiting draft as saved, with its revision, as `rhema_get_service_draft` |
+| `rhema://church` | As `rhema_get_church_profile` |
+| `rhema://outputs` | As `rhema_list_outputs` |
+| `rhema://media` | As `rhema_list_media` |
+| `rhema://songs/{id}` | As `rhema_get_song` |
+| `rhema://services/{id}/approved` | The approved release as `rhema://services/{id}` (phases and groups), with `release`, `revision`, `approvedAt`, `approvedBy`, `changedSinceApproval`; error `-32002` when there is none |
 
-- `resources/list` gives the five fixed resources and, with access on, each service (up to 50) and
-  each waiting draft by its own address. With access off it gives only the five fixed ones (no
+- `resources/list` gives the eight fixed resources and, with access on, each service (up to 50) and
+  each waiting draft by its own address. With access off it gives only the eight fixed ones (no
   church data) and every read is refused with error `-32001` and "turn it on in Settings → AI
   assistants".
-- `resources/templates/list` gives `rhema://services/{id}` and `rhema://drafts/{id}`.
+- `resources/templates/list` gives `rhema://services/{id}`, `rhema://drafts/{id}`,
+  `rhema://services/{id}/approved` and `rhema://songs/{id}`.
+- A service's run of show carries each item's `assignees` (or its one "prepared by" line).
 - An address Rhema does not have (an unknown service or draft id, any other `rhema://` path, any
   other scheme) is error `-32002` "Resource not found", with the address in `data.uri`.
 - Tests (`mcp.rs`): `resources_are_listed_with_templates_and_advertised`,
@@ -85,6 +107,7 @@ Ready-made requests an assistant offers (in Claude Desktop, under the + / prompt
 | `draft_service` | occasion; optional date, start time, length in minutes, a template to start from | Plan a timed service from the library and installed Bibles, check it, save it as a draft and say what it assumed |
 | `reuse_service` | a past service; optional changes | Propose this week's version of it as a draft |
 | `check_service` | a service | Report its timing against its phases and anything missing; change nothing |
+| `bilingual_worship` | optional occasion, languages (default "Yorùbá and English"), date, start time | Plan worship in two languages: songs with words in both (each with its `languages` in order), readings with a `translation` and a `second_translation`, slides in both languages with tone marks kept; never translate Scripture or lyrics |
 
 ## Drafts (MCP-002)
 
@@ -133,3 +156,38 @@ Ready-made requests an assistant offers (in Claude Desktop, under the + / prompt
   `<script>`) is only words: stored and returned as given, shown as text in Prepare, and nothing
   acts on it. Tests: `mcp.rs` (`yoruba_tone_marks_and_underdots_come_back_exactly`,
   `instructions_hidden_in_a_draft_stay_words_and_change_nothing`), `ai-drafts.test.tsx`.
+
+## Gap batch: plans per item, warnings, opened drafts, backups (#252)
+
+- **More per item:** `stage_message` (one line for the stage screens only, at most 120 characters),
+  `go_live_cue` (`timer.start`, `timer.fresh`, `timer.pause`, `stage.clearMessage`: none changes the
+  congregation's screens; `src/types/queue.ts` GO_LIVE_CUES, a frontend test keeps the lists the
+  same), `camera` (a church camera by name or label, kept by name), `on_take` (`scene`: a church
+  scene; `obs_scene`: an OBS scene name; `bible_feeds_only`: readings only), `second_translation`
+  (bible: an installed edition other than the first), `languages` and `arrangement` (song or hymn:
+  checked against the song). Anything unknown is named in a warning and left out. Opening the draft
+  sets them on the item (`on_live`, `camera`, `on_take` steps for scenes this church has,
+  `secondary_translation`, the song's `languages` and `arrangement_id`); the Take steps run only when a
+  person Takes the item in Present.
+- **Licence warnings:** a song or hymn with no licence recorded, CCLI with no number, or custom
+  permission with no note is warned about in the check.
+- **Warnings saved:** the check's `warnings` are saved in the draft; Prepare → AI drafts shows them
+  ("The check found 2 things to look at").
+- **AI suggestions:** slides the assistant wrote open with `ai_suggestion` (the assistant's name, saved
+  in the item's payload). The rundown shows **AI suggestion**; the item editor says who wrote it and
+  has **Accept**, which clears the mark. Library items and missing-song placeholders are not marked.
+- **Opened:** opening a draft calls `ai_draft_mark_opened` (status `opened`, `opened_at`, `opened_by`
+  = the operator's name). It stays listed (Opened … by …; Open again), does not count against the 50
+  waiting or the button's count, and `rhema_update_service_draft` refuses it ("people opened this
+  draft … propose a new draft").
+- **Backups:** Back up now puts the drafts in the installation part (`aiDrafts`); a restore puts back,
+  through `ai_drafts_restore`, each well-formed draft (v 1, a draft id, phases, under 2 MB) that is not
+  here already, until 50 wait; the ones here stay. The restore preview says how many would be added.
+- Tests (`mcp.rs`, `mcp_drafts.rs`): `turning_access_off_refuses_the_very_next_call`,
+  `calls_over_the_minute_s_limit_get_a_plain_error`, `initialize_answers_with_a_version_it_speaks`,
+  `church_outputs_media_and_songs_read_without_secrets`, `the_approved_release_is_read_not_the_working_copy`,
+  `a_draft_carries_stage_lines_cues_cameras_take_steps_and_two_languages`,
+  `an_opened_draft_stops_waiting_and_cannot_be_revised`, `drafts_from_a_backup_come_back_once`; every
+  listed resource is also searched for feed and camera secrets, the logo, TV addresses and monitor
+  names. Vitest: `ai-drafts.test.ts`, `ai-drafts.test.tsx`, `installation-export.test.ts`,
+  `service-structure.test.ts`, `builtin-looks.test.ts`.

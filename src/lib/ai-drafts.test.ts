@@ -95,3 +95,28 @@ describe("an AI draft opened in Prepare", () => {
     expect(matchSuggestions(suggested.phases[0].items[2], names)).toEqual({ look: null, scene: null })
   })
 })
+
+describe("an AI draft's plan for each item (#252 gap batch)", () => {
+  const names = { looks: [], scenes: [{ id: "sc1", name: "Bible and lyrics" }], cameras: [{ name: "pulpit", label: "Pulpit" }] }
+  const planned: AiDraft = { ...draft, phases: [{ name: "Main", items: [
+    { kind: "slide", status: "found", title: "Welcome", text: "Ẹ káàbọ̀", on_live: { stage_message: "Pastor: wrap up\nby 11", cue: "timer.start" }, camera: "Pulpit", on_take: { scene: "bible and lyrics", obs_scene: "Wide" } },
+    { kind: "slide", status: "found", title: "Notices", camera: "Drone", on_take: { scene: "Nope", bible_feeds_only: true } },
+    { kind: "song", status: "found", song: { id: "s1", title: "Ọlọ́run Ọba", primary_language: "en", languages: ["en", "yo"] }, languages: ["yo", "en"], arrangement: { id: "arr-short", name: "Short" } },
+    { kind: "verse", status: "found", reference: "John 3:16", translation: "OYCB", second_translation: "KJV", book_number: 43, book_name: "John", chapter: 3, verse: 16, on_take: { bible_feeds_only: true } },
+    { kind: "missing", status: "missing", wanted: "song", title: "Not here" },
+  ] }] }
+
+  it("arms what the church has, by name, and never anything else", () => {
+    const { items } = draftToRundown(planned, () => "x", names)
+    expect(items[0]).toMatchObject({ camera: "pulpit", on_live: { stage_message: "Pastor: wrap up by 11", cue: "timer.start" }, on_take: ["scene.take:sc1", "obs.scene:Wide"] })
+    expect(["camera", "on_take", "on_live"].filter((k) => k in items[1])).toEqual([])
+    expect(items[2]).toMatchObject({ kind: "song", song: { arrangement_id: "arr-short", languages: ["yo", "en"] } })
+    expect(items[3]).toMatchObject({ translation: "OYCB", secondary_translation: "KJV", on_take: ["source.only"] })
+  })
+
+  it("marks the slides the assistant wrote as suggestions, and nothing else", () => {
+    const { items } = draftToRundown(planned, () => "x", names)
+    expect(items.map((i) => i.ai_suggestion ?? null)).toEqual(["Claude", "Claude", null, null, null])
+    expect(draftToRundown({ ...planned, client: null }, () => "x", names).items[0].ai_suggestion).toBe("an assistant")
+  })
+})
