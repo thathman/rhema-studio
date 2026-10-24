@@ -1526,6 +1526,17 @@ Settings → AI assistants on, and an assistant (Claude Desktop) connected with 
 | 10fe.10 | In the assistant, open the prompt list. Pick **Prepare bilingual worship**. | It plans with songs that have both languages, readings with two editions, and slides in Yorùbá and English with every tone mark kept. | Unverified |
 | 10fe.11 | With two drafts waiting, use **Back up now**. Remove the drafts, then restore that backup (Setup → Bring in a previous installation). | The restore preview says "AI drafts: 2 drafts added from the backup; the ones here stay". After restoring, both drafts are back in Prepare → AI drafts, warnings and Yorùbá text as they were. | Unverified |
 
+### 10fm. Rhema Camera: smooth viewfinder on slower phones (#209)
+
+Needs the Rhema Camera APK from this branch on an Android phone, paired as in 10fb. Turn on (App Settings → On screen) the gridlines, safe areas, level and histogram, and a letterbox guide.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fm.1 | Send at the phone's largest size with the Studio look for two minutes; pan the phone slowly. | The viewfinder moves without stutters or pauses; the dot, gear and overlays respond at once. Rhema's camera card says Sending at the chosen frame rate. | Unverified |
+| 10fm.2 | On a computer with adb: `adb shell dumpsys gfxinfo com.openbezal.rhema.camera reset`, wait 30 s, run it again without `reset`. | Janky frames a few % at most; 99th percentile under about 20 ms. | Unverified |
+| 10fm.3 | App Settings → Picture on a slower phone (or at 1080p30 on the test phone). | If the phone cannot keep up, a line reads "Lighter look on this phone: …" (viewfinder slower, then film grain off). The picture Rhema receives keeps its frame rate, or the line says how many frames a second it sends. | Unverified |
+| 10fm.4 | Turn the histogram off; then press the moon (screen off). | The histogram goes; with the screen off the picture keeps sending at its frame rate. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

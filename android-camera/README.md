@@ -41,6 +41,15 @@ build.sh) and baked into a 17³ table whenever a setting changes; the shader onl
 the camera's own sharpening is turned off and its noise reduction is the best that keeps the frame
 rate. Never a LOG profile; 8-bit colour, never HDR.
 
+The look runs once per camera frame, never twice. On a frame only the encoder takes, it grades
+straight into the encoder's surface; on a frame the viewfinder (or the histogram) also takes, it
+grades into a texture at the sending size, copies that to the encoder first and then to the
+viewfinder at the screen's size. The viewfinder is a SurfaceView (the display hardware shows it, at
+no GPU cost), its swaps never wait for the screen's refresh, and a viewfinder frame is left out when
+its last one is still on the GPU or the frame is over its time (but it is drawn at least 4 times a
+second). The histogram is a 64 × 36 copy of the graded picture read twice a second, only while it is
+shown.
+
 ## Picture and sending
 
 - **Presets** (only those the camera can hold exactly): Cinematic 24, Film 25, Smooth 30, Sports 60.
@@ -86,8 +95,16 @@ rate. Never a LOG profile; 8-bit colour, never HDR.
   background; Android 14 needs the camera/microphone service types, which the app declares. Some makers
   (Xiaomi, Huawei, Samsung's "sleeping apps") still stop apps unless allowed: Settings → Battery and
   heat has a shortcut.
-- While sending, the viewfinder draws at most 15 times a second, and less if the GPU is short of time,
-  so the encoder always gets every frame.
+- While sending, the viewfinder draws at most 15 times a second. If the GPU still runs over its time
+  for about a second, the look gets lighter step by step: the viewfinder at most 15, then the film
+  grain off, then the viewfinder at most 8 a second; half a minute of calm steps back. Settings →
+  Picture then says **Lighter look on this phone…**. The encoder is never slowed on purpose; if it
+  still cannot keep up, Settings says how many frames a second it sends and suggests a smaller size or
+  frame rate.
+- On the test phone (Snapdragon 430) a look costs about 10–13 ms of GPU time per 1080p frame beyond
+  Off (about 30 ms against 17): at 1080p30 the encoder gets 29 of 30 frames and the viewfinder about
+  7 a second; at **Cinematic 24** (the default) the encoder keeps 24 and the viewfinder about 11.
+  Phones from the last few years have several times this GPU.
 - **Heat** (Android 10+): bitrate −30 % when the phone is warm; at most 1080p and 30 fps when hot;
   720p when very hot. Settings shows battery %, temperature and the battery current.
 

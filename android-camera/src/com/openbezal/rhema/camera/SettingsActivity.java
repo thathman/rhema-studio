@@ -653,6 +653,16 @@ public final class SettingsActivity extends Activity {
                 prefs.edit().putString(Prefs.CAMERA, lenses.get(which).id).apply();
             }
         });
+        final TextView lighter = note(c, "");
+        lighter.setVisibility(View.GONE);
+        live.add(new Runnable() {
+            @Override
+            public void run() {
+                String n = service == null ? "" : service.lighterNote();
+                lighter.setText(n);
+                lighter.setVisibility(n.isEmpty() ? View.GONE : View.VISIBLE);
+            }
+        });
         if (Caps.opticalStabilisation(chars)) toggle(c, "Optical stabilisation", "Steadies a hand-held phone. Leave off on a tripod.", Prefs.STAB_OPTICAL, false, false);
         if (Caps.videoStabilisation(chars)) toggle(c, "Electronic stabilisation", "Steadier when hand-held, but crops the picture a little. Leave off on a tripod.", Prefs.STAB_VIDEO, false, false);
 

@@ -4,6 +4,10 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Rhema Camera: a smooth viewfinder on slower phones (#209)
+- The viewfinder no longer stutters: the look is worked out once per frame (never twice), the picture sent always comes first, and the viewfinder is drawn by the phone's display hardware. The histogram costs almost nothing, and nothing when it is off.
+- When a phone's graphics chip cannot keep up, the look gets lighter by itself (a slower viewfinder, then no film grain), and Settings → Picture says so; the picture sent is never slowed down without telling you.
+
 ### Countdown display: one big time that turns amber, then red (owner request)
 - A new **Countdown** look (Design → Countdown) shows one big time, readable from the back of the hall, on a black screen that turns **amber at 25 %** of the time left and **red at 10 %** (a 10-minute timer goes red at 1:00), then says **Time's up** with a slow, gentle pulse and counts on as **+0:42** when over. The steps, their colours, messages ("Please wrap up") and the pulse are yours to change, each at a percentage or a time left; a slider in the preview walks through them before Sunday.
 - It counts the service timer (the default), the item on now, a named extra timer, or the time until a time of day or the service start. The stage message from Present or Timekeeper shows under the time; the item on now, what is next and the time of day are optional small lines.
