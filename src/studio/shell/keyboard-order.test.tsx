@@ -109,7 +109,8 @@ describe("keyboard order (#215)", () => {
     expect(await walk(15)).toEqual(["This computer", "See joined desks", "Join another host", "Light", "Dark", "System", expect.stringMatching(/^Settings/), "Complete setup", expect.stringMatching(/^Setup status/), "This computer runs OBS only…", "Keyboard shortcuts", "Help and the tour", "Diagnostics", expect.stringMatching(/^About Rhema Studio/), "Your name"])
     await act(async () => void document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })))
     expect(document.querySelector('[aria-label="Your desk"]')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
+    // Focus goes back to the Desk button after the menu's close; give it up to a second (slow CI).
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
 
   it("Settings search: the search box, then each section in order, then the open section; a match elsewhere is next after the search", async () => {
