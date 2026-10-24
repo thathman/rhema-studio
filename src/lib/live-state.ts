@@ -16,11 +16,13 @@ import { useHold } from "@/stores/hold-store"
 import { useVoice, type VoicePerson } from "@/lib/voice"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
+import { sharedChurchLook, type ChurchLook } from "@/lib/church-look"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
  * screens, each live source, the event clock, the run of show and its timing. One shape, version 1;
- * the host's LAN server hands it on to paired devices only. No secrets, no pictures.
+ * the host's LAN server hands it on to paired devices only. No secrets; the one picture is the
+ * church logo in `churchLook`, and only when it is small.
  */
 export interface LiveStateV1 {
   v: 1
@@ -68,6 +70,12 @@ export interface LiveStateV1 {
   hold?: { reason: string; since: number; by?: string } | null
   /** How often the host sends this at the least (ms), so a desk can tell a quiet host from a lost one. Absent from older hosts. */
   heartbeatMs?: number
+  /**
+   * The church look (#298 E4): the host's Brand Kit and the themes made from it, with a revision. A
+   * joined desk offers it ("The host's church look changed") and uses it only when its operator
+   * says so. Absent from older hosts.
+   */
+  churchLook?: ChurchLook
 }
 
 /**
@@ -152,6 +160,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     paused: useSettingsStore.getState().remoteDevices.filter((d) => d.paused === true).map((d) => d.name),
     hold: (() => { const h = useHold.getState().hold; return h ? { reason: h.reason, since: h.since, ...(h.by ? { by: h.by } : {}) } : null })(),
     heartbeatMs: LIVE_HEARTBEAT_MS,
+    churchLook: sharedChurchLook(useSettingsStore.getState().brandKit, b.themes),
   }
 }
 
@@ -194,7 +203,7 @@ export function refreshLiveState(now = Date.now()): void {
 export function startLiveStatePublisher(): () => void {
   const subs = [
     useBroadcastStore.subscribe((s, p) => {
-      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.stateSources !== p.stateSources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage || s.scenes !== p.scenes || s.outputs !== p.outputs) soon()
+      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.stateSources !== p.stateSources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage || s.scenes !== p.scenes || s.outputs !== p.outputs || s.themes !== p.themes) soon()
     }),
     useEventClock.subscribe(soon),
     useQueueStore.subscribe((s, p) => { if (s.items !== p.items || s.headers !== p.headers) soon() }),
@@ -205,7 +214,7 @@ export function startLiveStatePublisher(): () => void {
     useHold.subscribe((s, p) => { if (s.hold !== p.hold) soon() }),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
-    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras) soon() }),
+    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit) soon() }),
     useRouterHealth.subscribe(() => soon()),
   ]
   soon()

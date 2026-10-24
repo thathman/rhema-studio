@@ -6,6 +6,7 @@ import { CAC_TAG } from "@/lib/cac-hymnbook"
 import { parseOpenLyrics, toOpenLyrics } from "@/lib/openlyrics"
 import { songToMarkdown } from "@/lib/lyrics"
 import { useSettingsStore } from "@/stores/settings-store"
+import { buildInstallationExport } from "@/lib/installation-export"
 
 export interface ImportOutcome {
   /** Files that were read. */
@@ -144,14 +145,17 @@ export async function importServicePackageFromFile(): Promise<PackageReport | nu
 
 export const contentStatus = () => invoke<ContentStatus>("content_status")
 
-/** Copy the whole content database (services and songs) to a file the user picks. */
+/**
+ * Copy the whole content database (services and songs) to a file the user picks, with this
+ * computer's settings and looks inside it (#298 E6; no saved keys or passwords).
+ */
 export async function backupDatabaseToFile(): Promise<string | null> {
   const path = await save({
     defaultPath: `rhema-studio-backup-${new Date().toISOString().slice(0, 10)}.db`,
     filters: [{ name: "Rhema Studio database", extensions: ["db"] }],
   })
   if (!path) return null
-  await invoke("content_backup", { path })
+  await invoke("content_backup", { path, installation: JSON.stringify(buildInstallationExport()) })
   // The setup's Finish step shows when the last backup was made.
   useSettingsStore.getState().setSetup({ lastBackupAt: new Date().toISOString() })
   return path
@@ -176,5 +180,9 @@ export async function pickBackupFile(): Promise<string | null> {
 /** What a backup holds (services, songs, the newest service), without changing anything. */
 export const inspectBackup = (path: string) => invoke<BackupSummary>("content_inspect_backup", { path })
 
-/** Restore this backup file (checked and snapshotted by the backend, as above). */
-export const restoreDatabaseFrom = (path: string) => invoke<RestoreReport>("content_restore", { path })
+/**
+ * Restore this backup file's services and songs (checked and snapshotted by the backend, as
+ * above). This computer's settings and looks go into the snapshot with them, so restoring the
+ * snapshot undoes it; the backup's own settings and looks come back in the report for the caller.
+ */
+export const restoreDatabaseFrom = (path: string) => invoke<RestoreReport>("content_restore", { path, current: JSON.stringify(buildInstallationExport()) })

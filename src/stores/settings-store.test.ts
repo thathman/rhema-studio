@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mockGet = vi.fn()
 const mockSet = vi.fn()
 const mockSave = vi.fn()
+const mockDelete = vi.fn()
 const mockLoad = vi.fn()
 
 vi.mock("@tauri-apps/plugin-store", () => ({
@@ -23,11 +24,13 @@ describe("settings store", () => {
     mockGet.mockReset()
     mockSet.mockReset()
     mockSave.mockReset()
+    mockDelete.mockReset()
     mockLoad.mockReset()
     mockLoad.mockResolvedValue({
       get: mockGet,
       set: mockSet,
       save: mockSave,
+      delete: mockDelete,
     })
     vi.resetModules()
   })
@@ -79,7 +82,9 @@ describe("settings store", () => {
 
     await flushSave()
 
-    expect(mockSet).toHaveBeenCalledWith("gain", 1.75)
+    // Gain is this computer's: it is saved in the machine part (#298 M11).
+    expect(mockSet).toHaveBeenCalledWith("machine", expect.objectContaining({ gain: 1.75 }))
+    expect(mockSet).toHaveBeenCalledWith("settingsLayout", 2)
     expect(mockSave).toHaveBeenCalledTimes(1)
   })
 
@@ -97,7 +102,7 @@ describe("settings store", () => {
     await flushSave()
 
     expect(mockSave).toHaveBeenCalledTimes(1)
-    expect(mockSet).toHaveBeenCalledWith("gain", 1.3)
+    expect(mockSet).toHaveBeenCalledWith("machine", expect.objectContaining({ gain: 1.3 }))
   })
 
   it("concurrent hydrate calls attach only one subscription", async () => {
@@ -241,7 +246,7 @@ describe("settings store", () => {
     expect(s.setup.stepsDone).toEqual({ church: "done" })
     s.setSetup({ lastStep: "screens" })
     await flushSave()
-    expect(mockSet).toHaveBeenCalledWith("setup", expect.objectContaining({ version: 1, lastStep: "screens", deviceName: "Sanctuary desk" }))
+    expect(mockSet).toHaveBeenCalledWith("machine", expect.objectContaining({ setup: expect.objectContaining({ version: 1, lastStep: "screens", deviceName: "Sanctuary desk" }) }))
   })
 
   it("a damaged setup section costs nothing else: names, Brand Kit and keys load as saved (#298 H)", async () => {

@@ -1460,6 +1460,85 @@ export function flushThemeSave(): Promise<void> {
   return pendingSave
 }
 
+/**
+ * The looks and screens as a backup file carries them (#298 E6): the church's own themes, the
+ * outputs (without their browser-feed link secrets), lower thirds, the ticker and stage looks,
+ * scenes and the Auto choices. The same values the themes file keeps, never a rehearsal scene.
+ */
+export interface LooksBackup {
+  customThemes: BroadcastTheme[]
+  outputs: BroadcastOutput[]
+  lowerThirdStyles: LowerThirdStyle[]
+  tickerStyle: TickerStyle
+  stageStyle: StageStyle
+  tickerItems: string[]
+  tickerPresets: BroadcastState["tickerPresets"]
+  scenes: Scene[]
+  scenePresets: Scene[]
+  autoLive: boolean
+  autoBibleFeeds: boolean
+}
+
+export function looksForBackup(state: BroadcastState = useBroadcastStore.getState()): LooksBackup {
+  return {
+    customThemes: state.themes.filter((t) => !t.builtin),
+    outputs: outputsForScreens(state).map((o) => {
+      const copy = { ...o }
+      delete copy.feedToken
+      return copy
+    }),
+    lowerThirdStyles: state.lowerThirdStyles,
+    tickerStyle: state.tickerStyle,
+    stageStyle: state.stageStyle,
+    tickerItems: state.tickerItems,
+    tickerPresets: state.tickerPresets,
+    scenes: state.scenes,
+    scenePresets: state.scenePresets,
+    autoLive: state.autoLive,
+    autoBibleFeeds: state.autoBibleFeeds,
+  }
+}
+
+const isOutput = (o: unknown): o is BroadcastOutput => {
+  const x = o as BroadcastOutput
+  return typeof o === "object" && o !== null && typeof x.id === "string" && typeof x.name === "string" && typeof x.type === "string" && typeof x.themeId === "string" && typeof x.ndi === "object" && x.ndi !== null
+}
+const isTheme = (t: unknown): t is BroadcastTheme => typeof t === "object" && t !== null && typeof (t as BroadcastTheme).id === "string" && typeof (t as BroadcastTheme).name === "string"
+
+/**
+ * Put a backup's looks and screens in place, read as the themes file is read: a part that is
+ * missing or of the wrong shape leaves this computer's as it is. A browser feed on this computer
+ * keeps its link (a new feed gets a new one). Only when nothing is on air (the caller checks).
+ */
+export function restoreLooksFromBackup(raw: unknown): void {
+  if (typeof raw !== "object" || raw === null) return
+  const looks = raw as Partial<Record<keyof LooksBackup, unknown>>
+  const here = useBroadcastStore.getState()
+  const patch: Partial<BroadcastState> = {}
+  if (Array.isArray(looks.customThemes)) patch.themes = [...BUILTIN_THEMES, ...looks.customThemes.filter(isTheme).filter((t) => !t.builtin).map(normalizeTheme)]
+  if (Array.isArray(looks.outputs) && looks.outputs.some(isOutput)) {
+    const outputs = looks.outputs.filter(isOutput).map((o) => {
+      const token = here.outputs.find((h) => h.id === o.id)?.feedToken
+      const copy = { ...o }
+      delete copy.feedToken
+      return o.type === "browser" && token ? { ...copy, feedToken: token } : copy
+    })
+    patch.outputs = outputs.some((o) => o.id === MAIN_OUTPUT_ID) ? outputs : [...here.outputs.filter((o) => o.id === MAIN_OUTPUT_ID), ...outputs]
+    const main = patch.outputs.find((o) => o.id === MAIN_OUTPUT_ID)
+    if (main) patch.activeThemeId = main.themeId
+  }
+  if (Array.isArray(looks.lowerThirdStyles) && looks.lowerThirdStyles.length > 0) patch.lowerThirdStyles = looks.lowerThirdStyles.filter((x) => typeof x === "object" && x !== null).map((x) => normalizeLowerThirdStyle(x as LowerThirdStyle))
+  if (typeof looks.tickerStyle === "object" && looks.tickerStyle !== null) patch.tickerStyle = normalizeTickerStyle(looks.tickerStyle as Partial<TickerStyle>)
+  if (typeof looks.stageStyle === "object" && looks.stageStyle !== null) patch.stageStyle = normalizeStageStyle(looks.stageStyle as Partial<StageStyle>)
+  if (Array.isArray(looks.scenes)) patch.scenes = looks.scenes.map(normalizeScene).filter((x): x is Scene => x !== null)
+  if (Array.isArray(looks.scenePresets)) patch.scenePresets = looks.scenePresets.map(normalizeScene).filter((x): x is Scene => x !== null)
+  if (Array.isArray(looks.tickerItems)) patch.tickerItems = looks.tickerItems.filter((i): i is string => typeof i === "string")
+  if (looks.tickerPresets !== undefined) patch.tickerPresets = normalizePresets(looks.tickerPresets)
+  if (typeof looks.autoLive === "boolean") patch.autoLive = looks.autoLive
+  if (typeof looks.autoBibleFeeds === "boolean") patch.autoBibleFeeds = looks.autoBibleFeeds && !(patch.autoLive ?? here.autoLive)
+  useBroadcastStore.setState(patch)
+}
+
 /** The theme open in the Designer has changes that are not saved. */
 export function themeDraftChanged(): boolean {
   const { draftTheme, themes, editingThemeId } = useBroadcastStore.getState()

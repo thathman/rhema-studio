@@ -84,7 +84,10 @@ describe("the setup's Finish step: safety and backups (#298 S7)", () => {
     await openAt("finish")
     expect(text()).toContain("None made from this computer yet")
     await click("Back up now")
-    expect(calls.find((c) => c.cmd === "content_backup")?.args).toEqual({ path: "/Volumes/USB/rhema-backup.db" })
+    const args = calls.find((c) => c.cmd === "content_backup")?.args as { path: string; installation: string }
+    expect(args.path).toBe("/Volumes/USB/rhema-backup.db")
+    // The settings and looks go in the same file (#298 E6).
+    expect(JSON.parse(args.installation)).toMatchObject({ kind: "rhema-installation", v: 1, settings: { church: expect.any(Object), machine: expect.any(Object), operator: expect.any(Object) } })
     expect(useSettingsStore.getState().setup.lastBackupAt).not.toBe("")
     expect(text()).toMatch(/Today at /)
   })

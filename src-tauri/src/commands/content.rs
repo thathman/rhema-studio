@@ -271,10 +271,17 @@ fn copy_error(what: &str, e: &std::io::Error) -> ContentCommandError {
 /// included) nor hold up saving. The copy lands as `<path>.part` first and
 /// is renamed when complete, so a dropped drive never leaves a file that
 /// looks like a whole backup.
+///
+/// `installation`: this computer's settings and looks (#298 E6, JSON from the app with no
+/// secrets), kept inside the same file so one backup brings back the whole installation.
 #[tauri::command(async)]
-pub fn content_backup(state: State<'_, ContentState>, path: String) -> CmdResult<()> {
+pub fn content_backup(state: State<'_, ContentState>, path: String, installation: Option<String>) -> CmdResult<()> {
     let local = local_temp("backup");
     let result = with_db(&state, |db| db.backup_to(&local))
+        .and_then(|()| match installation.as_deref() {
+            Some(json) => rhema_content::write_installation(&local, json).map_err(ContentCommandError::from),
+            None => Ok(()),
+        })
         .and_then(|()| copy_into_place(&local, &path).map_err(|e| copy_error("Could not write the backup there", &e)));
     let _ = std::fs::remove_file(&local);
     result
@@ -323,9 +330,12 @@ mod backup_copy_tests {
 
 #[derive(Debug, Serialize)]
 pub struct RestoreReport {
-    /// Where the pre-restore database was kept.
+    /// Where the pre-restore database was kept (with this computer's settings and looks, when the
+    /// app sent them, so restoring the snapshot undoes the restore).
     pub snapshot: Option<String>,
     pub migrations: Vec<String>,
+    /// The backup's settings and looks (JSON) for the app to put in place; `None` when it has none.
+    pub installation: Option<String>,
 }
 
 /// What a backup file would bring in (services, songs, the newest service), read from a local
@@ -348,14 +358,26 @@ pub fn content_inspect_backup(path: String) -> CmdResult<rhema_content::BackupSu
 /// The backup is first copied to local disk without the lock (it may be on a
 /// slow or failing drive), off the main thread; the restore itself then
 /// reads only the local copy.
+///
+/// `current`: this computer's settings and looks as they are now (JSON, no secrets), kept in the
+/// snapshot with the services and songs, so the whole restore can be undone from that one file.
 #[tauri::command(async)]
-pub fn content_restore(state: State<'_, ContentState>, path: String) -> CmdResult<RestoreReport> {
+pub fn content_restore(state: State<'_, ContentState>, path: String, current: Option<String>) -> CmdResult<RestoreReport> {
     let local = local_temp("restore");
     std::fs::copy(&path, &local).map_err(|e| {
         let _ = std::fs::remove_file(&local);
         copy_error("Could not read the backup", &e)
     })?;
-    let report = restore_local(&state, &local);
+    let installation = rhema_content::read_installation(&local).ok().flatten();
+    let report = restore_local(&state, &local).map(|mut r| {
+        if let (Some(snapshot), Some(json)) = (r.snapshot.as_deref(), current.as_deref()) {
+            if let Err(e) = rhema_content::write_installation(Path::new(snapshot), json) {
+                log::warn!("content_restore: the settings and looks were not kept in the snapshot: {e}");
+            }
+        }
+        r.installation = installation;
+        r
+    });
     let _ = std::fs::remove_file(&local);
     report
 }
@@ -372,7 +394,7 @@ fn restore_local(state: &State<'_, ContentState>, path: &Path) -> CmdResult<Rest
         Ok((db, snapshot)) => {
             let migrations = db.applied_migrations().unwrap_or_default();
             *guard = Some(db);
-            Ok(RestoreReport { snapshot: snapshot.map(|p| p.display().to_string()), migrations })
+            Ok(RestoreReport { snapshot: snapshot.map(|p| p.display().to_string()), migrations, installation: None })
         }
         Err(e) => {
             match ContentDb::open(&current) {

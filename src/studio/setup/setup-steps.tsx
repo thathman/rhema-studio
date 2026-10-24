@@ -140,7 +140,7 @@ export function BrandStep({ onLeave }: { onLeave: Leave }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="max-w-xl text-xs text-muted-foreground">
-        Screens keep the theme they have until you choose one of the new ones; nothing on air changes here.
+        Screens keep the theme they have until you choose one of the new ones; nothing on air changes here. The Brand Kit is the church's: computers that join this one are offered it, and use it only when their operator says so.
       </p>
       <BrandDesigner />
       <Button variant="outline" className="self-start" onClick={() => onLeave(() => useShellStore.getState().openDesign("brand"))}>Open Design → Brand for more room</Button>

@@ -8,7 +8,7 @@ let keychainHangs = false
 const calls: string[] = []
 
 vi.mock("@tauri-apps/plugin-store", () => ({
-  load: async () => ({ get: async (k: string) => file.get(k) ?? null, set: async (k: string, v: unknown) => { file.set(k, v) }, save: async () => {} }),
+  load: async () => ({ get: async (k: string) => file.get(k) ?? null, set: async (k: string, v: unknown) => { file.set(k, v) }, delete: async (k: string) => file.delete(k), save: async () => {} }),
 }))
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: async (cmd: string, a: { json?: string }) => {
@@ -54,9 +54,12 @@ describe("secrets in the system keychain (RG-08)", () => {
     await settle()
     expect(useSettingsStore.getState().deepgramApiKey).toBe("dg-1234567890")
     expect(JSON.parse(keychain!)).toEqual({ deepgramApiKey: "dg-1234567890", remoteSecret: "sunday-key-1", obsPassword: "obs-pass-99" })
-    expect(file.get("deepgramApiKey")).toBe("")
-    expect(file.get("remoteSecret")).toBe("")
-    expect((file.get("obs") as { password: string }).password).toBe("")
+    // Saved in the machine part (#298 M11) and at the top for older builds, blanked in both.
+    const machine = file.get("machine") as Record<string, unknown>
+    expect(machine.deepgramApiKey).toBe("")
+    expect(machine.remoteSecret).toBe("")
+    expect((machine.obs as { password: string }).password).toBe("")
+    expect([file.get("deepgramApiKey"), file.get("remoteSecret"), (file.get("obs") as { password: string }).password]).toEqual(["", "", ""])
     expect(file.get("secretsInKeychain")).toBe(true)
 
     vi.resetModules()
@@ -74,7 +77,7 @@ describe("secrets in the system keychain (RG-08)", () => {
     const { hydrateSettings } = await import("./settings-store")
     await hydrateSettings()
     await settle()
-    expect(file.get("deepgramApiKey")).toBe("dg-1234567890")
+    expect((file.get("machine") as Record<string, unknown>).deepgramApiKey).toBe("dg-1234567890")
     expect(file.get("secretsInKeychain")).toBe(false)
   })
 
@@ -90,7 +93,7 @@ describe("secrets in the system keychain (RG-08)", () => {
     await settle()
     expect(JSON.parse(keychain!)).toEqual({ deepgramApiKey: "dg-1234567890", obsPassword: "obs-pass-99" })
     expect(calls.filter((c) => c.startsWith("set"))).toEqual([])
-    expect(file.get("remoteSecret")).toBe("new-key-123")
+    expect((file.get("machine") as Record<string, unknown>).remoteSecret).toBe("new-key-123")
     expect(file.get("secretsInKeychain")).toBe(true)
   })
 

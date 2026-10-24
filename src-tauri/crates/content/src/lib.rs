@@ -619,6 +619,9 @@ pub struct BackupSummary {
     pub last_changed: Option<String>,
     /// Written by a newer Rhema Studio: this build cannot restore it.
     pub newer: bool,
+    /// The installation's settings and looks kept in it (#298 E6), as the app wrote them (JSON, no
+    /// secrets); `None` for a backup made before they were, or with services and songs only.
+    pub installation: Option<String>,
 }
 
 /// Read-only look inside a backup (after `verify_backup`): how many services and songs it would bring in.
@@ -648,7 +651,35 @@ pub fn inspect_backup(source: &Path) -> Result<BackupSummary> {
         (0, None, None, None)
     };
     let songs: i64 = if table("songs")? { conn.query_row("SELECT COUNT(*) FROM songs", [], |r| r.get(0))? } else { 0 };
-    Ok(BackupSummary { services, songs, newest_service, newest_date, last_changed, newer })
+    let installation = read_installation(source)?;
+    Ok(BackupSummary { services, songs, newest_service, newest_date, last_changed, newer, installation })
+}
+
+/// The largest installation part a backup may hold: settings and looks with their pictures.
+const INSTALLATION_MAX: usize = 64 * 1024 * 1024;
+
+/// Put the installation's settings and looks (#298 E6: one JSON text from the app, secrets already
+/// left out) into a backup file, beside its services and songs. Only ever a copy: a backup being
+/// made, or the snapshot kept before a restore, never the live database.
+pub fn write_installation(dest: &Path, json: &str) -> Result<()> {
+    if json.len() > INSTALLATION_MAX {
+        return Err(ContentError::Invalid("the settings and looks are too large to keep in a backup".into()));
+    }
+    serde_json::from_str::<serde_json::Value>(json).map_err(|e| ContentError::Invalid(format!("the settings and looks are not readable: {e}")))?;
+    let conn = Connection::open(dest)?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS installation_export (id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL, made_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')))")?;
+    conn.execute("INSERT OR REPLACE INTO installation_export (id, json) VALUES (1, ?1)", [json])?;
+    Ok(())
+}
+
+/// The installation part of a backup file, if it has one; read only.
+pub fn read_installation(source: &Path) -> Result<Option<String>> {
+    let conn = Connection::open_with_flags(source, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+    let has: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'installation_export'", [], |r| r.get(0))?;
+    if has == 0 {
+        return Ok(None);
+    }
+    Ok(conn.query_row("SELECT json FROM installation_export WHERE id = 1", [], |r| r.get(0)).optional()?)
 }
 
 /// Replace the database at `path` with the verified backup at `source`,
@@ -692,6 +723,10 @@ pub fn restore_from(path: &Path, source: &Path) -> Result<(ContentDb, Option<Pat
     match ContentDb::open(path) {
         Ok(db) => {
             log::info!("[content] restored {} from {}", path.display(), source.display());
+            // The backup's settings and looks are handed to the app; the live database never keeps them.
+            if let Ok(conn) = db.lock() {
+                let _ = conn.execute_batch("DROP TABLE IF EXISTS installation_export");
+            }
             Ok((db, snapshot))
         }
         Err(e) => {
@@ -1644,6 +1679,39 @@ lines"}"#.to_string(), false),
         let garbage = tmp.0.join("garbage.db");
         std::fs::write(&garbage, b"not a database at all").unwrap();
         assert!(inspect_backup(&garbage).is_err());
+    }
+
+    #[test]
+    fn a_backup_carries_the_installation_and_the_live_database_never_keeps_it() {
+        let tmp = TempDir::new();
+        let backup = tmp.0.join("full.db");
+        {
+            let db = ContentDb::open(&tmp.db()).unwrap();
+            db.create_program("Sunday", None).unwrap();
+            db.backup_to(&backup).unwrap();
+        }
+        assert_eq!(inspect_backup(&backup).unwrap().installation, None, "services and songs only");
+        let json = r#"{"kind":"rhema-installation","v":1,"settings":{"church":{"brandKit":{"churchName":"Grace Chapel"}}}}"#;
+        write_installation(&backup, json).unwrap();
+        // Written again (Back up now twice into one file): one copy, the newer.
+        let newer = json.replace("Grace Chapel", "Grace Chapel Ikeja");
+        write_installation(&backup, &newer).unwrap();
+        let s = inspect_backup(&backup).unwrap();
+        assert_eq!(s.installation.as_deref(), Some(newer.as_str()));
+        assert_eq!(s.services, 1);
+        assert!(write_installation(&backup, "{not json").is_err(), "only readable settings are kept");
+        assert_eq!(read_installation(&backup).unwrap().as_deref(), Some(newer.as_str()));
+
+        let (db, snapshot) = restore_from(&tmp.db(), &backup).unwrap();
+        assert_eq!(db.list_programs().unwrap().len(), 1);
+        let kept: i64 = db.lock().unwrap().query_row("SELECT COUNT(*) FROM sqlite_master WHERE name = 'installation_export'", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 0, "the restored database does not keep the backup's settings");
+        drop(db);
+        // The snapshot from before the restore can carry what was here, so the restore can be undone.
+        let snapshot = snapshot.unwrap();
+        write_installation(&snapshot, json).unwrap();
+        assert_eq!(inspect_backup(&snapshot).unwrap().installation.as_deref(), Some(json));
+        assert!(verify_backup(&snapshot).is_ok());
     }
 
     #[test]

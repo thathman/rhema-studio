@@ -4,6 +4,8 @@ import { ArrowLeftIcon, ArrowRightIcon, FileUpIcon, InfoIcon, RotateCcwIcon } fr
 import { Button } from "@/components/ui/button"
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { importServicePackageFromFile, inspectBackup, pickBackupFile, restoreDatabaseFrom } from "@/lib/song-files"
+import { buildInstallationExport, installationChanges, parseInstallationExport, restoreInstallation, type InstallationChange, type InstallationExport } from "@/lib/installation-export"
+import { outputOnAir } from "@/lib/output-on-air"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -21,30 +23,50 @@ const day = (iso: string | null) => {
 }
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
+type Picked = { path: string; summary: BackupSummary; incoming: InstallationExport | null; changes: InstallationChange[]; undo: boolean }
+
 /**
  * Bring in a previous installation (#298), from the setup's welcome: never a blind overwrite.
  * A backup file is looked inside first and restored only after the operator has seen what it
- * holds and confirmed; a service file or the church folder only ever adds. What a backup does
- * not carry yet is said plainly.
+ * holds and what would change, and confirmed. Its settings, outputs and looks (#298 E6) come back
+ * with the services and songs; what is here is kept first as a snapshot, so Undo puts it back. A
+ * service file or the church folder only ever adds. What a backup never carries is said plainly.
  */
 export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => void; onContinue: () => void; onLeave: Leave }) {
-  const [picked, setPicked] = useState<{ path: string; summary: BackupSummary } | null>(null)
+  const [picked, setPicked] = useState<Picked | null>(null)
   const [busy, setBusy] = useState<"inspect" | "restore" | "service" | null>(null)
-  const [restored, setRestored] = useState<BackupSummary | null>(null)
+  const [restored, setRestored] = useState<{ summary: BackupSummary; settings: boolean; snapshot: string | null; undo: boolean } | null>(null)
   const servicesHere = useServiceStore((s) => s.programs.length)
   const dirty = useServiceStore((s) => s.dirty)
   const onAir = useBroadcastStore((s) => s.isLive && !!s.liveVerse)
+  const outputOn = useBroadcastStore((s) => s.outputs.some((o) => outputOnAir(o, s.outputStatus[o.id])))
 
+  const look = async (path: string, undo: boolean) => {
+    const summary = await inspectBackup(path)
+    const incoming = parseInstallationExport(summary.installation)
+    setPicked({ path, summary, incoming, changes: incoming ? installationChanges(buildInstallationExport(), incoming) : [], undo })
+  }
   const choose = async () => {
     setBusy("inspect")
     setRestored(null)
     try {
       const path = await pickBackupFile()
       if (!path) return
-      setPicked({ path, summary: await inspectBackup(path) })
+      await look(path, false)
     } catch (e) {
       setPicked(null)
       toast.error("That file cannot be restored", { description: describeError(e) })
+    } finally {
+      setBusy(null)
+    }
+  }
+  const undo = async (snapshot: string) => {
+    setBusy("inspect")
+    try {
+      await look(snapshot, true)
+      setRestored(null)
+    } catch (e) {
+      toast.error("The snapshot cannot be read", { description: describeError(e) })
     } finally {
       setBusy(null)
     }
@@ -55,9 +77,12 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
     try {
       const r = await restoreDatabaseFrom(picked.path)
       await reloadAfterRestore()
-      setRestored(picked.summary)
+      // The settings and looks the backend read from the same file; the ones looked at, if it said none.
+      const incoming = parseInstallationExport(r.installation) ?? picked.incoming
+      if (incoming) restoreInstallation(incoming)
+      setRestored({ summary: picked.summary, settings: !!incoming, snapshot: r.snapshot, undo: picked.undo })
       setPicked(null)
-      toast.success("Backup restored", { description: r.snapshot ? `What was here before is kept at ${r.snapshot}` : undefined })
+      toast.success(picked.undo ? "Restore undone" : "Backup restored", { description: r.snapshot ? `What was here before is kept at ${r.snapshot}` : undefined })
     } catch (e) {
       toast.error("Nothing was changed", { description: describeError(e) })
     } finally {
@@ -85,7 +110,9 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
       ? "The open service has unsaved changes. Save or close it first."
       : onAir
         ? "Something is on air. Clear the screens first."
-        : null
+        : picked?.incoming && outputOn
+          ? "An output is on. Turn the outputs off first: the backup brings its own outputs and looks."
+          : null
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-8 py-7 max-[720px]:px-5">
@@ -98,7 +125,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
         <div className="mt-5 flex max-w-2xl flex-col gap-3 text-sm">
           <section aria-labelledby="restore-backup" className="rounded-lg border border-border bg-card p-4">
             <h3 id="restore-backup" className="font-semibold">A Rhema backup file</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Every service and song, as saved with Archive → Backups → Back up now (a .db file). Rhema looks inside it first.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Every service and song, with the settings, outputs, looks and Brand Kit, as saved with Archive → Backups → Back up now (a .db file). Rhema looks inside it first.</p>
             {!s && (
               <Button size="sm" variant="outline" className="mt-3" disabled={busy !== null} onClick={() => void choose()}>
                 <RotateCcwIcon /> {busy === "inspect" ? "Looking inside…" : "Choose a backup file…"}
@@ -111,19 +138,45 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
                 {s.newest_service && (
                   <p className="text-xs text-muted-foreground">Newest service: {s.newest_service}{s.newest_date ? ` (${day(s.newest_date)})` : ""}{s.last_changed ? ` · last changed ${day(s.last_changed)}` : ""}</p>
                 )}
+                {s.installation === undefined || s.installation === null || !picked.incoming ? (
+                  <p className="mt-2 text-xs text-muted-foreground">This backup has services and songs only (it was made before settings were kept in backups). The settings and looks here stay as they are.</p>
+                ) : picked.changes.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">Its settings, outputs and looks are the same as this computer's.</p>
+                ) : (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold">What would change here</p>
+                    <ul aria-label="What would change" className="mt-1 divide-y divide-border rounded-md border border-border bg-card text-xs">
+                      {picked.changes.map((c) => (
+                        <li key={c.what} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-3 px-2.5 py-1.5">
+                          <span className="font-medium">{c.what}</span>
+                          <span className="min-w-0 break-words text-muted-foreground">{c.here} <span aria-hidden>→</span><span className="sr-only">becomes</span> <span className="text-foreground">{c.incoming}</span></span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <p className="mt-2 text-xs">
-                  Restoring replaces every service and song on this computer ({plural(servicesHere, "service")} here now) with the backup's. What is here now is kept as a snapshot file beside the database, so it can be got back.
+                  {picked.undo ? "Undoing puts back" : "Restoring replaces"} every service and song on this computer ({plural(servicesHere, "service")} here now){picked.incoming ? ", and the settings and looks above," : ""} with the {picked.undo ? "snapshot's" : "backup's"}. Saved keys and passwords, paired phones and desks and this computer's ID stay as they are. What is here now is kept as a snapshot file beside the database, so it can be undone.
                 </p>
                 {blocked && <p role="alert" className="mt-2 text-xs font-medium text-confidence-mid">{blocked}</p>}
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
                   <Button size="sm" variant="ghost" disabled={busy === "restore"} onClick={() => setPicked(null)}>Keep what is here</Button>
                   <Button size="sm" variant="destructive" disabled={busy !== null || !!blocked} onClick={() => void restore()}>
-                    {busy === "restore" ? "Restoring…" : "Restore this backup"}
+                    {busy === "restore" ? "Restoring…" : picked.undo ? "Undo the restore" : "Restore this backup"}
                   </Button>
                 </div>
               </div>
             )}
-            {restored && <p role="status" className="mt-2 text-xs font-medium text-confidence-high">Restored: {plural(restored.services, "service")} and {plural(restored.songs, "song")}.</p>}
+            {restored && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p role="status" className="text-xs font-medium text-confidence-high">
+                  {restored.undo ? "Put back" : "Restored"}: {plural(restored.summary.services, "service")} and {plural(restored.summary.songs, "song")}{restored.settings ? ", with the settings, outputs and looks" : ""}.
+                </p>
+                {restored.snapshot && !restored.undo && (
+                  <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void undo(restored.snapshot!)}>Undo this restore…</Button>
+                )}
+              </div>
+            )}
           </section>
 
           <section aria-labelledby="restore-service" className="rounded-lg border border-border bg-card p-4">
@@ -143,7 +196,7 @@ export function RestoreView({ onBack, onContinue, onLeave }: { onBack: () => voi
           <div className="flex gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
             <InfoIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
             <p>
-              <span className="font-semibold text-foreground">Not brought in yet:</span> settings, outputs, looks, the Brand Kit, paired phones and saved keys are not in a backup file. The next steps set them up again, and keys are entered again in the setting that uses them.
+              <span className="font-semibold text-foreground">Never in a backup:</span> saved keys and passwords, paired phones and desks, and the secret part of camera and browser-feed links. Remote control, the AI assistant connector and cloud speech consent stay as they are set on this computer. Enter keys again in the setting that uses them and pair phones again; a feed new to this computer gets a new link. Backups made before this version have services and songs only.
             </p>
           </div>
         </div>

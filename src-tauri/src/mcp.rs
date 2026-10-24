@@ -57,6 +57,12 @@ fn settings(dir: &Path) -> Value {
     std::fs::read_to_string(dir.join("settings.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null)
 }
 
+/// One setting from the settings file: in its part ("church", "machine" or "operator", #298), or at
+/// the top in a file from before the parts.
+fn setting<'a>(s: &'a Value, part: &str, key: &str) -> Option<&'a Value> {
+    s.get(part).and_then(|p| p.get(key)).or_else(|| s.get(key))
+}
+
 struct Server {
     /// Where drafts are saved (`ai-drafts`), if the data folder is known.
     dir: Option<PathBuf>,
@@ -73,8 +79,8 @@ impl Server {
     fn open() -> Self {
         let dir = data_dir();
         let s = dir.as_deref().map(settings).unwrap_or(Value::Null);
-        let enabled = s.get("mcpEnabled").and_then(Value::as_bool).unwrap_or(false);
-        let church = s.pointer("/brandKit/churchName").and_then(Value::as_str).unwrap_or("").trim().to_string();
+        let enabled = setting(&s, "machine", "mcpEnabled").and_then(Value::as_bool).unwrap_or(false);
+        let church = setting(&s, "church", "brandKit").and_then(|k| k.get("churchName")).and_then(Value::as_str).unwrap_or("").trim().to_string();
         let mut problem = None;
         let content = dir.as_ref().map(|d| d.join("studio.db")).filter(|p| p.exists()).and_then(|p| match ContentDb::open_read_only(&p) {
             Ok(db) => Some(db),
@@ -541,6 +547,17 @@ mod tests {
         assert!(text.contains("Thanksgiving service starting at 10:00, 120 minutes long") && text.contains("rhema_create_service_draft") && text.contains("never quote Scripture from memory"), "{text}");
         assert_eq!(handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 4, "method": "prompts/get", "params": { "name": "nope" } })).unwrap()["error"]["code"], -32602);
         assert_eq!(handle(&mut s, &json!({ "jsonrpc": "2.0", "id": 5, "method": "prompts/get", "params": { "name": "reuse_service", "arguments": {} } })).unwrap()["error"]["code"], -32602, "the service is required");
+    }
+
+    #[test]
+    fn settings_are_read_from_their_part_or_from_an_older_flat_file() {
+        let parts = json!({ "settingsLayout": 2, "machine": { "mcpEnabled": true }, "church": { "brandKit": { "churchName": "Grace Chapel" } } });
+        assert_eq!(setting(&parts, "machine", "mcpEnabled"), Some(&json!(true)));
+        assert_eq!(setting(&parts, "church", "brandKit").and_then(|k| k.get("churchName")), Some(&json!("Grace Chapel")));
+        let flat = json!({ "mcpEnabled": true, "brandKit": { "churchName": "Old Chapel" } });
+        assert_eq!(setting(&flat, "machine", "mcpEnabled"), Some(&json!(true)));
+        assert_eq!(setting(&flat, "church", "brandKit").and_then(|k| k.get("churchName")), Some(&json!("Old Chapel")));
+        assert_eq!(setting(&json!({}), "machine", "mcpEnabled"), None);
     }
 
     #[test]
