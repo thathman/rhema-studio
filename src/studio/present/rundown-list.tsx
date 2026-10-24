@@ -18,7 +18,7 @@ import { buildSlides, sectionShort } from "@/lib/lyrics"
 import { MediaKindIcon, MissingMediaMark } from "@/studio/prepare/item-editor-parts"
 import { interleave, sectionSummaries } from "@/lib/run-of-show"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
-import { CUE_ACTIONS } from "@/lib/cues"
+import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
 import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 
 
@@ -106,11 +106,15 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 empty:hidden">
                 {song && <SongBadges item={item} />}
                 {item.planned_minutes ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
-                {item.on_live && (
+                {(item.on_live || takeImpact(item.on_take).length > 0) && (
                   <BellRingIcon
                     className="size-3 shrink-0 text-muted-foreground"
                     role="img"
-                    aria-label={`When it goes live: ${[item.on_live.stage_message && `stage message "${item.on_live.stage_message}"`, item.on_live.cue && CUE_ACTIONS[item.on_live.cue].label.toLowerCase()].filter(Boolean).join(", ")}`}
+                    aria-label={[
+                      item.on_live && `When it goes live: ${[item.on_live.stage_message && `stage message "${item.on_live.stage_message}"`, item.on_live.cue && CUE_ACTIONS[item.on_live.cue].label.toLowerCase()].filter(Boolean).join(", ")}`,
+                      // Steps armed for the operator's own Take (#243 RS.4).
+                      takeImpact(item.on_take).length > 0 && `When you Take it: ${takeImpact(item.on_take).join("; ").toLowerCase()}`,
+                    ].filter(Boolean).join(". ")}
                   />
                 )}
                 {item.auto_advance && <TimerIcon className="size-3 shrink-0 text-muted-foreground" role="img" aria-label={`Moves on by itself after ${item.planned_minutes ?? 0} min while timed moves are on`} />}

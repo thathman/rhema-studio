@@ -26,6 +26,16 @@ interface QueueItemBase {
   on_live?: OnLive | null
   /** Moves on to the next item of its phase after its planned minutes, while timed moves are on in Present (issue #193). */
   auto_advance?: boolean | null
+  /**
+   * How this item is meant to look (#299 6.6, #243 RS.3): a congregation scene, a look and a camera
+   * on the church network, by id (a look is a theme id, a camera its name in the camera router).
+   * Hints for Present's Preview only: none of them is taken by itself.
+   */
+  scene_id?: string | null
+  look_id?: string | null
+  camera?: string | null
+  /** What the operator's own Take of this item also does (#243 RS.4, OB.2); see `TakeStep`. */
+  on_take?: TakeStep[] | null
   /** Payload fields this build does not edit (from a newer version or a service file), written back unchanged (FR-03). */
   payload_extra?: Record<string, unknown>
 }
@@ -128,3 +138,13 @@ export interface OnLive {
   stage_message?: string
   cue?: GoLiveCue
 }
+
+/**
+ * A step armed on an item for the operator's own Take of it (#243 RS.4, OB.2), never run by a timed
+ * move or a phase that runs by itself, and never putting anything live by itself:
+ * "scene.take:<scene id>" arranges every congregation screen as the scene ("…@<output id>": one
+ * screen); "obs.scene:<OBS scene name>" puts the scene in OBS's preview in Studio Mode, or switches
+ * OBS to it otherwise (never in rehearsal); "source.only" sends a reading to the Bible feeds only,
+ * and the main screens keep what they show.
+ */
+export type TakeStep = `scene.take:${string}` | `obs.scene:${string}` | "source.only"

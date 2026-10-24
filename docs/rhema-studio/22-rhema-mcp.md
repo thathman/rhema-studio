@@ -101,8 +101,10 @@ Ready-made requests an assistant offers (in Claude Desktop, under the + / prompt
 - **Look and scene suggestions (MCP-004):** any item may carry `suggested_look` and
   `suggested_scene`, names from `rhema_list_looks_and_scenes`. The check warns when the church has no
   look or scene by that name. Prepare → AI drafts shows them beside the item ("Welcome (look:
-  Thanksgiving gold, scene: Bible and lyrics)") for people to apply by hand; they are never stored in
-  the service, so nothing about the screens changes by opening a draft.
+  Thanksgiving gold, scene: Bible and lyrics)"). Opening the draft sets each one the church has (by
+  name, any case) as the item's planned look and scene (#299 6.6), shown under Preview; one it lacks
+  is marked "(none here by that name)" and left out. They stay a plan: nothing about the screens
+  changes by opening a draft, and a scene is taken only if a person arms it for their own Take.
 - The only file the MCP server writes is the draft; it still cannot change a saved service.
 
 ## Timing, groups, choosing items and revisions (MCP-005)

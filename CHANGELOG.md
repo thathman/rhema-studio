@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Run-of-show items get a scene, look and camera (#243, #299)
+- In Prepare, each item has a **Look and scene** section (Slides tab): choose its congregation scene, its look and its camera from the church's own. Preview in Prepare draws the item in that look, and Present shows the plan under Preview. Nothing changes a screen by itself.
+- **Signals → When you Take it** can arm the item's scene (on every congregation screen or one), an **OBS scene** (in OBS's Studio Mode it only waits in OBS's preview) and, for a reading, **Bible feeds only** (the main screens keep what they show). These run once when you, or a joined desk, take the item: never for a timed move or a phase running by itself. In rehearsal the scene is practice and OBS is never changed.
+- Opening an AI draft now sets an item's look and scene when the assistant suggested one your church has by that name; review shows the ones this computer does not have.
+- Services saved before keep opening and saving exactly as they were; the new choices travel in service files and the church folder.
 ### Tidier layouts on small windows; clearer planned times (#215)
 - **Present** fits a 1024×600 window: on a narrow window the Live panel, transport, Find & cue and One-touch moments share one column that scrolls instead of drawing over each other, and on a window 900 pixels tall or less the Scenes strip starts folded (one click opens it). The Live panel's "Nothing on air" no longer spills over the sources under it.
 - Running-order rows keep their titles readable: languages, minutes and who prepares it move under the title when the row is narrow, and phase headers wrap instead of cutting their name and counts short.

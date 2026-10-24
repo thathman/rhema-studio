@@ -52,7 +52,7 @@ function reconsider() {
     move = null
     useTimedAdvance.setState({ dueAt: null })
     const b = useBroadcastStore.getState()
-    if (useTimedAdvance.getState().on && b.isLive && b.liveItemId === next.itemId) void presentQueueItem(next.index)
+    if (useTimedAdvance.getState().on && b.isLive && b.liveItemId === next.itemId) void presentQueueItem(next.index, 0, undefined, { automatic: true })
   }
   move = go
   timer = setTimeout(go, next.ms)

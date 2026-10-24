@@ -1164,6 +1164,23 @@ Rhema on the church network with the HTTP listener on the network. The Chromecas
 | 10en.9 | From another computer: `nc <TV> 8095` and type nothing; at once press **Check TV** in Show health. Then `python3 -c "print('{' + '[' * 8000)" > deep.json; curl -i -X POST -H 'Content-Type: application/json' --data-binary @deep.json http://<TV>:8095/challenge`. | Check TV answers while nc is open; nc is closed by the TV after about 5 s. The deep body gets 400 "That is not what Rhema sends"; Rhema Receiver keeps running and showing the feed. | Partial (2026-10-24, Chromecast with Google TV HD, QA build of main + #336, the TV reaching Rhema through adb (the https port 9091 forwarded)): 8,000 nested [ → 400 and the app kept running; the slow-connection (nc) case not tried. |
 | 10en.10 | A scene with a camera (camera router on) on the TV's feed. | The camera plays on the TV as before (10dh.8). | Unverified |
 
+### 10ep. Run-of-show items get a scene, look and camera (#243, #299)
+
+Rhema with one congregation screen (two for 10ep.4), two saved scenes (Production → Programs), a camera in Production → Cameras, and OBS with the "Rhema QA" collection (scenes Worship and Sermon) connected in Production → OBS. A service with a slide, a song and a reading.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ep.1 | Prepare → the slide → Slides tab → **Look and scene**: choose a scene, a look different from the screen's and the camera. | Preview above draws the slide in that look ("In its look, …" in its header). Under Preview: "Planned · Scene: … · Look: … · Camera: …". No screen changes. | Unverified |
+| 10ep.2 | Save the service, close it and open it again; then **Copy** it and open the copy. | The scene, look and camera are still chosen on the slide in both. | Unverified |
+| 10ep.3 | Present: click the slide (Preview). | Under Preview the same plan shows; the screens and the Scenes strip are unchanged. | Unverified |
+| 10ep.4 | Prepare → the slide → **Signals → When you Take it**: tick **Take its scene**, choose one screen; type **Sermon** in Switch OBS to. Present: Take live the slide. | The slide goes live; that screen is then arranged as the scene (the other screen keeps its own); OBS switches to Sermon (Studio Mode off) and the service log says so. The rundown's bell says "When you Take it: …". | Unverified |
+| 10ep.5 | Take live the slide again; then the next item and back to the slide with Previous. | Taking it again changes nothing more; coming back to it from another item runs the steps again. | Unverified |
+| 10ep.6 | OBS Studio Mode on. Take another item, then the slide. | Sermon goes into OBS's preview only; OBS's program changes only when you press Take in OBS (or Rhema's Take in OBS). | Unverified |
+| 10ep.7 | Rehearsal on. Take the slide. | The scene shows in Rhema as practice (In rehearsal); "OBS not changed — Rehearsal is on…"; OBS does not change. Rehearsal off: every screen has its own scene again. | Unverified |
+| 10ep.8 | Give the slide planned minutes and Move on by itself; turn Timed moves on and let the item before it move on to it by itself. | The slide goes live but its scene and OBS steps do not run. | Unverified |
+| 10ep.9 | A lyrics song live. Prepare → the reading → When you Take it → **Bible feeds only**. Present: Take live the reading. | "John 3:16 is on the Bible feeds"; the main screen keeps the song; an output that follows Bible (or a scene's Bible box) shows the verse. | Unverified |
+| 10ep.10 | Prepare → AI drafts: open a draft whose item suggests a look and a scene the church has, and one it has not. | Review says "(look: …, scene: … (none here by that name))" for the missing one. After opening, the matched item has that look and scene in Look and scene; nothing went live. | Unverified |
+| 10ep.11 | Delete the scene used in 10ep.1 (Production → Programs) and select the slide in Prepare. | Look and scene shows the scene as "Not on this computer" and Preview says "Scene: not on this computer"; a Take of it says "Scene not taken". | Unverified |
 ### 10eo. Layouts on small windows; clearer planned times (#215)
 
 Rhema with a saved service that has phases (pre-service loop, warm-up, main service), a song with two languages, minutes and a "prepared by" name, at least one congregation output and one saved scene.

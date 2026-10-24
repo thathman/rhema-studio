@@ -146,8 +146,8 @@ fn draft_schema() -> Value {
                             "end_by": { "type": "string", "description": "HH:MM (24-hour): a time this item must finish by, e.g. the sermon by 11:20" },
                             "group": { "type": "string", "description": "a group within the phase, e.g. \"Praise and worship\": items next to each other with the same group sit under one heading; put ungrouped items before the first group" },
                             "notes": { "type": "string" },
-                            "suggested_look": { "type": "string", "description": "a look name from rhema_list_looks_and_scenes (a suggestion the reviewer sees; not applied)" },
-                            "suggested_scene": { "type": "string", "description": "a scene name from rhema_list_looks_and_scenes (a suggestion the reviewer sees; not applied)" }
+                            "suggested_look": { "type": "string", "description": "a look name from rhema_list_looks_and_scenes (the reviewer sees it; when the church has one by that name, opening the draft sets it as the item's planned look; never taken live)" },
+                            "suggested_scene": { "type": "string", "description": "a scene name from rhema_list_looks_and_scenes (the reviewer sees it; when the church has one by that name, opening the draft sets it as the item's planned scene; never taken live)" }
                         }
                     } }
                 }

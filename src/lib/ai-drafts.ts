@@ -1,4 +1,5 @@
 import { clockMinutes, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
+import { idByName } from "@/lib/item-intent"
 import type { QueueItem } from "@/types"
 
 /**
@@ -15,7 +16,11 @@ export interface AiDraftItem {
   /** The group within its phase: items next to each other with the same name share a heading. */
   group?: string | null
   notes?: string | null
-  /** The assistant's suggestions for how it looks (shown in review; never stored in the service). */
+  /**
+   * The assistant's suggestions for how it looks, by name (shown in review). Opening the draft sets
+   * them as the item's look and scene when the church has one by that name (#299 6.6); they stay
+   * Preview hints, never taken live.
+   */
   suggested_look?: string | null
   suggested_scene?: string | null
   song?: { id: string; title: string; primary_language: string; languages: string[]; hymn?: boolean }
@@ -90,8 +95,23 @@ export function draftDiff(draft: QueueItem[], open: QueueItem[]): DraftDiff {
   return { added, missing: left.map((o) => o.reference), changed }
 }
 
-/** The draft as a rundown: items in order and the phases (and groups) before them. */
-export function draftToRundown(d: AiDraft, newId: () => string = () => crypto.randomUUID()): { items: QueueItem[]; headers: OutlineHeader[] } {
+/** The church's looks and congregation scenes, by name, to match a draft's suggestions against. */
+export interface DraftNames {
+  looks: readonly { id: string; name: string }[]
+  scenes: readonly { id: string; name: string }[]
+}
+
+/** An item's suggested look and scene, each with the id of the church's one by that name (null: none here). */
+export function matchSuggestions(it: Pick<AiDraftItem, "suggested_look" | "suggested_scene">, names: DraftNames): { look: { name: string; id: string | null } | null; scene: { name: string; id: string | null } | null } {
+  const one = (name: string | null | undefined, list: DraftNames["looks"]) => (name?.trim() ? { name: name.trim(), id: idByName(name, list) } : null)
+  return { look: one(it.suggested_look, names.looks), scene: one(it.suggested_scene, names.scenes) }
+}
+
+/**
+ * The draft as a rundown: items in order and the phases (and groups) before them. A suggested look
+ * or scene the church has (matched by name) becomes the item's look or scene; one it lacks is left out.
+ */
+export function draftToRundown(d: AiDraft, newId: () => string = () => crypto.randomUUID(), names: DraftNames = { looks: [], scenes: [] }): { items: QueueItem[]; headers: OutlineHeader[] } {
   const items: QueueItem[] = []
   const headers: OutlineHeader[] = []
   const by = draftAuthor(d)
@@ -104,7 +124,8 @@ export function draftToRundown(d: AiDraft, newId: () => string = () => crypto.ra
       if (g && g !== group) headers.push({ id: newId(), type: "group", name: g, at: items.length })
       if (g) group = g
       const endBy = clockMinutes(it.end_by) !== null ? it.end_by! : null
-      const base = { id: newId(), confidence: 1, source: "manual" as const, added_at: now, prepared_by: by, planned_minutes: it.planned_minutes ?? null, ...(endBy ? { end_by: endBy } : {}), notes: it.notes ?? null }
+      const { look, scene } = matchSuggestions(it, names)
+      const base = { id: newId(), confidence: 1, source: "manual" as const, added_at: now, prepared_by: by, planned_minutes: it.planned_minutes ?? null, ...(endBy ? { end_by: endBy } : {}), notes: it.notes ?? null, ...(look?.id ? { look_id: look.id } : {}), ...(scene?.id ? { scene_id: scene.id } : {}) }
       if (it.kind === "song" && it.song) {
         const languages = [it.song.primary_language, ...it.song.languages.filter((l) => l !== it.song!.primary_language)]
         items.push({ ...base, kind: "song", reference: it.song.title, song: { song_id: it.song.id, title: it.song.title, arrangement_id: null, languages } })

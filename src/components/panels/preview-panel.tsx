@@ -8,8 +8,15 @@ import { isImageItem, isSlideItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
+import { useSelectedItem } from "@/studio/prepare/use-selected-item"
+import { ItemPlan } from "@/studio/prepare/item-plan"
 
-export function PreviewPanel() {
+/**
+ * What Show live will present, only for the operator. Under it, the previewed rundown item's plan
+ * (its scene, look, camera and Take steps). `itemLook` (Prepare): drawn in the item's own look,
+ * when it has one, to see how it is meant to look; Present keeps the look Show live will use.
+ */
+export function PreviewPanel({ itemLook = false }: { itemLook?: boolean } = {}) {
   const selectedVerse = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
   const previewSongId = selectedSlide && isSongItem(selectedSlide.item) ? selectedSlide.item.song.song_id : null
@@ -51,7 +58,9 @@ export function PreviewPanel() {
   const themes = useBroadcastStore((s) => s.themes)
   const activeThemeId = useBroadcastStore((s) => s.activeThemeId)
 
-  const activeTheme = themes.find((t) => t.id === activeThemeId) ?? themes[0]
+  const previewed = useSelectedItem()?.item ?? null
+  const ownLook = itemLook && previewed?.look_id ? themes.find((t) => t.id === previewed.look_id) : undefined
+  const activeTheme = ownLook ?? themes.find((t) => t.id === activeThemeId) ?? themes[0]
   // Label the preview with the translation the verse is actually in.
   const translation =
     translations.find((t) => t.id === selectedVerse?.translation_id)?.abbreviation ??
@@ -80,7 +89,7 @@ export function PreviewPanel() {
       className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
       <PanelHeader title="Preview">
-        <span className="text-xs text-muted-foreground">Only you see this</span>
+        <span className="text-xs text-muted-foreground">{ownLook ? `In its look, ${ownLook.name} · ` : ""}Only you see this</span>
       </PanelHeader>
       {/* The picture fits the panel both ways, so a short panel never crops it. */}
       <div className="flex min-h-0 flex-1 items-center justify-center p-3 [container-type:size]">
@@ -88,6 +97,7 @@ export function PreviewPanel() {
           <CanvasVerse theme={activeTheme} verse={verseData} />
         </div>
       </div>
+      {previewed && <ItemPlan item={previewed} />}
     </div>
   )
 }

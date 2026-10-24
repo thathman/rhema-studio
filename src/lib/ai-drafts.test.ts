@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { draftDiff, draftToRundown, itemKey, leaveOut, type AiDraft } from "./ai-drafts"
+import { draftDiff, draftToRundown, itemKey, leaveOut, matchSuggestions, type AiDraft } from "./ai-drafts"
 import type { QueueItem } from "@/types"
 
 const draft: AiDraft = {
@@ -75,5 +75,21 @@ describe("an AI draft opened in Prepare", () => {
     const { items, headers } = draftToRundown(d, () => "x")
     expect(items[0]).toMatchObject({ reference: hostile, slide: { title: hostile, body: "<img src=x onerror=alert(1)>" }, notes: hostile })
     expect(headers[0].name).toBe("<b>Main</b>")
+  })
+
+  it("sets an item's look and scene from the assistant's suggestion when the church has one by that name (#299 6.6)", () => {
+    const names = { looks: [{ id: "classic-dark", name: "Classic Dark" }, { id: "gold", name: "Thanksgiving gold" }], scenes: [{ id: "sc1", name: "Bible and lyrics" }] }
+    const suggested: AiDraft = { ...draft, phases: [{ name: "Main service", items: [
+      { kind: "slide", status: "found", title: "Welcome", suggested_look: "  thanksgiving GOLD ", suggested_scene: "Bible and lyrics" },
+      { kind: "slide", status: "found", title: "Notices", suggested_look: "Neon party", suggested_scene: "Camera only" },
+      { kind: "slide", status: "found", title: "Prayer" },
+    ] }] }
+    const { items } = draftToRundown(suggested, () => "x", names)
+    expect(items.map((i) => [i.look_id, i.scene_id])).toEqual([["gold", "sc1"], [undefined, undefined], [undefined, undefined]])
+    // Without the church's names (an old caller) nothing is set: suggestions stay words only.
+    expect(draftToRundown(suggested, () => "x").items.every((i) => !i.look_id && !i.scene_id)).toBe(true)
+    // Review shows which ones this computer has.
+    expect(matchSuggestions(suggested.phases[0].items[1], names)).toEqual({ look: { name: "Neon party", id: null }, scene: { name: "Camera only", id: null } })
+    expect(matchSuggestions(suggested.phases[0].items[2], names)).toEqual({ look: null, scene: null })
   })
 })

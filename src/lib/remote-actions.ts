@@ -1,4 +1,4 @@
-import { cancelPendingPresents, presentCustomSlide, presentImage, presentSlide, presentVerse } from "@/hooks/use-broadcast"
+import { cancelPendingPresents, presentCustomSlide, presentImage, presentSlide, presentVerse, type PresentOutcome } from "@/hooks/use-broadcast"
 import { fetchChapter, stepVerse } from "@/hooks/use-bible"
 import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
@@ -8,6 +8,36 @@ import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { approvalHolds } from "@/stores/approval-gate-store"
+import { runTakeSteps, takesSourceOnly } from "@/lib/take-steps"
+import { toast } from "sonner"
+
+/**
+ * After an item's content is presented by the operator's own Take: its armed Take steps run once,
+ * when it was not already the item up (not for the next slide of the same song, or a Take again).
+ */
+function afterTake(item: QueueItem, entering: boolean) {
+  return (outcome: PresentOutcome | void) => {
+    if (outcome === "presented" && entering) void runTakeSteps(item)
+  }
+}
+
+/** Whether this item is what is up now: on the main screens, or (a "Bible feeds only" reading) on the Bible source. */
+function isUp(item: QueueItem): boolean {
+  const b = useBroadcastStore.getState()
+  if (takesSourceOnly(item)) return b.sources.bible?.on === true && b.sources.bible.itemId === item.id
+  return b.isLive && b.liveItemId === item.id
+}
+
+/** A reading armed "Bible feeds only": its Take activates the Bible source; the main screens keep what they show. */
+async function takeOnBibleFeeds(item: QueueItem): Promise<PresentOutcome> {
+  if (!isVerseItem(item)) return "empty"
+  const outcome = await presentVerse(item.verse, { sourceOnly: true, item, itemId: item.id, background: item.background })
+  if (outcome === "presented") {
+    if (useBroadcastStore.getState().rehearsal) toast.info("Rehearsal: the Bible feeds were not changed")
+    else toast.success(`${item.reference} is on the Bible feeds`, { description: "This item is set to Bible feeds only in Prepare: the main screens keep what they show." })
+  }
+  return outcome
+}
 
 /**
  * Find the queue index of the item currently on the live output.
@@ -29,29 +59,33 @@ function findLiveQueueIndex(): number | null {
  * first, "last" for stepping backwards into a song).
  * Next/Previous/double-click/OSC/HTTP all come here.
  */
-export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[]; song?: SongWithSections }): Promise<void> {
+export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[]; song?: SongWithSections }, opts: { automatic?: boolean } = {}): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
   // Before the active item moves: a held go-live must change nothing (CL-002).
   const id = item.id
   const again = () => {
     const i = useQueueStore.getState().items.findIndex((x) => x.id === id)
-    if (i !== -1) void presentQueueItem(i, slide, songAs)
+    if (i !== -1) void presentQueueItem(i, slide, songAs, opts)
   }
-  if (!isSoundItem(item) && approvalHolds(again)) return
+  const sourceOnly = takesSourceOnly(item)
+  // A reading for the Bible feeds only does not reach the main screens, like Activate on Bible feeds.
+  if (!isSoundItem(item) && !sourceOnly && approvalHolds(again)) return
+  // A timed move or a phase that runs by itself is not the operator's Take: its steps do not run.
+  const took = afterTake(item, !opts.automatic && !isUp(item))
   useQueueStore.getState().setActive(index)
   if (isSlideItem(item)) {
-    await presentCustomSlide(item, { goLive: true }).catch((e) => console.warn("[remote-actions] presentQueueItem (slide) failed:", e))
+    await presentCustomSlide(item, { goLive: true }).then(took).catch((e) => console.warn("[remote-actions] presentQueueItem (slide) failed:", e))
     return
   }
   if (isImageItem(item)) {
-    await presentImage(item, { goLive: true }).catch((e) => console.warn("[remote-actions] presentQueueItem (image) failed:", e))
+    await presentImage(item, { goLive: true }).then(took).catch((e) => console.warn("[remote-actions] presentQueueItem (image) failed:", e))
     return
   }
   if (isSongItem(item)) {
     // Stepping within the live song keeps the arrangement it went live with.
     const songItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
-    await presentSlide(songItem, slide, { goLive: true, song: songAs?.song }).catch((e) =>
+    await presentSlide(songItem, slide, { goLive: true, song: songAs?.song }).then(took).catch((e) =>
       console.warn("[remote-actions] presentQueueItem (song) failed:", e),
     )
     return
@@ -62,7 +96,11 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
     chapter: item.verse.chapter,
     verse: item.verse.verse,
   })
-  await presentVerse(item.verse, { item, goLive: true, itemId: item.id, background: item.background }).catch((e) =>
+  if (sourceOnly) {
+    await takeOnBibleFeeds(item).then(took).catch((e) => console.warn("[remote-actions] presentQueueItem (Bible feeds) failed:", e))
+    return
+  }
+  await presentVerse(item.verse, { item, goLive: true, itemId: item.id, background: item.background }).then(took).catch((e) =>
     console.warn("[remote-actions] presentQueueItem failed:", e),
   )
 }
@@ -211,18 +249,23 @@ export const remoteActions = {
       const stillLive = useBroadcastStore.getState().liveSlide?.itemId === item.id
       const idx = queue.items.findIndex((i) => i.id === item.id)
       if (idx !== -1) queue.setActive(idx)
-      const presenting: Promise<unknown> = isSlideItem(item)
+      // The rundown's copy carries the steps armed in Prepare since it was put in Preview.
+      const took = afterTake(queue.items[idx] ?? item, !isUp(item))
+      const presenting: Promise<PresentOutcome> = isSlideItem(item)
         ? presentCustomSlide(item, { goLive: true })
         : isImageItem(item)
           ? presentImage(item, { goLive: true })
           : presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined })
-      return presenting.then(() => {}).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
+      return presenting.then(took).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
     }
     const selectedVerse = bible.selectedVerse
     if (!selectedVerse) return Promise.resolve()
     const idx = queue.findDuplicate(selectedVerse.book_number, selectedVerse.chapter, selectedVerse.verse)
     const rundownItem = idx === -1 ? null : queue.items[idx]
     if (idx !== -1) queue.setActive(idx)
+    const took = rundownItem ? afterTake(rundownItem, !isUp(rundownItem)) : () => {}
+    // A reading armed "Bible feeds only" in Prepare: Take live sends it there, in its own translations.
+    if (rundownItem && takesSourceOnly(rundownItem)) return takeOnBibleFeeds(rundownItem).then(took).catch((e) => console.warn("[remote-actions] sendToLive (Bible feeds) failed:", e))
     const previewed = bible.translations.find((t) => t.id === selectedVerse.translation_id)?.abbreviation ?? null
     return presentVerse(selectedVerse, {
       goLive: true,
@@ -232,7 +275,7 @@ export const remoteActions = {
         translation: previewed,
         secondary_translation: rundownItem && isVerseItem(rundownItem) ? (rundownItem.secondary_translation ?? null) : null,
       },
-    }).then(() => {}).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
+    }).then(took).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
   },
 
   /** Queue the verse showing in Program preview. Duplicates are dropped by the store. */
