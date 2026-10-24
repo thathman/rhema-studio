@@ -64,6 +64,32 @@ export interface ReadinessInput {
   camerasNotSending?: Array<{ camera: string; outputs: string[]; onAir: boolean; routerOff: boolean }>
   /** Browser feeds on air that no screen (TV, browser, OBS) is watching (#213). */
   feedsUnwatched?: string[]
+  /**
+   * Whether the service is about to start or running (#298 H6): false = it is hours or days away,
+   * so nothing on a screen yet is only a note. Absent or null = not known, and it stays a warning.
+   */
+  serviceSoon?: boolean | null
+}
+
+/** How close a service must be before "nothing is on a screen" needs doing. */
+export const SOON_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Is the service about to start or happening (#298 H6)? Running (something live, the event clock
+ * started) is soon. Otherwise from its date and the main service's start time: within two hours
+ * before the start until six after; a date with no time is soon all that day. No date: not known.
+ */
+export function serviceStartsSoon(i: { serviceDate: string | null | undefined; startsAt?: string | null; running: boolean; now: number }): boolean | null {
+  if (i.running) return true
+  if (!i.serviceDate || !/^\d{4}-\d{2}-\d{2}$/.test(i.serviceDate)) return null
+  const [y, m, d] = i.serviceDate.split("-").map(Number)
+  const minutes = clockMinutes(i.startsAt)
+  if (minutes === null) {
+    const today = new Date(i.now)
+    return today.getFullYear() === y && today.getMonth() === m - 1 && today.getDate() === d
+  }
+  const start = new Date(y, m - 1, d, Math.floor(minutes / 60), minutes % 60).getTime()
+  return i.now >= start - SOON_MS && i.now <= start + 3 * SOON_MS
 }
 
 /** "Main Display · on · congregation, Stage · off · stage" (plus a nudge when only the stage is on). */
@@ -95,7 +121,10 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
           detail: outputDetail(i.outputs),
           ...(i.outputs?.some((o) => o.role === "congregation" && o.on) === false || i.outputs?.some((o) => o.on && o.error) ? { fix: "outputs" as const, fixLabel: "Open outputs" } : {}),
         }
-      : { id: "outputs", status: "warn", label: "No output is on a screen yet", detail: i.outputs?.length ? outputDetail(i.outputs) : "The congregation cannot see anything until an output is on air.", fix: "outputs", fixLabel: "Open outputs" },
+      : i.outputsConfigured === 0 || i.serviceSoon === false
+        ? // Planning only (#298 H6): no screens set up, or the service is hours away. A note, not "not ready".
+          { id: "outputs", status: "info", label: "No output is on a screen yet", detail: i.outputsConfigured === 0 ? "No outputs are set up. You can plan without any; add one in Outputs before the service." : `Turn the screens on before the service starts.${i.outputs?.length ? ` ${outputDetail(i.outputs)}` : ""}`, fix: "outputs", fixLabel: "Open outputs" }
+        : { id: "outputs", status: "warn", label: "No output is on a screen yet", detail: i.outputs?.length ? outputDetail(i.outputs) : "The congregation cannot see anything until an output is on air.", fix: "outputs", fixLabel: "Open outputs" },
     i.rundownCount > 0
       ? { id: "rundown", status: "ok", label: `${i.rundownCount} item${i.rundownCount === 1 ? "" : "s"} in the service` }
       : { id: "rundown", status: "info", label: "Nothing in the service yet", detail: "You can still find and show passages live.", fix: "prepare", fixLabel: "Prepare service" },

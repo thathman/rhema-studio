@@ -1,3 +1,5 @@
+import { useEffect } from "react"
+import { create } from "zustand"
 import { churchSetup, equipment, type ChurchSetup, type EquipmentItem } from "@/lib/setup-readiness"
 import { outputOnAir } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
@@ -6,6 +8,10 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useJoin } from "@/stores/join-store"
 import { useObsStore } from "@/stores/obs-store"
 import { useSettingsStore } from "@/stores/settings-store"
+import { useSongStore } from "@/stores/song-store"
+
+/** Whether the Library has any songs or hymns (null until looked up): one small lookup per view that shows it. */
+const useLibrarySongs = create<{ count: number | null }>(() => ({ count: null }))
 
 /** Church setup and equipment as they are now (#298), for the setup's Finish step and Home's card. */
 export function useSetupStatus(): { church: ChurchSetup; equipment: { items: EquipmentItem[]; notUsing: string[]; attention: number } } {
@@ -18,6 +24,15 @@ export function useSetupStatus(): { church: ChurchSetup; equipment: { items: Equ
   const obsStatus = useObsStore((o) => o.status)
   const obsError = useObsStore((o) => o.error)
   const joinStatus = useJoin((j) => j.status)
+  const librarySongs = useLibrarySongs((l) => l.count)
+  useEffect(() => {
+    let alive = true
+    useSongStore.getState().lookup("", 1).then(
+      (found) => { if (alive) useLibrarySongs.setState({ count: Array.isArray(found) ? found.length : 0 }) },
+      () => {},
+    )
+    return () => { alive = false }
+  }, [])
   return {
     church: churchSetup({
       churchName: s.brandKit.churchName,
@@ -31,6 +46,7 @@ export function useSetupStatus(): { church: ChurchSetup; equipment: { items: Equ
       campus: s.setup.campus,
       serviceLanguages: s.setup.serviceLanguages,
       deviceName: s.setup.deviceName,
+      librarySongs,
     }),
     equipment: equipment({
       outputs: outputs.map((o) => ({
@@ -41,6 +57,7 @@ export function useSetupStatus(): { church: ChurchSetup; equipment: { items: Equ
         ndiError: outputStatus[o.id]?.ndiError ?? null,
         receivers: outputStatus[o.id]?.ndiReceivers ?? null,
         feed: feeds[o.id] ?? null,
+        tvs: o.tvs?.map((t) => ({ name: t.name, address: t.address })),
       })),
       obs: { enabled: s.obs.enabled, status: obsStatus, error: obsError },
       // Only whether a key exists: the key itself never leaves the settings store.
@@ -48,6 +65,7 @@ export function useSetupStatus(): { church: ChurchSetup; equipment: { items: Equ
       mcpEnabled: s.mcpEnabled,
       join: { address: s.joinAddress, status: joinStatus },
       pairedDevices: s.remoteDevices.length,
+      audio: { micChosen: !!s.audioDeviceId, talkHeadset: !!(s.talkInputId || s.talkOutputId) },
     }),
   }
 }

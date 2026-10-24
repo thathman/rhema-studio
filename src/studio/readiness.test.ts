@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { computeReadiness } from "./readiness"
+import { computeReadiness, serviceStartsSoon } from "./readiness"
 
 const good = {
   translationsLoaded: 8,
@@ -184,3 +184,34 @@ describe("preflight: the plan and cameras (#213, #196)", () => {
   })
 })
 
+
+describe("planning without screens on (#298 H6)", () => {
+  it("no output set up at all is a note, not 'not ready'", () => {
+    const r = computeReadiness({ ...good, outputsConfigured: 0, outputsOnAir: 0, outputs: [] })
+    expect(r.checks.find((c) => c.id === "outputs")).toMatchObject({ status: "info", fix: "outputs" })
+    expect(r.ready).toBe(true)
+  })
+
+  it("nothing on a screen is a note while the service is hours away, and a warning once it is close or unknown", () => {
+    const far = computeReadiness({ ...good, outputsOnAir: 0, serviceSoon: false })
+    expect(far.checks.find((c) => c.id === "outputs")?.status).toBe("info")
+    expect(far.ready).toBe(true)
+    expect(computeReadiness({ ...good, outputsOnAir: 0, serviceSoon: true }).checks.find((c) => c.id === "outputs")?.status).toBe("warn")
+    expect(computeReadiness({ ...good, outputsOnAir: 0, serviceSoon: null }).ready).toBe(false)
+  })
+
+  it("works out 'soon' from the date and the main service's start: two hours before until six after", () => {
+    const at = (h: number, m = 0) => new Date(2026, 9, 25, h, m).getTime()
+    const sunday = { serviceDate: "2026-10-25", startsAt: "10:00", running: false }
+    expect(serviceStartsSoon({ ...sunday, now: at(7, 59) })).toBe(false)
+    expect(serviceStartsSoon({ ...sunday, now: at(8, 0) })).toBe(true)
+    expect(serviceStartsSoon({ ...sunday, now: at(12, 30) })).toBe(true)
+    expect(serviceStartsSoon({ ...sunday, now: at(16, 1) })).toBe(false)
+    // A date with no time: all that day; another day is not soon; no date is not known.
+    expect(serviceStartsSoon({ serviceDate: "2026-10-25", running: false, now: at(6) })).toBe(true)
+    expect(serviceStartsSoon({ serviceDate: "2026-10-26", running: false, now: at(23) })).toBe(false)
+    expect(serviceStartsSoon({ serviceDate: null, running: false, now: at(9) })).toBeNull()
+    // Something live or the event clock running is always soon.
+    expect(serviceStartsSoon({ serviceDate: "2026-11-01", running: true, now: at(9) })).toBe(true)
+  })
+})

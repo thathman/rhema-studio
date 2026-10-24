@@ -96,6 +96,9 @@ async function invoke(cmd: string, args: Record<string, unknown> = {}): Promise<
     case "content_get_service_log": return logs.find((l) => l.id === args.id) ?? null
     case "content_delete_service_log": { const i = logs.findIndex((l) => l.id === args.id); if (i >= 0) logs.splice(i, 1); return null }
     case "content_backup": return null
+    case "setup_data_paths": return { folder: "(browser shim)", database: "(browser shim)/studio.db" }
+    case "setup_show_data_folder": return null
+    case "setup_test_folder": throw "Not available in the browser shim"
     case "media_list": return []
     case "media_import": return (args.paths as string[]).map((path) => ({ status: "failed", path, message: "the browser shim has no media folder" }))
     case "content_restore": return { snapshot: "(browser shim)", migrations: ["0001_programs", "0002_item_identity", "0003_songs"] }

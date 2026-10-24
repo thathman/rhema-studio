@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
-import { shouldAutoOpenSetup, type InstallFacts } from "@/lib/setup-readiness"
+import { newDeviceId, shouldAutoOpenSetup, type InstallFacts } from "@/lib/setup-readiness"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -37,7 +37,21 @@ export function installFacts(): InstallFacts {
  */
 export function decideSetupLaunch(servicesKnown: boolean): void {
   if (useSetupLaunch.getState().checked) return
+  ensureDeviceId()
   const open = servicesKnown && shouldAutoOpenSetup(installFacts(), useSettingsStore.getState().setup)
   useSetupLaunch.setState({ checked: true, autoOpened: open })
   if (open) useShellStore.getState().setSetupOpen(true)
+}
+
+/**
+ * This install's id (#298 M3): made once, at the first start after settings have loaded, and saved
+ * with them. Reading the settings never writes them; this is the one deliberate change, and only
+ * when an older file has no id yet.
+ */
+export function ensureDeviceId(): string {
+  const s = useSettingsStore.getState()
+  if (s.setup.deviceId) return s.setup.deviceId
+  const id = newDeviceId()
+  s.setSetup({ deviceId: id })
+  return id
 }

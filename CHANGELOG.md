@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### This computer's name in the Desk menu; a fuller setup summary (#298, #299)
+- The Desk menu now shows and edits **this computer's name** (with a short Desk ID), says **what this desk may do** (all controls on the main desk, or what the host's role allows), and leads to Production → Operators, or **Leave this host** on a joined desk. Joining a host suggests "your name · this computer" as the name the host sees.
+- After Rhema closed unexpectedly, **Not now** on the banner no longer throws the offer away: the Desk menu keeps **Put back the last session's screens** (it asks once more first).
+- The setup's summary shows where services and songs are kept (Copy, Show in folder), the last backup with **Back up now…**, a church folder write test, **Run screen test** and **Start a sample service** (passages and slides only, never saved by itself). The Church step has an optional time zone and the Screens step an optional microphone choice that asks the computer only when pressed. Google TVs and sound now appear in the equipment list.
+- Computers in use before the setup existed see **Review your setup** on Home once. Home counts readiness checks ("5 of 6 checks") instead of a percentage, and "No output is on a screen yet" is only a note when no output is set up or the service is hours away.
 ### Starter looks in setup; announcement looks, OBS overlay filter and Reset for every library look (#298, #299)
 - Setup step 3 (**Brand and starter looks**) now offers **starter looks**: pick a family (Church Classic, Broadcast Clean, Contemporary, Warm Editorial, High Contrast) to see its scripture, song, notice and over-the-camera looks drawn in your church colours. Nothing is added until you press **Apply…** and confirm; then the looks are copied into your own looks and set on the outputs that are **off**. An output that is on, the stage display and signage screens are left as they are.
 - **Design → Library** has an announcement (notice slide) look in each main family, and an **OBS overlay** filter (the lower thirds and tickers with nothing behind them, to lay over the camera in OBS).

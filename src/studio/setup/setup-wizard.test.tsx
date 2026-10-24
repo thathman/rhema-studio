@@ -70,6 +70,15 @@ describe("first launch", () => {
     expect(useSetupLaunch.getState()).toEqual({ checked: true, autoOpened: false })
   })
 
+  it("gives this install its id once, at the first start, and keeps it (#298 M3)", () => {
+    decideSetupLaunch(true)
+    const id = useSettingsStore.getState().setup.deviceId
+    expect(id).toMatch(/^[0-9a-f-]{36}$/)
+    useSetupLaunch.setState({ checked: false })
+    decideSetupLaunch(true)
+    expect(useSettingsStore.getState().setup.deviceId).toBe(id)
+  })
+
   it("does not assume an empty install when the services could not be read", () => {
     decideSetupLaunch(false)
     expect(useShellStore.getState().setupOpen).toBe(false)

@@ -105,7 +105,8 @@ export function HomeWorkspace() {
 
         <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
           <Stat icon={<CalendarDaysIcon />} label="Sunday plan" value={String(items.length)} unit={items.length === 1 ? "item" : "items"} detail={current ? `${current.title}${minutes ? ` · ${formatMinutes(minutes * 60_000)} planned in all` : ""}${dirty ? " · unsaved changes" : ""}` : "No saved service open"} />
-          <Stat icon={<CheckIcon />} label="Content readiness" value={String(counted ? Math.round((okCount / counted) * 100) : 0)} unit="%" detail={ready ? "Ready to present" : `${warnings.length} to check`} />
+          {/* Checks counted, not a percentage (#298: no arbitrary percentages). */}
+          <Stat icon={<CheckIcon />} label="Content readiness" value={String(okCount)} unit={`of ${counted} check${counted === 1 ? "" : "s"}`} detail={ready ? "Ready to present" : `${warnings.length} to check`} />
           <Stat icon={<MonitorIcon />} label="Screens" value={String(onAir)} unit={`of ${outputs.length} on`} detail={onAir ? "On air when you show something live" : "Turn them on in Outputs"} />
         </div>
 

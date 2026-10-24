@@ -1,13 +1,16 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
-import { TriangleAlertIcon } from "lucide-react"
+import { CheckIcon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
-import type { EquipmentItem } from "@/lib/setup-readiness"
+import { backupWhen, systemTimeZone, timeZones, type EquipmentItem } from "@/lib/setup-readiness"
+import { dataPaths, showDataFolder, testFolderWritable, type DataPaths } from "@/lib/data-folder"
+import { backupDatabaseToFile } from "@/lib/song-files"
+import type { DeviceInfo } from "@/types/audio"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMonitorStore } from "@/stores/monitor-store"
@@ -76,7 +79,26 @@ export function ChurchStep({ error }: { error: string | null }) {
       <Field id="setup-languages" label="Service languages (optional)" hint="As you would say them. Bible and hymn languages are chosen in a later step.">
         <Input id="setup-languages" value={languages} placeholder="e.g. English, Yorùbá" onChange={(e) => setSetup({ serviceLanguages: e.target.value })} aria-describedby="setup-languages-hint" />
       </Field>
+      <TimeZoneField />
     </div>
+  )
+}
+
+/** Optional time zone (#298 S1.3): "this computer's" unless the church chooses one. Nothing is guessed from an account. */
+function TimeZoneField() {
+  const timeZone = useSettingsStore((s) => s.setup.timeZone)
+  const system = systemTimeZone()
+  const [zones] = useState(() => timeZones(timeZone))
+  return (
+    <Field id="setup-time-zone" label="Time zone (optional)" hint="For service times. Leave it on this computer's unless the church keeps another.">
+      <Select value={timeZone || "system"} onValueChange={(v) => useSettingsStore.getState().setSetup({ timeZone: v === "system" ? "" : v })}>
+        <SelectTrigger id="setup-time-zone" aria-describedby="setup-time-zone-hint"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="system">This computer's{system ? ` (${system.replace(/_/g, " ")})` : ""}</SelectItem>
+          {zones.filter((z) => z !== system || z === timeZone).map((z) => <SelectItem key={z} value={z}>{z.replace(/_/g, " ")}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </Field>
   )
 }
 
@@ -128,7 +150,7 @@ export function BrandStep({ onLeave }: { onLeave: Leave }) {
 }
 
 /** Step 4: the Bible editions really on this computer, and where songs and hymns come from. */
-export function BibleStep({ onLeave }: { onLeave: Leave }) {
+export function BibleStep({ onLeave, onSample }: { onLeave: Leave; onSample?: () => void }) {
   const translations = useBibleStore((s) => s.translations).filter((t) => t.is_downloaded !== false)
   const activeId = useBibleStore((s) => s.activeTranslationId)
   const secondaryId = useBibleStore((s) => s.secondaryTranslationId)
@@ -181,13 +203,20 @@ export function BibleStep({ onLeave }: { onLeave: Leave }) {
           <Button variant="outline" size="sm" onClick={() => onLeave(() => useShellStore.getState().goTo("library"))}>Open Library</Button>
           <Button variant="ghost" size="sm" onClick={() => onLeave(() => openSettings("bible"))}>Bible settings</Button>
         </div>
+        {onSample && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Nothing to import yet?{" "}
+            <Button variant="link" size="sm" className="h-auto px-0 text-xs" onClick={onSample}>Try a sample service</Button>{" "}
+            with passages from your Bible edition; it is not saved unless you save it.
+          </p>
+        )}
       </div>
     </div>
   )
 }
 
-/** Step 5: the screens this computer sees and the outputs set up. Nothing turns on from here. */
-export function ScreensStep() {
+/** Step 5: the screens this computer sees, the outputs set up, and sound if wanted. Nothing turns on from here. */
+export function ScreensStep({ onLeave }: { onLeave?: Leave }) {
   const count = useMonitorStore((s) => s.count)
   const names = useMonitorStore((s) => s.names)
   const items = useSetupStatus().equipment.items.filter((i) => i.id.startsWith("output-"))
@@ -214,7 +243,55 @@ export function ScreensStep() {
         </p>
         <Button variant="outline" size="sm" className="mt-3" onClick={() => useShellStore.getState().openOutputs()}>Open Outputs</Button>
       </div>
+      <SoundSection onLeave={onLeave} />
     </div>
+  )
+}
+
+/**
+ * Sound, only if needed (#298 S5.4): the microphone Rhema listens with. The list is asked for only
+ * when "Choose microphone" is pressed, so the setup never touches the microphone by itself.
+ */
+function SoundSection({ onLeave }: { onLeave?: Leave }) {
+  const audioDeviceId = useSettingsStore((s) => s.audioDeviceId)
+  const [devices, setDevices] = useState<DeviceInfo[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const choose = () => {
+    setLoading(true)
+    invoke<DeviceInfo[]>("get_audio_devices")
+      .then((d) => setDevices(Array.isArray(d) ? d : []))
+      .catch(() => setDevices([]))
+      .finally(() => setLoading(false))
+  }
+  const chosen = devices?.find((d) => d.id === audioDeviceId)?.name ?? audioDeviceId
+  return (
+    <section aria-labelledby="setup-sound" className="flex flex-col gap-2">
+      <h3 id="setup-sound" className="text-xs font-semibold">Sound (optional)</h3>
+      <div className="rounded-lg border border-border bg-card p-4">
+        <p className="text-xs text-muted-foreground">
+          {audioDeviceId ? `Listening uses ${chosen}.` : "Listening for verses uses the system's own microphone. Choose another only if the sound desk feeds a different input."}
+        </p>
+        {devices === null ? (
+          <Button variant="outline" size="sm" className="mt-3" disabled={loading} onClick={choose}>{loading ? "Looking for microphones…" : "Choose microphone"}</Button>
+        ) : (
+          <div className="mt-3 flex flex-col gap-1.5">
+            <label htmlFor="setup-microphone" className="text-xs font-semibold">Microphone</label>
+            <Select value={audioDeviceId ?? "__default__"} onValueChange={(v) => useSettingsStore.getState().setAudioDeviceId(v === "__default__" ? null : v)}>
+              <SelectTrigger id="setup-microphone"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__default__">System default</SelectItem>
+                {devices.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}{d.is_default ? " (default)" : ""}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {devices.length === 0 && <p className="text-xs text-muted-foreground">No other microphone was found; the system default is used.</p>}
+          </div>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Nothing is recorded here. Test the level in Settings → Audio, and try the whole service with Rehearsal on in Present: nothing reaches the screens.
+        </p>
+        {onLeave && <Button variant="ghost" size="sm" className="mt-2" onClick={() => onLeave(() => openSettings("audio"))}>Audio settings</Button>}
+      </div>
+    </section>
   )
 }
 
@@ -279,7 +356,103 @@ export function FinishStep() {
         )}
         {equipment.notUsing.length > 0 && <p className="text-xs text-muted-foreground">Not using: {equipment.notUsing.join(", ")}. These never count against the setup.</p>}
       </section>
-      <p className="text-xs text-muted-foreground">Whether a particular service is ready is on Home, under “Your attention”. Services and songs are kept on this computer; back them up from Archive → Backups.</p>
+      <SafetySection />
+      <p className="text-xs text-muted-foreground">Whether a particular service is ready is on Home, under “Your attention”.</p>
     </div>
+  )
+}
+
+const copy = (text: string) => void navigator.clipboard.writeText(text).then(() => toast.success("Copied")).catch(() => toast.error("Could not copy: select the text instead."))
+
+/**
+ * Where services and songs are kept, when they were last backed up, and whether the church folder
+ * can be written to (#298 S7.1, S7.2, S7.5). Nothing here changes the database or the church's files.
+ */
+function SafetySection() {
+  const [paths, setPaths] = useState<DataPaths | null>(null)
+  const [pathError, setPathError] = useState<string | null>(null)
+  const lastBackupAt = useSettingsStore((s) => s.setup.lastBackupAt)
+  const churchFolder = useSettingsStore((s) => s.churchFolder)
+  const [backingUp, setBackingUp] = useState(false)
+  const [folderTest, setFolderTest] = useState<{ folder: string; state: "testing" | "ok" | "failed"; text?: string } | null>(null)
+  useEffect(() => {
+    let alive = true
+    dataPaths().then(
+      (p) => { if (alive) setPaths(p) },
+      (e) => { if (alive) setPathError(String(e)) },
+    )
+    return () => { alive = false }
+  }, [])
+  const backUp = async () => {
+    setBackingUp(true)
+    try {
+      const path = await backupDatabaseToFile()
+      if (path) toast.success("Backup saved", { description: path })
+    } catch (e) {
+      toast.error("The backup was not made", { description: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBackingUp(false)
+    }
+  }
+  const testFolder = async () => {
+    const folder = churchFolder
+    setFolderTest({ folder, state: "testing" })
+    try {
+      await testFolderWritable(folder)
+      setFolderTest({ folder, state: "ok" })
+    } catch (e) {
+      setFolderTest({ folder, state: "failed", text: String(e) })
+    }
+  }
+  const when = backupWhen(lastBackupAt)
+  const test = folderTest?.folder === churchFolder ? folderTest : null
+  return (
+    <section aria-labelledby="setup-sum-safety" className="flex flex-col gap-2">
+      <h3 id="setup-sum-safety" className="text-sm font-semibold">Safety and backups</h3>
+      <ul className="divide-y divide-border rounded-lg border border-border bg-card px-4">
+        <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">Services and songs are kept in</span>
+            {paths ? (
+              <>
+                <code className="block truncate text-xs text-muted-foreground" title={paths.folder}>{paths.folder}</code>
+                <span className="block truncate text-xs text-muted-foreground" title={paths.database}>Database: <code>{paths.database}</code></span>
+              </>
+            ) : (
+              <span className="block text-xs text-muted-foreground">{pathError ?? "Looking…"}</span>
+            )}
+          </span>
+          {paths && (
+            <span className="flex shrink-0 gap-1.5">
+              <Button size="sm" variant="outline" onClick={() => copy(paths.database)}>Copy</Button>
+              <Button size="sm" variant="ghost" onClick={() => void showDataFolder().catch((e) => toast.error(String(e)))}>Show in folder</Button>
+            </span>
+          )}
+        </li>
+        <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">Last backup</span>
+            <span className="block text-xs text-muted-foreground">{when ?? "None made from this computer yet. A backup file holds every service and song; keep it off this computer."}</span>
+          </span>
+          <Button size="sm" variant="outline" disabled={backingUp} onClick={() => void backUp()}>{backingUp ? "Backing up…" : "Back up now…"}</Button>
+        </li>
+        <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5">
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">Church folder</span>
+            {churchFolder ? (
+              <>
+                <code className="block truncate text-xs text-muted-foreground" title={churchFolder}>{churchFolder}</code>
+                {test?.state === "ok" && <span role="status" className="flex items-center gap-1 text-xs font-medium text-confidence-high"><CheckIcon className="size-3.5" /> Rhema can write there. The test file was deleted again.</span>}
+                {test?.state === "failed" && <span role="alert" className="flex items-center gap-1 text-xs font-medium text-confidence-mid"><TriangleAlertIcon className="size-3.5" /> {test.text}</span>}
+              </>
+            ) : (
+              <span className="block text-xs text-muted-foreground">Not set. Optional: choose one in Connections to share services between computers.</span>
+            )}
+          </span>
+          {churchFolder && <Button size="sm" variant="outline" disabled={test?.state === "testing"} onClick={() => void testFolder()}>{test?.state === "testing" ? "Testing…" : "Test the folder"}</Button>}
+        </li>
+      </ul>
+      <p className="text-xs text-muted-foreground">Restore a backup from Archive → Backups. Nothing is replaced without asking first.</p>
+    </section>
   )
 }

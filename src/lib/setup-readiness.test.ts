@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { churchSetup, defaultSetup, equipment, isFreshInstall, normalizeSetup, resumeStep, setupStatusLabel, shouldAutoOpenSetup, showSetupCard, type ChurchSetupInput, type EquipmentInput, type InstallFacts } from "./setup-readiness"
+import { backupWhen, churchSetup, defaultSetup, equipment, isFreshInstall, newDeviceId, normalizeSetup, pairingLabel, resumeStep, setupStatusLabel, shortDeviceId, shouldAutoOpenSetup, showReviewNotice, showSetupCard, timeZones, type ChurchSetupInput, type EquipmentInput, type InstallFacts } from "./setup-readiness"
 
 const fresh: InstallFacts = {
   churchName: "",
@@ -217,5 +217,91 @@ describe("setupStatusLabel", () => {
     expect(setupStatusLabel(0, 0)).toBe("Complete")
     expect(setupStatusLabel(2, 0)).toBe("Needs 2")
     expect(setupStatusLabel(0, 1)).toBe("Needs 1")
+  })
+})
+
+describe("device identity, time zone and backups in the setup section (#298 M3, S1.3, S7.2)", () => {
+  it("keeps the device id, time zone and last backup time, and an older file without them loads as before", () => {
+    const s = normalizeSetup({ deviceId: "3f2a91c0-1111-4222-8333-944455556666", timeZone: "Africa/Lagos", lastBackupAt: "2026-10-24T09:12:00Z", deviceName: "Sanctuary desk" })
+    expect(s).toMatchObject({ deviceId: "3f2a91c0-1111-4222-8333-944455556666", timeZone: "Africa/Lagos", lastBackupAt: "2026-10-24T09:12:00Z", deviceName: "Sanctuary desk" })
+    expect(normalizeSetup({ deviceName: "Hall" })).toMatchObject({ deviceId: "", timeZone: "", lastBackupAt: "" })
+    expect(normalizeSetup({ deviceId: 7, timeZone: null })).toMatchObject({ deviceId: "", timeZone: "" })
+  })
+
+  it("makes a new id each time, readable in short", () => {
+    const a = newDeviceId()
+    expect(a).not.toBe(newDeviceId())
+    expect(shortDeviceId("3f2a91c0-1111-4222-8333-944455556666")).toBe("3F2A-91C0")
+    expect(shortDeviceId("")).toBe("")
+  })
+
+  it("labels a joining desk as operator and computer, or the id's start without a computer name", () => {
+    expect(pairingLabel("Tolu", "Sanctuary desk", "3f2a91c0")).toBe("Tolu · Sanctuary desk")
+    expect(pairingLabel(" Tolu ", "", "3f2a91c0")).toBe("Tolu · desk 3F2A")
+    expect(pairingLabel("", "Media booth", "")).toBe("Media booth")
+    expect(pairingLabel("", "", "")).toBe("")
+    expect(pairingLabel("A".repeat(50), "B".repeat(50), "").length).toBe(60)
+  })
+
+  it("lists every time zone, keeping a saved one the system no longer names", () => {
+    expect(timeZones("")).toContain("Africa/Lagos")
+    expect(timeZones("Mars/Olympus")[0]).toBe("Mars/Olympus")
+  })
+
+  it("says when the last backup was made, or nothing for never", () => {
+    const now = new Date(2026, 9, 24, 15, 0).getTime()
+    expect(backupWhen(new Date(2026, 9, 24, 9, 12).toISOString(), now)).toMatch(/^Today at /)
+    expect(backupWhen(new Date(2026, 9, 19, 18, 40).toISOString(), now)).toMatch(/2026 at /)
+    expect(backupWhen("", now)).toBeNull()
+  })
+})
+
+describe("showReviewNotice (#298 M7: existing installs)", () => {
+  it("invites an install that was in use before, once; never a fresh one, never after the setup was closed", () => {
+    expect(showReviewNotice({ ...fresh, savedServices: 4 }, defaultSetup())).toBe(true)
+    expect(showReviewNotice(fresh, defaultSetup())).toBe(false)
+    expect(showReviewNotice({ ...fresh, savedServices: 4 }, { ...defaultSetup(), dismissedAt: "2026-10-24T08:00:00Z" })).toBe(false)
+  })
+})
+
+describe("songs in the Library are optional (#298 C1b)", () => {
+  it("is listed as optional, done once any song or hymn is there, and never counts against the setup", () => {
+    expect(churchSetup(essentialsDone).optional.find((o) => o.id === "library")?.state).toBe("later")
+    expect(churchSetup({ ...essentialsDone, librarySongs: 0 }).optional.find((o) => o.id === "library")?.state).toBe("later")
+    expect(churchSetup({ ...essentialsDone, librarySongs: 1 }).optional.find((o) => o.id === "library")?.state).toBe("done")
+    expect(churchSetup({ ...essentialsDone, librarySongs: 0 }).missing).toBe(0)
+  })
+})
+
+describe("Google TVs and sound in equipment (#298 C2b)", () => {
+  const feed = (o: Partial<EquipmentInput["outputs"][number]>): EquipmentInput["outputs"][number] => ({ id: "f", name: "Lobby feed", type: "browser", on: true, ...o })
+  const tv = { name: "Hall TV", address: "192.168.1.40:8090" }
+
+  it("lists each TV a feed was sent to once: off is Configured, shown is Connected, never Verified for that TV", () => {
+    const off = equipment({ ...solo, outputs: [feed({ on: false, tvs: [tv] })] }).items.find((i) => i.id.startsWith("tv-"))
+    expect(off).toMatchObject({ label: "Hall TV", state: "configured" })
+    const shown = equipment({ ...solo, outputs: [feed({ feed: { watching: 1, current: true }, tvs: [tv] })] }).items.find((i) => i.id.startsWith("tv-"))
+    expect(shown?.state).toBe("connected")
+    const nobody = equipment({ ...solo, outputs: [feed({ feed: { watching: 0, current: true }, tvs: [tv] })] })
+    expect(nobody.items.find((i) => i.id.startsWith("tv-"))?.state).toBe("not-tested")
+    expect(nobody.attention).toBe(0)
+    // The same TV sent two feeds is one row.
+    const twice = equipment({ ...solo, outputs: [feed({ tvs: [tv] }), feed({ id: "g", name: "Overflow", tvs: [tv] })] })
+    expect(twice.items.filter((i) => i.id.startsWith("tv-"))).toHaveLength(1)
+  })
+
+  it("a browser feed with no TV says Google TVs are not used; no feed at all says browser feeds and TVs", () => {
+    expect(equipment({ ...solo, outputs: [feed({})] }).notUsing).toContain("Google TVs")
+    expect(equipment(solo).notUsing).not.toContain("Google TVs")
+  })
+
+  it("a chosen microphone or Talk headset is Configured; neither is Not using and never counts", () => {
+    const none = equipment(solo)
+    expect(none.items.some((i) => i.id === "microphone" || i.id === "talk-headset")).toBe(false)
+    expect(none.notUsing).toEqual(expect.arrayContaining(["Talk headset"]))
+    const both = equipment({ ...solo, audio: { micChosen: true, talkHeadset: true } })
+    expect(both.items.find((i) => i.id === "microphone")?.state).toBe("configured")
+    expect(both.items.find((i) => i.id === "talk-headset")?.state).toBe("configured")
+    expect(both.attention).toBe(0)
   })
 })
