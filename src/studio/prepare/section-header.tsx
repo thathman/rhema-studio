@@ -25,9 +25,9 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
   return (
     <li
       aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
-      className={cn("flex items-center gap-2 text-[0.625rem] font-bold tracking-[0.1em] uppercase", phase ? "mt-2 border-t border-[#334056] bg-[#1d3335] px-3 py-2 text-[#d6e8e1] first:mt-0" : "mt-1.5 px-2 pl-4 text-muted-foreground")}
+      className={cn("flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.625rem] font-bold tracking-[0.1em] uppercase", phase ? "mt-2 border-t border-[#334056] bg-[#1d3335] px-3 py-2 text-[#d6e8e1] first:mt-0" : "mt-1.5 px-2 pl-4 text-muted-foreground")}
     >
-      <span className="truncate">{header.name}</span>
+      <span className="min-w-0 max-w-full truncate">{header.name}</span>
       {phase && header.rule && <span className="shrink-0 font-semibold tracking-normal normal-case">· {RULE_LABEL[header.rule].chip}</span>}
       {summary?.minutes ? <span className="ml-auto shrink-0 font-semibold tracking-normal normal-case">{summary.minutes} min</span> : null}
       {action && <span className={cn("shrink-0", !summary?.minutes && "ml-auto")}>{action}</span>}
@@ -59,22 +59,27 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
         {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
       </button>
-      {renaming ? (
-        <Input
-          autoFocus
-          aria-label={`Name of the ${phase ? "phase" : "group"}`}
-          value={name}
-          maxLength={120}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={finish}
-          onKeyDown={(e) => { if (e.key === "Enter") finish(); if (e.key === "Escape") { setName(header.name); setRenaming(false) } }}
-          className="h-7 flex-1 text-sm"
-        />
-      ) : (
-        <span className={cn("min-w-0 flex-1 truncate", phase ? "min-w-[5.5rem] text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
-      )}
-      {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
-      <span className="min-w-0 truncate text-[0.6875rem] tabular-nums" title={`${count} ${count === 1 ? "item" : "items"}${minutes ? ` · ${minutes} min` : ""}`}>{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+      {/* On a narrow column how it runs and its counts wrap under the name rather than cutting both short. */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+        {renaming ? (
+          <Input
+            autoFocus
+            aria-label={`Name of the ${phase ? "phase" : "group"}`}
+            value={name}
+            maxLength={120}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={finish}
+            onKeyDown={(e) => { if (e.key === "Enter") finish(); if (e.key === "Escape") { setName(header.name); setRenaming(false) } }}
+            className="h-7 min-w-0 flex-1 basis-32 text-sm"
+          />
+        ) : (
+          <span className={cn("min-w-0 max-w-full truncate", phase ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
+        )}
+        <span className="flex shrink-0 items-center gap-1.5">
+          {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
+          <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+        </span>
+      </span>
       <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={() => useAddDialog.getState().openFor(header.id)}><PlusIcon /></Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

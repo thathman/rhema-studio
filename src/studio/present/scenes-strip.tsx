@@ -7,6 +7,9 @@ import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { BroadcastOutput, Scene } from "@/types"
 
+/** Window heights at which the scenes start folded (a 1440×900 laptop and smaller). */
+export const SCENES_FOLDED_QUERY = "(max-height: 900px)"
+
 const isCongregation = (o: BroadcastOutput) => (o.role ?? "congregation") === "congregation"
 
 /** What a scene Take does in rehearsal: like Show live there, it stays in the app and is undone when rehearsal ends. */
@@ -23,7 +26,8 @@ export function ScenesStrip({ className }: { className?: string }) {
   const scenes = useBroadcastStore((s) => s.scenes)
   const outputs = useBroadcastStore((s) => s.outputs)
   const congregation = outputs.filter(isCongregation)
-  const [open, setOpen] = useState(true)
+  // Folded at first on a short window, so the Live panel keeps its room; one click opens it.
+  const [open, setOpen] = useState(() => !(typeof window.matchMedia === "function" && window.matchMedia(SCENES_FOLDED_QUERY).matches))
   const [targetId, setTargetId] = useState<string | null>(null)
   const bodyId = useId()
   if (congregation.length === 0 || scenes.length === 0) return null

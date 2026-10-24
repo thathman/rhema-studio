@@ -79,7 +79,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
           <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"}>
             <div
               className={cn(
-                "group flex h-11 items-center gap-2 rounded-md border px-2 transition-colors",
+                "group flex min-h-11 items-center gap-2 rounded-md border px-2 py-1 transition-colors",
                 onAir
                   ? "border-live-pulse/50 bg-live-pulse/10"
                   : isSelected
@@ -100,9 +100,12 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 {picture && <MediaKindIcon mediaId={item.image.media_id} />}
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
-                <span className="truncate text-sm font-medium">{item.reference}</span>
+                {/* The title keeps its room: on a narrow row the details below wrap under it instead of squeezing it. */}
+                <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="min-w-0 max-w-full truncate text-sm font-medium">{item.reference}</span>
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 empty:hidden">
                 {song && <SongBadges item={item} />}
-                {item.planned_minutes ? <span className="ml-1 shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
+                {item.planned_minutes ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums">{item.planned_minutes} min</span> : null}
                 {item.on_live && (
                   <BellRingIcon
                     className="size-3 shrink-0 text-muted-foreground"
@@ -111,15 +114,17 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                   />
                 )}
                 {item.auto_advance && <TimerIcon className="size-3 shrink-0 text-muted-foreground" role="img" aria-label={`Moves on by itself after ${item.planned_minutes ?? 0} min while timed moves are on`} />}
-                {item.end_by ? <span className="ml-1 shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
-                {item.prepared_by ? <span className="ml-1 max-w-24 shrink-0 truncate text-[0.6875rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
+                {item.end_by ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
+                {item.prepared_by ? <span className="max-w-24 shrink-0 truncate text-[0.6875rem] text-muted-foreground" title={`Prepared by ${item.prepared_by}`}>· {item.prepared_by}</span> : null}
                 {item.comments?.length ? (
-                  <span className="ml-1 inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
+                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
                     <MessageSquareIcon className="size-3" aria-hidden />
                     {item.comments.length}
                     <span className="sr-only"> comments</span>
                   </span>
                 ) : null}
+                </span>
+                </span>
                 {onAir && (
                   <span className="ml-auto shrink-0 text-[0.6875rem] font-bold tracking-wider text-destructive uppercase">
                     Live
@@ -227,7 +232,7 @@ function SongBadges({ item }: { item: SongQueueItem }) {
   const song = useSongStore((s) => s.songs[item.song.song_id])
   const arrangement = song?.arrangements.find((a) => a.id === item.song.arrangement_id)
   return (
-    <span className="ml-1 flex shrink-0 items-center gap-1 text-[0.6875rem] text-muted-foreground">
+    <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] text-muted-foreground">
       {item.song.languages.map((l) => (
         <span key={l} className="rounded border border-border px-1 uppercase">{l}</span>
       ))}

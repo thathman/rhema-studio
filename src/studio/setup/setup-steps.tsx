@@ -72,8 +72,8 @@ export function ChurchStep({ error }: { error: string | null }) {
       <Field id="setup-campus" label="Campus or ministry (optional)" hint="Only on this computer.">
         <Input id="setup-campus" value={campus} placeholder="e.g. Ikeja campus, Youth church" onChange={(e) => setSetup({ campus: e.target.value })} aria-describedby="setup-campus-hint" />
       </Field>
-      <Field id="setup-languages" label="Service languages (optional)" hint="As you would say them, e.g. English, Yorùbá. Bible and hymn languages are chosen in a later step.">
-        <Input id="setup-languages" value={languages} placeholder="English, Yorùbá" onChange={(e) => setSetup({ serviceLanguages: e.target.value })} aria-describedby="setup-languages-hint" />
+      <Field id="setup-languages" label="Service languages (optional)" hint="As you would say them. Bible and hymn languages are chosen in a later step.">
+        <Input id="setup-languages" value={languages} placeholder="e.g. English, Yorùbá" onChange={(e) => setSetup({ serviceLanguages: e.target.value })} aria-describedby="setup-languages-hint" />
       </Field>
     </div>
   )

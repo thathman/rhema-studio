@@ -1164,6 +1164,21 @@ Rhema on the church network with the HTTP listener on the network. The Chromecas
 | 10en.9 | From another computer: `nc <TV> 8095` and type nothing; at once press **Check TV** in Show health. Then `python3 -c "print('{' + '[' * 8000)" > deep.json; curl -i -X POST -H 'Content-Type: application/json' --data-binary @deep.json http://<TV>:8095/challenge`. | Check TV answers while nc is open; nc is closed by the TV after about 5 s. The deep body gets 400 "That is not what Rhema sends"; Rhema Receiver keeps running and showing the feed. | Partial (2026-10-24, Chromecast with Google TV HD, QA build of main + #336, the TV reaching Rhema through adb (the https port 9091 forwarded)): 8,000 nested [ → 400 and the app kept running; the slow-connection (nc) case not tried. |
 | 10en.10 | A scene with a camera (camera router on) on the TV's feed. | The camera plays on the TV as before (10dh.8). | Unverified |
 
+### 10eo. Layouts on small windows; clearer planned times (#215)
+
+Rhema with a saved service that has phases (pre-service loop, warm-up, main service), a song with two languages, minutes and a "prepared by" name, at least one congregation output and one saved scene.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10eo.1 | Make the window 1024×600 (the smallest supported). Present, Standard view. | Nothing is drawn over anything else: the Live panel, the folded Scenes line, Previous / Next / Take live / Clear / Restore, then Find & cue and One-touch moments, the last of these reached by scrolling the right-hand column. Running-order titles read in full ("Amazing Grace"), with languages and minutes under them. | Unverified |
+| 10eo.2 | Still at 1024×600, open the Scenes strip. | The scenes and their buttons show under Live; the column scrolls; the transport is never covered. | Unverified |
+| 10eo.3 | Repeat at 1280×800, 1440×900 and full screen (1920×1080 or larger). | No overlap at any size. At 900 tall or less the Scenes strip starts folded; on a taller window it starts open. The Live panel's "Nothing on air" sits inside its picture and never over the Sources row. One-touch moments show both rows and the news ticker. | Unverified |
+| 10eo.4 | Prepare: select the song with languages, minutes and a preparer; narrow the window. | The title stays readable; the chips, minutes and name go under it. Phase headers wrap ("Pre-service loop" with LOOP · 2 items · 17 min under it) instead of cutting to "Pre-service l…". | Unverified |
+| 10eo.5 | Prepare → Run of show: the main service start time, in a 12-hour locale (e.g. English (US)). | "10:00 AM" shows in full with its clock icon. | Unverified |
+| 10eo.6 | Look at the planned times: Prepare's header, Order of service, Run of show, Home's Sunday plan. | Prepare's header says **Main service 45 min** (the main service only); the others say **1 h 8 min planned in all**, in the same hours-and-minutes form. | Unverified |
+| 10eo.7 | Production → Cameras (a camera added), Timekeeper (Count down to, the chime, "Follows the screens") and Settings → Audio → Talk headset, in light and dark. | The drop-down lists look like Rhema's other lists (border, quiet chevron, teal focus ring, dark lists in dark mode); tick boxes are teal; they open and choose as before. **New link** is an outlined button. | Unverified |
+| 10eo.8 | First run (or Home → setup): the welcome, then step 1. | The welcome window fits its four choices with no empty lower half. "Service languages" shows a grey "e.g. English, Yorùbá" that disappears when you type. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

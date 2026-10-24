@@ -186,7 +186,7 @@ function StandardView() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
     <PhaseStrip />
-    <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,12rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
+    <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto_minmax(0,15rem)] [@media(max-height:860px)]:grid-rows-[minmax(6rem,1fr)_auto_minmax(0,14.5rem)] gap-3 max-[1200px]:grid-cols-[13rem_minmax(0,1fr)] max-[1200px]:gap-2">
       <section className="row-span-3 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface-sunken" data-tour="present-rundown">
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
@@ -204,20 +204,24 @@ function StandardView() {
           <RundownList mode="present" />
         </div>
       </section>
+      {/* On a wide window these sit in the grid itself; on a narrow one (1024×600 and up) they share one
+          column that scrolls when it must, so nothing in it is ever drawn over another part. */}
+      <div className="contents max-[1200px]:row-span-3 max-[1200px]:flex max-[1200px]:min-h-0 max-[1200px]:flex-col max-[1200px]:gap-2 max-[1200px]:overflow-y-auto">
       <div className="min-h-0 overflow-hidden rounded-xl max-[1200px]:hidden [&>div]:h-full">
         <PreviewPanel />
       </div>
-      {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live. */}
-      <div className="flex min-h-0 flex-col gap-2">
-        <div className="min-h-0 flex-1 overflow-hidden rounded-xl [&>div]:h-full" data-studio-live>
+      {/* Live, with the congregation scenes under it: a scene Take changes a screen's layout, not what is live.
+          Opening the scenes on a short window scrolls this column instead of covering the transport. */}
+      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto max-[1200px]:min-h-fit max-[1200px]:flex-1 max-[1200px]:overflow-visible">
+        <div className="min-h-[8rem] flex-1 overflow-hidden rounded-xl max-[1200px]:min-h-[11rem] [&>div]:h-full" data-studio-live>
           <LiveOutputPanel />
         </div>
         <ScenesStrip />
       </div>
 
-      <TransportBar className="col-span-2 max-[1200px]:col-span-1" />
+      <TransportBar className="col-span-2 max-[1200px]:shrink-0" />
 
-      <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:col-span-1">
+      <div className="col-span-2 grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 max-[1200px]:h-[14.5rem] max-[1200px]:shrink-0">
         <section className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-4" data-tour="quick-find">
           <div>
             <h2 className="text-sm font-semibold tracking-tight">Find &amp; cue anything</h2>
@@ -254,6 +258,7 @@ function StandardView() {
           </div>
           <TickerRow />
         </section>
+      </div>
       </div>
     </div>
     </div>
