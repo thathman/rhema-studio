@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Notices: honest answers, private delivery, kept through a crash (#251)
+- Pressing the button on an action request ("Show Romans 8:28", "Take Sermon split") now answers **Ready** only when it really happened. If the main desk refused it (the desk's role does not allow it, the main desk has taken back control, or it moved to another service), the notice answers **Unable** and the desk shows the reason.
+- Each joined desk and phone now receives only the notices meant for it: those to everyone, to its role, to it by name, or that it sent. The main desk still sees them all. Before, every desk received every notice and only hid the others.
+- A notice can now go to **one person**: pick their desk or phone under "One person" in Send to.
+- The main desk keeps the last 100 notices, with their answers, through an unexpected close: after Rhema restarts from a crash they are back (once, if from the last 6 hours), as the service log is.
+
 ### The ticker, the timer and cameras in Present → Sources (#243)
 - **Present → Live → Sources** now also lists the **Ticker** (running, held still or off, with its first words), the **service timer** (running or paused, with the time left) and **each camera** (sending or not), each saying who changed it last and when.
 - Take the ticker off and **Restore** the same words; pause and resume the timer; **Hide a camera from scenes** so every scene with it shows its fallback words instead, without changing the scenes. Each change is in the service log with who made it, and joined desks and the phone page see and can do the same (with the Present role).

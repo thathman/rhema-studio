@@ -142,7 +142,7 @@ export function useRemoteControl() {
           if (!p || typeof p.text !== "string" || typeof p.by !== "string") return
           const items = useQueueStore.getState().items
           const ev = typeof p.event === "string" ? items.find((i) => i.id === p.event) : undefined
-          useNotices.getState().send({ from: p.by, to: typeof p.to === "string" ? p.to : "all", priority: typeof p.priority === "string" ? p.priority : "normal", text: p.text, event: ev ? { id: ev.id, title: ev.reference } : null, action: p.action })
+          useNotices.getState().send({ from: p.by, to: p.to ?? "all", priority: typeof p.priority === "string" ? p.priority : "normal", text: p.text, event: ev ? { id: ev.id, title: ev.reference } : null, action: p.action })
         }),
       )
       keep(

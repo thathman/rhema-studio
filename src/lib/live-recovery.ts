@@ -11,6 +11,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
 import type { JournalEntry } from "@/lib/journal"
+import { useNotices, type Notice } from "@/stores/notices-store"
 import type { VerseRenderData } from "@/types"
 
 /**
@@ -64,6 +65,27 @@ export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.
   const entries = kept.entries.map((e) => ({ ...e, mono: e.at - base }))
   useJournalStore.setState({ entries: [...entries, ...j.entries].slice(-2000), startItemIds: j.startItemIds?.length ? j.startItemIds : kept.startItemIds, added: j.added + entries.length })
   j.add({ kind: "recovery", label: `Service log kept from before Rhema closed unexpectedly at ${new Date(kept.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })
+  return true
+}
+
+/** Production notices as kept for recovery (Rhema Comms, #251): the last 100 and which were read. */
+export interface KeptNotices {
+  v: 1
+  at: number
+  notices: Notice[]
+  read: string[]
+}
+
+let noticesBack = false
+/**
+ * The notices from the run that closed unexpectedly, back on the main desk (and so on each joined
+ * desk again), with their answers: as the service log, only after an unclean exit, only if recent,
+ * and only once. Any sent since stay first; none is sent again or shown anywhere new.
+ */
+export function restoreNotices(kept: KeptNotices | null | undefined, now = Date.now()): boolean {
+  if (!kept || kept.v !== 1 || !Array.isArray(kept.notices) || !kept.notices.length || now - kept.at >= FRESH_MS || now < kept.at || noticesBack) return false
+  noticesBack = true
+  useNotices.getState().restore(kept.notices, Array.isArray(kept.read) ? kept.read : [])
   return true
 }
 
@@ -145,13 +167,24 @@ function saveJournal() {
   void store.set("journal", kept).then(() => store?.save()).catch(() => {})
 }
 
+let noticesTimer: ReturnType<typeof setTimeout> | null = null
+function saveNotices() {
+  noticesTimer = null
+  if (!store) return
+  const { notices, read } = useNotices.getState()
+  const ids = new Set(notices.map((n) => n.id))
+  const kept: KeptNotices = { v: 1, at: Date.now(), notices: notices.slice(0, 100), read: read.filter((id) => ids.has(id)) }
+  void store.set("notices", kept).then(() => store?.save()).catch(() => {})
+}
+
 /** Read the last snapshot (offer it after an unclean exit), then keep it up to date. */
 export async function startLiveRecovery(): Promise<() => void> {
   try {
     store = await load("recovery.json", { autoSave: false, defaults: {} })
-    const [unclean, snap, kept] = await Promise.all([invoke<boolean>("last_exit_unclean"), store.get<LiveSnapshot>("snapshot"), store.get<KeptJournal>("journal")])
+    const [unclean, snap, kept, notices] = await Promise.all([invoke<boolean>("last_exit_unclean"), store.get<LiveSnapshot>("snapshot"), store.get<KeptJournal>("journal"), store.get<KeptNotices>("notices")])
     if (unclean && worthOffering(snap)) useRecovery.setState({ offer: snap })
     if (unclean) restoreJournal(kept)
+    if (unclean) restoreNotices(notices)
   } catch {
     // Not under Tauri, or the file is unreadable: nothing to offer.
   }
@@ -172,6 +205,8 @@ export async function startLiveRecovery(): Promise<() => void> {
     useRecovery.subscribe((s, p) => { if (p.offer && !s.offer) soon() }),
     // The log, a few seconds after it changes (and when it is cleared for another service).
     useJournalStore.subscribe((s, p) => { if (s.entries !== p.entries && !journalTimer) journalTimer = setTimeout(saveJournal, 3000) }),
+    // Notices and their answers, the same way.
+    useNotices.subscribe((s, p) => { if ((s.notices !== p.notices || s.read !== p.read) && !noticesTimer) noticesTimer = setTimeout(saveNotices, 3000) }),
   ]
   return () => offs.forEach((off) => off())
 }

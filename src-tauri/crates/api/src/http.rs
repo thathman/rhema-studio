@@ -244,6 +244,34 @@ impl LiveHub {
 
 pub type SharedLive = Arc<LiveHub>;
 
+/// Production notices stay private to the people they are for (Rhema Comms, #251): a paired desk
+/// gets the Live State with only the notices addressed to everyone, to its role, to it by name, or
+/// sent by it. `None` is the main desk (this computer itself), which gets them all. A state this
+/// server cannot read, or one without notices, goes out as it is.
+#[must_use]
+pub fn notices_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
+    let Some(reader) = reader else { return json.to_string() };
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(json) else { return json.to_string() };
+    let Some(list) = v.get_mut("notices").and_then(serde_json::Value::as_array_mut) else { return json.to_string() };
+    list.retain(|n| notice_is_for(n, reader));
+    v.to_string()
+}
+
+/// The same rule as the desks' own (src/stores/notices-store.ts `isFor`): a Present-and-settings
+/// desk also gets what is sent to the Present desks.
+fn notice_is_for(n: &serde_json::Value, reader: &crate::keys::KeyEntry) -> bool {
+    let role = reader.role.as_str();
+    let same = |v: &serde_json::Value| v.as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case(reader.name.trim()));
+    if n.get("from").is_some_and(same) {
+        return true;
+    }
+    match n.get("to") {
+        Some(serde_json::Value::String(to)) => to == "all" || to == role || (role == "configure" && to == "present"),
+        Some(serde_json::Value::Object(to)) => to.get("name").is_some_and(same),
+        _ => false,
+    }
+}
+
 #[must_use]
 pub fn new_live_hub() -> SharedLive {
     Arc::new(LiveHub { current: std::sync::RwLock::new(None), service: std::sync::RwLock::new(None), tx: broadcast::channel(32).0 })
@@ -615,6 +643,12 @@ fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &
     }
 }
 
+/// Whose notices a Live State reader gets: `None` for this computer itself (keys off, the main
+/// desk), which sees every notice; otherwise the paired key.
+fn notice_reader(entry: crate::keys::KeyEntry) -> Option<crate::keys::KeyEntry> {
+    (!entry.hash.is_empty()).then_some(entry)
+}
+
 /// `GET /api/v1/me`: the name and role this key has, and whether the main desk has taken back
 /// control, so a joined desk shows what it may do.
 async fn me_handler<S: CommandSink + 'static>(
@@ -634,11 +668,12 @@ async fn live_handler<S: CommandSink + 'static>(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> axum::response::Response {
-    if let Err(code) = live_reader(&state, peer, &headers) {
-        return code.into_response();
-    }
+    let reader = match live_reader(&state, peer, &headers) {
+        Ok(entry) => notice_reader(entry),
+        Err(code) => return code.into_response(),
+    };
     match state.live.current() {
-        Some(json) => ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], json).into_response(),
+        Some(json) => ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], notices_for(&json, reader.as_ref())).into_response(),
         None => StatusCode::NO_CONTENT.into_response(),
     }
 }
@@ -650,18 +685,23 @@ async fn live_events_handler<S: CommandSink + 'static>(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> axum::response::Response {
-    if let Err(code) = live_reader(&state, peer, &headers) {
-        return code.into_response();
-    }
+    let reader = match live_reader(&state, peer, &headers) {
+        Ok(entry) => notice_reader(entry),
+        Err(code) => return code.into_response(),
+    };
     let rx = state.live.tx.subscribe();
     let first = state.live.current();
-    let stream = futures_util::stream::unfold((rx, first), |(mut rx, first)| async move {
+    let stream = futures_util::stream::unfold((rx, first, reader), |(mut rx, first, reader)| async move {
         if let Some(json) = first {
-            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(json)), (rx, None)));
+            let data = notices_for(&json, reader.as_ref());
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(data)), (rx, None, reader)));
         }
         loop {
             match rx.recv().await {
-                Ok(json) => return Some((Ok(Event::default().event("live").data(json)), (rx, None))),
+                Ok(json) => {
+                    let data = notices_for(&json, reader.as_ref());
+                    return Some((Ok(Event::default().event("live").data(data)), (rx, None, reader)));
+                }
                 // Slow reader: skip to the newest; the next message is the whole state anyway.
                 Err(broadcast::error::RecvError::Lagged(_)) => {}
                 Err(broadcast::error::RecvError::Closed) => return None,
@@ -1081,6 +1121,79 @@ mod tests {
         let stream = handle.await.unwrap();
         assert!(stream.contains("text/event-stream"), "{stream}");
         assert!(stream.contains("event: live") && stream.contains("Opening prayer") && stream.contains("Sermon"), "{stream}");
+
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    fn desk(name: &str, role: crate::keys::Role) -> crate::keys::KeyEntry {
+        crate::keys::KeyEntry { hash: "h".into(), name: name.into(), role, paused: false }
+    }
+
+    const NOTICES: &str = r#"{"v":1,"notices":[
+        {"id":"all","from":"Main desk","to":"all","text":"Doors open"},
+        {"id":"tk","from":"Main desk","to":"timekeeper","text":"Pastor has 5 minutes"},
+        {"id":"bb","from":"Main desk","to":"bible","text":"Romans next"},
+        {"id":"pr","from":"Main desk","to":"present","text":"Slides ready?"},
+        {"id":"host","from":"Femi","to":"host","text":"Running late"},
+        {"id":"ade","from":"Main desk","to":{"name":"Ade's phone"},"text":"Mic 2 is yours"},
+        {"id":"mine","from":"Ade's phone","to":"host","text":"Ready"}
+    ]}"#;
+
+    fn ids(json: &str) -> Vec<String> {
+        let v: serde_json::Value = serde_json::from_str(json).unwrap();
+        v["notices"].as_array().unwrap().iter().map(|n| n["id"].as_str().unwrap().to_string()).collect()
+    }
+
+    #[test]
+    fn each_desk_gets_only_the_notices_for_it() {
+        use crate::keys::Role;
+        assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Ade's phone", Role::Bible)))), ["all", "bb", "ade", "mine"], "a Bible desk never gets the Timekeeper's");
+        assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Femi", Role::Timekeeper)))), ["all", "tk", "host"], "its role's, and what it sent");
+        assert_eq!(ids(&notices_for(NOTICES, Some(&desk("Laptop", Role::Configure)))), ["all", "pr"], "Present and settings also gets the Present desks'");
+        assert_eq!(ids(&notices_for(NOTICES, Some(&desk("ade's PHONE", Role::Screens)))), ["all", "ade", "mine"], "names match as pairing keeps them unique (any case)");
+        assert_eq!(ids(&notices_for(NOTICES, None)).len(), 7, "the main desk sees every notice");
+        // Nothing else in the state changes; a state without notices goes out as it is.
+        let v: serde_json::Value = serde_json::from_str(&notices_for(NOTICES, Some(&desk("x", Role::Bible)))).unwrap();
+        assert_eq!(v["v"], 1);
+        assert_eq!(notices_for(r#"{"v":1,"now":"Sermon"}"#, Some(&desk("x", Role::Bible))), r#"{"v":1,"now":"Sermon"}"#);
+    }
+
+    #[tokio::test]
+    async fn the_live_endpoints_filter_notices_per_key() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![entry("bib", "Ade's phone", Role::Bible), entry("tim", "Femi", Role::Timekeeper)] }));
+        let live = new_live_hub();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        live.publish(NOTICES.into());
+
+        let bible = get_with(port, "/api/v1/live", "X-Rhema-Key: bib\r\n", None).await;
+        assert!(bible.contains("Romans next") && bible.contains("Mic 2 is yours") && !bible.contains("Pastor has 5 minutes") && !bible.contains("Running late"), "{bible}");
+        let time = get_with(port, "/api/v1/live", "X-Rhema-Key: tim\r\n", None).await;
+        assert!(time.contains("Pastor has 5 minutes") && !time.contains("Romans next") && !time.contains("Mic 2 is yours"), "{time}");
+
+        // The stream too: the first state and each change after it.
+        let handle = tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.expect("connect");
+            stream.write_all(b"GET /api/v1/live/events HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Rhema-Key: bib\r\nConnection: close\r\n\r\n").await.expect("write");
+            let (mut out, mut buf) = (Vec::new(), [0u8; 1024]);
+            while !String::from_utf8_lossy(&out).contains("Psalm 23 next") {
+                let r = tokio::time::timeout(std::time::Duration::from_secs(2), stream.read(&mut buf)).await.expect("in time").expect("read");
+                if r == 0 { break; }
+                out.extend_from_slice(&buf[..r]);
+            }
+            String::from_utf8_lossy(&out).into_owned()
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        live.publish(r#"{"v":1,"notices":[{"id":"t2","from":"Main desk","to":"timekeeper","text":"Wrap up now"},{"id":"b2","from":"Main desk","to":"bible","text":"Psalm 23 next"}]}"#.into());
+        let stream = handle.await.unwrap();
+        assert!(stream.contains("Romans next") && stream.contains("Psalm 23 next"), "{stream}");
+        assert!(!stream.contains("Pastor has 5 minutes") && !stream.contains("Wrap up now"), "a Bible key never receives the Timekeeper's notices: {stream}");
 
         let mut h = result.handle;
         h.stop();

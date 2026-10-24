@@ -3,12 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen: vi.fn(async () => () => {}) }))
 vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => []) }))
+/** recovery.json, in memory. */
+const kept = new Map<string, unknown>()
+const fakeStore = { get: vi.fn(async (k: string) => kept.get(k)), set: vi.fn(async (k: string, v: unknown) => void kept.set(k, v)), save: vi.fn(async () => {}) }
+vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => fakeStore) }))
 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { useEventClock } = await import("@/stores/event-clock-store")
 const { useJournalStore } = await import("@/stores/journal-store")
 const { useTimerStore } = await import("@/stores/timer-store")
-const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal } = await import("@/lib/live-recovery")
+const { takeSnapshot, worthOffering, putBack, useRecovery, restoreJournal, restoreNotices, startLiveRecovery } = await import("@/lib/live-recovery")
+const { useNotices } = await import("@/stores/notices-store")
+const { invoke } = await import("@tauri-apps/api/core")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
 /** Recovery after an unexpected close (#246): offered, never automatic; puts back what was up. */
@@ -96,5 +102,40 @@ describe("live recovery", () => {
     expect(useJournalStore.getState().entries).toHaveLength(4)
     useJournalStore.setState({ entries: [] })
     expect(restoreJournal(kept, at + 7 * 3_600_000, 1_000)).toBe(false)
+  })
+
+  it("keeps the last 100 notices with their answers and brings them back once after a crash (Comms)", async () => {
+    const now = Date.now()
+    const notice = (id: string, at: number) => ({ id, from: "Main desk", to: "bible" as const, priority: "normal" as const, text: `Notice ${id}`, event: null, action: null, at, answers: [{ by: "Ade", state: "ready" as const, at }] })
+    const before = { v: 1 as const, at: now - 60_000, notices: [notice("b", now - 90_000), notice("a", now - 120_000)], read: ["a"] }
+    // Never an old one or an empty one.
+    expect(restoreNotices({ ...before, at: now - 7 * 3_600_000 }, now)).toBe(false)
+    expect(restoreNotices({ ...before, notices: [] }, now)).toBe(false)
+    useNotices.setState({ notices: [], read: [] })
+    const since = useNotices.getState().send({ from: "Femi", to: "host", text: "Sent since the restart" })!
+    kept.set("notices", before)
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => (cmd === "last_exit_unclean" ? true : null))
+    const stop = await startLiveRecovery()
+    // Back behind what was sent since, answers and all; read stays read.
+    expect(useNotices.getState().notices.map((n) => n.id)).toEqual([since.id, "b", "a"])
+    expect(useNotices.getState().notices[1].answers).toEqual(before.notices[0].answers)
+    expect(useNotices.getState().read).toEqual(["a"])
+    expect(restoreNotices(before, now)).toBe(false)
+    expect(useNotices.getState().notices).toHaveLength(3)
+
+    // Kept as they change, bounded like the host's own list.
+    vi.useFakeTimers()
+    try {
+      for (let i = 0; i < 110; i++) useNotices.getState().send({ from: "x", text: `n${i}` })
+      vi.advanceTimersByTime(3000)
+      const saved = kept.get("notices") as { v: number; notices: unknown[]; read: string[] }
+      expect(saved.v).toBe(1)
+      expect(saved.notices).toHaveLength(100)
+      expect(saved.read).toEqual([])
+    } finally {
+      vi.useRealTimers()
+      stop()
+      vi.mocked(invoke).mockImplementation(async () => null)
+    }
   })
 })

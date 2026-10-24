@@ -29,6 +29,18 @@ pub enum Role {
 }
 
 impl Role {
+    /// As saved and as notices address it: "present", "configure", "timekeeper", "bible", "screens".
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Role::Present => "present",
+            Role::Configure => "configure",
+            Role::Timekeeper => "timekeeper",
+            Role::Bible => "bible",
+            Role::Screens => "screens",
+        }
+    }
+
     #[must_use]
     pub fn allows(self, cmd: &RemoteCommand) -> bool {
         match cmd {

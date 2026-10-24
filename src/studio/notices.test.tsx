@@ -6,9 +6,15 @@ vi.mock("@tauri-apps/api/event", () => ({ emitTo: vi.fn(async () => {}), listen:
 
 import { act } from "react"
 import { createRoot } from "react-dom/client"
-import { buildLiveState } from "@/lib/live-state"
-import { asAction, isFor, sceneTargets, useNotices } from "@/stores/notices-store"
+import { invoke } from "@tauri-apps/api/core"
+import { buildLiveState, type LiveStateV1 } from "@/lib/live-state"
+import { asAction, asTarget, isFor, sceneTargets, useNotices } from "@/stores/notices-store"
+import { useJoin } from "@/stores/join-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { OperatorsPanel } from "@/studio/production/operators-panel"
 import { NoticesPanel } from "./notices-panel"
+
+const buttonNamed = (el: HTMLElement, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent === text)!
 
 /** Production notices (Rhema Comms C1, #251): private, addressed, answered, carried in the Live State. */
 beforeEach(() => useNotices.setState({ notices: [], read: [] }))
@@ -73,5 +79,71 @@ describe("production notices", () => {
     // A scene request switches the outputs already showing a scene, else the main output.
     expect(sceneTargets([{ id: "main", sceneId: null }, { id: "obs", sceneId: "s1" }])).toEqual(["obs"])
     expect(sceneTargets([{ id: "side" }, { id: "main" }])).toEqual(["main"])
+  })
+
+  it("a refused action request answers Unable and shows the host's reason, not Ready", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const n = useNotices.getState().send({ from: "Main desk", to: "bible", text: "Camera after this", action: { kind: "scene", value: "split" } })!
+    const live: LiveStateV1 = {
+      v: 1, at: 0, church: "CAC", service: null, program: { onAir: false, reference: null, rehearsal: false }, sources: [], event: { mode: "own", currentId: null }, rundown: [], timing: null, stageMessage: "",
+      scenes: [{ id: "split", name: "Sermon split" }], outputs: [{ id: "main", name: "Projector", sceneId: null }], notices: [n],
+    }
+    const why = "this device runs the Bible: it may activate, step and clear the Bible only"
+    const sent: { command: string; value?: unknown }[] = []
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd !== "join_command") return null
+      const c = (args as { command: { command: string; value?: unknown } }).command
+      sent.push(c)
+      if (c.command === "take_scene") throw why
+      return null
+    })
+    useSettingsStore.setState({ joinAddress: "h:1", joinToken: "t" })
+    useJoin.setState({ status: "connected", me: { name: "Ade (Bible)", role: "bible" }, live, error: null, paused: false, note: null })
+    const el = document.createElement("div")
+    await act(async () => createRoot(el).render(<OperatorsPanel />))
+    await act(async () => buttonNamed(el, "Take Sermon split").click())
+    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ command: "notice_ack", value: { id: n.id, state: "unable" } }))
+    expect(sent.map((c) => c.command)).toEqual(["take_scene", "notice_ack"])
+    expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')?.textContent).toContain(why)
+
+    // Done by the host: Ready, and the reason goes.
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
+      if (cmd === "join_command") sent.push((args as { command: { command: string } }).command)
+      return null
+    })
+    await act(async () => buttonNamed(el, "Take Sermon split").click())
+    await vi.waitFor(() => expect(sent.at(-1)).toEqual({ command: "notice_ack", value: { id: n.id, state: "ready" } }))
+    expect(el.querySelector('[aria-label="Notices desk"] [role="alert"]')).toBeNull()
+    vi.mocked(invoke).mockImplementation(async () => null)
+    useJoin.setState({ status: "off", live: null, me: null })
+  })
+
+  it("can go to one person by name; only that desk (and the main desk) sees it", async () => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    expect(asTarget({ name: "  Ade's phone " })).toEqual({ name: "Ade's phone" })
+    expect(asTarget({ name: "  " })).toBe("all")
+    expect(asTarget({ id: 3 })).toBe("all")
+    const n = useNotices.getState().send({ from: "Main desk", to: { name: "Ade's phone" }, text: "Mic 2 is yours" })!
+    expect(n.to).toEqual({ name: "Ade's phone" })
+    expect([isFor(n, "bible", "ade's phone"), isFor(n, "bible", "Femi"), isFor(n, "bible")]).toEqual([true, false, false])
+    const onSend = vi.fn()
+    const el = document.createElement("div")
+    await act(async () => createRoot(el).render(<NoticesPanel notices={useNotices.getState().notices} role="host" me="Main desk" people={["Ade's phone", "Femi"]} onSend={onSend} onAnswer={vi.fn()} onAction={vi.fn()} />))
+    expect(el.textContent).toContain("→ Ade's phone")
+    const to = el.querySelector('[aria-label="Send to"]') as HTMLSelectElement
+    expect([...to.querySelectorAll("optgroup option")].map((o) => o.textContent)).toEqual(["Ade's phone", "Femi"])
+    await act(async () => {
+      to.value = "name:Femi"
+      to.dispatchEvent(new Event("change", { bubbles: true }))
+      const input = el.querySelector('[aria-label="Notice"]') as HTMLInputElement
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Timer on 5")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => (el.querySelector("form") as HTMLFormElement).requestSubmit())
+    expect(onSend).toHaveBeenCalledWith({ to: { name: "Femi" }, priority: "normal", text: "Timer on 5", action: null })
+    // Another desk does not list it.
+    const other = document.createElement("div")
+    await act(async () => createRoot(other).render(<NoticesPanel notices={useNotices.getState().notices} role="bible" me="Femi" onSend={vi.fn()} onAnswer={vi.fn()} onAction={vi.fn()} />))
+    expect(other.textContent).not.toContain("Mic 2 is yours")
   })
 })

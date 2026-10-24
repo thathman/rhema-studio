@@ -45,8 +45,13 @@ export interface LiveStateV1 {
   /** Congregation scenes and outputs, for a screens operator. */
   scenes: { id: string; name: string }[]
   outputs: { id: string; name: string; sceneId: string | null }[]
-  /** Production notices (Rhema Comms), newest first; each desk shows those for it. */
+  /**
+   * Production notices (Rhema Comms), newest first. The host's server passes each paired desk only
+   * those for it (everyone, its role, its name, or sent by it); the main desk has them all.
+   */
   notices: Notice[]
+  /** The paired desks' names, so a notice can go to one person (Comms). Absent from older hosts. */
+  crew?: string[]
   /** The talk channel (Rhema Comms voice): who is in it, holding Talk, audible now. */
   voice?: VoicePerson[]
   /** Desks the main desk has taken back control from (#243), by name: each shows "Paused by the main desk". Absent from older hosts. */
@@ -81,6 +86,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => ({ id: o.id, name: o.name, sceneId: o.sceneId ?? null })),
     notices: useNotices.getState().notices.slice(0, 50),
+    crew: useSettingsStore.getState().remoteDevices.map((d) => d.name),
     voice: voiceCrew(),
     paused: useSettingsStore.getState().remoteDevices.filter((d) => d.paused === true).map((d) => d.name),
   }
