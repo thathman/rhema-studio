@@ -102,18 +102,20 @@ fn refusal(status: u16, error: Option<String>, code: Option<&str>) -> String {
     }
 }
 
-/// Send one command (the host checks the key's role and the service).
+/// Send one command (the host checks the key's role and the service). A command the host took may
+/// come back with a note for the desk (a scene change sent to the main desk to accept).
 #[tauri::command]
-pub async fn join_command(address: String, token: String, command: serde_json::Value, service: Option<String>) -> Result<(), String> {
+pub async fn join_command(address: String, token: String, command: serde_json::Value, service: Option<String>) -> Result<Option<String>, String> {
     let url = format!("{}/api/v1/command", base_url(&address)?);
     let body = command_body(command, service);
     let r = client(Some(Duration::from_secs(10)))?.post(url).header("X-Rhema-Key", token).json(&body).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
-    if r.status().is_success() {
-        return Ok(());
-    }
-    let status = r.status().as_u16();
+    let status = r.status();
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
-    Err(refusal(status, v.get("error").and_then(|e| e.as_str()).map(String::from), v.get("code").and_then(|c| c.as_str())))
+    let text = |k: &str| v.get(k).and_then(|e| e.as_str()).map(String::from);
+    if status.is_success() {
+        return Ok(text("note"));
+    }
+    Err(refusal(status.as_u16(), text("error"), text("code").as_deref()))
 }
 
 /// Join the host's talk channel (Rhema Comms C3): send this desk's complete WebRTC offer, get the

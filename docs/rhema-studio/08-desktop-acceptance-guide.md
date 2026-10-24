@@ -1328,6 +1328,25 @@ Rhema with a saved service (a song and two slides), Desk menu → Your name = "T
 | 10ex.9 | Production → Scenes. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
 | 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
 
+### 10ez. Desk roles and scene changes from joined desks (#243, #215)
+
+Two Macs on the same network: the **host** (a saved service, a congregation display output, two scenes "Welcome" and "Sermon split", a camera in Production → Cameras with the router on, OBS connected in Settings → Remote control, a stage output) and a **desk** joined to it (Production → Operators → Join a host). Settings → Remote control on the host to change the desk's role between steps.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10ez.1 | Host: Settings → Remote control, open the desk's role list; open **What each role may do**. | The list has Timekeeper, Bible, Worship, Screens, Stage, Camera, OBS director, Present only, Present and settings, each with a one-line description (also on hover). | Unverified |
+| 10ez.2 | Role **Worship**. On the desk type a song title from the host's library, **Show**; then **Take it off**. | Only a Worship desk (plus Talk, Notices, run of show). The song shows on the host from its first slide; Take it off clears the lyrics; the host's log names the desk. | Unverified |
+| 10ez.3 | Role **Stage**: send "Wrap up", then **Take it off**. | Only the stage output shows "Wrap up"; never the congregation output. It goes off again. | Unverified |
+| 10ez.4 | Role **Camera**: **Hide from scenes** on the camera; then **Cameras…** on "Sermon split", pick another camera, **Save on the host**. | The scene shows the camera's fallback while hidden. In the editor the name, background and other layers cannot be changed; the camera box can. The change goes in (or waits, if the scene is on a screen). | Unverified |
+| 10ez.5 | Role **OBS director**, OBS in Studio Mode: **Preview** a scene, then **Take … to the stream**. Without Studio Mode: **Switch to …**. | OBS on the host changes exactly so; the host's log says "OBS: took … (from Rhema)". A Present or settings desk has no OBS desk. | Unverified |
+| 10ez.6 | Host: turn on rehearsal. OBS director desk. | "Rehearsal is on at the host" and the OBS buttons are off; OBS does not change. Turn rehearsal off. | Unverified |
+| 10ez.7 | Role **Screens**. "Welcome" is on no screen: **Edit…**, rename it "Welcome 2", move a box, **Save on the host**. | "Welcome 2 saved on the host." The host's Production → Scenes shows the change at once; its pictures are still there. | Unverified |
+| 10ez.8 | Host takes "Sermon split" to the projector. Desk: **Edit…** it, change the background, **Save on the host**. | The desk reads "Sent to the main desk to accept, because that scene is on a screen." The projector is unchanged. The host's bell has the desk's notice with **Accept the scene change** and **Decline**. | Unverified |
+| 10ez.9 | Host: **Accept the scene change**. Repeat 10ez.8 and **Decline**. | Accept: the projector shows the new background; the desk's notice reads "Main desk: Accepted". Decline: nothing changes; "Declined". Both are in the service log with the desk's name. | Unverified |
+| 10ez.10 | Desk opens **Edit…** on "Welcome 2"; meanwhile rename it on the host and Save there; then **Save on the host** on the desk. | Refused: "Someone changed this first — look again"; the desk's editor now shows the host's name. Save again: it goes in. Nothing was overwritten. | Unverified |
+| 10ez.11 | Host: Team → Approvals, tick **Ask before showing an unapproved service**. Desk: **New scene…**, **Add on the host**. Untick it afterwards. | The new scene waits: "…because Approvals is on at the main desk (Team → Approvals)", and appears on the host only after Accept. | Unverified |
+| 10ez.12 | Host rehearsal on; desk edits "Welcome 2" (on no real screen) and saves. | It goes in at once (rehearsal is not on air). Editing the scene on the projector still waits for the main desk. | Unverified |
+| 10ez.13 | Role **Present** and **Bible**. | Present: Take buttons, no Edit… or New scene…. Bible: no scenes desk. (Optional: a Bible desk's `/api/v1/live` has scene names only, no layers.) | Unverified |
 ### 10ey. One Sunday end to end: the cross-feature walkthrough (#299 UX15-6)
 
 One run through a whole Sunday on one build, to catch what the feature sections cannot: features that

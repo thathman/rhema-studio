@@ -16,6 +16,9 @@ import { activateBibleReference, previewBibleReference } from "@/lib/bible-activ
 import { songRequest } from "@/lib/song-request"
 import { cameraSourceId, isStateSource, type AnySourceId } from "@/lib/live-sources"
 import { useNotices } from "@/stores/notices-store"
+import { useObsStore } from "@/stores/obs-store"
+import { receiveDeskScene } from "@/lib/desk-scenes"
+import { asRemoteRole } from "@/lib/remote-roles"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
 /** A note in the service log that is not a remote command (a device paired). */
@@ -174,6 +177,16 @@ export function useRemoteControl() {
         }),
       )
       await withPayload(REMOTE_EVENTS.release_scene, (p) => { if (typeof p.output === "string") useBroadcastStore.getState().releaseScene(p.output) })
+      // Scenes made and changed on a joined desk (#243 SC.16): checked by the host's server, then here.
+      await withPayload(REMOTE_EVENTS.save_scene, (p) => receiveDeskScene(p))
+      await withPayload(REMOTE_EVENTS.delete_scene, (p) => receiveDeskScene(p, true))
+      // The stage message from a Stage desk: as the main desk's own box, stage screens only.
+      await withPayload(REMOTE_EVENTS.stage_message, (p) => { if (typeof p.text === "string") useBroadcastStore.getState().setStageMessage(p.text.trim().slice(0, 120)) })
+      // OBS from the OBS director's desk, on this computer's OBS connection; the OBS store refuses it in rehearsal.
+      const obsScene = (p: Record<string, unknown>) => (typeof p.scene === "string" && useObsStore.getState().scenes.includes(p.scene) ? p.scene : null)
+      await withPayload(REMOTE_EVENTS.obs_preview, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().setPreview(scene) })
+      await withPayload(REMOTE_EVENTS.obs_take, () => void useObsStore.getState().take())
+      await withPayload(REMOTE_EVENTS.obs_program, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().switchProgram(scene) })
 
       // remote:paired — a device completed pairing; remember its token hash
       keep(
@@ -182,7 +195,7 @@ export function useRemoteControl() {
           const p = parsePayload(event.payload)
           if (typeof p?.hash === "string" && typeof p?.name === "string") {
             noteRemote(`${REMOTE_PAIRED_EVENT} ${p.name}`)
-            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: p.role === "configure" || p.role === "timekeeper" || p.role === "bible" || p.role === "screens" ? p.role : "present" })
+            useSettingsStore.getState().addRemoteDevice({ hash: p.hash, name: p.name, role: asRemoteRole(p.role) ?? "present" })
             toast.success(`${p.name} paired`, { description: "It can now send commands. Revoke it in Settings → Remote." })
           }
         }),

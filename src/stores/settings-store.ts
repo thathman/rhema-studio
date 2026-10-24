@@ -3,8 +3,11 @@ import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { validLimit, type CapacityKind, type CapacityOverrides } from "@/lib/capacity"
 
-/** present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join). */
-export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens"
+/**
+ * present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join).
+ * worship: songs and hymns; stage: the stage message; camera: cameras in scenes; obs: OBS through the host (#215 G10). See src/lib/remote-roles.ts.
+ */
+export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens" | "worship" | "stage" | "camera" | "obs"
 
 export interface RemoteDevice {
   hash: string

@@ -38,10 +38,11 @@ interface JoinState {
    * main desk has taken back control, or if it is for another service. Says whether the host did it,
    * and if not, why in the host's words.
    */
-  send: (command: { command: string; value?: string | number | Record<string, unknown> }) => Promise<SendResult>
+  send: (command: { command: string; value?: string | number | Record<string, unknown>; seen?: Record<string, number> }) => Promise<SendResult>
 }
 
-export type SendResult = { ok: true } | { ok: false; error: string }
+/** `note`: what the host said about a command it took (a scene change sent to the main desk to accept). `stale`: the desk's copy of a scene was older than the host's. */
+export type SendResult = { ok: true; note?: string } | { ok: false; error: string; stale?: true }
 
 /** What a desk is told when someone changed that part of the service before its command arrived. */
 export const STALE_MESSAGE = "Someone changed this first — look again"
@@ -51,9 +52,11 @@ export const STALE_MESSAGE = "Someone changed this first — look again"
  * R7), so the host can refuse it if someone changed that part first, and, for an Unable answer, the
  * reason this desk could not do what was asked (Comms, #251). Older hosts ignore both.
  */
-export function withWhatWasSeen(command: { command: string; value?: unknown }, live: LiveStateV1 | null): Record<string, unknown> {
+export function withWhatWasSeen(command: { command: string; value?: unknown; seen?: Record<string, number> }, live: LiveStateV1 | null): Record<string, unknown> {
   const out: Record<string, unknown> = { ...command }
-  if (live?.revisions) out.seen = live.revisions
+  // What a command says it saw itself wins: a scene editor sends the scene's revision from when it
+  // was opened, not from the Live State now (#243 SC.16).
+  if (live?.revisions || command.seen) out.seen = { ...live?.revisions, ...command.seen }
   const v = command.value as { id?: unknown; state?: unknown } | undefined
   if (command.command === "notice_ack" && v?.state === "unable" && typeof v.id === "string") {
     const why = takeUnableReason(v.id)
@@ -153,9 +156,9 @@ export const useJoin = create<JoinState>((set, get) => ({
   send: async (command) => {
     const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
     try {
-      await invoke("join_command", { address, token, command: withWhatWasSeen(command, get().live), service: serviceOf(get().live) })
+      const note = await invoke<string | null>("join_command", { address, token, command: withWhatWasSeen(command, get().live), service: serviceOf(get().live) })
       set({ error: null, note: null })
-      return { ok: true }
+      return typeof note === "string" && note ? { ok: true, note } : { ok: true }
     } catch (e) {
       const msg = String(e)
       // join_command marks the two refusals this desk handles itself (src-tauri/src/commands/join.rs).
@@ -168,7 +171,7 @@ export const useJoin = create<JoinState>((set, get) => ({
       if (msg.startsWith("stale:")) {
         const why = msg.slice("stale:".length).trim() || STALE_MESSAGE
         set({ error: why, note: null })
-        return { ok: false, error: why }
+        return { ok: false, error: why, stale: true }
       }
       if (msg.startsWith("other-service:")) {
         set({ error: null, note: OTHER_SERVICE_NOTE })
@@ -180,3 +183,6 @@ export const useJoin = create<JoinState>((set, get) => ({
     }
   },
 }))
+
+/** A joined desk may send commands: connected, and the main desk has not taken back control. */
+export const useCanSend = () => useJoin((s) => s.status === "connected" && !s.paused)

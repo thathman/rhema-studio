@@ -73,7 +73,7 @@ describe("acting on what the desk saw (#196 R7)", () => {
   it("refused because someone changed it first: the desk says so and stays connected", async () => {
     useJoin.setState({ status: "connected", me: { name: "Femi's laptop", role: "screens" }, live: served({ "output:main": 7 }) })
     refuseNext = `stale: ${STALE_MESSAGE}`
-    expect(await useJoin.getState().send({ command: "take_scene", value: { output: "main", scene: "s" } })).toEqual({ ok: false, error: STALE_MESSAGE })
+    expect(await useJoin.getState().send({ command: "take_scene", value: { output: "main", scene: "s" } })).toEqual({ ok: false, error: STALE_MESSAGE, stale: true })
     expect(useJoin.getState()).toMatchObject({ status: "connected", error: STALE_MESSAGE, note: null, paused: false })
     // No reconnect: the desk already follows the change; the operator looks again.
     expect(calls.map((c) => c.cmd)).toEqual(["join_command"])

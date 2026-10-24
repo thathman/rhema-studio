@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { formatMs } from "@/lib/timer"
 import { openSettings } from "@/lib/settings-dialog"
 import { setDeskControl } from "@/lib/desk-control"
-import { useJoin } from "@/stores/join-store"
+import { useCanSend, useJoin } from "@/stores/join-store"
 import type { LiveStateV1 } from "@/lib/live-state"
 import { activatedLabel } from "@/lib/live-sources"
 import { sourceName } from "@/lib/content-names"
@@ -19,13 +19,17 @@ import { deskFreshness, skewWords } from "@/lib/desk-freshness"
 import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
 import { HostLookOffer } from "@/studio/production/host-look-offer"
+import { CameraDesk, DeskSceneEditor, ObsDesk, SongsDesk, StageDesk } from "@/studio/production/joined-desks"
+import { deskEditable } from "@/lib/desk-scenes"
+import { editsScenes, REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
 
-const ROLE_NAMES: Record<string, string> = { timekeeper: "Timekeeper (the event clock only)", bible: "Bible (the Bible source only)", screens: "Screens (congregation scenes only)", present: "Present", configure: "Present and settings" }
+type Desk = "clock" | "bible" | "scenes" | "songs" | "stage" | "cameras" | "obs"
 /** Which desks a role gets on a joined computer (the host checks every command again). */
-const DESKS: Record<string, readonly ("clock" | "bible" | "scenes")[]> = { timekeeper: ["clock"], bible: ["bible"], screens: ["scenes"], present: ["clock", "bible", "scenes"], configure: ["clock", "bible", "scenes"] }
+const DESKS: Record<string, readonly Desk[]> = {
+  timekeeper: ["clock"], bible: ["bible"], screens: ["scenes"], worship: ["songs"], stage: ["stage"], camera: ["cameras", "scenes"], obs: ["obs"],
+  present: ["clock", "bible", "songs", "scenes", "stage"], configure: ["clock", "bible", "songs", "scenes", "stage"],
+}
 const hhmm = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-/** A joined desk may send commands: connected, and the main desk has not taken back control. */
-const useCanSend = () => useJoin((s) => s.status === "connected" && !s.paused)
 
 /** How fresh this desk's view of the host is, looked at again every second (#196 R5). */
 function useFreshness() {
@@ -102,7 +106,7 @@ function HostCard() {
           <li key={d.hash} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
             <span className="min-w-0 flex-1 truncate font-medium">{d.name}</span>
             {d.paused === true && <span className="rounded-full bg-muted px-2 py-0.5 text-[0.625rem] font-bold text-muted-foreground uppercase">Paused</span>}
-            <span className="text-muted-foreground">{ROLE_NAMES[d.role ?? "configure"]}</span>
+            <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "configure"))?.may}>{roleLabel(d.role ?? "configure")}</span>
             <DeskControlButton hash={d.hash} name={d.name} paused={d.paused === true} />
           </li>
         ))}
@@ -235,7 +239,7 @@ function JoinedDesk() {
         <span role="status" className={cn("rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase", status === "connected" ? "bg-primary/10 text-primary-text" : "bg-muted text-muted-foreground")}>
           {status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : status === "refused" ? "Refused" : "Connecting…"}
         </span>
-        {me && <span className="text-muted-foreground">as {me.name} · {ROLE_NAMES[me.role] ?? me.role}</span>}
+        {me && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === me.role)?.may}>as {me.name} · {roleLabel(me.role)}</span>}
         {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
         <span className="flex-1" />
         <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave()}>Leave</Button>
@@ -263,7 +267,11 @@ function JoinedDesk() {
           </div>
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
           {desks.includes("bible") && <BibleDesk live={live} />}
-          {desks.includes("scenes") && <ScenesDesk live={live} />}
+          {desks.includes("songs") && <SongsDesk live={live} />}
+          {desks.includes("cameras") && <CameraDesk live={live} />}
+          {desks.includes("scenes") && <ScenesDesk live={live} role={me?.role ?? "present"} />}
+          {desks.includes("stage") && <StageDesk live={live} />}
+          {desks.includes("obs") && <ObsDesk live={live} />}
           <RunOfShowView live={live} stale={fresh.stale} />
           <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
             <p className="font-semibold">Talk</p>
@@ -282,6 +290,7 @@ function JoinedDesk() {
                 // The host checks this desk's role for each, as for its own buttons; its refusal is the
                 // reason. Preview puts a verse or a song in the main desk's Preview only.
                 if (a.kind === "camera") return null // answering is the action
+                if (a.kind === "sceneEdit") return "only the main desk answers a scene change"
                 const send = useJoin.getState().send
                 const results = a.kind === "bible" ? [await send({ command: mode === "preview" ? "bible_preview" : "bible_activate", value: a.value })]
                   : a.kind === "song" ? [await send({ command: mode === "preview" ? "song_preview" : "song_show", value: a.value })]
@@ -471,31 +480,54 @@ function BibleDesk({ live }: { live: LiveStateV1 }) {
   )
 }
 
-/** Congregation scenes: which scene each output shows; Take or back to its own feed (Screens operator). */
-function ScenesDesk({ live }: { live: LiveStateV1 }) {
+/**
+ * Congregation scenes: which scene each output shows; Take or back to its own feed (Screens
+ * operator); make or change a scene through the host (#243 SC.16) for a desk that may (a camera
+ * desk: its camera boxes only).
+ */
+function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
   const ok = useCanSend()
   const [outputId, setOutputId] = useState(live.outputs[0]?.id ?? "")
+  // The scene open in the editor: its id, "new", or none.
+  const [editing, setEditing] = useState<string | null>(null)
+  const [said, setSaid] = useState("")
   const output = live.outputs.find((o) => o.id === outputId) ?? live.outputs[0]
   const send = useJoin.getState().send
-  if (!output) return <p className="text-muted-foreground">The host has no congregation output.</p>
+  const takes = role !== "camera"
+  const edits = editsScenes(role)
+  const cameraOnly = role === "camera"
+  const open = editing === "new" ? null : live.scenes.find((s) => s.id === editing)
+  const done = (words: string) => { setEditing(null); setSaid(words) }
   return (
     <section aria-label="Scenes desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold">Scenes on</span>
-        <select aria-label="Congregation output" value={output.id} onChange={(e) => setOutputId(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5">
-          {live.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-        <span className="text-muted-foreground">shows {live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span>
-      </div>
+      {output ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">Scenes on</span>
+          <select aria-label="Congregation output" value={output.id} onChange={(e) => setOutputId(e.target.value)} className="h-7 rounded-md border border-input bg-card px-1.5">
+            {live.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+          <span className="text-muted-foreground">shows {live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">The host has no congregation output.</p>
+      )}
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (
-          <li key={s.id}>
-            <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || s.id === output.sceneId} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>Take {s.name}</Button>
+          <li key={s.id} className="flex items-center gap-0.5">
+            {takes && output && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || s.id === output.sceneId} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>Take {s.name}</Button>}
+            {!takes && <span className="px-1 font-medium">{s.name}</span>}
+            {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>
         ))}
-        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet: they are made on the host (Production → Scenes).</li>}
+        {live.scenes.length === 0 && <li className="text-muted-foreground">No scenes yet{edits && !cameraOnly ? "" : ": they are made on the host (Production → Scenes)"}.</li>}
       </ul>
-      {output.sceneId && <div><Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button></div>}
+      <div className="flex flex-wrap gap-2">
+        {takes && output?.sceneId && <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "release_scene", value: output.id })}>Back to its own feed</Button>}
+        {/* An older host says nothing about approvals and takes no scenes from a desk. */}
+        {edits && !cameraOnly && editing === null && live.requireApproval !== undefined && <Button size="sm" variant="outline" disabled={!ok} onClick={() => { setSaid(""); setEditing("new") }}>New scene…</Button>}
+      </div>
+      {said && <p role="status" className="text-muted-foreground">{said}</p>}
+      {editing !== null && (editing === "new" || open) && <DeskSceneEditor key={editing} live={live} scene={open ?? null} cameraOnly={cameraOnly} onDone={done} />}
     </section>
   )
 }

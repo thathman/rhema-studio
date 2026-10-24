@@ -4,7 +4,7 @@ import { CONTENT_TYPES } from "@/types/broadcast"
 import { serviceTiming, type EventState, type ServiceTiming } from "@/lib/timing-engine"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { cameraSourceId, lowerThirdWords, tickerWords, timerWords } from "@/lib/live-sources"
-import { cameraSending, useRouterHealth } from "@/lib/cameras"
+import { cameraSending, useRouterHealth, whepUrl } from "@/lib/cameras"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -17,6 +17,8 @@ import { useVoice, type VoicePerson } from "@/lib/voice"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { elapsedMs } from "@/lib/timer"
 import { sharedChurchLook, type ChurchLook } from "@/lib/church-look"
+import { sceneForDesk, scenesOnScreen, type DeskScene } from "@/lib/desk-scenes"
+import { useObsStore } from "@/stores/obs-store"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -51,9 +53,12 @@ export interface LiveStateV1 {
   /**
    * Congregation scenes and outputs, for a screens operator. An output's `sceneRevision` and `sceneBy`:
    * its last scene Take or release on the host, and who did it (#243 EX.1; absent from older hosts
-   * and before the first Take).
+   * and before the first Take). Whether each scene is on a real screen now (`onScreen`) and its
+   * arrangement without pictures, video addresses or held copies (#243 SC.16): the host's server
+   * passes the arrangement only to desks that may change scenes, and keeps its revision in
+   * `revisions` ("scene:<id>"). Both absent from older hosts.
    */
-  scenes: { id: string; name: string }[]
+  scenes: ({ id: string; name: string } & Partial<Omit<DeskScene, "id" | "name">>)[]
   outputs: { id: string; name: string; sceneId: string | null; sceneRevision?: number; sceneBy?: string }[]
   /**
    * Production notices (Rhema Comms), newest first. The host's server passes each paired desk only
@@ -68,6 +73,19 @@ export interface LiveStateV1 {
   paused?: string[]
   /** A hold in the service (#196 R3): its reason, since when (host wall ms) and which desk held it. Null when not held; absent from older hosts. */
   hold?: { reason: string; since: number; by?: string } | null
+  /** Approvals is on (Team → Approvals; #243 SC.17): every scene change from a desk then waits for the main desk. Absent from older hosts. */
+  requireApproval?: boolean
+  /**
+   * OBS as the host sees it, for an OBS director desk: connected, Studio Mode, its scenes, program
+   * and preview. Absent from older hosts.
+   */
+  obs?: { connected: boolean; studioMode: boolean | null; scenes: string[]; program: string | null; preview: string | null }
+  /**
+   * The church's cameras (Production → Cameras) for a scene's camera box on a joined desk: name,
+   * label and the router address a screen plays (null while the router is off). Never a camera's
+   * secret. Absent from older hosts.
+   */
+  cameraFeeds?: { name: string; label: string; url: string | null }[]
   /** How often the host sends this at the least (ms), so a desk can tell a quiet host from a lost one. Absent from older hosts. */
   heartbeatMs?: number
   /**
@@ -156,7 +174,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by } : null,
     stageMessage: b.stageMessage,
     timer: (() => { const t = useTimerStore.getState().timer; return { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null, revision: timerRevision } })(),
-    scenes: b.scenes.map((s) => ({ id: s.id, name: s.name })),
+    scenes: (() => { const on = scenesOnScreen(b); return b.scenes.map((s) => sceneForDesk(s, on.has(s.id))) })(),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => {
       const take = b.sceneTakes[o.id]
       return { id: o.id, name: o.name, sceneId: o.sceneId ?? null, ...(take ? { sceneRevision: take.revision, ...(take.by ? { sceneBy: take.by } : {}) } : {}) }
@@ -166,6 +184,9 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     voice: voiceCrew(),
     paused: useSettingsStore.getState().remoteDevices.filter((d) => d.paused === true).map((d) => d.name),
     hold: (() => { const h = useHold.getState().hold; return h ? { reason: h.reason, since: h.since, ...(h.by ? { by: h.by } : {}) } : null })(),
+    requireApproval: useSettingsStore.getState().requireApproval,
+    cameraFeeds: (() => { const r = useRouterHealth.getState().status; return useSettingsStore.getState().cameras.map((c) => ({ name: c.name, label: c.label, url: r?.running && r.lanAddress ? whepUrl(r.lanAddress, r.ports, c.name) : null })) })(),
+    obs: (() => { const o = useObsStore.getState(); return { connected: o.status === "connected", studioMode: o.studioMode, scenes: o.scenes.slice(0, 100), program: o.program, preview: o.preview } })(),
     heartbeatMs: LIVE_HEARTBEAT_MS,
     churchLook: sharedChurchLook(useSettingsStore.getState().brandKit, b.themes),
   }
@@ -226,7 +247,8 @@ export function startLiveStatePublisher(): () => void {
     useHold.subscribe((s, p) => { if (s.hold !== p.hold) soon() }),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
-    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit) soon() }),
+    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit || s.requireApproval !== p.requireApproval) soon() }),
+    useObsStore.subscribe((s, p) => { if (s.status !== p.status || s.scenes !== p.scenes || s.program !== p.program || s.preview !== p.preview || s.studioMode !== p.studioMode) soon() }),
     useRouterHealth.subscribe(() => soon()),
   ]
   soon()
