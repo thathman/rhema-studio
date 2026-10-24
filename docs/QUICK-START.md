@@ -1,8 +1,32 @@
-# Rhema Studio — Sunday in one page
+# Rhema Studio — the short manual
 
-For the volunteer at the laptop. Nothing in **Prepare** can reach the screen; only **Present** does.
+For the volunteer at the laptop and whoever looks after the screens on a Sunday. Nothing in **Prepare** can reach the screen; only **Present** does. The full detail for outputs, OBS, scenes and desks is in the [production guide](PRODUCTION-GUIDE.md); this page is the short version.
+
+**What "checked" means here.** Everything described on this page is built. Where a section says *Checked on the desktop*, the rows named there passed in the [desktop acceptance guide](rhema-studio/08-desktop-acceptance-guide.md); everything else is **built, not yet checked on the desktop**. The pictures are from a test build on 24 October 2026 with made-up demo data (no real church's services or people); where a label has changed since, the caption says so.
+
+- [Finding your way](#finding-your-way)
+- [The first time on a new computer](#the-first-time-on-a-new-computer-2-minutes)
+- [Home](#home)
+- [Before the service: Prepare](#before-the-service-prepare-10-minutes)
+- [During the service: Present](#during-the-service-present-standard-view)
+- [Production](#production)
+- [Design](#design)
+- [Settings](#settings)
+- [Your desk, joining a host and volunteer desks](#your-desk-joining-a-host-and-volunteer-desks)
+- [Google TV](#google-tv)
+- [Cameras](#cameras)
+- [OBS](#obs)
+- [If something breaks](#if-something-breaks)
+
+## Finding your way
+
+The sidebar has two groups. **Workspace**: **Home** (is everything ready?), **Prepare** (build the service), **Present** (the live console) and **Production** (timing, screens, health, scenes, OBS, cameras, other desks). **Your church**: **Library** (songs and ministrations, the hymn book, pictures and videos, import and export), **Design** (every look), **Team** (who is at the desk, approvals, church folder, phones and other computers) and **Archive** (what went live, songs sung, sharing services, backups).
+
+Your name at the foot of the sidebar opens the **Desk menu**: your name, this computer's name, what this desk may do, Light / Dark / System, Settings, Complete setup, Setup status, keyboard shortcuts, help and the tour, Diagnostics and About. **Find anything** at the top (⌘K / Ctrl+K) finds a service, a song, a verse, a setting or an action. **Collapse** (⌘B / Ctrl+B) folds the sidebar to icons.
 
 ## The first time on a new computer (2 minutes)
+
+![The welcome window with its four choices: set up this computer as the main desk, join an existing church host, bring in a previous installation, use Rhema now and finish later](images/manual/setup-welcome.png)
 
 On a new install Rhema opens **Welcome to Rhema Studio** once. Choose:
 
@@ -15,13 +39,23 @@ In **Brand and starter looks**, after your logo and colours you can pick a famil
 
 In **Screens**, **Test this screen** checks an output that is on: after you confirm, that one output shows bars, its name and size and "TEST – not on air" until you press **End test** (it asks again if something is on air or a stream or TV is watching). Browser feeds say whether a page really shows them ("Shown on 1 page") or not ("Connected, not shown").
 
-In **Church identity** you can choose the church's **time zone** (it starts on this computer's own). In **Screens**, a **Sound (optional)** box chooses the microphone Rhema listens with; Rhema asks the computer for its microphones only when you press **Choose microphone**. In **Screens**, **Test this screen** checks an output that is on: after you confirm, that one output shows bars, its name and size and "TEST – not on air" until you press **End test** (it asks again if something is on air or a stream or TV is watching). Browser feeds say whether a page really shows them ("Shown on 1 page") or not ("Connected, not shown").
+In **Church identity** you can choose the church's **time zone** (it starts on this computer's own). In **Screens**, a **Sound (optional)** box chooses the microphone Rhema listens with; Rhema asks the computer for its microphones only when you press **Choose microphone**.
 
 The **Setup summary** at the end shows where services and songs are kept (**Copy**, **Show in folder**), when they were last backed up (**Back up now…** saves a backup file where you choose), and tests the church folder by writing a small file there and deleting it again. **Run screen test** goes back to Screens; **Start a sample service** opens Prepare with a welcome, a few passages from your Bible, notices and a closing slide (no song words, not saved unless you save it; it will not replace a service with unsaved changes).
 
 Nothing in the setup turns on a screen, a microphone or a listener, and no internet or cloud key is needed. A computer that was already in use before the setup existed sees **Review your setup** on Home once (Review setup, or Not now); nothing changes unless you choose. Home's **Content readiness** counts checks ("5 of 6 checks"), not a percentage, and with no outputs set up, or a service hours away, "No output is on a screen yet" is a note, not a reason for "Not ready". Until the church's name, your name and a Bible are in place, Home shows a small **Finish church setup** card (Continue, Remind me tomorrow, or hide it). Features you do not use, such as NDI, OBS or cloud speech, are listed as **Not using** and never count against you. **Setup status** (Desk menu, or the Home card) shows the church's setup, the equipment that is switched on and this service side by side, each item with a link to fix it.
 
-## Before the service (Prepare, 10 minutes)
+*Built, not yet checked on the desktop (acceptance 10dn, 10dv, 10eq, 10er, 10ev).*
+
+## Home
+
+Home is the first thing to look at on a Sunday morning. It shows the next service, how much is planned, **Content readiness** (so many of so many checks: the Bible loaded, a look chosen, an output on a screen, songs and pictures present, fonts installed) and **Your attention**: each line that needs fixing, with a button that takes you there. Fix the amber lines first. **Team changes** lists the latest saves, approvals and new team comments on the service; a row opens it in Prepare. Until the church's name, your name and a Bible are in place, a **Finish church setup** card offers the rest of the setup.
+
+*Checked on the desktop: today's service on Home (10x.1). Content readiness, Team changes and the setup card are built, not yet checked on the desktop (acceptance 10du, 10eq.11, 10dn.5).*
+
+## Before the service: Prepare (10 minutes)
+
+![Prepare: the service name with Saved, History, Copy and New service, and the three phases of the service: pre-service loop, warm-up and main service](images/manual/prepare.png)
 
 First time at this computer? Click **Add your name** at the bottom of the sidebar and type your name (Enter saves). The same menu switches Light, Dark or System and opens Settings, setup and help. Want more room? **Collapse** (just above your name, or ⌘B / Ctrl+B) folds the sidebar to icons; it stays that way on this computer until you expand it.
 
@@ -36,7 +70,13 @@ First time at this computer? Click **Add your name** at the bottom of the sideba
 4. Click an item to set its languages (EN · YO), its order, a background picture, its planned time (`35`, `4:30`, `1:10:00` or `1h10`), or a note to yourself.
 5. **Save.** The service is kept with every version (History) and backed up before upgrades.
 
-## During the service (Present, Standard view)
+**Timing → Table** shows the whole run of show: the plan, what happened and what is now expected, with a People column. **Look and scene** on an item (Slides tab) records the scene, look and camera it is meant to have; it changes no screen. Tick **Take its scene** under **Signals → When you Take it** if Present should take that scene when you take the item live.
+
+*Checked on the desktop: 10dm.2 (a closed service says "Not saved as a service") and 10dg.1 (the run-of-show table). The rest is built, not yet checked on the desktop (acceptance 10dm, 10ep, 10ex).*
+
+## During the service: Present (Standard view)
+
+![Present, the live console: the running order on the left, Preview and Live side by side, the bar with Previous, Next, the verse buttons, Take live, Clear and Restore, and Find and cue anything with the one-touch moments below](images/manual/present.png)
 
 | Want to… | Do |
 |---|---|
@@ -54,9 +94,100 @@ First time at this computer? Click **Add your name** at the bottom of the sideba
 
 Things that cannot go wrong by accident: nothing goes live before it has loaded; a missing song, picture or translation is reported and the screen keeps what it had; Prepare never presents; the timer ignores the computer's clock.
 
+The **Sources** line under Live lists what each live source holds (Bible, songs, the ticker, the timer, the lower third, the stage message, each camera) and who changed it last; × takes one off, **Restore** brings it back. **Lower third** in the header puts a name band on the outputs that show lower thirds; **Ticker** starts the news ticker.
+
+*Checked on the desktop: Clear, Restore, Back and quick screens (10ca.1–10ca.4, 10ca.7), Black (10ai.1) and the ticker in Sources (10ec.1). The transport bar, the Scenes strip and New scene are built, not yet checked on the desktop (acceptance 10dj, 10et, 10ds, 10eu.8–10eu.10, 10es).*
+
+## Production
+
+Production is for the person looking after the screens and the stream. Nothing here takes anything live. Its tabs:
+
+| Tab | What it is for |
+|---|---|
+| **Timekeeper** | The service clock: start the next event, running late or early (±5 min), the service timer, a countdown to the next item, Hold with a reason. |
+| **Screens** | A card for every output (projector, NDI sender, browser feed): where it goes, what it follows, its look, language, safe area and what it shows now. **Add a ready-made feed** adds outputs for OBS ("Rhema Bible \| Lower third" and others). **Needs attention** lists real problems first. |
+| **Show health** | What each audience is really getting: the Sunday preflight, cameras, browser feeds and Google TVs, this computer's load and network, and NDI frames sent. |
+| **Scenes** | The scene composer: arrange the Bible, lyrics, a camera, a video, a clock, the ticker and the logo on one frame, then **Take** it to a congregation screen. (This tab was called **Programs** before.) |
+| **OBS** | OBS's own scenes, separate from Rhema's. See [OBS](#obs). |
+| **Cameras** | Phones and cameras on the church Wi-Fi. See [Cameras](#cameras). |
+| **Operators** | Host the service or join a host. See [Your desk](#your-desk-joining-a-host-and-volunteer-desks). |
+
+![Production → Screens: two output cards, the main display and a browser feed for the Bible as a lower third, each with where it goes, what it follows, its language and look](images/manual/production-screens.png)
+
+*In the picture the cards are from before the safe area and the "Congregation program" name were added.*
+
+![Production → Show health: the Sunday preflight list, the Pulpit camera sending, and the browser feed for the Bible](images/manual/production-show-health.png)
+
+*In the picture Show health is from before **This computer** (load, heat, network) and **NDI senders** were added below.*
+
+*Checked on the desktop: the OBS tab (10ek.1–10ek.9), a camera that stops sending in Show health (10dy.4), the first Show health check (10db.1), running late and the timer from a joined desk (10de.1–10de.3), the run-of-show table (10dg.1). Scenes, Screens and the capacity limits are built, not yet checked on the desktop (acceptance 10cs, 10eu, 10dl, 10ew).*
+
+## Design
+
+Design is where every look is made: **Themes** (how verses, songs, slides and pictures look), **Library** (ready-made looks in six families), **Lower thirds**, **News ticker**, **Stage**, **Brand kit** (church name, colours, fonts, logo) and **Used on…** (which outputs use each look, with **Open output** to change it). **Use** in the Library adds your own copy; nothing on the screens changes until you choose that copy for an output. Edits to a look stay a draft in Design until you save; **Live edit** (off unless you turn it on) shows a draft on the screens as you edit.
+
+![Design → Library: filters for layout, background and language, and the Church Classic family of ready-made looks with Use, Use and edit, and Use with church colours](images/manual/design-library.png)
+
+*In the picture the Library is from before the **OBS overlay** filter was added.*
+
+*Checked on the desktop: the scripture-strip lower third, lower-third styles, the stage over NDI, signage and the ticker (10co.2–10co.6). The Library, Used on…, output cards and a different look per content are built, not yet checked on the desktop (acceptance 10dk, 10er, 10dl, 10co.1).*
+
+## Settings
+
+Open Settings from the Desk menu (or ⌘, / Ctrl+,). The left list groups the sections: **Bible and languages**, **Display and output** (Outputs, Heard verses), **Microphone and speech** (Audio, Speech Recognition), **Connections** (Remote Control, AI assistants) and **Data and diagnostics**. Type in the search box to find any setting ("gain", "camera", "backup"); settings that live elsewhere (the church's name, appearance, cameras, hosting) are listed under **Elsewhere in Rhema** with a link. Settings are kept on this computer; saved keys and passwords go into the system keychain where there is one, and a backup never carries them.
+
+![Settings with "gain" typed in the search: one section matches, Audio, with the input gain slider marked](images/manual/settings-search.png)
+
+*Built, not yet checked on the desktop (acceptance 10dt, 10di.12–10di.14, 10es.9, 10ev.11).*
+
+## Your desk, joining a host and volunteer desks
+
+One computer, the **main desk** (the host), runs the service and keeps every control. Other computers and phones can help, each with a **role** the host gives it; nobody else is needed.
+
+- **On the host:** Settings → Remote Control: start the HTTP listener and allow other devices on the network. Production → Operators → **Pair an operator, set roles…** gives a code, and sets each device's role.
+- **On the helping computer:** Production → Operators → **Join a host**: pick the host Rhema found (check its address matches the host's Settings), type the code and this computer's name, **Join**. The Desk menu then says what this desk may do, and **Leave this host** stops following.
+- **Roles:** **Timekeeper** (the event clock, running late, the timer, Hold), **Bible** (a reference, its verses, the Bible source), **Screens** (congregation scenes), **Present** (all of these and moving through the service), **Present and settings** (also looks and on-air settings). Notices and the talk channel are for every role. What each role may do is listed in the [Production guide](PRODUCTION-GUIDE.md).
+- **Take back control** (Production → Operators, beside each desk) stops a desk's commands at once without unpairing it; **Give control back** ends it.
+- A joined desk that hears nothing from the host for 5 seconds says **Last update N s ago** and dims its clock; it reconnects by itself.
+
+![Production → Operators: Host the service on the left (hosting on the church network, no one paired yet, Pair an operator) and Join a host on the right (Find hosts, the host's address, the pairing code and this computer's name)](images/manual/production-operators.png)
+
+*Checked on the desktop on one Mac, with the joined desks simulated by their keys (no second computer): a Bible key cannot Hold (10ef.4), a paused desk's commands are refused (10dq.3), a desk on another service is refused (10dq.5), running late and the timer from a joined desk (10de.2, 10de.3), Timekeeper commands (10cu.2, 10cu.3), notices (10cu.8), priority talk and revoking a talking desk (10dd.1, 10dd.2). A two-computer run is not yet checked (acceptance 10cu.1, 10eq.3, 10ev.1).*
+
+## Google TV
+
+A Chromecast with Google TV (or another Android TV) can show a browser feed full screen with the **Rhema Receiver** app. Install it once from a computer (`android-tv/build.sh`, then `adb install`). In Rhema tick **Secure page for phones (https)** in Settings → Remote Control and start the listener. Open Rhema Receiver on the TV: it shows its name, address and a six-digit code. In Rhema, open the browser feed's settings → **Show on a Google TV**, pick the TV whose address matches, type the code from the TV, **Show on TV**. The TV keeps the feed after a restart or a power cut, keeps the last picture if the network drops, and picks up again by itself. **OK** on the TV's remote shows a new code to send another feed. Show health lists each TV, with **Check TV**.
+
+*Checked on the desktop with a Chromecast with Google TV HD: install and code (10dh.1), the feed on the TV (10dh.2), verses within a second (10dh.3), the ticker (10dh.4), restart and network loss (10dh.5), five wrong codes (10dh.6), a camera scene on the TV (10dh.8), the secure link (10en.0, 10en.2, 10en.3, 10en.8), Rhema finding the TV (10dz.3) and a smooth ticker layer (10eb.1).*
+
+## Cameras
+
+Phones on the church Wi-Fi can be cameras. Production → Cameras → type a name ("Pulpit") → **Add camera**; scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; a scene's Camera layer picks it by name, and OBS takes its RTSP address in a Media Source. Phones need the secure phone page (Settings → Remote Control → **Secure page for phones (https)**). Nothing goes to the internet. **New link** closes the old link. Step by step: [cameras](rhema-studio/cameras.md).
+
+![Production → Cameras: the camera router on, Add a camera, and the Pulpit camera sending, with its QR code, the camera page link, its address for Rhema scenes and TVs, and its address for OBS](images/manual/production-cameras.png)
+
+*In the picture the Production tab is still called **Programs**; it is **Scenes** now.*
+
+*Checked on the desktop: the router's own page needs a password (10do.12), words in a camera's box while it is not playing (10dc.4), a camera that stops sending in Show health (10dy.4), a camera scene on a Google TV (10dh.8). Adding a phone end to end is not yet checked (acceptance 10do).*
+
+## OBS
+
+Rhema works beside OBS in two ways:
+
+- **Pictures into OBS:** **Production → Screens → Add a ready-made feed** adds an output named for OBS ("Rhema Bible | Lower third", "Rhema Lyrics | Full", "Rhema Ticker | Alpha"…) as an NDI sender (add an NDI source in OBS) or a browser feed (paste its link into an OBS Browser source, 1920×1080). A Bible feed keeps the verse while a hymn is on the projector and changes the moment the next verse is shown.
+- **OBS's own scenes:** connect in Settings → Remote Control → **Connect to OBS** (OBS's address, port 4455 and its WebSocket password). The Present header then shows OBS's recording state. **Production → OBS** lists OBS's scenes and which is on OBS's program; in Studio Mode **Set as OBS preview** and **Take in OBS**, otherwise **Switch OBS to this scene…** (it asks first). Taking a Rhema scene or showing a verse never changes OBS; only these buttons do. In rehearsal they do nothing.
+
+![Production → OBS: OBS connected, Pulpit cam on OBS's program and Wide + lyrics in OBS's preview, Take in OBS, and the list of OBS's scenes with Set as OBS preview](images/manual/production-obs.png)
+
+*In the picture the left card is titled "OBS program"; it is now **Online program (OBS, 720p30)**, with OBS's real size and frame rate.*
+
+*Checked on the desktop with OBS Studio on the Intel Mac: the OBS tab, Studio Mode, Take in OBS, switching, and recovering when OBS closes (10ek.1–10ek.9). The ready-made feeds and the recording state are built, not yet checked on the desktop (acceptance 10es.5, 10ag, 10ex.8).*
+
 ## If something breaks
 
 - **Screen shows nothing?** Home → outputs. Turn the output on; check it is a *congregation* output, not *stage*.
 - **Wrong language on screen?** Present header: "Saved translations" means items show in the version they were saved with; click it to override with your current Bible.
 - **Lost a service?** Prepare → History picks any earlier version. Archive restores a whole backup.
 - **Need help?** Settings → Diagnostics saves the logs to send.
+- **Rhema closed unexpectedly?** Start it again: a banner shows what was on the screens. **Put back on the screens** brings back the program, sources, outputs with their scenes and the timer (still counting); **Not now** leaves everything off, and the Desk menu keeps the offer until Rhema closes. Nothing goes back on air by itself. *Checked on the desktop: 10da.1–10da.5.*
+- **A new or replaced computer?** Archive → Backups → **Back up now…** regularly. On the new computer, **Bring in a previous installation** shows what would change, restores services, songs, settings, outputs and looks, and keeps what was there for **Undo this restore**. Keys, passwords and paired phones are never in a backup: enter and pair them again. *Built, not yet checked on the desktop (acceptance 10ev).*

@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### A short manual, the Sunday walkthrough, the settings decision and new website pages (#299, #298, #243)
+- `docs/QUICK-START.md` is now a short manual with pictures: finding your way, the first run, Home, Prepare, Present, Production, Design, Settings, joining a host, Google TV, cameras and OBS. Each part says whether it has been checked on a real desktop yet.
+- The desktop acceptance guide has a one-Sunday walkthrough (10ey) that goes from setup to backup across every feature.
+- A decision record for how settings are kept: three parts, the settings file, keys in the system keychain and what a backup never carries (`docs/rhema-studio/26-adr-0005-settings.md`).
+- The website's docs have new pages for scenes, live sources, browser feeds and Google TV, and what the main desk and each volunteer desk may do, each marking what is built and what is planned.
+
 ### Two desks pressing at once; reasons for Unable; a long service's log (#196, #251)
 - When two joined desks act on the same thing at once (both take a scene on the same screen, one takes while the other clears, one holds while the other resumes, the timer, the event clock or a live source such as the ticker), the main computer carries out the first and refuses the other: that desk shows **Someone changed this first — look again**, and its view already shows what changed. Phones, Stream Decks and older desks work as before.
 - A refusal on a joined desk now stays until its next command, instead of disappearing within 2 seconds.
