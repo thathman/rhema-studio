@@ -981,6 +981,22 @@ report), but launching it cannot.
 | 10cu.12 | Settings → Remote: tick "Secure page for phones (https)", start the HTTP listener; pair a phone with the code (it opens the https page); accept the warning or install `/rhema-ca.pem`; Join the talk channel on the phone and hold to talk. | The phone joins and is heard; the desk hears it only while it holds Talk. | Partly verified on the Intel Mac (2026-10-23): https on 9091, curl with the CA verified it (refused without), certificate for the LAN address; headless Chrome joined and talked over https. A real phone not yet tried |
 | 10cu.7 | Joined as Screens: Take a scene on the projector; Back to its own feed. Try a Bible activation with its key. | The projector follows; the Bible command is refused (403). | Unverified |
 
+### 10dy. Cameras and Google TVs in Show health (#213)
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10dy.1 | Production → Cameras: add "Pulpit"; the router is on; no phone sending yet. Production → Show health. | **Cameras** card: "Pulpit camera · Not sending · Not in a scene yet"; badge "0 of 1 sending". No attention item (no scene on air uses it). | Unverified |
+| 10dy.2 | Scan the Pulpit QR code with a phone, Start camera. Wait up to 5 s on Show health. | "Sending (H264) · watched by 0 screens or programs"; badge "1 of 1 sending". | Unverified |
+| 10dy.3 | Use Pulpit in "Sermon split" (Use in a scene…), give its camera layer fallback words, Take it on the main output. | The Pulpit row says "In Sermon split · on air on Main Display" and the watched count goes up by one. | Unverified |
+| 10dy.4 | Stop the camera on the phone (or lock it). | Within 5 s **Needs attention** at the top: "Pulpit camera is not sending; "Sermon split" on Main Display shows its fallback words there"; the same line on Production → Screens. The row says Not sending in red. | Unverified |
+| 10dy.5 | Home. | Readiness warns "Pulpit camera is not sending" naming Main Display (on air now); **Open Cameras** opens Production → Cameras. | Unverified |
+| 10dy.6 | Production → Cameras → **Turn off** the router. Show health. | Each camera says "Camera router not running"; the attention line ends "(the camera router is not running)". Turn it back on afterwards. | Unverified |
+| 10dy.7 | A browser feed (e.g. "Foyer TV") on, with no page open. Show health, then Home. | Feed row: "No screen watching"; Home has the note "Foyer TV: no screen is watching" (not a warning). | Unverified |
+| 10dy.8 | Open the feed's link in a browser on another computer. | Within 2 s: "1 screen showing the latest"; the Home note goes away. | Unverified |
+| 10dy.9 | Outputs → the feed → Show on a Google TV: the TV's address and code → Show on TV. Back to Show health. | The TV is listed under the feed with its name, address and time; the feed counts it once the TV shows the page. | Unverified |
+| 10dy.10 | With Rhema Receiver 1.1 on the TV: **Check TV**. Then send a different feed to that TV and Check TV again. | "Showing this feed"; then "Showing another feed (its name)". With Receiver 1.0: "too old to be checked: install version 1.1". **Forget** removes the TV from the list only (the TV keeps showing). | Unverified |
+| 10dy.11 | Go to Library for 30 s with cameras and a feed on (Activity Monitor or the router log). | Rhema stops asking the router and the feeds while Home, Present and Production are closed; back on Production it asks again. | Unverified |
+
 ### 10dx. Church colours on library looks, language filter, ready-made feeds (#299)
 
 | # | Step | Expected | Result |

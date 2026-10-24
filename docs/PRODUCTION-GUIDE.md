@@ -93,6 +93,17 @@ Prepare → Slides → "QR link": type a full `https://…` address (giving, sig
 
 Phones on the church Wi-Fi can be cameras: **Add a camera** (Pulpit, Choir…), scan its QR code with the phone, allow the camera and press **Start camera**. Each camera goes once to the camera router that comes with Rhema; scenes and TVs take it with **Use in a scene…** (or its WHEP address in a Camera layer), and OBS with its RTSP address in a Media Source. Phones need the secure phone page (Settings → Remote control → "Secure page for phones (https)"). Nothing goes to the internet. Step by step, ports and security: [rhema-studio/cameras.md](rhema-studio/cameras.md).
 
+## Show health (Production → Show health)
+
+What each audience is actually getting, from real signals only:
+
+- **Needs attention** (top): the serious problems first: an NDI sender failing, a TV or browser page stuck behind, and a **scene on air whose camera is not sending** ("Pulpit camera is not sending; "Sermon split" on Main shows its fallback words there"). Production → Screens shows the same list.
+- **Sunday preflight:** the same checks as Home's readiness.
+- **Cameras:** every camera you added, and every camera layer in a scene, with what Rhema's camera router says: **Sending (H264) · watched by 2 screens or programs**, **Not sending**, or **Camera router not running**; and which scenes and screens use it. A camera address that is not Rhema's router says Rhema cannot see whether it sends. **Open Cameras** goes to Production → Cameras.
+- **Browser feeds and Google TVs:** each browser feed says **2 screens showing the latest**, **Behind** (a page is stuck: reload it) or **No screen watching**. Each Google TV you sent the feed to with **Show on a Google TV** is listed under it. **Check TV** asks the TV which feed it is showing ("Showing this feed", "Showing another feed", or what its screen says is wrong); it needs Rhema Receiver 1.1 on the TV. **Forget** only removes the TV from this list.
+- Home's readiness warns when a camera in a scene set on a screen is not sending (**Open Cameras**), and notes a browser feed that is on with no screen watching.
+- Rhema asks the camera router every 5 seconds and each feed every 2 seconds, and only while Home, Present or Production is open.
+
 ## Operators: host and join (Production → Operators)
 
 - **Host:** the computer that runs the service keeps every control. Start the HTTP listener on the network (Settings → Remote control), then **Pair a device** and give the code to the operator. Set each paired device's role there: **Timekeeper** moves only the event clock; **Bible** activates a typed reference and steps it (the main screens take it only when no song, hymn or slide is up there; the Bible feeds always do); **Screens** takes scenes to congregation outputs; **Present** does all of these and moves through the service; **Present and settings** adds settings.
@@ -115,6 +126,8 @@ The main computer never depends on anyone else: everything on the screens can be
 | A joined computer or phone dies | Everything; nothing it did is undone | It disappears from the talk channel and its notices stop | Carry on from the main desk; Settings → Remote → revoke it if it is lost (it also leaves the talk channel at once) |
 | The talk channel drops | Screens, outputs, notices | The crew list empties or a desk shows its error | Use **notices** and the **stage message** meanwhile; join the talk channel again |
 | A TV or OBS browser page sticks | Every other output | Production → Screens: **behind: not showing the latest** in red | Reload that page; if the link was shared, **New link** in the output's settings |
+| A phone camera stops (battery, Wi-Fi, locked) | Every screen; the scene shows the camera's fallback words (or its background) in its box | Production → Show health: **Needs attention** "Pulpit camera is not sending…"; Home warns | Check the phone: charging, on the church Wi-Fi, camera page open, **Start camera**; or Take a scene without that camera |
+| A Google TV goes blank or shows its code | Every other output | Show health: the feed's screen count drops, or **Check TV** says what the TV shows | Press OK on the TV's remote, then **Show on a Google TV** again with the new code |
 | An NDI sender fails | Every other output | Production → Screens: **Needs attention** names it | Outputs → turn it off and on; check OBS |
 | A projector is unplugged, or the display sleeps | Every other output | The output is reported off (macOS lists no monitor while the display sleeps) | Plug it back or wake the display; turn the output on again |
 | Rhema itself closes unexpectedly | Nothing until it starts again | On the next start: **Rhema closed unexpectedly…** | **Put back on the screens** (or **Not now**); check the screens, then carry on |
