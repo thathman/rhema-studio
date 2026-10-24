@@ -158,6 +158,7 @@ describe("settings store", () => {
     expect(s.remoteSecret).toBe("")
     expect(s.remoteDevices).toEqual([])
     expect(s.remoteAuthRequired).toBe(false)
+    expect([s.talkInputId, s.talkOutputId]).toEqual(["", ""]) // the system's headset
     expect(mockSet).not.toHaveBeenCalled()
     expect(mockSave).not.toHaveBeenCalled()
   })
@@ -171,6 +172,7 @@ describe("settings store", () => {
         gain: "loud",
         brandKit: ["no"],
         cooldownMs: Number.NaN,
+        talkInputId: { id: 1 },
       }
       return key in bad ? bad[key] : undefined
     })
@@ -184,6 +186,7 @@ describe("settings store", () => {
     expect(s.gain).toBe(before.gain)
     expect(s.brandKit).toEqual(before.brandKit)
     expect(s.cooldownMs).toBe(before.cooldownMs)
+    expect(s.talkInputId).toBe("")
   })
 
   it("well-formed values from this build round-trip", async () => {
@@ -192,6 +195,8 @@ describe("settings store", () => {
         remoteDevices: [{ hash: "a".repeat(64), name: "Tolu's phone", paired_at: "2026-10-20T20:00:00Z", role: "present" }],
         remoteAuthRequired: true,
         operatorName: "Tolu",
+        talkInputId: "headset-mic",
+        talkOutputId: "headset-ears",
       }
       return key in good ? good[key] : undefined
     })
@@ -201,6 +206,8 @@ describe("settings store", () => {
     expect(s.remoteDevices).toHaveLength(1)
     expect(s.remoteAuthRequired).toBe(true)
     expect(s.operatorName).toBe("Tolu")
+    // The talk headset (Rhema Comms) is kept per computer.
+    expect([s.talkInputId, s.talkOutputId]).toEqual(["headset-mic", "headset-ears"])
   })
 
   it("an old settings file without the setup section keeps everything and gets the setup defaults (#298)", async () => {

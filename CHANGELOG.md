@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Talk notices a dropped connection, and your own headset (#251)
+- When the main desk drops off the network, a joined desk stops sending its microphone at once and shows **Talk dropped — reconnecting…**. It joins again by itself for about a minute and a half, then says **Back in the talk channel**. The microphone stays off until you press Talk again, so nobody is heard by surprise.
+- A desk or phone that drops off leaves the main desk's crew list within a few seconds, and its Talk shows as let go straight away. The phone page also stops talking and says so when the computer goes quiet.
+- Choose the **Talk headset** for each computer: which microphone you talk with and where you hear the crew (Settings → Audio, or **Headset** under Talk on a joined desk). If that headset is unplugged, Rhema uses the computer's own microphone and says so. Where the computer cannot pick an output (the Mac app), it says the crew plays on the system output.
+
 ### The ticker, the timer and cameras in Present → Sources (#243)
 - **Present → Live → Sources** now also lists the **Ticker** (running, held still or off, with its first words), the **service timer** (running or paused, with the time left) and **each camera** (sending or not), each saying who changed it last and when.
 - Take the ticker off and **Restore** the same words; pause and resume the timer; **Hide a camera from scenes** so every scene with it shows its fallback words instead, without changing the scenes. Each change is in the service log with who made it, and joined desks and the phone page see and can do the same (with the Present role).

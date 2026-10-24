@@ -128,6 +128,10 @@ interface SettingsState {
   joinName: string
   joinToken: string
   setJoin: (patch: { joinAddress?: string; joinName?: string; joinToken?: string }) => void
+  /** The talk channel's headset on this computer (Rhema Comms): microphone and where the crew is heard, by device id; "" = the system's. */
+  talkInputId: string
+  talkOutputId: string
+  setTalkDevices: (patch: { talkInputId?: string; talkOutputId?: string }) => void
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
   /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
@@ -205,6 +209,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   joinName: "",
   joinToken: "",
   setJoin: (patch) => set(patch),
+  talkInputId: "",
+  talkOutputId: "",
+  setTalkDevices: (patch) => set(patch),
   remoteDevices: [],
   remoteAuthRequired: false,
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
@@ -292,6 +299,8 @@ function acceptable(key: string, value: unknown): boolean {
     case "joinAddress":
     case "joinName":
     case "joinToken":
+    case "talkInputId":
+    case "talkOutputId":
     case "churchFolder":
     case "cloudSpeechConsentAt":
       return typeof value === "string"
@@ -350,6 +359,8 @@ const PERSISTED_KEYS = [
   "joinAddress",
   "joinName",
   "joinToken",
+  "talkInputId",
+  "talkOutputId",
   "remoteDevices",
   "remoteAuthRequired",
   "remoteListeners",
