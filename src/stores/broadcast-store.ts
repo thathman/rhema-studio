@@ -8,7 +8,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -31,6 +31,7 @@ import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } fr
 import { useSettingsStore } from "@/stores/settings-store"
 import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
 import type { CountdownTargets } from "@/lib/countdown"
+import { countdownFrame, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -215,6 +216,12 @@ interface BroadcastState {
   /** The stage's countdown line, when its design shows one (kept by stage-finish.ts). */
   stageCountdown: StageAux | null
   setStageCountdown: (line: StageAux | null) => void
+  /** The countdown display's design (Design → Countdown), for stage outputs with the countdown layout. Saved. */
+  countdownLook: CountdownLook
+  saveCountdownLook: (look: CountdownLook) => void
+  /** What countdown displays can count besides the service timer (kept by countdown-sources.ts). */
+  countdownSources: CountdownSources
+  setCountdownSources: (sources: CountdownSources) => void
   /** Saved sets of announcements. Saved. */
   tickerPresets: TickerPreset[]
   /** Save the words now in the ticker as a set (replacing one of the same name). */
@@ -716,6 +723,16 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({ stageStyle: normalizeStageStyle(stageStyle) })
     get().syncBroadcastOutput()
   },
+  countdownLook: DEFAULT_COUNTDOWN_LOOK,
+  saveCountdownLook: (look) => {
+    set({ countdownLook: normalizeCountdownLook(look) })
+    syncCountdownOutputs()
+  },
+  countdownSources: NO_COUNTDOWN_SOURCES,
+  setCountdownSources: (countdownSources) => {
+    set({ countdownSources })
+    syncCountdownOutputs()
+  },
   tickerPresets: [],
   saveTickerPreset: (name) => {
     const n = name.trim().slice(0, 60)
@@ -840,6 +857,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (output.role === "stage") {
       recordFrame(outputId, { theme, verse: null, overlay: null, stage: true })
       const q = useQueueStore.getState()
+      const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, q.items, q.activeIndex) : null
       deliver(outputId, {
         // The stage window draws no theme: send the built-in one (no pictures) rather than the
         // output's, whose pictures can be megabytes, with every timer tick (NFR-03).
@@ -850,7 +868,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         stage: applyStageStyle({ ...buildStagePayload({
           isLive: shown !== null, liveVerse: shown, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux }, s.stageStyle),
+        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}) }, s.stageStyle),
       })
       return
     }
@@ -935,7 +953,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
-    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -1405,6 +1423,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
       if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
       patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
       patch.stageStyle = normalizeStageStyle((await store.get("stageStyle")) as Partial<StageStyle> | undefined)
+      patch.countdownLook = normalizeCountdownLook((await store.get("countdownLook")) as Partial<CountdownLook> | undefined)
       const scenes = await store.get("scenes")
       if (Array.isArray(scenes)) patch.scenes = scenes.map(normalizeScene).filter((x): x is Scene => x !== null)
       const scenePresets = await store.get("scenePresets")
@@ -1426,6 +1445,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.lowerThirdStyles !== prevState.lowerThirdStyles ||
           state.tickerStyle !== prevState.tickerStyle ||
           state.stageStyle !== prevState.stageStyle ||
+          state.countdownLook !== prevState.countdownLook ||
           state.tickerItems !== prevState.tickerItems ||
           state.tickerPresets !== prevState.tickerPresets ||
           state.scenes !== prevState.scenes ||
@@ -1471,6 +1491,8 @@ export interface LooksBackup {
   lowerThirdStyles: LowerThirdStyle[]
   tickerStyle: TickerStyle
   stageStyle: StageStyle
+  /** Absent from backups made before the countdown display. */
+  countdownLook?: CountdownLook
   tickerItems: string[]
   tickerPresets: BroadcastState["tickerPresets"]
   scenes: Scene[]
@@ -1490,6 +1512,7 @@ export function looksForBackup(state: BroadcastState = useBroadcastStore.getStat
     lowerThirdStyles: state.lowerThirdStyles,
     tickerStyle: state.tickerStyle,
     stageStyle: state.stageStyle,
+    countdownLook: state.countdownLook,
     tickerItems: state.tickerItems,
     tickerPresets: state.tickerPresets,
     scenes: state.scenes,
@@ -1530,6 +1553,7 @@ export function restoreLooksFromBackup(raw: unknown): void {
   if (Array.isArray(looks.lowerThirdStyles) && looks.lowerThirdStyles.length > 0) patch.lowerThirdStyles = looks.lowerThirdStyles.filter((x) => typeof x === "object" && x !== null).map((x) => normalizeLowerThirdStyle(x as LowerThirdStyle))
   if (typeof looks.tickerStyle === "object" && looks.tickerStyle !== null) patch.tickerStyle = normalizeTickerStyle(looks.tickerStyle as Partial<TickerStyle>)
   if (typeof looks.stageStyle === "object" && looks.stageStyle !== null) patch.stageStyle = normalizeStageStyle(looks.stageStyle as Partial<StageStyle>)
+  if (typeof looks.countdownLook === "object" && looks.countdownLook !== null) patch.countdownLook = normalizeCountdownLook(looks.countdownLook as Partial<CountdownLook>)
   if (Array.isArray(looks.scenes)) patch.scenes = looks.scenes.map(normalizeScene).filter((x): x is Scene => x !== null)
   if (Array.isArray(looks.scenePresets)) patch.scenePresets = looks.scenePresets.map(normalizeScene).filter((x): x is Scene => x !== null)
   if (Array.isArray(looks.tickerItems)) patch.tickerItems = looks.tickerItems.filter((i): i is string => typeof i === "string")
@@ -1562,6 +1586,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("lowerThirdStyles", state.lowerThirdStyles)
     await store.set("tickerStyle", state.tickerStyle)
     await store.set("stageStyle", state.stageStyle)
+    await store.set("countdownLook", state.countdownLook)
     await store.set("tickerItems", state.tickerItems)
     await store.set("tickerPresets", state.tickerPresets)
     await store.set("scenes", state.scenes)
@@ -1595,6 +1620,35 @@ useBroadcastStore.subscribe((s, prev) => {
   if (lastSoundOutput !== undefined && now !== lastSoundOutput) s.syncBroadcastOutput()
   lastSoundOutput = now
 })
+
+/** The church's time zone when a build sets one (Setup), else "" (this computer's clock). */
+function churchZone(): string {
+  const z = (useSettingsStore.getState().setup as { timeZone?: unknown }).timeZone
+  if (typeof z !== "string" || !z) return ""
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: z })
+    return z
+  } catch {
+    return ""
+  }
+}
+
+/** A countdown display's frame: what its look counts now, the item on now and the next one. */
+function stageCountdownFrame(s: BroadcastState, items: QueueItemLike[], activeIndex: number | null) {
+  const zone = churchZone()
+  const counting = lookCounting(s.countdownLook, s.countdownSources, useTimerStore.getState().timer, monotonicNow(), Date.now(), zone)
+  const item = activeIndex === null ? null : items[activeIndex]?.reference ?? null
+  const next = (activeIndex === null ? items[0] : items[activeIndex + 1])?.reference ?? null
+  // A browser feed's screen may be set to another zone: the time of day is the church's (or this computer's).
+  return countdownFrame(s.countdownLook, counting, { item, next, zone: zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "" })
+}
+type QueueItemLike = { reference: string }
+
+/** Stage outputs that show the countdown display. */
+function syncCountdownOutputs(): void {
+  const s = useBroadcastStore.getState()
+  for (const o of s.outputs) if (o.role === "stage" && o.stageLayout === "countdown") s.syncBroadcastOutputFor(o.id)
+}
 
 // Stage outputs also follow the rundown (what is next) and the timer.
 function syncStageOutputs(): void {

@@ -8,6 +8,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow } from "@/stores/timer-store"
 import { useServiceOffset } from "@/stores/service-offset-store"
 import { countdownLine, countdownTarget, countdownTargets, steadyTargets } from "@/lib/countdown"
+import { updateCountdownTiming } from "@/stores/countdown-sources"
 
 /**
  * Keeps the stage display's "Ends 10:42 · 5 min late" (issue #196): the run of show's timing
@@ -31,6 +32,8 @@ export function updateStageFinish() {
     now,
     adjustMinutes: useServiceOffset.getState().minutes,
   })
+  // The countdown display's "item on now" and "service start" (Design → Countdown).
+  updateCountdownTiming(t)
   const targets = steadyTargets(b.countdowns, countdownTargets(t), now)
   if (JSON.stringify(targets) !== JSON.stringify(b.countdowns)) {
     b.setCountdowns(targets)

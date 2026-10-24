@@ -51,6 +51,8 @@ export interface FeedMotionState {
   cameraInCanvas: boolean
   /** The scene's ticker layers on strips of their own (see `tickerStrips`). */
   strips: ReadonlySet<string>
+  /** A countdown display pulses or blends to a new step (otherwise it redraws once a second by itself). */
+  countdown?: boolean
 }
 
 /**
@@ -60,7 +62,7 @@ export interface FeedMotionState {
  */
 export function feedMotion(f: FeedMotionFrame | null, s: FeedMotionState): { picture: boolean; crawl: boolean } {
   if (!f || f.off) return { picture: false, crawl: false }
-  const picture = s.fading || s.cameraInCanvas || (!!f.overlay && entranceProgress(f.overlay, s.now) < 1) || sceneMoving(f.scene, s.hostNow, (id) => s.strips.has(id))
+  const picture = !!s.countdown || s.fading || s.cameraInCanvas || (!!f.overlay && entranceProgress(f.overlay, s.now) < 1) || sceneMoving(f.scene, s.hostNow, (id) => s.strips.has(id))
   const crawl = (!!f.ticker && !f.ticker.pausedAt) || !!f.scene?.layers.some((l) => s.strips.has(l.id) && l.opacity > 0 && !!l.ticker && !l.ticker.pausedAt)
   return { picture, crawl }
 }

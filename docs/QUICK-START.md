@@ -124,13 +124,13 @@ Production is for the person looking after the screens and the stream. Nothing h
 
 ## Design
 
-Design is where every look is made: **Themes** (how verses, songs, slides and pictures look), **Library** (ready-made looks in six families), **Lower thirds**, **News ticker**, **Stage**, **Brand kit** (church name, colours, fonts, logo) and **Used on…** (which outputs use each look, with **Open output** to change it). **Use** in the Library adds your own copy; nothing on the screens changes until you choose that copy for an output. Edits to a look stay a draft in Design until you save; **Live edit** (off unless you turn it on) shows a draft on the screens as you edit.
+Design is where every look is made: **Themes** (how verses, songs, slides and pictures look), **Library** (ready-made looks in six families), **Lower thirds**, **News ticker**, **Stage**, **Countdown** (one big time that turns amber, then red, as time runs out; show it on a stage output or the ready-made feed **Rhema Countdown**), **Brand kit** (church name, colours, fonts, logo) and **Used on…** (which outputs use each look, with **Open output** to change it). **Use** in the Library adds your own copy; nothing on the screens changes until you choose that copy for an output. Edits to a look stay a draft in Design until you save; **Live edit** (off unless you turn it on) shows a draft on the screens as you edit.
 
 ![Design → Library: filters for layout, background and language, and the Church Classic family of ready-made looks with Use, Use and edit, and Use with church colours](images/manual/design-library.png)
 
 *In the picture the Library is from before the **OBS overlay** filter was added.*
 
-*Checked on the desktop: the scripture-strip lower third, lower-third styles, the stage over NDI, signage and the ticker (10co.2–10co.6). The Library, Used on…, output cards and a different look per content are built, not yet checked on the desktop (acceptance 10dk, 10er, 10dl, 10co.1).*
+*Checked on the desktop: the scripture-strip lower third, lower-third styles, the stage over NDI, signage and the ticker (10co.2–10co.6). The Library, Used on…, output cards, a different look per content and the Countdown display are built, not yet checked on the desktop (acceptance 10dk, 10er, 10dl, 10co.1, 10fh).*
 
 ## Settings
 

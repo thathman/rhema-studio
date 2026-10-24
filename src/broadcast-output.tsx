@@ -25,6 +25,7 @@ import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
 import { drawStage } from "@/lib/stage-canvas"
+import { CountdownFade } from "@/lib/countdown-display"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
@@ -118,6 +119,9 @@ function BroadcastCanvas() {
   const [stage, setStage] = useState<StagePayload | null>(null)
   // The stage, also drawn on the canvas so a stage output can go out over NDI.
   const stageRef = useRef<StagePayload | null>(null)
+  // A countdown display's blend between its colour steps, and whether it moves (a pulse or a blend).
+  const countdownFade = useRef(new CountdownFade())
+  const countdownMoving = useRef(false)
   const ndiConfigRef = useRef<NdiConfigEventPayload>({
     active: false,
     fps: 24,
@@ -150,7 +154,7 @@ function BroadcastCanvas() {
 
     if (stageRef.current) {
       const s = stageRef.current
-      paintFrame(canvas, scratchCanvas, 1920, 1080, (fctx) => drawStage(fctx, 1920, 1080, s))
+      paintFrame(canvas, scratchCanvas, 1920, 1080, (fctx) => { countdownMoving.current = drawStage(fctx, 1920, 1080, s, { now: Date.now(), fade: countdownFade.current }).moving })
       return
     }
     const data = latestData.current
@@ -408,10 +412,18 @@ function BroadcastCanvas() {
     // A running clock layer needs one frame a second, on a screen too (a covered or locked screen's
     // timers are held back for many seconds).
     const clockRunning = () => !stageRef.current && !!latestData.current?.scene?.layers.some((l) => l.kind === "clock" && l.clock && l.clock.mode !== "still")
+    // A countdown display: smooth while it pulses or blends to a new step, else twice a second while
+    // it counts (it is drawn on the canvas, on screens too); held still, nothing.
+    const countdownFps = () => {
+      const c = stageRef.current?.countdown
+      if (!c) return 0
+      if (countdownMoving.current) return ndiConfigRef.current.active ? Math.max(15, ndiConfigRef.current.fps || 30) : 30
+      return c.endsAt !== null || c.look.showClock ? 2 : 0
+    }
     const syncPace = () => {
       // A camera moves with every frame: the pacer draws it on screens too (a covered or locked
       // window gets no animation frames). A running clock needs one a second.
-      const fps = ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() || fader.busy() ? 30 : clockRunning() ? 1 : 0
+      const fps = stageRef.current?.countdown ? countdownFps() : ndiConfigRef.current.active && motion() ? Math.max(15, ndiConfigRef.current.fps || 30) : cameraPlaying() || fader.busy() ? 30 : clockRunning() ? 1 : 0
       if (fps === paceFps) return
       paceFps = fps
       void logInfoLine(`[pace] output ${OUTPUT_ID}: ${fps ? `${fps} frames a second` : "stopped"}`).catch(() => {})
@@ -472,6 +484,7 @@ function BroadcastCanvas() {
         setStage(stageRef.current)
         draw()
         pushNdiBurst()
+        syncPace()
         return
       }
       stageRef.current = null
@@ -629,13 +642,14 @@ function BroadcastCanvas() {
   return (
     <>
       {/* A stage payload that fails to draw must not take the window's listeners with it. */}
-      {stage && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
+      {/* A countdown display is drawn on the canvas, as it goes out over NDI. */}
+      {stage && !stage.countdown && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
       <canvas
         ref={canvasRef}
         style={{
           width: "100vw",
           height: "100vh",
-          display: stage ? "none" : "block",
+          display: stage && !stage.countdown ? "none" : "block",
           objectFit: "contain",
         }}
       />

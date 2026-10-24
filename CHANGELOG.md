@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Countdown display: one big time that turns amber, then red (owner request)
+- A new **Countdown** look (Design → Countdown) shows one big time, readable from the back of the hall, on a black screen that turns **amber at 25 %** of the time left and **red at 10 %** (a 10-minute timer goes red at 1:00), then says **Time's up** with a slow, gentle pulse and counts on as **+0:42** when over. The steps, their colours, messages ("Please wrap up") and the pulse are yours to change, each at a percentage or a time left; a slider in the preview walks through them before Sunday.
+- It counts the service timer (the default), the item on now, a named extra timer, or the time until a time of day or the service start. The stage message from Present or Timekeeper shows under the time; the item on now, what is next and the time of day are optional small lines.
+- Show it on any stage output (Production → Screens → the output → Who sees it: Stage → **Countdown**), over NDI, or as a browser feed on a TV with the new ready-made feed **Rhema Countdown**. A confidence monitor is an output showing it. Screens count the seconds themselves, so it stays smooth on a Google TV and costs little.
+
 ### New desk roles: Worship, Stage, Camera, OBS director; scenes changed from a joined desk (#243, #215)
 - Four new roles for a paired desk (Settings → Remote control, with a line on what each may do): **Worship** (songs and hymns), **Stage** (the stage message), **Camera** (camera-ready, hiding a camera from scenes, the camera boxes in scenes) and **OBS director** (switches OBS scenes through the main computer's OBS connection; never in rehearsal). Each gets its own desk in Production → Operators, and the main computer checks every command.
 - A Screens desk can now **make and change scenes** from another computer. A new scene, or a change to a scene on no screen, goes in at once; a change to a scene on a screen, deleting one, or any scene change while Approvals is on, waits in the main desk's notices for **Accept** or **Decline**.
