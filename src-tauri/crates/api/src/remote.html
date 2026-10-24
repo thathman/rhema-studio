@@ -159,7 +159,9 @@
   }
   // Each live source (ADR 0001): what it shows, and take it off or put it back. The computer
   // checks what this phone may do.
-  const NAMES = { bible: "Bible", song: "Songs", hymn: "Hymns", slide: "Slides", picture: "Pictures", quick: "Quick screen" }
+  const NAMES = { bible: "Bible", song: "Songs", hymn: "Hymns", slide: "Slides", picture: "Pictures", quick: "Quick screen", ticker: "Ticker", timer: "Timer" }
+  // Take off pauses the timer and hides a camera from scenes.
+  const ACTIONS = { timer: ["Pause", "Resume"], camera: ["Hide", "Show"] }
   async function sources() {
     const box = $("sources")
     const r = await fetch("/api/v1/live", { cache: "no-store", headers: { "Authorization": "Bearer " + get() } }).catch(() => null)
@@ -171,11 +173,13 @@
       row.className = "src" + (s.on ? "" : " off")
       const label = document.createElement("span")
       const name = document.createElement("i")
-      name.textContent = (NAMES[s.id] || s.id) + (s.on ? " · " : " · off · ")
+      const camera = s.id.startsWith("camera:")
+      name.textContent = (camera ? "Camera" : NAMES[s.id] || s.id) + (s.on ? " · " : " · off · ")
       label.append(name, s.reference || "")
       const b = document.createElement("button")
       b.type = "button"
-      b.textContent = s.on ? "Take off" : "Put back"
+      const words = ACTIONS[camera ? "camera" : s.id] || ["Take off", "Put back"]
+      b.textContent = s.on ? words[0] : words[1]
       b.addEventListener("click", () => send(s.on ? "clear_source" : "restore_source", b, s.id))
       row.append(label, b)
       box.append(row)

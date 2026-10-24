@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core"
 import { eventStarts, eventTimes } from "@/lib/journal"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import { serviceTiming } from "@/lib/timing-engine"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
+import { cameraSourceId, tickerWords, timerWords } from "@/lib/live-sources"
+import { cameraSending, useRouterHealth } from "@/lib/cameras"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -26,8 +28,13 @@ export interface LiveStateV1 {
   /** The service open on the host (#246 C16): a desk tags each command with its id, so the host refuses one meant for another service. id and revision are absent from older hosts. */
   service: { id?: string; title: string; revision?: number } | null
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
-  /** Each live source; `activatedAt` and `by` (who activated it) are absent from older hosts. */
-  sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string }[]
+  /**
+   * Each live source; `activatedAt` and `by` (who activated it) are absent from older hosts. After the
+   * content sources: "ticker", "timer" and each "camera:<name>" (reference: the ticker's first words,
+   * the timer's state, the camera's name), with `state`: running / paused / off, or sending /
+   * not-sending / router-off / hidden (a camera hidden from scenes; absent before the router answers).
+   */
+  sources: { id: string; reference: string; on: boolean; revision: number; activatedAt?: number; by?: string; state?: string }[]
   event: { mode: "screens" | "own"; currentId: string | null }
   rundown: { id: string; reference: string; plannedMinutes: number | null }[]
   /** offsetMinutes: the shared running-late offset and who set it (#196). */
@@ -59,10 +66,13 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     church: useSettingsStore.getState().brandKit.churchName.trim(),
     service: current ? { id: current.id, title: current.title, revision: current.revision } : null,
     program: { onAir: b.isLive, reference: b.isLive ? (b.liveVerse?.reference || null) : null, rehearsal: b.rehearsal },
-    sources: [...CONTENT_TYPES, "quick" as const].flatMap((id) => {
-      const s = b.sources[id]
-      return s ? [{ id, reference: s.value.reference, on: s.on, revision: s.revision, activatedAt: s.activatedAt, ...(s.by ? { by: s.by } : {}) }] : []
-    }),
+    sources: [
+      ...[...CONTENT_TYPES, "quick" as const].flatMap((id) => {
+        const s = b.sources[id]
+        return s ? [{ id, reference: s.value.reference, on: s.on, revision: s.revision, activatedAt: s.activatedAt, ...(s.by ? { by: s.by } : {}) }] : []
+      }),
+      ...stateSourceRows(),
+    ],
     event: { mode: clock.mode, currentId: clock.currentId },
     rundown: q.items.map((i) => ({ id: i.id, reference: i.reference, plannedMinutes: i.planned_minutes ?? null })),
     timing: timing ? { plannedEnd: timing.plannedEnd, expectedEnd: timing.expectedEnd, lateMs: timing.lateMs, offsetMinutes: useServiceOffset.getState().minutes, offsetBy: useServiceOffset.getState().by } : null,
@@ -112,7 +122,7 @@ export function refreshLiveState(now = Date.now()): void {
 export function startLiveStatePublisher(): () => void {
   const subs = [
     useBroadcastStore.subscribe((s, p) => {
-      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage || s.scenes !== p.scenes || s.outputs !== p.outputs) soon()
+      if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.stateSources !== p.stateSources || s.rehearsal !== p.rehearsal || s.stageMessage !== p.stageMessage || s.scenes !== p.scenes || s.outputs !== p.outputs) soon()
     }),
     useEventClock.subscribe(soon),
     useQueueStore.subscribe((s, p) => { if (s.items !== p.items || s.headers !== p.headers) soon() }),
@@ -122,10 +132,37 @@ export function startLiveStatePublisher(): () => void {
     useServiceOffset.subscribe(() => soon()),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useVoice.subscribe(() => soon()),
-    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices) soon() }),
+    useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras) soon() }),
+    useRouterHealth.subscribe(() => soon()),
   ]
   soon()
   return () => subs.forEach((u) => u())
+}
+
+/** The ticker, the service timer and each camera, as the real screens have them (never rehearsal's). */
+function stateSourceRows(): LiveStateV1["sources"] {
+  const b = useBroadcastStore.getState()
+  const st = b.stateSources
+  const rows: LiveStateV1["sources"] = []
+  const meta = (x: { revision: number; activatedAt: number; by?: string }) => ({ revision: x.revision, activatedAt: x.activatedAt, ...(x.by ? { by: x.by } : {}) })
+  if (st.ticker) {
+    const t = st.ticker.on ? tickerForScreens(b) : st.ticker.ticker
+    rows.push({ id: "ticker", reference: tickerWords(t), on: st.ticker.on, ...meta(st.ticker), state: !st.ticker.on ? "off" : t?.pausedAt ? "paused" : "running" })
+  }
+  if (st.timer) {
+    // Running: a desk counts on from the timer field; paused, the time it stopped at.
+    const words = st.timer.on ? "Running" : `Paused · ${timerWords(timerForScreens(b), monotonicNow())}`
+    rows.push({ id: "timer", reference: words, on: st.timer.on, ...meta(st.timer), state: st.timer.on ? "running" : "paused" })
+  }
+  const health = useRouterHealth.getState()
+  for (const cam of useSettingsStore.getState().cameras) {
+    const id = cameraSourceId(cam.name)
+    const x = st[id]
+    const sending = cameraSending(health, cam.name)
+    const state = x?.on === false ? "hidden" : sending
+    rows.push({ id, reference: cam.label, on: x?.on !== false, ...(x ? meta(x) : { revision: 0 }), ...(state ? { state } : {}) })
+  }
+  return rows
 }
 
 /** The talk channel as joined desks see it: the main desk first (when it talks), then each desk. */

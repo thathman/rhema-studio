@@ -2,6 +2,10 @@
 export const CONTENT_TYPES = ["bible", "song", "hymn", "slide", "picture"] as const
 export type ContentType = (typeof CONTENT_TYPES)[number]
 
+/** What an output can follow (ADR 0001): a kind of content, or the ticker ("Rhema Ticker | Alpha" follows only the ticker). */
+export const FEED_SOURCES = [...CONTENT_TYPES, "ticker"] as const
+export type FeedSourceKind = (typeof FEED_SOURCES)[number]
+
 export interface VerseSegment {
   verseNumber?: number
   text: string

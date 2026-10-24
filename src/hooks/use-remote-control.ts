@@ -12,6 +12,7 @@ import { runMacro } from "@/lib/cues"
 import { useJournalStore } from "@/stores/journal-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { activateBibleReference } from "@/lib/bible-activate"
+import { cameraSourceId, isStateSource, type AnySourceId } from "@/lib/live-sources"
 import { useNotices } from "@/stores/notices-store"
 
 /** Every remote command lands in the service log, so "who pressed Next?" has an answer (QA-006). */
@@ -95,11 +96,12 @@ export function useRemoteControl() {
           useServiceOffset.getState().adjust(p.minutes, typeof p.by === "string" ? p.by : undefined)
         }),
       )
-      // The service timer from a Timekeeper desk (#196 R5), each in the log with who.
+      // The service timer from a Timekeeper desk (#196 R5), each in the log with who: starting and
+      // pausing are logged by the timer's live source (as the desk's), a correction here.
       const byOf = (p: Record<string, unknown> | null | undefined) => (typeof p?.by === "string" && p.by ? `${p.by}: ` : "")
       for (const [event, run] of [
-        [REMOTE_EVENTS.timer_start, (p) => { if (useTimerStore.getState().timer.startedAt !== null) return; useTimerStore.getState().start(); useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer started` }) }],
-        [REMOTE_EVENTS.timer_pause, (p) => { if (useTimerStore.getState().timer.startedAt === null) return; useTimerStore.getState().pause(); useJournalStore.getState().add({ kind: "timing", label: `${byOf(p)}timer paused` }) }],
+        [REMOTE_EVENTS.timer_start, (p) => { if (useTimerStore.getState().timer.startedAt !== null) return; actingAs(senderOf(p ?? null), () => useTimerStore.getState().start()) }],
+        [REMOTE_EVENTS.timer_pause, (p) => { if (useTimerStore.getState().timer.startedAt === null) return; actingAs(senderOf(p ?? null), () => useTimerStore.getState().pause()) }],
         [REMOTE_EVENTS.timer_adjust, (p) => {
           const m = typeof p?.minutes === "number" ? Math.trunc(p.minutes) : 0
           if (!m) return
@@ -120,8 +122,10 @@ export function useRemoteControl() {
           }),
         )
       }
-      const SOURCES = ["bible", "song", "hymn", "slide", "picture"] as const
-      const asSource = (v: unknown) => SOURCES.find((s) => s === v)
+      // Content sources, the ticker, the timer (take off = pause) and each camera added in Production → Cameras.
+      const SOURCES = ["bible", "song", "hymn", "slide", "picture", "ticker", "timer"] as const
+      const asSource = (v: unknown): AnySourceId | undefined =>
+        SOURCES.find((s) => s === v) ?? (typeof v === "string" && isStateSource(v) && useSettingsStore.getState().cameras.some((c) => cameraSourceId(c.name) === v) ? v : undefined)
       await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120)) })
       await withPayload(REMOTE_EVENTS.clear_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().clearSource(id) })
       await withPayload(REMOTE_EVENTS.restore_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().restoreSource(id) })

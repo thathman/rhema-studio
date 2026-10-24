@@ -4,6 +4,12 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### The ticker, the timer and cameras in Present → Sources (#243)
+- **Present → Live → Sources** now also lists the **Ticker** (running, held still or off, with its first words), the **service timer** (running or paused, with the time left) and **each camera** (sending or not), each saying who changed it last and when.
+- Take the ticker off and **Restore** the same words; pause and resume the timer; **Hide a camera from scenes** so every scene with it shows its fallback words instead, without changing the scenes. Each change is in the service log with who made it, and joined desks and the phone page see and can do the same (with the Present role).
+- **What this output follows** can include the **Ticker**: an output that follows only the ticker shows the ticker and nothing else. The ready-made **Rhema Ticker | Alpha** feed is now made that way; ticker feeds made before keep working.
+- Rehearsal never touches the real ticker, timer or cameras, and Black covers every feed, the ticker feed included.
+
 ### Rhema finds Google TVs by itself (#198)
 - **Show on a Google TV** lists the TVs running Rhema Receiver on the church network, by name and address, as soon as it opens; **Find TVs** looks again. Pick the one whose address matches the TV's screen instead of typing it; Rhema never picks one by itself.
 - Rhema checks the code with the TV before it sends the feed's link, so a device pretending to be a TV gets nothing; the code never goes over the network. Typing an address still works when a network blocks the search.

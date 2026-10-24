@@ -93,6 +93,13 @@ export function routerStatus(): Promise<RouterStatus | null> {
 /** The router as Show health and Home last saw it (#213); `checked` false until the first answer. */
 export const useRouterHealth = create<{ status: RouterStatus | null; checked: boolean }>(() => ({ status: null, checked: false }))
 
+/** Whether a camera is sending, from what the router last said; null before the first answer. */
+export function cameraSending(health: { status: RouterStatus | null; checked: boolean }, name: string): "sending" | "not-sending" | "router-off" | null {
+  if (!health.checked) return null
+  if (!health.status?.running) return "router-off"
+  return health.status.paths.some((p) => p.name === name && p.live) ? "sending" : "not-sending"
+}
+
 let routerUsers = 0
 let routerTimer: ReturnType<typeof setInterval> | undefined
 

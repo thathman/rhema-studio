@@ -11,7 +11,9 @@ describe("phone remote: live sources", () => {
     const live = { v: 1, notices: [
       { id: "n1", from: "Main desk", to: "all", priority: "urgent", text: "Five minutes over", at: 0, answers: [] },
       { id: "n2", from: "Main desk", to: "bible", priority: "normal", text: "Not for phones", at: 0, answers: [] },
-    ], sources: [{ id: "bible", reference: "Romans 8:28 (KJV)", on: true, revision: 2 }, { id: "hymn", reference: "Amazing Grace · Verse 1", on: false, revision: 1 }] }
+    ], sources: [{ id: "bible", reference: "Romans 8:28 (KJV)", on: true, revision: 2 }, { id: "hymn", reference: "Amazing Grace · Verse 1", on: false, revision: 1 },
+      // The ticker, the timer and a camera (#243): the timer pauses and resumes, a camera hides and shows.
+      { id: "ticker", reference: "Prayer meeting", on: true, revision: 3, state: "running" }, { id: "timer", reference: "Paused · 12:00 left", on: false, revision: 4, state: "paused" }, { id: "camera:pulpit", reference: "Pulpit", on: true, revision: 0, state: "sending" }] }
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       sent.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined, auth: (init?.headers as Record<string, string> | undefined)?.Authorization })
       if (url === "/api/v1/status") return new Response(JSON.stringify({ on_air: true, live_verse: "Amazing Grace · Verse 1" }))
@@ -21,9 +23,9 @@ describe("phone remote: live sources", () => {
     }))
     document.body.innerHTML = page.slice(page.indexOf("<body>") + 6, page.indexOf("<script>"))
     new Function(page.slice(page.indexOf("<script>") + 8, page.indexOf("</script>")))()
-    await vi.waitFor(() => expect(document.querySelectorAll("#sources .src")).toHaveLength(2))
+    await vi.waitFor(() => expect(document.querySelectorAll("#sources .src")).toHaveLength(5))
     const rows = [...document.querySelectorAll("#sources .src")].map((r) => r.textContent)
-    expect(rows).toEqual(["Bible · Romans 8:28 (KJV)Take off", "Hymns · off · Amazing Grace · Verse 1Put back"])
+    expect(rows).toEqual(["Bible · Romans 8:28 (KJV)Take off", "Hymns · off · Amazing Grace · Verse 1Put back", "Ticker · Prayer meetingTake off", "Timer · off · Paused · 12:00 leftResume", "Camera · PulpitHide"])
     expect(sent.find((s) => s.url === "/api/v1/live")?.auth).toBe("Bearer phone-key")
     ;(document.querySelector("#sources .src button") as HTMLButtonElement).click()
     await vi.waitFor(() => expect(sent.some((s) => s.url === "/api/v1/command")).toBe(true))

@@ -31,10 +31,11 @@ import {
 } from "@/lib/broadcast-output-control"
 import { useBroadcastStore } from "@/stores"
 import { useMediaStore } from "@/stores/media-store"
-import { CONTENT_TYPES, type ContentType } from "@/types/broadcast"
+import { CONTENT_TYPES, FEED_SOURCES, type ContentType, type FeedSourceKind } from "@/types/broadcast"
 import { withThemeFor } from "@/lib/output-themes"
 import { rememberTv } from "@/lib/show-health"
-import { CONTENT_NAMES } from "@/lib/content-names"
+import { CONTENT_NAMES, FEED_NAMES } from "@/lib/content-names"
+import { followsTicker } from "@/lib/live-sources"
 import type {
   BroadcastOutput,
   BroadcastOutputType,
@@ -154,7 +155,8 @@ export function OutputEditorDialog({
     onOpenChange(false)
   }
 
-  const followsPicker = (
+  // Congregation outputs can follow the ticker too (the ticker feed for OBS); a stage never shows it.
+  const followsPicker = (kinds: readonly FeedSourceKind[]) => (
     <fieldset className="mt-2 flex flex-col gap-1.5">
       <legend className="mb-1 text-xs text-muted-foreground">What this output follows</legend>
       <label className="flex items-center gap-2 text-xs">
@@ -167,7 +169,7 @@ export function OutputEditorDialog({
       </label>
       {!!form.shows?.length && (
         <span role="group" aria-label="Sources this output follows" className="ml-5 flex flex-wrap gap-1.5">
-          {CONTENT_TYPES.map((k) => {
+          {kinds.map((k) => {
             const on = form.shows!.includes(k)
             return (
               <button
@@ -176,11 +178,12 @@ export function OutputEditorDialog({
                 aria-pressed={on}
                 onClick={() => {
                   const next = on ? form.shows!.filter((x) => x !== k) : [...form.shows!, k]
-                  if (next.length) patch({ shows: next })
+                  // Following the ticker also turns its switch on (and off), so older builds draw it too.
+                  if (next.length) patch({ shows: next, ...(k === "ticker" ? { ticker: !on } : {}) })
                 }}
                 className={cn("rounded-full border px-2.5 py-0.5 text-[0.6875rem] font-semibold", on ? "border-primary bg-primary/10 text-primary-text" : "border-border text-muted-foreground hover:bg-muted")}
               >
-                {CONTENT_NAMES[k]}
+                {FEED_NAMES[k]}
               </button>
             )
           })}
@@ -283,19 +286,19 @@ export function OutputEditorDialog({
                     <SelectItem value="second">Second language only (first when there is no second)</SelectItem>
                   </SelectContent>
                 </Select>
-                {followsPicker}
+                {followsPicker(FEED_SOURCES)}
                 <label className="mt-2 flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={form.lowerThirds === true} onChange={(e) => patch({ lowerThirds: e.target.checked })} />
                   <span>Show lower thirds on this output <span className="text-muted-foreground">(names, scripture and lyrics strips from Present; usually the stream)</span></span>
                 </label>
                 <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={form.ticker === true} onChange={(e) => patch({ ticker: e.target.checked })} />
-                  <span>Show the news ticker on this output <span className="text-muted-foreground">(announcements crawling along the screen, from Present)</span></span>
+                  <input type="checkbox" checked={followsTicker(form)} disabled={!!form.shows?.includes("ticker")} onChange={(e) => patch({ ticker: e.target.checked })} />
+                  <span>Show the news ticker on this output <span className="text-muted-foreground">{form.shows?.includes("ticker") ? "(it follows the ticker, above)" : "(announcements crawling along the screen, from Present)"}</span></span>
                 </label>
               </>
             )}
             {/* A stage display can follow chosen sources too (ADR 0001): its words come from them. */}
-            {form.role === "stage" && followsPicker}
+            {form.role === "stage" && followsPicker(CONTENT_TYPES)}
           </div>
 
           <div className="flex flex-col gap-3 border-t border-border pt-4">

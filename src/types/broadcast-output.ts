@@ -1,4 +1,4 @@
-import type { ContentType } from "./broadcast"
+import type { ContentType, FeedSourceKind } from "./broadcast"
 import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
 /** display: a window on a monitor; ndi: an NDI sender; browser: a web page on the church network (OBS Browser Source, a TV's browser). */
@@ -212,10 +212,11 @@ export interface BroadcastOutput {
   /** Show the operator's lower third (name / title band) on this output, over whatever else it shows. */
   lowerThirds?: boolean
   /**
-   * The live sources this output follows (ADR 0001), e.g. ["bible"] for a Bible lower-third feed.
-   * Absent: whatever was put on air last, as before.
+   * The live sources this output follows (ADR 0001), e.g. ["bible"] for a Bible lower-third feed;
+   * "ticker" draws the ticker too (["ticker"] alone: the ticker and no content). Absent: whatever was
+   * put on air last, as before.
    */
-  shows?: ContentType[]
+  shows?: FeedSourceKind[]
   /** The congregation scene this output shows (its program, ADR 0001); absent: its own feed, full frame. */
   sceneId?: string
   /** Browser feeds: the secret in the feed's link (renewing it closes the old link). */

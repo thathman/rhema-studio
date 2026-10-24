@@ -1,6 +1,6 @@
 import { forOutputLanguage } from "@/lib/output-language"
 import { themeIdFor } from "@/lib/output-themes"
-import { feedFrame, type LiveSources } from "@/lib/live-sources"
+import { cameraHidden, feedFrame, type LiveSources, type StateSources } from "@/lib/live-sources"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, BroadcastTheme, LowerThird, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerKind, Ticker, VerseRenderData } from "@/types"
@@ -147,6 +147,8 @@ interface LiveState {
   isLive: boolean
   liveVerse: VerseRenderData | null
   sources: LiveSources
+  /** Cameras hidden from scenes (a camera's hold): their layers show the fallback. */
+  stateSources?: StateSources
   themes: BroadcastTheme[]
   /** The service timer for clock layers; absent or null: not set. */
   clock?: SceneClock | null
@@ -221,9 +223,11 @@ export function sceneFrame(s: LiveState, output: Pick<BroadcastOutput, "themeId"
         const clock = l.clockShows === "time" ? { mode: "time" as const, at: 0, text: "" } : l.clockShows === "until" ? untilClock(l.until, s.now ?? Date.now()) : (s.clock ?? null)
         return { ...base, theme, clock, ...(preview && !clock ? { label: l.clockShows === "until" ? `${l.name} · choose the time to count down to` : `${l.name} · set the service timer in Present` } : {}) }
       }
-      // A camera: its stream, played by each output from the church network.
+      // A camera: its stream, played by each output from the church network. One hidden from scenes
+      // (Present → Sources) is not played: its box shows the fallback, the scene itself unchanged.
       const fallback = l.cameraFallback ? { fallback: l.cameraFallback, theme: s.themes.find((t) => t.id === (l.themeId ?? output.themeId)) ?? s.themes[0] } : {}
-      return { ...base, ...(l.cameraUrl ? { cameraUrl: l.cameraUrl } : {}), ...fallback, ...(preview ? { label: l.cameraUrl ? `${l.name} · camera` : `${l.name} · add its stream address` } : {}) }
+      const hidden = !!l.cameraUrl && cameraHidden(s.stateSources, l.cameraUrl)
+      return { ...base, ...(l.cameraUrl && !hidden ? { cameraUrl: l.cameraUrl } : {}), ...fallback, ...(preview ? { label: hidden ? `${l.name} · hidden from scenes` : l.cameraUrl ? `${l.name} · camera` : `${l.name} · add its stream address` } : {}) }
     }),
   }
 }

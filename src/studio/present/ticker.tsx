@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useBroadcastStore } from "@/stores"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { cn } from "@/lib/utils"
+import { followsTicker } from "@/lib/live-sources"
 import { Badge } from "@/components/ui/badge"
 import { useShellStore } from "@/studio/shell-store"
 
@@ -22,7 +23,7 @@ export function TickerControl() {
   const outputs = useBroadcastStore((s) => s.outputs)
   const ticker = useBroadcastStore((s) => s.ticker)
   const items = useBroadcastStore((s) => s.tickerItems)
-  const targets = outputs.filter((o) => o.ticker && o.role !== "stage")
+  const targets = outputs.filter((o) => followsTicker(o) && o.role !== "stage")
   const hasWords = items.some((i) => i.trim())
   const start = async () => {
     const backing = await lowerThirdBacking(useBroadcastStore.getState().tickerStyle)

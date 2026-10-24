@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { FeedHealth } from "@/lib/browser-feeds"
 import type { RouterStatus } from "@/lib/cameras"
 import { outputOnAir } from "@/lib/output-on-air"
+import { cameraPathOf } from "@/lib/live-sources"
 import type { OutputFrame } from "@/stores/broadcast-store"
 import type { CameraSource } from "@/stores/settings-store"
 import type { BroadcastOutput, BroadcastOutputStatus, ReceiverTv, Scene } from "@/types"
@@ -41,15 +42,8 @@ export interface CameraHealth {
   onAir: string[]
 }
 
-/** The router's name in a camera layer's address (http://192.168.1.20:8889/pulpit/whep → "pulpit"), or null. */
-export function cameraPathOf(url: string): string | null {
-  try {
-    const m = new URL(url).pathname.match(/^\/([^/]+)\/whep\/?$/)
-    return m ? decodeURIComponent(m[1]) : null
-  } catch {
-    return null
-  }
-}
+// Kept here for its callers; it lives with the camera sources now.
+export { cameraPathOf }
 
 /** "Pulpit" → "Pulpit camera"; a name that already says camera stays as it is. */
 export function cameraWords(label: string): string {

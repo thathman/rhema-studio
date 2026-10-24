@@ -36,8 +36,9 @@ in studio.db        hymn, slide,     sender) with `shows` naming the sources it 
 - **Active is not visible.** Activating a source changes what every feed that follows it shows;
   whether a destination shows that feed is the scene's business. No operator picks destinations
   when advancing a verse.
-- **Feed.** An existing `BroadcastOutput` is the feed. New optional field `shows: ContentType[]`
-  lists the sources it follows. **Absent means legacy**: the latest-activated content source wins,
+- **Feed.** An existing `BroadcastOutput` is the feed. New optional field `shows` lists the sources
+  it follows: kinds of content and `ticker` (an output with `shows: ["ticker"]` is the ticker alone,
+  "Rhema Ticker | Alpha"; it also sets the ticker switch so older builds draw it). **Absent means legacy**: the latest-activated content source wins,
   exactly as today, so every saved output, NDI sender name and theme keeps working unchanged.
   A "Rhema Bible | Lower Third" feed is an NDI output with `shows: ["bible"]` and a lower-third
   theme for Bible; it keeps Romans 8:28 while a hymn is up on the projector.
@@ -49,6 +50,25 @@ in studio.db        hymn, slide,     sender) with `shows` naming the sources it 
 The legacy program (`liveVerse` and friends) stays as the **compatibility adapter**: Show Live writes
 the source for the item's kind and the legacy program in one update. Remote commands, cues, keyboard
 shortcuts and the phone remote keep calling the same actions.
+
+### Live sources as built
+
+| Source | Id | Its value | Activate | Clear (take off) | Restore | Shown by |
+| --- | --- | --- | --- | --- | --- | --- |
+| Bible, Songs, Hymns, Slides, Pictures | `bible`, `song`, `hymn`, `slide`, `picture` | the frame (`LiveSource.value`) | Show Live, or Activate on Bible feeds | off its feeds (value kept) | the same value back | feeds whose `shows` names it; the legacy feed (latest wins) |
+| Quick screen | `quick` | Welcome, Offering… | the quick screen | ends with the next thing shown | — | the program |
+| Ticker | `ticker` | the running ticker (`ticker`) | Start in Present → Ticker | Stop, or take off in Sources: the ticker it was is kept | that ticker again, its crawl starting over | outputs with the ticker switch or `shows` naming `ticker`; ticker layers |
+| Timer | `timer` | the service timer (`timer-store`) | Start / Resume | Pause | Resume | clock layers, the stage, joined desks |
+| Camera | `camera:<name>` (its router name) | the camera in Production → Cameras; sending or not from the router | — (on unless hidden) | hidden from scenes: every camera layer playing it shows its fallback; the scenes are unchanged | back in every scene | scene camera layers, TVs |
+
+Content sources live in `sources`; the ticker, timer and cameras in `stateSources` (`StateSource`:
+revision, `activatedAt`, `by`, `on`, and for a ticker taken off the ticker it was). Every change is
+recorded with who made it (the operator, or the joined desk or phone that sent it), journaled
+(Ticker on/off/back, "Tolu: timer paused", "Pulpit camera hidden from scenes"), listed in Present →
+Live → Sources and published in the Live State after the content sources, with a `state`. None of
+them changes in rehearsal (Present → Sources waits until it ends). Black and Logo cover every feed and
+scene, cameras included (a ticker-only feed shows Black too); Black also hides the ticker, as before. A remote
+`clear_source` / `restore_source` takes the same ids (`present` and `configure` roles).
 
 ### Scenes as built (ARCH-002 slice 1)
 
@@ -126,7 +146,7 @@ timing engine will follow an explicit current event, not "whatever is on air".
 | C01 | Designer drafts reach live outputs | Drafts stay in the Designer unless Live edit is on; Live edit shows how many screens it touches and ends with editing. Saving remains the normal way to change a look on air. | **Done (this slice)** |
 | C02 | Rehearsal leaks into production | Rehearsal snapshots the real program (and the rundown position) and restores it on exit; Show this live is the deliberate path, behind the approval gate. Nothing rehearsed is logged as aired; go-live cues do not fire on exit. The lower third, ticker, stage message and service timer always come back as they were (even with Show this live); the ticker never reaches signage from rehearsal; the service log keeps only rehearsal on/off. A loop or timed move on air waits through rehearsal and carries on after; one started in rehearsal ends with it. | **Done** (#254, ARCH-003 slice 2) |
 | C07 | One global live | Per-source state with `shows` on outputs; legacy adapter. | **Done (ARCH-001 slice 1)**: `src/lib/live-sources.ts`, `sources` in the store |
-| C05 | Ambiguous Restore | Restore is per source; Back releases an override to exactly what it covered. | **Done** for sources (`clearSource`/`restoreSource`, Present → Live → Sources); the main Clear/Restore keeps acting on the program |
+| C05 | Ambiguous Restore | Restore is per source; Back releases an override to exactly what it covered. | **Done** for sources (`clearSource`/`restoreSource`, Present → Live → Sources), the ticker, the timer (pause/resume) and each camera (hidden from scenes) included; the main Clear/Restore keeps acting on the program |
 | C11 | Auto Bible affects unrelated outputs | Auto activates only the `bible` source while a song, hymn, slide or quick screen is on the program; feeds bound to other sources are untouched. Default stays off. | **Done** (`presentVerse(…, { sourceOnly })`); the main desk can do the same on purpose (Activate on Bible feeds), and Auto has a "Bible feeds only" choice |
 | C03 | Event timing follows content | An explicit current event in Live State (the event clock) drives timing, the stage finish line and item cues; showing content starts an event only while the clock "follows the screens" (the default, as before); "I start each event" lets the timekeeper run it without touching the screens. Each start is an "event" entry in the service log, apart from what was shown. | **Done** (ARCH-003 slice 3, `event-clock-store`) |
 | C04 | Unscoped cues/macros | Each cue step declares its scope (program, screen, override, timer, stage, ticker, rehearsal); each cue lists what it will touch before it runs. | **Done** (ARCH-003 slice 2): `CueScope`, `cueImpact` |
