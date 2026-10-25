@@ -48,7 +48,7 @@ export function EngageHostControl() {
   const [qr, setQr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [clock, setClock] = useState(Date.now());
+  const [clock, setClock] = useState(0);
   const selected = quizzes.find(q => q.id === selectedId) ?? quizzes[0];
   const quiz = engageFromItem(selected);
   const disabled = pending || !session;
@@ -81,7 +81,7 @@ export function EngageHostControl() {
   }, [open]);
 
   useEffect(() => {
-    if (!session) { setQr(null); return; }
+    if (!session) return;
     let cancelled = false;
     void qrDataUrl(session.joinUrl).then(data => { if (!cancelled) setQr(data); }).catch(() => setQr(null));
     return () => { cancelled = true; };
