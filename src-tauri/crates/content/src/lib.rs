@@ -1017,7 +1017,7 @@ const CUE_DOES: [&str; 6] = ["timer.start", "timer.fresh", "timer.pause", "stage
 const MAX_CUES: usize = 12;
 
 fn valid_cue(c: &CuePayload) -> bool {
-    let text_ok = c.text.as_deref().map_or(true, |t| t.chars().count() <= 120 && !t.chars().any(char::is_control));
+    let text_ok = !c.text.as_deref().is_some_and(|t| t.chars().count() > 120 || t.chars().any(char::is_control));
     let needs_text = c.action == "stage.message";
     CUE_TRIGGERS.contains(&c.on.as_str()) && CUE_DOES.contains(&c.action.as_str()) && text_ok && (!needs_text || c.text.as_deref().is_some_and(|t| !t.trim().is_empty()))
 }
