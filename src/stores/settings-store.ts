@@ -85,6 +85,23 @@ export interface TimekeeperCountdown {
   chime: boolean
   /** 0: only at zero. */
   chimeMinutes: number
+  /** A chime here as the service timer runs out (#196 R2.8); absent: off. */
+  overtimeChime?: boolean
+}
+
+/** An extra timer as a service keeps it (#196 R2.5): its name, length, owner and whether it shows on the stage. */
+export interface ServiceTimerPlan {
+  id: string
+  label: string
+  minutes: number
+  /** The desk role that runs it besides the timekeeping desks ("worship"); "" or absent: none. */
+  owner?: string
+  onStage?: boolean
+}
+
+export function isServiceTimerPlan(p: unknown): p is ServiceTimerPlan {
+  const x = p as ServiceTimerPlan
+  return typeof p === "object" && p !== null && typeof x.id === "string" && x.id.length > 0 && x.id.length <= 100 && typeof x.label === "string" && typeof x.minutes === "number" && Number.isFinite(x.minutes) && x.minutes > 0 && x.minutes <= 600
 }
 
 export interface CustomMacro {
@@ -167,6 +184,9 @@ export interface SettingsState {
   /** Production → Timekeeper's countdown on this computer (#196 R2): what it counts to, and its chime (off unless turned on). */
   timekeeperCountdown: TimekeeperCountdown
   setTimekeeperCountdown: (patch: Partial<TimekeeperCountdown>) => void
+  /** Each saved service's extra timers, by service id (#196 R2.5), kept on this computer with its services. */
+  serviceTimers: Record<string, ServiceTimerPlan[]>
+  setServiceTimers: (serviceId: string, plans: ServiceTimerPlan[]) => void
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
   /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
@@ -270,6 +290,17 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setTalkRules: (patch) => set((s) => ({ talkRules: { ...s.talkRules, ...patch, duck: Math.min(0.8, Math.max(0.05, patch.duck ?? s.talkRules.duck)) } })),
   timekeeperCountdown: { to: "next", chime: false, chimeMinutes: 2 },
   setTimekeeperCountdown: (patch) => set((s) => ({ timekeeperCountdown: { ...s.timekeeperCountdown, ...patch } })),
+  serviceTimers: {},
+  setServiceTimers: (serviceId, plans) =>
+    set((s) => {
+      const next = { ...s.serviceTimers }
+      delete next[serviceId]
+      if (plans.length) next[serviceId] = plans
+      // The newest last; only the most recent services' timers are kept.
+      const ids = Object.keys(next)
+      for (const id of ids.slice(0, Math.max(0, ids.length - MAX_SERVICES_WITH_TIMERS))) delete next[id]
+      return { serviceTimers: next }
+    }),
   remoteDevices: [],
   remoteAuthRequired: false,
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
@@ -403,7 +434,7 @@ function acceptable(key: string, value: unknown): boolean {
       return typeof value === "number" && Number.isFinite(value)
     case "timekeeperCountdown": {
       const t = value as Partial<TimekeeperCountdown>
-      return typeof value === "object" && value !== null && isCountdownTo(t.to) && typeof t.chime === "boolean" && typeof t.chimeMinutes === "number" && Number.isInteger(t.chimeMinutes) && t.chimeMinutes >= 0 && t.chimeMinutes <= 30
+      return typeof value === "object" && value !== null && isCountdownTo(t.to) && typeof t.chime === "boolean" && typeof t.chimeMinutes === "number" && Number.isInteger(t.chimeMinutes) && t.chimeMinutes >= 0 && t.chimeMinutes <= 30 && (t.overtimeChime === undefined || typeof t.overtimeChime === "boolean")
     }
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
@@ -422,6 +453,8 @@ function acceptable(key: string, value: unknown): boolean {
     case "customMacros":
     case "cameras":
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
+    case "serviceTimers":
+      return typeof value === "object" && value !== null && !Array.isArray(value) // entries are checked one by one in readSetting
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
     case "talkRules": {
@@ -473,6 +506,7 @@ export const SETTINGS_SECTIONS = {
     "gain",
     "sttProvider",
     "cloudSpeechConsentAt",
+    "serviceTimers",
   ],
   operator: ["operatorName", "onboardingComplete", "commentsSeen", "timekeeperCountdown", "autoMode", "confidenceThreshold", "cooldownMs"],
 } as const satisfies Record<string, readonly (keyof SettingsState)[]>
@@ -483,6 +517,9 @@ export type ChurchSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.churc
 export type MachineSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.machine)[number]>
 export type OperatorSettings = Pick<SettingsState, (typeof SETTINGS_SECTIONS.operator)[number]>
 type PersistedKey = (typeof SETTINGS_SECTIONS)[SettingsSection][number]
+
+/** How many services' extra timers are kept (the newest). */
+const MAX_SERVICES_WITH_TIMERS = 200
 
 /** In the store but never saved: worked out while Rhema runs. */
 export const RUNTIME_ONLY_SETTINGS = ["settingsSaveFailed"] as const satisfies readonly (keyof SettingsState)[]
@@ -621,6 +658,7 @@ function readSetting(key: string, value: unknown): unknown {
   if (key === "customMacros") return (value as unknown[]).filter(isCustomMacro)
   if (key === "setup") return normalizeSetup(value)
   if (key === "cameras") return (value as unknown[]).filter(isCameraSource)
+  if (key === "serviceTimers") return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([id, plans]) => (Array.isArray(plans) ? [[id, plans.filter(isServiceTimerPlan).slice(0, 8)]] : [])))
   return value
 }
 

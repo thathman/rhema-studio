@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useBroadcastStore } from "@/stores"
 import { drawStage } from "@/lib/stage-canvas"
@@ -6,6 +6,9 @@ import { applyStageStyle, DEFAULT_STAGE_STYLE } from "@/lib/stage-style"
 import type { StagePayload, StageStyle } from "@/types"
 import { Colour, Row } from "@/studio/design/lower-third-designer"
 import { CountdownSelect } from "@/studio/production/countdown-select"
+import { stageClock } from "@/lib/stage-clock"
+import { validTimeZone } from "@/lib/church-time"
+import { useSettingsStore } from "@/stores/settings-store"
 
 /** What the preview shows: a verse live, the timer running, a note and the next item. */
 const SAMPLE: StagePayload = {
@@ -27,17 +30,44 @@ const PARTS: ReadonlyArray<readonly [keyof StageStyle, string]> = [
   ["showFinish", "When the service ends"],
 ]
 
+/** Zones offered for the second clock (any IANA zone can be typed). */
+const ZONES = (() => {
+  try {
+    return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("timeZone") ?? []
+  } catch {
+    return []
+  }
+})()
+
+/** A time zone typed or picked; kept as typed until it is one this computer knows (or empty), then saved. */
+function ZoneInput({ value, disabled, onChange }: { value: string; disabled: boolean; onChange: (zone: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const type = (v: string) => {
+    setDraft(v)
+    if (!v.trim() || validTimeZone(v.trim())) onChange(v.trim())
+  }
+  const unknown = draft !== null && draft.trim() !== "" && !validTimeZone(draft.trim())
+  return (
+    <>
+      <input aria-label="Second time zone" aria-invalid={unknown || undefined} list="stage-time-zones" value={draft ?? value} disabled={disabled} onChange={(e) => type(e.target.value)} onBlur={() => setDraft(null)} placeholder="Europe/London" className="h-7 w-40 rounded border border-border bg-background px-1.5" />
+      {unknown && <span className="text-destructive">Not a time zone this computer knows</span>}
+    </>
+  )
+}
+
 /** The stage display (DS-004): what the team on the platform sees. Changes apply at once, also on air. */
 export function StageDesigner() {
   const style = useBroadcastStore((s) => s.stageStyle)
+  const zone = useSettingsStore((s) => s.setup.timeZone)
   const canvas = useRef<HTMLCanvasElement>(null)
   const patch = (p: Partial<StageStyle>) => useBroadcastStore.getState().saveStageStyle({ ...style, ...p })
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d")
     // A countdown chosen shows first on the timers' line, as on the real stage.
     const sample = style.countdown ? { ...SAMPLE, aux: [{ label: style.countdown === "next" ? "Next: Sermon in" : "End of the main service in", text: "4:12", tone: "ok" as const }, ...(SAMPLE.aux ?? [])] } : SAMPLE
-    if (ctx) drawStage(ctx, 1280, 720, applyStageStyle(sample, style))
-  }, [style])
+    const clock = stageClock(Date.now(), style, validTimeZone(zone))
+    if (ctx) drawStage(ctx, 1280, 720, applyStageStyle(clock ? { ...sample, clock } : sample, style))
+  }, [style, zone])
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">What the team on the platform sees on the stage display (a screen or an NDI viewer): the live words, the timer, what is next and your messages. Changes apply at once. The congregation never sees it.</p>
@@ -68,6 +98,26 @@ export function StageDesigner() {
             <CountdownSelect label="Stage countdown" off="None" value={style.countdown} onChange={(countdown) => patch({ countdown })} className="h-7 text-xs" />
           </Row>
           <p className="-mt-2 text-xs text-muted-foreground">Time until the next item or a milestone, from the run of show; it shows how far over once it is due.</p>
+          <fieldset className="flex flex-col gap-1.5 text-xs">
+            <legend className="mb-1 text-muted-foreground">Time of day</legend>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" className="size-4" checked={!!style.showClock} onChange={(e) => patch({ showClock: e.target.checked || undefined })} />
+              Show the time of day
+            </label>
+            <span className="flex flex-wrap items-center gap-2">
+              <select aria-label="12- or 24-hour clock" value={style.clockHours ?? 24} disabled={!style.showClock} onChange={(e) => patch({ clockHours: Number(e.target.value) === 12 ? 12 : undefined })} className="h-7 rounded-md border border-input bg-card px-1.5">
+                <option value={24}>24-hour (14:05)</option>
+                <option value={12}>12-hour (2:05 PM)</option>
+              </select>
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">Second time zone</span>
+              <ZoneInput value={style.secondZone ?? ""} disabled={!style.showClock} onChange={(secondZone) => patch({ secondZone: secondZone || undefined })} />
+              <input aria-label="What the second time zone is called" value={style.secondZoneLabel ?? ""} disabled={!style.showClock || !style.secondZone} maxLength={24} onChange={(e) => patch({ secondZoneLabel: e.target.value || undefined })} placeholder="London" className="h-7 w-28 rounded border border-border bg-background px-1.5" />
+              <datalist id="stage-time-zones">{ZONES.map((z) => <option key={z} value={z} />)}</datalist>
+            </span>
+            <span className="text-muted-foreground">On the church's clock (Setup → time zone). The countdown display uses the same choices. A zone this computer does not know is not kept.</span>
+          </fieldset>
           <fieldset className="flex flex-col gap-1.5 text-xs">
             <legend className="mb-1 text-muted-foreground">Time warnings (a message on the stage while the timer runs)</legend>
             <label className="flex items-center gap-2">

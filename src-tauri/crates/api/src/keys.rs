@@ -92,6 +92,9 @@ impl Role {
             RemoteCommand::StageMessage(_) => matches!(self, Role::Present | Role::Configure | Role::Stage),
             // OBS is the online stream: only a desk the main desk made OBS director switches it.
             RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => self == Role::Obs,
+            // An extra timer (#196 R2.5): the timekeeping desks, or the role the timer belongs to; the
+            // server checks the owner against the host's Live State (crate::aux_timers).
+            RemoteCommand::AuxTimer(_) => self != Role::ObsCompanion,
             _ if !matches!(self, Role::Present | Role::Configure) => false,
             RemoteCommand::Theme(_) | RemoteCommand::Opacity(_) | RemoteCommand::Confidence(_) | RemoteCommand::OnAir(_) => self == Role::Configure,
             RemoteCommand::Next

@@ -3,9 +3,10 @@ import type { BroadcastOutputLanguage, LowerThird, Ticker } from "./broadcast-ou
 
 /**
  * What a "time until" clock counts down to (#196 R2): the next item's expected start, the main
- * service's expected end, or an item's "end by" (`endby:<item id>`).
+ * service's expected end, an item's "end by" (`endby:<item id>`), a chosen item's expected start
+ * (`start:<item id>`) or a group's expected end (`groupend:<group id>`).
  */
-export type CountdownTo = "next" | "end" | `endby:${string}`
+export type CountdownTo = "next" | "end" | `endby:${string}` | `start:${string}` | `groupend:${string}`
 
 /** A place in the frame, in % of its width and height (x/y = top-left). */
 export interface SceneBox {

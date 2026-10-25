@@ -86,6 +86,9 @@ struct Feed {
     acked_at: Option<std::time::Instant>,
     /// What its pages last said about the cameras they play (#213).
     video: crate::feed_video::FeedVideo,
+    /// The page's clock minus the host's (ms), the largest a page said lately, and when (#196: a TV
+    /// whose clock is off by more than 2 s is worth a warning, though its timers follow the host).
+    clock: Option<(i64, std::time::Instant)>,
 }
 
 /// A browser feed's health for the operator: pages following it, and whether one drew the latest frame.
@@ -98,6 +101,9 @@ pub struct FeedStatus {
     pub acked_ago_ms: Option<u64>,
     /// Each page that reported lately: the cameras it plays, frames shown and dropped (#213).
     pub video: Vec<crate::feed_video::PageVideo>,
+    /// A page's clock minus the host's (ms), when one said so in the last half minute (#196).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clock_skew_ms: Option<i64>,
 }
 
 impl FeedHub {
@@ -106,7 +112,7 @@ impl FeedHub {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         feeds.retain(|id, f| list.iter().any(|(i, t)| i == id && *t == f.token));
         for (id, token) in list {
-            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, video: crate::feed_video::FeedVideo::default() });
+            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, video: crate::feed_video::FeedVideo::default(), clock: None });
         }
     }
 
@@ -121,7 +127,7 @@ impl FeedHub {
     }
 
     /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent).
-    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>) -> bool {
+    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> bool {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(f) = feeds.get_mut(id).filter(|f| crate::command::same_key(token, &f.token)) else {
             return false;
@@ -132,6 +138,12 @@ impl FeedHub {
         }
         if let Some((from, cameras)) = video {
             f.video.report(from, cameras, std::time::Instant::now());
+        }
+        if let Some(skew) = clock {
+            // Several pages on one feed: the one furthest off is the one to warn about, until it reports again.
+            let now = std::time::Instant::now();
+            let keep = f.clock.filter(|(old, at)| now.duration_since(*at) < CLOCK_REPORT_FOR && old.abs() > skew.abs());
+            f.clock = Some(keep.unwrap_or((skew, now)));
         }
         true
     }
@@ -147,6 +159,7 @@ impl FeedHub {
             acked: f.acked,
             acked_ago_ms: f.acked_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
             video: f.video.pages(std::time::Instant::now()),
+            clock_skew_ms: f.clock.filter(|(_, at)| at.elapsed() < CLOCK_REPORT_FOR).map(|(ms, _)| ms),
         })
     }
 
@@ -170,6 +183,12 @@ impl FeedHub {
 }
 
 pub type SharedFeeds = Arc<FeedHub>;
+
+/// How long a page's clock report counts (pages send one every few seconds).
+const CLOCK_REPORT_FOR: std::time::Duration = std::time::Duration::from_secs(30);
+/// How often a feed page hears from the host when nothing changes (#196): a "beat" with the host's
+/// clock, so the page can tell a quiet host from a lost one and count by the host's time.
+pub const FEED_BEAT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Rhema Comms voice (C3, ADR 0002): a desk's WebRTC offer waits here for the host window's answer.
 #[derive(Debug, Default)]
@@ -1219,6 +1238,9 @@ struct FeedAck {
     /// The cameras the page plays, sent every few seconds while it plays any (#213); absent from older pages.
     #[serde(default)]
     video: Option<Vec<crate::feed_video::CameraPlayback>>,
+    /// The page's clock minus the host's (ms), from the host's beats (#196); absent from older pages.
+    #[serde(default)]
+    clock: Option<i64>,
 }
 
 /// `POST /api/v1/feed/{id}/ack?k=<secret>`: the page drew frame `seq` (receiver trust).
@@ -1232,7 +1254,7 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS;
     }
-    if state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v))) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN }
+    if state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000))) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN }
 }
 
 /// `GET /api/v1/feed/{id}/events?k=<secret>`: the feed's frames as server-sent events.
@@ -1248,20 +1270,31 @@ async fn feed_events_handler<S: CommandSink + 'static>(
     let Some((first, rx)) = state.feeds.follow(&id, q.get("k").map_or("", String::as_str)) else {
         return StatusCode::FORBIDDEN.into_response();
     };
-    let stream = futures_util::stream::unfold((rx, first), |(mut rx, first)| async move {
+    // Frames as they change, and a beat with the host's clock every few seconds between them (#196):
+    // a page that hears neither knows it is out of date. An older page ignores the beats.
+    let beat = tokio::time::interval_at(tokio::time::Instant::now() + FEED_BEAT, FEED_BEAT);
+    let stream = futures_util::stream::unfold((rx, first, beat), |(mut rx, first, mut beat)| async move {
         // The frame's number is the event id: the page acknowledges it once drawn.
         if let Some((seq, json)) = first {
-            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None)));
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None, beat)));
         }
         loop {
-            match rx.recv().await {
-                Ok((seq, json)) => return Some((Ok(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None))),
-                Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Err(broadcast::error::RecvError::Closed) => return None,
+            tokio::select! {
+                r = rx.recv() => match r {
+                    Ok((seq, json)) => return Some((Ok(Event::default().event("frame").id(seq.to_string()).data(json)), (rx, None, beat))),
+                    Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => return None,
+                },
+                _ = beat.tick() => return Some((Ok(Event::default().event("beat").data(host_now_ms().to_string())), (rx, None, beat))),
             }
         }
     });
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
+}
+
+/// The host's wall clock in ms since 1970, as a feed page's beat carries it.
+fn host_now_ms() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
 /// The key a request carries, from `X-Rhema-Key` or `Authorization: Bearer`.
@@ -1319,6 +1352,13 @@ async fn command_handler<S: CommandSink + 'static>(
     // OBS is the online stream: never switched from a desk in rehearsal (the host refuses it too).
     if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_)) && in_rehearsal(state.live.current().as_deref()) {
         return (StatusCode::FORBIDDEN, CommandResponse::refused(OBS_REHEARSAL_MESSAGE));
+    }
+    // An extra timer belongs to a role (#196 R2.5): only the timekeeping desks and that role may run it.
+    if let RemoteCommand::AuxTimer(t) = &command {
+        if let Err(why) = crate::aux_timers::judge(state.live.current().as_deref(), role, t) {
+            log::info!("HTTP extra timer command from {by} refused: {why}");
+            return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
+        }
     }
     // From here one command at a time, so two desks pressing at once are checked one after the other.
     let _turn = state.gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1878,6 +1918,41 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    async fn ack_clock(port: u16, clock: i64) -> String {
+        raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=s3cret", Some(&format!(r#"{{"seq":2,"clock":{clock}}}"#)), "").await
+    }
+
+    #[tokio::test]
+    async fn a_feed_page_hears_a_beat_with_the_host_clock_between_frames() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        feeds.publish("tv", "{}".into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let before = host_now_ms();
+        // The first frame, then nothing changes: a beat arrives within FEED_BEAT.
+        let stream = {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+            s.write_all(b"GET /api/v1/feed/tv/events?k=s3cret HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+            let mut out = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !String::from_utf8_lossy(&out).contains("event: beat\ndata: ") || !String::from_utf8_lossy(&out).split("event: beat\ndata: ").nth(1).is_some_and(|r| r.contains('\n')) {
+                let n = tokio::time::timeout(FEED_BEAT * 2, s.read(&mut buf)).await.expect("a beat in time").unwrap();
+                if n == 0 { break; }
+                out.extend_from_slice(&buf[..n]);
+            }
+            String::from_utf8_lossy(&out).into_owned()
+        };
+        assert!(stream.contains("event: frame"), "{stream}");
+        let beat = stream.split("event: beat\ndata: ").nth(1).and_then(|r| r.lines().next()).and_then(|n| n.trim().parse::<i64>().ok());
+        assert!(beat.is_some_and(|ms| ms >= before && ms - before < 10_000), "a beat with the host's clock: {stream}");
+        let mut h = result.handle;
+        h.stop();
+    }
+
     #[tokio::test]
     async fn a_browser_feed_needs_its_own_secret_and_streams_its_frames() {
         let feeds = new_feed_hub();
@@ -1918,6 +1993,11 @@ mod tests {
         assert_eq!(st.video.len(), 1);
         assert_eq!(st.video[0].from, "127.0.0.1");
         assert_eq!((st.video[0].cameras[0].camera.as_str(), st.video[0].cameras[0].fps, st.video[0].cameras[0].dropped_pct), ("pulpit", Some(29.8), Some(0.2)));
+        // A page says how far its clock is from the host's beats (#196): the one furthest off is kept.
+        assert_eq!(st.clock_skew_ms, None, "no page said yet");
+        assert!(ack_clock(port, -4200).await.contains("204"));
+        assert!(ack_clock(port, 300).await.contains("204"));
+        assert_eq!(feeds.status("l3").unwrap().clock_skew_ms, Some(-4200));
         // A new secret (the link was renewed) closes the old link.
         feeds.set(&[("l3".into(), "n3w".into())]);
         assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("403"));

@@ -21,6 +21,8 @@ import { elapsedMs } from "@/lib/timer"
 import { sharedChurchLook, type ChurchLook } from "@/lib/church-look"
 import { sceneForDesk, scenesOnScreen, type DeskScene } from "@/lib/desk-scenes"
 import { useObsStore } from "@/stores/obs-store"
+import { useAuxTimers } from "@/stores/aux-timers-store"
+import { useTimeChange } from "@/stores/time-change-store"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -101,6 +103,14 @@ export interface LiveStateV1 {
   cameraFeeds?: { name: string; label: string; url: string | null }[]
   /** How often the host sends this at the least (ms), so a desk can tell a quiet host from a lost one. Absent from older hosts. */
   heartbeatMs?: number
+  /**
+   * The extra timers (#196 R2.5), as the service timer is sent: a desk counts a running one on from
+   * when this arrived. `owner`: the desk role that may run it besides the timekeeping desks (the
+   * host's server checks it). Absent from older hosts.
+   */
+  auxTimers?: { id: string; label: string; owner?: string; durationMs: number; elapsedMs: number; running: boolean; onStage?: true }[]
+  /** Who last changed the service's time, what and when (#196 R2.9; host wall ms); null before anyone has. Absent from older hosts. */
+  timeChange?: { what: string; by?: string; at: number } | null
   /**
    * The church look (#298 E4): the host's Brand Kit and the themes made from it, with a revision. A
    * joined desk offers it ("The host's church look changed") and uses it only when its operator
@@ -216,6 +226,8 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     cameraFeeds: (() => { const r = useRouterHealth.getState().status; return useSettingsStore.getState().cameras.map((c) => ({ name: c.name, label: c.label, url: r?.running && r.lanAddress ? whepUrl(r.lanAddress, r.ports, c.name) : null })) })(),
     obs: (() => { const o = useObsStore.getState(); return { connected: o.status === "connected", studioMode: o.studioMode, scenes: o.scenes.slice(0, 100), program: o.program, preview: o.preview } })(),
     heartbeatMs: LIVE_HEARTBEAT_MS,
+    auxTimers: useAuxTimers.getState().timers.map((t) => ({ id: t.id, label: t.label, ...(t.owner ? { owner: t.owner } : {}), durationMs: t.timer.durationMs, elapsedMs: Math.round(elapsedMs(t.timer, monotonicNow())), running: t.timer.startedAt !== null, ...(t.onStage ? { onStage: true as const } : {}) })),
+    timeChange: (() => { const c = useTimeChange.getState().last; return c ? { what: c.what, ...(c.by ? { by: c.by } : {}), at: c.at } : null })(),
     churchLook: sharedChurchLook(useSettingsStore.getState().brandKit, b.themes),
   }
 }
@@ -274,6 +286,8 @@ export function startLiveStatePublisher(): () => void {
     useServiceOffset.subscribe(() => soon()),
     useHold.subscribe((s, p) => { if (s.hold !== p.hold) soon() }),
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
+    useAuxTimers.subscribe((s, p) => { if (s.timers !== p.timers) soon() }),
+    useTimeChange.subscribe(() => soon()),
     useVoice.subscribe(() => soon()),
     useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit || s.requireApproval !== p.requireApproval || s.setup.timeZone !== p.setup.timeZone || s.talkRules !== p.talkRules) soon() }),
     useTimingTrust.subscribe(() => soon()),

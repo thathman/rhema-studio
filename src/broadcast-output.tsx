@@ -24,7 +24,7 @@ import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
 import { StageView } from "@/components/stage-view"
-import { drawStage } from "@/lib/stage-canvas"
+import { drawStage, stageOnCanvas, stageSurface } from "@/lib/stage-canvas"
 import { sceneStatic } from "@/lib/no-signal"
 import { outputPace } from "@/lib/output-pace"
 import { CountdownFade } from "@/lib/countdown-display"
@@ -156,7 +156,9 @@ function BroadcastCanvas() {
 
     if (stageRef.current) {
       const s = stageRef.current
-      paintFrame(canvas, scratchCanvas, 1920, 1080, (fctx) => { countdownMoving.current = drawStage(fctx, 1920, 1080, s, { now: Date.now(), fade: countdownFade.current }).moving })
+      // A screen on its side set to portrait in the computer's settings gets a tall picture (#196 R6).
+      const { width: sw, height: sh } = stageSurface(s, window.innerWidth, window.innerHeight)
+      paintFrame(canvas, scratchCanvas, sw, sh, (fctx) => { countdownMoving.current = drawStage(fctx, sw, sh, s, { now: Date.now(), fade: countdownFade.current }).moving })
       return
     }
     const data = latestData.current
@@ -659,13 +661,14 @@ function BroadcastCanvas() {
     <>
       {/* A stage payload that fails to draw must not take the window's listeners with it. */}
       {/* A countdown display is drawn on the canvas, as it goes out over NDI. */}
-      {stage && !stage.countdown && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
+      {/* So are a role's layout, a screen on its side, night colours and the clock (#196 R6). */}
+      {stage && !stageOnCanvas(stage) && <ErrorBoundary name="the stage display" quiet><StageView stage={stage} /></ErrorBoundary>}
       <canvas
         ref={canvasRef}
         style={{
           width: "100vw",
           height: "100vh",
-          display: stage && !stage.countdown ? "none" : "block",
+          display: stage && !stageOnCanvas(stage) ? "none" : "block",
           objectFit: "contain",
         }}
       />

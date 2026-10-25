@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { newFeedToken } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
+import { SKEW_WARN_MS, skewWords } from "@/lib/desk-freshness"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import type { PageVideo } from "@/lib/camera-playback"
 
@@ -43,6 +44,8 @@ export interface FeedHealth {
   behind: boolean
   /** Each page that plays cameras: how they really play there (#213); absent from an older build. */
   video?: PageVideo[]
+  /** A page's clock minus this computer's (ms), when one said lately (#196); absent from older pages. */
+  clockSkewMs?: number
 }
 
 /** One poller per feed, shared by everything that shows its health (cards, Show health, Home). */
@@ -59,13 +62,13 @@ export function watchFeed(id: string): () => void {
     let alive = true
     let last = { seq: -1, behindSince: 0 }
     const ask = async () => {
-      const s = await invoke<{ watching: number; seq: number; acked: number; video?: PageVideo[] } | null>("feed_status", { id }).catch(() => null)
+      const s = await invoke<{ watching: number; seq: number; acked: number; video?: PageVideo[]; clock_skew_ms?: number } | null>("feed_status", { id }).catch(() => null)
       if (!alive) return
       if (!s) return useFeedHealthStore.setState({ [id]: null })
       const current = s.acked >= s.seq
       const behindSince = current ? 0 : s.seq === last.seq && last.behindSince ? last.behindSince : Date.now()
       last = { seq: s.seq, behindSince }
-      useFeedHealthStore.setState({ [id]: { watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000, ...(s.video?.length ? { video: s.video } : {}) } })
+      useFeedHealthStore.setState({ [id]: { watching: s.watching, current, behind: !current && s.watching > 0 && Date.now() - behindSince >= 3000, ...(s.video?.length ? { video: s.video } : {}), ...(typeof s.clock_skew_ms === "number" ? { clockSkewMs: s.clock_skew_ms } : {}) } })
     }
     void ask()
     const t = setInterval(() => void ask(), 2000)
@@ -102,5 +105,7 @@ export function feedHealthLabel(h: FeedHealth | null): string | null {
   if (!h) return null
   if (h.watching === 0) return "No page is showing it"
   const who = h.watching === 1 ? "1 page" : `${h.watching} pages`
-  return h.behind ? `${who} · behind: not showing the latest` : h.current ? `${who} · showing the latest` : `${who} · updating…`
+  const state = h.behind ? `${who} · behind: not showing the latest` : h.current ? `${who} · showing the latest` : `${who} · updating…`
+  // Its timers follow this computer, but its own clock is off: worth setting right (#196).
+  return h.clockSkewMs !== undefined && Math.abs(h.clockSkewMs) > SKEW_WARN_MS ? `${state} · its clock is ${skewWords(h.clockSkewMs)} this computer's` : state
 }

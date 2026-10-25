@@ -1,5 +1,6 @@
 import type { CountdownFrame } from "@/types"
 import { countdownNow, CountdownFade, mixColour, pulsed } from "@/lib/countdown-display"
+import { clockText } from "@/lib/stage-clock"
 
 /** Words wrapped to `maxW`, at most `most` lines (the last one cut with "…"). */
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number, most: number): string[] {
@@ -20,8 +21,9 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number, most: n
   return out
 }
 
-/** The time of day on the church's clock ("" zone: this screen's). */
-function clockOfDay(now: number, zone: string): string {
+/** The time of day on the church's clock ("" zone: this screen's), 12- or 24-hour when the stage design says. */
+function clockOfDay(now: number, zone: string, hours?: 12 | 24): string {
+  if (hours) return clockText(now, zone, hours)
   try {
     return new Date(now).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", ...(zone ? { timeZone: zone } : {}) })
   } catch {
@@ -87,7 +89,12 @@ export function drawCountdown(ctx: CanvasRenderingContext2D, width: number, heig
   ctx.fillText(`${frame.label}${held ? " · paused" : ""}`, padX, top, width * 0.6)
   if (look.showClock) {
     ctx.textAlign = "right"
-    ctx.fillText(clockOfDay(opts.now, frame.zone), width - padX, top)
+    ctx.fillText(clockOfDay(opts.now, frame.zone, frame.hours), width - padX, top)
+    // A second time zone under it, smaller (#196 R2.6).
+    if (frame.zone2) {
+      ctx.font = font(3 * vh, 500)
+      ctx.fillText(`${frame.zone2.label} ${clockText(opts.now, frame.zone2.zone, frame.hours ?? 24)}`, width - padX, top + 4 * vh)
+    }
   }
 
   // The messages under the time: the step's, then the stage message.

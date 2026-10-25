@@ -1606,6 +1606,27 @@ Needs `design-packs/rhema-worship-expressions.rhema-design.json` from this branc
 | 10fp.9 | Archive → Backups → Back up now…; **Remove pack** on the pack's heading; Archive → Backups → Restore from a backup… → that file. | Remove leaves your copies. The restore's list says "Design packs in the library: 0 packs → 1 pack"; afterwards the pack is back. | Unverified |
 | 10fp.10 | Use "Graphics only for OBS"; show it on an NDI output with alpha; look in OBS. | Only the lyrics, name band and ticker show; the rest is transparent. | Unverified |
 
+### 10fs. Timers and stage views: countdowns to anything, extra timers on desks, role layouts, out-of-date feeds (#196)
+
+A saved service "Sunday" with a main service start time and groups (Worship set: two songs; Word: Sermon 30). One stage output on a second screen; a browser feed on a Google TV or another computer's browser; two joined desks (Desk A as Timekeeper, Desk B as Worship; a third as Bible for 10fs.5).
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fs.1 | Design → Countdown → It counts: **Time until an item starts** → Sermon; then **Time until a group ends** → Worship set. Put a stage output on Countdown. | "Sermon starts" (then "End of Worship set") counting to the run of show's expected time; the colour steps over the minutes chosen. Start the first item 3 minutes late: the time moves by 3 minutes. | Unverified |
+| 10fs.2 | Design → Stage → Countdown and Production → Timekeeper → Count down to: open the list. | Under "An item starts" every item of the main service, under "A group ends" each group; the chosen one counts on the stage line ("Sermon starts in 4:12") and in Timekeeper. | Unverified |
+| 10fs.3 | Production → Timekeeper → Other timers: add "Communion prep" 5 min, Who runs: **Worship**; "Interpreter" 2 min (Timekeeper); turn On stage for the first. Open another service, then Sunday again; quit and reopen Rhema. | The two timers come back with Sunday each time (not started), Communion prep still on stage and owned by Worship; the other service has none. | Unverified |
+| 10fs.4 | On Desk B (Worship): the Extra timers box. Start Communion prep; try Interpreter. | Communion prep has Start/Reset and starts on the host (the host's log: "Desk B: extra timer “Communion prep” started"); Interpreter says read only. | Unverified |
+| 10fs.5 | On the Bible desk and on Desk A (Timekeeper). | The Bible desk sees both timers counting, read only, no buttons. Desk A can start, pause and reset both. | Unverified |
+| 10fs.6 | On Desk A press +5 min; then on the host press −1 min on the service timer. Look at Desk A's clock box and the host's Timekeeper. | "Last change: +5 min (running 5 min late) · by Desk A at 10:42 (just now)", then "timer corrected by −1 min · by <host's operator name, or the main desk> …", on both. | Unverified |
+| 10fs.7 | Design → Stage → Time of day: on, 12-hour, second zone **Europe/London** (label "London"). | The stage screen shows "10:42 AM · London 9:42 AM" on its top line, changing on the minute; the countdown display shows the time of day 12-hour with "London …" under it. Typing a zone that does not exist says so and keeps the last good one. | Unverified |
+| 10fs.8 | Timekeeper → **Chime when the service timer runs over**; set the service timer to 1 minute and start it. | Three low tones on this computer as it reaches 0:00, once; the screens, stage and NDI never hear it. | Unverified |
+| 10fs.9 | Production → Screens → edit the stage output → What the stage screen shows: **Pastor**, then **Band**, then **Stage manager**. Save, reopen the editor. | Pastor: the words and a big timer on its own line, no key or extra timers. Band: key and tempo large under the top line. Stage manager: every timer and the finish line, the words smaller. The choice is still there when the editor opens again. | Unverified |
+| 10fs.10 | The screen: **Portrait: turned clockwise**; turn the TV/monitor on its side clockwise (or look with your head turned). Then **anticlockwise**. Then set a Mac monitor to portrait in System Settings → Displays (Rotation 90°), with a Portrait choice in Rhema. | Upright on the turned screen each way; on the monitor set to portrait the picture is tall and upright without turning. | Unverified |
+| 10fs.11 | Tick **Night colours**. | Black with dim, warm text (no white, no bright green or yellow); the message box dim amber. The countdown layout keeps its own colours. | Unverified |
+| 10fs.12 | With the browser feed open on the TV, quit Rhema (or unplug the host's network). Wait 15 s; start it again. | Within about 10 s a small "Not updating" mark top right; it goes once the host is back. While the host runs and nothing changes, no mark. | Unverified |
+| 10fs.13 | On the TV (or the browser computer) set the clock 1 minute wrong; wait 10 s; look at that feed's card in Production → Screens. | "… · its clock is 1 min behind this computer's" (or ahead); the countdown on the TV still matches the host to the second. Set it right: the warning goes within half a minute. | Unverified |
+| 10fs.14 | Open a backup or profile from before this build. | Services open with no extra timers; the stage design, countdown look and stage outputs show as before (no clock, full layout, landscape, day colours). | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

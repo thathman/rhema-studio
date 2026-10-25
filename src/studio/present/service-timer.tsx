@@ -14,11 +14,12 @@ import { useServiceTiming } from "@/studio/use-service-timing"
 import { useHold } from "@/stores/hold-store"
 import { timeText } from "@/lib/church-time"
 import { churchTimeZone } from "@/stores/timing-input"
+import { useSettingsStore } from "@/stores/settings-store"
 
 const PRESETS = [20, 30, 45, 60]
 /** Manual timing correction, with its line in the service log (FR-07 "with audit"). */
 function correct(minutes: number) {
-  useTimerStore.getState().adjustMinutes(minutes)
+  useTimerStore.getState().adjustMinutes(minutes, useSettingsStore.getState().operatorName.trim() || null)
   useJournalStore.getState().add({ kind: "timing", label: `timer corrected by ${minutes > 0 ? "+" : "−"}${Math.abs(minutes)} min` })
 }
 

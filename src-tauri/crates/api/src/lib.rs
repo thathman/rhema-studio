@@ -3,6 +3,7 @@
 //! Implements: OSC server, HTTP API (Axum).
 //! Planned: `OpenAI` embeddings client.
 
+pub mod aux_timers;
 pub mod cameras;
 pub mod coerce;
 pub mod command;

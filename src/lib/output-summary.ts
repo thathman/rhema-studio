@@ -35,7 +35,15 @@ export function outputFollows(o: BroadcastOutput, theme?: BroadcastTheme): strin
  * transparent.
  */
 export function outputPresentation(o: BroadcastOutput, scenes: Scene[], theme?: BroadcastTheme): string {
-  if (o.role === "stage") return o.stageLayout === "countdown" ? "Countdown display (one big time; Design → Countdown)" : "Stage display (words, next, note, timer)"
+  if (o.role === "stage") {
+    const extra = [o.stageOrientation ? "portrait" : "", o.stageNight ? "night colours" : ""].filter(Boolean).join(", ")
+    const what = o.stageLayout === "countdown" ? "Countdown display (one big time; Design → Countdown)"
+      : o.stageLayout === "pastor" ? "Pastor's confidence monitor (words, big timer)"
+        : o.stageLayout === "band" ? "Band (lyrics, key and tempo)"
+          : o.stageLayout === "manager" ? "Stage manager (every timer and time)"
+            : "Stage display (words, next, note, timer)"
+    return extra ? `${what} · ${extra}` : what
+  }
   if (o.role === "signage") {
     if (tickerOnly(o, allSignageIds(o.signage).length, theme)) return "Ticker only · transparent, for keying"
     return o.ticker ? "Signage loop · ticker" : "Signage loop"
@@ -73,6 +81,12 @@ export function outputEditPatch(next: BroadcastOutput): Partial<Omit<BroadcastOu
     lowerThirds: next.lowerThirds,
     ticker: next.ticker === true,
     shows: next.shows?.length ? next.shows : undefined,
+    // A stage output's layout, orientation and night colours, and the camera fallback, as edited
+    // (before this they were dropped when an existing output was saved).
+    stageLayout: next.stageLayout,
+    stageOrientation: next.stageOrientation,
+    stageNight: next.stageNight === true ? true : undefined,
+    cameraFallback: next.cameraFallback,
     ...(next.feedToken ? { feedToken: next.feedToken } : {}),
   }
 }

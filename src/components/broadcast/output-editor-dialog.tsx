@@ -305,14 +305,31 @@ export function OutputEditorDialog({
             {form.role === "stage" && (
               <>
                 <span id="stage-layout-label" className="mt-2 text-xs text-muted-foreground">What the stage screen shows</span>
-                <Select value={form.stageLayout ?? "full"} onValueChange={(v) => patch({ stageLayout: v === "countdown" ? "countdown" : undefined })}>
+                <Select value={form.stageLayout ?? "full"} onValueChange={(v) => patch({ stageLayout: v === "countdown" || v === "pastor" || v === "band" || v === "manager" ? v : undefined })}>
                   <SelectTrigger aria-labelledby="stage-layout-label" className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="full">Everything: the live words, what is next, your note and the timer</SelectItem>
+                    <SelectItem value="pastor">Pastor (confidence monitor): the words and a big timer</SelectItem>
+                    <SelectItem value="band">Band: the lyrics, with the key and tempo large</SelectItem>
+                    <SelectItem value="manager">Stage manager: every timer and time, the words smaller</SelectItem>
                     <SelectItem value="countdown">Countdown: one big time that changes colour as time runs out</SelectItem>
                   </SelectContent>
                 </Select>
                 {form.stageLayout === "countdown" && <span className="text-xs text-muted-foreground">What it counts, its colours and messages are in Design → Countdown.</span>}
+                <span id="stage-orientation-label" className="mt-2 text-xs text-muted-foreground">The screen</span>
+                <Select value={form.stageOrientation ?? "landscape"} onValueChange={(v) => patch({ stageOrientation: v === "cw" || v === "ccw" ? v : undefined })}>
+                  <SelectTrigger aria-labelledby="stage-orientation-label" className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="landscape">Landscape (as usual)</SelectItem>
+                    <SelectItem value="cw">Portrait: the screen turned a quarter turn clockwise</SelectItem>
+                    <SelectItem value="ccw">Portrait: the screen turned a quarter turn anticlockwise</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.stageOrientation && <span className="text-xs text-muted-foreground">Drawn tall and turned so it reads upright on the turned screen. A monitor already set to portrait in the computer's display settings is drawn tall without turning.</span>}
+                <label className="mt-1 flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={!!form.stageNight} onChange={(e) => patch({ stageNight: e.target.checked || undefined })} />
+                  <span>Night colours <span className="text-muted-foreground">(dim and warm on black, for a dark platform; the countdown keeps its own colours)</span></span>
+                </label>
               </>
             )}
             {/* A stage display can follow chosen sources too (ADR 0001): its words come from them. */}

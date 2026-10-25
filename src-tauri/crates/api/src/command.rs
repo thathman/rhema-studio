@@ -82,6 +82,16 @@ pub enum RemoteCommand {
     VoiceLeave,
     /// Talk channels (Comms C4): which channels this desk listens to, and whom it talks to.
     VoiceChannels(VoiceChannelsIn),
+    /// An extra timer (#196 R2.5) from a joined desk: start, pause or reset the timer with this id.
+    /// The host's server checks the timer's owner first (`crate::aux_timers`). Never a screen.
+    AuxTimer(AuxTimerIn),
+}
+
+/// Which extra timer, and what to do: "start", "pause" or "reset".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuxTimerIn {
+    pub id: String,
+    pub action: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -241,6 +251,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::VoiceTalk(on) => write!(f, "voice_talk({on})"),
             RemoteCommand::VoiceLeave => write!(f, "voice_leave"),
             RemoteCommand::VoiceChannels(c) => write!(f, "voice_channels({} {:?})", c.talk, c.listen),
+            RemoteCommand::AuxTimer(t) => write!(f, "aux_timer({} {})", t.action, t.id),
         }
     }
 }
@@ -556,6 +567,7 @@ mod tests {
                 RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
                 RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::StageMessage(_) | RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => {}
                 RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
+                RemoteCommand::AuxTimer(_) => {}
             }
         }
 
