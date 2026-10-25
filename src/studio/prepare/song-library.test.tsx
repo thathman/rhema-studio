@@ -352,7 +352,7 @@ describe("Add item workflow (#386)", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  it("leaves the picker open when a Bible Add is deduped", async () => {
+  it("adds an intentional repeat Scripture occurrence and selects its new service item", async () => {
     const existing: QueueItem = {
       id: "existing-verse",
       kind: "verse",
@@ -375,7 +375,12 @@ describe("Add item workflow (#386)", () => {
     const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add")!
     await act(async () => add.click())
 
-    expect(useQueueStore.getState().items).toHaveLength(1)
-    expect(document.querySelector('[role="dialog"]')).toBeTruthy()
+    const items = useQueueStore.getState().items
+    expect(items).toHaveLength(2)
+    expect(items[0].id).not.toBe(items[1].id)
+    expect(items[0]).toMatchObject({ verse: { book_number: verse.book_number, chapter: verse.chapter, verse: verse.verse } })
+    const inserted = items.find((item) => item.id !== "existing-verse")!
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 })

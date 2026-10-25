@@ -301,7 +301,15 @@ export const remoteActions = {
     }
     const selectedVerse = bible.selectedVerse
     if (!selectedVerse) return Promise.resolve()
-    const idx = queue.findDuplicate(selectedVerse.book_number, selectedVerse.chapter, selectedVerse.verse)
+    const matchesSelectedVerse = (item: QueueItem) =>
+      isVerseItem(item) &&
+      item.verse.book_number === selectedVerse.book_number &&
+      item.verse.chapter === selectedVerse.chapter &&
+      item.verse.verse === selectedVerse.verse
+    const matchingIndices = queue.items.flatMap((item, index) => matchesSelectedVerse(item) ? [index] : [])
+    const idx = bible.selectedQueueItemId
+      ? queue.items.findIndex((item) => item.id === bible.selectedQueueItemId && matchesSelectedVerse(item))
+      : matchingIndices.length === 1 ? matchingIndices[0] : -1
     const rundownItem = idx === -1 ? null : queue.items[idx]
     if (idx !== -1) queue.setActive(idx)
     const took = rundownItem ? afterTake(rundownItem, !isUp(rundownItem)) : () => {}
@@ -319,7 +327,7 @@ export const remoteActions = {
     }).then(took).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
   },
 
-  /** Queue the verse showing in Program preview. Duplicates are dropped by the store. */
+  /** Add the verse showing in Program preview as an explicit planned occurrence. */
   addToQueue: () => {
     const { selectedVerse } = useBibleStore.getState()
     if (!selectedVerse) return

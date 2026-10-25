@@ -216,6 +216,51 @@ describe("bilingual service round trip", () => {
     expect(sentItems().find((i) => i.id === "y1")).toMatchObject({ translation: "OYCB", secondary_translation: "KJV", notes: "Read slowly" })
   })
 
+  it("saves and reopens repeated planned Scriptures as separate translated items", async () => {
+    useBibleStore.setState({ activeTranslationId: KJV.id, secondaryTranslationId: null, translations: [KJV, OYCB] })
+    let db: ProgramWithItems = {
+      program: { ...program, item_count: 1 },
+      items: [item("prayer-reading", "John 3:16", 43, 3, 16, { translation: "KJV", notes: "Opening prayer" })],
+    }
+    mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "content_get_program") return db
+      if (cmd === "get_verse") return { id: 1, translation_id: Number(args?.translationId), book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "For God so loved the world" }
+      if (cmd === "content_replace_items") {
+        const sent = args?.items as Array<Omit<ProgramItem, "program_id" | "position">>
+        db = {
+          program: { ...db.program, revision: db.program.revision + 1, item_count: sent.length },
+          items: sent.map((saved, position) => ({ ...saved, program_id: "p1", position })),
+        }
+        return db
+      }
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    const prayer = useQueueStore.getState().items[0] as VerseQueueItem
+    const sermon: VerseQueueItem = {
+      ...prayer,
+      id: "sermon-reading",
+      translation: "OYCB",
+      verse: { ...prayer.verse, translation_id: OYCB.id },
+      notes: "Sermon",
+      planned_minutes: 40,
+      scene_id: "sermon-scene",
+    }
+    expect(useQueueStore.getState().addItem(sermon, "end")).toBe("sermon-reading")
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+
+    useServiceStore.setState({ current: null, dirty: false })
+    useQueueStore.setState({ items: [] })
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    const reopened = useQueueStore.getState().items as VerseQueueItem[]
+    expect(reopened.map(({ id, translation, notes, planned_minutes, scene_id }) => [id, translation, notes, planned_minutes, scene_id ?? null])).toEqual([
+      ["prayer-reading", "KJV", "Opening prayer", null, null],
+      ["sermon-reading", "OYCB", "Sermon", 40, "sermon-scene"],
+    ])
+    expect(reopened.map((entry) => entry.verse.translation_id)).toEqual([KJV.id, OYCB.id])
+  })
+
   it("changing an item's notes or translation marks the service dirty", async () => {
     await openStored()
     useQueueStore.setState((s) => ({ items: s.items.map((i, n) => (n === 0 ? { ...i, notes: "Pause here" } : i)) }))

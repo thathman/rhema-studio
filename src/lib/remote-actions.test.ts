@@ -129,6 +129,30 @@ describe("remoteActions.sendToLive", () => {
     expect(useBroadcastStore.getState().liveVerse).toBeNull()
     expect(mockInvoke).not.toHaveBeenCalledWith("get_verse", expect.anything())
   })
+
+  it("takes the selected occurrence when the same Scripture appears twice", async () => {
+    const prayer = { ...queueItemFor(johnThreeSixteen), id: "prayer-reading", notes: "Opening prayer" }
+    const sermon = { ...queueItemFor(johnThreeSixteen), id: "sermon-reading", notes: "Sermon" }
+    useQueueStore.setState({ items: [prayer, sermon], activeIndex: null })
+    useBibleStore.setState({ selectedVerse: johnThreeSixteen, selectedQueueItemId: sermon.id })
+
+    await remoteActions.sendToLive()
+
+    expect(useQueueStore.getState().activeIndex).toBe(1)
+    expect(useBroadcastStore.getState().liveItemId).toBe("sermon-reading")
+  })
+
+  it("does not guess an occurrence when Preview has no selected service item", async () => {
+    const prayer = { ...queueItemFor(johnThreeSixteen), id: "prayer-reading" }
+    const sermon = { ...queueItemFor(johnThreeSixteen), id: "sermon-reading" }
+    useQueueStore.setState({ items: [prayer, sermon], activeIndex: null })
+    useBibleStore.setState({ selectedVerse: johnThreeSixteen, selectedQueueItemId: null })
+
+    await remoteActions.sendToLive()
+
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
+  })
 })
 
 describe("remoteActions.addToQueue", () => {
@@ -145,13 +169,14 @@ describe("remoteActions.addToQueue", () => {
     expect(items[0].verse).toEqual(johnThreeSixteen)
   })
 
-  it("is safe to press twice — the second press adds nothing", () => {
+  it("adds intentional repeat occurrences as separate plan items", () => {
     useBibleStore.setState({ selectedVerse: johnThreeSixteen })
 
     remoteActions.addToQueue()
     remoteActions.addToQueue()
 
-    expect(useQueueStore.getState().items).toHaveLength(1)
+    expect(useQueueStore.getState().items).toHaveLength(2)
+    expect(useQueueStore.getState().items[0].id).not.toBe(useQueueStore.getState().items[1].id)
   })
 
   it("does nothing when no verse is previewed", () => {

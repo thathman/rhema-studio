@@ -12,7 +12,7 @@ interface QueueState {
   /** The live item was removed from the rundown: the items either side of it, for Next/Previous. */
   removedActive: { prevId: string | null; nextId: string | null } | null
 
-  /** Add at the start by default, or at the end; a valid addTarget inserts at that section's end. Returns the inserted id, or null for a duplicate verse. */
+  /** Add at the start by default, or at the end; a valid addTarget inserts at that section's end. Manual Scripture additions may repeat; duplicate AI suggestions return null. */
   addItem: (item: QueueItem, placement?: "start" | "end") => string | null
   removeItem: (id: string) => void
   /** Change an item's own settings (song languages, arrangement, notes). */
@@ -170,8 +170,12 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   addItem: (item, placement = "start") => {
     let insertedId: string | null = null
     set((state) => {
-      // Songs may repeat in a service (opening and closing hymn); verses dedupe.
+      // Songs and explicit manual Scripture additions may repeat in a service.
       if (!isVerseItem(item)) {
+        insertedId = item.id
+        return inserted(state, item, placement)
+      }
+      if (item.source === "manual") {
         insertedId = item.id
         return inserted(state, item, placement)
       }
@@ -220,14 +224,16 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
     set({ highlightedId: id })
     flashTimer = setTimeout(() => set({ highlightedId: null }), 1500)
   },
-  findDuplicate: (bookNumber, chapter, verse) =>
-    get().items.findIndex(
-      (i) =>
+  findDuplicate: (bookNumber, chapter, verse) => {
+    const { items, activeIndex } = get()
+    const matches = (i: QueueItem) =>
         isVerseItem(i) &&
         i.verse.book_number === bookNumber &&
         i.verse.chapter === chapter &&
-        i.verse.verse === verse,
-    ),
+        i.verse.verse === verse
+    if (activeIndex !== null && items[activeIndex] && matches(items[activeIndex])) return activeIndex
+    return items.findIndex(matches)
+  },
   // Filling in words the item already stands for is not an edit to undo.
   backfillText: (id, text) =>
     rawSet((state) => {
