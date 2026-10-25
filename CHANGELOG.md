@@ -4,6 +4,11 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Manual and production guide catch-up (docs)
+- `docs/QUICK-START.md` has new chapters for editing the run of show (phases, undo, several at once, hide, cues, cue-only items), the countdown display, connecting an AI assistant (what it reads, drafts, never live, the switch, 30 requests a minute), Comms (Talk, Talk to, notices and requests, the phone page), the remote-control security defaults, Rhema Studio Cam (install the test APK, pair by QR, looks, screen off) and a second computer for OBS (Companion app or companion mode, pairing with the certificate code). The desks section names every role and the desk consoles.
+- `docs/PRODUCTION-GUIDE.md` has **When things go wrong** (the camera router or a frozen camera, OBS crashing, a firewall blocking the listener, a desk that cannot connect, the host computer restarting) and **Firewall and network ports** (every port Rhema Studio, the camera router and the Companion use, and what to allow for what).
+- The manual's pictures are taken again with the Rhema Studio branding and demo data, plus a new one of Design → Countdown. Acceptance row 10ei.1 now uses the phone's Talk to list as it is.
+
 ### Host/Join hardening: who is connected, cutting a desk at once, browser pages kept out, https between computers, Editor and View only (#162, #197)
 - Production → Operators → **Host the service** now shows this computer's address on each network, the secure link and its certificate code, each paired desk as **Connected now** or **Seen 5 min ago** with its address, and a **Stop hosting** button (with a confirm) that disconnects every joined computer, phone and browser feed while the service here carries on.
 - Taking back control, revoking or changing a desk's role cuts its Live State stream within a quarter of a second; the desk reconnects at once as what it is now (paused, its new role), or is told to pair again.

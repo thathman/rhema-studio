@@ -5,6 +5,15 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-25 — Docs: manual and production guide catch-up (docs-064)
+
+- **Branch / PR:** `docs-064/manual-catch-up` (from `main` d5cae9d). Docs and images only; no src.
+- **Behaviour:** QUICK-START: new chapters Editing the run of show, The countdown display, Connecting an AI assistant, Comms, Remote control security defaults, Rhema Studio Cam, A second computer for OBS; desks section with all roles, host card, encrypted desks and the desk consoles of PR #375 (marked as that PR, not yet on `main` when written); camera recovery controls; OBS status. PRODUCTION-GUIDE: "Who can send these" updated for key-by-default, 403/421; new **When things go wrong** and **Firewall and network ports** (ports read from `camera_router.rs` PORTS, `settings-store.ts` remoteListeners defaults, https = HTTP+1 in `commands/remote.rs`, mDNS `_rhema-host._tcp` / `_rhema-tv._tcp`). Acceptance: 10ei.1 rewritten (the phone's Talk to → Only… exists since #357; it sends a name the host resolves to a key, so the look-alike test picks each listed name in turn); new 10fw (firewall, ports, restart). Each section says what passed on the desktop (10fb.2, 10fg.3, 10fg.5, 10ek.9 and earlier rows) and otherwise "built, not yet checked on the desktop".
+- **Pictures:** `docs/images/manual/*.png` re-shot with the branding agent's harness (Vite dev server + headless Chrome + the app's browser shim), a private copy with extra seeding: the sample service plus Amazing Grace (public domain), saved as "Sunday Service" and organised into phases; mocked OBS, host status and camera router; light theme, 1440×900, three cropped. New `design-countdown.png`. All under 400 KB; no church name appears. The cameras page did not hang this time.
+- **Tests:** docs only; relative links checked with a script. No src touched, so no tsc/vitest/eslint.
+- **Not done / limits:** not confirmed from code: how OBS's own sources behave after OBS restarts (described as OBS's behaviour), NDI's port range (NDI's own documentation, not Rhema code), the exact macOS/Windows firewall wording (varies by OS version). The browser shim has no `ai_drafts_list` (returns null and breaks Prepare); the harness copy mocks it rather than changing `src/dev/browser-shim.ts`.
+- **Next:** desktop acceptance 10fw; update the desks section once #375 merges.
+
 ## 2026-10-25 — Host/Join hardening (#162, #197, #63 follow-ups)
 
 - **Branch / PR:** `host-055/join-hardening` (rebased onto `main` dce9cb2, after #362, #366, #369, #370). Acceptance 10fk.
