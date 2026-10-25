@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const sent: Record<string, unknown>[] = []
 vi.mock("@tauri-apps/api/core", () => ({
@@ -37,7 +37,7 @@ const render = async (role: string, state: LiveStateV1 = live) => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   useJoin.setState({ status: "connected", me: { name: "Op", role }, live: state, error: null, paused: false, note: null })
   const el = document.createElement("div")
-  await act(async () => createRoot(el).render(<OperatorsPanel />))
+  await act(async () => (roots.push(createRoot(el)), roots[roots.length - 1]).render(<OperatorsPanel />))
   return el
 }
 const button = (el: Element, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.trim() === text) as HTMLButtonElement
@@ -47,6 +47,12 @@ const choose = (sel: HTMLSelectElement, value: string) => act(async () => {
   sel.dispatchEvent(new Event("change", { bubbles: true }))
 })
 
+// Unmounted after each test, so no React work runs after the test environment closes.
+const roots: ReturnType<typeof createRoot>[] = []
+afterEach(async () => {
+  await act(async () => { for (const r of roots.splice(0)) r.unmount() })
+  document.body.innerHTML = ""
+})
 beforeEach(() => { sent.length = 0 })
 
 describe("worship desk: key, repeat chorus and the worship set", () => {
