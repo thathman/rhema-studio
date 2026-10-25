@@ -800,7 +800,7 @@ function RemoteControlSection() {
         <span>
           Accept commands from other devices on this network
           <span className="block text-xs text-muted-foreground">
-            Anyone on the network can then send commands, unless a key is set or devices are paired below. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
+            Other devices still need a key or pairing below while "Require a key or a paired device" is on (the setting on new installs). Web pages open in a browser on the network can never send commands. Untick to accept only from this computer (127.0.0.1). Takes effect when a listener is started.
           </span>
         </span>
       </label>
@@ -824,7 +824,7 @@ function RemoteControlSection() {
         <span>
           Require a key or a paired device
           <span className="block text-xs text-muted-foreground">
-            {anyKey ? "On while a key is set or a device is paired. Removing the last one keeps it on: nothing is accepted until you untick this." : remoteAuthRequired ? "On with no key and no device: every command is refused. Set a key or pair a device, or untick to accept anything." : "Off: anything on the network is accepted (as the app shipped)."}
+            {anyKey ? "On while a key is set or a device is paired. Removing the last one keeps it on: nothing is accepted until you untick this." : remoteAuthRequired ? "On (the setting on new installs): a phone, desk or controller works only once it is paired below or sends the key. With none yet, every command is refused. Untick only if you want anything on the network accepted." : "Off: anything on the network is accepted, as this computer was set up before. Tick this so only paired devices and the key are accepted (new installs start with it on)."}
           </span>
         </span>
       </label>

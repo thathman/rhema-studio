@@ -13,37 +13,106 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::watch;
 
-/// The one connection to a host, if any.
+/// The one connection to a host, if any, and how that host is reached.
 #[derive(Default)]
 pub struct JoinRuntime {
     stop: Mutex<Option<watch::Sender<bool>>>,
+    /// The host's https link as kept at pairing, for this address: every request then goes over
+    /// https with the host's certificate authority pinned (as Rhema Studio Companion does, #209).
+    /// None: plain http (a host without its secure page, or an older one).
+    secure: Mutex<Option<(String, SecureLink)>>,
+}
+
+/// A host's https port and the fingerprint of its certificate authority (64 hex), kept at pairing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecureLink {
+    pub port: u16,
+    pub fingerprint: String,
+}
+
+/// What pairing gives this computer: its token, and the host's https link when it has one.
+#[derive(Debug, Serialize)]
+pub struct Paired {
+    token: String,
+    secure: Option<SecureLink>,
+}
+
+impl JoinRuntime {
+    /// How to reach this host: https with its pinned CA when pairing kept one for this address,
+    /// else plain http as before.
+    fn host(&self, address: &str) -> Result<Host, String> {
+        let secure = self.secure.lock().map_err(|e| e.to_string())?.clone();
+        match secure.filter(|(a, _)| a == address.trim()) {
+            Some((_, link)) => rhema_join::pin::pinned_host(address, link.port, &link.fingerprint),
+            None => Host::plain(address),
+        }
+    }
+}
+
+/// How this computer reaches a host it paired with (the frontend keeps it with the address and
+/// token, and says it again before each connection): https with the host's CA, or None.
+#[tauri::command]
+pub fn join_secure(state: State<'_, JoinRuntime>, address: String, secure: Option<SecureLink>) -> Result<(), String> {
+    if let Some(link) = &secure {
+        if link.port == 0 || !rhema_join::pin::valid_fingerprint(&link.fingerprint) {
+            return Err("This computer's record of the host's certificate is damaged: pair again".into());
+        }
+    }
+    *state.secure.lock().map_err(|e| e.to_string())? = secure.map(|s| (address.trim().to_string(), s));
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct Health {
+    tls_port: Option<u16>,
+}
+
+/// The host's https port, if it says it has one (`/api/v1/health`; an older host does not say).
+async fn host_tls_port(address: &str) -> Result<Option<u16>, String> {
+    let plain = Host::plain(address)?;
+    let r = plain.client(Some(Duration::from_secs(8)))?.get(plain.url("/api/v1/health")).send().await.map_err(|e| plain.unreachable(&e))?;
+    Ok(r.json::<Health>().await.ok().and_then(|h| h.tls_port).filter(|p| *p != 0))
 }
 
 /// Pair with the host while its pairing window is open; the token comes back once. `role` asks
 /// for a role that does less than Present (an OBS companion, #209); the host decides.
+///
+/// A host that runs its secure page is paired over it, its CA read and pinned as Rhema Studio
+/// Companion does (`rhema_join::pin`): from then on this computer reaches it only over https and
+/// only with that CA, so its key and the service never cross the network in the clear. A host
+/// without it (or an older one) is paired over http, as before, and the desk says it is not encrypted.
 #[tauri::command]
-pub async fn join_pair(address: String, code: String, name: String, role: Option<String>) -> Result<String, String> {
-    rhema_join::host::pair(&Host::plain(&address)?, &code, &name, role.as_deref()).await
+pub async fn join_pair(address: String, code: String, name: String, role: Option<String>) -> Result<Paired, String> {
+    let (host, secure) = match host_tls_port(&address).await? {
+        Some(port) => {
+            // The host said it runs https: never fall back to plain http for it.
+            let fingerprint = rhema_join::pin::read_host_ca(&address, port).await?;
+            (rhema_join::pin::pinned_host(&address, port, &fingerprint)?, Some(SecureLink { port, fingerprint }))
+        }
+        None => (Host::plain(&address)?, None),
+    };
+    let token = rhema_join::host::pair(&host, &code, &name, role.as_deref()).await?;
+    Ok(Paired { token, secure })
 }
 
 /// The name and role the host gives this computer's key.
 #[tauri::command]
-pub async fn join_me(address: String, token: String) -> Result<serde_json::Value, String> {
-    rhema_join::host::me(&Host::plain(&address)?, &token).await
+pub async fn join_me(state: State<'_, JoinRuntime>, address: String, token: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::me(&state.host(&address)?, &token).await
 }
 
 /// What an OBS companion is told by its host (#209): the church's cameras, who reads them, and
 /// its own way to read them while the host's camera router runs.
 #[tauri::command]
-pub async fn join_cameras(address: String, token: String) -> Result<serde_json::Value, String> {
-    rhema_join::host::cameras(&Host::plain(&address)?, &token).await
+pub async fn join_cameras(state: State<'_, JoinRuntime>, address: String, token: String) -> Result<serde_json::Value, String> {
+    rhema_join::host::cameras(&state.host(&address)?, &token).await
 }
 
 /// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
 /// OBS plays, for the host's Production → Cameras.
 #[tauri::command]
-pub async fn join_tally(address: String, token: String, tally: serde_json::Value) -> Result<(), String> {
-    rhema_join::host::tally(&Host::plain(&address)?, &token, &tally).await
+pub async fn join_tally(state: State<'_, JoinRuntime>, address: String, token: String, tally: serde_json::Value) -> Result<(), String> {
+    rhema_join::host::tally(&state.host(&address)?, &token, &tally).await
 }
 
 /// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this
@@ -76,10 +145,10 @@ fn refusal(status: u16, error: Option<String>, code: Option<&str>) -> String {
 /// Send one command (the host checks the key's role and the service). A command the host took may
 /// come back with a note for the desk (a scene change sent to the main desk to accept).
 #[tauri::command]
-pub async fn join_command(address: String, token: String, command: serde_json::Value, service: Option<String>) -> Result<Option<String>, String> {
-    let url = format!("{}/api/v1/command", base_url(&address)?);
+pub async fn join_command(state: State<'_, JoinRuntime>, address: String, token: String, command: serde_json::Value, service: Option<String>) -> Result<Option<String>, String> {
+    let host = state.host(&address)?;
     let body = command_body(command, service);
-    let r = client(Some(Duration::from_secs(10)))?.post(url).header("X-Rhema-Key", token).json(&body).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
+    let r = host.client(Some(Duration::from_secs(10)))?.post(host.url("/api/v1/command")).header("X-Rhema-Key", token).json(&body).send().await.map_err(|e| host.unreachable(&e))?;
     let status = r.status();
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
     let text = |k: &str| v.get(k).and_then(|e| e.as_str()).map(String::from);
@@ -92,9 +161,9 @@ pub async fn join_command(address: String, token: String, command: serde_json::V
 /// Join the host's talk channel (Rhema Comms C3): send this desk's complete WebRTC offer, get the
 /// host's answer.
 #[tauri::command]
-pub async fn join_voice(address: String, token: String, sdp: String) -> Result<String, String> {
-    let url = format!("{}/api/v1/voice", base_url(&address)?);
-    let r = client(Some(Duration::from_secs(15)))?.post(url).header("X-Rhema-Key", token).json(&serde_json::json!({ "sdp": sdp })).send().await.map_err(|e| format!("Could not reach the host: {e}"))?;
+pub async fn join_voice(state: State<'_, JoinRuntime>, address: String, token: String, sdp: String) -> Result<String, String> {
+    let host = state.host(&address)?;
+    let r = host.client(Some(Duration::from_secs(15)))?.post(host.url("/api/v1/voice")).header("X-Rhema-Key", token).json(&serde_json::json!({ "sdp": sdp })).send().await.map_err(|e| host.unreachable(&e))?;
     let ok = r.status().is_success();
     let v = r.json::<serde_json::Value>().await.unwrap_or_default();
     if ok {
@@ -107,7 +176,7 @@ pub async fn join_voice(address: String, token: String, sdp: String) -> Result<S
 /// ("connected", "reconnecting" with the reason, "refused", "stopped"). Reconnects by itself.
 #[tauri::command]
 pub fn join_connect(app: AppHandle, state: State<'_, JoinRuntime>, address: String, token: String) -> Result<(), String> {
-    let host = Host::plain(&address)?;
+    let host = state.host(&address)?;
     let (tx, rx) = watch::channel(false);
     if let Some(old) = state.stop.lock().map_err(|e| e.to_string())?.replace(tx) {
         let _ = old.send(true);
@@ -563,5 +632,57 @@ mod tests {
         assert_eq!(tv_name("Living Room._rhema-tv._tcp.local."), "Living Room");
         assert_eq!(tv_name("odd name"), "odd name");
         assert_eq!(tv_name("Bedroom TV · Rhema._rhema-tv._tcp.local."), "Bedroom TV");
+    }
+
+    struct Quiet;
+    impl rhema_api::CommandSink for Quiet {
+        fn emit_event(&self, _: &str, _: &str) -> Result<(), rhema_api::CommandError> { Ok(()) }
+        fn invoke_backend(&self, _: &str, _: &str) -> Result<(), rhema_api::CommandError> { Ok(()) }
+    }
+
+    /// A host on 127.0.0.1 with its pairing window open; with its secure page when `tls`.
+    async fn host(tls: bool) -> (rhema_api::HttpStartResult, String, rhema_api::tls::Pem) {
+        let ca = rhema_api::tls::make_ca().unwrap();
+        let server = rhema_api::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let pairing = rhema_api::new_pairing_window();
+        let code = rhema_api::open_pairing(&pairing);
+        let config = rhema_api::HttpConfig { port: 0, host: "127.0.0.1".into(), pairing, tls: tls.then(|| rhema_api::TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let r = rhema_api::start_http_server(config, std::sync::Arc::new(Quiet), rhema_api::new_shared_status()).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        (r, code, ca)
+    }
+
+    #[tokio::test]
+    async fn a_host_with_https_is_paired_over_it_and_then_reached_only_with_its_own_ca() {
+        let (r, code, ca) = host(true).await;
+        let address = format!("127.0.0.1:{}", r.bound_port);
+        let paired = join_pair(address.clone(), code, "Ade".into(), None).await.unwrap();
+        let secure = paired.secure.clone().expect("paired over https");
+        assert_eq!(Some(secure.port), r.tls_port);
+        assert_eq!(secure.fingerprint, rhema_api::tls::fingerprint(&ca).unwrap(), "the host's CA, as its Settings shows it");
+        let rt = JoinRuntime::default();
+        *rt.secure.lock().unwrap() = Some((address.clone(), secure.clone()));
+        let pinned = rt.host(&address).unwrap();
+        assert!(pinned.is_secure());
+        assert_eq!(rhema_join::host::me(&pinned, &paired.token).await.unwrap()["name"], "Ade");
+        // Pinned to another computer's CA: refused, and said plainly.
+        let other = rhema_api::tls::fingerprint(&rhema_api::tls::make_ca().unwrap()).unwrap();
+        *rt.secure.lock().unwrap() = Some((address.clone(), SecureLink { port: secure.port, fingerprint: other }));
+        assert_eq!(rhema_join::host::me(&rt.host(&address).unwrap(), &paired.token).await.unwrap_err(), rhema_join::pin::NOT_THE_PAIRED_HOST);
+        // Another address than the one paired: plain http (it has its own pairing).
+        assert!(!rt.host("127.0.0.1:1").unwrap().is_secure());
+        let mut h = r.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn a_host_without_https_is_paired_over_http() {
+        let (r, code, _) = host(false).await;
+        let address = format!("127.0.0.1:{}", r.bound_port);
+        let paired = join_pair(address.clone(), code, "Ade".into(), None).await.unwrap();
+        assert!(paired.secure.is_none() && paired.token.len() == 64);
+        assert!(!JoinRuntime::default().host(&address).unwrap().is_secure());
+        let mut h = r.handle;
+        h.stop();
     }
 }

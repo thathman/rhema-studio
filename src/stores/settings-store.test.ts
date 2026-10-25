@@ -162,7 +162,8 @@ describe("settings store", () => {
     expect(s.operatorName).toBe("")
     expect(s.remoteSecret).toBe("")
     expect(s.remoteDevices).toEqual([])
-    expect(s.remoteAuthRequired).toBe(false)
+    // Absent from the file: the new default (a key or a paired device is required).
+    expect(s.remoteAuthRequired).toBe(true)
     expect([s.talkInputId, s.talkOutputId]).toEqual(["", ""]) // the system's headset
     expect(s.timekeeperCountdown).toEqual({ to: "next", chime: false, chimeMinutes: 2 }) // no chime unless turned on
     expect(mockSet).not.toHaveBeenCalled()
@@ -188,7 +189,7 @@ describe("settings store", () => {
     await hydrateSettings()
     const s = useSettingsStore.getState()
     expect(s.remoteDevices).toEqual([])
-    expect(s.remoteAuthRequired).toBe(false)
+    expect(s.remoteAuthRequired).toBe(true)
     expect(s.operatorName).toBe("")
     expect(s.gain).toBe(before.gain)
     expect(s.brandKit).toEqual(before.brandKit)
@@ -218,6 +219,16 @@ describe("settings store", () => {
     expect(s.operatorName).toBe("Tolu")
     // The talk headset (Rhema Comms) is kept per computer.
     expect([s.talkInputId, s.talkOutputId]).toEqual(["headset-mic", "headset-ears"])
+  })
+
+  it("a new install requires a key on the network; a church that saved it off keeps it off", async () => {
+    const { useSettingsStore: fresh } = await import("./settings-store")
+    expect(fresh.getState().remoteAuthRequired).toBe(true)
+    vi.resetModules()
+    mockGet.mockImplementation(async (key: string) => (key === "remoteAuthRequired" ? false : key === "machine" ? { remoteAuthRequired: false } : undefined))
+    const { hydrateSettings, useSettingsStore } = await import("./settings-store")
+    await hydrateSettings()
+    expect(useSettingsStore.getState().remoteAuthRequired).toBe(false)
   })
 
   it("an old settings file without the setup section keeps everything and gets the setup defaults (#298)", async () => {

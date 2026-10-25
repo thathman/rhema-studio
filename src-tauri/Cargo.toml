@@ -66,7 +66,9 @@ rhema-detection = { path = "crates/detection", features = ["onnx", "vector-searc
 rhema-api = { path = "crates/api" }
 rhema-content = { path = "crates/content" }
 # Find, pair with and follow a host; shared with Rhema Studio Companion (#209).
-rhema-join = { path = "crates/join", features = ["keychain"] }
+# `pinned`: a joined desk talks to a host that runs https only over it, the host's CA pinned at
+# pairing, as Rhema Studio Companion does (#209).
+rhema-join = { path = "crates/join", features = ["keychain", "pinned"] }
 crossbeam-channel = "0.5"
 dotenvy = "0.15"
 sha2 = "0.10"
@@ -83,6 +85,8 @@ futures-util = "0.3"
 uuid = { version = "1", features = ["v4"] }
 # #198: find Rhema Receiver TVs on the LAN (mDNS, pure Rust, MIT/Apache-2.0).
 mdns-sd = { version = "0.21", default-features = false }
+# This computer's addresses on each network, for the host card (already used by mdns-sd).
+if-addrs = "0.15"
 # #198: the code check with a TV before a feed link is sent (commands/tv_proof.rs).
 num-bigint = "0.4"
 hmac = "0.12"

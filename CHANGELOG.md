@@ -4,6 +4,13 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Host/Join hardening: who is connected, cutting a desk at once, browser pages kept out, https between computers, Editor and View only (#162, #197)
+- Production → Operators → **Host the service** now shows this computer's address on each network, the secure link and its certificate code, each paired desk as **Connected now** or **Seen 5 min ago** with its address, and a **Stop hosting** button (with a confirm) that disconnects every joined computer, phone and browser feed while the service here carries on.
+- Taking back control, revoking or changing a desk's role cuts its Live State stream within a quarter of a second; the desk reconnects at once as what it is now (paused, its new role), or is told to pair again.
+- Web pages open in a browser on the church network can no longer send commands to Rhema or read its Live State: only Rhema's own pages (phone remote, camera, feeds, TV receiver) and its own windows are answered.
+- New installs need a key or a paired device before anything on the network is accepted. A church that already set this keeps its setting.
+- A joined computer now pairs and works over https when the host runs the secure link, and then trusts only that host's own certificate, kept at pairing the same way Rhema Studio Companion does (both computers show the same certificate code). A host without it still works over plain http, and the desk says plainly that it is not encrypted.
+- Two new roles: **Editor** (puts verses and songs in the main desk's Preview, adds to the queue, makes and changes scenes; never goes live) and **View only** (follows the service, Talk and notices; changes nothing).
 ### Cameras: what really arrives and what each screen really shows, and recovery controls (#213, #208)
 - Connected is no longer counted as working. Production → Cameras and Show health show each camera's picture size, its rate in Mbit/s, and the frames a second Rhema's own screens and TVs really show. A camera the router still has but that sends nothing for more than 3 seconds shows **Frozen** (with how long nothing has arrived), and its screens show the camera's fallback (colour bars, static, words) instead of a still picture passed off as live.
 - Each Google TV and browser page that plays a camera reports how it plays it: Show health says, for example, "Foyer TV: pulpit camera 29.8 fps, 0.2% dropped", and lists a screen that is dropping frames, showing too few, or getting no new frame.

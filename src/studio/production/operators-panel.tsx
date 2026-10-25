@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { RUN_STATE_WORDS } from "@/lib/timing-state"
 import { validTimeZone } from "@/lib/church-time"
 import { PinIcon } from "lucide-react"
@@ -24,15 +24,19 @@ import { CameraDesk, DeskSceneEditor, ObsDesk, SongsDesk, StageDesk } from "@/st
 import { deskEditable } from "@/lib/desk-scenes"
 import { editsScenes, REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
 import { Card, JoinForm } from "@/studio/production/join-form"
+import { certificateWords } from "@/lib/host-certificate"
+import { presenceRows, readHostStatus, seenWords, type HostStatus } from "@/lib/host-presence"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
 
-type Desk = "clock" | "bible" | "scenes" | "songs" | "stage" | "cameras" | "obs"
+type Desk = "clock" | "bible" | "scenes" | "songs" | "stage" | "cameras" | "obs" | "prepare"
 /** Which desks a role gets on a joined computer (the host checks every command again). */
 const DESKS: Record<string, readonly Desk[]> = {
   timekeeper: ["clock"], bible: ["bible"], screens: ["scenes"], worship: ["songs"], stage: ["stage"], camera: ["cameras", "scenes"], obs: ["obs"],
   present: ["clock", "bible", "songs", "scenes", "stage"], configure: ["clock", "bible", "songs", "scenes", "stage"],
+  // An editor prepares scenes (nothing live); view only follows the service, the run of show, Talk and notices.
+  editor: ["prepare", "scenes"], viewer: [],
 }
 // The host's times on the church's clock when the host says which (#196 R1.1), else this computer's.
 const hhmm = (ms: number, zone?: string) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", ...(zone && validTimeZone(zone) ? { timeZone: zone } : {}) })
@@ -76,39 +80,88 @@ export function OperatorsPanel() {
 
 function HostCard() {
   const devices = useSettingsStore((s) => s.remoteDevices)
-  const [http, setHttp] = useState<{ running: boolean; lan: boolean; port: number | null } | null>(null)
+  const [host, setHost] = useState<HostStatus | null>(null)
+  const [confirmStop, setConfirmStop] = useState(false)
+  const [stopError, setStopError] = useState<string | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  const look = useRef<() => void>(() => {})
   useEffect(() => {
     let alive = true
-    const look = () => invoke<{ running: boolean; lan: boolean; port: number | null }>("get_http_status").then((s) => alive && setHttp(s)).catch(() => alive && setHttp(null))
-    void look()
-    const t = setInterval(look, 5000)
+    look.current = () => {
+      setNow(Date.now())
+      void invoke<unknown>("host_status").then((s) => alive && setHost(readHostStatus(s))).catch(() => alive && setHost(null))
+    }
+    look.current()
+    // Often enough that a desk joining or dropping out shows within a couple of seconds.
+    const t = setInterval(() => look.current(), 2000)
     return () => {
       alive = false
       clearInterval(t)
     }
   }, [])
-  const hosting = !!http?.running && http.lan
+  const hosting = !!host?.running && host.lan
+  const rows = presenceRows(devices, host?.desks ?? [])
+  const stopHosting = async () => {
+    setConfirmStop(false)
+    try {
+      await invoke("stop_http")
+      setStopError(null)
+    } catch (e) {
+      // Already stopped elsewhere (Settings): the card shows it at the next look.
+      if (!String(e).includes("not running")) setStopError(String(e))
+    }
+    // Not started again by itself at the next start of Rhema either.
+    useSettingsStore.getState().setRemoteListeners({ http: false })
+    look.current()
+  }
   return (
     <Card kicker="This computer" title="Host the service">
       <p className="text-muted-foreground">This computer runs the service with every control, with or without anyone joined. Paired computers and phones follow it and do only what their role allows; if one drops out, nothing here changes.</p>
       <p className={cn("font-semibold", hosting ? "text-primary-text" : "text-muted-foreground")}>
-        {hosting ? `Hosting on the church network (port ${http?.port})` : http?.running ? "Listening on this computer only: turn on the network in Settings → Remote control" : "Not hosting: start the HTTP listener on the network in Settings → Remote control"}
+        {hosting ? `Hosting on the church network (port ${host?.port})` : host?.running ? "Listening on this computer only: turn on the network in Settings → Remote control" : "Not hosting: start the HTTP listener on the network in Settings → Remote control"}
       </p>
+      {hosting && (
+        <div className="flex flex-col gap-1" aria-label="This computer's address">
+          <p className="text-muted-foreground">Joining computers and phones use {host.addresses.length > 1 ? "one of these addresses (the one on their network)" : "this address"}:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {host.addresses.length === 0 && <span className="text-muted-foreground">No network address found: is this computer on the church network?</span>}
+            {host.addresses.map((a) => <code key={a} className="rounded-sm bg-muted px-1.5 py-0.5 font-mono tabular-nums">{a}</code>)}
+          </div>
+          {host.tlsPort ? (
+            <p className="text-muted-foreground">Secure link on port {host.tlsPort}{host.caFingerprint ? <>; certificate <span className="font-mono">{certificateWords(host.caFingerprint)}</span> (a joined computer shows the same)</> : null}.</p>
+          ) : (
+            <p className="text-confidence-mid">No secure link: joined computers talk to this one unencrypted. Turn on Secure page for phones (https) in Settings → Remote control and start the listener again; computers paired before then pair again to use it.</p>
+          )}
+        </div>
+      )}
       <ul aria-label="Paired operators" className="flex flex-col divide-y divide-border rounded-md border border-border">
-        {devices.length === 0 && <li className="px-2.5 py-2 text-muted-foreground">No one paired yet.</li>}
-        {devices.map((d) => (
-          <li key={d.hash} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
-            <span className="min-w-0 flex-1 truncate font-medium">{d.name}</span>
-            {d.paused === true && <span className="rounded-full bg-muted px-2 py-0.5 text-[0.625rem] font-bold text-muted-foreground uppercase">Paused</span>}
-            <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "configure"))?.may}>{roleLabel(d.role ?? "configure")}</span>
-            <DeskControlButton hash={d.hash} name={d.name} paused={d.paused === true} />
+        {rows.length === 0 && <li className="px-2.5 py-2 text-muted-foreground">No one paired yet.</li>}
+        {rows.map(({ device: d, hash, name, seen }) => (
+          <li key={hash} className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
+            <span className={cn("size-2 shrink-0 rounded-full", seen?.connected ? "bg-primary" : "bg-muted-foreground/40")} aria-hidden />
+            <span className="min-w-0 flex-1 truncate font-medium">{d ? d.name : name}</span>
+            <span className={cn("text-[0.6875rem]", seen?.connected ? "text-primary-text" : "text-muted-foreground")} title={seen ? `From ${seen.address}` : undefined}>
+              {hosting ? seenWords(seen, now, (ms) => hhmm(ms)) : "Not connected"}{seen && hosting ? ` · ${seen.address}` : ""}
+            </span>
+            {d?.paused === true && <span className="rounded-full bg-muted px-2 py-0.5 text-[0.625rem] font-bold text-muted-foreground uppercase">Paused</span>}
+            {d && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === (d.role ?? "configure"))?.may}>{roleLabel(d.role ?? "configure")}</span>}
+            {d && <DeskControlButton hash={d.hash} name={d.name} paused={d.paused === true} />}
           </li>
         ))}
       </ul>
       <p className="text-muted-foreground">Take back control stops a desk's commands at once without unpairing it; it still sees the service and stays on Talk. Give control back when it may help again.</p>
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => openSettings("remote")}>Pair an operator, set roles…</Button>
+        {host?.running && !confirmStop && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmStop(true)}>Stop hosting</Button>}
+        {confirmStop && (
+          <span role="group" aria-label="Stop hosting?" className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 px-2 py-1">
+            <span>Every joined computer and phone is disconnected (this computer's service goes on).</span>
+            <Button size="xs" variant="destructive" onClick={() => void stopHosting()}>Stop hosting</Button>
+            <Button size="xs" variant="ghost" onClick={() => setConfirmStop(false)}>Cancel</Button>
+          </span>
+        )}
       </div>
+      {stopError && <p role="alert" className="text-destructive">{stopError}</p>}
     </Card>
   )
 }
@@ -128,6 +181,8 @@ function JoinedDesk() {
   const me = useJoin((s) => s.me)
   const live = useJoin((s) => s.live)
   const address = useSettingsStore((s) => s.joinAddress)
+  const secure = useJoin((s) => s.secure)
+  const fingerprint = useSettingsStore((s) => s.joinSecure?.fingerprint)
   const desks = DESKS[me?.role ?? "present"] ?? []
   const fresh = useFreshness()
   return (
@@ -138,10 +193,16 @@ function JoinedDesk() {
         </span>
         {me && <span className="text-muted-foreground" title={REMOTE_ROLES.find((r) => r.id === me.role)?.may}>as {me.name} · {roleLabel(me.role)}</span>}
         {live && fresh.showSince && <span role="status" className="font-semibold text-confidence-mid">Last update {Math.round(fresh.sinceMs / 1000)} s ago</span>}
+        {secure === true && <span className="text-muted-foreground" title="This computer checks the host's certificate, kept when it paired: compare it with the host's card (Production → Operators).">Encrypted{fingerprint ? ` · certificate ${certificateWords(fingerprint)}` : ""}</span>}
         <span className="flex-1" />
         <Button size="sm" variant="outline" onClick={() => void useJoin.getState().leave()}>Leave</Button>
         <Button size="sm" variant="ghost" onClick={() => void useJoin.getState().leave(true)}>Forget this host</Button>
       </div>
+      {secure === false && status === "connected" && (
+        <p role="status" className="rounded-md border border-confidence-mid/40 bg-confidence-mid/10 px-2.5 py-2">
+          <span className="font-semibold">Not encrypted.</span> <span className="text-muted-foreground">This host has no secure link, so the service and this computer's key cross the network in plain text. At the host: Settings → Remote control → Secure page for phones (https), start the listener again, then pair this computer again.</span>
+        </p>
+      )}
       {paused && (
         <p role="status" className="rounded-md border border-border bg-muted px-2.5 py-2 font-semibold">
           Paused by the main desk. <span className="font-normal text-muted-foreground">You still see the service and can talk and send notices; the controls come back when the main desk gives control back.</span>
@@ -163,6 +224,7 @@ function JoinedDesk() {
             {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
+          {desks.includes("prepare") && <PrepareDesk />}
           {desks.includes("bible") && <BibleDesk live={live} />}
           {desks.includes("songs") && <SongsDesk live={live} />}
           {desks.includes("cameras") && <CameraDesk live={live} />}
@@ -356,6 +418,36 @@ function DeskHold({ live }: { live: LiveStateV1 }) {
   )
 }
 
+/** An editor's desk: a verse or a song into the main desk's Preview, never live (the host checks the role too). */
+function PrepareDesk() {
+  const ok = useCanSend()
+  const [verse, setVerse] = useState("")
+  const [song, setSong] = useState("")
+  const [said, setSaid] = useState("")
+  const send = useJoin.getState().send
+  const put = async (command: "bible_preview" | "song_preview", value: string, clear: () => void) => {
+    const r = await send({ command, value })
+    if (r.ok) {
+      clear()
+      setSaid(`${value} is in the main desk's Preview.`)
+    } else setSaid("")
+  }
+  return (
+    <section aria-label="Prepare desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+      <p className="font-semibold">Prepare <span className="font-normal text-muted-foreground">· into the main desk's Preview; nothing goes live from here</span></p>
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const v = verse.trim(); if (v) void put("bible_preview", v, () => setVerse("")) }}>
+        <input aria-label="Bible reference to preview" value={verse} onChange={(e) => setVerse(e.target.value)} placeholder="Romans 8:28" maxLength={120} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+        <Button size="sm" variant="outline" type="submit" disabled={!ok || !verse.trim()}>Preview verse</Button>
+      </form>
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); const v = song.trim(); if (v) void put("song_preview", v, () => setSong("")) }}>
+        <input aria-label="Song or hymn title to preview" value={song} onChange={(e) => setSong(e.target.value)} placeholder="Amazing Grace" maxLength={120} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
+        <Button size="sm" variant="outline" type="submit" disabled={!ok || !song.trim()}>Preview song</Button>
+      </form>
+      {said && <p role="status" className="text-muted-foreground">{said}</p>}
+    </section>
+  )
+}
+
 /** The Bible source: type a reference and activate it; step through the passage; take it off (Bible operator). */
 function BibleDesk({ live }: { live: LiveStateV1 }) {
   const ok = useCanSend()
@@ -392,7 +484,8 @@ function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
   const [said, setSaid] = useState("")
   const output = live.outputs.find((o) => o.id === outputId) ?? live.outputs[0]
   const send = useJoin.getState().send
-  const takes = role !== "camera"
+  // A camera desk and an editor change scenes but never put one on a screen.
+  const takes = role !== "camera" && role !== "editor"
   const edits = editsScenes(role)
   const cameraOnly = role === "camera"
   const open = editing === "new" ? null : live.scenes.find((s) => s.id === editing)
