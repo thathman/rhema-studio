@@ -3,6 +3,7 @@ import path from "path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import { configDefaults } from "vitest/config"
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -42,6 +43,8 @@ export default defineConfig({
     },
   },
   test: {
+    // Cloudflare game rules use Node built-in tests in a separate project.
+    exclude: [...configDefaults.exclude, "engage-cloud/**"],
     // Many store tests import modules afresh (resetModules); a cold import can pass vitest's 5 s
     // default on a loaded Intel Mac and fail at random (#176, #180, the OBS and sound stores).
     testTimeout: 20_000,
