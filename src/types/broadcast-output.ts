@@ -1,5 +1,5 @@
 import type { ContentType, FeedSourceKind } from "./broadcast"
-import type { CountdownTo } from "./scene"
+import type { CountdownTo, Scene } from "./scene"
 import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
 /** display: a window on a monitor; ndi: an NDI sender; browser: a web page on the church network (OBS Browser Source, a TV's browser). */
@@ -348,6 +348,8 @@ export interface BroadcastOutput {
   stageNight?: boolean
   /** The congregation scene this output shows (its program, ADR 0001); absent: its own feed, full frame. */
   sceneId?: string
+  /** Immutable layout revision taken to this output; later edits to the saved scene do not change the program. */
+  sceneSnapshot?: Scene
   /** Browser feeds: the secret in the feed's link (renewing it closes the old link). */
   feedToken?: string
   signage?: SignageSettings

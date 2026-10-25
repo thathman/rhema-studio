@@ -102,6 +102,23 @@ describe("Present's scenes", () => {
     expect(output(MAIN_OUTPUT_ID).sceneId).toBe("lyr")
   })
 
+  it("shows the taken revision and permits an explicit Take of a saved edit", async () => {
+    const taken = { ...camera, name: "Taken camera layout", updatedAt: 10 }
+    const saved = { ...camera, name: "Edited camera layout", updatedAt: 11 }
+    await act(async () => useBroadcastStore.setState({
+      scenes: [saved],
+      outputs: outputs().map((o) => o.id === MAIN_OUTPUT_ID ? { ...o, sceneId: camera.id, sceneSnapshot: taken } : o),
+    }))
+    await render()
+    expect(el.textContent).toContain("Shows Taken camera layout")
+    await click(sceneButton("Edited camera layout"))
+    const takeUpdated = button("Take scene Edited camera layout to Sanctuary")
+    expect(takeUpdated.getAttribute("aria-disabled")).toBeNull()
+    await click(takeUpdated)
+    expect(take).toHaveBeenLastCalledWith(MAIN_OUTPUT_ID, camera.id)
+    expect(output(MAIN_OUTPUT_ID).sceneSnapshot?.name).toBe("Edited camera layout")
+  })
+
   it("says why a button cannot act, and a click on it does nothing", async () => {
     await render()
     const takeBtn = button("Take scene")

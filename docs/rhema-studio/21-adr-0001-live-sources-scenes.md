@@ -85,8 +85,8 @@ scene, cameras included (a ticker-only feed shows Black too); Black also hides t
   composer's preview use the same code. The lower third and ticker draw over the whole frame, unless
   the scene has a ticker or lower-third layer of its own (#243): such a scene owns that source on its
   output, which then draws it only in the layer's box. A logo layer shows the Brand Kit logo.
-- **Composer:** Production → Programs. Edits stay in the composer until Save or Take, so a scene on air
-  never changes while it is arranged.
+- **Composer:** Production → Scenes. Save updates the library scene; an output keeps the revision it
+  took until an explicit Take applies the saved revision.
 
 ### Host/Join as built (ARCH-004 slice 1)
 

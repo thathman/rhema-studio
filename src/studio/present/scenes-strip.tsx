@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { ChevronDownIcon, LayersIcon, RotateCcwIcon, UndoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { drawScene } from "@/lib/scene-renderer"
-import { sceneFrame } from "@/lib/scenes"
+import { sceneForOutput, sceneFrame } from "@/lib/scenes"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { cleanIntentId } from "@/lib/item-intent"
@@ -36,7 +36,7 @@ export function ScenesStrip({ className }: { className?: string }) {
   const planned = usePlannedScene(scenes)
   if (congregation.length === 0 || scenes.length === 0) return null
   const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
-  const sceneName = (o: BroadcastOutput) => scenes.find((s) => s.id === o.sceneId)?.name ?? "its own feed"
+  const sceneName = (o: BroadcastOutput) => sceneForOutput(o, scenes)?.name ?? "its own feed"
 
   return (
     <section aria-label="Scenes" className={cn("flex shrink-0 flex-col rounded-lg border border-border bg-card", className)}>
@@ -103,7 +103,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
     setSeenPlanned(plannedId)
     setOwn(undefined)
   }
-  const showing = scenes.find((s) => s.id === output.sceneId)
+  const showing = sceneForOutput(output, scenes)
   // Already on this screen: nothing to pre-pick.
   const suggested = planned && planned.id !== showing?.id ? planned : null
   const pickedId = own !== undefined ? own : (suggested?.id ?? null)
@@ -111,7 +111,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
   const restorable = back ? scenes.find((s) => s.id === back) : undefined
   const b = useBroadcastStore.getState
 
-  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id ? `${output.name} already shows ${picked.name}` : null
+  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id && picked.updatedAt === showing.updatedAt ? `${output.name} already shows ${picked.name}` : null
   const ownReason = !showing ? `${output.name} already shows its own feed` : null
   const restoreReason = showing ? `${output.name} shows ${showing.name}: Restore is for after Back to its own feed` : !restorable ? `${output.name} has not shown a scene yet` : null
   // In rehearsal the scene on a screen is the rehearsal's, never called on air.

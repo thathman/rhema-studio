@@ -41,7 +41,8 @@ describe("run of show timing: actual times", () => {
     useBroadcastStore.setState({ isLive: true, liveItemId: "Reading" })
     useEventClock.setState({ currentId: "Reading" })
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<TimingPanel />))
+    const root = createRoot(el)
+    await act(async () => root.render(<TimingPanel />))
     const text = el.textContent ?? ""
     expect(text).toContain("Began at 10:04, 4 min late")
     // Planned 3 min, on air 5 min: 2 min over.
@@ -62,6 +63,7 @@ describe("run of show timing: actual times", () => {
       ["Reading", "", "10:03", "10:13", "10", "10:09 · 0:00", "10:09–10:19", "+6 min", "", "On now"],
     ])
     expect(document.querySelector("tfoot")?.textContent).toContain("ends 10:19")
+    await act(async () => root.unmount())
   })
 })
 
@@ -82,7 +84,8 @@ describe("run of show timing: an item jumped over", () => {
     })
     useEventClock.setState({ currentId: "Reading" })
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<TimingPanel />))
+    const root = createRoot(el)
+    await act(async () => root.render(<TimingPanel />))
     expect(el.textContent).toContain("Skipped")
     const table = [...el.querySelectorAll("button")].find((b) => b.textContent === "Table")!
     await act(async () => table.click())
@@ -90,5 +93,6 @@ describe("run of show timing: an item jumped over", () => {
     expect(rows[1]).toEqual(["Notices", "", "10:03", "10:08", "5", "", "", "", "", "Skipped"])
     // The reading follows the welcome: expected 10:03–10:13, 5 min early against its plan (10:08).
     expect(rows[2].slice(6, 8)).toEqual(["10:03–10:13", "−5 min"])
+    await act(async () => root.unmount())
   })
 })

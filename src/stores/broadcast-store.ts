@@ -29,7 +29,7 @@ import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/
 import { useMediaStore } from "@/stores/media-store"
 import { feedLost, overscanPct } from "@/lib/feed-receivers"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
-import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } from "@/lib/scenes"
+import { normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
 import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
@@ -509,6 +509,15 @@ function sceneTake(outputId: string, sceneId: string | null, by: string | undefi
   return { sceneTakes: { ...s.sceneTakes, [outputId]: { sceneId, revision: ++activations, at: Date.now(), ...(by ? { by } : {}) } } }
 }
 
+function withSceneSnapshot(output: BroadcastOutput, scenes: readonly Scene[]): BroadcastOutput {
+  const stored = output.sceneSnapshot?.id === output.sceneId ? normalizeScene(output.sceneSnapshot) : null
+  const snapshot = stored ?? sceneForOutput({ ...output, sceneSnapshot: undefined }, scenes)
+  const next = { ...output }
+  if (snapshot) next.sceneSnapshot = snapshot
+  else delete next.sceneSnapshot
+  return next
+}
+
 /** Send the ticker (on, changed or off) to the outputs that show it. */
 function syncTickerOutputs(): void {
   const s = useBroadcastStore.getState()
@@ -520,7 +529,7 @@ function syncTickerOutputs(): void {
 
 /** The output shows a scene with a layer of this kind (a ticker, lower third or logo in its own box). */
 function showsSceneWith(o: BroadcastOutput, kind: SceneLayerKind): boolean {
-  const scene = o.sceneId && (o.role ?? "congregation") === "congregation" ? useBroadcastStore.getState().scenes.find((x) => x.id === o.sceneId) : undefined
+  const scene = sceneForOutput(o, useBroadcastStore.getState().scenes)
   return !!scene?.layers.some((l) => l.kind === kind)
 }
 
@@ -794,7 +803,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set({ countdowns })
     // Clock layers count down by themselves: a scene is sent again only when what it counts to moves.
     for (const o of get().outputs) {
-      const scene = o.sceneId && (o.role ?? "congregation") === "congregation" ? get().scenes.find((x) => x.id === o.sceneId) : undefined
+      const scene = sceneForOutput(o, get().scenes)
       if (scene?.layers.some((l) => l.kind === "clock" && l.visible && l.clockShows === "countdown")) get().syncBroadcastOutputFor(o.id)
     }
     // A countdown display counting to an item's start or a group's end follows it as it moves.
@@ -927,7 +936,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (!output) return
     // The look for what is on air: this output's theme for that kind of content, else its main theme.
     const shown = feedFrame(s, output.shows)
-    const scene = output.sceneId && (output.role ?? "congregation") === "congregation" ? s.scenes.find((x) => x.id === output.sceneId) : undefined
+    const scene = sceneForOutput(output, s.scenes)
     const themeId = themeIdFor(output, scene ? null : shown?.content)
     const saved = s.themes.find((t) => t.id === themeId) ?? s.themes.find((t) => t.id === output.themeId) ?? s.themes[0]
     if (!saved) return
@@ -1038,11 +1047,21 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     set((s) => ({
       outputs: s.outputs.some((o) => o.id === output.id)
         ? s.outputs
-        : [...s.outputs, output],
+        : [...s.outputs, withSceneSnapshot(output, s.scenes)],
     })),
   updateOutput: (id, patch) => {
     set((s) => ({
-      outputs: s.outputs.map((o) => (o.id === id ? { ...o, ...patch, id } : o)),
+      outputs: s.outputs.map((o) => {
+        if (o.id !== id) return o
+        const next = { ...o, ...patch, id }
+        if ("sceneSnapshot" in patch) {
+          if (patch.sceneSnapshot) next.sceneSnapshot = patch.sceneSnapshot
+          else delete next.sceneSnapshot
+        } else if ("sceneId" in patch && patch.sceneId !== o.sceneId && !s.rehearsal) {
+          return withSceneSnapshot(next, s.scenes)
+        }
+        return next
+      }),
       ...(id === MAIN_OUTPUT_ID && patch.themeId
         ? { activeThemeId: patch.themeId }
         : {}),
@@ -1349,18 +1368,18 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   saveScene: (scene) => {
     const s = get()
     const at = s.scenes.findIndex((x) => x.id === scene.id)
-    const next = { ...scene, updatedAt: Date.now() }
+    const next = { ...scene, updatedAt: Math.max(Date.now(), (s.scenes[at]?.updatedAt ?? 0) + 1) }
     set({ scenes: at < 0 ? [...s.scenes, next] : s.scenes.map((x, i) => (i === at ? next : x)) })
-    for (const o of get().outputs) if (o.sceneId === scene.id) get().syncBroadcastOutputFor(o.id)
   },
   deleteScene: (id) => {
     set({ scenes: get().scenes.filter((x) => x.id !== id) })
     for (const o of get().outputs) if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
   },
   takeScene: (outputId, sceneId, by = currentActor()) => {
-    if (!get().scenes.some((x) => x.id === sceneId)) return
+    const scene = get().scenes.find((x) => x.id === sceneId)
+    if (!scene) return
     set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
-    get().updateOutput(outputId, { sceneId })
+    get().updateOutput(outputId, { sceneId, ...(!get().rehearsal ? { sceneSnapshot: normalizeScene(scene) ?? scene } : {}) })
   },
   releaseScene: (outputId, by = currentActor()) => {
     if (!get().outputs.find((o) => o.id === outputId)?.sceneId) return
@@ -1548,6 +1567,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
       const items = await store.get("tickerItems")
       if (Array.isArray(items)) patch.tickerItems = items.filter((i): i is string => typeof i === "string")
       patch.tickerPresets = normalizePresets(await store.get("tickerPresets"))
+      patch.outputs = patch.outputs?.map((output) => withSceneSnapshot(output, patch.scenes ?? useBroadcastStore.getState().scenes))
 
       useBroadcastStore.setState(patch)
 
@@ -1690,6 +1710,7 @@ export function restoreLooksFromBackup(raw: unknown): void {
   if (looks.tickerPresets !== undefined) patch.tickerPresets = normalizePresets(looks.tickerPresets)
   if (typeof looks.autoLive === "boolean") patch.autoLive = looks.autoLive
   if (typeof looks.autoBibleFeeds === "boolean") patch.autoBibleFeeds = looks.autoBibleFeeds && !(patch.autoLive ?? here.autoLive)
+  if (patch.outputs) patch.outputs = patch.outputs.map((output) => withSceneSnapshot(output, patch.scenes ?? here.scenes))
   useBroadcastStore.setState(patch)
 }
 
@@ -1809,7 +1830,7 @@ useTimerStore.subscribe((s, prev) => {
   if (s.timer === prev.timer) return
   const b = useBroadcastStore.getState()
   for (const o of b.outputs) {
-    const scene = o.sceneId ? b.scenes.find((x) => x.id === o.sceneId) : undefined
+    const scene = sceneForOutput(o, b.scenes)
     if (scene?.layers.some((l) => l.kind === "clock" && l.visible)) b.syncBroadcastOutputFor(o.id)
   }
 })
