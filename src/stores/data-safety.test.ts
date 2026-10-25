@@ -67,6 +67,9 @@ describe("nothing in use on screen is deleted (data loss audit)", () => {
     await keepJournal()
     expect(mockInvoke).toHaveBeenCalledWith("content_save_service_log", expect.objectContaining({ body: expect.stringContaining("John 3:16") }))
     expect(journalUnkept()).toBe(false)
+    // What was said goes apart from the log, so retention can remove it alone (#246 C17).
+    await keepJournal("\nTranscript (recognised speech by Whisper)\n09:02  Amen")
+    expect(mockInvoke).toHaveBeenLastCalledWith("content_save_service_log", expect.objectContaining({ transcript: expect.stringContaining("Amen"), body: expect.not.stringContaining("Amen") }))
     useJournalStore.getState().add({ kind: "live", label: "John 3:17" })
     useJournalStore.getState().clear()
     expect(journalUnkept()).toBe(false)

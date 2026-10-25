@@ -93,7 +93,7 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
     case "ai_drafts_list": return [] // no assistant drafts in the browser; null crashed Prepare
     case "content_remove_old_log_transcripts": return 0
     case "content_set_actor": return null
-    case "content_save_service_log": { const id = crypto.randomUUID(); logs.unshift({ id, program_id: (args.programId as string | null) ?? null, title: String(args.title), saved_at: new Date().toISOString(), bytes: String(args.body).length, body: String(args.body) }); return logs[0] }
+    case "content_save_service_log": { const id = crypto.randomUUID(); logs.unshift({ id, program_id: (args.programId as string | null) ?? null, title: String(args.title), saved_at: new Date().toISOString(), bytes: String(args.body).length + String(args.transcript ?? "").length, body: String(args.body) + String(args.transcript ?? "") }); return logs[0] }
     case "content_list_service_logs": { const q = String(args.query ?? "").toLowerCase(); return logs.filter((l) => !q || l.title.toLowerCase().includes(q) || l.body.toLowerCase().includes(q)) }
     case "content_get_service_log": return logs.find((l) => l.id === args.id) ?? null
     case "content_delete_service_log": { const i = logs.findIndex((l) => l.id === args.id); if (i >= 0) logs.splice(i, 1); return null }

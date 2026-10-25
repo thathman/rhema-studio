@@ -71,8 +71,8 @@ pub fn content_create_program(
 }
 
 #[tauri::command]
-pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Option<String>, title: String, body: String) -> CmdResult<ServiceLogSummary> {
-    with_db(&state, |db| db.save_service_log(program_id.as_deref(), &title, &body))
+pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Option<String>, title: String, body: String, transcript: Option<String>) -> CmdResult<ServiceLogSummary> {
+    with_db(&state, |db| db.save_service_log(program_id.as_deref(), &title, &body, transcript.as_deref()))
 }
 
 /// Song usage between two ISO dates, for licence (CCLI) reports.

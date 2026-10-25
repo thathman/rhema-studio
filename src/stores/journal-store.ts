@@ -72,12 +72,15 @@ export function journalText(): string {
 /** Something was logged since the log was last kept. */
 export const journalUnkept = () => useJournalStore.getState().added > useJournalStore.getState().keptAt
 
-/** Keep the log in the library (Earlier logs); `extra` is appended (the transcript, when ticked). */
-export async function keepJournal(extra = ""): Promise<void> {
+/**
+ * Keep the log in the library (Earlier logs); `transcript` (what was said, when ticked) is kept
+ * apart from the log, so the church's retention removes only it (#246 C17).
+ */
+export async function keepJournal(transcript = ""): Promise<void> {
   const current = useServiceStore.getState().current
   const added = useJournalStore.getState().added
   const title = `${current?.title ?? "Service"} — ${new Date().toLocaleDateString()}`
-  await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: journalText() + extra })
+  await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: journalText(), transcript: transcript || null })
   useJournalStore.setState({ keptAt: added })
 }
 

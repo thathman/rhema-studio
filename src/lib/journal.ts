@@ -102,6 +102,10 @@ export interface RundownLine {
   inserted?: boolean
 }
 
+/** Line breaks (and other control characters) in typed words as spaces. */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const oneLine = (s: string) => s.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ")
+
 export function formatJournal(title: string, entries: JournalEntry[], nowMono: number, planned: Map<string, number> = new Map(), rundown?: RundownLine[]): string {
   const lines = [`${title}`, `Service log — ${entries[0] ? new Date(entries[0].at).toLocaleDateString() : ""}`, ""]
   const durations = actualDurations(entries, nowMono)
@@ -109,7 +113,8 @@ export function formatJournal(title: string, entries: JournalEntry[], nowMono: n
     const d = durations.find((x) => x.entry === e)
     const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", source: "source", recovery: "RECOVERED", scene: "SCENE", shown: "shown" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
-    lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}${e.source && e.kind !== "source" ? `  · ${e.source}` : ""}`)
+    // One entry, one line: typed words (a notice, a hold reason, a scene name) never start a line of their own.
+    lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${oneLine(e.label)}${dur}${e.source && e.kind !== "source" ? `  · ${oneLine(e.source)}` : ""}`)
   }
   const totals = actualByItem(entries, nowMono)
   const versus = (ms: number | undefined, plan: number | undefined) =>

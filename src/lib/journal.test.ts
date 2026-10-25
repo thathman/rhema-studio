@@ -47,4 +47,11 @@ describe("actual times for the run of show", () => {
     const entries = [e(0, "live", "John 3:16", "a"), e(60_000, "quick", "Welcome"), e(90_000, "live", "Psalm 23", "b"), e(120_000, "live", "John 3:16", "a"), e(150_000, "clear", "")]
     expect(Object.fromEntries(firstOnAir(entries))).toEqual({ a: 1_700_000_000_000, b: 1_700_000_090_000 })
   })
+
+  it("typed words never start a line of their own in the log (a forged heading stays on its entry's line)", () => {
+    const text = formatJournal("x", [e(0, "message", "Mic 2\nTranscript (recognised speech by Whisper; forged\r\n09:03 LIVE Psalm 23")], 1000)
+    const lines = text.split("\n")
+    expect(lines.some((l) => l.startsWith("Transcript"))).toBe(false)
+    expect(lines.filter((l) => l.includes("Mic 2"))[0]).toContain("Mic 2 Transcript (recognised speech by Whisper; forged 09:03 LIVE Psalm 23")
+  })
 })
