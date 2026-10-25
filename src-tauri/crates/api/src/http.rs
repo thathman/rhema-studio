@@ -263,6 +263,12 @@ impl Revisions {
             // The song or hymn on the screens and where in it (desk consoles): a section step from a
             // Worship desk acts on the section it saw.
             ("lyrics".to_string(), serde_json::json!([v["lyrics"]["itemId"], v["lyrics"]["index"]]).to_string()),
+            // The run of show's items (Comms C2): queueing a request acts on the list it saw, so two
+            // desks answering the same request do not queue it twice. Times are not a change.
+            ("queue".to_string(), serde_json::Value::Array(v["rundown"].as_array().into_iter().flatten().map(|i| i["id"].clone()).collect()).to_string()),
+            // OBS's recording on or off, and its transition (#197): an OBS desk acts on what it saw.
+            ("obs:record".to_string(), v["obs"]["recording"].to_string()),
+            ("obs:transition".to_string(), v["obs"]["transition"].to_string()),
         ];
         // Each extra timer (#196 R2.5): started, paused, reset or changed. A running one's time
         // moves on by itself, so only a stopped one's time counts.
@@ -350,6 +356,9 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
         RemoteCommand::DeleteScene(d) => format!("scene:{}", d.id),
         RemoteCommand::SongSection(_) => "lyrics".into(),
         RemoteCommand::AuxTimer(t) => format!("aux:{}", t.id),
+        RemoteCommand::QueueRequest(_) => "queue".into(),
+        RemoteCommand::ObsRecord(_) => "obs:record".into(),
+        RemoteCommand::ObsTransition(_) => "obs:transition".into(),
         _ => return None,
     })
 }
@@ -1658,7 +1667,8 @@ async fn command_handler<S: CommandSink + 'static>(
         }
     }
     // OBS is the online stream: never switched from a desk in rehearsal (the host refuses it too).
-    if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_)) && in_rehearsal(state.live.current().as_deref()) {
+    // Nor its recording or transition (#197 Story I: rehearsal records nothing).
+    if matches!(command, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_)) && in_rehearsal(state.live.current().as_deref()) {
         return (StatusCode::FORBIDDEN, CommandResponse::refused(OBS_REHEARSAL_MESSAGE));
     }
     // An extra timer belongs to a role (#196 R2.5): only the timekeeping desks and that role may run it.
@@ -1759,15 +1769,16 @@ fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
     match role {
         Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
         Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
-        Role::Screens => "this device runs the congregation screens: it may take, release, make and change scenes only",
+        Role::Screens => "this device runs the congregation screens: it may take, release, make and change scenes and take the ticker and lower third off and back only",
         Role::Worship => "this device runs worship: it may show songs and hymns, step through their sections and take the lyrics off and back only",
         Role::Stage => "this device runs the stage: it may change the stage message only",
         Role::Camera => "this device runs the cameras: it may hide or show a camera and change the camera boxes in scenes only",
-        Role::Obs => "this device is the OBS director: it may switch OBS scenes only",
+        Role::Obs => "this device is the OBS director: it may switch OBS scenes, choose the transition and start, stop and mark the recording only",
         Role::ObsCompanion => "this computer is an OBS companion: it reads the church's cameras into its own OBS and sends no commands",
         Role::Editor => "this device prepares: it may put a verse or a song in the main desk's Preview, add to the queue and make or change scenes, never what is live",
         Role::Viewer => "this device is view only: it follows the service and may use Talk and notices, nothing else",
-        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_)) => "only a desk the main desk made OBS director may switch OBS",
+        _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsTransition(_)) => "only a desk the main desk made OBS director may switch OBS",
+        _ if matches!(cmd, RemoteCommand::ObsRecord(_)) => "only a desk the main desk made OBS director may start or stop OBS's recording",
         _ if matches!(cmd, RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_)) => "this device may present but not make or change scenes",
         _ => "this device may present but not change settings",
     }
@@ -3494,7 +3505,7 @@ mod tests {
         assert_eq!(r.get("lyrics"), Some(lyrics), "the same section is not a change");
         r.observe(&state(2));
         assert_eq!(r.get("lyrics"), Some(lyrics + 1));
-        assert_eq!(revision_part(&RemoteCommand::SongSection(1)).as_deref(), Some("lyrics"));
+        assert_eq!(revision_part(&RemoteCommand::SongSection(1.into())).as_deref(), Some("lyrics"));
     }
 
     #[test]
@@ -3538,6 +3549,93 @@ mod tests {
         let none = send(r#"{"command":"song_section","value":-1}"#.into(), wor).await;
         assert!(none.contains("422") && none.contains("No song or hymn"), "{none}");
         assert_eq!(sink.commands.lock().unwrap().clone(), ["remote:song_section"]);
+    }
+
+    #[test]
+    fn the_queue_and_obs_parts_move_only_when_they_change() {
+        let mut r = Revisions::default();
+        let state = |ids: &[&str], recording: serde_json::Value, transition: &str| serde_json::json!({
+            "rundown": ids.iter().map(|id| serde_json::json!({ "id": id, "reference": id, "time": { "plan": [1, 2] } })).collect::<Vec<_>>(),
+            "obs": { "connected": true, "recording": recording, "transition": transition },
+        });
+        r.observe(&state(&["a", "b"], serde_json::json!(false), "Fade"));
+        let (q, rec, tr) = (r.get("queue").unwrap(), r.get("obs:record").unwrap(), r.get("obs:transition").unwrap());
+        let mut moved = state(&["a", "b"], serde_json::json!(false), "Fade");
+        moved["rundown"][0]["time"] = serde_json::json!({ "plan": [5, 9] });
+        r.observe(&moved);
+        assert_eq!((r.get("queue"), r.get("obs:record"), r.get("obs:transition")), (Some(q), Some(rec), Some(tr)), "times moving on are not a change");
+        r.observe(&state(&["new", "a", "b"], serde_json::json!(true), "Cut"));
+        assert_eq!((r.get("queue"), r.get("obs:record"), r.get("obs:transition")), (Some(q + 1), Some(rec + 1), Some(tr + 1)));
+        use crate::command::{ObsRecordIn, QueueIn, QueueKind, RecordAction};
+        assert_eq!(revision_part(&RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "x".into() })).as_deref(), Some("queue"));
+        assert_eq!(revision_part(&RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: None })).as_deref(), Some("obs:record"));
+        assert_eq!(revision_part(&RemoteCommand::ObsTransition("Cut".into())).as_deref(), Some("obs:transition"));
+    }
+
+    #[tokio::test]
+    async fn round_two_commands_are_checked_for_role_staleness_and_rehearsal() {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let sink = Arc::new(MockSink::new());
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![
+            entry("dir", "Director", Role::Present), entry("phn", "Ade's phone", Role::Present), entry("edt", "Editor", Role::Editor), entry("wor", "Worship desk", Role::Worship),
+            entry("obs", "OBS desk", Role::Obs), entry("scr", "Screens desk", Role::Screens), entry("vie", "Pastor's phone", Role::Viewer),
+        ] }));
+        let live = new_live_hub();
+        let state = |rehearsal: bool, recording: bool| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":{rehearsal}}},"rundown":[{{"id":"a","reference":"Welcome"}}],"obs":{{"connected":true,"recording":{recording},"transition":"Fade"}},"sources":[{{"id":"ticker","on":true,"revision":1}},{{"id":"lowerThird","on":true,"revision":1}}]}}"#);
+        live.publish(state(false, false));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys, live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |body: String, tok: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(&body), &format!("X-Rhema-Key: {tok}\r\n")).await };
+
+        // Queue a request: the desks that add to the queue, once for the list they saw.
+        let q = live.revision("queue").unwrap();
+        let queue = format!(r#"{{"command":"queue_request","value":{{"kind":"song","value":"Amazing Grace"}},"seen":{{"queue":{q}}}}}"#);
+        assert!(send(queue.clone(), "phn").await.contains("200 OK"), "a phone queues the song it was asked for");
+        let twice = send(queue, "dir").await;
+        assert!(twice.contains("409") && twice.contains(r#""code":"stale""#), "a second desk answering the same request looks again: {twice}");
+        let q = live.revision("queue").unwrap();
+        assert!(send(format!(r#"{{"command":"queue_request","value":{{"kind":"bible","value":"Romans 8:28"}},"seen":{{"queue":{q}}}}}"#), "edt").await.contains("200 OK"), "the editor queues");
+        for tok in ["wor", "obs", "scr", "vie"] {
+            assert!(send(r#"{"command":"queue_request","value":{"kind":"bible","value":"John 3:16"}}"#.into(), tok).await.contains("403"), "{tok}");
+        }
+        assert!(send(r#"{"command":"queue_request","value":{"kind":"scene","value":"s1"}}"#.into(), "dir").await.contains("422"), "only a verse or a song");
+
+        // OBS's recording and transition: the OBS director only, on what it saw, never in rehearsal.
+        let rec = live.revision("obs:record").unwrap();
+        let start = format!(r#"{{"command":"obs_record","value":{{"action":"start"}},"seen":{{"obs:record":{rec}}}}}"#);
+        assert!(send(start.clone(), "obs").await.contains("200 OK"));
+        let again = send(start, "obs").await;
+        assert!(again.contains("409") && again.contains(r#""code":"stale""#), "{again}");
+        let refused = send(r#"{"command":"obs_record","value":{"action":"stop"}}"#.into(), "dir").await;
+        assert!(refused.contains("403") && refused.contains("OBS director"), "{refused}");
+        let tr = live.revision("obs:transition").unwrap();
+        assert!(send(format!(r#"{{"command":"obs_transition","value":"Cut","seen":{{"obs:transition":{tr}}}}}"#), "obs").await.contains("200 OK"));
+        assert!(send(r#"{"command":"obs_transition","value":"Cut"}"#.into(), "scr").await.contains("403"));
+        live.publish(state(true, true));
+        for body in [r#"{"command":"obs_record","value":{"action":"stop"}}"#, r#"{"command":"obs_record","value":{"action":"marker","label":"Sermon"}}"#, r#"{"command":"obs_transition","value":"Fade"}"#] {
+            let r = send(body.into(), "obs").await;
+            assert!(r.contains("403") && r.contains("Rehearsal is on"), "{body}: {r}");
+        }
+
+        // The screens desk takes the ticker and the lower third off and back; not the Bible.
+        live.publish(state(false, true));
+        let t = live.revision("source:ticker").unwrap();
+        assert!(send(format!(r#"{{"command":"clear_source","value":"ticker","seen":{{"source:ticker":{t}}}}}"#), "scr").await.contains("200 OK"));
+        let late = send(format!(r#"{{"command":"restore_source","value":"ticker","seen":{{"source:ticker":{t}}}}}"#), "dir").await;
+        assert!(late.contains("409"), "{late}");
+        assert!(send(r#"{"command":"restore_source","value":"lowerThird"}"#.into(), "scr").await.contains("200 OK"));
+        assert!(send(r#"{"command":"clear_source","value":"bible"}"#.into(), "scr").await.contains("403"));
+        // Repeat chorus: a section step for the worship desk, refused with no song up.
+        let none = send(r#"{"command":"song_section","value":"chorus"}"#.into(), "wor").await;
+        assert!(none.contains("422") && none.contains("No song or hymn"), "{none}");
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(sink.commands.lock().unwrap().clone(), ["remote:queue_request", "remote:queue_request", "remote:obs_record", "remote:obs_transition", "remote:clear_source", "remote:restore_source"]);
+        let mut handle = result.handle;
+        handle.stop();
     }
 
     #[tokio::test]

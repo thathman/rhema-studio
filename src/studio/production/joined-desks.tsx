@@ -45,6 +45,23 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
       <p className="font-semibold">Songs and hymns</p>
       <SongLibrary onSend={(c) => void send(c)} />
       <SectionStepper live={live} onSend={(c) => void send(c)} />
+      {live.worshipSet && (
+        <div role="group" aria-label="Worship set" className="flex flex-col gap-1">
+          <p className="font-semibold">Worship set <span className="font-normal text-muted-foreground">· the service's songs and hymns, in order</span></p>
+          {live.worshipSet.length === 0 ? <p className="text-muted-foreground">No songs or hymns in the service yet.</p> : (
+            <ol className="flex flex-col divide-y divide-border rounded-md border border-border">
+              {live.worshipSet.map((w, i) => (
+                <li key={w.id} className={cn("flex items-center gap-2 px-2 py-1", w.live && "bg-primary/10")}>
+                  <span className="w-5 text-right text-muted-foreground tabular-nums">{i + 1}</span>
+                  <span className={cn("min-w-0 flex-1 truncate", w.live && "font-semibold")}>{w.title}</span>
+                  {w.key && <span className="text-muted-foreground" title="The song's key, for the band">Key {w.key}</span>}
+                  {w.live && <span className="text-[0.625rem] font-bold text-primary-text uppercase">On the screens</span>}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
       {lyrics.length > 0 && (
         <ul className="flex flex-col gap-1">
           {lyrics.map((s) => (
@@ -109,13 +126,21 @@ export function CameraDesk({ live }: { live: LiveStateV1 }) {
   )
 }
 
-/** OBS (OBS director): the host's OBS scenes, Preview and Take (Studio Mode) or switch; never in rehearsal. */
+const TONE = { ok: "text-confidence-high", live: "text-on-air", warn: "text-confidence-mid", off: "text-muted-foreground" } as const
+
+/**
+ * OBS (OBS director): the host's OBS scenes, Preview and Take (Studio Mode) or switch; the stream's
+ * and recording's health, the transition, and the recording (start, stop, marker). Nothing changes
+ * OBS in rehearsal.
+ */
 export function ObsDesk({ live }: { live: LiveStateV1 }) {
   const ok = useCanSend()
   const [result, setResult] = useState<SendResult | null>(null)
+  const [marker, setMarker] = useState("")
+  const [stopping, setStopping] = useState(false)
   const obs = live.obs
   const rehearsal = live.program.rehearsal
-  const send = async (command: { command: string; value?: string }) => setResult(await useJoin.getState().send(command))
+  const send = async (command: { command: string; value?: string | Record<string, unknown> }) => setResult(await useJoin.getState().send(command))
   return (
     <section aria-label="OBS desk" className={box}>
       <p className="font-semibold">OBS <span className="font-normal text-muted-foreground">· through the host's OBS connection</span></p>
@@ -138,6 +163,33 @@ export function ObsDesk({ live }: { live: LiveStateV1 }) {
             })}
           </ul>
           {obs.studioMode && <div><Button size="sm" disabled={!ok || rehearsal || !obs.preview || obs.preview === obs.program} onClick={() => void send({ command: "obs_take" })}>Take {obs.preview ?? "the preview"} to the stream</Button></div>}
+          {(obs.stream || obs.record) && (
+            <dl aria-label="OBS health" className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              {obs.stream && <><dt className="text-muted-foreground">Stream</dt><dd className={cn("font-medium", TONE[obs.stream.tone])}>{obs.stream.text}</dd></>}
+              {obs.record && <><dt className="text-muted-foreground">Recording</dt><dd className={cn("font-medium", TONE[obs.record.tone])}>{obs.record.text}</dd></>}
+            </dl>
+          )}
+          {obs.transitions && obs.transitions.length > 0 && (
+            <label className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">Transition</span>
+              <select aria-label="OBS transition" value={obs.transition ?? ""} disabled={!ok || rehearsal} onChange={(e) => { if (e.target.value) void send({ command: "obs_transition", value: e.target.value }) }} className="h-8 rounded-md border border-input bg-card px-1.5">
+                {!obs.transition && <option value="">Choose…</option>}
+                {obs.transitions.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+          )}
+          {obs.recording !== undefined && (
+            <div role="group" aria-label="OBS recording" className="flex flex-wrap items-center gap-2">
+              {obs.recording === true ? (stopping
+                ? <><Button size="sm" variant="destructive" disabled={!ok || rehearsal} onClick={() => { setStopping(false); void send({ command: "obs_record", value: { action: "stop" } }) }}>Stop the recording</Button><Button size="sm" variant="ghost" onClick={() => setStopping(false)}>Keep recording</Button></>
+                : <Button size="sm" variant="outline" disabled={!ok || rehearsal} onClick={() => setStopping(true)}>Stop recording…</Button>)
+                : <Button size="sm" variant="outline" disabled={!ok || rehearsal || obs.recording === null} title={obs.recording === null ? "OBS has not said whether it is recording" : undefined} onClick={() => void send({ command: "obs_record", value: { action: "start" } })}>Start recording</Button>}
+              <form className="flex min-w-0 flex-1 gap-2" onSubmit={(e) => { e.preventDefault(); void send({ command: "obs_record", value: { action: "marker", ...(marker.trim() ? { label: marker.trim() } : {}) } }); setMarker("") }}>
+                <input aria-label="Marker name" value={marker} onChange={(e) => setMarker(e.target.value)} placeholder="Sermon starts" maxLength={60} className={cn(field, "min-w-24 flex-1")} />
+                <Button size="sm" type="submit" variant="outline" disabled={!ok || rehearsal || obs.recording !== true} title="A chapter in the recording where OBS has them, and a line in the host's service log">Add marker</Button>
+              </form>
+            </div>
+          )}
         </>
       )}
       <Result result={result} />

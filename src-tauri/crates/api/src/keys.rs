@@ -27,7 +27,10 @@ use crate::command::{same_key, RemoteCommand};
 /// the main desk, `crate::scene_edits`). `Viewer` (view only) follows the service and changes nothing;
 /// like every desk it keeps the notices and the talk channel.
 /// Existing entries without a role are `Configure`, as before.
-/// The desk consoles: `Worship` also steps the song on the screens section by section.
+/// The desk consoles: `Worship` also steps the song on the screens section by section (and back to
+/// the chorus); `Screens` also takes the ticker and the lower third off and back; `Obs` also starts,
+/// stops and marks OBS's recording and chooses its transition. A verse or song asked for in a notice
+/// is queued by the desks that may add to the queue.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -89,8 +92,8 @@ impl Role {
             RemoteCommand::SongShow(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
             // Stepping the song on the screens section by section (desk consoles): the same desks.
             RemoteCommand::SongSection(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
-            // Adding to the queue prepares; it shows nothing.
-            RemoteCommand::AddToQueue => matches!(self, Role::Present | Role::Configure | Role::Editor),
+            // Adding to the queue prepares; it shows nothing. A verse or song asked for (Comms C2) too.
+            RemoteCommand::AddToQueue | RemoteCommand::QueueRequest(_) => matches!(self, Role::Present | Role::Configure | Role::Editor),
             RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => match self {
                 Role::Present | Role::Configure => true,
                 Role::Bible => id == "bible",
@@ -98,6 +101,8 @@ impl Role {
                 Role::Stage => id == "stage",
                 // Hiding a camera from scenes (it is not framed yet) and showing it again.
                 Role::Camera => id.starts_with("camera:"),
+                // The screens desk takes the ticker and the lower third off its screens and back (#197).
+                Role::Screens => id == "ticker" || id == "lowerThird",
                 _ => false,
             },
             RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => matches!(self, Role::Present | Role::Configure | Role::Screens),
@@ -107,7 +112,8 @@ impl Role {
             RemoteCommand::DeleteScene(_) => matches!(self, Role::Configure | Role::Screens | Role::Editor),
             RemoteCommand::StageMessage(_) => matches!(self, Role::Present | Role::Configure | Role::Stage),
             // OBS is the online stream: only a desk the main desk made OBS director switches it.
-            RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => self == Role::Obs,
+            // Its recording and its transition too (#197 OBS.3 obs:record): the OBS director only.
+            RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_) => self == Role::Obs,
             // An extra timer (#196 R2.5): the timekeeping desks, or the role the timer belongs to; the
             // server checks the owner against the host's Live State (crate::aux_timers).
             RemoteCommand::AuxTimer(_) => self != Role::ObsCompanion,
@@ -400,11 +406,13 @@ mod tests {
             assert!(!Role::Screens.allows(&cmd), "{cmd}");
         }
         assert!(Role::Present.allows(&take) && Role::Present.allows(&RemoteCommand::ClearSource("hymn".into())));
-        // The lower third and the stage message as sources (#243): taken off and back by the Present desks only.
+        // The lower third and the stage message as sources (#243): taken off and back by the Present
+        // desks; the lower third by the screens desk too (#197), the stage message by the stage desk.
         for id in ["lowerThird", "stage"] {
             for cmd in [RemoteCommand::ClearSource(id.into()), RemoteCommand::RestoreSource(id.into())] {
                 assert!(Role::Present.allows(&cmd) && Role::Configure.allows(&cmd), "{cmd}");
-                assert!(!Role::Bible.allows(&cmd) && !Role::Screens.allows(&cmd) && !Role::Timekeeper.allows(&cmd), "{cmd}");
+                assert!(!Role::Bible.allows(&cmd) && !Role::Timekeeper.allows(&cmd), "{cmd}");
+                assert_eq!(Role::Screens.allows(&cmd), id == "lowerThird", "{cmd}");
             }
         }
         assert!(!Role::Timekeeper.allows(&RemoteCommand::BibleActivate("x".into())));
@@ -552,7 +560,7 @@ mod tests {
 
     #[test]
     fn section_stepping_is_for_the_worship_and_present_desks_only() {
-        let step = RemoteCommand::SongSection(1);
+        let step = RemoteCommand::SongSection(1.into());
         for role in [Role::Worship, Role::Present, Role::Configure] {
             assert!(role.allows(&step), "{role:?}");
         }
@@ -564,6 +572,54 @@ mod tests {
         assert!(Role::Bible.allows(&chosen) && Role::Present.allows(&chosen) && !Role::Editor.allows(&chosen) && !Role::Worship.allows(&chosen));
         let paused = KeyEntry { hash: "h".into(), name: "Desk".into(), role: Role::Worship, paused: true };
         assert!(paused.paused_for(&step), "a paused desk steps nothing");
+    }
+
+    #[test]
+    fn queueing_a_request_is_for_the_desks_that_add_to_the_queue() {
+        let q = RemoteCommand::QueueRequest(crate::command::QueueIn { kind: crate::command::QueueKind::Song, value: "Amazing Grace".into() });
+        for role in [Role::Present, Role::Configure, Role::Editor] {
+            assert!(role.allows(&q), "{role:?}");
+        }
+        for role in [Role::Timekeeper, Role::Bible, Role::Screens, Role::Worship, Role::Stage, Role::Camera, Role::Obs, Role::ObsCompanion, Role::Viewer] {
+            assert!(!role.allows(&q), "{role:?}");
+        }
+        let paused = KeyEntry { hash: "h".into(), name: "Phone".into(), role: Role::Present, paused: true };
+        assert!(paused.paused_for(&q), "a paused desk queues nothing");
+    }
+
+    #[test]
+    fn the_obs_director_alone_records_and_chooses_the_transition() {
+        use crate::command::{ObsRecordIn, RecordAction};
+        let cmds = [
+            RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Start, label: None }),
+            RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Stop, label: None }),
+            RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: Some("Sermon".into()) }),
+            RemoteCommand::ObsTransition("Fade".into()),
+        ];
+        for cmd in &cmds {
+            assert!(Role::Obs.allows(cmd), "{cmd}");
+            for role in [Role::Present, Role::Configure, Role::Timekeeper, Role::Bible, Role::Screens, Role::Worship, Role::Stage, Role::Camera, Role::ObsCompanion, Role::Editor, Role::Viewer] {
+                assert!(!role.allows(cmd), "{role:?} {cmd}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_screens_desk_takes_the_ticker_and_lower_third_off_and_back() {
+        for id in ["ticker", "lowerThird"] {
+            for cmd in [RemoteCommand::ClearSource(id.into()), RemoteCommand::RestoreSource(id.into())] {
+                assert!(Role::Screens.allows(&cmd), "{cmd}");
+                for role in [Role::Bible, Role::Worship, Role::Stage, Role::Camera, Role::Obs, Role::Timekeeper, Role::Editor, Role::Viewer] {
+                    assert!(!role.allows(&cmd), "{role:?} {cmd}");
+                }
+            }
+        }
+        for id in ["bible", "song", "hymn", "stage", "timer", "camera:pulpit"] {
+            assert!(!Role::Screens.allows(&RemoteCommand::ClearSource(id.into())), "{id}: not the screens desk's");
+        }
+        // Repeat chorus is a section step: the same desks.
+        let chorus = RemoteCommand::SongSection(crate::command::SectionMove::To(crate::command::SectionTarget::Chorus));
+        assert!(Role::Worship.allows(&chorus) && Role::Present.allows(&chorus) && !Role::Screens.allows(&chorus) && !Role::Editor.allows(&chorus));
     }
 
     #[test]

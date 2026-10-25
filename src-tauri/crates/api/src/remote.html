@@ -62,6 +62,7 @@
   #crew li.held { border-color:var(--live); }
   #crew button { min-height:40px; padding:0 12px; font-size:13px; }
   #crew button.on { border-color:var(--live); color:#ff8a8a; }
+  #crew li input[type=range] { width:96px; flex:none; padding:0; }
   #talkHold { width:100%; min-height:110px; font-size:22px; touch-action:none; user-select:none; -webkit-user-select:none; }
   #talkHold.on { background:var(--live); border-color:var(--live); color:#fff; }
   #talkJoin { width:100%; min-height:52px; margin-bottom:10px; }
@@ -102,7 +103,7 @@
       <select id="talkTo" aria-label="Talk to"></select>
       <label>Hear, besides All crew</label>
       <div class="hear" id="talkHear" role="group" aria-label="Channels you hear"></div>
-      <label for="talkVol">Crew volume on this phone</label>
+      <label for="talkVol">Crew volume on this phone (each person's is beside their name)</label>
       <input id="talkVol" type="range" min="0" max="1" step="0.05" value="1">
       <ul id="crew" aria-label="Talk channel" aria-live="polite"></ul>
     </div>
@@ -180,9 +181,9 @@
     finally { btn.disabled = false }
   }
   // One command for an action request: null when the computer did it, else its reason.
-  async function attempt(cmd, value) {
+  async function attempt(cmd, value, extra) {
     try {
-      const r = await post(cmd, pressId(), value)
+      const r = await post(cmd, pressId(), value, extra)
       if (r.ok) return null
       const j = await r.json().catch(() => ({}))
       if (r.status === 401) { set(null); show() }
@@ -266,7 +267,10 @@
     const a = n.action, live = lastLive || {}
     btn.disabled = true
     let why = null
-    if (a.kind === "scene") {
+    if (mode === "queue") {
+      // Into the run of show for later, nothing shown; acting on the run of show this phone saw.
+      why = await attempt("queue_request", { kind: a.kind, value: a.value }, live.revisions && live.revisions.queue !== undefined ? { seen: { queue: live.revisions.queue } } : undefined)
+    } else if (a.kind === "scene") {
       const targets = sceneTargets(live.outputs || [])
       if (!targets.length) why = "the host has no congregation output"
       else why = (await Promise.all(targets.map((o) => attempt("take_scene", { output: o, scene: a.value })))).find(Boolean) || null
@@ -274,12 +278,13 @@
       const cmd = { bible: mode === "preview" ? "bible_preview" : "bible_activate", song: mode === "preview" ? "song_preview" : "song_show", event: "event_start", wrap: "stage_message" }[a.kind]
       why = cmd ? await attempt(cmd, a.kind === "wrap" ? a.value.slice(0, 120) : a.value) : "this phone cannot do that"
     }
-    const what = "\u201c" + (mode === "preview" ? "Preview " + a.value : actionName(a, live)) + "\u201d"
+    const what = "\u201c" + (mode === "preview" ? "Preview " + a.value : mode === "queue" ? "Queue " + a.value : actionName(a, live)) + "\u201d"
     failed[n.id] = why ? what + " was not done: " + why + ". Answered Unable." : ""
     await post("notice_ack", pressId(), { id: n.id, state: why ? "unable" : "ready" }, why ? { why: what + ": " + why } : undefined).catch(() => {})
     btn.disabled = false
     poll()
   }
+  const QUEUE_ROLES = ["present", "configure", "editor"]
   const isFor = (n, role) => n.to === "all" || n.to === role || (role === "configure" && n.to === "present") || (!!n.to && typeof n.to === "object" && String(n.to.name).toLowerCase() === String(me.name).toLowerCase())
   async function notices(live) {
     if (!me) {
@@ -344,6 +349,15 @@
             pv.setAttribute("aria-label", "Preview " + n.action.value)
             pv.addEventListener("click", () => doRequest(n, "preview", pv))
             row.append(pv)
+            // Queue: into the run of show for later (the phones and desks that may add to the queue).
+            if (QUEUE_ROLES.includes(me.role)) {
+              const qb = document.createElement("button")
+              qb.type = "button"
+              qb.textContent = "Queue"
+              qb.setAttribute("aria-label", "Queue " + n.action.value)
+              qb.addEventListener("click", () => doRequest(n, "queue", qb))
+              row.append(qb)
+            }
           }
         }
         for (const state of ["seen", "ready", "unable"]) {
@@ -404,17 +418,24 @@
   // a secure page (https, or this computer itself); elsewhere the button says so. Talk is held, never
   // latched: letting go, leaving the page or locking the phone stops it.
   let pc = null, mic = null, player = null
+  // After a dropped connection the phone joins again by itself, waiting longer each time (1 s, 2 s,
+  // 4 s… at most 30 s), until it is back or the person leaves. The microphone stays off until they
+  // press Talk again.
+  let wantTalk = false, rejoin = null, rejoinWait = 0
+  const REJOIN_MAX = 30000
   // Whom this phone talks to, the channels it hears, and each person's level (by name; "to:host" for
   // the main desk). The computer mixes what the phone hears, so the levels go to it.
   const CHANNELS = [["production", "Production"], ["stage", "Stage & worship"]]
   const HOST_KEY = "to:host"
   const ROLE_NAMES = { timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present only", configure: "Present and change settings", editor: "Editor", viewer: "View only" }
-  let talkTo = "all", listen = CHANNELS.map((c) => c[0]), muted = {}
+  // vol: each person's level here in percent (100 = full); muted wins over it.
+  let talkTo = "all", listen = CHANNELS.map((c) => c[0]), muted = {}, vol = {}
   const isHostName = (n) => /\(main desk\)$|^Main desk$/.test(n)
   const allowedChannels = (live) => CHANNELS.filter(([id]) => { const r = live && live.talkRights && live.talkRights[id]; return !r || !me || r.includes(me.role) })
   function sendChannels() {
     if (!pc) return
     const levels = {}
+    for (const k of Object.keys(vol)) if (vol[k] < 100) levels[k] = vol[k]
     for (const k of Object.keys(muted)) if (muted[k]) levels[k] = 0
     post("voice_channels", pressId(), Object.keys(levels).length ? { listen, talk: talkTo, levels } : { listen, talk: talkTo }).catch(() => {})
   }
@@ -456,28 +477,55 @@
       }
     }
     if (changed) sendChannels()
-    // Who is in the channel: talking (heard now), Talk held, or listening; each can be muted here.
+    // Who is in the channel: talking (heard now), Talk held, or listening; each with a volume and
+    // Mute here. Each person keeps one row, changed in place, so a slider being moved is never redrawn.
     const crew = $("crew")
-    crew.replaceChildren()
     const rows = [{ key: HOST_KEY, name: "The main desk", p: people.find((p) => isHostName(p.name)) }, ...people.filter((p) => !isHostName(p.name)).map((p) => ({ key: p.name, name: p.name, p }))]
-    for (const r of rows) {
-      const li = document.createElement("li")
+    const keep = new Set(rows.map((r) => r.key))
+    for (const [k, el] of crewRows) if (!keep.has(k)) { el.li.remove(); crewRows.delete(k) }
+    rows.forEach((r, i) => {
+      let el = crewRows.get(r.key)
+      if (!el) el = crewRow(r.key)
       const p = r.p || {}
-      li.className = p.speaking ? "speaking" : p.talking ? "held" : ""
-      const label = document.createElement("span")
-      const state = document.createElement("i")
-      state.textContent = (p.role ? " \u00b7 " + (ROLE_NAMES[p.role] || p.role) : "") + (p.speaking ? " \u00b7 speaking" : p.talking ? " \u00b7 holding Talk" : "")
-      label.append(r.name, state)
-      const b = document.createElement("button")
-      b.type = "button"
-      b.textContent = muted[r.key] ? "Unmute" : "Mute"
-      b.className = muted[r.key] ? "on" : ""
-      b.setAttribute("aria-pressed", String(!!muted[r.key]))
-      b.setAttribute("aria-label", (muted[r.key] ? "Unmute " : "Mute ") + r.name)
-      b.addEventListener("click", () => { muted[r.key] = !muted[r.key]; sendChannels(); talkView(lastLive) })
-      li.append(label, b)
-      crew.append(li)
-    }
+      el.li.className = p.speaking ? "speaking" : p.talking ? "held" : ""
+      el.name.textContent = r.name
+      el.state.textContent = (p.role ? " \u00b7 " + (ROLE_NAMES[p.role] || p.role) : "") + (p.speaking ? " \u00b7 speaking" : p.talking ? " \u00b7 holding Talk" : "")
+      el.mute.textContent = muted[r.key] ? "Unmute" : "Mute"
+      el.mute.className = muted[r.key] ? "on" : ""
+      el.mute.setAttribute("aria-pressed", String(!!muted[r.key]))
+      el.mute.setAttribute("aria-label", (muted[r.key] ? "Unmute " : "Mute ") + r.name)
+      el.level.setAttribute("aria-label", "Volume for " + r.name)
+      el.level.disabled = !!muted[r.key]
+      if (document.activeElement !== el.level) el.level.value = String(vol[r.key] === undefined ? 100 : vol[r.key])
+      if (crew.children[i] !== el.li) crew.insertBefore(el.li, crew.children[i] || null)
+    })
+  }
+  // One row per person in the talk channel, by key, made once.
+  const crewRows = new Map()
+  let levelSend = null
+  function crewRow(key) {
+    const li = document.createElement("li")
+    const label = document.createElement("span")
+    const name = document.createTextNode("")
+    const state = document.createElement("i")
+    label.append(name, state)
+    const level = document.createElement("input")
+    level.type = "range"
+    level.min = "0"
+    level.max = "100"
+    level.step = "5"
+    level.addEventListener("input", () => {
+      vol[key] = Number(level.value)
+      clearTimeout(levelSend)
+      levelSend = setTimeout(sendChannels, 250)
+    })
+    const mute = document.createElement("button")
+    mute.type = "button"
+    mute.addEventListener("click", () => { muted[key] = !muted[key]; sendChannels(); talkView(lastLive) })
+    li.append(label, level, mute)
+    const el = { li, name, state, level, mute }
+    crewRows.set(key, el)
+    return el
   }
   $("talkTo").addEventListener("change", () => { talkTo = $("talkTo").value; sendChannels() })
   $("talkVol").addEventListener("input", () => { if (player) player.volume = Number($("talkVol").value) })
@@ -499,38 +547,67 @@
     $("talkHold").textContent = on ? "Talking…" : "Hold to talk"
     post("voice_talk", pressId(), on).catch(() => {})
   }
-  function leaveTalk() {
-    talk(false)
-    if (pc) post("voice_leave", pressId()).catch(() => {})
+  // Close the connection; `keepMic` keeps the microphone (off) for joining again by itself.
+  function closeTalk(keepMic) {
+    // After a drop the computer is not there to tell: the microphone just goes off here.
+    if (keepMic) {
+      if (mic) mic.enabled = false
+      $("talkHold").classList.remove("on")
+      $("talkHold").setAttribute("aria-pressed", "false")
+      $("talkHold").textContent = "Hold to talk"
+    } else {
+      talk(false)
+      if (pc) post("voice_leave", pressId()).catch(() => {})
+    }
     if (player) player.pause()
-    if (mic) mic.stop()
+    if (mic && !keepMic) mic.stop()
     if (pc) pc.close()
-    pc = mic = player = null
-    $("talkJoin").textContent = "Join the talk channel"
+    pc = player = null
+    if (!keepMic) mic = null
     $("talkHold").hidden = true
     $("talkOpts").hidden = true
     talkKey = ""
+    for (const el of crewRows.values()) el.li.remove()
+    crewRows.clear()
     $("talkHold").disabled = false
   }
-  async function joinTalk() {
+  function leaveTalk() {
+    wantTalk = false
+    clearTimeout(rejoin)
+    rejoin = null
+    rejoinWait = 0
+    closeTalk(false)
+    $("talkJoin").textContent = "Join the talk channel"
+  }
+  // Join again after a drop, a little later each time.
+  function rejoinLater(why) {
+    closeTalk(true)
+    rejoinWait = rejoinWait ? Math.min(REJOIN_MAX, rejoinWait * 2) : 1000
+    $("talkJoin").textContent = "Stop joining again"
+    say(why + " Joining again in " + Math.round(rejoinWait / 1000) + " s; your microphone stays off until you press Talk.", true)
+    clearTimeout(rejoin)
+    rejoin = setTimeout(() => { rejoin = null; if (wantTalk) joinTalk(true) }, rejoinWait)
+  }
+  async function joinTalk(again) {
     const btn = $("talkJoin")
+    wantTalk = true
     btn.disabled = true
-    say("Joining the talk channel…")
+    say(again ? "Joining the talk channel again…" : "Joining the talk channel…")
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      const s = mic && mic.readyState === "live" ? new MediaStream([mic]) : await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
       mic = s.getAudioTracks()[0]
       mic.enabled = false
       pc = new RTCPeerConnection({ iceServers: [] })
       pc.addTransceiver(mic, { direction: "sendrecv", streams: [s] })
       // The computer went quiet on the network: stop talking at once (never back on by itself).
-      // A blip that passes says so; a lost connection leaves, and Join brings the phone back.
+      // A blip that passes says so; a lost connection joins again by itself, with the mic off.
       const own = pc
       own.onconnectionstatechange = () => {
         if (pc !== own) return
         const st = own.connectionState
         if (st === "disconnected") { talk(false); $("talkHold").disabled = true; say("Talk dropped — reconnecting…") }
         else if (st === "connected" && $("talkHold").disabled) { $("talkHold").disabled = false; say("Back in the talk channel") }
-        else if (st === "failed") { leaveTalk(); say("Talk dropped: the computer could not be reached. Press Join the talk channel to come back.", true) }
+        else if (st === "failed") rejoinLater("Talk dropped: the computer could not be reached.")
       }
       pc.ontrack = (e) => {
         player = new Audio()
@@ -547,17 +624,23 @@
       btn.textContent = "Leave the talk channel"
       $("talkHold").hidden = false
       $("talkOpts").hidden = false
-      say("")
+      say(again ? "Back in the talk channel. Press Talk to speak." : "")
+      rejoinWait = 0
       talkView(lastLive)
       sendChannels()
     } catch (e) {
-      leaveTalk()
-      say(e && e.name === "NotAllowedError" ? "The microphone was not allowed. Allow it for this page to talk." : (e && e.message) || "Could not join the talk channel.", true)
+      const denied = e && e.name === "NotAllowedError"
+      // Joining again after a drop keeps trying (unless the microphone was refused); a first Join says why it failed.
+      if (again && wantTalk && !denied) rejoinLater("Could not join the talk channel again.")
+      else {
+        leaveTalk()
+        say(denied ? "The microphone was not allowed. Allow it for this page to talk." : (e && e.message) || "Could not join the talk channel.", true)
+      }
     } finally {
       btn.disabled = false
     }
   }
-  $("talkJoin").addEventListener("click", () => (pc ? leaveTalk() : joinTalk()))
+  $("talkJoin").addEventListener("click", () => (pc || wantTalk ? leaveTalk() : joinTalk(false)))
   const hold = $("talkHold")
   hold.addEventListener("pointerdown", (e) => { if (hold.setPointerCapture) hold.setPointerCapture(e.pointerId); talk(true) })
   for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) hold.addEventListener(ev, () => talk(false))

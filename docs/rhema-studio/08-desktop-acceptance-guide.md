@@ -1328,6 +1328,30 @@ Rhema with a saved service (a song and two slides), Desk menu → Your name = "T
 | 10ex.9 | Production → Scenes. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
 | 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
 
+### 10ga. Comms and desk consoles, round two: Queue from desks and phones, phone Talk rejoin and volumes, OBS desk, Screens ticker, Worship key and set, output owners (#251, #197)
+
+Two computers on the church network: **A** hosts with OBS connected (any scene collection, recording to a
+file), songs with a chorus and a key set (Prepare → Songs → Key), and a service with two or three songs;
+**B** joins it; a phone on the https phone page, paired as Present. Change B's role on A for each part.
+
+| # | Step | Expected | Result |
+|---|------|----------|--------|
+| 10ga.1 | A sends B (Present) a request "Ask to show a song or hymn: Amazing Grace". B presses **Queue**. | Amazing Grace is added to A's run of show (where added items go); nothing is shown and A's Preview does not change; B's answer reads Ready; A's log says "B: queued Amazing Grace". | Unverified |
+| 10ga.2 | The same request to two desks (Present and Editor); both press Queue at the same moment. | It is queued once; the second desk answers Unable "Someone changed this first — look again". | Unverified |
+| 10ga.3 | B as Worship, Bible, Screens or View only, with the same request. | No Queue button on those desks. | Unverified |
+| 10ga.4 | Phone: a verse request ("Romans 8:28") to Present desks; press **Queue**. A song not in A's library. | The verse is added to A's run of show and the phone answers Ready; the missing song: nothing added, and A says "… not queued: that song is not in the library". | Unverified |
+| 10ga.5 | Phone: join Talk; turn Wi-Fi off on the phone for 20 s, then on (or quit and restart Rhema Studio on A). | The phone says "Talk dropped … Joining again in 1 s", then 2 s, 4 s… while A cannot be reached; it rejoins by itself when A is back, saying "Back in the talk channel. Press Talk to speak." The microphone is off until Talk is pressed again (no one hears the phone before that). "Stop joining again" stops it. | Unverified |
+| 10ga.6 | Phone in Talk with two people talking: move one person's volume slider while the page refreshes (keep a finger on it for a few seconds). | The slider does not jump back or redraw; that person gets quieter on the phone only; Mute still silences them and Unmute brings the chosen volume back. | Unverified |
+| 10ga.7 | B as **OBS director**: the OBS desk while A's OBS streams and records. | Stream (live for, bitrate, dropped frames) and Recording (recording at, bitrate) match A's Production → OBS within a few seconds. | Unverified |
+| 10ga.8 | B: choose another **Transition**; then switch a scene. | OBS's transition changes (check in OBS); the switch uses it; A's log names the change. | Unverified |
+| 10ga.9 | B: **Start recording**, **Add marker** "Sermon starts", **Stop recording…** then **Stop the recording**. | OBS starts recording; the marker is a line in A's service log with the recording time, "(B)" and, with OBS 30.2+ Hybrid MP4, a chapter; Stop needs the second press, then OBS stops. | Unverified |
+| 10ga.10 | Rehearsal on at A: B tries Start recording, the transition and a marker (also from a script). | The buttons are greyed; a script gets "Rehearsal is on …" (403); OBS does not change. | Unverified |
+| 10ga.11 | B as Present, Screens or Worship: send `obs_record` from a script. | Refused for the role (403, "only a desk the main desk made OBS director …"); OBS does not change. | Unverified |
+| 10ga.12 | B as **Screens**: the ticker running and a lower third up on A; **Take off** the ticker, **Put back** the lower third. | A's ticker leaves its screens and the lower third returns, each "by B"; a Bible or Worship desk has no such box. | Unverified |
+| 10ga.13 | B as **Worship** with a song up on A that has a key: the sections box and **Repeat chorus** after a verse. | "Key G" (the song's key) shows beside the title; Repeat chorus puts the last chorus sung (or the first) back on A's screens; a song with no chorus has it greyed. | Unverified |
+| 10ga.14 | B as Worship: the **Worship set**. | The service's songs and hymns in order with their keys (keys appear once A has opened each song); the one on the screens is marked. | Unverified |
+| 10ga.15 | B as **Present** (director) and as Screens: the output map after A and B each take a scene to different outputs. | Each output shows who took it last and when ("by B 10:42"); outputs no one took show no name. | Unverified |
+
 ### 10ft. Desk consoles on joined computers: Bible, Worship, Screens, Director (#197)
 
 Two computers on the church network: **A** hosts with a Bible translation or two, songs and the CAC

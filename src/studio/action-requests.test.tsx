@@ -35,6 +35,9 @@ import { useJoin } from "@/stores/join-store"
 import { asAction, canPreview, useNotices } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useSongStore } from "@/stores/song-store"
+import { useQueueStore } from "@/stores/queue-store"
+import { useObsStore } from "@/stores/obs-store"
+import { useJournalStore } from "@/stores/journal-store"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
 import { NoticesPanel } from "./notices-panel"
 
@@ -197,6 +200,63 @@ describe("action requests", () => {
     await act(async () => handlers.get("remote:song_show")!({ payload: JSON.stringify({ title: "No such hymn", by: "Femi" }) }))
     await vi.waitFor(() => expect(warning).toHaveBeenCalledWith("No such hymn not shown", { description: "Femi: that song is not in the library" }))
     expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Amazing Grace · Verse 1")
+    root.unmount()
+  })
+})
+
+/** Round two (#251 queue from desks and phones, #197 OBS desk): the host carries them out as the desk's. */
+describe("round two commands on the main desk", () => {
+  async function host() {
+    const el = document.createElement("div")
+    const root = createRoot(el)
+    function Host() {
+      useRemoteControl()
+      return null
+    }
+    await act(async () => root.render(<Host />))
+    await vi.waitFor(() => expect(handlers.has("remote:queue_request")).toBe(true))
+    return root
+  }
+  const fire = (event: string, p: Record<string, unknown>) => act(async () => handlers.get(event)!({ payload: JSON.stringify(p) }))
+
+  it("a verse or song queued from a joined desk or a phone goes into the run of show, showing nothing", async () => {
+    useQueueStore.setState({ items: [], headers: [], activeIndex: null })
+    useSongStore.setState({ lookup: vi.fn(async (q: string) => (q.toLowerCase().includes("amazing") ? [summary("song-1", "Amazing Grace")] : [])) } as never)
+    const root = await host()
+    await fire("remote:queue_request", { kind: "song", value: "Amazing Grace", by: "Ade's phone" })
+    await vi.waitFor(() => expect(useQueueStore.getState().items.map((i) => i.reference)).toEqual(["Amazing Grace"]))
+    await fire("remote:queue_request", { kind: "bible", value: "Romans 8:28", by: "Editor" })
+    await vi.waitFor(() => expect(useQueueStore.getState().items).toHaveLength(2))
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useJournalStore.getState().entries.some((e) => e.label === "Ade's phone: queued Amazing Grace")).toBe(true)
+    await fire("remote:queue_request", { kind: "song", value: "No such hymn", by: "Ade's phone" })
+    await vi.waitFor(() => expect(warning).toHaveBeenCalledWith("No such hymn not queued", { description: "Ade's phone: that song is not in the library" }))
+    await fire("remote:queue_request", { kind: "scene", value: "s1", by: "Ade's phone" })
+    expect(useQueueStore.getState().items).toHaveLength(2)
+    root.unmount()
+  })
+
+  it("the OBS director's recording and transition run on this computer's OBS, never in rehearsal", async () => {
+    const startRecording = vi.fn(async () => {})
+    const stopRecording = vi.fn(async () => {})
+    const mark = vi.fn(async () => {})
+    const setTransition = vi.fn(async () => {})
+    useObsStore.setState({ startRecording, stopRecording, mark, setTransition, transitions: ["Fade", "Cut"] })
+    const root = await host()
+    await fire("remote:obs_record", { action: "start", by: "OBS desk" })
+    await fire("remote:obs_record", { action: "marker", label: "Sermon", by: "OBS desk" })
+    await fire("remote:obs_record", { action: "marker", label: "", by: "OBS desk" })
+    await fire("remote:obs_record", { action: "stop", by: "OBS desk" })
+    expect(startRecording).toHaveBeenCalledTimes(1)
+    expect(stopRecording).toHaveBeenCalledTimes(1)
+    expect(mark.mock.calls).toEqual([["Sermon (OBS desk)"], ["Marker (OBS desk)"]])
+    await fire("remote:obs_transition", { name: "Cut", by: "OBS desk" })
+    await fire("remote:obs_transition", { name: "Not in OBS", by: "OBS desk" })
+    expect(setTransition.mock.calls).toEqual([["Cut"]])
+    useBroadcastStore.setState({ rehearsal: true })
+    await fire("remote:obs_record", { action: "start", by: "OBS desk" })
+    expect(startRecording).toHaveBeenCalledTimes(1)
+    useBroadcastStore.setState({ rehearsal: false })
     root.unmount()
   })
 })

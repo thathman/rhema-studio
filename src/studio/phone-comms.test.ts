@@ -6,8 +6,11 @@ import page from "../../src-tauri/crates/api/src/remote.html?raw"
 type Sent = { url: string; body?: Record<string, unknown> }
 /** The page's saved key: emptied after each test so the page stops asking (it polls every 2 s). */
 let saved = new Map<string, string>()
+/** The talk connections the page opened, and its microphone, to drop one and look at the mic. */
+let connections: { connectionState: string; onconnectionstatechange: (() => void) | null }[] = []
+let mics: { enabled: boolean; stop: () => void; readyState: string }[] = []
 
-function start(live: Record<string, unknown>, opts: { secure?: boolean; refuse?: (body: Record<string, unknown>) => string | null } = {}) {
+function start(live: Record<string, unknown>, opts: { secure?: boolean; refuse?: (body: Record<string, unknown>) => string | null; voiceDown?: (join: number) => boolean } = {}) {
   const store = (saved = new Map([["rhema-remote-token", "phone-key"]]))
   vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) })
   const sent: Sent[] = []
@@ -17,17 +20,21 @@ function start(live: Record<string, unknown>, opts: { secure?: boolean; refuse?:
     if (url === "/api/v1/status") return new Response(JSON.stringify({ on_air: true }))
     if (url === "/api/v1/live") return new Response(JSON.stringify(live))
     if (url === "/api/v1/me") return new Response(JSON.stringify({ name: "Usher phone", role: "present" }))
-    if (url === "/api/v1/voice") return new Response(JSON.stringify({ sdp: "answer" }))
+    if (url === "/api/v1/voice") return opts.voiceDown?.(sent.filter((x) => x.url === url).length) ? new Response(JSON.stringify({ error: "not now" }), { status: 503 }) : new Response(JSON.stringify({ sdp: "answer" }))
     const why = body && opts.refuse?.(body)
     return why ? new Response(JSON.stringify({ error: why }), { status: 403 }) : new Response(JSON.stringify({ success: true }))
   }))
   if (opts.secure) {
     vi.stubGlobal("isSecureContext", true)
-    const track = { enabled: true, stop: vi.fn() }
+    const track = { enabled: true, stop: vi.fn(), readyState: "live" }
+    mics.push(track)
     Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia: vi.fn(async () => ({ getAudioTracks: () => [track] })) }, configurable: true })
+    vi.stubGlobal("MediaStream", class { tracks: unknown[]; constructor(tracks: unknown[]) { this.tracks = tracks } getAudioTracks() { return this.tracks } })
     vi.stubGlobal("RTCPeerConnection", class {
       iceGatheringState = "complete"
       connectionState = "new"
+      onconnectionstatechange: (() => void) | null = null
+      constructor() { connections.push(this as never) }
       localDescription = { sdp: "offer" }
       addTransceiver() {}
       addEventListener() {}
@@ -52,6 +59,8 @@ const button = (root: Element | Document, text: string) => [...root.querySelecto
 
 afterEach(async () => {
   saved.clear()
+  connections = []
+  mics = []
   // Let a request already on its way finish before the page goes.
   await new Promise((r) => setTimeout(r, 50))
   vi.unstubAllGlobals()
@@ -123,4 +132,88 @@ describe("phone remote: Talk to and each person's mute", () => {
     expect(commands().at(-1)).toMatchObject({ command: "voice_channels", value: { talk: "to:Ade", levels: { Ade: 0 } } })
     expect(crew.querySelector('button[aria-label="Unmute Ade"]')).not.toBeNull()
   })
+})
+
+describe("phone remote: round two (#251)", () => {
+  const request = { id: "n3", from: "Main desk", to: "present", priority: "normal", text: "Next hymn", at: 0, answers: [], action: { kind: "song", value: "Amazing Grace" } }
+
+  it("queues a requested song with the run of show it saw, and answers Ready", async () => {
+    const { commands } = start({ v: 1, sources: [], notices: [request], revisions: { queue: 7 } })
+    await vi.waitFor(() => expect(button(document, "Queue")).toBeDefined())
+    expect(button(document, "Queue").getAttribute("aria-label")).toBe("Queue Amazing Grace")
+    button(document, "Queue").click()
+    await vi.waitFor(() => expect(commands()).toHaveLength(2))
+    expect(commands()[0]).toMatchObject({ command: "queue_request", value: { kind: "song", value: "Amazing Grace" }, seen: { queue: 7 } })
+    expect(commands()[1]).toMatchObject({ command: "notice_ack", value: { id: "n3", state: "ready" } })
+  })
+
+  it("a refused Queue (someone queued it first) answers Unable with why", async () => {
+    const { commands } = start({ v: 1, sources: [], notices: [request] }, { refuse: (b) => (b.command === "queue_request" ? "Someone changed this first — look again" : null) })
+    await vi.waitFor(() => expect(button(document, "Queue")).toBeDefined())
+    button(document, "Queue").click()
+    await vi.waitFor(() => expect(commands()).toHaveLength(2))
+    expect(commands()[1]).toMatchObject({ command: "notice_ack", value: { state: "unable" }, why: "“Queue Amazing Grace”: Someone changed this first — look again" })
+  })
+
+  it("has a volume for each person, sent as their level and never redrawn while the page refreshes", async () => {
+    const live = { v: 1, sources: [], notices: [], voice: [{ name: "Ade", role: "bible", talking: false, speaking: false }] }
+    const { commands } = start(live, { secure: true })
+    await vi.waitFor(() => expect((document.getElementById("talkJoin") as HTMLButtonElement).hidden).toBe(false))
+    ;(document.getElementById("talkJoin") as HTMLButtonElement).click()
+    await vi.waitFor(() => expect(document.querySelector('#crew input[aria-label="Volume for Ade"]')).not.toBeNull())
+    const slider = document.querySelector('#crew input[aria-label="Volume for Ade"]') as HTMLInputElement
+    expect(slider.value).toBe("100")
+    slider.value = "40"
+    slider.dispatchEvent(new Event("input"))
+    await vi.waitFor(() => expect(commands().filter((c) => c.command === "voice_channels").at(-1)).toMatchObject({ value: { levels: { Ade: 40 } } }))
+    // The page looks at the host again: the same slider, with its value.
+    document.dispatchEvent(new Event("visibilitychange"))
+    await new Promise((r) => setTimeout(r, 100))
+    expect(document.querySelector('#crew input[aria-label="Volume for Ade"]')).toBe(slider)
+    expect(slider.value).toBe("40")
+    // Mute wins over the volume; unmuting gives the volume back.
+    ;(document.querySelector('#crew button[aria-label="Mute Ade"]') as HTMLButtonElement).click()
+    expect(commands().at(-1)).toMatchObject({ command: "voice_channels", value: { levels: { Ade: 0 } } })
+    ;(document.querySelector('#crew button[aria-label="Unmute Ade"]') as HTMLButtonElement).click()
+    expect(commands().at(-1)).toMatchObject({ command: "voice_channels", value: { levels: { Ade: 40 } } })
+  })
+
+  it("joins Talk again by itself after a dropped connection, with the microphone off until Talk is pressed", async () => {
+    const live = { v: 1, sources: [], notices: [], voice: [] }
+    // The second join (the first try after the drop) finds the computer not ready yet.
+    const { sent } = start(live, { secure: true, voiceDown: (n) => n === 2 })
+    await vi.waitFor(() => expect((document.getElementById("talkJoin") as HTMLButtonElement).hidden).toBe(false))
+    ;(document.getElementById("talkJoin") as HTMLButtonElement).click()
+    await vi.waitFor(() => expect((document.getElementById("talkHold") as HTMLButtonElement).hidden).toBe(false))
+    const joins = () => sent.filter((x) => x.url === "/api/v1/voice").length
+    expect(joins()).toBe(1)
+    // Talking when the connection fails: the mic goes off at once and the page waits, then joins again.
+    const hold = document.getElementById("talkHold") as HTMLButtonElement
+    hold.dispatchEvent(new Event("pointerdown"))
+    expect(mics[0].enabled).toBe(true)
+    connections[0].connectionState = "failed"
+    connections[0].onconnectionstatechange?.()
+    expect(mics[0].enabled).toBe(false)
+    expect(hold.hidden).toBe(true)
+    expect(document.getElementById("msg")!.textContent).toContain("Joining again in 1 s")
+    expect((document.getElementById("talkJoin") as HTMLButtonElement).textContent).toBe("Stop joining again")
+    // That try fails: the next wait is longer.
+    await vi.waitFor(() => expect(document.getElementById("msg")!.textContent).toContain("Joining again in 2 s"), { timeout: 3000 })
+    expect(joins()).toBe(2)
+    await vi.waitFor(() => expect(hold.hidden).toBe(false), { timeout: 4000 })
+    expect(joins()).toBe(3)
+    expect(mics[0].enabled).toBe(false)
+    expect(mics[0].stop).not.toHaveBeenCalled()
+    expect(document.getElementById("msg")!.textContent).toContain("Press Talk to speak")
+    // Back in: the next drop starts from a short wait again; Leave stops it joining again.
+    const last = connections[connections.length - 1]
+    last.connectionState = "failed"
+    last.onconnectionstatechange?.()
+    expect(document.getElementById("msg")!.textContent).toContain("Joining again in 1 s")
+    ;(document.getElementById("talkJoin") as HTMLButtonElement).click()
+    expect((document.getElementById("talkJoin") as HTMLButtonElement).textContent).toBe("Join the talk channel")
+    expect(mics[0].stop).toHaveBeenCalled()
+    await new Promise((r) => setTimeout(r, 1300))
+    expect(joins()).toBe(3)
+  }, 12_000)
 })

@@ -14,14 +14,14 @@ import { activatedLabel } from "@/lib/live-sources"
 import { sourceName } from "@/lib/content-names"
 import { NoticesPanel } from "@/studio/notices-panel"
 import { JoinedTalk } from "@/studio/talk"
-import { sceneTargets } from "@/stores/notices-store"
+import { sceneTargets, type NoticeAction } from "@/stores/notices-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { deskFreshness, skewWords } from "@/lib/desk-freshness"
 import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
 import { HostLookOffer } from "@/studio/production/host-look-offer"
 import { CameraDesk, DeskSceneEditor, ObsDesk, SongsDesk, StageDesk } from "@/studio/production/joined-desks"
-import { BibleConsole, DirectorBoard, OutputMap } from "@/studio/production/desk-consoles"
+import { BibleConsole, DirectorBoard, OutputMap, ScreenSources } from "@/studio/production/desk-consoles"
 import type { CrewRow } from "@/lib/desk-console-words"
 import { useReadiness } from "@/studio/use-readiness"
 import { deskEditable } from "@/lib/desk-scenes"
@@ -46,6 +46,19 @@ const DESKS: Record<string, readonly Desk[]> = {
 }
 // The host's times on the church's clock when the host says which (#196 R1.1), else this computer's.
 const hhmm = (ms: number, zone?: string) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", ...(zone && validTimeZone(zone) ? { timeZone: zone } : {}) })
+
+/** The roles whose desks add to the host's queue, as the host allows (rhema-api `Role::allows`). */
+const QUEUE_ROLES = new Set(["present", "configure", "editor"])
+
+/**
+ * Queue a verse or a song asked for on the host (Comms C2, #251): into its run of show for later,
+ * nothing shown. Null when the host took it, else its reason.
+ */
+async function queueOnHost(a: NoticeAction): Promise<string | null> {
+  if (a.kind !== "bible" && a.kind !== "song") return "only a verse or a song can be queued"
+  const r = await useJoin.getState().send({ command: "queue_request", value: { kind: a.kind, value: a.value } })
+  return r.ok ? null : r.error
+}
 
 /** How fresh this desk's view of the host is, looked at again every second (#196 R5). */
 function useFreshness() {
@@ -263,6 +276,7 @@ function JoinedDesk() {
           {desks.includes("songs") && <SongsDesk live={live} />}
           {desks.includes("cameras") && <CameraDesk live={live} />}
           {desks.includes("outputs") && <OutputMap live={live} />}
+          {desks.includes("outputs") && <ScreenSources live={live} />}
           {desks.includes("scenes") && <ScenesDesk live={live} role={me?.role ?? "present"} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
@@ -295,6 +309,7 @@ function JoinedDesk() {
                 const refused = results.find((r) => !r.ok)
                 return refused && !refused.ok ? refused.error : null
               }}
+              onQueue={QUEUE_ROLES.has(me?.role ?? "present") ? (a) => queueOnHost(a) : undefined}
               scenes={live.scenes}
               rundown={live.rundown}
               people={live.crew ?? []}

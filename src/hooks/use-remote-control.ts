@@ -18,7 +18,8 @@ import { activateBibleReference, previewBibleReference } from "@/lib/bible-activ
 import { songRequest } from "@/lib/song-request"
 import { cameraSourceId, isStateSource, type AnySourceId } from "@/lib/live-sources"
 import { useNotices } from "@/stores/notices-store"
-import { useObsStore } from "@/stores/obs-store"
+import { OBS_REHEARSAL_REASON, useObsStore } from "@/stores/obs-store"
+import { queueRequest } from "@/lib/queue-request"
 import { receiveDeskScene } from "@/lib/desk-scenes"
 import { asRemoteRole } from "@/lib/remote-roles"
 
@@ -155,10 +156,20 @@ export function useRemoteControl() {
           void songRequest(title, mode).then((why) => { if (why) notDone(p, title, why) })
         })
       }
-      // The song on the screens one section on or back, from a Worship desk (desk consoles).
+      // The song on the screens one section on or back, or the chorus again, from a Worship desk (desk consoles).
       await withPayload(REMOTE_EVENTS.song_section, (p) => {
-        const step = p.step === 1 ? 1 : p.step === -1 ? -1 : 0
+        const step = p.to === "chorus" ? "chorus" : p.step === 1 ? 1 : p.step === -1 ? -1 : 0
         if (step) void stepLiveSection(step).then((why) => { if (why) toast.warning("Section not changed", { description: `${byOf(p)}${why}` }) })
+      })
+      // A verse or a song asked for, queued from a joined desk or a phone (Comms C2): into the run
+      // of show for later, as the main desk's own Queue; nothing is shown.
+      await withPayload(REMOTE_EVENTS.queue_request, (p) => {
+        if ((p.kind !== "bible" && p.kind !== "song") || typeof p.value !== "string") return
+        const value = p.value.slice(0, 120)
+        void queueRequest({ kind: p.kind, value }).then((why) => {
+          if (why) toast.warning(`${value} not queued`, { description: `${byOf(p)}${why}` })
+          else useJournalStore.getState().add({ kind: "remote", label: `${byOf(p)}queued ${value}` })
+        })
       })
       await withPayload(REMOTE_EVENTS.clear_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().clearSource(id) })
       await withPayload(REMOTE_EVENTS.restore_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().restoreSource(id) })
@@ -197,6 +208,16 @@ export function useRemoteControl() {
       await withPayload(REMOTE_EVENTS.obs_preview, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().setPreview(scene) })
       await withPayload(REMOTE_EVENTS.obs_take, () => void useObsStore.getState().take())
       await withPayload(REMOTE_EVENTS.obs_program, (p) => { const scene = obsScene(p); if (scene) void useObsStore.getState().switchProgram(scene) })
+      // The transition and the recording from the OBS director's desk (#197); the host's server
+      // refused them in rehearsal, and so does this computer (rehearsal records nothing).
+      await withPayload(REMOTE_EVENTS.obs_transition, (p) => { if (typeof p.name === "string" && useObsStore.getState().transitions.includes(p.name)) void useObsStore.getState().setTransition(p.name) })
+      await withPayload(REMOTE_EVENTS.obs_record, (p) => {
+        if (useBroadcastStore.getState().rehearsal) return void toast.info("OBS not changed", { description: `${byOf(p)}${OBS_REHEARSAL_REASON}` })
+        const obs = useObsStore.getState()
+        if (p.action === "start") void obs.startRecording()
+        else if (p.action === "stop") void obs.stopRecording()
+        else if (p.action === "marker") void obs.mark((typeof p.label === "string" && p.label.trim() ? p.label.trim() : "Marker").slice(0, 60) + ` (${senderOf(p)})`)
+      })
 
       // remote:paired — a device completed pairing; remember its token hash
       keep(

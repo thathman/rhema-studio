@@ -23,7 +23,8 @@ import { sceneForDesk, scenesOnScreen, type DeskScene } from "@/lib/desk-scenes"
 import { useObsStore } from "@/stores/obs-store"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useTimeChange } from "@/stores/time-change-store"
-import { deskConsoleState, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness } from "@/lib/desk-consoles"
+import { deskConsoleState, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness, type WorshipSetItem } from "@/lib/desk-consoles"
+import { recordWords, streamWords, type ObsLine } from "@/lib/obs-status"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -93,9 +94,11 @@ export interface LiveStateV1 {
   requireApproval?: boolean
   /**
    * OBS as the host sees it, for an OBS director desk: connected, Studio Mode, its scenes, program
-   * and preview. Absent from older hosts.
+   * and preview. Absent from older hosts. From the desk consoles' second round (#197; absent from
+   * older hosts): whether OBS is recording (null: OBS has not said), the stream's and the
+   * recording's health in words, its transitions and the one in use.
    */
-  obs?: { connected: boolean; studioMode: boolean | null; scenes: string[]; program: string | null; preview: string | null }
+  obs?: { connected: boolean; studioMode: boolean | null; scenes: string[]; program: string | null; preview: string | null; recording?: boolean | null; stream?: ObsLine; record?: ObsLine; transitions?: string[]; transition?: string | null }
   /**
    * The church's cameras (Production → Cameras) for a scene's camera box on a joined desk: name,
    * label and the router address a screen plays (null while the router is off). Never a camera's
@@ -121,6 +124,8 @@ export interface LiveStateV1 {
   lyrics?: LiveLyrics | null
   outputMap?: OutputMapRow[]
   heard?: HeardVerse[]
+  /** The service's songs and hymns in order with their keys, for a Worship desk (#197). Absent from older hosts. */
+  worshipSet?: WorshipSetItem[]
   readiness?: SharedReadiness
   /**
    * Added by the host's server for the Present and settings desks (the director), not the app:
@@ -241,7 +246,10 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     hold: (() => { const h = useHold.getState().hold; return h ? { reason: h.reason, since: h.since, ...(h.by ? { by: h.by } : {}) } : null })(),
     requireApproval: useSettingsStore.getState().requireApproval,
     cameraFeeds: (() => { const r = useRouterHealth.getState().status; return useSettingsStore.getState().cameras.map((c) => ({ name: c.name, label: c.label, url: r?.running && r.lanAddress ? whepUrl(r.lanAddress, r.ports, c.name) : null })) })(),
-    obs: (() => { const o = useObsStore.getState(); return { connected: o.status === "connected", studioMode: o.studioMode, scenes: o.scenes.slice(0, 100), program: o.program, preview: o.preview } })(),
+    obs: (() => {
+      const o = useObsStore.getState()
+      return { connected: o.status === "connected", studioMode: o.studioMode, scenes: o.scenes.slice(0, 100), program: o.program, preview: o.preview, recording: o.recording ? o.recording.active : null, stream: streamWords(o.stream), record: recordWords(o.recordOutput), transitions: o.transitions.slice(0, 40), transition: o.transition }
+    })(),
     heartbeatMs: LIVE_HEARTBEAT_MS,
     auxTimers: useAuxTimers.getState().timers.map((t) => ({ id: t.id, label: t.label, ...(t.owner ? { owner: t.owner } : {}), durationMs: t.timer.durationMs, elapsedMs: Math.round(elapsedMs(t.timer, monotonicNow())), running: t.timer.startedAt !== null, ...(t.onStage ? { onStage: true as const } : {}) })),
     timeChange: (() => { const c = useTimeChange.getState().last; return c ? { what: c.what, ...(c.by ? { by: c.by } : {}), at: c.at } : null })(),
@@ -309,7 +317,8 @@ export function startLiveStatePublisher(): () => void {
     useVoice.subscribe(() => soon()),
     useSettingsStore.subscribe((s, p) => { if (s.remoteDevices !== p.remoteDevices || s.cameras !== p.cameras || s.brandKit !== p.brandKit || s.requireApproval !== p.requireApproval || s.setup.timeZone !== p.setup.timeZone || s.talkRules !== p.talkRules) soon() }),
     useTimingTrust.subscribe(() => soon()),
-    useObsStore.subscribe((s, p) => { if (s.status !== p.status || s.scenes !== p.scenes || s.program !== p.program || s.preview !== p.preview || s.studioMode !== p.studioMode) soon() }),
+    // The stream's and recording's figures move with every poll: the heartbeat carries those.
+    useObsStore.subscribe((s, p) => { if (s.status !== p.status || s.scenes !== p.scenes || s.program !== p.program || s.preview !== p.preview || s.studioMode !== p.studioMode || s.recording?.active !== p.recording?.active || s.transition !== p.transition || s.transitions !== p.transitions || s.stream?.active !== p.stream?.active) soon() }),
     useRouterHealth.subscribe(() => soon()),
     ...watchDeskConsoles(soon),
   ]
