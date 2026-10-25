@@ -209,6 +209,7 @@ pub fn run() {
             commands::content::content_set_program_archived,
             commands::content::content_set_program_template,
             commands::content::content_approve_program,
+            commands::content::content_approved_songs,
             commands::content::content_set_actor,
             commands::content::content_save_service_log,
             commands::content::content_list_service_logs,

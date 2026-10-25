@@ -14,8 +14,11 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, defaultPhases, sectionSummaries, type PhaseRole } from "@/lib/run-of-show"
-import { CalendarDaysIcon, ClockIcon, FolderPlusIcon, LayersIcon, MonitorPlayIcon } from "lucide-react"
+import { RULE_LABEL, defaultPhases, newPhase, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { CalendarDaysIcon, ClockIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
+import { RundownTools } from "@/studio/prepare/bulk-bar"
+import { useBibleStore } from "@/stores"
+import type { CueQueueItem } from "@/types"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { cn } from "@/lib/utils"
@@ -28,7 +31,8 @@ import { cn } from "@/lib/utils"
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
-  const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(s.items)))
+  // Hidden items and a skipped phase take no planned time (#193).
+  const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(timedItems(s.items, s.headers))))
   const service = useServiceStore((s) => s.current)
   const [confirmOpen, setConfirmOpen] = useState(false)
   // On a narrower window the timing column folds away; this brings it back over the editor.
@@ -92,6 +96,7 @@ export function PrepareWorkspace() {
               <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
               <h2 className="text-sm font-semibold">{count} {count === 1 ? "item" : "items"}{planned ? ` · ${planned} planned in all` : ""}</h2>
             </div>
+            <RundownTools />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <RundownList mode="prepare" />
@@ -161,6 +166,17 @@ function RundownFooter() {
     const at = sel?.index ?? 0
     useQueueStore.getState().setHeaders([...useQueueStore.getState().headers, { id: crypto.randomUUID(), type: "group", name: "New group", at }])
   }
+  // A church-named phase (#193): before the selected item, else at the end; rename it from its menu.
+  const addPhase = () => {
+    const at = sel?.index ?? count
+    useQueueStore.getState().setHeaders([...useQueueStore.getState().headers, newPhase(at)])
+  }
+  // A cue-only moment (#193): shows nothing; it fires its cues (an OBS marker to begin with) when taken.
+  const addCue = () => {
+    const item: CueQueueItem = { id: crypto.randomUUID(), kind: "cue", reference: "New cue", confidence: 1, source: "manual", added_at: Date.now(), cues: [{ on: "live", do: "obs.mark" }] }
+    useQueueStore.getState().addItem(item)
+    useBibleStore.getState().selectSlide({ item, index: 0 })
+  }
   return (
     <div className="flex flex-wrap gap-2 border-t border-border p-2.5">
       {!hasPhases && (
@@ -170,6 +186,14 @@ function RundownFooter() {
       )}
       <Button size="sm" variant="outline" onClick={addGroup} title={sel ? `A group starting at ${sel.item.reference}` : "A group at the top"}>
         <FolderPlusIcon /> Group
+      </Button>
+      {hasPhases && (
+        <Button size="sm" variant="outline" onClick={addPhase} title={sel ? `A phase of your own starting at ${sel.item.reference}` : "A phase of your own at the end"}>
+          <LayersPlusIcon /> Phase
+        </Button>
+      )}
+      <Button size="sm" variant="outline" onClick={addCue} title="A moment that shows nothing and fires its cues, e.g. an OBS recording marker">
+        <ZapIcon /> Cue
       </Button>
     </div>
   )

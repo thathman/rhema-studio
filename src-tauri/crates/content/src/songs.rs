@@ -262,6 +262,9 @@ pub struct SongItemPayload {
     pub arrangement_id: Option<String>,
     #[serde(default)]
     pub languages: Vec<String>,
+    /// Show a slide with the song's title (and authors) before its words (#193).
+    #[serde(default)]
+    pub title_slide: Option<bool>,
 }
 
 impl ContentDb {
@@ -1012,7 +1015,7 @@ fn load_numbers(conn: &Connection, song_id: &str) -> Result<Vec<HymnNumber>> {
     Ok(rows.collect::<std::result::Result<_, _>>()?)
 }
 
-fn load_song(conn: &Connection, id: &str) -> Result<Option<SongWithSections>> {
+pub(crate) fn load_song(conn: &Connection, id: &str) -> Result<Option<SongWithSections>> {
     let Some(song) = load_song_row(conn, id)? else { return Ok(None) };
     let sections = load_sections(conn, id)?;
     let arrangements = {

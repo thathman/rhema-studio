@@ -1,4 +1,5 @@
 import { validTimeZone } from "@/lib/church-time"
+import { timedItems } from "@/lib/run-of-show"
 import { eventStarts, eventTimes, serviceFinishedAt } from "@/lib/journal"
 import type { TimingInput } from "@/lib/timing-engine"
 import { runState, type RunState } from "@/lib/timing-state"
@@ -25,7 +26,8 @@ export function timingInputNow(now = Date.now()): TimingInput {
   const entries = useJournalStore.getState().entries
   const offset = useServiceOffset.getState()
   return {
-    items: q.items,
+    // Hidden items and a skipped phase take no planned time (#193).
+    items: timedItems(q.items, q.headers),
     headers: q.headers,
     firstOnAir: eventStarts(entries),
     onAirMs: eventTimes(entries, Math.max(monotonicNow(), entries.at(-1)?.mono ?? 0)),

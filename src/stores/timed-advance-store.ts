@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { presentQueueItem } from "@/lib/remote-actions"
-import { phaseAt } from "@/lib/run-of-show"
+import { isSkipped, phaseAt } from "@/lib/run-of-show"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { usePhaseRun } from "@/stores/phase-run-store"
 import { useQueueStore } from "@/stores/queue-store"
@@ -31,11 +31,14 @@ export function timedNext(): { index: number; ms: number; itemId: string } | nul
   const { items, headers } = useQueueStore.getState()
   const index = items.findIndex((i) => i.id === b.liveItemId)
   const item = items[index]
-  if (!item?.auto_advance || !item.planned_minutes || index + 1 >= items.length) return null
+  // The next item Present runs: hidden ones and a skipped phase are passed over (#193).
+  let to = index + 1
+  while (to < items.length && isSkipped(items, headers, to)) to += 1
+  if (!item?.auto_advance || !item.planned_minutes || to >= items.length) return null
   const phase = phaseAt(headers, index)
   if (phase && phase.rule && phase.rule !== "manual") return null
-  if (phaseAt(headers, index + 1) !== phase) return null
-  return { index: index + 1, ms: item.planned_minutes * 60_000, itemId: item.id }
+  if (phaseAt(headers, to) !== phase) return null
+  return { index: to, ms: item.planned_minutes * 60_000, itemId: item.id }
 }
 
 function reconsider() {

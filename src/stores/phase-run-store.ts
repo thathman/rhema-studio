@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { presentQueueItem } from "@/lib/remote-actions"
-import { clockInstant, clockMinutes, dwellSeconds, nextInPhase, phaseRange, planTimeline } from "@/lib/run-of-show"
+import { clockInstant, clockMinutes, dwellSeconds, isSkipped, nextInPhase, phaseRange, planTimeline } from "@/lib/run-of-show"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useHold } from "@/stores/hold-store"
@@ -83,7 +83,9 @@ async function step(run: PhaseRun) {
   const range = phaseRange(items.length, headers, run.headerId)
   if (!header?.rule || header.rule === "manual" || !range) return usePhaseRun.getState().stop()
   const current = run.itemId ? items.findIndex((i) => i.id === run.itemId) : -1
-  const index = run.itemId ? nextInPhase(header.rule, range.start, range.end, current) : range.end > range.start ? range.start : null
+  // Hidden items, a skipped phase and cue-only moments are not run by themselves (#193).
+  const skip = (i: number) => isSkipped(items, headers, i) || items[i]?.kind === "cue"
+  const index = nextInPhase(header.rule, range.start, range.end, run.itemId ? current : -1, skip)
   if (index === null) return usePhaseRun.getState().stop()
   // A loop of one item keeps it up (a video does not restart); it looks again later in case items were added.
   if (index === current) return later(dwellSeconds(header, items[index].planned_minutes) * 1000, () => { if (usePhaseRun.getState().run === run) void step(run) })
@@ -99,7 +101,7 @@ async function step(run: PhaseRun) {
   const b = useBroadcastStore.getState()
   if (!b.isLive || b.liveItemId !== item.id) return usePhaseRun.getState().stop()
   const ms = dwellSeconds(header, item.planned_minutes) * 1000
-  const more = nextInPhase(header.rule, range.start, range.end, index) !== null
+  const more = nextInPhase(header.rule, range.start, range.end, index, skip) !== null
   const next: PhaseRun = { headerId: run.headerId, itemId: item.id, startsAt: null, nextAt: more ? Date.now() + ms : null, ...(run.rehearsal ? { rehearsal: true } : {}) }
   usePhaseRun.setState({ run: next })
   later(ms, () => { if (usePhaseRun.getState().run === next) void step(next) })
@@ -110,7 +112,7 @@ export const usePhaseRun = create<PhaseRunState>((set, get) => ({
   start: (headerId) => {
     get().stop()
     const header = useQueueStore.getState().headers.find((h) => h.id === headerId)
-    if (header?.type !== "phase" || (header.rule !== "loop" && header.rule !== "auto_once")) return
+    if (header?.type !== "phase" || header.disabled || (header.rule !== "loop" && header.rule !== "auto_once")) return
     const due = header.role === "warmup" && header.rule === "auto_once" ? warmupDue(Date.now()) : null
     const run: PhaseRun = { headerId, itemId: null, startsAt: due, nextAt: null, ...(useBroadcastStore.getState().rehearsal ? { rehearsal: true } : {}) }
     set({ run })

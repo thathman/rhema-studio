@@ -3,7 +3,7 @@
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 
-use crate::{audit, load_items, load_program, new_id, ContentDb, ContentError, ItemInput, ProgramItem, ProgramWithItems, Result};
+use crate::{audit, load_items, load_program, new_id, ContentDb, ContentError, ItemInput, ProgramItem, ProgramWithItems, Result, SongWithSections};
 
 /// Snapshots kept per service; older ones are dropped on the next save.
 pub const KEEP_REVISIONS: i64 = 50;
@@ -153,10 +153,31 @@ impl ContentDb {
         if crate::has_archive_column(&tx) {
             tx.execute("UPDATE programs SET approved_by = ?2 WHERE id = ?1", params![program_id, crate::actor()])?;
         }
+        pin_songs(&tx, program_id)?;
         audit(&tx, "program", program_id, "approve", &serde_json::json!({ "revision": expected_revision }))?;
         let program = load_program(&tx, program_id)?.ok_or_else(|| ContentError::NotFound(program_id.into()))?;
         tx.commit()?;
         Ok(program)
+    }
+
+    /// The words of each song as the service was approved (#193): what Present shows for the
+    /// service's songs unless the operator chooses the library's newer words. Empty for a service
+    /// never approved here (or approved by a build before pins).
+    pub fn approved_songs(&self, program_id: &str) -> Result<Vec<SongWithSections>> {
+        let conn = self.lock()?;
+        if !has_pin_table(&conn)? {
+            return Ok(Vec::new());
+        }
+        let mut stmt = conn.prepare("SELECT song FROM approved_songs WHERE program_id = ?1 ORDER BY song_id")?;
+        let rows = stmt.query_map(params![program_id], |r| r.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for raw in rows {
+            // A pin this build cannot read is left out: the library's words are shown instead.
+            if let Ok(song) = serde_json::from_str::<SongWithSections>(&raw?) {
+                out.push(song);
+            }
+        }
+        Ok(out)
     }
 
     pub fn restore_revision(&self, program_id: &str, expected_revision: i64, revision_id: &str) -> Result<ProgramWithItems> {
@@ -184,6 +205,47 @@ impl ContentDb {
         tx.commit()?;
         Ok(restored)
     }
+}
+
+/// The pinned songs live in a table made when first needed rather than by a migration, so a
+/// database stays openable by builds from before pins (they ignore the table; a migration would
+/// make them refuse the file as newer).
+const PIN_TABLE: &str = "CREATE TABLE IF NOT EXISTS approved_songs (
+    program_id    TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+    song_id       TEXT NOT NULL,
+    song_revision INTEGER NOT NULL,
+    song          TEXT NOT NULL,
+    pinned_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (program_id, song_id)
+)";
+
+fn has_pin_table(conn: &Connection) -> Result<bool> {
+    let n: i64 = conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'approved_songs'", [], |r| r.get(0))?;
+    Ok(n > 0)
+}
+
+/// Approving pins each song of the service at its current words (#193): a song edited in the
+/// library afterwards shows as changed since approval, and the approved words are kept.
+fn pin_songs(tx: &Transaction<'_>, program_id: &str) -> Result<()> {
+    tx.execute_batch(PIN_TABLE)?;
+    tx.execute("DELETE FROM approved_songs WHERE program_id = ?1", params![program_id])?;
+    let ids: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT DISTINCT json_extract(payload, '$.song_id') FROM program_items
+             WHERE program_id = ?1 AND kind = 'song' AND json_valid(payload) AND json_extract(payload, '$.song_id') IS NOT NULL",
+        )?;
+        let rows = stmt.query_map(params![program_id], |r| r.get(0))?.collect::<std::result::Result<_, _>>()?;
+        rows
+    };
+    for id in ids {
+        let Some(song) = crate::songs::load_song(tx, &id)? else { continue };
+        let json = serde_json::to_string(&song).map_err(|e| ContentError::Invalid(e.to_string()))?;
+        tx.execute(
+            "INSERT INTO approved_songs (program_id, song_id, song_revision, song) VALUES (?1, ?2, ?3, ?4)",
+            params![program_id, id, song.song.revision, json],
+        )?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -300,5 +362,40 @@ mod tests {
         assert_eq!(approve.actor.as_deref(), Some("Tolu"));
         let _ = db.update_program(&p.id, renamed.revision, "Sunday 9am", None).unwrap();
         assert_eq!(db.audit_events("program", &p.id).unwrap().last().unwrap().actor, None);
+    }
+
+    #[test]
+    fn approving_pins_each_song_and_a_later_edit_leaves_the_pin() {
+        use crate::{SectionInput, SongInput};
+        let db = ContentDb::open_in_memory().unwrap();
+        let words = |w: &str| SongInput {
+            title: "Amazing Grace".into(),
+            sections: vec![SectionInput { id: None, kind: "verse".into(), label: "Verse 1".into(), texts: [("en".to_string(), w.to_string())].into() }],
+            ..SongInput::default()
+        };
+        let song = db.create_song(&words("Amazing grace")).unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        // Never approved: no pins (and no table yet).
+        assert!(db.approved_songs(&p.id).unwrap().is_empty());
+        let item = ItemInput { kind: "song".into(), reference: "Amazing Grace".into(), payload: Some(format!(r#"{{"song_id":"{}","languages":["en"],"title_slide":true}}"#, song.song.id)), ..ItemInput::default() };
+        let saved = db.replace_items(&p.id, 1, &[item.clone(), item]).unwrap();
+        db.approve_program(&p.id, saved.program.revision).unwrap();
+        let pins = db.approved_songs(&p.id).unwrap();
+        assert_eq!(pins.len(), 1, "one pin per song, however often it is sung");
+        assert_eq!((pins[0].song.revision, pins[0].sections[0].texts["en"].as_str()), (1, "Amazing grace"));
+        // The song is edited after approval: the pin keeps the approved words.
+        let edited = db.update_song(&song.song.id, 1, &words("Amazing grace, how sweet")).unwrap();
+        assert_eq!(edited.song.revision, 2);
+        let pins = db.approved_songs(&p.id).unwrap();
+        assert_eq!((pins[0].song.revision, pins[0].sections[0].texts["en"].as_str()), (1, "Amazing grace"));
+        // Approving again pins the new words.
+        db.approve_program(&p.id, saved.program.revision).unwrap();
+        assert_eq!(db.approved_songs(&p.id).unwrap()[0].song.revision, 2);
+        // Deleting the service drops its pins.
+        let rev = db.get_program(&p.id).unwrap().unwrap().program.revision;
+        db.delete_program(&p.id, rev).unwrap();
+        let conn = db.lock().unwrap();
+        let left: i64 = conn.query_row("SELECT COUNT(*) FROM approved_songs", [], |r| r.get(0)).unwrap();
+        assert_eq!(left, 0);
     }
 }

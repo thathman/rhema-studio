@@ -12,7 +12,9 @@ import { useQueueStore } from "@/stores"
 import { useSongStore } from "@/stores/song-store"
 import { useMediaStore } from "@/stores/media-store"
 
-import { GO_LIVE_CUES, isImageItem, isSlideItem, isSongItem, isVerseItem, type GoLiveCue, type ImageQueueItem, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
+import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type CueTrigger, type GoLiveCue, type ImageQueueItem, type ItemCue, type ItemCueDo, type QueueItem, type SlideQueueItem, type SongQueueItem, type TakeStep } from "@/types"
+import { CUE_DO_LABEL, cueTakesText, MAX_ITEM_CUES, TRIGGER_LABEL } from "@/lib/item-cues"
+import { useSongApproval, useSongPins } from "@/stores/song-pins-store"
 import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
 import { cleanTakeSteps, obsStep, parseTakeStep, sceneStep, takeSteps, type ParsedTakeStep } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -371,6 +373,10 @@ export function SongItemControls({ item }: { item: SongQueueItem }) {
           </button>
         ))}
       </span>
+      <label className="flex items-center gap-1.5" title="A slide with the song's title (and authors) before its words">
+        <input type="checkbox" className="size-3.5" checked={!!item.song.title_slide} onChange={(e) => update({ title_slide: e.target.checked || undefined })} />
+        Title slide first
+      </label>
       {song.arrangements.length > 1 && (
         <Select value={item.song.arrangement_id ?? "__default"} onValueChange={(v) => update({ arrangement_id: v === "__default" ? null : v })}>
           <SelectTrigger className="h-6 w-36 text-xs" aria-label="Order"><SelectValue /></SelectTrigger>
@@ -380,6 +386,23 @@ export function SongItemControls({ item }: { item: SongQueueItem }) {
           </SelectContent>
         </Select>
       )}
+    </div>
+  )
+}
+
+/**
+ * A song edited in the library since the service was approved (#193): Present shows the approved
+ * words; approving again pins the new ones, or Present can use them for this service.
+ */
+export function SongApprovalNote({ item }: { item: SongQueueItem }) {
+  const state = useSongApproval(item.song.song_id)
+  if (!state) return null
+  return (
+    <div role="status" className="mx-2 mt-2 flex flex-wrap items-center gap-2 rounded-md bg-tone-amber px-2 py-1.5 text-xs text-tone-amber-foreground">
+      <span className="min-w-0 flex-1">
+        Changed since approval: the song was edited in the library (approved at revision {state.approvedRevision}, now {state.libraryRevision}). {state.usingNew ? "Present shows the new words in this service." : "Present shows the approved words. Approve the service again to use the new ones, or choose them in Present."}
+      </span>
+      {state.usingNew && <Button size="xs" variant="outline" onClick={() => useSongPins.getState().setLatest(item.song.song_id, false)}>Back to the approved words</Button>}
     </div>
   )
 }
@@ -430,6 +453,71 @@ export function GoLiveCues({ item }: { item: QueueItem }) {
         </select>
       </label>
     </section>
+  )
+}
+
+/**
+ * The item's cue list (#193, #196 R6): more cues for when it starts, and cues for when its planned
+ * time is up, when it is paused (a hold, or the timer paused) and when it ends. Each is a stage
+ * message, an OBS recording marker or a timer step: none changes what the congregation sees, and
+ * none runs in rehearsal.
+ */
+export function ItemCuesEditor({ item }: { item: QueueItem }) {
+  const cues = item.cues ?? []
+  const write = (next: ItemCue[]) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, cues: next.length ? next : null }))
+  const change = (k: number, patch: Partial<ItemCue>) => write(cues.map((c, j) => (j === k ? { ...c, ...patch, ...(patch.do && !cueTakesText(patch.do) ? { text: undefined } : {}) } : c)))
+  return (
+    <section className="mt-4 ml-7 flex flex-col gap-2 border-t border-border pt-3 pl-2 text-xs" aria-labelledby={`cues-${item.id}`}>
+      <h3 id={`cues-${item.id}`} className="text-sm font-semibold">Cues</h3>
+      <p className="text-muted-foreground">More moments for this item: when its planned time is up, when it is paused, when it ends. None changes what the congregation sees, and none runs in rehearsal.</p>
+      {cues.length > 0 && (
+        <ul className="flex flex-col gap-1.5" aria-label={`Cues of ${item.reference}`}>
+          {cues.map((c, k) => (
+            <li key={k} className="flex flex-wrap items-center gap-1.5">
+              <select aria-label={`Cue ${k + 1}: when`} value={c.on} onChange={(e) => change(k, { on: e.target.value as CueTrigger })} className={cn(fieldSelect, "w-auto min-w-0 flex-1 basis-36")}>
+                {CUE_TRIGGERS.map((t) => <option key={t} value={t}>{TRIGGER_LABEL[t]}</option>)}
+              </select>
+              <select aria-label={`Cue ${k + 1}: what`} value={c.do} onChange={(e) => change(k, { do: e.target.value as ItemCueDo })} className={cn(fieldSelect, "w-auto min-w-0 flex-1 basis-36")}>
+                {ITEM_CUE_DOES.map((d) => <option key={d} value={d}>{CUE_DO_LABEL[d]}</option>)}
+              </select>
+              {cueTakesText(c.do) && (
+                <Input
+                  aria-label={c.do === "stage.message" ? `Cue ${k + 1}: stage message` : `Cue ${k + 1}: marker name`}
+                  value={c.text ?? ""}
+                  maxLength={120}
+                  placeholder={c.do === "stage.message" ? "Shown on the stage screen only" : `Marker name (else "${item.reference}")`}
+                  className="h-7 min-w-0 flex-1 basis-48 text-xs"
+                  onChange={(e) => change(k, { text: e.target.value })}
+                />
+              )}
+              <Button variant="ghost" size="icon-xs" aria-label={`Remove cue ${k + 1}`} onClick={() => write(cues.filter((_, j) => j !== k))}><XIcon /></Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {cues.length < MAX_ITEM_CUES && (
+        <Button variant="outline" size="xs" className="self-start" onClick={() => write([...cues, { on: "end", do: "obs.mark" }])}>Add a cue</Button>
+      )}
+    </section>
+  )
+}
+
+/** A cue-only item (#193): its name; it shows nothing and fires its cues when taken. */
+export function CueItemEditor({ item }: { item: CueQueueItem }) {
+  return (
+    <div className="flex flex-col gap-2 px-2 pt-3 text-xs">
+      <label className="min-w-0">
+        <span className={fieldLabel}>Name</span>
+        <Input
+          aria-label="Name of the cue"
+          value={item.reference}
+          maxLength={200}
+          className="h-7 text-xs"
+          onChange={(e) => useQueueStore.getState().updateItem(item.id, (i) => ({ ...i, reference: e.target.value }))}
+        />
+      </label>
+      <p className="text-muted-foreground">A moment in the run of show with nothing on screen, e.g. "Sermon begins" with an OBS recording marker. Taking it in Present fires its cues (set them in Signals) and starts its time; the screens keep what they show.</p>
+    </div>
   )
 }
 

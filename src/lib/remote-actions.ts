@@ -4,9 +4,10 @@ import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
 import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type SongWithSections } from "@/types"
+import { isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type QueueItem, type SongWithSections } from "@/types"
+import { isSkipped } from "@/lib/run-of-show"
 import { useMediaStore } from "@/stores/media-store"
-import { useSongStore } from "@/stores/song-store"
+import { serviceSongNow } from "@/stores/song-pins-store"
 import { approvalHolds } from "@/stores/approval-gate-store"
 import { runTakeSteps, takesSourceOnly } from "@/lib/take-steps"
 import { toast } from "sonner"
@@ -68,6 +69,8 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
     const i = useQueueStore.getState().items.findIndex((x) => x.id === id)
     if (i !== -1) void presentQueueItem(i, slide, songAs, opts)
   }
+  // A cue-only moment (#193) shows nothing: taking it fires its cues; the screens keep what they show.
+  if (isCueItem(item)) return takeCueItem(item, index)
   const sourceOnly = takesSourceOnly(item)
   // A reading for the Bible feeds only does not reach the main screens, like Activate on Bible feeds.
   if (!isSoundItem(item) && !sourceOnly && approvalHolds(again)) return
@@ -106,6 +109,32 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
 }
 
 /**
+ * Take a cue-only moment (#193): it becomes the active item, and its event starts (following the
+ * screens) so its cues run; with the clock run on its own its "when it starts" cues run now, and
+ * the timekeeper starts its event. Nothing on the screens changes. Not in rehearsal.
+ */
+async function takeCueItem(item: CueQueueItem, index: number): Promise<void> {
+  useQueueStore.getState().setActive(index)
+  if (useBroadcastStore.getState().rehearsal) {
+    toast.info(`Rehearsal: the cues of ${item.reference} were not run`)
+    return
+  }
+  // Imported when needed: these modules import this one.
+  const [{ useEventClock }, { runItemCues }] = await Promise.all([import("@/stores/event-clock-store"), import("@/stores/on-live-cues")])
+  const clock = useEventClock.getState()
+  if (clock.mode === "screens") clock.start(item.id)
+  else await runItemCues(item, "live")
+}
+
+/** From `index` on in direction `dir`, the first item Present runs (hidden ones and a skipped phase are passed over, #193). */
+function shownFrom(index: number, dir: 1 | -1): number {
+  const { items, headers } = useQueueStore.getState()
+  let i = index
+  while (i >= 0 && i < items.length && isSkipped(items, headers, i)) i += dir
+  return i
+}
+
+/**
  * Next/Previous step through a song's slides first, then on to the next
  * item; stepping back into a song lands on its last slide.
  */
@@ -132,13 +161,14 @@ function stepQueue(offset: number): Promise<void> {
   const prev = gap ? known(gap.prevId) : -1
   const nextNeighbour = gap ? known(gap.nextId) : -1
   if (gap && (prev !== -1 || nextNeighbour !== -1)) {
-    const index = offset > 0 ? (nextNeighbour !== -1 ? nextNeighbour : gap.nextId === null ? -1 : prev + 1) : prev !== -1 ? prev : gap.prevId === null ? -1 : nextNeighbour - 1
+    const near = offset > 0 ? (nextNeighbour !== -1 ? nextNeighbour : gap.nextId === null ? -1 : prev + 1) : prev !== -1 ? prev : gap.prevId === null ? -1 : nextNeighbour - 1
+    const index = near < 0 ? near : shownFrom(near, offset > 0 ? 1 : -1)
     return index < 0 || index >= items.length ? Promise.resolve() : presentQueueItem(index)
   }
   if (current !== null) {
     const item = items[current]
     // Within the live song, unless it has been deleted from the library (then Next moves on).
-    if (item && isSongItem(item) && live && live.itemId === item.id && useSongStore.getState().songs[item.song.song_id]) {
+    if (item && isSongItem(item) && live && live.itemId === item.id && serviceSongNow(item.song.song_id)) {
       const next = live.index + offset
       if (next >= 0 && next < live.total) {
         // An arrangement or language change made while the song is live applies the next time it is entered.
@@ -147,10 +177,13 @@ function stepQueue(offset: number): Promise<void> {
       }
     }
   }
+  const dir = offset > 0 ? 1 : -1
+  // Hidden items and a skipped phase are passed over; with none left that way, it stays put (#193).
+  const passed = current === null ? -1 : shownFrom(current + offset, dir)
   let target =
     current === null
-      ? 0
-      : Math.min(Math.max(current + offset, 0), items.length - 1)
+      ? shownFrom(0, 1)
+      : passed < 0 || passed >= items.length ? current : passed
   // Sound items play only when reached going forward: Previous steps over
   // them (walk-in music does not start again on the way back), and Next at
   // the end of the service does not replay a final sound.
@@ -240,6 +273,12 @@ export const remoteActions = {
    */
   // Returns when the content is on air (or the present failed), so a cue's next step waits for it.
   sendToLive: (): Promise<void> => {
+    // A cue-only moment in Preview: Take fires its cues and shows nothing, so approval is not asked (#193).
+    const cue = useBibleStore.getState().selectedSlide?.item
+    if (cue && isCueItem(cue)) {
+      const at = useQueueStore.getState().items.findIndex((i) => i.id === cue.id)
+      return at === -1 ? Promise.resolve() : takeCueItem(cue, at)
+    }
     if (approvalHolds(() => void remoteActions.sendToLive())) return Promise.resolve()
     const bible = useBibleStore.getState()
     const queue = useQueueStore.getState()
@@ -255,7 +294,9 @@ export const remoteActions = {
         ? presentCustomSlide(item, { goLive: true })
         : isImageItem(item)
           ? presentImage(item, { goLive: true })
-          : presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined })
+          : isSongItem(item)
+            ? presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined })
+            : Promise.resolve<PresentOutcome>("empty")
       return presenting.then(took).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
     }
     const selectedVerse = bible.selectedVerse

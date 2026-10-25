@@ -34,7 +34,8 @@ describe("Present touch targets (#215 G9.3)", () => {
     const src = read("./rundown-list.tsx")
     expect(src).toMatch(/className="flex min-h-11 min-w-0 flex-1 items-center/)
     expect(src).toMatch(/mode === "present" \? "h-11" : "h-7"/)
-    expect(src.match(/size="icon-xs" className="size-11"/g)).toHaveLength(3)
+    // Move up, Move down, Hide (#193) and Remove.
+    expect(src.match(/size="icon-xs" className="size-11"/g)).toHaveLength(4)
     expect(src).not.toMatch(/className="size-8"/)
   })
 

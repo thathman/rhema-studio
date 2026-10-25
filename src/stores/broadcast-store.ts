@@ -20,6 +20,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
+import { markSkipped } from "@/lib/run-of-show"
 import { forOutputLanguage } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
@@ -899,7 +900,9 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (output.role === "stage") {
       recordFrame(outputId, { theme, verse: null, overlay: null, stage: true })
       const q = useQueueStore.getState()
-      const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, q.items, q.activeIndex) : null
+      // What comes next leaves out hidden items and a skipped phase (#193).
+      const items = markSkipped(q.items, q.headers)
+      const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, items, q.activeIndex) : null
       deliver(outputId, {
         // The stage window draws no theme: send the built-in one (no pictures) rather than the
         // output's, whose pictures can be megabytes, with every timer tick (NFR-03).
@@ -908,7 +911,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         role: "stage",
         // A stage that follows chosen sources shows their words; otherwise the program (ADR 0001).
         stage: applyStageStyle({ ...buildStagePayload({
-          isLive: shown !== null, liveVerse: shown, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
+          isLive: shown !== null, liveVerse: shown, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
         }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
@@ -1715,14 +1718,14 @@ function stageCountdownFrame(s: BroadcastState, items: QueueItemLike[], activeIn
   const zone = churchZone()
   const counting = lookCounting(s.countdownLook, s.countdownSources, useTimerStore.getState().timer, monotonicNow(), Date.now(), zone, s.countdowns)
   const item = activeIndex === null ? null : items[activeIndex]?.reference ?? null
-  const next = (activeIndex === null ? items[0] : items[activeIndex + 1])?.reference ?? null
+  const next = items.find((it, k) => k > (activeIndex ?? -1) && !it.hidden)?.reference ?? null
   // A browser feed's screen may be set to another zone: the time of day is the church's (or this computer's).
   const frame = countdownFrame(s.countdownLook, counting, { item, next, zone: zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "" })
   // The stage design's clock choices (#196 R2.6) reach the countdown display's time of day too.
   const st = s.stageStyle
   return { ...frame, ...(st.clockHours ? { hours: st.clockHours } : st.showClock ? { hours: 24 as const } : {}), ...(st.showClock && st.secondZone ? { zone2: { label: st.secondZoneLabel?.trim() || zoneCity(st.secondZone), zone: st.secondZone } } : {}) }
 }
-type QueueItemLike = { reference: string }
+type QueueItemLike = { reference: string; hidden?: boolean | null }
 
 /** Stage outputs that show the countdown display. */
 function syncCountdownOutputs(): void {

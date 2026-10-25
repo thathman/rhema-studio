@@ -123,6 +123,12 @@ pub fn content_approve_program(state: State<'_, ContentState>, id: String, expec
     with_db(&state, |db| db.approve_program(&id, expected_revision))
 }
 
+/// The words of each song as the service was approved (#193), for Present to keep showing them.
+#[tauri::command]
+pub fn content_approved_songs(state: State<'_, ContentState>, program_id: String) -> CmdResult<Vec<rhema_content::SongWithSections>> {
+    with_db(&state, |db| db.approved_songs(&program_id))
+}
+
 #[tauri::command]
 pub fn content_update_program(
     state: State<'_, ContentState>,

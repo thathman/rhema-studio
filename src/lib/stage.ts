@@ -40,7 +40,8 @@ export function stageFontVh(lines: string[]): number {
 export function buildStagePayload(i: StageInput): StagePayload {
   const live = i.isLive && i.liveVerse ? i.liveVerse : null
   const active = i.activeIndex === null ? null : i.items[i.activeIndex] ?? null
-  const next = i.activeIndex === null ? i.items[0] ?? null : i.items[i.activeIndex + 1] ?? null
+  // What comes next on stage: hidden items are passed over, as Next passes over them (#193).
+  const next = i.items.find((it, k) => k > (i.activeIndex ?? -1) && !it.hidden) ?? null
   const running = i.timer.startedAt !== null || i.timer.accumulatedMs > 0
   return {
     current: live ? { title: live.reference, lines: currentLines(live) } : null,

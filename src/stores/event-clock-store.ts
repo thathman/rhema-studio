@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { SERVICE_FINISHED, serviceFinishedAt } from "@/lib/journal"
 import { runState, transition } from "@/lib/timing-state"
+import { isSkipped } from "@/lib/run-of-show"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useHold } from "@/stores/hold-store"
 import { useJournalStore } from "@/stores/journal-store"
@@ -32,9 +33,12 @@ interface EventClockState {
 }
 
 function step(offset: 1 | -1) {
-  const { items } = useQueueStore.getState()
+  const { items, headers } = useQueueStore.getState()
   const at = items.findIndex((i) => i.id === useEventClock.getState().currentId)
-  const to = items[at === -1 ? (offset === 1 ? 0 : -1) : at + offset]
+  // Hidden items and skipped phases are passed over (#193).
+  let i = at === -1 ? (offset === 1 ? 0 : -1) : at + offset
+  while (i >= 0 && i < items.length && isSkipped(items, headers, i)) i += offset
+  const to = items[i]
   if (to) useEventClock.getState().start(to.id)
 }
 
@@ -67,8 +71,10 @@ export const useEventClock = create<EventClockState>((set, get) => ({
 }))
 
 // Following the screens: an item's own content going on air starts its event (not in rehearsal,
-// not a quick screen; Restore and Back keep the same event).
-useBroadcastStore.subscribe((s) => {
+// not a quick screen; Restore and Back keep the same event). Only when what is on air changes: a
+// cue-only item taken meanwhile (#193) stays the event until the screens change.
+useBroadcastStore.subscribe((s, prev) => {
+  if (s.liveItemId === prev.liveItemId && s.isLive === prev.isLive && s.liveVerse === prev.liveVerse && s.rehearsal === prev.rehearsal) return
   if (useEventClock.getState().mode !== "screens" || s.rehearsal || !s.isLive || !s.liveItemId) return
   if (s.liveVerse?.quick || s.liveVerse?.screen) return
   useEventClock.getState().start(s.liveItemId)

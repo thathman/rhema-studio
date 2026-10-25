@@ -16,7 +16,8 @@ import type {
   Translation,
   Verse,
 } from "@/types"
-import { GO_LIVE_CUES, isImageItem, isSlideItem, isVerseItem, type OnLive } from "@/types"
+import { GO_LIVE_CUES, isCueItem, isImageItem, isSlideItem, isVerseItem, type ItemCue, type OnLive } from "@/types"
+import { cleanCues } from "@/lib/item-cues"
 import { safeLink } from "@/lib/qr-bulletin"
 import { cleanComments, parseComments } from "@/lib/comments"
 import { cleanAssignees, parseAssignees, preparedByText } from "@/lib/assignees"
@@ -130,7 +131,7 @@ export function toItemInputs(
 function headerInput(h: OutlineHeader): ItemInput {
   const payload = {
     ...(h.payload_extra ?? {}),
-    ...(h.type === "phase" ? { ...(h.rule ? { rule: h.rule } : {}), ...(h.role ? { role: h.role } : {}), ...(h.starts_at && isClockTime(h.starts_at) ? { starts_at: h.starts_at } : {}), ...(isAdvanceSeconds(h.advance_seconds) ? { advance_seconds: h.advance_seconds } : {}) } : {}),
+    ...(h.type === "phase" ? { ...(h.rule ? { rule: h.rule } : {}), ...(h.role ? { role: h.role } : {}), ...(h.starts_at && isClockTime(h.starts_at) ? { starts_at: h.starts_at } : {}), ...(isAdvanceSeconds(h.advance_seconds) ? { advance_seconds: h.advance_seconds } : {}), ...(h.disabled ? { disabled: true } : {}) } : {}),
   }
   return {
     id: h.id,
@@ -165,6 +166,9 @@ function itemInputs(
     ...(cleanAssignees(i.assignees).length ? { assignees: cleanAssignees(i.assignees), prepared_by: preparedByText(cleanAssignees(i.assignees)) } : cleanName(i.prepared_by) ? { prepared_by: cleanName(i.prepared_by) } : {}),
     ...(cleanComments(i.comments).length ? { comments: cleanComments(i.comments) } : {}),
     ...(cleanOnLive(i.on_live) ? { on_live: cleanOnLive(i.on_live) } : {}),
+    // Its cue list (#193) and whether Present skips it.
+    ...(cleanCues(i.cues).length ? { cues: cleanCues(i.cues) } : {}),
+    ...(i.hidden ? { hidden: true } : {}),
     ...(i.auto_advance ? { auto_advance: true } : {}),
     // Its scene, look and camera, and the steps armed for its Take (#243 RS.3, RS.4).
     ...intentPayload(i),
@@ -211,6 +215,19 @@ function itemInputs(
           notes: i.notes ?? null,
           ...(Object.keys(bg(i)).length ? { payload: JSON.stringify(bg(i)) } : {}),
         }
+      : isCueItem(i)
+      ? {
+          id: i.id,
+          kind: "cue",
+          reference: [...(i.reference.trim() || "Cue")].slice(0, 200).join(""),
+          book_number: null,
+          chapter: null,
+          verse: null,
+          translation: null,
+          secondary_translation: null,
+          notes: i.notes ?? null,
+          ...(Object.keys(bg(i)).length ? { payload: JSON.stringify(bg(i)) } : {}),
+        }
       : {
           id: i.id,
           kind: "song",
@@ -225,6 +242,7 @@ function itemInputs(
             song_id: i.song.song_id,
             arrangement_id: i.song.arrangement_id,
             languages: i.song.languages,
+            ...(i.song.title_slide ? { title_slide: true } : {}),
             ...bg(i),
           } satisfies SongItemPayload & { background_media_id?: string }),
         }
@@ -247,12 +265,13 @@ export function cleanName(raw: string | null | undefined): string {
 }
 
 /** The payload keys this build reads and writes, per item kind; anything else is kept untouched (FR-03). */
-const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "starts_at", "gap_minutes", "prepared_by", "assignees", "comments", "on_live", "auto_advance", "scene_id", "look_id", "camera", "on_take", "timing", "ai_suggestion"]
+const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by", "starts_at", "gap_minutes", "prepared_by", "assignees", "comments", "on_live", "cues", "hidden", "auto_advance", "scene_id", "look_id", "camera", "on_take", "timing", "ai_suggestion"]
 const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
   slide: new Set([...COMMON_PAYLOAD_KEYS, "title", "body", "link"]),
-  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "arrangement_id", "languages"]),
+  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "arrangement_id", "languages", "title_slide"]),
+  cue: new Set(COMMON_PAYLOAD_KEYS),
 }
 
 /** Payload keys this build does not know for that kind (from a newer version or a service file), to write back unchanged. */
@@ -296,6 +315,18 @@ export function parseOnLive(raw: string | null | undefined): OnLive | null {
     return p.on_live && typeof p.on_live === "object" ? cleanOnLive(p.on_live as OnLive) : null
   } catch {
     return null
+  }
+}
+
+/** An item's cue list and whether Present skips it (#193), from any item's payload; only those set. */
+export function parseCuesAndHidden(raw: string | null | undefined): { cues?: ItemCue[]; hidden?: true } {
+  if (!raw) return {}
+  try {
+    const p = JSON.parse(raw) as { cues?: unknown; hidden?: unknown }
+    const cues = Array.isArray(p.cues) ? cleanCues(p.cues as ItemCue[]) : []
+    return { ...(cues.length ? { cues } : {}), ...(p.hidden === true ? { hidden: true } : {}) }
+  } catch {
+    return {}
   }
 }
 
@@ -412,6 +443,7 @@ export function parseSongPayload(raw: string | null | undefined): SongItemPayloa
       song_id: p.song_id,
       arrangement_id: typeof p.arrangement_id === "string" ? p.arrangement_id : null,
       languages: Array.isArray(p.languages) ? p.languages.filter((l): l is string => typeof l === "string") : [],
+      ...(p.title_slide === true ? { title_slide: true } : {}),
     }
   } catch {
     return null
@@ -458,7 +490,7 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "slide") {
@@ -467,7 +499,11 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
-      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      items.push({ id: it.id, kind: "slide", slide, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      continue
+    }
+    if (it.kind === "cue") {
+      items.push({ id: it.id, kind: "cue", reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
       continue
     }
     if (it.kind === "song") {
@@ -479,13 +515,13 @@ export function toQueueItems(
       items.push({
         id: it.id,
         kind: "song",
-        song: { song_id: payload.song_id, title: it.reference, arrangement_id: payload.arrangement_id ?? null, languages: payload.languages ?? [] },
+        song: { song_id: payload.song_id, title: it.reference, arrangement_id: payload.arrangement_id ?? null, languages: payload.languages ?? [], ...(payload.title_slide ? { title_slide: true } : {}) },
         reference: it.reference,
         confidence: 1,
         source: "manual",
         added_at: Date.now(),
         notes: it.notes,
-        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+        background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
       })
       continue
     }
@@ -516,7 +552,7 @@ export function toQueueItems(
       translation: it.translation,
       secondary_translation: it.secondary_translation,
       notes: it.notes,
-      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
+      background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind),
     })
   }
   return { items, headers, unsupported, missingTranslations: [...missing] }
@@ -534,7 +570,10 @@ function parseHeader(it: ProgramItem, at: number): OutlineHeader {
   } catch {
     // An unreadable payload: the header keeps its name and place.
   }
-  const { rule, role, starts_at, advance_seconds, ...rest } = p
+  const { rule, role, starts_at, advance_seconds, ...others } = p
+  // A phase skipped for this service (#193); on a group the key is not this build's and is kept.
+  const { disabled, ...phaseRest } = others
+  const rest = it.kind === "phase" ? phaseRest : others
   return {
     id: it.id,
     type: it.kind === "phase" ? "phase" : "group",
@@ -545,6 +584,7 @@ function parseHeader(it: ProgramItem, at: number): OutlineHeader {
     ...(it.kind === "phase" && ROLES.includes(role as PhaseRole) ? { role: role as PhaseRole } : {}),
     ...(it.kind === "phase" && typeof starts_at === "string" && isClockTime(starts_at) ? { starts_at } : {}),
     ...(it.kind === "phase" && isAdvanceSeconds(advance_seconds) ? { advance_seconds } : {}),
+    ...(it.kind === "phase" && disabled === true ? { disabled: true } : {}),
     ...(Object.keys(rest).length ? { payload_extra: rest } : {}),
   }
 }
@@ -636,6 +676,9 @@ function renewItemIds(h: Awaited<ReturnType<typeof idHolders>>): void {
     headers: q.headers.map((h) => ({ ...h, id: crypto.randomUUID() })),
     highlightedId: re(q.highlightedId),
     removedActive: q.removedActive ? { prevId: re(q.removedActive.prevId), nextId: re(q.removedActive.nextId) } : null,
+    // The states before hold the old ids: undoing into them would bring back another service's items.
+    past: [],
+    future: [],
   }))
   const b = useBroadcastStore.getState()
   useBroadcastStore.setState({
@@ -853,6 +896,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       const { items, headers, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
       baseline = rundownSignature(items, headers)
       useQueueStore.setState({ items, headers, activeIndex: null })
+      // Undo never reaches into the service open before.
+      useQueueStore.getState().resetHistory()
       set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported, missingTranslations })
       remember(data.program.id)
       // Fill in verse text so preview works before anything is presented.
@@ -987,6 +1032,12 @@ function recheckDirty() {
   if (dirty !== svc.dirty) useServiceStore.setState({ dirty })
 }
 useQueueStore.subscribe(recheckDirty)
+// The open service changed, or was approved again: the approved words of its songs are loaded (#193).
+// Imported when needed: the pins' module is imported by modules this one imports.
+useServiceStore.subscribe((s, prev) => {
+  if (s.current?.id === prev.current?.id && s.current?.approved_at === prev.current?.approved_at && s.current?.approved_revision === prev.current?.approved_revision) return
+  void import("@/stores/song-pins-store").then((m) => m.loadSongPins(s.current)).catch(() => {})
+})
 // Edits made while a load was running (a rename refreshing the list, verse text filling in) count once it ends.
 useServiceStore.subscribe((s, prev) => {
   if (prev.loading && !s.loading) recheckDirty()

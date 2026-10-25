@@ -86,7 +86,10 @@ pub const MIGRATIONS: &[Migration] = &[
 /// migration and a renderer; until then they are rejected on write and
 /// surfaced untouched on read. A `song` item carries a JSON `payload`
 /// (`SongItemPayload`); its `reference` is the title, for display only.
-pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image", "phase", "group"];
+pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image", "phase", "group", "cue"];
+/// A moment in the run of show that shows nothing (#193): it fires its cues (a stage message,
+/// an OBS recording chapter, the timer) when its turn comes. Its reference is its name.
+pub const CUE_KIND: &str = "cue";
 /// Rows that structure a service rather than show anything: a phase (pre-service loop, warm-up,
 /// main service, post-service loop or a named one) and a group inside it. An item belongs to the
 /// nearest header above it; the reference is the header's name.
@@ -989,6 +992,34 @@ struct ExtrasPayload {
     /// The app checks each step again before it runs one.
     #[serde(default)]
     on_take: Option<Vec<String>>,
+    /// The item's cue list (#193, #196 R6): what runs when it starts, finishes its planned time,
+    /// is paused, or ends. None of them changes what the congregation sees.
+    #[serde(default)]
+    cues: Option<Vec<CuePayload>>,
+    /// Kept in the service but skipped in Present (#193). Only its type is checked.
+    #[serde(default)]
+    #[allow(dead_code)]
+    hidden: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CuePayload {
+    on: String,
+    #[serde(rename = "do")]
+    action: String,
+    #[serde(default)]
+    text: Option<String>,
+}
+
+/// When an item's cue runs, and what it may do.
+const CUE_TRIGGERS: [&str; 4] = ["live", "finish", "pause", "end"];
+const CUE_DOES: [&str; 6] = ["timer.start", "timer.fresh", "timer.pause", "stage.clearMessage", "stage.message", "obs.mark"];
+const MAX_CUES: usize = 12;
+
+fn valid_cue(c: &CuePayload) -> bool {
+    let text_ok = !c.text.as_deref().is_some_and(|t| t.chars().count() > 120 || t.chars().any(char::is_control));
+    let needs_text = c.action == "stage.message";
+    CUE_TRIGGERS.contains(&c.on.as_str()) && CUE_DOES.contains(&c.action.as_str()) && text_ok && (!needs_text || c.text.as_deref().is_some_and(|t| !t.trim().is_empty()))
 }
 
 /// A scene, look or camera id on an item: one short line.
@@ -1060,6 +1091,9 @@ fn validate_background(i: usize, payload: Option<&str>) -> Result<()> {
             return Err(ContentError::Invalid(format!("item {i}: a go-live cue may only start, pause or reset the timer or clear the stage message")));
         }
     }
+    if p.cues.as_ref().is_some_and(|cs| cs.len() > MAX_CUES || !cs.iter().all(valid_cue)) {
+        return Err(ContentError::Invalid(format!("item {i}: at most {MAX_CUES} cues, each a stage message, an OBS marker or a timer step, on live, finish, pause or end")));
+    }
     if [&p.scene_id, &p.look_id, &p.camera].into_iter().any(|id| id.as_deref().is_some_and(|id| !valid_intent_id(id))) {
         return Err(ContentError::Invalid(format!("item {i}: a scene, look or camera must be a short id")));
     }
@@ -1083,6 +1117,10 @@ struct PhasePayload {
     /// Loop phases: how long each item stays up when the phase runs by itself, in seconds.
     #[serde(default)]
     advance_seconds: Option<u32>,
+    /// Skipped for this service (#193): its items stay but Present passes over them. Only its type is checked.
+    #[serde(default)]
+    #[allow(dead_code)]
+    disabled: Option<bool>,
 }
 
 fn validate_phase_payload(i: usize, payload: Option<&str>) -> Result<()> {
@@ -1257,6 +1295,34 @@ mod tests {
 
     fn header(kind: &str, name: &str, payload: Option<&str>) -> ItemInput {
         ItemInput { kind: kind.into(), reference: name.into(), payload: payload.map(Into::into), ..ItemInput::default() }
+    }
+
+    #[test]
+    fn cue_items_cue_lists_hidden_items_and_skipped_phases() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let p = db.create_program("Sunday", None).unwrap();
+        let cues = r#"{"cues":[{"on":"live","do":"obs.mark","text":"Sermon"},{"on":"finish","do":"stage.message","text":"Time is up"},{"on":"end","do":"timer.pause"}],"hidden":true}"#;
+        let rows = vec![
+            header("phase", "Pre-service loop", Some(r#"{"rule":"loop","role":"pre","disabled":true}"#)),
+            header("cue", "Sermon begins", Some(cues)),
+            ItemInput { payload: Some(cues.into()), ..verse("John 3:16", 43, 3, 16) },
+        ];
+        let saved = db.replace_items(&p.id, 1, &rows).unwrap();
+        assert_eq!(saved.items.iter().map(|i| i.kind.as_str()).collect::<Vec<_>>(), vec!["phase", "cue", "verse"]);
+        assert_eq!(saved.program.item_count, 2, "a cue item counts as an item; a phase does not");
+        let bad = |payload: &str| db.replace_items(&p.id, 2, &[header("cue", "x", Some(payload))]).unwrap_err();
+        for payload in [
+            r#"{"cues":[{"on":"later","do":"timer.pause"}]}"#,
+            r#"{"cues":[{"on":"live","do":"next"}]}"#,
+            r#"{"cues":[{"on":"live","do":"stage.message"}]}"#,
+            r#"{"cues":[{"on":"live","do":"obs.mark","text":"a\nb"}]}"#,
+            r#"{"hidden":"yes"}"#,
+        ] {
+            assert!(matches!(bad(payload), ContentError::Invalid(_)), "{payload}");
+        }
+        let many = format!(r#"{{"cues":[{}]}}"#, vec![r#"{"on":"live","do":"timer.pause"}"#; 13].join(","));
+        assert!(matches!(bad(&many), ContentError::Invalid(_)));
+        assert!(matches!(db.replace_items(&p.id, 2, &[header("phase", "x", Some(r#"{"disabled":1}"#))]).unwrap_err(), ContentError::Invalid(_)));
     }
 
     #[test]
