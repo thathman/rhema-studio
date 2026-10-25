@@ -16,7 +16,7 @@ const KIND: Record<string, string> = { verse: "Scripture", song: "Song", slide: 
  * welcome, the benediction, last week's sermon series graphic) and add
  * copies to the open service. The earlier service is not changed.
  */
-export function ReusePanel() {
+export function ReusePanel({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const programs = useServiceStore((s) => s.programs)
   const current = useServiceStore((s) => s.current)
   const [query, setQuery] = useState("")
@@ -53,13 +53,25 @@ export function ReusePanel() {
   const add = async () => {
     const copies = copyForReuse(items, chosen)
     const queue = useQueueStore.getState()
-    const added = copies.filter((item) => queue.addItem(item, "end") !== null).length
+    const addedItems: QueueItem[] = []
+    let lastAddedId: string | null = null
+    for (const item of copies) {
+      const id = queue.addItem(item, "end")
+      if (id) {
+        addedItems.push(item)
+        lastAddedId = id
+      }
+    }
+    const added = addedItems.length
+    if (lastAddedId) {
+      onAdded?.(lastAddedId)
+      setChosen(new Set())
+    }
     const skipped = copies.length - added
     toast.success(`${added} item${added === 1 ? "" : "s"} added${skipped ? `; ${skipped} verse${skipped === 1 ? " was" : "s were"} already in the service` : ""}`)
-    setChosen(new Set())
     // Verse text for the preview, as opening a service does.
     await Promise.all(
-      copies.filter(isVerseItem).map(async (item) => {
+      addedItems.filter(isVerseItem).map(async (item) => {
         try {
           const v = await invoke<Verse | null>("get_verse", { translationId: item.verse.translation_id, bookNumber: item.verse.book_number, chapter: item.verse.chapter, verse: item.verse.verse })
           if (v?.text) useQueueStore.getState().backfillText(item.id, v.text)
