@@ -1,0 +1,19 @@
+name = "rhema-engage"
+main = "src/index.mjs"
+compatibility_date = "2026-10-25"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "QuizRoom"
+
+[[durable_objects.bindings]]
+name = "DIRECTORY"
+class_name = "QuizDirectory"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["QuizRoom", "QuizDirectory"]
+
+# Set ADMIN_KEY with: npx wrangler secret put ADMIN_KEY
+# No deployment occurs merely by building the desktop application.
