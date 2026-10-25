@@ -8,6 +8,9 @@ use crate::{audit, new_id, ContentDb, ContentError, Result};
 
 pub const MAX_LOG_BYTES: usize = 2_000_000;
 
+/// How a kept log's transcript section starts (src/lib/journal-transcript.ts `transcriptSection`).
+pub const TRANSCRIPT_MARK: &str = "\nTranscript (recognised speech by ";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ServiceLogSummary {
     pub id: String,
@@ -80,6 +83,22 @@ impl ContentDb {
             .optional()?)
     }
 
+    /// The church's transcript retention (#246 C17): the transcript section of each kept log saved
+    /// more than `days` days ago is removed (the log itself stays), with a line saying so. Returns
+    /// how many logs changed. `days` 0 keeps every transcript.
+    pub fn remove_old_log_transcripts(&self, days: u32) -> Result<usize> {
+        if days == 0 {
+            return Ok(0);
+        }
+        let conn = self.lock()?;
+        let n = conn.execute(
+            "UPDATE service_logs SET body = rtrim(substr(body, 1, instr(body, ?1) - 1)) || ?2
+             WHERE instr(body, ?1) > 0 AND saved_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?3)",
+            params![TRANSCRIPT_MARK, format!("\n\n(Transcript removed after {days} days, as the church's settings ask.)"), format!("-{days} days")],
+        )?;
+        Ok(n)
+    }
+
     pub fn delete_service_log(&self, id: &str) -> Result<()> {
         let conn = self.lock()?;
         let n = conn.execute("DELETE FROM service_logs WHERE id = ?1", params![id])?;
@@ -114,5 +133,22 @@ mod tests {
         assert!(db.get_service_log(&a.id).unwrap().is_some());
         db.delete_service_log(&a.id).unwrap();
         assert!(matches!(db.delete_service_log(&a.id), Err(ContentError::NotFound(_))));
+    }
+
+    #[test]
+    fn old_transcripts_are_removed_and_the_logs_kept() {
+        let db = ContentDb::open_in_memory().unwrap();
+        let body = "09:01 LIVE John 3:16\n\nTranscript (recognised speech by Whisper (on this computer); not checked, may contain mistakes)\n\n09:02  For God so loved";
+        let old = db.save_service_log(None, "Old", body).unwrap();
+        let new = db.save_service_log(None, "New", body).unwrap();
+        let plain = db.save_service_log(None, "Plain", "09:01 LIVE Psalm 23").unwrap();
+        db.lock().unwrap().execute("UPDATE service_logs SET saved_at = '2020-01-01T00:00:00.000Z' WHERE id IN (?1, ?2)", params![old.id, plain.id]).unwrap();
+        assert_eq!(db.remove_old_log_transcripts(0).unwrap(), 0, "0 keeps every transcript");
+        assert_eq!(db.remove_old_log_transcripts(30).unwrap(), 1);
+        let kept = db.get_service_log(&old.id).unwrap().unwrap().body;
+        assert!(kept.starts_with("09:01 LIVE John 3:16") && !kept.contains("For God so loved") && kept.contains("Transcript removed after 30 days"), "{kept}");
+        assert!(db.get_service_log(&new.id).unwrap().unwrap().body.contains("For God so loved"), "a recent log keeps its transcript");
+        assert_eq!(db.get_service_log(&plain.id).unwrap().unwrap().body, "09:01 LIVE Psalm 23");
+        assert_eq!(db.remove_old_log_transcripts(30).unwrap(), 0, "already removed");
     }
 }

@@ -7,6 +7,7 @@ import { useBibleStore } from "@/stores/bible-store"
 import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
 import { presentQuickScreen, type QuickScreen } from "@/hooks/use-broadcast"
 import { useSongStore } from "@/stores/song-store"
+import { lowerThirdBacking } from "@/lib/lower-third-backing"
 
 /**
  * The Standard view's verb set. Thin wrappers over `remoteActions` so the big
@@ -79,6 +80,13 @@ export const presentActions = {
   clear: () => remoteActions.toggleOnAir(false),
   restore: () => {
     if (presentActions.canRestore()) remoteActions.toggleOnAir(true)
+  },
+  /** Take the news ticker with its words, or Stop it when it runs (Shift+T, #187). Nothing without words. */
+  ticker: () => {
+    const b = useBroadcastStore.getState()
+    if (b.ticker) return b.setTicker(null)
+    if (!b.tickerItems.some((i) => i.trim())) return
+    void lowerThirdBacking(b.tickerStyle).then((backing) => { if (!useBroadcastStore.getState().ticker) useBroadcastStore.getState().setTicker({ backing }) }).catch(() => {})
   },
   canRestore: () => {
     const s = useBroadcastStore.getState()

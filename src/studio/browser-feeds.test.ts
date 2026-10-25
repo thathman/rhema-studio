@@ -9,8 +9,9 @@ vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { enableOutput, disableOutput } = await import("@/lib/broadcast-output-control")
 const { outputOnAir } = await import("@/lib/output-on-air")
-const { startBrowserFeeds, feedUrl, feedHealthLabel, beginTvKey, endTvKey, revokeTv } = await import("@/lib/browser-feeds")
+const { startBrowserFeeds, feedUrl, feedHealthLabel, beginTvKey, endTvKey, revokeTv, noteFeedShown, resetFeedShown } = await import("@/lib/browser-feeds")
 const { looksForBackup, restoreLooksFromBackup } = await import("@/stores/broadcast-store")
+const { useJournalStore } = await import("@/stores/journal-store")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
 /** Browser feeds (ARCH-002): an output drawn by a LAN web page; published only while on. */
@@ -114,5 +115,24 @@ describe("browser feeds", () => {
     useBroadcastStore.getState().setCountdownSources({ aux: [], item: null, start: 1_900_000_600_000 })
     expect(last().lost).toEqual({ mode: "countdown", startsAt: 1_900_000_600_000 })
     await disableOutput(tv)
+  })
+
+  it("log which screen first showed new content and how soon, once per content change (#246 C17)", () => {
+    resetFeedShown()
+    useJournalStore.setState({ entries: [] })
+    const theme = useBroadcastStore.getState().themes[0]
+    const verse = (reference: string) => ({ reference, segments: [], lines: [reference] }) as never
+    const shown = () => useJournalStore.getState().entries.filter((e) => e.kind === "shown").map((e) => e.label)
+    useBroadcastStore.setState({ outputFrames: { tv: { theme, verse: verse("John 3:16"), overlay: null } } })
+    noteFeedShown("tv", 412)
+    // The page draws a timer beat or the same verse again: not news.
+    noteFeedShown("tv", 380)
+    useBroadcastStore.setState({ outputFrames: { tv: { theme, verse: verse("John 3:17"), overlay: null } } })
+    noteFeedShown("tv", 1250)
+    useBroadcastStore.setState({ outputFrames: { tv: { theme, verse: null, overlay: null } } })
+    noteFeedShown("tv", 90)
+    noteFeedShown("unknown", 100)
+    expect(shown()).toEqual(["Foyer TV showed John 3:16 after 0.4 s", "Foyer TV showed John 3:17 after 1.3 s", "Foyer TV showed a clear screen after 0.1 s"])
+    expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ outputId: "tv", afterMs: 90 })
   })
 })

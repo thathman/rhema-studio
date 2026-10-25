@@ -4,6 +4,15 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Small fixes from the third issue audit (#299, #213, #243, #246, #187, #215)
+- The Desk menu names every role a joined computer can have (Worship, Stage, Camera, OBS director, Editor, View only, and the rest) and says what each may do, in the same words as Settings → Remote control.
+- Camera Retry, Switch to backup, Freeze and Unfreeze are logged as what they are, with who pressed them ("Pulpit camera: switched to backup Choir camera · by Tolu"), never as "back in scenes".
+- The service log says when each browser feed's screen first showed new content, and how soon ("Foyer TV showed John 3:16 after 0.4 s"): once per change of content, not for every frame.
+- **Settings → Speech → Transcripts in kept logs**: keep a kept log's transcript until the log is deleted (as before), or 30 days, 90 days or a year; older transcripts are taken out of their logs (the logs stay).
+- Home's readiness notes a countdown display with nothing to count, an extra timer whose desk is not connected, and reminds once per service to check TVs for overscan (**Got it** puts it away).
+- Design → Ticker checks the words and the tag against their colours (WCAG AA, 4.5:1), gives the ratio and offers a Brand Kit colour that passes. **Shift+T** in Present takes the ticker or stops it (in the shortcuts list).
+- No body text at 10 px anywhere (the setup step's "Home will read" is 11 px); the dev browser shim no longer crashes Prepare; the production guide says correctly that TVs and desks report their clocks.
+
 ### Measured camera signal: network counters, camera lag, 1080p60 per screen, live camera cards, phone battery and heat (#213, #208, #209)
 - Every Rhema Studio screen and browser feed page now measures each camera's **jitter, packets lost, round trip to the camera router and frames decoded** (WebRTC's own counters) beside the frames it shows. Show health, the camera card and a Screens desk's output map say them; heavy loss or jitter is listed as needing attention.
 - **Measure camera lag** (Setup → Screens): after confirming, one screen or browser feed shows a large running clock; point a camera at it, press Freeze, type the time the camera's picture shows, and **Save measurement**. Show health then says e.g. "Pulpit → Main Display ≈ 240 ms (measured 25 Oct)". The operator reads the digits; Rhema Studio does not read them off the picture.

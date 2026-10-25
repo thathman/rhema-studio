@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { computeReadiness, serviceStartsSoon } from "./readiness"
+import { computeReadiness, serviceStartsSoon, type ReadinessCheck } from "./readiness"
 
 const good = {
   translationsLoaded: 8,
@@ -213,5 +213,34 @@ describe("planning without screens on (#298 H6)", () => {
     expect(serviceStartsSoon({ serviceDate: null, running: false, now: at(9) })).toBeNull()
     // Something live or the event clock running is always soon.
     expect(serviceStartsSoon({ serviceDate: "2026-11-01", running: true, now: at(9) })).toBe(true)
+  })
+})
+
+describe("preflight: timers, the countdown display and TV overscan (#213)", () => {
+  const base = { translationsLoaded: 1, activeThemeName: "Dark", outputsConfigured: 1, outputsOnAir: 1, rundownCount: 1, listening: false }
+  const byId = (checks: ReadinessCheck[], id: string) => checks.find((c) => c.id === id)
+
+  it("a countdown with nothing to count says why; a warning only near the service", () => {
+    const later = computeReadiness({ ...base, countdownIdle: [{ output: "Pulpit countdown", why: "Set the service timer in Present" }] }).checks
+    expect(byId(later, "countdown-idle:Pulpit countdown")).toMatchObject({ status: "info", label: "Pulpit countdown: the countdown has nothing to count" })
+    expect(byId(later, "countdown-idle:Pulpit countdown")?.detail).toContain("Set the service timer in Present")
+    const soon = computeReadiness({ ...base, serviceSoon: true, countdownIdle: [{ output: "Pulpit countdown", why: "Set the service timer in Present" }] })
+    expect(byId(soon.checks, "countdown-idle:Pulpit countdown")?.status).toBe("warn")
+    expect(soon.ready).toBe(false)
+  })
+
+  it("an extra timer whose desk is not connected names the timer and the desk", () => {
+    const one = computeReadiness({ ...base, timersOwnerAway: [{ timer: "Communion prep", role: "Worship" }] }).checks
+    expect(byId(one, "timers-owner-away")?.label).toBe("Extra timer “Communion prep”: no Worship desk is connected")
+    expect(byId(one, "timers-owner-away")?.detail).toContain("The main desk and the Timekeeper desk can still run it")
+    const two = computeReadiness({ ...base, timersOwnerAway: [{ timer: "Communion prep", role: "Worship" }, { timer: "Interpreter", role: "Stage" }] }).checks
+    expect(byId(two, "timers-owner-away")?.label).toBe("2 extra timers have no desk connected to run them")
+    expect(byId(computeReadiness({ ...base, timersOwnerAway: [] }).checks, "timers-owner-away")).toBeUndefined()
+  })
+
+  it("TVs get one overscan reminder that can be put away for the service", () => {
+    const c = byId(computeReadiness({ ...base, overscan: { outputs: ["Foyer TV", "Hall TV"], dismiss: "overscan:svc1" } }).checks, "overscan")
+    expect(c).toMatchObject({ status: "info", label: "Foyer TV, Hall TV: check the edges are not cut off", dismiss: "overscan:svc1" })
+    expect(byId(computeReadiness(base).checks, "overscan")).toBeUndefined()
   })
 })

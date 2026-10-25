@@ -26,6 +26,13 @@ import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
 import { themeIdsOf } from "@/lib/output-themes"
 import { useRouterHealth } from "@/lib/cameras"
 import { cameraHealth, cameraWords, useFeedHealthStore } from "@/lib/show-health"
+import { invoke } from "@tauri-apps/api/core"
+import { lookCounting } from "@/lib/countdown-display"
+import { presenceRows, readHostStatus, type HostStatus } from "@/lib/host-presence"
+import { roleLabel } from "@/lib/remote-roles"
+import { useAuxTimers } from "@/stores/aux-timers-store"
+import { monotonicNow, useTimerStore } from "@/stores/timer-store"
+import { useDismissedChecks } from "@/studio/dismissed-checks"
 
 watchLanAddressAtService()
 
@@ -93,6 +100,23 @@ export function useReadiness() {
     void lanAddressNow().then((ip) => { if (live) setLan(ip) })
     return () => { live = false }
   }, [now])
+  // Timers and the countdown display (#213): what a countdown shows, and which extra timers' desks are here.
+  const countdownLook = useBroadcastStore((s) => s.countdownLook)
+  const countdownSources = useBroadcastStore((s) => s.countdownSources)
+  const countdownTargets = useBroadcastStore((s) => s.countdowns)
+  const serviceTimer = useTimerStore((s) => s.timer)
+  const auxTimers = useAuxTimers((s) => s.timers)
+  const pairedDevices = useSettingsStore((s) => s.remoteDevices)
+  const ownedTimers = auxTimers.filter((t) => t.owner)
+  const watchDesks = ownedTimers.length > 0 && pairedDevices.length > 0 && joinStatus === "off"
+  const [host, setHost] = useState<HostStatus | null>(null)
+  useEffect(() => {
+    if (!watchDesks) return
+    let live = true
+    void invoke<unknown>("host_status").then((v) => { if (live) setHost(readHostStatus(v)) }).catch(() => {})
+    return () => { live = false }
+  }, [watchDesks, now])
+  const dismissed = useDismissedChecks((s) => s.keys)
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
@@ -200,6 +224,23 @@ export function useReadiness() {
     screens,
     yorubaFonts: yoruba && yoruba.key === fontKey ? { checked: lookFonts, missing: yoruba.missing } : null,
     clock: { year: new Date(now).getFullYear(), skewMs: joinStatus === "connected" ? clockSkewMs : null, reference: joinStatus === "connected" ? "the host's" : null },
+    countdownIdle: (() => {
+      const shows = outputs.filter((o) => o.role === "stage" && o.stageLayout === "countdown" && outputOnAir(o, outputStatus[o.id]))
+      if (shows.length === 0) return []
+      const c = lookCounting(countdownLook, countdownSources, serviceTimer, monotonicNow(), now, zone, countdownTargets)
+      return c.idle ? shows.map((o) => ({ output: o.name, why: c.idle! })) : []
+    })(),
+    timersOwnerAway: (() => {
+      if (!watchDesks || !host?.running) return []
+      const here = new Set<string>(presenceRows(pairedDevices, host.desks).filter((r) => r.device && r.seen?.connected).map((r) => r.device!.role ?? "configure"))
+      return ownedTimers.filter((t) => !here.has(t.owner)).map((t) => ({ timer: t.label, role: roleLabel(t.owner) }))
+    })(),
+    // TVs zoom the picture (#213 overscan): a reminder for each on-air browser feed, once per service.
+    overscan: (() => {
+      const key = `overscan:${current?.id ?? localDate()}`
+      const tvs = outputs.filter((o) => o.type === "browser" && (o.role ?? "congregation") !== "signage" && outputOnAir(o, outputStatus[o.id])).map((o) => o.name)
+      return dismissed.includes(key) || tvs.length === 0 ? undefined : { outputs: tvs, dismiss: key }
+    })(),
     feedsUnwatched: outputs.filter((o) => o.type === "browser" && outputOnAir(o, outputStatus[o.id]) && feeds[o.id]?.watching === 0).map((o) => o.name),
     signage: outputs
       // A ticker feed (Rhema Ticker | Alpha) has no pictures on purpose.

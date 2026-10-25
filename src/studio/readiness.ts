@@ -15,6 +15,8 @@ export interface ReadinessCheck {
   detail?: string
   fix?: ReadinessFix
   fixLabel?: string
+  /** A reminder the operator may put away (Got it): this key, kept for the service (#213 overscan). */
+  dismiss?: string
 }
 
 export interface OutputHealth {
@@ -82,6 +84,12 @@ export interface ReadinessInput {
   screens?: Array<{ name: string; role: "congregation" | "stage" | "signage"; monitor: string | null; width: number; height: number; onMain: boolean }>
   /** Fonts the outputs' looks use, checked for Yorùbá letters (ẹ ọ ṣ with tone marks); null/absent: not measurable here. */
   yorubaFonts?: { checked: string[]; missing: string[] } | null
+  /** Countdown displays (stage outputs on Countdown, ready-made countdown feeds) with nothing to count, and why (#213). */
+  countdownIdle?: Array<{ output: string; why: string }>
+  /** Extra timers that belong to a desk role with no desk of that role connected (#196 R2.5, #213). */
+  timersOwnerAway?: Array<{ timer: string; role: string }>
+  /** TVs (browser feeds) to look at for overscan, unless put away for this service (`dismiss` its key). */
+  overscan?: { outputs: string[]; dismiss: string }
   /** This computer's clock: its year, and how far it is from a joined host's (null when there is nothing to compare). */
   clock?: { year: number; skewMs: number | null; reference: string | null }
 }
@@ -137,6 +145,14 @@ export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
         : { id: "clock", status: "ok", label: `Clock matches ${c.reference}` })
     }
   }
+  // Timers and the countdown display (#213): nothing to count, or a timer whose desk is not there.
+  const soon = i.serviceSoon === true ? ("warn" as const) : ("info" as const)
+  for (const c of i.countdownIdle ?? []) out.push({ id: `countdown-idle:${c.output}`, status: soon, label: `${c.output}: the countdown has nothing to count`, detail: `${c.why}. Until then it shows a dash. Or choose what it counts in Design → Countdown.`, fix: "outputs", fixLabel: "Open outputs" })
+  if (i.timersOwnerAway?.length) {
+    const t = i.timersOwnerAway
+    out.push({ id: "timers-owner-away", status: soon, label: t.length === 1 ? `Extra timer “${t[0].timer}”: no ${t[0].role} desk is connected` : `${t.length} extra timers have no desk connected to run them`, detail: `${t.map((x) => `“${x.timer}” belongs to the ${x.role} desk`).join("; ")}. The main desk and the Timekeeper desk can still run ${t.length === 1 ? "it" : "them"}, in Production → Timekeeper.` })
+  }
+  if (i.overscan?.outputs.length) out.push({ id: "overscan", status: "info", label: `${i.overscan.outputs.join(", ")}: check the edges are not cut off`, detail: "Many TVs zoom the picture a little (overscan) and cut off the edges. In the TV's picture settings choose Just scan, Screen fit or Original size, then look at the corners with something on screen.", dismiss: i.overscan.dismiss })
   if (i.internet) out.push({ id: "internet", status: "ok", label: "Works without the internet", detail: `The service runs on the church network alone: unplugging the router's internet is fine. Only OBS's stream to YouTube${i.internet.cloudSpeech ? " and cloud speech need" : " needs"} it.` })
   return out
 }

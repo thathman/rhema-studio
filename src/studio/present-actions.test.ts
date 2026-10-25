@@ -95,6 +95,21 @@ describe("presentActions", () => {
   })
 })
 
+describe("presentActions ticker (Shift+T, #187)", () => {
+  it("takes the ticker with its words, stops it when it runs, and does nothing without words", async () => {
+    useBroadcastStore.setState({ ticker: null, tickerItems: ["  "], rehearsal: false })
+    presentActions.ticker()
+    await flush()
+    expect(useBroadcastStore.getState().ticker).toBeNull()
+    useBroadcastStore.setState({ tickerItems: ["Youth meeting Friday"] })
+    presentActions.ticker()
+    await flush()
+    expect(useBroadcastStore.getState().ticker?.items).toContain("Youth meeting Friday")
+    presentActions.ticker()
+    expect(useBroadcastStore.getState().ticker).toBeNull()
+  })
+})
+
 describe("presentActions live safety", () => {
   function deferredLookups() {
     const pending: Array<{ resolve: (v: Verse | null) => void; reject: (e: unknown) => void }> = []

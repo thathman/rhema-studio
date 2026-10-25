@@ -10,6 +10,9 @@ import { BUNDLED_FONTS } from "@/lib/fonts"
 import { SlideBackground } from "@/studio/prepare/slide-composer"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { Colour, NumberField, Row } from "@/studio/design/lower-third-designer"
+import { themeGrounds } from "@/lib/brand-kit"
+import { TICKER_AA, tickerContrast, type ContrastLine } from "@/lib/ticker-contrast"
+import { useSettingsStore } from "@/stores/settings-store"
 
 const SAMPLE_ITEMS = ["Youth meeting, Friday 6 pm", "Choir practice, Saturday 4 pm", "Harvest thanksgiving next Sunday"]
 
@@ -85,8 +88,38 @@ export function TickerDesigner() {
             value={style.background.mediaId ? { media_id: style.background.mediaId, name: media?.name ?? "" } : null}
             onChange={(v) => save({ ...style, background: { ...style.background, kind: v ? (v.kind === "video" ? "video" : "picture") : "color", mediaId: v?.media_id ?? null } }, true)}
           />
+          <ContrastCheck style={style} under={theme ? themeGrounds(theme) : []} onUse={patch} />
             </div>
         </div>
+    </div>
+  )
+}
+
+/**
+ * The readability check (#187): the words on the band and the tag on its colour against WCAG AA
+ * (4.5:1), with the ratio, and a Brand Kit colour that would pass when one does not.
+ */
+function ContrastCheck({ style, under, onUse }: { style: TickerStyle; under: string[]; onUse: (p: Partial<TickerStyle>) => void }) {
+  const kit = useSettingsStore((s) => s.brandKit)
+  const c = tickerContrast(style, under, kit)
+  const row = (what: string, l: ContrastLine, use: (color: string) => void) => (
+    <p className={l.ok ? "text-muted-foreground" : "font-medium text-confidence-mid"}>
+      {what}: {l.ratio.toFixed(1)}:1 {l.ok ? `· reads well (WCAG AA is ${TICKER_AA}:1)` : `· below ${TICKER_AA}:1 (WCAG AA): hard to read from the back`}
+      {!l.ok && l.suggest && (
+        <>
+          {" "}
+          <Button size="xs" variant="outline" onClick={() => use(l.suggest!)}>
+            <span aria-hidden className="size-3 rounded-sm border border-border" style={{ background: l.suggest }} /> Use {l.suggest}
+          </Button>
+        </>
+      )}
+    </p>
+  )
+  return (
+    <div role="status" aria-label="Ticker contrast" className="flex flex-col gap-1 rounded-md border border-border px-2.5 py-2 text-xs">
+      {row("Words on the band", c.words, (color) => onUse({ color }))}
+      {c.tag && row("Tag words on the tag", c.tag, (labelColor) => onUse({ labelColor }))}
+      {c.overMedia && <p className="text-muted-foreground">With a picture or video under the band, checked over its darkest and lightest: raise the band opacity if it fails.</p>}
     </div>
   )
 }

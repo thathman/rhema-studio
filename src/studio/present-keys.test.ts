@@ -26,6 +26,12 @@ describe("keyToPresentAction", () => {
     expect(keyToPresentAction(key("PageUp", { shiftKey: true }))).toBe("versePrev")
   })
 
+  it("Shift+T takes or stops the ticker; a plain T does nothing (#187)", () => {
+    expect(keyToPresentAction(key("T", { shiftKey: true }))).toBe("ticker")
+    expect(keyToPresentAction(key("t"))).toBeNull()
+    expect(keyToPresentAction(key("T", { shiftKey: true, metaKey: true }))).toBeNull()
+  })
+
   it("ignores modifier combos and unknown keys", () => {
     expect(keyToPresentAction(key("ArrowRight", { metaKey: true }))).toBeNull()
     expect(keyToPresentAction(key("ArrowRight", { ctrlKey: true }))).toBeNull()

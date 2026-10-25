@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core"
 import type { TranscriptSegment } from "@/types"
 
 /** Room left for the transcript inside a kept log, in UTF-8 bytes (the crate refuses logs over 2 MB; Yorùbá letters take up to 3 bytes). */
@@ -34,4 +35,19 @@ export function transcriptSection(segments: TranscriptSegment[], provider: strin
     "",
   ]
   return [...head, ...kept].join("\n")
+}
+
+/**
+ * The church's transcript retention (#246 C17): kept logs older than the chosen days lose their
+ * transcript (the log stays). Run when Rhema starts and whenever the setting changes. 0: kept.
+ */
+export async function removeOldTranscripts(days: number): Promise<number> {
+  if (!days) return 0
+  return invoke<number>("content_remove_old_log_transcripts", { days }).catch(() => 0)
+}
+
+/** The retention choice in words, for Settings and the service log's checkbox. */
+export function retentionWords(days: number): string {
+  if (!days) return "until the log is deleted"
+  return days === 365 ? "for a year" : `for ${days} days`
 }

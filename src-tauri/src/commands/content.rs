@@ -91,6 +91,12 @@ pub fn content_get_service_log(state: State<'_, ContentState>, id: String) -> Cm
     with_db(&state, |db| db.get_service_log(&id))
 }
 
+/// Remove the transcripts of kept logs older than `days` days (the church's retention; 0 keeps them).
+#[tauri::command]
+pub fn content_remove_old_log_transcripts(state: State<'_, ContentState>, days: u32) -> CmdResult<usize> {
+    with_db(&state, |db| db.remove_old_log_transcripts(days))
+}
+
 #[tauri::command]
 pub fn content_delete_service_log(state: State<'_, ContentState>, id: String) -> CmdResult<()> {
     with_db(&state, |db| db.delete_service_log(&id))

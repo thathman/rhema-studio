@@ -1,3 +1,4 @@
+import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { CheckIcon, InfoIcon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
@@ -169,6 +170,7 @@ function ServiceRow({ check: c }: { check: ReadinessCheck }) {
         <span className="block text-sm font-medium">{c.label}</span>
         {c.detail && <span className="block text-xs text-muted-foreground">{c.detail}</span>}
         {c.fix && c.status !== "ok" && <FixButton fix={{ label: c.fixLabel ?? "Fix", open: serviceFix(c.fix) }} />}
+        {c.dismiss && <Button size="sm" variant="link" className="ml-3 h-auto px-0 text-xs" onClick={() => useDismissedChecks.getState().dismiss(c.dismiss!)}>Got it</Button>}
       </span>
     </li>
   )
