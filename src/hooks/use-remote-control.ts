@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { actingAs, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { pushRemoteKeys, useSettingsStore } from "@/stores/settings-store"
+import { stepLiveSection } from "@/lib/desk-consoles"
 import { REMOTE_EVENTS, REMOTE_PAIR_CLOSED_EVENT, REMOTE_PAIRED_EVENT } from "@/lib/remote-events"
 import { toast } from "sonner"
 import { runMacro } from "@/lib/cues"
@@ -137,7 +138,8 @@ export function useRemoteControl() {
       const SOURCES = ["bible", "song", "hymn", "slide", "picture", "ticker", "timer", "lowerThird", "stage"] as const
       const asSource = (v: unknown): AnySourceId | undefined =>
         SOURCES.find((s) => s === v) ?? (typeof v === "string" && isStateSource(v) && useSettingsStore.getState().cameras.some((c) => cameraSourceId(c.name) === v) ? v : undefined)
-      await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120)) })
+      // A Bible desk may name the translation it chose (desk consoles); else the host's own.
+      await withPayload(REMOTE_EVENTS.bible_activate, (p) => { if (typeof p.reference === "string") void activateBibleReference(p.reference.slice(0, 120), typeof p.translation === "string" ? p.translation.slice(0, 16) : undefined) })
       // An action request answered on a joined desk (Comms C2): a verse to Preview only, or a song or
       // hymn by title. What could not be done is said here, where the operator can act on it.
       const notDone = (p: Record<string, unknown>, what: string, why: string) => toast.warning(`${what} not shown`, { description: `${byOf(p)}${why}` })
@@ -153,6 +155,11 @@ export function useRemoteControl() {
           void songRequest(title, mode).then((why) => { if (why) notDone(p, title, why) })
         })
       }
+      // The song on the screens one section on or back, from a Worship desk (desk consoles).
+      await withPayload(REMOTE_EVENTS.song_section, (p) => {
+        const step = p.step === 1 ? 1 : p.step === -1 ? -1 : 0
+        if (step) void stepLiveSection(step).then((why) => { if (why) toast.warning("Section not changed", { description: `${byOf(p)}${why}` }) })
+      })
       await withPayload(REMOTE_EVENTS.clear_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().clearSource(id) })
       await withPayload(REMOTE_EVENTS.restore_source, (p) => { const id = asSource(p.id); if (id) useBroadcastStore.getState().restoreSource(id) })
       await withPayload(REMOTE_EVENTS.take_scene, (p) => {

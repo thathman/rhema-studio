@@ -23,6 +23,7 @@ import { sceneForDesk, scenesOnScreen, type DeskScene } from "@/lib/desk-scenes"
 import { useObsStore } from "@/stores/obs-store"
 import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useTimeChange } from "@/stores/time-change-store"
+import { deskConsoleState, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness } from "@/lib/desk-consoles"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -111,6 +112,22 @@ export interface LiveStateV1 {
   auxTimers?: { id: string; label: string; owner?: string; durationMs: number; elapsedMs: number; running: boolean; onStage?: true }[]
   /** Who last changed the service's time, what and when (#196 R2.9; host wall ms); null before anyone has. Absent from older hosts. */
   timeChange?: { what: string; by?: string; at: number } | null
+  /**
+   * The desk consoles (#197; all absent from older hosts): the song or hymn on the screens with its
+   * sections (null: none), every output and the scene it shows, the verses Auto Bible heard (the
+   * host's server passes these to the Bible, Present and editor desks only) and the readiness
+   * checks (to the Present and settings desks only, src/lib/desk-consoles.ts).
+   */
+  lyrics?: LiveLyrics | null
+  outputMap?: OutputMapRow[]
+  heard?: HeardVerse[]
+  readiness?: SharedReadiness
+  /**
+   * Added by the host's server for the Present and settings desks (the director), not the app:
+   * each paired desk's name and role, whether it follows the service now and when it was last
+   * seen (null: not since hosting began), and whether the main desk has taken back control.
+   */
+  presence?: { name: string; role: string; connected: boolean; lastSeenMs: number | null; paused?: boolean }[]
   /**
    * The church look (#298 E4): the host's Brand Kit and the themes made from it, with a revision. A
    * joined desk offers it ("The host's church look changed") and uses it only when its operator
@@ -228,6 +245,7 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     heartbeatMs: LIVE_HEARTBEAT_MS,
     auxTimers: useAuxTimers.getState().timers.map((t) => ({ id: t.id, label: t.label, ...(t.owner ? { owner: t.owner } : {}), durationMs: t.timer.durationMs, elapsedMs: Math.round(elapsedMs(t.timer, monotonicNow())), running: t.timer.startedAt !== null, ...(t.onStage ? { onStage: true as const } : {}) })),
     timeChange: (() => { const c = useTimeChange.getState().last; return c ? { what: c.what, ...(c.by ? { by: c.by } : {}), at: c.at } : null })(),
+    ...deskConsoleState(),
     churchLook: sharedChurchLook(useSettingsStore.getState().brandKit, b.themes),
   }
 }
@@ -293,6 +311,7 @@ export function startLiveStatePublisher(): () => void {
     useTimingTrust.subscribe(() => soon()),
     useObsStore.subscribe((s, p) => { if (s.status !== p.status || s.scenes !== p.scenes || s.program !== p.program || s.preview !== p.preview || s.studioMode !== p.studioMode) soon() }),
     useRouterHealth.subscribe(() => soon()),
+    ...watchDeskConsoles(soon),
   ]
   soon()
   return () => subs.forEach((u) => u())

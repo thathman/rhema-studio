@@ -33,6 +33,7 @@ const EXPECTED_EVENT_NAMES = [
   "remote:bible_preview",
   "remote:song_show",
   "remote:song_preview",
+  "remote:song_section",
   "remote:clear_source",
   "remote:restore_source",
   "remote:take_scene",
@@ -50,7 +51,7 @@ const EXPECTED_EVENT_NAMES = [
 
 describe("REMOTE_EVENTS", () => {
   it("has one entry per RemoteCommand variant", () => {
-    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(41)
+    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(42)
   })
 
   it("matches the event names the Rust dispatcher emits", () => {

@@ -115,6 +115,13 @@ pub async fn join_tally(state: State<'_, JoinRuntime>, address: String, token: S
     rhema_join::host::tally(&state.host(&address)?, &token, &tally).await
 }
 
+/// Look something up in the host's library (desk consoles): its Bible and its songs and hymns, as
+/// this desk's role allows. Read only.
+#[tauri::command]
+pub async fn join_lookup(state: State<'_, JoinRuntime>, address: String, token: String, asked: serde_json::Value) -> Result<serde_json::Value, String> {
+    rhema_join::host::lookup(&state.host(&address)?, &token, &asked).await
+}
+
 /// The body of one command: a fresh `id` (a retry is harmless) and, when known, the service this
 /// desk is looking at (#246 C16), so the host refuses it if it has moved to another one.
 fn command_body(command: serde_json::Value, service: Option<String>) -> serde_json::Value {

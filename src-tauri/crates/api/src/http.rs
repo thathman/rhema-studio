@@ -260,7 +260,18 @@ impl Revisions {
             ("offset".to_string(), serde_json::json!([v["timing"]["offsetMinutes"], v["timing"]["offsetBy"]]).to_string()),
             ("timer".to_string(), serde_json::json!([v["timer"]["running"], v["timer"]["durationMs"], v["timer"]["revision"]]).to_string()),
             ("hold".to_string(), v["hold"].to_string()),
+            // The song or hymn on the screens and where in it (desk consoles): a section step from a
+            // Worship desk acts on the section it saw.
+            ("lyrics".to_string(), serde_json::json!([v["lyrics"]["itemId"], v["lyrics"]["index"]]).to_string()),
         ];
+        // Each extra timer (#196 R2.5): started, paused, reset or changed. A running one's time
+        // moves on by itself, so only a stopped one's time counts.
+        for t in v["auxTimers"].as_array().into_iter().flatten() {
+            if let Some(id) = t["id"].as_str() {
+                let stopped_at = if t["running"].as_bool() == Some(true) { serde_json::Value::Null } else { t["elapsedMs"].clone() };
+                out.push((format!("aux:{id}"), serde_json::json!([t["running"], t["durationMs"], stopped_at]).to_string()));
+            }
+        }
         for s in v["sources"].as_array().into_iter().flatten() {
             if let Some(id) = s["id"].as_str() {
                 out.push((format!("source:{id}"), serde_json::json!([s["on"], s["revision"]]).to_string()));
@@ -337,6 +348,8 @@ fn revision_part(cmd: &RemoteCommand) -> Option<String> {
         RemoteCommand::ReleaseScene(output) => format!("output:{output}"),
         RemoteCommand::SaveScene(sc) => format!("scene:{}", sc.id()),
         RemoteCommand::DeleteScene(d) => format!("scene:{}", d.id),
+        RemoteCommand::SongSection(_) => "lyrics".into(),
+        RemoteCommand::AuxTimer(t) => format!("aux:{}", t.id),
         _ => return None,
     })
 }
@@ -431,21 +444,76 @@ pub fn notices_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String
 /// The Live State as one paired desk gets it: only its notices (`notices_for`), and the scenes'
 /// full definitions only for a desk that may change scenes (#243 SC.16); the others get each
 /// scene's name and id, as before, which keeps a phone's copy small.
+/// The desk consoles' parts of it go only to the desks they are for: the readiness board and who is
+/// connected (`readiness`, `presence`) to the Present and settings desks (the director); the verses
+/// heard by Auto Bible (`heard`) to them, the Bible desk and the editor.
 #[must_use]
 pub fn live_for(json: &str, reader: Option<&crate::keys::KeyEntry>) -> String {
     let filtered = notices_for(json, reader);
     let Some(reader) = reader else { return filtered };
-    if reader.role.edits_scenes() || !filtered.contains("\"layers\"") {
+    let scenes = !reader.role.edits_scenes() && filtered.contains("\"layers\"");
+    let hidden: Vec<&str> = hidden_from(reader.role).iter().copied().filter(|k| filtered.contains(&format!("\"{k}\""))).collect();
+    if !scenes && hidden.is_empty() {
         return filtered;
     }
     let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&filtered) else { return filtered };
-    let Some(list) = v.get_mut("scenes").and_then(serde_json::Value::as_array_mut) else { return filtered };
-    for scene in list.iter_mut() {
-        if let Some(o) = scene.as_object_mut() {
-            o.retain(|k, _| matches!(k.as_str(), "id" | "name" | "onScreen"));
+    if let Some(o) = v.as_object_mut() {
+        for k in hidden {
+            o.remove(k);
+        }
+    }
+    if scenes {
+        for scene in v.get_mut("scenes").and_then(serde_json::Value::as_array_mut).into_iter().flatten() {
+            if let Some(o) = scene.as_object_mut() {
+                o.retain(|k, _| matches!(k.as_str(), "id" | "name" | "onScreen"));
+            }
         }
     }
     v.to_string()
+}
+
+/// What of the Live State a desk with this role does not get (see `live_for`).
+fn hidden_from(role: crate::keys::Role) -> &'static [&'static str] {
+    use crate::keys::Role;
+    match role {
+        Role::Present | Role::Configure => &[],
+        Role::Bible | Role::Editor => &["readiness", "presence"],
+        _ => &["readiness", "presence", "heard"],
+    }
+}
+
+/// Whether a reader gets who is connected (`presence`): this computer itself, and the director.
+fn sees_crew(reader: Option<&crate::keys::KeyEntry>) -> bool {
+    reader.is_none_or(|r| matches!(r.role, crate::keys::Role::Present | crate::keys::Role::Configure))
+}
+
+/// Who is on the team now, for a director's board (desk consoles, #197): each paired desk's name and
+/// role, whether it follows the service now and when it was last seen (null: not since hosting
+/// began). Never its address or key.
+fn crew_rows(keys: &KeySet, presence: &crate::presence::Presence) -> serde_json::Value {
+    let seen = presence.list();
+    let keys = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+    serde_json::Value::Array(
+        keys.entries
+            .iter()
+            .take(64)
+            .map(|e| {
+                let s = seen.iter().find(|d| d.hash == e.hash);
+                serde_json::json!({ "name": e.name, "role": e.role.as_str(), "connected": s.is_some_and(|d| d.connected), "lastSeenMs": s.map(|d| d.last_seen_ms), "paused": e.paused })
+            })
+            .collect(),
+    )
+}
+
+/// The Live State with who is connected added, for a reader that sees it (`sees_crew`).
+fn with_crew(json: String, crew: serde_json::Value) -> String {
+    match serde_json::from_str::<serde_json::Value>(&json) {
+        Ok(serde_json::Value::Object(mut o)) => {
+            o.insert("presence".into(), crew);
+            serde_json::Value::Object(o).to_string()
+        }
+        _ => json,
+    }
 }
 
 /// The same rule as the desks' own (src/stores/notices-store.ts `isFor`): a Present-and-settings
@@ -595,6 +663,7 @@ where
         .route("/api/v1/me", get(me_handler::<S>))
         .route("/api/v1/live", get(live_handler::<S>))
         .route("/api/v1/live/events", get(live_events_handler::<S>))
+        .route("/api/v1/lookup", post(lookup_handler::<S>))
         .route("/feed/{id}", get(feed_page_handler::<S>))
         .route("/api/v1/feed/{id}/events", get(feed_events_handler::<S>))
         .route("/api/v1/voice", post(voice_handler::<S>))
@@ -940,6 +1009,13 @@ fn in_rehearsal(live: Option<&str>) -> bool {
     live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).and_then(|v| v.get("program")?.get("rehearsal")?.as_bool()) == Some(true)
 }
 
+/// Whether a song or hymn is on the screens (the host's Live State says which, desk consoles).
+fn lyrics_up(live: Option<&str>) -> bool {
+    live.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok()).is_some_and(|v| v.get("lyrics").is_some_and(|l| l.is_object()))
+}
+
+const NO_LYRICS_MESSAGE: &str = "No song or hymn is on the screens";
+
 /// What an OBS director is told in rehearsal: OBS is the online stream (the host's own wording).
 const OBS_REHEARSAL_MESSAGE: &str = "Rehearsal is on: OBS is the live stream, so Rhema Studio doesn't change it while you practise";
 
@@ -1044,7 +1120,13 @@ async fn live_handler<S: CommandSink + 'static>(
         Err(code) => return code.into_response(),
     };
     match state.live.current() {
-        Some(json) => ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], live_for(&json, reader.as_ref())).into_response(),
+        Some(json) => {
+            let mut data = live_for(&json, reader.as_ref());
+            if sees_crew(reader.as_ref()) {
+                data = with_crew(data, crew_rows(&state.keys, &state.presence));
+            }
+            ([(axum::http::header::CONTENT_TYPE, "application/json"), (axum::http::header::CACHE_CONTROL, "no-store")], data).into_response()
+        }
         None => StatusCode::NO_CONTENT.into_response(),
     }
 }
@@ -1081,6 +1163,8 @@ struct LiveStream {
     first: Option<String>,
     entry: crate::keys::KeyEntry,
     keys: KeySet,
+    /// Who is connected, for a director's board (`sees_crew`).
+    presence: crate::presence::SharedPresence,
     tick: tokio::time::Interval,
     /// Counts the desk as connected (Production → Operators) until the stream ends.
     _connected: Option<crate::presence::StreamGuard>,
@@ -1104,19 +1188,24 @@ async fn live_events_handler<S: CommandSink + 'static>(
     }
     let mut tick = tokio::time::interval(KEY_CHECK);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    let open = LiveStream { rx: state.live.tx.subscribe(), first: state.live.current(), _connected: state.presence.stream_opened(&entry, peer.ip()), entry, keys: state.keys.clone(), tick };
+    let open = LiveStream { rx: state.live.tx.subscribe(), first: state.live.current(), _connected: state.presence.stream_opened(&entry, peer.ip()), entry, keys: state.keys.clone(), presence: state.presence.clone(), tick };
     let stream = futures_util::stream::unfold(Some(open), |open| async move {
         let mut s = open?;
         let reader = notice_reader(s.entry.clone());
+        let crew = sees_crew(reader.as_ref());
+        let shape = |json: &str, keys: &KeySet, presence: &crate::presence::Presence| {
+            let data = live_for(json, reader.as_ref());
+            if crew { with_crew(data, crew_rows(keys, presence)) } else { data }
+        };
         if let Some(json) = s.first.take() {
-            let data = live_for(&json, reader.as_ref());
+            let data = shape(&json, &s.keys, &s.presence);
             return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(data)), Some(s)));
         }
         loop {
             tokio::select! {
                 r = s.rx.recv() => match r {
                     Ok(json) => {
-                        let data = live_for(&json, reader.as_ref());
+                        let data = shape(&json, &s.keys, &s.presence);
                         return Some((Ok(Event::default().event("live").data(data)), Some(s)));
                     }
                     // Slow reader: skip to the newest; the next message is the whole state anyway.
@@ -1135,6 +1224,34 @@ async fn live_events_handler<S: CommandSink + 'static>(
     });
     let stream = futures_util::StreamExt::take_until(stream, until_stopped(state.stopping.clone()));
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
+}
+
+/// `POST /api/v1/lookup {"what": …}`: a joined desk looks something up in this computer's library
+/// (desk consoles, #197): Bible translations, a chapter, a words search, songs and hymns. A paired
+/// key whose role works with that content (`crate::lookup`); read only, so a paused desk may too.
+async fn lookup_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(asked): Json<crate::lookup::Lookup>,
+) -> axum::response::Response {
+    let entry = match live_reader(&state, peer, &headers) {
+        Ok(entry) => entry,
+        Err(code) => return code.into_response(),
+    };
+    if !asked.allowed(entry.role) {
+        log::info!("Lookup from {} refused: its role", entry.name);
+        return (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": crate::lookup::refusal(&asked) }))).into_response();
+    }
+    let Some(asked) = asked.checked() else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, Json(serde_json::json!({ "error": "Type a little more to look up" }))).into_response();
+    };
+    let sink = state.sink.clone();
+    match tokio::task::spawn_blocking(move || sink.lookup(&asked)).await {
+        Ok(Ok(v)) => ([(axum::http::header::CACHE_CONTROL, "no-store")], Json(v)).into_response(),
+        Ok(Err(why)) => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": why }))).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 type Query = axum::extract::Query<std::collections::HashMap<String, String>>;
@@ -1551,6 +1668,9 @@ async fn command_handler<S: CommandSink + 'static>(
             return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
         }
     }
+    if matches!(command, RemoteCommand::SongSection(_)) && !lyrics_up(state.live.current().as_deref()) {
+        return (StatusCode::UNPROCESSABLE_ENTITY, CommandResponse::refused(NO_LYRICS_MESSAGE));
+    }
     // From here one command at a time, so two desks pressing at once are checked one after the other.
     let _turn = state.gate.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if request.id.as_deref().is_some_and(|id| state.recent.seen(id)) {
@@ -1640,7 +1760,7 @@ fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
         Role::Timekeeper => "this device keeps time: it may move the event clock, not the screens",
         Role::Bible => "this device runs the Bible: it may activate, step and clear the Bible only",
         Role::Screens => "this device runs the congregation screens: it may take, release, make and change scenes only",
-        Role::Worship => "this device runs worship: it may show songs and hymns and take the lyrics off and back only",
+        Role::Worship => "this device runs worship: it may show songs and hymns, step through their sections and take the lyrics off and back only",
         Role::Stage => "this device runs the stage: it may change the stage message only",
         Role::Camera => "this device runs the cameras: it may hide or show a camera and change the camera boxes in scenes only",
         Role::Obs => "this device is the OBS director: it may switch OBS scenes only",
@@ -1707,6 +1827,13 @@ mod tests {
         fn invoke_backend(&self, action: &str, _args: &str) -> Result<(), CommandError> {
             self.commands.lock().unwrap().push(action.to_string());
             Ok(())
+        }
+
+        fn lookup(&self, q: &crate::lookup::Lookup) -> Result<serde_json::Value, String> {
+            match q {
+                crate::lookup::Lookup::Songs { query } if query == "broken" => Err("Songs are unavailable on the host".into()),
+                _ => Ok(serde_json::json!({ "asked": format!("{q:?}") })),
+            }
         }
     }
 
@@ -3302,5 +3429,151 @@ mod tests {
         assert!(!raw_http_request(plain.bound_port, "GET", "/api/v1/health", None).await.contains("tls_port"), "no https: not said");
         let mut h = plain.handle;
         h.stop();
+    }
+
+    fn console_keys() -> KeySet {
+        use crate::keys::{hash_key, KeyEntry, Keys, Role};
+        let entry = |tok: &str, name: &str, role| KeyEntry { hash: hash_key(tok), name: name.into(), role, paused: false };
+        Arc::new(std::sync::RwLock::new(Keys {
+            require_auth: true,
+            entries: vec![entry("dir", "Director", Role::Present), entry("bib", "Bible desk", Role::Bible), entry("wor", "Worship desk", Role::Worship), entry("stg", "Stage desk", Role::Stage), entry("vie", "Pastor's phone", Role::Viewer)],
+        }))
+    }
+
+    #[test]
+    fn the_console_parts_go_only_to_their_desks() {
+        use crate::keys::Role;
+        let json = r#"{"v":1,"readiness":{"ready":false,"checks":[]},"heard":[{"reference":"John 3:16"}],"auxTimers":[],"outputMap":[],"lyrics":null,"notices":[]}"#;
+        let get = |role: Role| -> serde_json::Value { serde_json::from_str(&live_for(json, Some(&desk("Desk", role)))).unwrap() };
+        for role in [Role::Present, Role::Configure] {
+            let v = get(role);
+            assert!(v.get("readiness").is_some() && v.get("heard").is_some(), "{role:?}");
+        }
+        for role in [Role::Bible, Role::Editor] {
+            let v = get(role);
+            assert!(v.get("readiness").is_none() && v.get("heard").is_some(), "{role:?}");
+        }
+        for role in [Role::Worship, Role::Stage, Role::Screens, Role::Timekeeper, Role::Camera, Role::Obs, Role::Viewer] {
+            let v = get(role);
+            assert!(v.get("readiness").is_none() && v.get("heard").is_none() && v.get("presence").is_none(), "{role:?}");
+            assert!(v.get("auxTimers").is_some() && v.get("outputMap").is_some(), "{role:?} still gets the timers and the output map");
+        }
+        // A presence list a host's app sent itself never reaches a desk that may not see it.
+        let spoofed = r#"{"v":1,"presence":[{"name":"x"}],"notices":[]}"#;
+        assert!(!live_for(spoofed, Some(&desk("Desk", Role::Stage))).contains("presence"));
+        assert_eq!(live_for(json, None), json, "this computer itself gets all of it");
+        assert!(sees_crew(None) && sees_crew(Some(&desk("D", Role::Present))) && sees_crew(Some(&desk("D", Role::Configure))));
+        assert!(!sees_crew(Some(&desk("D", Role::Bible))) && !sees_crew(Some(&desk("D", Role::Viewer))));
+    }
+
+    #[test]
+    fn the_crew_list_names_desks_and_roles_but_never_addresses_or_keys() {
+        let keys = console_keys();
+        let presence = crate::presence::new_presence();
+        let bible = keys.read().unwrap().entries[1].clone();
+        let _open = presence.stream_opened(&bible, "192.168.1.40".parse().unwrap());
+        let crew = crew_rows(&keys, &presence);
+        let text = crew.to_string();
+        assert!(!text.contains("192.168") && !text.contains(&bible.hash), "{text}");
+        let rows = crew.as_array().unwrap();
+        assert_eq!(rows.len(), 5);
+        assert_eq!((rows[1]["name"].as_str(), rows[1]["role"].as_str(), rows[1]["connected"].as_bool()), (Some("Bible desk"), Some("bible"), Some(true)));
+        assert_eq!((rows[0]["connected"].as_bool(), rows[0]["lastSeenMs"].is_null()), (Some(false), true), "never seen since hosting began");
+        let with = with_crew(r#"{"v":1}"#.into(), crew);
+        assert!(with.contains(r#""presence":[{"#));
+        assert_eq!(with_crew("not json".into(), serde_json::json!([])), "not json");
+    }
+
+    #[test]
+    fn a_section_step_acts_on_the_section_it_saw() {
+        let mut r = Revisions::default();
+        let state = |index: u32| serde_json::json!({ "lyrics": { "itemId": "s1", "index": index, "title": "Amazing Grace" } });
+        r.observe(&state(0));
+        let lyrics = r.get("lyrics").unwrap();
+        r.observe(&state(0));
+        assert_eq!(r.get("lyrics"), Some(lyrics), "the same section is not a change");
+        r.observe(&state(2));
+        assert_eq!(r.get("lyrics"), Some(lyrics + 1));
+        assert_eq!(revision_part(&RemoteCommand::SongSection(1)).as_deref(), Some("lyrics"));
+    }
+
+    #[test]
+    fn an_extra_timer_command_acts_on_the_timer_it_saw() {
+        let mut r = Revisions::default();
+        let timer = |running: bool, elapsed: u64| serde_json::json!({ "auxTimers": [{ "id": "t1", "label": "Communion", "durationMs": 300000, "elapsedMs": elapsed, "running": running }] });
+        r.observe(&timer(true, 1000));
+        let n = r.get("aux:t1").unwrap();
+        r.observe(&timer(true, 5000));
+        assert_eq!(r.get("aux:t1"), Some(n), "a running timer counting on is not a change");
+        r.observe(&timer(false, 6000));
+        assert_eq!(r.get("aux:t1"), Some(n + 1), "paused");
+        r.observe(&timer(false, 0));
+        assert_eq!(r.get("aux:t1"), Some(n + 2), "reset");
+        assert_eq!(revision_part(&RemoteCommand::AuxTimer(crate::command::AuxTimerIn { id: "t1".into(), action: "start".into() })).as_deref(), Some("aux:t1"));
+    }
+
+    #[tokio::test]
+    async fn section_steps_are_checked_for_role_and_staleness() {
+        let sink = Arc::new(MockSink::new());
+        let live = new_live_hub();
+        let state = |lyrics: &str| format!(r#"{{"v":1,"program":{{"onAir":true,"rehearsal":false}},"lyrics":{lyrics}}}"#);
+        live.publish(state(r#"{"itemId":"s1","index":0}"#));
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: console_keys(), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let send = |body: String, key: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/command", Some(&body), key).await };
+        let (wor, stg, bib, dir) = ("X-Rhema-Key: wor\r\n", "X-Rhema-Key: stg\r\n", "X-Rhema-Key: bib\r\n", "X-Rhema-Key: dir\r\n");
+        // Two desks on the same section: only the first step is carried out.
+        let seen = live.revision("lyrics").unwrap();
+        let step = format!(r#"{{"command":"song_section","value":1,"seen":{{"lyrics":{seen}}}}}"#);
+        assert!(send(step.clone(), wor).await.contains("200 OK"));
+        let again = send(step, dir).await;
+        assert!(again.contains("409") && again.contains(r#""code":"stale""#), "{again}");
+        assert!(send(r#"{"command":"song_section","value":1}"#.into(), bib).await.contains("403"), "the Bible desk does not step songs");
+        assert!(send(r#"{"command":"song_section","value":1}"#.into(), stg).await.contains("403"));
+        assert!(send(r#"{"command":"song_section","value":-1}"#.into(), "X-Rhema-Key: vie\r\n").await.contains("403"));
+        // With no song up there is nothing to step.
+        live.publish(state("null"));
+        let none = send(r#"{"command":"song_section","value":-1}"#.into(), wor).await;
+        assert!(none.contains("422") && none.contains("No song or hymn"), "{none}");
+        assert_eq!(sink.commands.lock().unwrap().clone(), ["remote:song_section"]);
+    }
+
+    #[tokio::test]
+    async fn a_desk_looks_in_the_host_library_only_as_its_role_allows() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: console_keys(), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let ask = |body: &'static str, key: &'static str| async move { raw_http_request_with(port, "POST", "/api/v1/lookup", Some(body), key).await };
+        let search = r#"{"what":"search","query":"so loved","translation":1}"#;
+        let ok = ask(search, "X-Rhema-Key: bib\r\n").await;
+        assert!(ok.contains("200 OK") && ok.contains("so loved"), "{ok}");
+        assert!(ask(search, "X-Rhema-Key: wor\r\n").await.contains("403"), "the worship desk does not search the Bible");
+        assert!(ask(search, "X-Rhema-Key: vie\r\n").await.contains("403"), "view only looks nothing up");
+        assert!(ask(search, "").await.contains("401"), "never without a key");
+        assert!(ask(search, "X-Rhema-Key: nope\r\n").await.contains("401"));
+        assert!(ask(r#"{"what":"songs","query":"CAC 245"}"#, "X-Rhema-Key: wor\r\n").await.contains("CAC 245"));
+        assert!(ask(r#"{"what":"songs","query":"x"}"#, "X-Rhema-Key: bib\r\n").await.contains("403"));
+        assert!(ask(r#"{"what":"search","query":"a","translation":1}"#, "X-Rhema-Key: bib\r\n").await.contains("422"));
+        let down = ask(r#"{"what":"songs","query":"broken"}"#, "X-Rhema-Key: dir\r\n").await;
+        assert!(down.contains("503") && down.contains("Songs are unavailable"), "{down}");
+        assert!(sink.commands.lock().unwrap().is_empty(), "a lookup is never a command");
+    }
+
+    #[tokio::test]
+    async fn the_director_reads_who_is_connected_and_others_do_not() {
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"readiness":{"ready":true,"checks":[]},"notices":[]}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: console_keys(), live: live.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("should bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let dir = get_with(port, "/api/v1/live", "X-Rhema-Key: dir\r\n", None).await;
+        assert!(dir.contains(r#""presence":["#) && dir.contains("Stage desk") && dir.contains(r#""readiness""#), "{dir}");
+        let stage = get_with(port, "/api/v1/live", "X-Rhema-Key: stg\r\n", None).await;
+        assert!(!stage.contains("presence") && !stage.contains("readiness"), "{stage}");
     }
 }

@@ -88,6 +88,10 @@ impl CommandSink for TauriSink {
         super::media::media_file_path(media.inner(), file)
     }
 
+    fn lookup(&self, q: &rhema_api::Lookup) -> Result<serde_json::Value, String> {
+        answer_lookup(&self.app, q)
+    }
+
     fn emit_event(&self, event: &str, payload: &str) -> Result<(), CommandError> {
         self.app
             .emit(event, payload.to_string())
@@ -116,6 +120,42 @@ impl CommandSink for TauriSink {
             _ => Err(CommandError::DispatchFailed(format!(
                 "Unknown backend action: {action}"
             ))),
+        }
+    }
+}
+
+/// A joined desk's lookup in this computer's library (desk consoles, #197), its role already checked
+/// by the server: the Bible translations this computer has, a chapter, a words search, or songs and
+/// hymns (the hymn book too: a number like "CAC 245" finds its hymn). Read only.
+fn answer_lookup(app: &AppHandle, q: &rhema_api::Lookup) -> Result<serde_json::Value, String> {
+    use rhema_api::lookup::MAX_RESULTS;
+    use rhema_api::Lookup;
+    let json = |v: Result<serde_json::Value, serde_json::Error>| v.map_err(|e| e.to_string());
+    match q {
+        Lookup::Songs { query } => {
+            let content = app.try_state::<super::content::ContentState>().ok_or("Songs are not available on the host")?;
+            let guard = content.0.lock().map_err(|e| e.to_string())?;
+            let db = guard.as_ref().ok_or("Songs are not available on the host")?;
+            let songs = db.list_songs_tagged(Some(query.as_str()).filter(|q| !q.is_empty()), MAX_RESULTS, None).map_err(|e| e.to_string())?;
+            json(Ok(serde_json::json!({ "songs": songs.iter().map(|s| serde_json::json!({
+                "id": s.id, "title": s.title, "numbers": s.numbers, "firstLine": s.first_line.chars().take(120).collect::<String>(),
+                "hymn": s.tags.split(',').any(|t| t.trim().eq_ignore_ascii_case("cacghb")),
+            })).collect::<Vec<_>>() })))
+        }
+        _ => {
+            let state = app.try_state::<Mutex<crate::state::AppState>>().ok_or("The Bible is not available on the host")?;
+            let app_state = state.lock().map_err(|e| e.to_string())?;
+            let db = app_state.bible_db.as_ref().ok_or("The Bible is not available on the host")?;
+            let verses = |v: Vec<rhema_bible::Verse>| serde_json::json!({ "verses": v.into_iter().take(200).map(|v| serde_json::json!({ "book": v.book_number, "bookName": v.book_name, "chapter": v.chapter, "verse": v.verse, "text": v.text, "translation": v.translation_id })).collect::<Vec<_>>() });
+            match q {
+                Lookup::Translations => {
+                    let list = db.list_translations().map_err(|e| e.to_string())?;
+                    json(Ok(serde_json::json!({ "active": app_state.active_translation_id, "translations": list.iter().filter(|t| t.is_downloaded).map(|t| serde_json::json!({ "id": t.id, "abbreviation": t.abbreviation, "name": t.title, "language": t.language })).collect::<Vec<_>>() })))
+                }
+                Lookup::Chapter { translation, book, chapter } => Ok(verses(db.get_chapter(*translation, *book, *chapter).map_err(|e| e.to_string())?)),
+                Lookup::Search { query, translation } => Ok(verses(db.search_verses(query, *translation, MAX_RESULTS).map_err(|e| e.to_string())?)),
+                Lookup::Songs { .. } => unreachable!("answered above"),
+            }
         }
     }
 }
