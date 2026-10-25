@@ -21,6 +21,8 @@ const EXAMPLES = [
   { title: "", body: "Please stand" },
 ]
 
+const DRAFT_SLIDE_ID = "draft-slide"
+
 /**
  * Prepare → Slides: write an announcement or any free-text screen and add
  * it to the service. The preview follows as you type; nothing presents.
@@ -41,7 +43,7 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
   const composedBody = mode === "announcement" ? announcementBody(when, where, body) : body
 
   const draft = (): SlideQueueItem => ({
-    id: "draft-slide",
+    id: DRAFT_SLIDE_ID,
     kind: "slide",
     slide: { title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) },
     reference: slideLabel({ title, body: composedBody, ...(mode === "qr" && safeLink(link) ? { link: safeLink(link)! } : {}) }),
@@ -53,7 +55,10 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
   const preview = (t = title, b = body, w = when, p = where, m = mode, l = link) => {
     const full = m === "announcement" ? announcementBody(w, p, b) : m === "reading" ? (readingPages(b)[0] ?? "") : b
     const safe = m === "qr" ? safeLink(l) : null
-    if (!t.trim() && !full.trim() && !safe) return
+    if (!t.trim() && !full.trim() && !safe) {
+      useBibleStore.getState().clearSlidePreview(DRAFT_SLIDE_ID)
+      return
+    }
     useBibleStore.getState().selectSlide({ item: { ...draft(), slide: { title: t, body: full, ...(safe ? { link: safe } : {}) } }, index: 0 })
   }
   // A responsive reading is always one slide per exchange (leader, then people).
@@ -63,6 +68,9 @@ export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = 
     return queue.addItem(item, "end")
   }
   const reset = () => {
+    // AddItems may already have selected the saved slide. Clear only our
+    // temporary draft so resetting cannot erase that or a newer selection.
+    useBibleStore.getState().clearSlidePreview(DRAFT_SLIDE_ID)
     setTitle("")
     setBody("")
     setWhen("")
