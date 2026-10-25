@@ -2132,7 +2132,7 @@ mod tests {
         let stream = {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-            s.write_all(b"GET /api/v1/feed/tv/events?k=s3cret HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+            s.write_all(format!("GET /api/v1/feed/tv/events?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
             let mut out = Vec::new();
             let mut buf = [0u8; 1024];
             while !String::from_utf8_lossy(&out).contains("event: beat\ndata: ") || !String::from_utf8_lossy(&out).split("event: beat\ndata: ").nth(1).is_some_and(|r| r.contains('\n')) {
