@@ -8,7 +8,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageClock, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageClock, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook, HostLostRule, ReceiverTv } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -27,6 +27,7 @@ import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
 import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/lib/ticker"
 import { useMediaStore } from "@/stores/media-store"
+import { feedLost, overscanPct } from "@/lib/feed-receivers"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
 import { normalizeScene, presetFromScene, sceneClock, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
@@ -645,10 +646,41 @@ function send(outputId: string, payload: Record<string, unknown>): void {
   const output = s.outputs.find((o) => o.id === outputId)
   if (output?.type === "browser") {
     // hostNow: clocks on the page count by this computer's time, not the TV's (which may be off).
-    if (s.outputStatus[outputId]?.feedActive) void invoke("feed_publish", { id: outputId, json: JSON.stringify({ ...payload, hostNow: Date.now() }) }).catch(() => {})
+    // With the output's rule for a lost host and its overscan (#198), so a TV keeps them.
+    if (s.outputStatus[outputId]?.feedActive) {
+      const lost = feedLost(output.hostLost, s.countdownSources.start ?? null, lostPicture(outputId, output.hostLost))
+      const overscan = overscanPct(output.overscan)
+      void invoke("feed_publish", { id: outputId, json: JSON.stringify({ ...payload, hostNow: Date.now(), ...(lost ? { lost } : {}), ...(overscan ? { overscan } : {}) }) }).catch(() => {})
+    }
     return
   }
   void emitTo(outputWindowLabel(outputId), "broadcast:verse-update", payload).catch(() => {})
+}
+
+/** Send an output its last program frame again (after something it carries changed). */
+function resendLast(outputId: string): void {
+  const last = lastProgram.get(outputId)
+  if (last && !useBroadcastStore.getState().outputTests[outputId]) send(outputId, last)
+}
+
+/** Pictures for feeds' host-lost rule, as data (null when it cannot be read), by media id. */
+const lostPictures = new Map<string, string | null>()
+
+/**
+ * The picture a feed shows when it loses this computer, if it is ready; otherwise it is read and
+ * the feed's last frame sent again with it (the picture travels inside the frame, like a theme's).
+ */
+function lostPicture(outputId: string, rule: HostLostRule | undefined): string | null {
+  const id = rule?.mode === "picture" ? rule.mediaId : undefined
+  if (!id) return null
+  if (lostPictures.has(id)) return lostPictures.get(id) ?? null
+  lostPictures.set(id, null)
+  void useMediaStore.getState().dataUrl(id).catch(() => null).then((url) => {
+    if (!url) return void lostPictures.delete(id)
+    lostPictures.set(id, url)
+    resendLast(outputId)
+  })
+  return null
 }
 
 function recordFrame(id: string, frame: OutputFrame): void {
@@ -773,8 +805,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   },
   countdownSources: NO_COUNTDOWN_SOURCES,
   setCountdownSources: (countdownSources) => {
+    const startMoved = countdownSources.start !== get().countdownSources.start
     set({ countdownSources })
     syncCountdownOutputs()
+    // Feeds that count down to the service start when they lose this computer (#198) get the new start.
+    if (startMoved) for (const o of get().outputs) if (o.type === "browser" && o.hostLost?.mode === "countdown") resendLast(o.id)
   },
   tickerPresets: [],
   saveTickerPreset: (name) => {
@@ -1003,6 +1038,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
     if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch || "stageOrientation" in patch || "stageNight" in patch) get().syncBroadcastOutputFor(id)
+    // A feed's rule for a lost host or its overscan (#198): its screens get the last frame again with it.
+    else if ("hostLost" in patch || "overscan" in patch) resendLast(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -1569,12 +1606,21 @@ export interface LooksBackup {
   autoBibleFeeds: boolean
 }
 
+/** A paired TV as a backup keeps it: without its own key (#198). */
+function withoutTvKey(tv: ReceiverTv): ReceiverTv {
+  const copy = { ...tv }
+  delete copy.token
+  return copy
+}
+
 export function looksForBackup(state: BroadcastState = useBroadcastStore.getState()): LooksBackup {
   return {
     customThemes: state.themes.filter((t) => !t.builtin),
     outputs: outputsForScreens(state).map((o) => {
       const copy = { ...o }
       delete copy.feedToken
+      // Each TV's own key stays on this computer, like the feed's (#198).
+      if (copy.tvs) copy.tvs = copy.tvs.map(withoutTvKey)
       return copy
     }),
     lowerThirdStyles: state.lowerThirdStyles,
@@ -1609,9 +1655,13 @@ export function restoreLooksFromBackup(raw: unknown): void {
   if (Array.isArray(looks.customThemes)) patch.themes = [...BUILTIN_THEMES, ...looks.customThemes.filter(isTheme).filter((t) => !t.builtin).map(normalizeTheme)]
   if (Array.isArray(looks.outputs) && looks.outputs.some(isOutput)) {
     const outputs = looks.outputs.filter(isOutput).map((o) => {
-      const token = here.outputs.find((h) => h.id === o.id)?.feedToken
+      const mine = here.outputs.find((h) => h.id === o.id)
+      const token = mine?.feedToken
       const copy = { ...o }
       delete copy.feedToken
+      // The TVs paired here (with their own keys) stay; a backup's list has no keys.
+      if (o.type === "browser" && mine?.tvs) copy.tvs = mine.tvs
+      else if (copy.tvs) copy.tvs = copy.tvs.map(withoutTvKey)
       return o.type === "browser" && token ? { ...copy, feedToken: token } : copy
     })
     patch.outputs = outputs.some((o) => o.id === MAIN_OUTPUT_ID) ? outputs : [...here.outputs.filter((o) => o.id === MAIN_OUTPUT_ID), ...outputs]

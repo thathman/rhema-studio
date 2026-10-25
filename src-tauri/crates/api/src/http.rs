@@ -75,11 +75,56 @@ impl Default for HttpConfig {
 #[derive(Debug, Default)]
 pub struct FeedHub {
     feeds: std::sync::RwLock<std::collections::HashMap<String, Feed>>,
+    /// Told whenever the keys change, so a page whose key was withdrawn (a revoked TV, a new link)
+    /// is cut at once instead of following until it reconnects.
+    changed: tokio::sync::Notify,
+}
+
+/// A feed's keys as the app keeps them (#198): the feed's own link key, and each paired TV's own
+/// key with the TV's id (its address), so one TV can be revoked without a new link for everyone.
+#[derive(Debug, Clone, Default)]
+pub struct FeedKeys {
+    pub id: String,
+    pub token: String,
+    pub tvs: Vec<(String, String)>,
+}
+
+/// A paired TV's own key on a feed, and how many of its pages follow the feed now.
+#[derive(Debug)]
+struct TvKey {
+    id: String,
+    token: String,
+    watching: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+/// Counts a TV's page while its stream is open; dropping it (the stream ended) counts it out.
+struct Watching(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Watching {
+    fn new(n: &Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        n.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Self(n.clone())
+    }
+}
+
+impl Drop for Watching {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// A paired TV's pages following its feed now, by the TV's id (never its key).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct TvWatching {
+    pub id: String,
+    pub watching: usize,
 }
 
 #[derive(Debug)]
 struct Feed {
     token: String,
+    /// Each paired TV's own key (#198, Rhema Studio Receiver sent from 1.5 on).
+    tvs: Vec<TvKey>,
     /// The frame shown now, with its number.
     current: Option<(u64, String)>,
     seq: u64,
@@ -107,16 +152,52 @@ pub struct FeedStatus {
     /// A page's clock minus the host's (ms), when one said so in the last half minute (#196).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub clock_skew_ms: Option<i64>,
+    /// Each paired TV with its own key: how many of its pages follow the feed now (#198).
+    pub tvs: Vec<TvWatching>,
+}
+
+impl Feed {
+    fn new(token: String) -> Self {
+        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
+    }
+
+    /// Whether a key opens this feed: the feed's own (`Some(None)`) or a paired TV's (`Some(Some(tv))`).
+    fn admits(&self, token: &str) -> Option<Option<&TvKey>> {
+        if crate::command::same_key(token, &self.token) {
+            return Some(None);
+        }
+        self.tvs.iter().find(|t| crate::command::same_key(token, &t.token)).map(Some)
+    }
 }
 
 impl FeedHub {
-    /// Replace the list of feeds (id, secret); frames of feeds that stay are kept.
+    /// Replace the list of feeds (id, secret) with no TV keys; frames of feeds that stay are kept.
     pub fn set(&self, list: &[(String, String)]) {
-        let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        feeds.retain(|id, f| list.iter().any(|(i, t)| i == id && *t == f.token));
-        for (id, token) in list {
-            feeds.entry(id.clone()).or_insert_with(|| Feed { token: token.clone(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, video: crate::feed_video::FeedVideo::default(), clock: None });
+        self.set_keys(&list.iter().map(|(id, token)| FeedKeys { id: id.clone(), token: token.clone(), tvs: Vec::new() }).collect::<Vec<_>>());
+    }
+
+    /// Replace the list of feeds with their keys (#198): the feed's own and each paired TV's. Frames
+    /// of feeds that stay are kept; a page whose key is no longer listed (a new link, a revoked TV)
+    /// is cut at once, the others carry on.
+    pub fn set_keys(&self, list: &[FeedKeys]) {
+        {
+            let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+            feeds.retain(|id, _| list.iter().any(|k| k.id == *id));
+            for k in list {
+                let f = feeds.entry(k.id.clone()).or_insert_with(|| Feed::new(k.token.clone()));
+                f.token.clone_from(&k.token);
+                let tvs = k
+                    .tvs
+                    .iter()
+                    .map(|(id, token)| {
+                        let watching = f.tvs.iter().find(|t| t.token == *token).map(|t| t.watching.clone()).unwrap_or_default();
+                        TvKey { id: id.clone(), token: token.clone(), watching }
+                    })
+                    .collect();
+                f.tvs = tvs;
+            }
         }
+        self.changed.notify_waiters();
     }
 
     /// The frame a feed shows now; unknown feeds are ignored.
@@ -132,7 +213,7 @@ impl FeedHub {
     /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent).
     fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> bool {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(f) = feeds.get_mut(id).filter(|f| crate::command::same_key(token, &f.token)) else {
+        let Some(f) = feeds.get_mut(id).filter(|f| f.admits(token).is_some()) else {
             return false;
         };
         if seq <= f.seq && seq >= f.acked {
@@ -163,25 +244,41 @@ impl FeedHub {
             acked_ago_ms: f.acked_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX)),
             video: f.video.pages(std::time::Instant::now()),
             clock_skew_ms: f.clock.filter(|(_, at)| at.elapsed() < CLOCK_REPORT_FOR).map(|(ms, _)| ms),
+            tvs: f.tvs.iter().map(|t| TvWatching { id: t.id.clone(), watching: t.watching.load(std::sync::atomic::Ordering::Relaxed) }).collect(),
         })
     }
 
-    /// The feed's current frame and a receiver for the next ones, if the secret matches.
-    fn follow(&self, id: &str, token: &str) -> Option<(Option<(u64, String)>, broadcast::Receiver<(u64, String)>)> {
+    /// The feed's current frame and a receiver for the next ones, if the key opens it; a paired
+    /// TV's page is counted as that TV's while the stream lasts.
+    fn follow(&self, id: &str, token: &str) -> Option<(Option<(u64, String)>, broadcast::Receiver<(u64, String)>, Option<Watching>)> {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let f = feeds.get(id)?;
-        crate::command::same_key(token, &f.token).then(|| (f.current.clone(), f.tx.subscribe()))
+        let tv = f.admits(token)?;
+        Some((f.current.clone(), f.tx.subscribe(), tv.map(|t| Watching::new(&t.watching))))
     }
 
     fn knows(&self, id: &str, token: &str) -> bool {
-        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| crate::command::same_key(token, &f.token))
+        self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner).get(id).is_some_and(|f| f.admits(token).is_some())
+    }
+
+    /// Ends once this key no longer opens the feed (a revoked TV, a new link, the feed removed).
+    async fn until_withdrawn(self: Arc<Self>, id: String, token: String) {
+        loop {
+            let changed = self.changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if !self.knows(&id, &token) {
+                return;
+            }
+            changed.await;
+        }
     }
 
     /// The feed's frame shown now names this media file (a scene's video layer): only then may its page fetch it.
     fn shows_file(&self, id: &str, token: &str, file: &str) -> bool {
         let feeds = self.feeds.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         let needle = format!("\"mediaFile\":\"{file}\"");
-        feeds.get(id).is_some_and(|f| crate::command::same_key(token, &f.token) && f.current.as_ref().is_some_and(|(_, json)| json.contains(&needle)))
+        feeds.get(id).is_some_and(|f| f.admits(token).is_some() && f.current.as_ref().is_some_and(|(_, json)| json.contains(&needle)))
     }
 }
 
@@ -1580,7 +1677,8 @@ async fn feed_events_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    let Some((first, rx)) = state.feeds.follow(&id, q.get("k").map_or("", String::as_str)) else {
+    let key = q.get("k").cloned().unwrap_or_default();
+    let Some((first, rx, watching)) = state.feeds.follow(&id, &key) else {
         return StatusCode::FORBIDDEN.into_response();
     };
     // Frames as they change, and a beat with the host's clock every few seconds between them (#196):
@@ -1603,6 +1701,13 @@ async fn feed_events_handler<S: CommandSink + 'static>(
         }
     });
     let stream = futures_util::StreamExt::take_until(stream, until_stopped(state.stopping.clone()));
+    // A revoked TV (or a new link) is cut at once; its page then finds its link no longer works.
+    let stream = futures_util::StreamExt::take_until(stream, state.feeds.clone().until_withdrawn(id, key));
+    // A paired TV's page counts as watching while this stream is open.
+    let stream = futures_util::StreamExt::map(stream, move |e| {
+        let _ = &watching;
+        e
+    });
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
 }
 
@@ -2335,6 +2440,56 @@ mod tests {
         // A new secret (the link was renewed) closes the old link.
         feeds.set(&[("l3".into(), "n3w".into())]);
         assert!(get_with(port, "/feed/l3?k=s3cret", "", None).await.contains("403"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn each_paired_tv_has_its_own_key_and_one_can_be_revoked_alone() {
+        // #198: a TV sent the feed gets its own key; the feed's link key keeps working (OBS, a TV
+        // paired before 1.5) and revoking one TV cuts only that TV, at once.
+        let feeds = new_feed_hub();
+        let keys = |tvs: &[(&str, &str)]| [FeedKeys { id: "hall".into(), token: "feed-key".into(), tvs: tvs.iter().map(|(a, b)| ((*a).to_string(), (*b).to_string())).collect() }];
+        feeds.set_keys(&keys(&[("192.168.1.40:8095", "tv-one-key"), ("192.168.1.41:8095", "tv-two-key")]));
+        feeds.publish("hall", r#"{"verse":"Psalm 23:1"}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds: feeds.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        for k in ["feed-key", "tv-one-key", "tv-two-key"] {
+            assert!(get_with(port, &format!("/feed/hall?k={k}"), "", None).await.contains("feed page"), "{k}");
+        }
+        assert!(get_with(port, "/feed/hall?k=tv-three-key", "", None).await.contains("403"));
+        assert!(raw_http_request_with(port, "POST", "/api/v1/feed/hall/ack?k=tv-two-key", Some(r#"{"seq":1}"#), "").await.contains("204"));
+        let follow = |k: &'static str| tokio::spawn(async move { get_with(port, &format!("/api/v1/feed/hall/events?k={k}"), "", Some(100_000)).await });
+        let (one, two, link) = (follow("tv-one-key"), follow("tv-two-key"), follow("feed-key"));
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        let st = feeds.status("hall").unwrap();
+        assert_eq!(st.watching, 3);
+        assert_eq!(st.tvs, [TvWatching { id: "192.168.1.40:8095".into(), watching: 1 }, TvWatching { id: "192.168.1.41:8095".into(), watching: 1 }], "each TV's page, by its address");
+        // Revoke TV one: its stream ends at once; the other TV and the link carry on.
+        let started = std::time::Instant::now();
+        feeds.set_keys(&keys(&[("192.168.1.41:8095", "tv-two-key")]));
+        let cut = tokio::time::timeout(std::time::Duration::from_secs(1), one).await.expect("the revoked TV is cut at once").unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert!(cut.contains("Psalm 23:1"), "{cut}");
+        assert!(get_with(port, "/feed/hall?k=tv-one-key", "", None).await.contains("403"), "its link no longer works");
+        assert!(get_with(port, "/api/v1/feed/hall/events?k=tv-one-key", "", None).await.contains("403"));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let st = feeds.status("hall").unwrap();
+        assert_eq!(st.watching, 2);
+        assert_eq!(st.tvs, [TvWatching { id: "192.168.1.41:8095".into(), watching: 1 }]);
+        feeds.publish("hall", r#"{"verse":"Psalm 23:2"}"#.into());
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // A new link for the feed: pages on the old link key are cut, the paired TV keeps its own key.
+        feeds.set_keys(&[FeedKeys { id: "hall".into(), token: "new-feed-key".into(), tvs: vec![("192.168.1.41:8095".into(), "tv-two-key".into())] }]);
+        let old_link = tokio::time::timeout(std::time::Duration::from_secs(1), link).await.expect("the old link is cut").unwrap();
+        assert!(old_link.contains("Psalm 23:2"));
+        assert!(get_with(port, "/feed/hall?k=tv-two-key", "", None).await.contains("feed page"));
+        assert!(!two.is_finished(), "the other TV still follows");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(feeds.status("hall").unwrap().tvs[0].watching, 1);
+        two.abort();
         let mut h = result.handle;
         h.stop();
     }

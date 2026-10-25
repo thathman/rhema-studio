@@ -1,8 +1,9 @@
 package com.openbezal.rhema.receiver;
 
 /**
- * Cheap checks ShowServer makes before it reads a request (#198 hardening). Plain Java only, so
- * build.sh's CodeProofCheck can test them on the computer.
+ * Cheap checks ShowServer makes before it reads a request (#198 hardening), and the limits of the
+ * picture kept for a restart (1.5). Plain Java only, so build.sh's CodeProofCheck can test them on
+ * the computer.
  */
 final class Guard {
     private Guard() { }
@@ -86,6 +87,30 @@ final class Guard {
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
         }
         return true;
+    }
+
+    /** The biggest picture of the screen kept for a restart (1.5): 1920×1080 at most. */
+    static final int STILL_MAX_W = 1920;
+    static final int STILL_MAX_H = 1080;
+    /** A kept picture bigger than this is not kept (a JPEG of a 1080p screen is far smaller). */
+    static final long STILL_MAX_BYTES = 4L * 1024 * 1024;
+
+    /**
+     * The size of the picture kept of a screen w×h: the same shape, no bigger than
+     * STILL_MAX_W×STILL_MAX_H, at least 1×1; null for a screen with no size yet.
+     */
+    static int[] stillSize(int w, int h) {
+        if (w <= 0 || h <= 0) return null;
+        double scale = Math.min(1.0, Math.min((double) STILL_MAX_W / w, (double) STILL_MAX_H / h));
+        return new int[] {Math.max(1, (int) Math.round(w * scale)), Math.max(1, (int) Math.round(h * scale))};
+    }
+
+    /**
+     * Whether the picture kept is the one to show at start: it was taken of the feed shown now (a
+     * picture of another feed, or of a link withdrawn since, is never shown) and is not too big.
+     */
+    static boolean stillFits(String takenOf, String shown, long bytes) {
+        return takenOf != null && takenOf.equals(shown) && bytes > 0 && bytes <= STILL_MAX_BYTES;
     }
 
     private static boolean digits(String s, int max) {

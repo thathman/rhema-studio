@@ -24,7 +24,8 @@ import java.util.concurrent.TimeUnit;
  * check, CodeProof, 1.2; "v": 2 since 1.3), then POST /show {"nonce","data"} → {"ok","name"|"error"}:
  * the feed's https link and Rhema's certificate fingerprint, encrypted with the check's key (1.3;
  * the plain {"url","proof"} of 1.2 is refused); and (#213, 1.1) GET /status →
- * {"ok","name","feed","problem"}: the id of the feed shown, never its secret link. Small bodies
+ * {"ok","name","feed","problem"} (and, 1.5, "width","height": the display's size): the id of the
+ * feed shown, never its secret link. Small bodies
  * only; nothing else is served.
  *
  * Any device on the network can reach this port, so (1.3): a few requests are served at a time and
@@ -133,7 +134,10 @@ final class ShowServer extends Thread {
             status = 403;
             reply.put("ok", false).put("error", "Ask this TV by its address, e.g. 192.168.1.40:8095");
         } else if ("GET".equals(request[0]) && "/status".equals(path)) {
+            int[] size = app.displaySize();
             reply.put("ok", true).put("name", app.name()).put("feed", app.feedShown()).put("problem", app.problem());
+            // 1.5: the display's size, for the host's TV list.
+            if (size[0] > 0 && size[1] > 0) reply.put("width", size[0]).put("height", size[1]);
         } else if (!post) {
             status = 404;
             reply.put("ok", false).put("error", "Rhema Studio Receiver only takes POST /challenge, POST /show and GET /status");

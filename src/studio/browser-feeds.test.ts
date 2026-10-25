@@ -9,7 +9,8 @@ vi.mock("@tauri-apps/api/window", () => ({ availableMonitors: vi.fn(async () => 
 const { useBroadcastStore } = await import("@/stores/broadcast-store")
 const { enableOutput, disableOutput } = await import("@/lib/broadcast-output-control")
 const { outputOnAir } = await import("@/lib/output-on-air")
-const { startBrowserFeeds, feedUrl, feedHealthLabel } = await import("@/lib/browser-feeds")
+const { startBrowserFeeds, feedUrl, feedHealthLabel, beginTvKey, endTvKey, revokeTv } = await import("@/lib/browser-feeds")
+const { looksForBackup, restoreLooksFromBackup } = await import("@/stores/broadcast-store")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
 /** Browser feeds (ARCH-002): an output drawn by a LAN web page; published only while on. */
@@ -31,9 +32,9 @@ describe("browser feeds", () => {
     const stop = startBrowserFeeds()
     const tv = useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!
     expect(tv.feedToken).toMatch(/^[0-9a-f]{32}$/)
-    expect(calls.find((c) => c.cmd === "feeds_set")?.args).toEqual({ feeds: [{ id: "tv", token: tv.feedToken }] })
+    expect(calls.find((c) => c.cmd === "feeds_set")?.args).toEqual({ feeds: [{ id: "tv", token: tv.feedToken, tvs: [] }] })
     useBroadcastStore.getState().updateOutput("tv", { feedToken: "f".repeat(32) })
-    expect(calls.filter((c) => c.cmd === "feeds_set").at(-1)?.args).toEqual({ feeds: [{ id: "tv", token: "f".repeat(32) }] })
+    expect(calls.filter((c) => c.cmd === "feeds_set").at(-1)?.args).toEqual({ feeds: [{ id: "tv", token: "f".repeat(32), tvs: [] }] })
     expect(feedUrl("192.168.1.20", 8080, "tv", "abc")).toBe("http://192.168.1.20:8080/feed/tv?k=abc")
     expect(feedUrl("192.168.1.20", 8081, "tv", "abc", true)).toBe("https://192.168.1.20:8081/feed/tv?k=abc")
     stop()
@@ -63,5 +64,55 @@ describe("browser feeds", () => {
     expect(feedHealthLabel({ watching: 0, current: false, behind: false })).toBe("No page is showing it")
     expect(feedHealthLabel({ watching: 1, current: true, behind: false })).toBe("1 page · showing the latest")
     expect(feedHealthLabel({ watching: 2, current: false, behind: true })).toBe("2 pages · behind: not showing the latest")
+  })
+
+  it("give each TV its own key, known before its link goes, kept only when the send works (#198)", async () => {
+    const stop = startBrowserFeeds()
+    const lastKeys = () => (calls.filter((c) => c.cmd === "feeds_set").at(-1)!.args.feeds as { id: string; token: string; tvs: { id: string; token: string }[] }[])[0]
+    const key = await beginTvKey("tv", " 192.168.1.40:8095 ")
+    expect(key).toMatch(/^[0-9a-f]{32}$/)
+    expect(lastKeys().tvs).toEqual([{ id: "192.168.1.40:8095", token: key }])
+    // The TV refused (a wrong code): the key goes, nothing is remembered.
+    await endTvKey("tv", key!)
+    expect(lastKeys().tvs).toEqual([])
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!.tvs).toBeUndefined()
+    // It worked: remembered with its key (as Show on TV does), then the send ends; the key stays.
+    const key2 = (await beginTvKey("tv", "192.168.1.40:8095"))!
+    useBroadcastStore.getState().updateOutput("tv", { tvs: [{ name: "Hall TV", address: "192.168.1.40:8095", sentAt: 1, token: key2 }, { name: "Old TV", address: "192.168.1.41:8095", sentAt: 1 }] })
+    await endTvKey("tv", key2)
+    expect(lastKeys().tvs, "a TV sent the shared link has no key of its own").toEqual([{ id: "192.168.1.40:8095", token: key2 }])
+    // Revoke: its key is withdrawn at once; the shared-link TV is untouched.
+    await revokeTv("tv", "192.168.1.40:8095")
+    expect(lastKeys().tvs).toEqual([])
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!.tvs!.map((t) => t.name)).toEqual(["Old TV"])
+    // A feed not saved yet gets no key of its own (its link is the feed's).
+    expect(await beginTvKey("nope", "192.168.1.42:8095")).toBeNull()
+    stop()
+  })
+
+  it("keep TV keys out of backups, and keep this computer's TVs on restore (#198)", () => {
+    useBroadcastStore.getState().updateOutput("tv", { feedToken: "f".repeat(32), tvs: [{ name: "Hall TV", address: "192.168.1.40:8095", sentAt: 1, token: "k".repeat(32), width: 3840, height: 2160 }] })
+    const backup = looksForBackup()
+    expect(JSON.stringify(backup)).not.toContain("k".repeat(32))
+    expect(backup.outputs.find((o) => o.id === "tv")!.tvs).toEqual([{ name: "Hall TV", address: "192.168.1.40:8095", sentAt: 1, width: 3840, height: 2160 }])
+    restoreLooksFromBackup(backup)
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!.tvs![0].token, "this computer's TV keeps its key").toBe("k".repeat(32))
+  })
+
+  it("send a feed its rule for a lost host and its overscan, and again when they change (#198)", async () => {
+    const tv = useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!
+    useBroadcastStore.getState().setCountdownSources({ aux: [], item: null, start: 1_900_000_000_000 })
+    useBroadcastStore.getState().setLiveVerse({ reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" }, null, { goLive: true })
+    await enableOutput(tv)
+    const last = () => JSON.parse(calls.filter((c) => c.cmd === "feed_publish").at(-1)!.args.json as string)
+    expect(last().lost, "keeps the last frame: nothing sent").toBeUndefined()
+    expect(last().overscan).toBeUndefined()
+    useBroadcastStore.getState().updateOutput("tv", { hostLost: { mode: "countdown" }, overscan: 3 })
+    expect(last().lost).toEqual({ mode: "countdown", startsAt: 1_900_000_000_000 })
+    expect(last().overscan).toBe(3)
+    expect(last().verse.reference, "the same frame, again").toBe("Romans 8:28")
+    useBroadcastStore.getState().setCountdownSources({ aux: [], item: null, start: 1_900_000_600_000 })
+    expect(last().lost).toEqual({ mode: "countdown", startsAt: 1_900_000_600_000 })
+    await disableOutput(tv)
   })
 })

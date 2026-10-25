@@ -1351,6 +1351,28 @@ file), songs with a chorus and a key set (Prepare → Songs → Key), and a serv
 | 10ga.13 | B as **Worship** with a song up on A that has a key: the sections box and **Repeat chorus** after a verse. | "Key G" (the song's key) shows beside the title; Repeat chorus puts the last chorus sung (or the first) back on A's screens; a song with no chorus has it greyed. | Unverified |
 | 10ga.14 | B as Worship: the **Worship set**. | The service's songs and hymns in order with their keys (keys appear once A has opened each song); the one on the screens is marked. | Unverified |
 | 10ga.15 | B as **Present** (director) and as Screens: the output map after A and B each take a scene to different outputs. | Each output shows who took it last and when ("by B 10:42"); outputs no one took show no name. | Unverified |
+### 10fz. TVs: revoke one TV, its size, a picture or countdown when the host is lost, overscan, Receiver 1.5 (#198)
+
+The host computer with the secure page on (Settings → Remote control) and two Google TVs (or one TV
+and a browser) on the church network running **Rhema Studio Receiver 1.5.0.0** (built with
+`android-tv/build.sh`; installed by the integrator). A browser feed "Hall" with a congregation look.
+A picture in the media library (Prepare → Pictures). The run of show with a start time.
+
+| # | Step | Expected | Result |
+|---|------|----------|--------|
+| 10fz.1 | Outputs → Hall → Show on a Google TV: send it to TV 1, then to TV 2 (codes on their screens). Production → Show health → Browser feeds and Google TVs. | Both TVs show the feed. Under Hall: "Public screen · If this computer is lost: keeps the last picture" and both TVs, each "Private link: its own key · following the feed now". The two TVs' links (only in a debug build's chrome://inspect) have different `k=` keys, neither the feed's. | Unverified |
+| 10fz.2 | Check TV on TV 1. | "Showing this feed"; the row now shows the TV's display size (e.g. 1920×1080 or 3840×2160). A Receiver 1.4 TV answers without a size and its row says "size not known yet". | Unverified |
+| 10fz.3 | Revoke on TV 1, then **Revoke now**. | Within a second TV 1 leaves the feed and shows its code screen with "This screen's link no longer works (this TV was revoked …)". TV 2 and OBS on the feed's own link carry on without a blink. TV 1 is gone from the list. | Unverified |
+| 10fz.4 | Send the feed to TV 1 again. Then Edit output → **New link**, save. | TV 1 shows the feed again. After New link: a browser or OBS on the old link stops; both TVs keep showing (their own keys). | Unverified |
+| 10fz.5 | A TV paired with an older Rhema Studio (the feed's shared link), if one is available. | Its row says "Shared link: the feed's key …" and offers Forget, not Revoke; it keeps working until New link or until it is sent the feed again (then it gets its own key). | Unverified |
+| 10fz.6 | Edit Hall: **When a screen loses this computer** → Show a picture from the library, pick the picture; save. Quit Rhema Studio (or unplug the host's network). | After about 10 s both TVs show the picture full screen (inside the overscan); when Rhema Studio is back they return to the live picture by themselves. | Unverified |
+| 10fz.7 | Change it to **Count down to the service start**; quit Rhema Studio again before the start time. | The TVs show "The service starts in 12:34" counting down by the second (by the host's clock as last heard); after the start time "The service is starting". With no start time in the run of show they keep the last picture. | Unverified |
+| 10fz.8 | Change it back to **Keep the last picture**; quit Rhema Studio. | The last frame stays with the small "Not updating" mark, as before. | Unverified |
+| 10fz.9 | Hall → **Keep clear at each edge (overscan)** 5 %; save. Look at a TV that crops (or a browser). | The whole picture (text, ticker, cameras, the stage view) is drawn smaller, 5 % clear on every side; 0 % fills the screen again. The Screens card's TVs row says "5% kept clear at each edge". | Unverified |
+| 10fz.10 | With Hall showing on a TV for over a minute, quit Rhema Studio, then restart the TV (power off and on) and open Rhema Studio Receiver. | Before Rhema Studio answers, the TV shows the last picture of the feed (not the code screen) with a small "Not updating · Looking for Rhema Studio at …" line in a corner. Start Rhema Studio: the live feed replaces it within a few seconds. | Unverified |
+| 10fz.11 | Revoke the TV, then restart it. | The code screen shows; the old picture is not shown again. | Unverified |
+| 10fz.12 | On the TV's code screen press → (or ←). Restart the TV. | The line "Start with the TV   On" shows. After the restart Rhema Studio Receiver opens by itself with its feed (on a TV that allows it; some Android 10+ TVs do not, then it opens from the home screen as before). Press → again: Off; after a restart it does not open by itself. Off is the default on a new install. | Unverified |
+| 10fz.13 | Make a backup and look at the outputs in it. | The TVs are listed by name and address with no keys; restoring it on this computer keeps the TVs' own keys. | Unverified |
 
 ### 10ft. Desk consoles on joined computers: Bible, Worship, Screens, Director (#197)
 

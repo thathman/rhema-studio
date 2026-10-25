@@ -26,7 +26,7 @@ pub use dispatch::{CommandDispatcher, CommandSink};
 pub use error::CommandError;
 pub use lookup::Lookup;
 pub use feed_video::{CameraPlayback, PageVideo};
-pub use http::{set_app_version, start_http_server, FeedHub, FeedStatus, HttpConfig, HttpHandle, HttpStartResult, LiveHub, SharedFeeds, SharedLive, SharedStatus, SharedVoice, StatusSnapshot, TlsListener, VoiceHub, new_feed_hub, new_live_hub, new_voice_hub, new_shared_status};
+pub use http::{set_app_version, start_http_server, FeedHub, FeedKeys, FeedStatus, TvWatching, HttpConfig, HttpHandle, HttpStartResult, LiveHub, SharedFeeds, SharedLive, SharedStatus, SharedVoice, StatusSnapshot, TlsListener, VoiceHub, new_feed_hub, new_live_hub, new_voice_hub, new_shared_status};
 pub use presence::{new_presence, DeskPresence, Presence, SharedPresence};
 pub use osc::{start_osc_listener, OscConfig, OscHandle, OscStartResult};
 pub use keys::{check_key, close_pairing, hash_key, key_set_from, new_key_set, new_pairing_window, open_pairing, role_asked, try_pair, try_pair_as, KeyEntry, KeySet, PairOutcome, PairingWindow, Role};

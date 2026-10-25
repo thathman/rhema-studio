@@ -87,6 +87,9 @@ export function outputEditPatch(next: BroadcastOutput): Partial<Omit<BroadcastOu
     stageOrientation: next.stageOrientation,
     stageNight: next.stageNight === true ? true : undefined,
     cameraFallback: next.cameraFallback,
+    // A browser feed's rule for a lost host and its overscan (#198).
+    hostLost: next.hostLost?.mode && next.hostLost.mode !== "last" ? next.hostLost : undefined,
+    overscan: next.overscan ? next.overscan : undefined,
     ...(next.feedToken ? { feedToken: next.feedToken } : {}),
   }
 }

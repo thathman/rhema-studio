@@ -615,13 +615,32 @@ pub fn publish_live_state(state: State<'_, Mutex<HttpRuntime>>, json: String) ->
 pub struct FeedEntry {
     id: String,
     token: String,
+    /// Each paired TV's own key (#198), by the TV's address; absent from an older window.
+    #[serde(default)]
+    tvs: Vec<FeedTvEntry>,
 }
 
-/// The browser feeds (outputs of type "browser") and their secrets, kept in step with the outputs.
+#[derive(serde::Deserialize)]
+pub struct FeedTvEntry {
+    id: String,
+    token: String,
+}
+
+/// The keys `feeds_set` hands the server: keys shorter than 16 characters are never accepted.
+fn feed_keys(feeds: Vec<FeedEntry>) -> Vec<rhema_api::FeedKeys> {
+    feeds
+        .into_iter()
+        .filter(|f| f.token.len() >= 16)
+        .map(|f| rhema_api::FeedKeys { id: f.id, token: f.token, tvs: f.tvs.into_iter().filter(|t| t.token.len() >= 16).map(|t| (t.id, t.token)).collect() })
+        .collect()
+}
+
+/// The browser feeds (outputs of type "browser") and their secrets, with each paired TV's own key,
+/// kept in step with the outputs. A key no longer listed stops working at once.
 #[tauri::command]
 pub fn feeds_set(state: State<'_, Mutex<HttpRuntime>>, feeds: Vec<FeedEntry>) -> Result<(), String> {
     let hub = state.lock().map_err(|e| e.to_string())?.feeds.clone();
-    hub.set(&feeds.into_iter().filter(|f| f.token.len() >= 16).map(|f| (f.id, f.token)).collect::<Vec<_>>());
+    hub.set_keys(&feed_keys(feeds));
     Ok(())
 }
 
@@ -725,6 +744,20 @@ pub fn feed_status(state: State<'_, Mutex<HttpRuntime>>, id: String) -> Result<O
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn feed_keys_keep_each_tv_key_and_drop_short_ones() {
+        let feeds: Vec<FeedEntry> = serde_json::from_value(serde_json::json!([
+            { "id": "hall", "token": "feed-key-0123456789", "tvs": [{ "id": "192.168.1.40:8095", "token": "tv-key-0123456789ab" }, { "id": "192.168.1.41:8095", "token": "short" }] },
+            { "id": "old", "token": "feed-key-from-before" },
+            { "id": "bad", "token": "short" },
+        ]))
+        .unwrap();
+        let keys = feed_keys(feeds);
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys[0].tvs, [("192.168.1.40:8095".to_string(), "tv-key-0123456789ab".to_string())]);
+        assert!(keys[1].tvs.is_empty(), "an older window sends no TV keys");
+    }
 
     #[test]
     fn the_https_certificate_is_kept_while_the_addresses_stay_the_same() {
