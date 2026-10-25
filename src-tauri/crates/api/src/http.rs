@@ -550,6 +550,7 @@ where
         .map_err(|e| CommandError::DispatchFailed(format!("Invalid bind address: {e}")))?;
 
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
+    let ports = Arc::new(ListenPorts::default());
     let state = Arc::new(AppState {
         stopping: shutdown_rx.clone(),
         live: config.live.clone(),
@@ -592,7 +593,7 @@ where
         // Rhema's own pages are served from here (same origin) and its windows call through Rust, so
         // no other web page may use this API from a browser on the network (see `same_origin_only`).
         .layer(app_cors())
-        .layer(axum::middleware::from_fn(same_origin_only))
+        .layer(axum::middleware::from_fn_with_state(ports.clone(), same_origin_only))
         .with_state(state.clone());
     // The local CA's certificate (public): a phone installs it to trust the https page.
     let app = match config.tls.as_ref() {
@@ -608,12 +609,14 @@ where
     })?;
 
     let bound_port = listener.local_addr().map(|a| a.port()).unwrap_or(config.port);
+    let _ = ports.http.set(bound_port);
 
     let tls_port = match config.tls.as_ref() {
         Some(t) => Some(serve_tls(t, &config.host, app.clone(), shutdown_tx.subscribe()).await?),
         None => None,
     };
     if let Some(p) = tls_port {
+        let _ = ports.https.set(p);
         let _ = state.tls_port.set(p);
     }
 
@@ -736,14 +739,74 @@ fn app_cors() -> CorsLayer {
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, HeaderName::from_static("x-rhema-key")])
 }
 
-/// Refuse a request a browser sent for another web page (its `Origin` is neither this listener's
-/// own address nor Rhema's window). A browser always says the origin of a cross-site request that
-/// could change something, so this also stops the ones CORS would let through unasked (a form's
-/// plain POST). Controllers that are not browsers (Companion, Stream Deck, OSC bridges) send no
-/// origin and are checked by their key, as before.
-async fn same_origin_only(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
-    if let Some(origin) = req.headers().get(axum::http::header::ORIGIN) {
-        let host = req.headers().get(axum::http::header::HOST).and_then(|h| h.to_str().ok()).map(str::to_string).or_else(|| req.uri().authority().map(|a| a.as_str().to_string()));
+/// The ports this server listens on, once bound: a `Host` must name one of them.
+#[derive(Debug, Default)]
+struct ListenPorts {
+    http: std::sync::OnceLock<u16>,
+    https: std::sync::OnceLock<u16>,
+}
+
+/// Whether a request's `Host` names this computer the way a page of ours can be reached: an IP
+/// address (v4, or v6 in brackets), `localhost`, or a `.local` name (this computer's mDNS name), on
+/// one of this server's ports. Any other name is refused: DNS rebinding points an attacker's own
+/// name (evil.example) at this computer's address, and then its page's origin and the `Host` match.
+/// A missing port is the scheme's default (80 / 443), which this server never listens on.
+fn host_trusted(host: &str, ports: &[u16]) -> bool {
+    let host = host.trim();
+    let (name, port) = if let Some(rest) = host.strip_prefix('[') {
+        let Some((v6, after)) = rest.split_once(']') else { return false };
+        if v6.parse::<std::net::Ipv6Addr>().is_err() {
+            return false;
+        }
+        (None, after.strip_prefix(':'))
+    } else {
+        match host.rsplit_once(':') {
+            Some((n, p)) => (Some(n), Some(p)),
+            None => (Some(host), None),
+        }
+    };
+    let port: Option<u16> = match port {
+        Some(p) => match p.parse() {
+            Ok(p) => Some(p),
+            Err(_) => return false,
+        },
+        None => None,
+    };
+    let name_ok = match name {
+        None => true,
+        Some(n) => {
+            let n = n.to_ascii_lowercase();
+            n.parse::<std::net::Ipv4Addr>().is_ok()
+                || n == "localhost"
+                || (n.len() > ".local".len() && n.ends_with(".local") && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.'))
+        }
+    };
+    name_ok && port.is_some_and(|p| ports.contains(&p))
+}
+
+/// The pages a browser opens from this server (phone remote, camera, feeds) and what they load:
+/// their `Host` is checked even without an `Origin`.
+fn browser_page(path: &str) -> bool {
+    path == "/remote" || path == "/camera" || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
+}
+
+/// Refuse a request a browser sent for another web page: its `Origin` is neither this listener's
+/// own address nor Rhema Studio's window, or it reached us under a name that is not ours (DNS
+/// rebinding, `host_trusted`). A browser always says the origin of a cross-site request that could
+/// change something, so this also stops the ones CORS would let through unasked (a form's plain
+/// POST). The pages a browser opens from here are checked by name always. Controllers that are not
+/// browsers (Companion, Stream Deck, OSC bridges) send no origin and are checked by their key.
+async fn same_origin_only(AxumState(ports): AxumState<Arc<ListenPorts>>, req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    let origin = req.headers().get(axum::http::header::ORIGIN).cloned();
+    let host = req.headers().get(axum::http::header::HOST).and_then(|h| h.to_str().ok()).map(str::to_string).or_else(|| req.uri().authority().map(|a| a.as_str().to_string()));
+    if origin.is_some() || browser_page(req.uri().path()) {
+        let listening: Vec<u16> = [ports.http.get(), ports.https.get()].into_iter().flatten().copied().collect();
+        if !host.as_deref().is_some_and(|h| host_trusted(h, &listening)) {
+            log::warn!("HTTP request refused: asked for under another name ({host:?})");
+            return (StatusCode::MISDIRECTED_REQUEST, "Rhema Studio answers only at this computer's own address").into_response();
+        }
+    }
+    if let Some(origin) = origin {
         if !origin.to_str().is_ok_and(|o| origin_allowed(o, host.as_deref())) {
             log::warn!("HTTP request refused: from another web page ({origin:?})");
             return (StatusCode::FORBIDDEN, "Rhema Studio answers only its own pages and windows").into_response();
@@ -1660,7 +1723,7 @@ mod tests {
     async fn get_with(port: u16, path: &str, headers: &str, read_bytes: Option<usize>) -> String {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.expect("connect");
-        stream.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{headers}Connection: close\r\n\r\n").as_bytes()).await.expect("write");
+        stream.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{headers}Connection: close\r\n\r\n").as_bytes()).await.expect("write");
         let mut out = Vec::new();
         match read_bytes {
             None => { stream.read_to_end(&mut out).await.expect("read"); }
@@ -1912,7 +1975,7 @@ mod tests {
                 use sha2::Digest;
                 let shown = tls.get_ref().1.peer_certificates().unwrap()[0].clone();
                 let seen: String = sha2::Sha256::digest(shown.as_ref()).iter().map(|b| format!("{b:02x}")).collect();
-                tls.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                tls.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{tls_port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
                 let mut out = Vec::new();
                 let _ = tls.read_to_end(&mut out).await;
                 (seen, String::from_utf8_lossy(&out).to_string())
@@ -2090,7 +2153,7 @@ mod tests {
         let send = |method: &'static str, path: &'static str, body: &'static str, extra: &'static str| async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: x\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
             let mut out = String::new();
             s.read_to_string(&mut out).await.unwrap();
             out
@@ -2965,6 +3028,48 @@ mod tests {
         }
     }
 
+    #[test]
+    fn only_this_computers_own_names_on_its_ports_are_trusted() {
+        let ports = [8080, 8081];
+        for ok in ["192.168.1.20:8080", "192.168.1.20:8081", "127.0.0.1:8080", "[::1]:8080", "[fe80::1]:8081", "localhost:8080", "Studio-Mac.local:8080", "LOCALHOST:8081"] {
+            assert!(host_trusted(ok, &ports), "{ok}");
+        }
+        for bad in ["evil.example:8080", "evil.example", "192.168.1.20", "192.168.1.20:9090", "192.168.1.20:x", "[::1]", "[nonsense]:8080", "local:8080", ".local:8080", "evil.local.example:8080", "localhost.evil:8080", "", "1.2.3.4.5:8080"] {
+            assert!(!host_trusted(bad, &ports), "{bad}");
+        }
+        assert!(browser_page("/feed/l3") && browser_page("/remote") && browser_page("/camera") && browser_page("/assets/feed.js") && browser_page("/api/v1/feed/l3/events") && browser_page("/api/v1/camera/pulpit/whip"));
+        assert!(!browser_page("/api/v1/command") && !browser_page("/api/v1/live") && !browser_page("/remotes"));
+    }
+
+    #[tokio::test]
+    async fn a_rebound_name_is_refused_and_the_address_works() {
+        let sink = Arc::new(MockSink::new());
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), feeds, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let post = |host: &str, origin: &str| format!("POST /api/v1/command HTTP/1.1\r\nHost: {host}\r\nOrigin: {origin}\r\nX-Rhema-Key: tok\r\nContent-Type: application/json\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{{\"command\":\"next\"}}");
+        // DNS rebinding: the attacker's name points at this computer; origin and host agree.
+        let rebound = raw(port, &post("evil.example:{port}", "http://evil.example:{port}")).await;
+        assert!(rebound.starts_with("HTTP/1.1 421"), "{rebound}");
+        assert_eq!(sink.command_count(), 0);
+        // This computer's address with its own page's origin: works.
+        assert!(raw(port, &post("127.0.0.1:{port}", "http://127.0.0.1:{port}")).await.starts_with("HTTP/1.1 200"));
+        assert_eq!(sink.command_count(), 1);
+        // The phone and feed pages by address work; by another name they are refused, origin or not.
+        assert!(raw(port, "GET /remote HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
+        for path in ["/remote", "/feed/l3?k=s3cret", "/api/v1/feed/l3/events?k=s3cret", "/camera?name=pulpit&k=x"] {
+            let r = raw(port, &format!("GET {path} HTTP/1.1\r\nHost: evil.example:{{port}}\r\nConnection: close\r\n\r\n")).await;
+            assert!(r.starts_with("HTTP/1.1 421"), "{path}: {r}");
+        }
+        // A controller that is not a browser (no origin) keeps working by key, whatever name it used.
+        assert!(raw(port, &post("studio.lan:{port}", "").replace("Origin: \r\n", "")).await.starts_with("HTTP/1.1 200"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
     #[tokio::test]
     async fn another_web_page_on_the_network_cannot_send_commands_through_a_browser() {
         let sink = Arc::new(MockSink::new());
@@ -3019,8 +3124,8 @@ mod tests {
         assert!(script.starts_with("HTTP/1.1 200"), "{script}");
         let ack = raw(port, "POST /api/v1/feed/l3/ack?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: 9\r\nConnection: close\r\n\r\n{\"seq\":1}").await;
         assert!(!ack.starts_with("HTTP/1.1 403"), "{ack}");
-        let events = get_with(port, "/api/v1/feed/l3/events?k=s3cret", "Origin: http://127.0.0.1\r\n", Some(200)).await;
-        assert!(events.contains("text/event-stream"), "same origin (get_with asks for Host 127.0.0.1): {events}");
+        let events = get_with(port, "/api/v1/feed/l3/events?k=s3cret", &format!("Origin: http://127.0.0.1:{port}\r\n"), Some(200)).await;
+        assert!(events.contains("text/event-stream"), "same origin: {events}");
         let foreign = raw(port, "GET /api/v1/feed/l3/events?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nConnection: close\r\n\r\n").await;
         assert!(foreign.starts_with("HTTP/1.1 403"), "{foreign}");
         let mut h = result.handle;
