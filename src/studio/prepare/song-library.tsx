@@ -19,7 +19,7 @@ const LICENCE_BADGE: Record<string, string> = { public_domain: "PD", ccli: "CCLI
  * to the service, or open it in the editor. "New song" opens the paste-first
  * editor.
  */
-export function SongLibrary({ layout = "list", newRequest = 0 }: { layout?: "list" | "cards"; newRequest?: number } = {}) {
+export function SongLibrary({ layout = "list", newRequest = 0, onAdded }: { layout?: "list" | "cards"; newRequest?: number; onAdded?: (id: string) => void } = {}) {
   const [query, setQuery] = useState("")
   const results = useSongStore((s) => s.results)
   const searching = useSongStore((s) => s.searching)
@@ -57,7 +57,8 @@ export function SongLibrary({ layout = "list", newRequest = 0 }: { layout?: "lis
 
   const add = (song: SongSummary) => {
     const queue = useQueueStore.getState()
-    queue.addItem(songQueueItem(song), "end")
+    const id = queue.addItem(songQueueItem(song), "end")
+    if (id) onAdded?.(id)
   }
 
   return (
