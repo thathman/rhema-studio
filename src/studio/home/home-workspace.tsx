@@ -36,6 +36,7 @@ export function HomeWorkspace() {
     if (f === "outputs") openOutputs()
     else if (f === "prepare") setWorkspace("prepare")
     else if (f === "cameras") openProductionTab("cameras")
+    else if (f === "obs") openProductionTab("obs")
     else openSettings("diagnostics")
   }
 

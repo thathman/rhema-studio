@@ -2,9 +2,11 @@ import { serviceTiming } from "@/lib/timing-engine"
 import { clockAt } from "@/lib/church-time"
 import { clockMinutes, type OutlineHeader } from "@/lib/run-of-show"
 import type { QueueItem } from "@/types"
+import { recordWords, streamWords, type ObsOutputStatus } from "@/lib/obs-status"
+import { SKEW_WARN_MS, skewWords } from "@/lib/desk-freshness"
 
 export type ReadinessStatus = "ok" | "warn" | "info"
-export type ReadinessFix = "outputs" | "prepare" | "settings" | "cameras"
+export type ReadinessFix = "outputs" | "prepare" | "settings" | "cameras" | "obs"
 
 export interface ReadinessCheck {
   id: string
@@ -70,6 +72,73 @@ export interface ReadinessInput {
    * so nothing on a screen yet is only a note. Absent or null = not known, and it stays a warning.
    */
   serviceSoon?: boolean | null
+  /** OBS (#197, #213): optional, so off is only a note. Absent: not asked. */
+  obs?: { enabled: boolean; status: "off" | "connecting" | "connected" | "error"; error: string | null; label: string | null; stream: ObsOutputStatus | null; record: ObsOutputStatus | null; rehearsal: boolean }
+  /** Show the offline-first note (#213): Rhema needs no internet. `cloudSpeech`: cloud speech is chosen (it does). */
+  internet?: { cloudSpeech: boolean }
+  /** This computer's network address now and when the last service went live (#213: fixed or reserved address). */
+  lan?: { now: string; atLastService: string | null }
+  /** Each display output's monitor as the system reports it (#213: resolution; refresh is not reported). */
+  screens?: Array<{ name: string; role: "congregation" | "stage" | "signage"; monitor: string | null; width: number; height: number; onMain: boolean }>
+  /** Fonts the outputs' looks use, checked for Yorùbá letters (ẹ ọ ṣ with tone marks); null/absent: not measurable here. */
+  yorubaFonts?: { checked: string[]; missing: string[] } | null
+  /** This computer's clock: its year, and how far it is from a joined host's (null when there is nothing to compare). */
+  clock?: { year: number; skewMs: number | null; reference: string | null }
+}
+
+/** A clock that says a year before this is plainly wrong (a flat clock battery, a reset). */
+export const EARLIEST_SANE_YEAR = 2025
+
+/** The preflight's own checks (#197, #213): OBS, the network address, screens, Yorùbá fonts, the clock, the internet. */
+export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
+  const out: ReadinessCheck[] = []
+  if (i.obs) {
+    const o = i.obs
+    if (!o.enabled) out.push({ id: "obs", status: "info", label: "OBS is not connected (optional)", detail: "Rhema Studio runs the service without OBS. Connect it in Settings → Remote control to see its scenes, stream and recording here.", fix: "obs", fixLabel: "Open OBS" })
+    else if (o.status === "connected") {
+      const on = `${o.label ? ` (${o.label})` : ""}`
+      const live = o.stream?.active === true
+      if (o.rehearsal && live) out.push({ id: "obs", status: "warn", label: `OBS${on} is streaming while you rehearse`, detail: "Rehearsal stays on this computer, but OBS is live: what its scenes show goes out. Stop the stream in OBS if this is only practice.", fix: "obs", fixLabel: "Open OBS" })
+      else out.push({ id: "obs", status: "ok", label: `OBS connected${on}`, detail: `Stream: ${streamWords(o.stream).text}. Recording: ${recordWords(o.record).text}.` })
+    } else if (o.status === "connecting") out.push({ id: "obs", status: "info", label: "Connecting to OBS…" })
+    else out.push({ id: "obs", status: "warn", label: `OBS${o.label ? ` (${o.label})` : ""} is not connected`, detail: `${o.error ? `${o.error}. ` : ""}Rhema Studio keeps trying every 15 seconds; OBS's own stream is not affected. Check OBS is open on that computer, or use another saved OBS in Settings.`, fix: "obs", fixLabel: "Open OBS" })
+  }
+  if (i.lan) {
+    const { now, atLastService: was } = i.lan
+    if (was && was !== now) out.push({ id: "lan-address", status: "warn", label: `This computer's network address changed since the last service (${was} → ${now})`, detail: "Phones, TVs, OBS and desks that saved the old address will not find it. Reserve this address for this computer in the church router (a DHCP reservation), or give it a fixed one." })
+    else if (was) out.push({ id: "lan-address", status: "ok", label: `Same network address as the last service (${now})` })
+    else out.push({ id: "lan-address", status: "ok", label: `Network address ${now}`, detail: "Compared at the next service. Reserve it for this computer in the church router so phones and TVs always find it." })
+  }
+  if (i.screens?.length) {
+    out.push({
+      id: "screens",
+      status: "ok",
+      label: `Screens: ${i.screens.map((s) => `${s.name} ${s.width}×${s.height}`).join(", ")}`,
+      detail: `${i.screens.map((s) => `${s.name} on ${s.monitor || "a monitor"}${s.onMain ? " (this computer's main screen)" : ""}`).join("; ")}. The refresh rate is not reported to Rhema Studio: check it in the system's display settings.`,
+    })
+    const swapped = i.screens.filter((s) => s.role === "stage" && s.onMain)
+    if (swapped.length) {
+      const room = i.screens.find((s) => s.role === "congregation" && !s.onMain)
+      out.push({ id: "screens-swapped", status: "warn", label: `${swapped.map((s) => s.name).join(", ")}: a stage output is on this computer's main screen`, detail: `The stage and congregation outputs may be swapped${room ? ` (${room.name} is on ${room.monitor || "another monitor"})` : ""}. Check each output's monitor in Outputs.`, fix: "outputs", fixLabel: "Open outputs" })
+    }
+  }
+  if (i.yorubaFonts?.checked.length) {
+    const m = i.yorubaFonts.missing
+    out.push(m.length
+      ? { id: "yoruba-fonts", status: "warn", label: `${m.length === 1 ? `${m[0]} cannot` : `${m.length} fonts cannot`} draw every Yorùbá letter`, detail: `${m.join(", ")}: ẹ, ọ, ṣ or their tone marks would show in a fallback font. Choose a look whose font has them.`, fix: "outputs", fixLabel: "Open outputs" }
+      : { id: "yoruba-fonts", status: "ok", label: "Fonts draw Yorùbá (ẹ ọ ṣ with tone marks)" })
+  }
+  if (i.clock) {
+    const c = i.clock
+    if (c.year < EARLIEST_SANE_YEAR) out.push({ id: "clock", status: "warn", label: "This computer's clock looks wrong", detail: `It says the year is ${c.year}. Timers and the event clock use it: set the date and time in the system settings.` })
+    else if (c.skewMs !== null && c.reference) {
+      out.push(Math.abs(c.skewMs) > SKEW_WARN_MS
+        ? { id: "clock", status: "warn", label: `This computer's clock is ${skewWords(c.skewMs)} ${c.reference}`, detail: "Times here may differ from the other screens. Set the clocks to the same time (both on automatic time when the network has it)." }
+        : { id: "clock", status: "ok", label: `Clock matches ${c.reference}` })
+    }
+  }
+  if (i.internet) out.push({ id: "internet", status: "ok", label: "Works without the internet", detail: `The service runs on the church network alone: unplugging the router's internet is fine. Only OBS's stream to YouTube${i.internet.cloudSpeech ? " and cloud speech need" : " needs"} it.` })
+  return out
 }
 
 /** How close a service must be before "nothing is on a screen" needs doing. */
@@ -200,6 +269,7 @@ export function computeReadiness(i: ReadinessInput): { ready: boolean; checks: R
     ...(i.feedsUnwatched?.length
       ? [{ id: "feeds-unwatched", status: "info" as const, label: `${i.feedsUnwatched.join(", ")}: no screen is watching`, detail: "The browser feed is on, but no TV, browser or OBS has it open. Show it on a Google TV, or open its link.", fix: "outputs" as const, fixLabel: "Open outputs" }]
       : []),
+    ...preflightChecks(i),
   ]
   return { ready: checks.every((c) => c.status !== "warn"), checks }
 }

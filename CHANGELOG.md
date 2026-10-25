@@ -4,6 +4,14 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### OBS status and profiles, and more preflight checks (#197, #213)
+- **Production → OBS** now shows what OBS reports about the stream and the recording: live or not, for how long, the bitrate and dropped frames, and OBS's own frames a second and CPU. Its inputs are listed with their mute state and a live sound level, shown only (mute and levels are still changed in OBS).
+- **OBS's transition** can be chosen on the OBS tab (Cut, Fade, …). It changes how OBS's next switch looks, only when you choose one, and never in rehearsal or on a joined desk.
+- **Saved OBS computers** (Settings → Remote control): save the connection under a name ("Main stream PC", "Backup laptop"), **Test** one (it only connects and asks OBS its version) and **Use** it. Their passwords stay in the system keychain; they are not in backups.
+- **Show health** has an **Online (OBS)** card: connected or not, OBS's program scene, which church camera is on it, the stream and the recording. Home and Show health list OBS in the preflight (optional: off is only a note; enabled but not reachable is a warning; streaming during rehearsal is a warning).
+- More preflight checks: a note that the service needs no internet (unplugging it is fine); a warning when this computer's network address changed since the last service; each screen's resolution (the refresh rate is not reported to Rhema, and it says so); a warning when a stage output is on this computer's main screen; a warning when a look's font cannot draw Yorùbá letters (ẹ ọ ṣ with tone marks); and the clock against the host's on a joined desk (or a plainly wrong year).
+- **Sound check** in Show health: a 1 kHz test tone at −18 dBFS until you press Stop (on a chosen output where this computer can choose one), and a clap test that listens on the microphone for 5 seconds and says whether it heard you. Both only when pressed; nothing is recorded.
+
 ### Cameras: what really arrives and what each screen really shows, and recovery controls (#213, #208)
 - Connected is no longer counted as working. Production → Cameras and Show health show each camera's picture size, its rate in Mbit/s, and the frames a second Rhema's own screens and TVs really show. A camera the router still has but that sends nothing for more than 3 seconds shows **Frozen** (with how long nothing has arrived), and its screens show the camera's fallback (colour bars, static, words) instead of a still picture passed off as live.
 - Each Google TV and browser page that plays a camera reports how it plays it: Show health says, for example, "Foyer TV: pulpit camera 29.8 fps, 0.2% dropped", and lists a screen that is dropping frames, showing too few, or getting no new frame.

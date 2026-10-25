@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { ObsClient, ObsRequestError } from "@/lib/obs"
 import { obsVideo, type ObsVideo } from "@/lib/program-names"
 import { programCameras } from "@/lib/obs-companion"
+import { meterLevels, obsInputList, obsOutput, obsStats, type ObsInput, type ObsOutputStatus, type ObsStats } from "@/lib/obs-status"
 import { useJournalStore } from "@/stores/journal-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type ObsSettings } from "@/stores/settings-store"
@@ -31,6 +32,17 @@ interface ObsState {
    * of its Media Sources; null while OBS has not said. Information only: Rhema never acts on it.
    */
   programCameras: string[] | null
+  /** OBS's stream (GetStreamStatus); null until OBS has answered. */
+  stream: ObsOutputStatus | null
+  /** OBS's recording in full (duration, bitrate); `recording` above stays the short answer. */
+  recordOutput: ObsOutputStatus | null
+  /** OBS's render and encoder figures (GetStats); null until OBS has answered. */
+  stats: ObsStats | null
+  /** OBS's inputs with their mute state and audio level, shown only (#197); null until OBS has answered. */
+  inputs: ObsInput[] | null
+  /** OBS's scene transitions and the one it uses now; empty / null until OBS has answered. */
+  transitions: string[]
+  transition: string | null
   connect: () => Promise<void>
   disconnect: () => void
   startRecording: () => Promise<void>
@@ -43,15 +55,21 @@ interface ObsState {
   take: () => Promise<void>
   /** Outside Studio Mode: switch OBS's program straight to a scene. The panel asks first; this changes what the stream shows. */
   switchProgram: (scene: string) => Promise<void>
+  /** Choose OBS's transition (a deliberate click; not in rehearsal). Changes how OBS's next switch looks. */
+  setTransition: (name: string) => Promise<void>
 }
 
 const NO_SCENES = { scenes: [] as string[], program: null, preview: null, studioMode: null, programCameras: null }
+const NO_STATUS = { stream: null, recordOutput: null, stats: null, inputs: null, transitions: [] as string[], transition: null }
 
 let client: ObsClient | null = null
 let poll: ReturnType<typeof setInterval> | null = null
 let retry: ReturnType<typeof setTimeout> | null = null
 
 const url = (o: ObsSettings) => `ws://${o.host.trim() || "127.0.0.1"}:${o.port}`
+
+// The last byte counts, for each output's bitrate between two readings.
+let lastBytes: { stream: { bytes: number; at: number } | null; record: { bytes: number; at: number } | null } = { stream: null, record: null }
 
 async function refresh(): Promise<void> {
   const c = client
@@ -60,11 +78,106 @@ async function refresh(): Promise<void> {
     const r = await c.request<{ outputActive: boolean; outputPaused?: boolean; outputTimecode?: string }>("GetRecordStatus")
     if (client !== c) return
     const active = r.outputActive === true
-    useObsStore.setState({ recording: { active, paused: active && r.outputPaused === true, timecode: active ? (r.outputTimecode ?? null) : null } })
+    const at = Date.now()
+    const out = obsOutput(r, lastBytes.record, at)
+    lastBytes.record = out.bytes !== null ? { bytes: out.bytes, at } : null
+    useObsStore.setState({ recording: { active, paused: active && r.outputPaused === true, timecode: active ? (r.outputTimecode ?? null) : null }, recordOutput: out })
   } catch {
     // Unknown is not "not recording": show nothing rather than a stale answer.
-    if (client === c) useObsStore.setState({ recording: null })
+    if (client === c) useObsStore.setState({ recording: null, recordOutput: null })
   }
+}
+
+/** The stream and OBS's render figures, every poll; each unknown on its own failure. */
+async function refreshStream(): Promise<void> {
+  const c = client
+  if (!c) return
+  const [stream, stats] = await Promise.allSettled([c.request("GetStreamStatus"), c.request("GetStats")])
+  if (client !== c) return
+  const at = Date.now()
+  let s: ObsOutputStatus | null = null
+  if (stream.status === "fulfilled") {
+    s = obsOutput(stream.value, lastBytes.stream, at)
+    lastBytes.stream = s.bytes !== null ? { bytes: s.bytes, at } : null
+  }
+  useObsStore.setState({ stream: s, stats: stats.status === "fulfilled" ? obsStats(stats.value) : null })
+}
+
+/** OBS's inputs, and the mute state of those with sound (an input without audio refuses GetInputMute). */
+async function loadInputs(): Promise<void> {
+  const c = client
+  if (!c) return
+  try {
+    const list = obsInputList((await c.request<{ inputs?: unknown }>("GetInputList")).inputs).slice(0, 60)
+    const mutes = await Promise.allSettled(list.map((i) => c.request<{ inputMuted?: boolean }>("GetInputMute", { inputName: i.name })))
+    if (client !== c) return
+    const before = new Map((useObsStore.getState().inputs ?? []).map((i) => [i.name, i.levelDb]))
+    useObsStore.setState({
+      inputs: list.map((i, n) => {
+        const m = mutes[n]
+        return { ...i, muted: m.status === "fulfilled" && typeof m.value.inputMuted === "boolean" ? m.value.inputMuted : null, levelDb: before.get(i.name) ?? null }
+      }),
+    })
+  } catch {
+    if (client === c) useObsStore.setState({ inputs: null })
+  }
+}
+
+/** OBS's transitions and the one in use. */
+async function loadTransitions(): Promise<void> {
+  const c = client
+  if (!c) return
+  try {
+    const r = await c.request<{ currentSceneTransitionName?: string | null; transitions?: unknown }>("GetSceneTransitionList")
+    if (client !== c) return
+    const names = Array.isArray(r.transitions) ? (r.transitions as Array<{ transitionName?: unknown }>).map((t) => t?.transitionName).filter((n): n is string => typeof n === "string") : []
+    useObsStore.setState({ transitions: names, transition: r.currentSceneTransitionName || null })
+  } catch {
+    if (client === c) useObsStore.setState({ transitions: [], transition: null })
+  }
+}
+
+// Audio meters arrive about 20 times a second: kept here and shown at most 4 times a second.
+let meters: Record<string, number> = {}
+let meterFlush: ReturnType<typeof setTimeout> | null = null
+const METER_MS = 250
+function onMeters(data: Record<string, unknown>): void {
+  meters = { ...meters, ...meterLevels(data) }
+  if (meterFlush) return
+  meterFlush = setTimeout(() => {
+    meterFlush = null
+    const inputs = useObsStore.getState().inputs
+    if (!inputs) return
+    useObsStore.setState({ inputs: inputs.map((i) => (i.name in meters ? { ...i, levelDb: meters[i.name] } : i)) })
+  }, METER_MS)
+}
+
+/** OBS's input and transition events. True when handled. */
+function onInputEvent(type: string, data: Record<string, unknown>): boolean {
+  switch (type) {
+    case "InputVolumeMeters":
+      onMeters(data)
+      return true
+    case "InputMuteStateChanged": {
+      const inputs = useObsStore.getState().inputs
+      if (inputs && typeof data.inputName === "string") useObsStore.setState({ inputs: inputs.map((i) => (i.name === data.inputName ? { ...i, muted: data.inputMuted === true } : i)) })
+      return true
+    }
+    case "InputCreated":
+    case "InputRemoved":
+    case "InputNameChanged":
+      void loadInputs()
+      return true
+    case "CurrentSceneTransitionChanged":
+      useObsStore.setState({ transition: typeof data.transitionName === "string" ? data.transitionName : null })
+      return true
+    case "SceneTransitionCreated":
+    case "SceneTransitionRemoved":
+    case "SceneTransitionNameChanged":
+      void loadTransitions()
+      return true
+  }
+  return false
 }
 
 /** OBS's scene list as it sends it, put in OBS's own order: highest sceneIndex is the top of OBS's list. */
@@ -180,6 +293,10 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 function stopTimers(): void {
   if (poll) clearInterval(poll)
   poll = null
+  if (meterFlush) clearTimeout(meterFlush)
+  meterFlush = null
+  meters = {}
+  lastBytes = { stream: null, record: null }
   if (retry) clearTimeout(retry)
   retry = null
 }
@@ -190,6 +307,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
   recording: null,
   chapters: null,
   ...NO_SCENES,
+  ...NO_STATUS,
   video: null,
 
   connect: async () => {
@@ -203,13 +321,14 @@ export const useObsStore = create<ObsState>((set, get) => ({
       onEvent: (type, data) => {
         // Pause/resume/start/stop: ask OBS for the full state rather than reading one flag.
         if (type === "RecordStateChanged") void refresh()
-        else if (client === c) onSceneEvent(type, data)
+        else if (type === "StreamStateChanged") void refreshStream()
+        else if (client === c && !onInputEvent(type, data)) onSceneEvent(type, data)
       },
       onClose: (reason) => {
         if (client !== c) return
         client = null
         stopTimers()
-        useObsStore.setState({ status: "error", error: reason, recording: null, video: null, ...NO_SCENES })
+        useObsStore.setState({ status: "error", error: reason, recording: null, video: null, ...NO_SCENES, ...NO_STATUS })
         // Try again quietly while the connection stays enabled.
         if (useSettingsStore.getState().obs.enabled) retry = setTimeout(() => void useObsStore.getState().connect(), 15_000)
       },
@@ -219,20 +338,21 @@ export const useObsStore = create<ObsState>((set, get) => ({
       await c.connect()
       if (client !== c) return
       set({ status: "connected", error: null, recording: null })
-      await Promise.all([refresh(), loadScenes(), loadVideo()])
+      await Promise.all([refresh(), refreshStream(), loadScenes(), loadVideo(), loadInputs(), loadTransitions()])
       // A newer connect (or a disconnect) happened while waiting: this one must not start a poll.
       if (client !== c) return
       if (poll) clearInterval(poll)
       let ticks = 0
       poll = setInterval(() => {
         void refresh()
+        void refreshStream()
         // A source shown or hidden inside the program scene sends no scene event: look again now and then.
         if (++ticks % 5 === 0) void loadProgramCameras()
       }, 2000)
     } catch (e) {
       if (client !== c) return
       client = null
-      set({ status: "error", error: e instanceof Error ? e.message : String(e), recording: null, video: null, ...NO_SCENES })
+      set({ status: "error", error: e instanceof Error ? e.message : String(e), recording: null, video: null, ...NO_SCENES, ...NO_STATUS })
       if (useSettingsStore.getState().obs.enabled) retry = setTimeout(() => void useObsStore.getState().connect(), 15_000)
     }
   },
@@ -242,7 +362,7 @@ export const useObsStore = create<ObsState>((set, get) => ({
     const c = client
     client = null
     c?.close()
-    set({ status: "off", error: null, recording: null, chapters: null, video: null, ...NO_SCENES })
+    set({ status: "off", error: null, recording: null, chapters: null, video: null, ...NO_SCENES, ...NO_STATUS })
   },
 
   startRecording: async () => {
@@ -317,6 +437,17 @@ export const useObsStore = create<ObsState>((set, get) => ({
       useJournalStore.getState().add({ kind: "obs", label: `OBS: switched its program to ${scene} (from Rhema Studio)` })
     } catch (e) {
       toast.error("OBS did not switch scene", { description: errText(e) })
+    }
+  },
+
+  setTransition: async (name) => {
+    if (!client || name === get().transition || refusedInRehearsal()) return
+    try {
+      await client.request("SetCurrentSceneTransition", { transitionName: name })
+      set({ transition: name })
+      useJournalStore.getState().add({ kind: "obs", label: `OBS: transition set to ${name} (from Rhema Studio)` })
+    } catch (e) {
+      toast.error("OBS did not change its transition", { description: errText(e) })
     }
   },
 }))

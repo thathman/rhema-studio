@@ -67,6 +67,7 @@ function serviceFix(f: ReadinessFix): () => void {
   if (f === "outputs") return () => useShellStore.getState().openOutputs()
   if (f === "prepare") return () => useShellStore.getState().goTo("prepare")
   if (f === "cameras") return () => openProductionTab("cameras")
+  if (f === "obs") return () => openProductionTab("obs")
   return () => openSettings("diagnostics")
 }
 

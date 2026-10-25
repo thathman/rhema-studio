@@ -5,7 +5,11 @@ import { useApprovalGateStore } from "@/stores/approval-gate-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { approvalState } from "@/lib/approval"
 import { localDate, todaysService } from "@/lib/todays-service"
-import { monitorProblems } from "@/lib/monitor-health"
+import { monitorProblems, resolveMonitorIndex } from "@/lib/monitor-health"
+import { useObsStore } from "@/stores/obs-store"
+import { useJoin } from "@/stores/join-store"
+import { lanAddressNow, watchLanAddressAtService } from "@/lib/lan-address"
+import { fontsMissingYoruba } from "@/lib/yoruba-fonts"
 import { contentStatus } from "@/lib/song-files"
 import { useMonitorStore } from "@/stores/monitor-store"
 import { allSignageIds } from "@/lib/signage"
@@ -22,6 +26,8 @@ import { fontAvailable, missingThemeFonts } from "@/lib/brand-kit"
 import { themeIdsOf } from "@/lib/output-themes"
 import { useRouterHealth } from "@/lib/cameras"
 import { cameraHealth, cameraWords, useFeedHealthStore } from "@/lib/show-health"
+
+watchLanAddressAtService()
 
 /**
  * Is the service ready? The readiness checks (FR-08) for any view: Home's "Your attention" and
@@ -47,6 +53,20 @@ export function useReadiness() {
   const suggested = todaysService(programs, localDate())
   const monitorCount = useMonitorStore((s) => s.count)
   const monitorNames = useMonitorStore((s) => s.names)
+  const monitorSizes = useMonitorStore((s) => s.sizes)
+  const primaryMonitor = useMonitorStore((s) => s.primary)
+  // OBS (#197): optional; its own state as OBS reported it.
+  const obsSettings = useSettingsStore((s) => s.obs)
+  const obsProfiles = useSettingsStore((s) => s.obsProfiles)
+  const obsStatus = useObsStore((s) => s.status)
+  const obsError = useObsStore((s) => s.error)
+  const obsStream = useObsStore((s) => s.stream)
+  const obsRecord = useObsStore((s) => s.recordOutput)
+  const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const cloudSpeech = useSettingsStore((s) => s.sttProvider === "deepgram")
+  const lanAtService = useSettingsStore((s) => s.lanAddressAtService)
+  const joinStatus = useJoin((s) => s.status)
+  const clockSkewMs = useJoin((s) => s.clockSkewMs)
   const [contentError, setContentError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -66,6 +86,13 @@ export function useReadiness() {
     const id = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(id)
   }, [])
+  // This computer's network address, looked at once a minute with the time.
+  const [lan, setLan] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    void lanAddressNow().then((ip) => { if (live) setLan(ip) })
+    return () => { live = false }
+  }, [now])
   const setWorkspace = useShellStore((s) => s.setWorkspace)
   const openOutputs = useShellStore((s) => s.openOutputs)
 
@@ -109,6 +136,24 @@ export function useReadiness() {
     for (const id of songIds) if (!songs[id] && !missing.includes(id)) void useSongStore.getState().load(id).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ids only
   }, [songIds.join(",")])
+  // The fonts the outputs' looks draw with, measured for Yorùbá letters (#213); each set once.
+  const lookFonts = [...new Set(themes.filter((t) => outputs.some((o) => themeIdsOf(o).includes(t.id))).flatMap((t) => [t.verseText.fontFamily, t.reference.fontFamily]).filter((f): f is string => !!f && fontAvailable(f)))].sort()
+  const [yoruba, setYoruba] = useState<{ key: string; missing: string[] } | null>(null)
+  const fontKey = lookFonts.join("\u0000")
+  useEffect(() => {
+    let live = true
+    if (!fontKey) return
+    void fontsMissingYoruba(fontKey.split("\u0000")).then((missing) => { if (live && missing) setYoruba({ key: fontKey, missing }) }).catch(() => {})
+    return () => { live = false }
+  }, [fontKey])
+  // Each display output on its monitor (#213): the size the system reports, and whether it is the main screen.
+  const displays = outputs.filter((o) => o.type === "display")
+  const screens = monitorSizes.length === 0 ? undefined : displays.flatMap((o) => {
+    const at = resolveMonitorIndex(o, monitorNames, displays)
+    const size = at === null ? undefined : monitorSizes[at]
+    return at === null || !size ? [] : [{ name: o.name, role: o.role ?? "congregation", monitor: monitorNames[at] ?? null, width: size.width, height: size.height, onMain: primaryMonitor === at && monitorSizes.length > 1 }]
+  })
+  const obsLabel = obsProfiles.find((p) => p.host.trim().toLowerCase() === obsSettings.host.trim().toLowerCase() && p.port === obsSettings.port)?.label ?? null
   const { ready, checks } = computeReadiness({
     translationsLoaded: translations.length,
     activeThemeName: themes.find((t) => t.id === activeThemeId)?.name ?? null,
@@ -149,6 +194,12 @@ export function useReadiness() {
       running: isLive || eventId !== null,
       now,
     }),
+    obs: { enabled: obsSettings.enabled, status: obsStatus, error: obsError, label: obsLabel, stream: obsStream, record: obsRecord, rehearsal },
+    internet: { cloudSpeech },
+    lan: lan ? { now: lan, atLastService: lanAtService } : undefined,
+    screens,
+    yorubaFonts: yoruba && yoruba.key === fontKey ? { checked: lookFonts, missing: yoruba.missing } : null,
+    clock: { year: new Date(now).getFullYear(), skewMs: joinStatus === "connected" ? clockSkewMs : null, reference: joinStatus === "connected" ? "the host's" : null },
     feedsUnwatched: outputs.filter((o) => o.type === "browser" && outputOnAir(o, outputStatus[o.id]) && feeds[o.id]?.watching === 0).map((o) => o.name),
     signage: outputs
       // A ticker feed (Rhema Ticker | Alpha) has no pictures on purpose.

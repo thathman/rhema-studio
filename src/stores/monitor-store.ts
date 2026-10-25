@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { availableMonitors } from "@tauri-apps/api/window"
+import { availableMonitors, primaryMonitor } from "@tauri-apps/api/window"
 import { toast } from "sonner"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { resolveMonitorIndex } from "@/lib/monitor-health"
@@ -10,9 +10,19 @@ interface MonitorState {
   count: number | null
   /** Their names in OS order (null when the OS gives none). */
   names: (string | null)[]
+  /** Each monitor's size in physical pixels and scale, in the same order; empty until known. */
+  sizes: MonitorSize[]
+  /** Which of them is this computer's main screen (the menu bar / taskbar), or null when not known. */
+  primary: number | null
 }
 
-export const useMonitorStore = create<MonitorState>(() => ({ count: null, names: [] }))
+export interface MonitorSize {
+  width: number
+  height: number
+  scale: number
+}
+
+export const useMonitorStore = create<MonitorState>(() => ({ count: null, names: [], sizes: [], primary: null }))
 
 const POLL_MS = 5000
 
@@ -27,15 +37,25 @@ async function check(): Promise<void> {
   const b0 = useBroadcastStore.getState()
   for (const o of b0.outputs) if (o.type !== "browser" && (b0.outputStatus[o.id]?.previewOpen || b0.outputStatus[o.id]?.ndiActive)) void reconcileOutputStatus(o)
   let names: (string | null)[]
+  let sizes: MonitorSize[]
+  let primary: number | null = null
   try {
-    names = (await availableMonitors()).map((m) => m.name ?? null)
+    const monitors = await availableMonitors()
+    names = monitors.map((m) => m.name ?? null)
+    sizes = monitors.map((m) => ({ width: m.size.width, height: m.size.height, scale: m.scaleFactor }))
+    const p = await primaryMonitor().catch(() => null)
+    if (p) {
+      const at = monitors.findIndex((m) => m.name === p.name && m.position.x === p.position.x && m.position.y === p.position.y)
+      primary = at === -1 ? null : at
+    }
   } catch {
     return // not under Tauri (tests, browser shim)
   }
   const count = names.length
   const prev = useMonitorStore.getState().count
-  if (prev === count && useMonitorStore.getState().names.join("\u0000") === names.join("\u0000")) return
-  useMonitorStore.setState({ count, names })
+  const was = useMonitorStore.getState()
+  if (prev === count && was.names.join("\u0000") === names.join("\u0000") && was.primary === primary && JSON.stringify(was.sizes) === JSON.stringify(sizes)) return
+  useMonitorStore.setState({ count, names, sizes, primary })
   if (prev === null || count >= prev) return
   const b = useBroadcastStore.getState()
   const lost = b.outputs.filter((o) => o.type === "display" && resolveMonitorIndex(o, names, b.outputs.filter((x) => x.type === "display")) === null && b.outputStatus[o.id]?.previewOpen)

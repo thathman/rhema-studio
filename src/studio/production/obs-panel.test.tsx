@@ -26,6 +26,12 @@ class FakeObs {
   studioMode = false
   /** OBS → Settings → Video: the output size and frame rate. */
   video = { baseWidth: 1920, baseHeight: 1080, outputWidth: 1920, outputHeight: 1080, fpsNumerator: 60, fpsDenominator: 1 }
+  /** OBS's stream (Start Streaming in OBS), its inputs and its transitions. */
+  streaming: Record<string, unknown> = { outputActive: false }
+  inputs = [{ inputName: "Pulpit mic", inputKind: "coreaudio_input_capture", unversionedInputKind: "coreaudio_input_capture" }, { inputName: "Camera 1", inputKind: "ffmpeg_source", unversionedInputKind: "ffmpeg_source" }]
+  muted: Record<string, boolean> = { "Pulpit mic": false }
+  transitions = ["Cut", "Fade"]
+  transition = "Fade"
   url: string
   constructor(url: string) {
     this.url = url
@@ -59,6 +65,18 @@ class FakeObs {
     const after: Array<() => void> = []
     if (type === "GetRecordStatus") responseData = { outputActive: false, outputPaused: false }
     else if (type === "GetVideoSettings") responseData = this.video
+    else if (type === "GetStreamStatus") responseData = this.streaming
+    else if (type === "GetStats") responseData = { activeFps: 30, cpuUsage: 9, renderSkippedFrames: 0, renderTotalFrames: 100, outputSkippedFrames: 0, outputTotalFrames: 100 }
+    else if (type === "GetInputList") responseData = { inputs: this.inputs }
+    else if (type === "GetInputMute") {
+      const name = String(data?.inputName)
+      if (name in this.muted) responseData = { inputMuted: this.muted[name] }
+      else { ok = false; code = 604 } // an input without audio
+    } else if (type === "GetSceneTransitionList") responseData = { currentSceneTransitionName: this.transition, transitions: this.transitions.map((transitionName) => ({ transitionName, transitionKind: "x", transitionFixed: false })) }
+    else if (type === "SetCurrentSceneTransition") {
+      this.transition = String(data?.transitionName)
+      after.push(() => this.event("CurrentSceneTransitionChanged", { transitionName: this.transition }))
+    }
     else if (type === "GetStudioModeEnabled") responseData = { studioModeEnabled: this.studioMode }
     else if (type === "GetSceneList") responseData = { currentProgramSceneName: this.program, currentPreviewSceneName: this.studioMode ? this.preview : null, scenes: this.list() }
     else if (type === "SetCurrentPreviewScene") {
@@ -119,7 +137,7 @@ async function render() {
 }
 
 /** The last request that is not one of the reads "Camera follows OBS" makes after a program change (#208). */
-const PROGRAM_READS = ["GetInputList", "GetInputSettings", "GetSceneItemList", "GetGroupSceneItemList"]
+const PROGRAM_READS = ["GetInputList", "GetInputSettings", "GetSceneItemList", "GetGroupSceneItemList", "GetInputMute"]
 const lastCommand = (requests: { type: string }[]) => requests.filter((r) => !PROGRAM_READS.includes(r.type)).at(-1)
 
 describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => {
@@ -283,6 +301,54 @@ describe("OBS scenes, against a fake obs-websocket", { timeout: 30_000 }, () => 
     expect(plain.obs.requests.some((r) => r.type === "SetCurrentProgramScene")).toBe(false)
     expect(plain.useObsStore.getState().program).toBe("Wide")
     expect(view.el.textContent).toContain(reason)
+  })
+
+  it("shows OBS's stream, recording and inputs read only, and changes nothing in OBS by connecting (#197)", async () => {
+    const { useObsStore, obs } = await setup()
+    expect(Number(obs.identify?.eventSubscriptions) & 8).toBe(8) // Inputs
+    expect(Number(obs.identify?.eventSubscriptions) & 65536).toBe(65536) // InputVolumeMeters
+    expect(obs.requests.filter((r) => r.type.startsWith("Set") || r.type.startsWith("Start") || r.type.startsWith("Stop") || r.type.startsWith("Toggle"))).toEqual([])
+    const { el } = await render()
+    expect(el.querySelector('[aria-label="Stream"]')?.textContent).toContain("Not streaming")
+    expect(el.querySelector('[aria-label="OBS itself"]')?.textContent).toContain("30 fps")
+    // Only the input with sound has a mute state; the camera is listed as without sound.
+    expect(useObsStore.getState().inputs?.map((i) => [i.name, i.muted])).toEqual([["Pulpit mic", false], ["Camera 1", null]])
+    expect(el.querySelector('[aria-label="OBS audio inputs"]')?.textContent).toContain("Pulpit mic")
+    expect(el.textContent).toContain("Without sound: Camera 1")
+    await act(async () => obs.event("InputMuteStateChanged", { inputName: "Pulpit mic", inputMuted: true }))
+    expect(el.querySelector('[aria-label="Pulpit mic"]')?.textContent).toContain("Muted")
+    await act(async () => obs.event("InputMuteStateChanged", { inputName: "Pulpit mic", inputMuted: false }))
+    // Audio levels arrive many times a second and are shown at most four times a second.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] })
+    await act(async () => obs.event("InputVolumeMeters", { inputs: [{ inputName: "Pulpit mic", inputLevelsMul: [[0.1, 0.1, 0.1]] }] }))
+    await act(async () => { vi.advanceTimersByTime(300) })
+    expect(el.querySelector('[aria-label="Pulpit mic"]')?.textContent).toContain("-20 dBFS")
+    obs.streaming = { outputActive: true, outputDuration: 65_000, outputBytes: 0, outputSkippedFrames: 0, outputTotalFrames: 1950 }
+    await act(async () => obs.event("StreamStateChanged", { outputActive: true }))
+    await settle()
+    expect(el.querySelector('[aria-label="Stream"]')?.textContent).toContain("Live for 1:05")
+  })
+
+  it("changes OBS's transition only when one is chosen, and not in rehearsal", async () => {
+    const { useObsStore, useJournalStore, obs } = await setup()
+    const { el } = await render()
+    const select = el.querySelector('select[aria-label="OBS transition"]') as HTMLSelectElement
+    expect(select.value).toBe("Fade")
+    expect(obs.requests.some((r) => r.type === "SetCurrentSceneTransition")).toBe(false)
+    await act(async () => {
+      select.value = "Cut"
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await settle()
+    expect(lastCommand(obs.requests)).toEqual({ type: "SetCurrentSceneTransition", data: { transitionName: "Cut" } })
+    expect(useObsStore.getState().transition).toBe("Cut")
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("OBS: transition set to Cut (from Rhema Studio)")
+    const { useBroadcastStore } = await import("@/stores/broadcast-store")
+    await act(async () => useBroadcastStore.setState({ rehearsal: true }))
+    expect((el.querySelector('select[aria-label="OBS transition"]') as HTMLSelectElement).disabled).toBe(true)
+    const before = obs.requests.length
+    await useObsStore.getState().setTransition("Fade")
+    expect(obs.requests.length).toBe(before)
   })
 
   it("on a computer that joined a host, OBS's scenes are shown only", async () => {
