@@ -135,4 +135,21 @@ describe("browser feeds", () => {
     expect(shown()).toEqual(["Foyer TV showed John 3:16 after 0.4 s", "Foyer TV showed John 3:17 after 1.3 s", "Foyer TV showed a clear screen after 0.1 s"])
     expect(useJournalStore.getState().entries.at(-1)).toMatchObject({ outputId: "tv", afterMs: 90 })
   })
+
+  it("logs the scene revision the screen actually showed after the saved scene was edited", () => {
+    resetFeedShown()
+    useJournalStore.setState({ entries: [] })
+    const layer = { id: "background", name: "Background", kind: "color" as const, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true, color: "#000000" }
+    const taken = { id: "sermon", name: "Sermon", background: "#000000", layers: [layer], createdAt: 1, updatedAt: 1 }
+    const saved = { ...taken, name: "Edited sermon", background: "#ffffff", updatedAt: 2 }
+    useBroadcastStore.setState({
+      scenes: [saved],
+      outputs: useBroadcastStore.getState().outputs.map((o) => o.id === "tv" ? { ...o, sceneId: taken.id, sceneSnapshot: taken } : o),
+      outputFrames: { tv: { theme: useBroadcastStore.getState().themes[0], verse: null, overlay: null, scene: { sceneId: taken.id, background: taken.background, layers: [] } } },
+    })
+
+    noteFeedShown("tv", 250)
+
+    expect(useJournalStore.getState().entries.at(-1)?.label).toBe("Foyer TV showed the Sermon scene after 0.3 s")
+  })
 })

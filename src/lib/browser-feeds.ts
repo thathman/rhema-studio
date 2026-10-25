@@ -8,6 +8,8 @@ import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
 import type { PageVideo } from "@/lib/camera-playback"
 import { tvKeys } from "@/lib/feed-receivers"
+import { sceneForOutput } from "@/lib/scenes"
+import type { BroadcastOutput } from "@/types/broadcast-output"
 
 /**
  * Browser feeds (ARCH-002): every output of type "browser" has a secret for its link, and the LAN
@@ -83,9 +85,15 @@ export function startBrowserFeeds(): () => void {
 }
 
 /** What an output's frame shows, in the log's words: the scene, Black, the reference, or a clear screen. */
-export function frameWords(frame: OutputFrame | undefined): string | null {
+export function frameWords(frame: OutputFrame | undefined, output?: BroadcastOutput): string | null {
   if (!frame) return null
-  if (frame.scene) return `the ${useBroadcastStore.getState().scenes.find((x) => x.id === frame.scene!.sceneId)?.name ?? "scene"} scene`
+  if (frame.scene) {
+    const s = useBroadcastStore.getState()
+    const scene = output?.sceneId === frame.scene.sceneId
+      ? sceneForOutput(output, s.scenes)
+      : s.scenes.find((x) => x.id === frame.scene!.sceneId)
+    return `the ${scene?.name ?? "scene"} scene`
+  }
   const v = frame.verse
   if (!v) return "a clear screen"
   if (v.screen === "black") return "Black"
@@ -104,7 +112,7 @@ export function noteFeedShown(id: string, afterMs: number): void {
   const s = useBroadcastStore.getState()
   const output = s.outputs.find((o) => o.id === id)
   if (!output || s.rehearsal) return
-  const words = frameWords(s.outputFrames[id])
+  const words = frameWords(s.outputFrames[id], output)
   if (!words || lastShown.get(id) === words) return
   lastShown.set(id, words)
   useJournalStore.getState().add({ kind: "shown", label: `${output.name} showed ${words} after ${(Math.max(0, afterMs) / 1000).toFixed(1)} s`, outputId: id, afterMs })

@@ -135,7 +135,6 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
 
   const add = (hit: Hit) => {
     const queue = useQueueStore.getState()
-    const before = queue.items.length
     queue.addItem(
       hit.kind === "verse"
         ? {
@@ -146,11 +145,9 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
             source: "manual",
             added_at: Date.now(),
           }
-        : songQueueItem(hit.song)
+        : songQueueItem(hit.song),
+      "end",
     )
-    // The queue store prepends (newest detection first); a service reads top-down.
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
   }
 
   return (

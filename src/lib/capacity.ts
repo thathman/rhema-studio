@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { useEffect, useState } from "react"
 import { outputOnAir } from "@/lib/output-on-air"
+import { sceneForOutput } from "@/lib/scenes"
 import type { BroadcastOutput, BroadcastOutputStatus, NdiFrameRate, Scene } from "@/types"
 
 /**
@@ -100,7 +101,7 @@ export function capacityUse(outputs: BroadcastOutput[], status: Record<string, B
     ndiSenders: on.filter((o) => o.type === "ndi").length,
     browserFeeds: on.filter((o) => o.type === "browser").length,
     cameras,
-    videoScenes: on.filter((o) => hasLiveVideo(scenes.find((s) => s.id === o.sceneId))).length,
+    videoScenes: on.filter((o) => hasLiveVideo(sceneForOutput(o, scenes))).length,
   }
 }
 
@@ -111,7 +112,7 @@ export function withOutputOn(use: CapacityUse, output: BroadcastOutput, scenes: 
     outputs: use.outputs + 1,
     ndiSenders: use.ndiSenders + (output.type === "ndi" ? 1 : 0),
     browserFeeds: use.browserFeeds + (output.type === "browser" ? 1 : 0),
-    videoScenes: use.videoScenes + (hasLiveVideo(scenes.find((s) => s.id === output.sceneId)) ? 1 : 0),
+    videoScenes: use.videoScenes + (hasLiveVideo(sceneForOutput(output, scenes)) ? 1 : 0),
   }
 }
 

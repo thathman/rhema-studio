@@ -22,6 +22,16 @@ const MEDIA_FILE = /^[0-9a-f]{64}\.[a-z0-9]{1,8}$/
 
 export const FULL: SceneBox = { x: 0, y: 0, w: 100, h: 100 }
 
+/** The immutable revision on air, falling back to the saved scene for older output records. */
+export function sceneForOutput(
+  output: Pick<BroadcastOutput, "role" | "sceneId" | "sceneSnapshot">,
+  scenes: readonly Scene[],
+): Scene | undefined {
+  if (!output.sceneId || (output.role ?? "congregation") !== "congregation") return undefined
+  if (output.sceneSnapshot?.id === output.sceneId) return output.sceneSnapshot
+  return scenes.find((scene) => scene.id === output.sceneId)
+}
+
 let seq = 0
 const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `layer-${Date.now()}-${++seq}`)
 

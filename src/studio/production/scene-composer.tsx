@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { feedFrame } from "@/lib/live-sources"
 import { drawScene } from "@/lib/scene-renderer"
-import { copyScene, FADES, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneFrame, type ScenePreset } from "@/lib/scenes"
+import { copyScene, FADES, layerBox, newLayer, newScene, ownPreset, SCENE_PRESETS, sceneClock, sceneForOutput, sceneFrame, type ScenePreset } from "@/lib/scenes"
 import { cameraLabelOf, cameraOfUrl, routerStatus, whepUrl, type RouterStatus } from "@/lib/cameras"
 import { overlayFor } from "@/lib/lower-third-style"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
@@ -24,7 +24,7 @@ import type { BroadcastOutput, BroadcastOutputLanguage, NoSignal, Scene, SceneBo
 /**
  * The congregation Scene Composer (ADR 0001, ARCH-002): arrange live sources, colours, pictures and
  * camera places on one frame, then Take it to a congregation output. Looks come from Design; this is
- * about where things go. Edits stay in the composer until Save or Take, so a scene on air never
+ * about where things go. Edits stay in the composer or saved library until Take, so a scene on air never
  * changes while it is being arranged.
  */
 export function SceneComposer() {
@@ -611,7 +611,7 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
   const scenes = useBroadcastStore((s) => s.scenes)
   const back = useBroadcastStore((s) => (target ? s.sceneReturn[target.id] : undefined))
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
-  const showing = target?.sceneId ? scenes.find((s) => s.id === target.sceneId) : undefined
+  const showing = target ? sceneForOutput(target, scenes) : undefined
   const restorable = !showing && back ? scenes.find((s) => s.id === back) : undefined
   if (!target) return <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">Add a congregation output (Production → Screens) to take a scene to it.</p>
   return (

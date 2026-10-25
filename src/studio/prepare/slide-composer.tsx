@@ -60,10 +60,7 @@ export function SlideComposer() {
   const pages = mode === "qr" ? [] : mode === "reading" ? readingPages(body) : slidePages(composedBody)
   const appendToService = (item: SlideQueueItem) => {
     const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(item)
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    queue.addItem(item, "end")
   }
   const reset = () => {
     setTitle("")

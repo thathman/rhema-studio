@@ -60,10 +60,7 @@ export function MediaLibrary() {
 
   const add = (a: MediaAssetStatus) => {
     const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(imageQueueItem(a))
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    queue.addItem(imageQueueItem(a), "end")
   }
 
   const pictures = assets.filter((a) => a.kind === "image" || a.kind === "video")

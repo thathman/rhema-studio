@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
@@ -19,6 +19,7 @@ const at = (h: number, m: number) => new Date(2026, 9, 25, h, m).getTime()
 
 describe("run of show timing: actual times", () => {
   it("shows when the service began against its start, each item's time on air, and moves the finish", async () => {
+    vi.useFakeTimers({ now: at(10, 9) })
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useQueueStore.setState({
       items: [{ ...slide("Welcome", 3), assignees: ["Tolu", "Ade"], prepared_by: "Tolu, Ade" }, slide("Reading", 10)],
@@ -33,7 +34,8 @@ describe("run of show timing: actual times", () => {
     useBroadcastStore.setState({ isLive: true, liveItemId: "Reading" })
     useEventClock.setState({ currentId: "Reading" })
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<TimingPanel />))
+    const root = createRoot(el)
+    await act(async () => root.render(<TimingPanel />))
     const text = el.textContent ?? ""
     expect(text).toContain("Began at 10:04, 4 min late")
     // Planned 3 min, on air 5 min: 2 min over.
@@ -54,11 +56,13 @@ describe("run of show timing: actual times", () => {
       ["Reading", "", "10:03", "10:13", "10", "10:09 · 0:00", "10:09–10:19", "+6 min", "", "On now"],
     ])
     expect(document.querySelector("tfoot")?.textContent).toContain("ends 10:19")
+    await act(async () => root.unmount())
   })
 })
 
 describe("run of show timing: an item jumped over", () => {
   it("says Skipped in the panel and the table, with no expected time or offset", async () => {
+    vi.useFakeTimers({ now: at(10, 3) })
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     document.body.innerHTML = ""
     useQueueStore.setState({
@@ -73,7 +77,8 @@ describe("run of show timing: an item jumped over", () => {
     })
     useEventClock.setState({ currentId: "Reading" })
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<TimingPanel />))
+    const root = createRoot(el)
+    await act(async () => root.render(<TimingPanel />))
     expect(el.textContent).toContain("Skipped")
     const table = [...el.querySelectorAll("button")].find((b) => b.textContent === "Table")!
     await act(async () => table.click())
@@ -81,5 +86,8 @@ describe("run of show timing: an item jumped over", () => {
     expect(rows[1]).toEqual(["Notices", "", "10:03", "10:08", "5", "", "", "", "", "Skipped"])
     // The reading follows the welcome: expected 10:03–10:13, 5 min early against its plan (10:08).
     expect(rows[2].slice(6, 8)).toEqual(["10:03–10:13", "−5 min"])
+    await act(async () => root.unmount())
   })
 })
+
+afterEach(() => vi.useRealTimers())

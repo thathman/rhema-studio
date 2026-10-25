@@ -119,6 +119,32 @@ describe("broadcast store sync", () => {
     )
   })
 
+  it("saving a scene keeps its taken program revision until an explicit Take", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const scene = newScene("On air", SCENE_PRESETS[0])
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene("main", scene.id)
+
+    emitToMock.mockClear()
+    const edited = { ...scene, background: "#123456" }
+    useBroadcastStore.getState().saveScene(edited)
+    expect(emitToMock).not.toHaveBeenCalled()
+
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(scene.background)
+    expect(emitToMock).toHaveBeenLastCalledWith(
+      "broadcast-main",
+      "broadcast:verse-update",
+      expect.objectContaining({ scene: expect.objectContaining({ background: scene.background }) }),
+    )
+
+    useBroadcastStore.getState().takeScene("main", scene.id)
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(edited.background)
+  })
+
   it("duplicateOutput copies config with fresh id, unique name and NDI source name", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const state = useBroadcastStore.getState()
