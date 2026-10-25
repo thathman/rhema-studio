@@ -1058,7 +1058,7 @@ Two computers (A hosts, B joins as **Present**) and a phone paired as **Present*
 
 | # | Step | Expected | Result |
 |---|---|---|---|
-| 10ei.1 | Pair a second desk C under a look-alike of B's name (B "Ade", C "Аde" typed with a Cyrillic А, or paste B's name with a trailing space). Join the talk channel on B and C. On the phone, **Talk to → Only… → Ade** (B) and hold Talk. | Only B hears the phone; C and A hear nothing. A's crew list shows the phone "→ Ade". | Unverified |
+| 10ei.1 | Pair a second desk C under a look-alike of B's name (B "Ade", C "Аde" typed with a Cyrillic А). Join the talk channel on B and C. On the phone (paired as Present on the https page): **Join the talk channel**, then **Talk to → Only…**: both names are listed and look the same. Pick the first and hold Talk; then pick the second and hold Talk. | Each time exactly one of B and C hears the phone, never both, and A hears nothing; A's crew list shows the phone "→ Ade" with the desk that hears it. (The phone sends the name; the host turns it into that desk's key when it is picked.) | Unverified |
 | 10ei.2 | On A, top bar **Talk to → Ade** (B) and hold Talk. Then pick C's entry and talk. | First only B hears A, then only C. | Unverified |
 | 10ei.3 | On B, leave the talk channel. In Settings → Remote on A, revoke B, then pair a new desk named exactly "Ade" and join it. The phone keeps talking to "Ade". | The new "Ade" does not hear the phone's private call (it was for B's key). Picking "Ade" again on the phone reaches the new desk. | Unverified |
 | 10ei.4 | On A, open the bell and send to B: "Next song", **Ask to show a song or hymn**, type "Amaz" and pick **Amazing Grace** from the suggestions. | B's notice shows **Show Amazing Grace** and **Preview**. A's list shows "Asks: Show Amazing Grace". | Unverified |
@@ -1349,6 +1349,18 @@ hymn book imported, and Auto Bible listening; **B** joins it. Change B's role on
 | 10ft.12 | A (main desk) with a desk paired: Production → Operators. | The Director board shows below the host card with A's own checks and the team. | Unverified |
 | 10ft.13 | B as Worship, Stage, Screens, Timekeeper or View only. | No Director board and no Heard list on those desks. | Unverified |
 | 10ft.14 | B as **Stage**, with an extra timer on A that belongs to Stage: two stage desks press Start at the same moment. | It starts once; the other desk says "Someone changed this first — look again". | Unverified |
+### 10fw. Manual and production guide: firewall, ports and recovery (docs)
+
+Two computers and a phone on the church network; the main computer with Rhema Studio, the camera router and a camera; macOS with the firewall on (and a Windows PC if there is one). Checks what `docs/PRODUCTION-GUIDE.md` → When things go wrong and Firewall and network ports say.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fw.1 | macOS: System Settings → Network → Firewall on, **Options…**: remove Rhema Studio and mediamtx. Start the HTTP listener (other devices, https) and the camera router. | macOS asks whether Rhema Studio (and mediamtx) may accept incoming connections. Answer Deny for now. | Unverified |
+| 10fw.2 | From the phone open `http://<host>:8080/remote`; from the second computer Join a host → Find hosts, then type the address. | The page never loads; Find hosts is empty; the desk says "Could not reach the host at …". The main computer itself works as usual. | Unverified |
+| 10fw.3 | Firewall → Options…: set Rhema Studio and mediamtx to **Allow incoming connections**. Repeat 10fw.2; start a phone camera. | The remote page loads, the host is found, the desk joins; the camera's card says Sending. | Unverified |
+| 10fw.4 | Windows (if available): first start of the listener and of Rhema Studio Companion. | Windows Defender Firewall asks; with **Private networks** ticked everything in 10fw.3 works; with only Public, nothing on a private network reaches it. | Unverified |
+| 10fw.5 | `nc -vz <host> 8080`, `8081`, `8889`, `8554`, `8322`, `1935` from the second computer; `nc -vzu <host> 8890` and `8189`; `nc -vz <host> 9997`. | The TCP ports answer while the listener (https on) and router run; 9997 does not answer from another computer. | Unverified |
+| 10fw.6 | Restart the main computer with Rhema Studio open and a desk joined; open Rhema Studio again. | The recovery banner offers **Put back on the screens**; the listener is running again; the desk reconnects by itself within about ten seconds and still shows the same certificate code. | Unverified |
 
 ### 10fk. Host/Join hardening: who is connected, cutting a desk, browser pages, key by default, https, Editor and View only (#162, #197, #63)
 

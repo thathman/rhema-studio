@@ -63,7 +63,7 @@ The phone also lists each **live source** (Bible, Hymns, Songs…, the Ticker, t
 
 **If Rhema closes unexpectedly** (a crash, a forced quit, a power cut) during a service, the next start shows a banner with what was on the screens then. **Put back on the screens** brings back the program, each live source, the outputs that were on with their scenes, the run-of-show event, and the service timer (still counting the minutes Rhema was closed, if it was running); **Not now** leaves everything off; until Rhema closes, the Desk menu keeps **Put back the last session's screens** in case you change your mind. Nothing goes back on air by itself. The **service log** comes back by itself (it is history, not the screens): what went up and when, each item's actual time, so the planned-versus-actual report and Keep log still cover the whole service, with a line saying where Rhema closed. Quitting from the Dock or at logout also counts as unexpected (the offer is harmless: choose Not now). Rehearsal is never put back.
 
-**Who can send these:** anyone on the network while a listener runs, unless you set a key or pair devices in Settings → Remote. Pairing: start the HTTP API, press "Pair a device", and on the phone or controller send the six-digit code once to `/api/v1/pair`; it receives its own token (HTTP header `X-Rhema-Key`, or first OSC argument) and can be revoked on its own later. Start a listener just before the service and stop it after (a listener left running starts again, the same way, the next time Rhema starts, unless it accepted other devices with no key or paired device: that one waits for you, with a message); if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
+**Who can send these:** on a new install, only a paired device or a controller with a key (**Require a key or a paired device** is on by default; a computer set up before keeps its old setting and says so). With it unticked, anyone on the network while a listener runs. Web pages open in a browser can never send commands or read Live State: a request with an `Origin` other than this listener's own address or Rhema Studio's window is refused (403, "Rhema Studio answers only its own pages and windows"), and Rhema Studio's pages, and any request from a browser, answer only under this computer's IP address, `localhost` or its `.local` name on its own port; any other name (DNS rebinding) gets 421, "Rhema Studio answers only at this computer's own address". Controllers that are not browsers send no `Origin` and are checked by their key as before. Pairing: start the HTTP API, press "Pair a device", and on the phone or controller send the six-digit code once to `/api/v1/pair`; it receives its own token (HTTP header `X-Rhema-Key`, or first OSC argument) and can be revoked on its own later. Start a listener just before the service and stop it after (a listener left running starts again, the same way, the next time Rhema starts, unless it accepted other devices with no key or paired device: that one waits for you, with a message); if the controller software runs on this laptop, untick "Accept commands from other devices on this network" so only this computer is accepted. Details: `docs/rhema-studio/13-remote-control-threat-notes.md`.
 
 ## Sound (walk-in music, backing tracks)
 
@@ -253,6 +253,96 @@ The main computer never depends on anyone else: everything on the screens can be
 | Rhema itself closes unexpectedly | Nothing until it starts again | On the next start: **Rhema closed unexpectedly…** | **Put back on the screens** (or **Not now**); check the screens, then carry on. The service log and the last 100 notices (with their answers) are back by themselves; joined desks see them again when they reconnect |
 
 Black and Logo always work from the main desk and cover every screen and feed, whatever else is happening. The service log keeps what happened, with who did it.
+
+## When things go wrong
+
+What each failure looks like on the main computer, what carries on, and what to do. The table above is the short version.
+
+### The camera router stopped, or a camera froze
+
+- **The router stopped.** Production → Cameras → **Camera router** says **On**, **Starting** or **Off**. If it stops by itself while it should be on, Rhema Studio starts it again, waiting a little longer each time (up to half a minute), and the card says "started again N times". While it is down, every scene's camera box shows its fallback (colour bars unless the scene says TV static, words or nothing) and Show health says **Camera router not running**; the words, verses and lyrics over the camera carry on. If it does not come back: **Turn off**, then **Turn on**; an error under the card says why ("Port 8889 is already in use": another MediaMTX is running on this computer; close it). Phones on the camera page and Rhema Studio Cam reconnect by themselves once it is back; Rhema Studio Cam says "Cannot reach Rhema…" meanwhile. OBS companions pick the cameras up again with their new addresses by themselves.
+- **A camera froze or dropped.** The camera's card says **Frozen** (connected, but nothing has arrived for a few seconds) or **Not sending**, and Show health → **Needs attention** names the scenes and screens that now show its fallback (never a still picture passed off as live). From the card (or Show health):
+  - **Retry**: every screen and TV that plays the camera connects to it again.
+  - **Switch to backup**: choose a **Backup camera** on the card first; its scenes play that one in its place until **Back to …**.
+  - **Freeze**: the screens hold the camera's last frame until **Unfreeze** (useful while someone walks in front of it).
+  - **Hide from scenes** (Present → Live → Sources, on the camera's chip): its scenes show the fallback until **Restore**.
+  - The fallback itself: on the scene's camera layer, **When the camera isn't sending** (Colour bars, TV static, Words, Nothing, with an optional name on the bars); or per output (Edit output → **When a camera isn't sending**), including **another camera** that steps in.
+  These buttons are disabled in rehearsal, and each is logged with who pressed it. Then check the phone: on the charger, on the church Wi-Fi, the camera page open (or Rhema Studio Cam LIVE).
+- *Checked on the desktop: colour bars with the camera's name on a Google TV and the TV leaving the bars when the camera started (10fg.3, 10fg.5). Retry, backup, Freeze and Frozen are built, not yet checked on the desktop (acceptance 10fl).*
+
+### OBS crashed or disconnected
+
+- **What Rhema Studio shows:** Production → OBS says **Not connected** and empties OBS's scene list (it never shows an old program); the Present header's OBS recording state goes; Show health's **Online (OBS)** card and the preflight warn that OBS is enabled but not reachable. Rhema Studio tries again every 15 seconds and, once OBS is back, shows its scenes and program by itself.
+- **What carries on:** everything in the room. Rhema Studio's screens, NDI senders and browser feeds keep sending whether OBS is there or not; OBS's NDI and Browser sources pick them up again when it restarts. Only what OBS does is lost while it is down (the stream and the recording, which OBS itself restarts or not). An OBS companion's OBS card also says not connected and tries again; the cameras' Media Sources stay in OBS's scene collection.
+- **What to do:** start OBS again (start streaming and recording again in OBS if it does not do so itself). Check Production → OBS shows **Connected** and the right program before you take anything in OBS.
+- *Checked on the desktop: OBS force-quit showed Not connected with no scene list, and the list and program came back 9.2 s after OBS was listening again (10ek.9).*
+
+### The network listener is blocked by the firewall
+
+The usual sign: everything works on the main computer, but **no other device can reach it**. A joined desk says "Could not reach the host at …: is Rhema open there, with Remote control on the network, on the same network as this computer?"; **Find hosts** and **Find TVs** stay empty; a phone's remote page never loads; the phone camera page says Live but the camera's card stays **Not sending**, or TVs show colour bars.
+
+How to tell it is the firewall and not the network: on the main computer, Settings → Remote control shows the listener running with **Accept commands from other devices on this network**; Production → Operators shows the address. Open `http://<that address>:8080/remote` on a phone on the same Wi-Fi: if it never loads (rather than refusing), the computer's firewall (or a guest Wi-Fi that keeps devices apart) is in the way.
+
+- **macOS:** System Settings → Network → **Firewall** → **Options…**: set **Rhema Studio** (Rhema.app) and **mediamtx** (the camera router) to **Allow incoming connections**. The first time a listener or the router starts, macOS may ask; answer **Allow**. If "Block all incoming connections" is ticked, untick it.
+- **Windows:** when Windows Defender Firewall asks the first time, tick **Private networks** and press **Allow access** (not Public). Later: Windows Security → Firewall & network protection → **Allow an app through firewall** → Change settings → tick **Private** for Rhema Studio, mediamtx, and Rhema Studio Companion on the OBS computer. Make sure the church network is set as a **Private** network in Windows.
+- Ports and what each is for: [Firewall and network ports](#firewall-and-network-ports) below.
+
+### A joined desk cannot connect
+
+- **Pair by address.** If the host is not listed under Join a host, type the address and port the host card shows (Production → Operators on the host, for example `192.168.1.20:8080`), or the host's `.local` name (`studio-mac.local:8080`). Any other name is refused by design. Check both computers are on the same network (not one on a guest Wi-Fi) and that the host's firewall allows Rhema Studio (above).
+- **The certificate code.** With the secure page on, the desk shows **Encrypted · certificate …** and the host card shows **Secure link on port 8081; certificate …**: the four-character groups must be the same. Rhema Studio Companion shows **Host's certificate** before you join; if it differs from the main computer's, do not join. If a desk says "The host's certificate is not the one this computer paired with…", nothing was sent: if the main computer was reinstalled (or its data folder replaced), **Leave this host** and join again with a new code; otherwise another computer may be pretending to be the host.
+- **"The host refused this computer… pair again"**: the desk was revoked or the host's keys were reset; pair again with a new code. **Paused by the main desk**: the host took back control; it gives it back from Production → Operators.
+- **Not encrypted.** A desk paired while the host had no secure link says so; turn on **Secure page for phones (https)** on the host, start the listener again and pair the desk again. A desk paired over https never falls back to plain http.
+- A different service on the host makes a desk's command refused once; it refreshes and you press again.
+
+### The host computer restarted
+
+- **The screens:** when Rhema Studio starts again after it closed unexpectedly (a crash, a forced quit, a power cut, or the computer restarting with it open), a banner shows what was on the screens. **Put back on the screens** brings back the program, live sources, outputs with their scenes and the timer (still counting); **Not now** leaves everything off, and the Desk menu keeps the offer until Rhema Studio closes. Nothing goes back on air by itself. An item that was running says its elapsed time can't be trusted until you press **The time is right** or start it again.
+- **The listener** starts again by itself the way it was (with the key requirement on), so phones and desks can find it again; a listener that accepted other devices with no key waits for you instead.
+- **Joined desks** that stayed open say **Reconnecting…** / **Last update N s ago** and come back by themselves within about ten seconds of the listener being back, trusting the same certificate as before. A desk that was itself closed shows **Join <address> again** in Production → Operators. Talk joins again by itself if the host is back within about a minute and a half; otherwise press **Join the talk channel**. The last 100 notices and the service log come back.
+- **Phones, TVs and cameras**: the phone remote and browser feeds reconnect by themselves; Google TVs keep the last picture and pick up again; camera phones reconnect once the camera router is back. OBS companions get the cameras' addresses again by themselves.
+- If the host came back with a **different network address**, desks, TVs and OBS still look for the old one: give the main computer a fixed address (a DHCP reservation in the router). Home warns when the address changed since the last service.
+
+## Firewall and network ports
+
+Everything stays on the church network; nothing needs the internet. Allowing **the app** in the firewall (macOS) or for **Private networks** (Windows) covers all its ports; the table says which port does what, for a church whose network team sets rules by port.
+
+**On the main computer (Rhema Studio):**
+
+| Port | Protocol | What uses it | Needed for |
+|---|---|---|---|
+| 8080 (the HTTP port in Settings → Remote control) | TCP | The phone remote (`/remote`), joined desks without the secure link, browser feeds, `rhema-ca.pem`, HTTP controllers | Phones, other desks, browser feeds on TVs and OBS on another computer |
+| 8081 (the HTTP port + 1) | TCP | The secure page (https) when **Secure page for phones** is on: phone Talk, the camera page, joined desks and Rhema Studio Companion (encrypted), Google TV feeds | Phone Talk and cameras, Google TV, encrypted desks, the Companion |
+| 8000 (the OSC port) | UDP | OSC controllers, only while the OSC listener runs | OSC controllers |
+| 5353 | UDP (mDNS) | Announcing this host (`_rhema-host._tcp`, only while the listener accepts other devices) and finding Google TVs (`_rhema-tv._tcp`) | **Find hosts**, **Find TVs** (typing addresses works without it) |
+| Chosen by the system | UDP | The talk channel's voices (WebRTC on the LAN) | Talk |
+| NDI's own (from 5960 up, and mDNS) | TCP/UDP | NDI senders | OBS or an NDI viewer on another computer |
+
+**On the main computer (the camera router, `mediamtx`):**
+
+| Port | Protocol | What uses it | Needed for |
+|---|---|---|---|
+| 8889 | TCP | WebRTC: phones send (through Rhema Studio's https page), screens and TVs watch (WHEP) | Every phone camera, cameras on TVs |
+| 8189 | UDP | The camera video itself (WebRTC) | Every phone camera, cameras on TVs |
+| 8554 | TCP | RTSP | OBS reading a camera directly |
+| 8322 | TCP | RTSPS (encrypted RTSP, with Rhema Studio's certificate), once the secure page has been on | Rhema Studio Cam |
+| 8890 | UDP | SRT: OBS companions read the cameras (encrypted); camera apps and encoders may send | OBS companions and Rhema Studio Companion; Moblin, StreamCaster, encoders |
+| 1935 | TCP | RTMP | Camera apps and encoders |
+| 9997 | TCP | The router's control API, on 127.0.0.1 only | Nothing: no firewall rule needed |
+
+**On the OBS computer (Rhema Studio Companion or companion mode):** nothing listens for other devices. It reaches the main computer on 8081 (TCP) and 8890 (UDP), OBS on the same computer on 4455, and uses mDNS to find hosts. On Windows, allow it on **Private networks** when Windows asks.
+
+**Elsewhere:** OBS's WebSocket (4455, TCP) must be allowed on the OBS computer when Rhema Studio on another computer connects to it. A Google TV running Rhema Studio Receiver listens on 8095 (TCP); Rhema Studio reaches it there.
+
+**What to allow, by what you use:**
+
+- Phone remote, joined desks, browser feeds: Rhema Studio (8080, 8081).
+- Phone Talk, phone cameras, Google TV: Rhema Studio (8081) and mediamtx (8889, 8189).
+- Rhema Studio Cam: mediamtx (8322).
+- OBS on another computer: mediamtx (8890/UDP) and Rhema Studio (8081) on the main computer; Rhema Studio Companion allowed on the OBS computer.
+- OBS on the main computer reading a camera: nothing (it is local).
+
+The port numbers above are the defaults in the code (`camera_router.rs`, the remote-control settings); only the HTTP and OSC ports can be changed (the https port follows the HTTP port). *Not yet checked on the desktop with a firewall turned on (acceptance 10fw).*
 
 ## Timing and the stage
 
