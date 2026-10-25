@@ -8,6 +8,8 @@ import { drawStage } from "@/lib/stage-canvas"
 import { isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
 import { SlideList } from "@/studio/present/rundown-list"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
+import { hymnNumbersFromLibrary, songKindLabel } from "@/lib/song-kind"
+import { useSongStore } from "@/stores/song-store"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { TimingRules } from "@/studio/prepare/timing-rules"
 import { BackgroundPicker, CommentsEditor, CueItemEditor, CustomSlideEditor, ImageItemControls, ItemCuesEditor, LookAndScene, NoteEditor, GoLiveCues, PlannedMinutes, SongApprovalNote, TakeSteps, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
@@ -23,6 +25,7 @@ const KIND: Record<string, [string, React.ReactNode]> = {
 /** The selected item's settings, in three tabs: what it shows, notes and team, timing. */
 export function ItemEditor() {
   const sel = useSelectedItem()
+  const songs = useSongStore((s) => s.songs)
   if (!sel) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
@@ -33,13 +36,16 @@ export function ItemEditor() {
   }
   const { item, index } = sel
   const kind = isSongItem(item) ? "song" : isSlideItem(item) ? "slide" : isImageItem(item) ? "image" : isCueItem(item) ? "cue" : "verse"
+  const badgeLabel = isSongItem(item)
+    ? songKindLabel(item, songs[item.song.song_id] ? hymnNumbersFromLibrary(songs[item.song.song_id].numbers) : [], songs[item.song.song_id]?.song.tags)
+    : KIND[kind][0]
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-border px-5 pt-4 pb-3">
         <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Event editor · {index + 1}</p>
         <div className="mt-1 flex items-center gap-2">
           <h2 className="truncate text-lg font-bold tracking-[-0.03em]">{item.reference}</h2>
-          <Badge variant="accent" className="gap-1">{KIND[kind][1]}{KIND[kind][0]}</Badge>
+          <Badge variant="accent" className="gap-1">{KIND[kind][1]}{badgeLabel}</Badge>
         </div>
         {item.ai_suggestion && <AiSuggestion item={item} />}
       </div>

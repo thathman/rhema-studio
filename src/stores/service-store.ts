@@ -240,6 +240,8 @@ function itemInputs(
           notes: i.notes ?? null,
           payload: JSON.stringify({
             song_id: i.song.song_id,
+            ...(i.song.hymn ? { hymn: true } : {}),
+            ...(i.song.hymn_numbers?.length ? { hymn_numbers: i.song.hymn_numbers } : {}),
             arrangement_id: i.song.arrangement_id,
             languages: i.song.languages,
             ...(i.song.title_slide ? { title_slide: true } : {}),
@@ -270,7 +272,7 @@ const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
   slide: new Set([...COMMON_PAYLOAD_KEYS, "title", "body", "link"]),
-  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "arrangement_id", "languages", "title_slide"]),
+  song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "hymn", "hymn_numbers", "arrangement_id", "languages", "title_slide"]),
   cue: new Set(COMMON_PAYLOAD_KEYS),
 }
 
@@ -441,6 +443,8 @@ export function parseSongPayload(raw: string | null | undefined): SongItemPayloa
     if (typeof p.song_id !== "string" || !p.song_id) return null
     return {
       song_id: p.song_id,
+      ...(p.hymn === true ? { hymn: true } : {}),
+      ...(Array.isArray(p.hymn_numbers) ? { hymn_numbers: p.hymn_numbers.filter((n): n is string => typeof n === "string" && n.trim().length > 0) } : {}),
       arrangement_id: typeof p.arrangement_id === "string" ? p.arrangement_id : null,
       languages: Array.isArray(p.languages) ? p.languages.filter((l): l is string => typeof l === "string") : [],
       ...(p.title_slide === true ? { title_slide: true } : {}),
@@ -515,7 +519,7 @@ export function toQueueItems(
       items.push({
         id: it.id,
         kind: "song",
-        song: { song_id: payload.song_id, title: it.reference, arrangement_id: payload.arrangement_id ?? null, languages: payload.languages ?? [], ...(payload.title_slide ? { title_slide: true } : {}) },
+        song: { song_id: payload.song_id, title: it.reference, ...(payload.hymn ? { hymn: true } : {}), ...(payload.hymn_numbers?.length ? { hymn_numbers: payload.hymn_numbers } : {}), arrangement_id: payload.arrangement_id ?? null, languages: payload.languages ?? [], ...(payload.title_slide ? { title_slide: true } : {}) },
         reference: it.reference,
         confidence: 1,
         source: "manual",

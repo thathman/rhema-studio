@@ -18,6 +18,7 @@ import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { takeImpact } from "@/lib/cues"
 import { cuesFor, cueText } from "@/lib/item-cues"
 import { CUE_TRIGGERS } from "@/types"
+import { hymnNumbersFromLibrary, songKindLabel } from "@/lib/song-kind"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { BulkBar } from "@/studio/prepare/bulk-bar"
 import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
@@ -113,7 +114,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 title={mode === "present" ? (cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
-                {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Song" />}
+                {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={item.song.hymn ? "Hymn" : "Song"} />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 {picture && <MediaKindIcon mediaId={item.image.media_id} />}
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
@@ -276,8 +277,10 @@ function Row({ id, index, sortable, children }: { id: string; index: number; sor
 function SongBadges({ item }: { item: SongQueueItem }) {
   const song = useSongStore((s) => s.songs[item.song.song_id])
   const arrangement = song?.arrangements.find((a) => a.id === item.song.arrangement_id)
+  const kindLabel = songKindLabel(item, song ? hymnNumbersFromLibrary(song.numbers) : [], song?.song.tags)
   return (
     <span className="flex shrink-0 items-center gap-1 text-[0.6875rem] text-muted-foreground">
+      <span className="rounded border border-border px-1">{kindLabel}</span>
       {item.song.languages.map((l) => (
         <span key={l} className="rounded border border-border px-1 uppercase">{l}</span>
       ))}

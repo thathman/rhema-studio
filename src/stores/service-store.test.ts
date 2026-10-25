@@ -107,6 +107,16 @@ describe("conversions", () => {
     expect(unsupported).toEqual([])
   })
 
+  it("keeps hymn identity and numbers in additive saved-service payloads", () => {
+    const payload = JSON.stringify({ song_id: "cac-245", arrangement_id: "arr-1", languages: ["yo", "en"], hymn: true, hymn_numbers: ["CAC 245"] })
+    const data = { program, items: [item("h1", "Grace", 0, 0, 0, { kind: "song", book_number: null, chapter: null, verse: null, payload })] }
+    const loaded = toQueueItems(data, 1, [KJV]).items[0]
+
+    expect(loaded).toMatchObject({ song: { hymn: true, hymn_numbers: ["CAC 245"], arrangement_id: "arr-1", languages: ["yo", "en"] } })
+    const [saved] = toItemInputs([loaded])
+    expect(JSON.parse(saved.payload ?? "{}")).toMatchObject({ song_id: "cac-245", hymn: true, hymn_numbers: ["CAC 245"] })
+  })
+
   it("unknown kinds and malformed verses are set aside, never converted", () => {
     const data: ProgramWithItems = {
       program,

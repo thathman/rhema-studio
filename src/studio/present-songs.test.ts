@@ -80,6 +80,19 @@ describe("presentSlide", () => {
     expect(useBibleStore.getState().selectedSlide).toMatchObject({ index: 0 })
   })
 
+  it("keeps a hymn's number and identity through Present and its live reference", async () => {
+    const hymn = {
+      ...songItem(),
+      song: { ...songItem().song, hymn_numbers: ["CAC 245"] },
+    } as unknown as SongQueueItem
+
+    expect(await presentSlide(hymn, 0, { goLive: true })).toBe("presented")
+    expect(useBroadcastStore.getState().liveVerse).toMatchObject({
+      content: "hymn",
+      reference: "CAC 245 · Amazing Grace · Verse 1",
+    })
+  })
+
   it("renders both languages, reports a section missing one, and footers a CCLI song", async () => {
     await presentSlide(songItem(["en", "yo"]), 0, { goLive: true })
     expect(useBroadcastStore.getState().liveVerse?.secondaryLines).toEqual(["Oore-ọ̀fẹ́", "ìyanu"])
