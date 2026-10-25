@@ -9,7 +9,7 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 - Camera Retry, Switch to backup, Freeze and Unfreeze are logged as what they are, with who pressed them ("Pulpit camera: switched to backup Choir camera · by Tolu"), never as "back in scenes".
 - The service log says when each browser feed's screen first showed new content, and how soon ("Foyer TV showed John 3:16 after 0.4 s"): once per change of content, not for every frame.
 - **Settings → Speech → Transcripts in kept logs**: keep a kept log's transcript until the log is deleted (as before), or 30 days, 90 days or a year; older transcripts are taken out of their logs (the logs stay).
-- Home's readiness notes a countdown display with nothing to count, an extra timer whose desk is not connected, and reminds once per service to check TVs for overscan (**Got it** puts it away).
+- Home's readiness notes a countdown display with nothing to count, an extra timer whose desk is not connected, and reminds once per service to set Overscan on a TV feed that has none (**Got it** puts it away).
 - Design → Ticker checks the words and the tag against their colours (WCAG AA, 4.5:1), gives the ratio and offers a Brand Kit colour that passes. **Shift+T** in Present takes the ticker or stops it (in the shortcuts list).
 - No body text at 10 px anywhere (the setup step's "Home will read" is 11 px); the dev browser shim no longer crashes Prepare; the production guide says correctly that TVs and desks report their clocks.
 

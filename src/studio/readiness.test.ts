@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { computeReadiness, serviceStartsSoon, type ReadinessCheck } from "./readiness"
+import { computeReadiness, overscanReminder, serviceStartsSoon, type ReadinessCheck } from "./readiness"
 
 const good = {
   translationsLoaded: 8,
@@ -240,7 +240,21 @@ describe("preflight: timers, the countdown display and TV overscan (#213)", () =
 
   it("TVs get one overscan reminder that can be put away for the service", () => {
     const c = byId(computeReadiness({ ...base, overscan: { outputs: ["Foyer TV", "Hall TV"], dismiss: "overscan:svc1" } }).checks, "overscan")
-    expect(c).toMatchObject({ status: "info", label: "Foyer TV, Hall TV: check the edges are not cut off", dismiss: "overscan:svc1" })
+    expect(c).toMatchObject({ status: "info", label: "Foyer TV, Hall TV: if the TV cuts off the edges, set Overscan in this output's settings (Edit output → Overscan)", fix: "outputs", dismiss: "overscan:svc1" })
     expect(byId(computeReadiness(base).checks, "overscan")).toBeUndefined()
+  })
+
+  it("only on-air TV feeds with no Overscan of their own are reminded; Got it puts it away for the service", () => {
+    const feeds = [
+      { type: "browser", name: "Foyer TV" },
+      { type: "browser", name: "Hall TV", overscan: 0 },
+      { type: "browser", name: "Kids TV", overscan: 3 },
+      { type: "browser", name: "Lobby loop", role: "signage" },
+      { type: "display", name: "Projector" },
+    ]
+    expect(overscanReminder(feeds, "overscan:svc1", [])).toEqual({ outputs: ["Foyer TV", "Hall TV"], dismiss: "overscan:svc1" })
+    expect(overscanReminder(feeds, "overscan:svc1", ["overscan:svc1"])).toBeUndefined()
+    expect(overscanReminder(feeds, "overscan:svc2", ["overscan:svc1"])?.outputs).toEqual(["Foyer TV", "Hall TV"])
+    expect(overscanReminder([{ type: "browser", name: "Kids TV", overscan: 3 }], "k", [])).toBeUndefined()
   })
 })

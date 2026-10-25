@@ -94,6 +94,15 @@ export interface ReadinessInput {
   clock?: { year: number; skewMs: number | null; reference: string | null }
 }
 
+/**
+ * The overscan reminder (#213): on-air browser feeds (TVs, not signage) that have no Overscan set
+ * of their own (#198), unless Got it put it away for this service (`key`).
+ */
+export function overscanReminder(onAir: readonly { type: string; role?: string; name: string; overscan?: number }[], key: string, dismissed: readonly string[]): ReadinessInput["overscan"] {
+  const tvs = onAir.filter((o) => o.type === "browser" && (o.role ?? "congregation") !== "signage" && !o.overscan).map((o) => o.name)
+  return dismissed.includes(key) || tvs.length === 0 ? undefined : { outputs: tvs, dismiss: key }
+}
+
 /** A clock that says a year before this is plainly wrong (a flat clock battery, a reset). */
 export const EARLIEST_SANE_YEAR = 2025
 
@@ -152,7 +161,7 @@ export function preflightChecks(i: ReadinessInput): ReadinessCheck[] {
     const t = i.timersOwnerAway
     out.push({ id: "timers-owner-away", status: soon, label: t.length === 1 ? `Extra timer “${t[0].timer}”: no ${t[0].role} desk is connected` : `${t.length} extra timers have no desk connected to run them`, detail: `${t.map((x) => `“${x.timer}” belongs to the ${x.role} desk`).join("; ")}. The main desk and the Timekeeper desk can still run ${t.length === 1 ? "it" : "them"}, in Production → Timekeeper.` })
   }
-  if (i.overscan?.outputs.length) out.push({ id: "overscan", status: "info", label: `${i.overscan.outputs.join(", ")}: check the edges are not cut off`, detail: "Many TVs zoom the picture a little (overscan) and cut off the edges. In the TV's picture settings choose Just scan, Screen fit or Original size, then look at the corners with something on screen.", dismiss: i.overscan.dismiss })
+  if (i.overscan?.outputs.length) out.push({ id: "overscan", status: "info", label: `${i.overscan.outputs.join(", ")}: if the TV cuts off the edges, set Overscan in this output's settings (Edit output → Overscan)`, fix: "outputs", fixLabel: "Open outputs", dismiss: i.overscan.dismiss })
   if (i.internet) out.push({ id: "internet", status: "ok", label: "Works without the internet", detail: `The service runs on the church network alone: unplugging the router's internet is fine. Only OBS's stream to YouTube${i.internet.cloudSpeech ? " and cloud speech need" : " needs"} it.` })
   return out
 }

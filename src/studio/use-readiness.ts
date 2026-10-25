@@ -17,7 +17,7 @@ import { tickerOnly } from "@/lib/feed-presets"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
-import { computeReadiness, planCheck, serviceStartsSoon } from "@/studio/readiness"
+import { computeReadiness, overscanReminder, planCheck, serviceStartsSoon } from "@/studio/readiness"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
@@ -235,12 +235,8 @@ export function useReadiness() {
       const here = new Set<string>(presenceRows(pairedDevices, host.desks).filter((r) => r.device && r.seen?.connected).map((r) => r.device!.role ?? "configure"))
       return ownedTimers.filter((t) => !here.has(t.owner)).map((t) => ({ timer: t.label, role: roleLabel(t.owner) }))
     })(),
-    // TVs zoom the picture (#213 overscan): a reminder for each on-air browser feed, once per service.
-    overscan: (() => {
-      const key = `overscan:${current?.id ?? localDate()}`
-      const tvs = outputs.filter((o) => o.type === "browser" && (o.role ?? "congregation") !== "signage" && outputOnAir(o, outputStatus[o.id])).map((o) => o.name)
-      return dismissed.includes(key) || tvs.length === 0 ? undefined : { outputs: tvs, dismiss: key }
-    })(),
+    // TVs zoom the picture (#213 overscan): a reminder for on-air browser feeds with no Overscan set, once per service.
+    overscan: overscanReminder(outputs.filter((o) => outputOnAir(o, outputStatus[o.id])), `overscan:${current?.id ?? localDate()}`, dismissed),
     feedsUnwatched: outputs.filter((o) => o.type === "browser" && outputOnAir(o, outputStatus[o.id]) && feeds[o.id]?.watching === 0).map((o) => o.name),
     signage: outputs
       // A ticker feed (Rhema Ticker | Alpha) has no pictures on purpose.
