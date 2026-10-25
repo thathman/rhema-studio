@@ -54,6 +54,9 @@ export const REMOTE_EVENTS = {
   notice_send: "remote:notice_send",
   notice_ack: "remote:notice_ack",
   aux_timer: "remote:aux_timer",
+  queue_request: "remote:queue_request",
+  obs_record: "remote:obs_record",
+  obs_transition: "remote:obs_transition",
 } as const
 
 /** Emitted by the backend when a device completes pairing: `{ name, hash }`. Not a command. */

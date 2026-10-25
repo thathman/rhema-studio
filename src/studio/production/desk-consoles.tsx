@@ -188,21 +188,27 @@ export function SongLibrary({ onSend }: { onSend: (command: { command: string; v
   )
 }
 
-/** The song or hymn on the screens, section by section: never on to the next item of the service. */
-export function SectionStepper({ live, onSend }: { live: LiveStateV1; onSend: (command: { command: string; value: number }) => void }) {
+/**
+ * The song or hymn on the screens, section by section: never on to the next item of the service.
+ * Repeat chorus goes back to the chorus (the last one sung, else the first), when the host says
+ * which sections are a chorus.
+ */
+export function SectionStepper({ live, onSend }: { live: LiveStateV1; onSend: (command: { command: string; value: number | string }) => void }) {
   const ok = useCanSend()
   const l = live.lyrics
   if (l === undefined) return null
   if (!l) return <p className="text-muted-foreground">No song or hymn on the screens: show one to step through its sections.</p>
+  const choruses = l.choruses
   return (
     <div className="flex flex-col gap-1.5" role="group" aria-label="Sections of the song on the screens">
-      <p><span className="font-semibold">{l.title}</span> <span className="text-muted-foreground">· {l.sections[l.section] ?? ""} ({l.section + 1} of {l.sections.length}){live.program.rehearsal ? " · rehearsal" : ""}</span></p>
+      <p><span className="font-semibold">{l.title}</span>{l.key && <span className="ml-1.5 rounded-sm bg-muted px-1.5 py-0.5 text-[0.6875rem] font-semibold" title="The song's key, for the band">Key {l.key}</span>} <span className="text-muted-foreground">· {l.sections[l.section] ?? ""} ({l.section + 1} of {l.sections.length}){live.program.rehearsal ? " · rehearsal" : ""}</span></p>
       <ol className="flex flex-wrap gap-1">
         {l.sections.map((label, i) => <li key={i} className={cn("rounded-sm px-1.5 py-0.5 text-[0.6875rem]", i === l.section ? "bg-primary/10 font-semibold text-primary-text" : "bg-muted text-muted-foreground")}>{label}</li>)}
       </ol>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" disabled={!ok || l.section === 0} onClick={() => onSend({ command: "song_section", value: -1 })}>Previous section</Button>
         <Button size="sm" disabled={!ok || l.section >= l.sections.length - 1} onClick={() => onSend({ command: "song_section", value: 1 })}>Next section</Button>
+        {choruses && <Button size="sm" variant="outline" disabled={!ok || choruses.length === 0} title={choruses.length ? "Back to the chorus on the screens" : "This song has no chorus"} onClick={() => onSend({ command: "song_section", value: "chorus" })}>Repeat chorus</Button>}
       </div>
     </div>
   )
@@ -211,7 +217,10 @@ export function SectionStepper({ live, onSend }: { live: LiveStateV1; onSend: (c
 const KIND = { display: "Screen", ndi: "NDI", browser: "Browser feed" } as const
 const ROLE = { congregation: "Congregation", stage: "Stage", signage: "Signage" } as const
 
-/** Which output shows which scene, on or off, as the host's real screens have them (read only). */
+/**
+ * Which output shows which scene, on or off, as the host's real screens have them, and who took a
+ * scene to it last (read only).
+ */
 export function OutputMap({ live }: { live: LiveStateV1 }) {
   if (!live.outputMap) return null
   return (
@@ -225,10 +234,36 @@ export function OutputMap({ live }: { live: LiveStateV1 }) {
             <span className="min-w-0 flex-1 truncate font-medium">{o.name}</span>
             <span className="text-muted-foreground">{ROLE[o.role]} · {KIND[o.kind]}</span>
             <span>{o.role === "congregation" ? (o.scene ?? "its own feed") : o.role === "stage" ? "stage display" : "signage loop"}</span>
+            {o.at !== undefined && <span className="text-muted-foreground" title="Who took a scene to it, or sent it back to its own feed, last">{activatedLabel({ by: o.by, activatedAt: o.at }) || "taken"}</span>}
             <span className={cn("text-[0.625rem] font-bold uppercase", o.on ? "text-primary-text" : "text-muted-foreground")}>{o.on ? "On" : "Off"}</span>
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+/** The sources a Screens desk takes off its screens and back (#197): the ticker and the lower third. */
+const SCREEN_SOURCES = [["ticker", "Ticker"], ["lowerThird", "Lower third"]] as const
+
+/** The ticker and the lower third on the host's screens: what each shows, Take off or Put back. */
+export function ScreenSources({ live }: { live: LiveStateV1 }) {
+  const ok = useCanSend()
+  const [result, setResult] = useState<SendResult | null>(null)
+  const rows = SCREEN_SOURCES.flatMap(([id, name]) => { const s = live.sources.find((x) => x.id === id); return s ? [{ s, name }] : [] })
+  if (rows.length === 0) return null
+  return (
+    <div role="group" aria-label="Ticker and lower third" className="flex flex-col gap-1">
+      <p className="font-semibold">Ticker and lower third</p>
+      <ul className="flex flex-col gap-1">
+        {rows.map(({ s, name }) => (
+          <li key={s.id} className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{name} · {s.on ? "on" : "off"}{s.reference ? <span className="text-muted-foreground"> · {s.reference}</span> : null}{activatedLabel(s) ? <span className="text-muted-foreground"> · {activatedLabel(s)}</span> : null}</span>
+            <Button size="xs" variant="outline" disabled={!ok} onClick={async () => setResult(await useJoin.getState().send({ command: s.on ? "clear_source" : "restore_source", value: s.id }))}>{s.on ? "Take off" : "Put back"}</Button>
+          </li>
+        ))}
+      </ul>
+      <Said result={result} />
     </div>
   )
 }

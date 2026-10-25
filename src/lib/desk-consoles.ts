@@ -28,6 +28,20 @@ export interface LiveLyrics {
   /** The section on the screens, in `sections`. */
   section: number
   sections: string[]
+  /** The song's key for the band ("G", "F#m"), when it has one (absent from older hosts). */
+  key?: string
+  /** Which of `sections` are a chorus, for Repeat chorus (absent from older hosts). */
+  choruses?: number[]
+}
+
+/** A song or hymn in the service's run of show, for a Worship desk's set list. */
+export interface WorshipSetItem {
+  id: string
+  title: string
+  /** Its key, when the host has the song loaded and it has one. */
+  key?: string
+  /** On the screens now. */
+  live?: true
 }
 
 /** One output as a Screens desk's output map shows it. */
@@ -39,6 +53,9 @@ export interface OutputMapRow {
   on: boolean
   /** The scene it shows, by name; null: its own feed. */
   scene: string | null
+  /** Who took a scene to it or released it last, and when (host wall ms), outside rehearsal (absent: no one yet, or an older host). */
+  by?: string
+  at?: number
 }
 
 /** A verse Auto Bible heard, for a Bible desk to Activate with one click. */
@@ -64,6 +81,8 @@ interface Sections {
   /** The first slide of each section, in order. */
   starts: number[]
   labels: string[]
+  /** Each section's id, in the song. */
+  ids: string[]
   /** The section the slide on the screens is in. */
   at: number
 }
@@ -72,15 +91,17 @@ interface Sections {
 export function sectionsOf(slides: readonly { sectionId: string; sectionLabel: string }[], index: number): Sections {
   const starts: number[] = []
   const labels: string[] = []
+  const ids: string[] = []
   slides.forEach((s, i) => {
     if (i === 0 || s.sectionId !== slides[i - 1].sectionId) {
       starts.push(i)
       labels.push(s.sectionLabel)
+      ids.push(s.sectionId)
     }
   })
   let at = 0
   starts.forEach((start, n) => { if (start <= index) at = n })
-  return { starts, labels, at }
+  return { starts, labels, ids, at }
 }
 
 let cached: { live: LiveSlide; song: SongWithSections; sections: Sections } | null = null
@@ -99,11 +120,37 @@ function liveSections(): { live: LiveSlide; song: SongWithSections; sections: Se
   return cached
 }
 
+/** The sections (by place in the song as it runs) that are a chorus. */
+export function chorusesOf(song: SongWithSections, ids: readonly string[]): number[] {
+  const chorus = new Set(song.sections.filter((x) => x.kind === "chorus").map((x) => x.id))
+  return ids.flatMap((id, n) => (chorus.has(id) ? [n] : []))
+}
+
+/** Where Repeat chorus goes from section `at`: the last chorus sung (at or before it), else the song's first; null when it has none. */
+export function chorusTarget(choruses: readonly number[], at: number): number | null {
+  const before = choruses.filter((n) => n <= at)
+  return before.length ? before[before.length - 1] : (choruses[0] ?? null)
+}
+
 /** The Live State's `lyrics`: null when no song or hymn is on the screens. */
 export function liveLyrics(): LiveLyrics | null {
   const s = liveSections()
   if (!s) return null
-  return { itemId: s.live.itemId, index: s.live.index, title: s.song.song.title, kind: useBroadcastStore.getState().liveVerse?.content === "hymn" ? "hymn" : "song", section: s.sections.at, sections: s.sections.labels.slice(0, 40) }
+  const key = s.song.song.key?.trim()
+  return {
+    itemId: s.live.itemId, index: s.live.index, title: s.song.song.title, kind: useBroadcastStore.getState().liveVerse?.content === "hymn" ? "hymn" : "song", section: s.sections.at, sections: s.sections.labels.slice(0, 40),
+    ...(key ? { key: key.slice(0, 12) } : {}), choruses: chorusesOf(s.song, s.sections.ids).filter((n) => n < 40),
+  }
+}
+
+/** The service's songs and hymns in order, for a Worship desk's set list (at most 30). */
+export function worshipSet(): WorshipSetItem[] {
+  const songs = useSongStore.getState().songs
+  const liveItem = useBroadcastStore.getState().liveSlide?.itemId
+  return useQueueStore.getState().items.filter(isSongItem).slice(0, 30).map((i) => {
+    const key = songs[i.song.song_id]?.song.key?.trim()
+    return { id: i.id, title: i.song.title || i.reference, ...(key ? { key: key.slice(0, 12) } : {}), ...(i.id === liveItem && liveLyrics() ? { live: true as const } : {}) }
+  })
 }
 
 /**
@@ -111,11 +158,14 @@ export function liveLyrics(): LiveLyrics | null {
  * only within that song, in the arrangement and languages it went live with. Null when done, else
  * why not, for the main desk's toast.
  */
-export async function stepLiveSection(step: 1 | -1): Promise<string | null> {
+export async function stepLiveSection(step: 1 | -1 | "chorus"): Promise<string | null> {
   const s = liveSections()
   if (!s) return "no song or hymn is on the screens"
-  const target = s.sections.starts[s.sections.at + step]
-  if (target === undefined) return step > 0 ? "that is the song's last section" : "that is the song's first section"
+  // Repeat chorus: the last chorus sung, else the song's first.
+  const to = step === "chorus" ? chorusTarget(chorusesOf(s.song, s.sections.ids), s.sections.at) : s.sections.at + step
+  if (to === null) return "this song has no chorus"
+  const target = s.sections.starts[to]
+  if (target === undefined) return step === 1 ? "that is the song's last section" : "that is the song's first section"
   const { live, song } = s
   const languages = live.languages?.length ? live.languages : [song.song.primary_language]
   const items = useQueueStore.getState().items
@@ -140,6 +190,7 @@ export function outputMap(): OutputMapRow[] {
     role: o.role ?? "congregation",
     on: outputOnAir(o, b.outputStatus[o.id]),
     scene: o.sceneId ? (b.scenes.find((sc) => sc.id === o.sceneId)?.name ?? null) : null,
+    ...(b.sceneTakes[o.id] ? { ...(b.sceneTakes[o.id].by ? { by: b.sceneTakes[o.id].by } : {}), at: b.sceneTakes[o.id].at } : {}),
   }))
 }
 
@@ -149,15 +200,17 @@ export function heardVerses(): HeardVerse[] {
 }
 
 /** The desk consoles' parts of the Live State. */
-export function deskConsoleState(): { lyrics: LiveLyrics | null; outputMap: OutputMapRow[]; heard: HeardVerse[]; readiness?: SharedReadiness } {
+export function deskConsoleState(): { lyrics: LiveLyrics | null; outputMap: OutputMapRow[]; heard: HeardVerse[]; worshipSet: WorshipSetItem[]; readiness?: SharedReadiness } {
   const readiness = useSharedReadiness.getState().readiness
-  return { lyrics: liveLyrics(), outputMap: outputMap(), heard: heardVerses(), ...(readiness ? { readiness } : {}) }
+  return { lyrics: liveLyrics(), outputMap: outputMap(), heard: heardVerses(), worshipSet: worshipSet(), ...(readiness ? { readiness } : {}) }
 }
 
 /** Publish again when one of these parts changes (`soon`: the Live State publisher's own). */
 export function watchDeskConsoles(soon: () => void): (() => void)[] {
   return [
-    useBroadcastStore.subscribe((s, p) => { if (s.liveSlide !== p.liveSlide || s.outputStatus !== p.outputStatus) soon() }),
+    useBroadcastStore.subscribe((s, p) => { if (s.liveSlide !== p.liveSlide || s.outputStatus !== p.outputStatus || s.sceneTakes !== p.sceneTakes) soon() }),
+    // A song loaded on the host brings its key to the set list.
+    useSongStore.subscribe((s, p) => { if (s.songs !== p.songs) soon() }),
     useDetectionStore.subscribe((s, p) => { if (s.detections !== p.detections) soon() }),
     useSharedReadiness.subscribe(() => soon()),
   ]

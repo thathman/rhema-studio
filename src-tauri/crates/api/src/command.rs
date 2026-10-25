@@ -57,8 +57,9 @@ pub enum RemoteCommand {
     SongShow(String),
     SongPreview(String),
     /// Step the song or hymn on the screens to its next (+1) or previous (−1) section, from a Worship
-    /// desk: only within that song, never on to the next item of the service.
-    SongSection(i32),
+    /// desk: only within that song, never on to the next item of the service. `"chorus"` goes to
+    /// the chorus again (repeat chorus): the last one sung, else the song's first.
+    SongSection(SectionMove),
     /// Take one live source off its feeds ("bible", "song", "hymn", "slide", "picture"), or put it back.
     ClearSource(String),
     RestoreSource(String),
@@ -90,6 +91,87 @@ pub enum RemoteCommand {
     /// An extra timer (#196 R2.5) from a joined desk: start, pause or reset the timer with this id.
     /// The host's server checks the timer's owner first (`crate::aux_timers`). Never a screen.
     AuxTimer(AuxTimerIn),
+    /// Queue a verse or a song asked for (Comms C2, #251) from a joined desk or a phone: into the
+    /// host's run of show for later. Nothing is shown and the main desk's Preview does not change.
+    QueueRequest(QueueIn),
+    /// OBS's recording, from the OBS director's desk through the host's OBS connection: start, stop,
+    /// or a marker (a line in the service log, and a chapter where OBS has them). Never in rehearsal.
+    ObsRecord(ObsRecordIn),
+    /// Choose OBS's scene transition (OBS director): how OBS's next switch looks. Never in rehearsal.
+    ObsTransition(String),
+}
+
+/// Where a section step goes: one section on or back, or the chorus again.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SectionMove {
+    Step(i32),
+    To(SectionTarget),
+}
+
+/// A section to go to by name: the chorus (the only one for now).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SectionTarget {
+    Chorus,
+}
+
+impl From<i32> for SectionMove {
+    fn from(n: i32) -> Self {
+        SectionMove::Step(n)
+    }
+}
+
+/// A verse or a song to queue: its kind and the reference or title, as the request had it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueIn {
+    pub kind: QueueKind,
+    pub value: String,
+}
+
+/// Only a verse or a song can be queued; anything else does not parse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QueueKind {
+    Bible,
+    Song,
+}
+
+impl QueueKind {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            QueueKind::Bible => "bible",
+            QueueKind::Song => "song",
+        }
+    }
+}
+
+/// What to do with OBS's recording, and a marker's name (optional; the host names it otherwise).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ObsRecordIn {
+    pub action: RecordAction,
+    #[serde(default)]
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RecordAction {
+    Start,
+    Stop,
+    Marker,
+}
+
+impl RecordAction {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RecordAction::Start => "start",
+            RecordAction::Stop => "stop",
+            RecordAction::Marker => "marker",
+        }
+    }
 }
 
 /// Which extra timer, and what to do: "start", "pause" or "reset".
@@ -293,7 +375,8 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::BiblePreview(r) => write!(f, "bible_preview({r})"),
             RemoteCommand::SongShow(t) => write!(f, "song_show({t})"),
             RemoteCommand::SongPreview(t) => write!(f, "song_preview({t})"),
-            RemoteCommand::SongSection(n) => write!(f, "song_section({n:+})"),
+            RemoteCommand::SongSection(SectionMove::Step(n)) => write!(f, "song_section({n:+})"),
+            RemoteCommand::SongSection(SectionMove::To(SectionTarget::Chorus)) => write!(f, "song_section(chorus)"),
             RemoteCommand::ClearSource(id) => write!(f, "clear_source({id})"),
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
             RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
@@ -310,6 +393,9 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::VoiceLeave => write!(f, "voice_leave"),
             RemoteCommand::VoiceChannels(c) => write!(f, "voice_channels({} {:?})", c.talk, c.listen),
             RemoteCommand::AuxTimer(t) => write!(f, "aux_timer({} {})", t.action, t.id),
+            RemoteCommand::QueueRequest(q) => write!(f, "queue_request({} {})", q.kind.as_str(), q.value),
+            RemoteCommand::ObsRecord(r) => write!(f, "obs_record({})", r.action.as_str()),
+            RemoteCommand::ObsTransition(t) => write!(f, "obs_transition({t})"),
         }
     }
 }
@@ -587,7 +673,7 @@ mod tests {
             RemoteCommand::BiblePreview("John 3:16".into()),
             RemoteCommand::SongShow("Amazing Grace".into()),
             RemoteCommand::SongPreview("Amazing Grace".into()),
-            RemoteCommand::SongSection(1),
+            RemoteCommand::SongSection(1.into()),
             RemoteCommand::ClearSource("bible".into()),
             RemoteCommand::RestoreSource("bible".into()),
             RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
@@ -603,6 +689,10 @@ mod tests {
             RemoteCommand::VoiceTalk(true),
             RemoteCommand::VoiceLeave,
             RemoteCommand::VoiceChannels(VoiceChannelsIn { listen: vec!["stage".into()], talk: "production".into(), levels: Default::default() }),
+            RemoteCommand::AuxTimer(AuxTimerIn { id: "t".into(), action: "start".into() }),
+            RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Bible, value: "Romans 8:28".into() }),
+            RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: None }),
+            RemoteCommand::ObsTransition("Fade".into()),
         ];
 
         for cmd in &cmds {
@@ -627,10 +717,11 @@ mod tests {
                 RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::StageMessage(_) | RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => {}
                 RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
                 RemoteCommand::AuxTimer(_) => {}
+                RemoteCommand::QueueRequest(_) | RemoteCommand::ObsRecord(_) | RemoteCommand::ObsTransition(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 44);
+        assert_eq!(cmds.len(), 48);
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#).unwrap(), RemoteCommand::TimerAdjust(1));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_start"}"#).unwrap(), RemoteCommand::TimerStart);
         let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
@@ -697,9 +788,37 @@ mod tests {
         let odd = BibleRef::With { reference: "Ps 23".into(), translation: Some(" <b>KJV</b>\n".into()) };
         assert_eq!(odd.translation().as_deref(), Some("bKJVb"), "letters and digits only, never markup");
         assert_eq!(BibleRef::With { reference: "Ps 23".into(), translation: Some("  ".into()) }.translation(), None);
-        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"song_section","value":-1}"#).unwrap(), RemoteCommand::SongSection(-1));
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"song_section","value":-1}"#).unwrap(), RemoteCommand::SongSection((-1).into()));
         assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"song_section","value":"next"}"#).is_err());
-        assert_eq!(RemoteCommand::SongSection(1).to_string(), "song_section(+1)");
+        assert_eq!(RemoteCommand::SongSection(1.into()).to_string(), "song_section(+1)");
+    }
+
+    #[test]
+    fn round_two_console_commands_parse_and_anything_else_is_refused() {
+        // Repeat chorus is a section step by name.
+        let chorus: RemoteCommand = serde_json::from_str(r#"{"command":"song_section","value":"chorus"}"#).unwrap();
+        assert_eq!(chorus, RemoteCommand::SongSection(SectionMove::To(SectionTarget::Chorus)));
+        assert_eq!(chorus.to_string(), "song_section(chorus)");
+        assert_eq!(serde_json::to_value(&chorus).unwrap(), serde_json::json!({ "command": "song_section", "value": "chorus" }));
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"song_section","value":"bridge"}"#).is_err(), "only the chorus by name");
+        // Queue a request: a verse or a song only.
+        let q: RemoteCommand = serde_json::from_str(r#"{"command":"queue_request","value":{"kind":"song","value":"Amazing Grace"}}"#).unwrap();
+        assert_eq!(q, RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Song, value: "Amazing Grace".into() }));
+        assert_eq!(q.to_string(), "queue_request(song Amazing Grace)");
+        for odd in [r#"{"command":"queue_request","value":{"kind":"scene","value":"s1"}}"#, r#"{"command":"queue_request","value":{"kind":"bible"}}"#, r#"{"command":"queue_request","value":"Romans 8:28"}"#] {
+            assert!(serde_json::from_str::<RemoteCommand>(odd).is_err(), "{odd}");
+        }
+        // OBS's recording and transition.
+        let start: RemoteCommand = serde_json::from_str(r#"{"command":"obs_record","value":{"action":"start"}}"#).unwrap();
+        assert_eq!(start, RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Start, label: None }));
+        let mark: RemoteCommand = serde_json::from_str(r#"{"command":"obs_record","value":{"action":"marker","label":"Sermon"}}"#).unwrap();
+        assert!(matches!(mark, RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: Some(ref l) }) if l == "Sermon"));
+        assert_eq!(mark.to_string(), "obs_record(marker)");
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_record","value":{"action":"pause"}}"#).is_err());
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_transition","value":"Fade"}"#).unwrap(), RemoteCommand::ObsTransition("Fade".into()));
+        for cmd in [q, start, mark, RemoteCommand::ObsTransition("Cut".into())] {
+            assert!(!cmd.is_comms(), "{cmd}: a service command, refused for a paused desk");
+        }
     }
 
     #[test]

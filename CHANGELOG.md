@@ -4,6 +4,15 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Comms and desk consoles, round two (#251, #197)
+- **Queue a request from any desk that adds to the queue, and from a phone**: a verse or song asked for in a notice now has **Queue** on joined Present, settings and Editor desks and on the phone page, as on the main desk. It goes into the host's run of show for later; nothing is shown. Two desks answering the same request queue it once.
+- **Phone Talk comes back by itself** after a dropped connection, waiting a little longer each time (1 s, 2 s, 4 s… up to 30 s). The microphone stays off until the person presses Talk again.
+- **Each person's volume on the phone page**, beside Mute. The list is updated in place, so a slider being moved is never redrawn.
+- **OBS desk** (OBS director): the stream's and the recording's health, the transition to choose, and **Start recording**, **Stop recording** (asks twice) and **Add marker**. None of these change OBS in rehearsal.
+- **Screens desk**: takes the ticker and the lower third off its screens and puts them back.
+- **Worship desk**: the song's key beside its title, **Repeat chorus** (back to the chorus on the screens) and the worship set (the service's songs and hymns in order, with their keys).
+- **Output map** (Screens desk and the director): who took a scene to each output last, and when.
+- Every new command is checked on the host for the desk's role, acts only on what the desk saw (or it is told "Someone changed this first — look again"), and the recording and transition are refused in rehearsal.
 ### Desk consoles on joined computers: Bible, Worship, Screens and the director's board (#197)
 - **Bible desk**: find a verse by reference or by words in the host's own Bible, in a translation chosen on the desk; the passage shows on the desk first (the verse and the two after it), and **Activate** puts it up in that translation. The verses Auto Bible heard on the host are listed with **Activate** beside each; nothing goes up until someone presses it.
 - **Worship desk**: find a song or hymn in the host's library by title, words or hymn number (CAC 245), then Show it or put it in the main desk's Preview. **Previous section / Next section** move the song on the screens one section at a time, never on to the next item of the service.

@@ -158,8 +158,13 @@ impl CommandDispatcher {
             RemoteCommand::BiblePreview(reference) => sink.emit_event("remote:bible_preview", &serde_json::json!({ "reference": reference.chars().take(120).collect::<String>() }).to_string()),
             RemoteCommand::SongShow(title) => sink.emit_event("remote:song_show", &serde_json::json!({ "title": title.chars().take(120).collect::<String>() }).to_string()),
             RemoteCommand::SongPreview(title) => sink.emit_event("remote:song_preview", &serde_json::json!({ "title": title.chars().take(120).collect::<String>() }).to_string()),
-            // One section at a time, either way.
-            RemoteCommand::SongSection(n) => sink.emit_event("remote:song_section", &serde_json::json!({ "step": (*n).signum() }).to_string()),
+            // One section at a time, either way; or the chorus again.
+            RemoteCommand::SongSection(crate::command::SectionMove::Step(n)) => sink.emit_event("remote:song_section", &serde_json::json!({ "step": (*n).signum() }).to_string()),
+            RemoteCommand::SongSection(crate::command::SectionMove::To(crate::command::SectionTarget::Chorus)) => sink.emit_event("remote:song_section", &serde_json::json!({ "to": "chorus" }).to_string()),
+            RemoteCommand::QueueRequest(q) => sink.emit_event("remote:queue_request", &serde_json::json!({ "kind": q.kind.as_str(), "value": q.value.trim().chars().take(120).collect::<String>() }).to_string()),
+            // A marker's name is one short line (60 characters), as the main desk's own.
+            RemoteCommand::ObsRecord(r) => sink.emit_event("remote:obs_record", &serde_json::json!({ "action": r.action.as_str(), "label": r.label.as_deref().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(60).collect::<String>() }).to_string()),
+            RemoteCommand::ObsTransition(name) => sink.emit_event("remote:obs_transition", &serde_json::json!({ "name": name.chars().take(200).collect::<String>() }).to_string()),
             RemoteCommand::ClearSource(id) => sink.emit_event("remote:clear_source", &serde_json::json!({ "id": id }).to_string()),
             RemoteCommand::RestoreSource(id) => sink.emit_event("remote:restore_source", &serde_json::json!({ "id": id }).to_string()),
             RemoteCommand::TakeScene(t) => sink.emit_event("remote:take_scene", &serde_json::json!({ "output": t.output, "scene": t.scene }).to_string()),
@@ -398,10 +403,37 @@ mod tests {
         assert_eq!(sink.last_event(), ("remote:bible_activate".to_string(), r#"{"reference":"John 3:16","translation":"YOR"}"#.to_string()));
         CommandDispatcher::dispatch(&RemoteCommand::BibleActivate("John 3:16".into()), &sink).unwrap();
         assert_eq!(sink.last_event().1, r#"{"reference":"John 3:16"}"#, "a plain reference is as before");
-        CommandDispatcher::dispatch(&RemoteCommand::SongSection(5), &sink).unwrap();
+        CommandDispatcher::dispatch(&RemoteCommand::SongSection(5.into()), &sink).unwrap();
         assert_eq!(sink.last_event(), ("remote:song_section".to_string(), r#"{"step":1}"#.to_string()), "one section at a time");
-        CommandDispatcher::dispatch(&RemoteCommand::SongSection(-3), &sink).unwrap();
+        CommandDispatcher::dispatch(&RemoteCommand::SongSection((-3).into()), &sink).unwrap();
         assert_eq!(sink.last_event().1, r#"{"step":-1}"#);
+        let chorus = RemoteCommand::SongSection(crate::command::SectionMove::To(crate::command::SectionTarget::Chorus));
+        CommandDispatcher::dispatch(&chorus, &sink).unwrap();
+        assert_eq!(sink.last_event(), ("remote:song_section".to_string(), r#"{"to":"chorus"}"#.to_string()), "repeat chorus");
+    }
+
+    #[test]
+    fn round_two_console_commands_emit_their_events_with_who_and_a_log_line() {
+        use crate::command::{ObsRecordIn, QueueIn, QueueKind, RecordAction};
+        let sink = MockSink::new();
+        let q = RemoteCommand::QueueRequest(QueueIn { kind: QueueKind::Bible, value: format!("  Romans 8:28 {}", "x".repeat(200)) });
+        CommandDispatcher::dispatch_as(&q, &sink, "Ade's phone").unwrap();
+        let all = sink.events.lock().unwrap().clone();
+        let v: serde_json::Value = serde_json::from_str(&all[all.len() - 2].1).unwrap();
+        assert_eq!((all[all.len() - 2].0.as_str(), v["kind"].as_str(), v["by"].as_str()), ("remote:queue_request", Some("bible"), Some("Ade's phone")));
+        assert!(v["value"].as_str().unwrap().starts_with("Romans 8:28") && v["value"].as_str().unwrap().chars().count() == 120);
+        assert_eq!(all[all.len() - 1].0, "remote:audit", "in the service log with who");
+        let mark = RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Marker, label: Some(format!(" Sermon \n starts {}", "y".repeat(100))) });
+        CommandDispatcher::dispatch_as(&mark, &sink, "OBS desk").unwrap();
+        let all = sink.events.lock().unwrap().clone();
+        let v: serde_json::Value = serde_json::from_str(&all[all.len() - 2].1).unwrap();
+        assert_eq!((all[all.len() - 2].0.as_str(), v["action"].as_str()), ("remote:obs_record", Some("marker")));
+        let label = v["label"].as_str().unwrap();
+        assert!(label.starts_with("Sermon starts y") && label.chars().count() == 60, "{label}");
+        CommandDispatcher::dispatch(&RemoteCommand::ObsRecord(ObsRecordIn { action: RecordAction::Stop, label: None }), &sink).unwrap();
+        assert_eq!(sink.last_event().1, r#"{"action":"stop","label":""}"#);
+        CommandDispatcher::dispatch(&RemoteCommand::ObsTransition("Stinger".into()), &sink).unwrap();
+        assert_eq!(sink.last_event(), ("remote:obs_transition".to_string(), r#"{"name":"Stinger"}"#.to_string()));
     }
 
     #[test]
