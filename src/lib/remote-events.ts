@@ -40,6 +40,7 @@ export const REMOTE_EVENTS = {
   bible_preview: "remote:bible_preview",
   song_show: "remote:song_show",
   song_preview: "remote:song_preview",
+  song_section: "remote:song_section",
   clear_source: "remote:clear_source",
   restore_source: "remote:restore_source",
   take_scene: "remote:take_scene",

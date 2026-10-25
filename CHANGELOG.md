@@ -4,6 +4,13 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Desk consoles on joined computers: Bible, Worship, Screens and the director's board (#197)
+- **Bible desk**: find a verse by reference or by words in the host's own Bible, in a translation chosen on the desk; the passage shows on the desk first (the verse and the two after it), and **Activate** puts it up in that translation. The verses Auto Bible heard on the host are listed with **Activate** beside each; nothing goes up until someone presses it.
+- **Worship desk**: find a song or hymn in the host's library by title, words or hymn number (CAC 245), then Show it or put it in the main desk's Preview. **Previous section / Next section** move the song on the screens one section at a time, never on to the next item of the service.
+- **Screens desk**: an output map: every output, whether it is on, and the scene it shows (read only; the scene buttons are as before).
+- **Director** (Present and settings desks, joined or on the main desk): the readiness checks and who of the team is connected, with their role and when each was last seen.
+- Look-ups need the desk's key and a role that works with that content; they change nothing. Section steps are checked like every other command (the role, the section the desk saw, the service), so two desks pressing at once move it once.
+
 ### Host/Join hardening: who is connected, cutting a desk at once, browser pages kept out, https between computers, Editor and View only (#162, #197)
 - Production → Operators → **Host the service** now shows this computer's address on each network, the secure link and its certificate code, each paired desk as **Connected now** or **Seen 5 min ago** with its address, and a **Stop hosting** button (with a confirm) that disconnects every joined computer, phone and browser feed while the service here carries on.
 - Taking back control, revoking or changing a desk's role cuts its Live State stream within a quarter of a second; the desk reconnects at once as what it is now (paused, its new role), or is told to pair again.

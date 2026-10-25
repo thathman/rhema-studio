@@ -203,3 +203,14 @@ type Paired = { token: string; secure: { port: number; fingerprint: string } | n
 
 /** A joined desk may send commands: connected, and the main desk has not taken back control. */
 export const useCanSend = () => useJoin((s) => s.status === "connected" && !s.paused)
+
+/**
+ * Look something up in the host's library (desk consoles, #197): `{ what: "translations" }`,
+ * `{ what: "chapter", translation, book, chapter }`, `{ what: "search", query, translation }` or
+ * `{ what: "songs", query }`. The host checks this desk's role; a refusal is thrown in its words.
+ * Read only: nothing on the host changes.
+ */
+export async function lookupOnHost<T>(asked: Record<string, unknown>): Promise<T> {
+  const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+  return invoke<T>("join_lookup", { address, token, asked })
+}

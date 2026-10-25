@@ -34,6 +34,8 @@ import { startCameras } from "@/lib/cameras"
 import { startLiveRecovery } from "@/lib/live-recovery"
 import { RecoveryBanner } from "@/studio/shell/recovery-banner"
 import { SignalWatch } from "@/studio/shell/signal-watch"
+import { ShareReadiness } from "@/studio/share-readiness"
+import { useSettingsStore } from "@/stores/settings-store"
 import { startVoiceHub } from "@/lib/voice"
 import { GlobalSearch } from "@/studio/shell/global-search"
 import { SetupWizard } from "@/studio/setup/setup-wizard"
@@ -68,6 +70,8 @@ export function AppShell() {
   const setOutputsOpen = useShellStore((s) => s.setOutputsDialogOpen)
   const isLive = useBroadcastStore((s) => s.isLive)
   const church = useMemo(() => churchItems(), [])
+  // A joined director sees this computer's readiness checks (desk consoles): worked out only while someone is paired.
+  const paired = useSettingsStore((s) => s.remoteDevices.length > 0)
 
   // Going anywhere from Design first settles an unsaved theme (keep editing, or discard it), as closing the designer did.
   const go = useCallback(async (next: Workspace) => {
@@ -178,6 +182,7 @@ export function AppShell() {
         <TopBar title={TITLES[workspace]} />
         <RecoveryBanner />
         <SignalWatch />
+        {paired && <ShareReadiness />}
         <main id="main" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 outline-none">
           {/* One view failing leaves the navigation, the remote, the outputs and the other views working. */}
           <ErrorBoundary key={workspace} name={`the ${TITLES[workspace]} view`}>{WORKSPACE[workspace]()}</ErrorBoundary>

@@ -191,6 +191,7 @@ pub fn run() {
             commands::join::host_discover,
             commands::join::join_me,
             commands::join::join_command,
+            commands::join::join_lookup,
             commands::join::join_cameras,
             commands::join::join_tally,
             commands::companion::app_restart,

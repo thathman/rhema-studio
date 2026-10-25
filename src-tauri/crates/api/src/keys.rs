@@ -27,6 +27,7 @@ use crate::command::{same_key, RemoteCommand};
 /// the main desk, `crate::scene_edits`). `Viewer` (view only) follows the service and changes nothing;
 /// like every desk it keeps the notices and the talk channel.
 /// Existing entries without a role are `Configure`, as before.
+/// The desk consoles: `Worship` also steps the song on the screens section by section.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -86,6 +87,8 @@ impl Role {
             RemoteCommand::BibleActivate(_) | RemoteCommand::VerseNext | RemoteCommand::VersePrev => matches!(self, Role::Present | Role::Configure | Role::Bible),
             // Songs and hymns are the main screens' content: the Present desks and the worship desk.
             RemoteCommand::SongShow(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
+            // Stepping the song on the screens section by section (desk consoles): the same desks.
+            RemoteCommand::SongSection(_) => matches!(self, Role::Present | Role::Configure | Role::Worship),
             // Adding to the queue prepares; it shows nothing.
             RemoteCommand::AddToQueue => matches!(self, Role::Present | Role::Configure | Role::Editor),
             RemoteCommand::ClearSource(id) | RemoteCommand::RestoreSource(id) => match self {
@@ -545,6 +548,22 @@ mod tests {
         // Pairing never hands out either role by asking: a new device is Present until the main desk says.
         assert_eq!(role_asked(Some("viewer")), Role::Present);
         assert_eq!(role_asked(Some("editor")), Role::Present);
+    }
+
+    #[test]
+    fn section_stepping_is_for_the_worship_and_present_desks_only() {
+        let step = RemoteCommand::SongSection(1);
+        for role in [Role::Worship, Role::Present, Role::Configure] {
+            assert!(role.allows(&step), "{role:?}");
+        }
+        for role in [Role::Bible, Role::Screens, Role::Stage, Role::Camera, Role::Obs, Role::ObsCompanion, Role::Editor, Role::Viewer, Role::Timekeeper] {
+            assert!(!role.allows(&step), "{role:?}");
+        }
+        // A Bible desk's chosen translation is still Bible activation: the same rights as before.
+        let chosen = RemoteCommand::BibleActivate(crate::command::BibleRef::With { reference: "John 3:16".into(), translation: Some("KJV".into()) });
+        assert!(Role::Bible.allows(&chosen) && Role::Present.allows(&chosen) && !Role::Editor.allows(&chosen) && !Role::Worship.allows(&chosen));
+        let paused = KeyEntry { hash: "h".into(), name: "Desk".into(), role: Role::Worship, paused: true };
+        assert!(paused.paused_for(&step), "a paused desk steps nothing");
     }
 
     #[test]

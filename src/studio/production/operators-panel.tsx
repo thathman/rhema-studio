@@ -21,6 +21,9 @@ import { backstageRows, pauseWords } from "@/lib/cuesheet"
 import { formatMinutes } from "@/lib/service-timing"
 import { HostLookOffer } from "@/studio/production/host-look-offer"
 import { CameraDesk, DeskSceneEditor, ObsDesk, SongsDesk, StageDesk } from "@/studio/production/joined-desks"
+import { BibleConsole, DirectorBoard, OutputMap } from "@/studio/production/desk-consoles"
+import type { CrewRow } from "@/lib/desk-console-words"
+import { useReadiness } from "@/studio/use-readiness"
 import { deskEditable } from "@/lib/desk-scenes"
 import { editsScenes, REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
 import { Card, JoinForm } from "@/studio/production/join-form"
@@ -32,11 +35,12 @@ import { timeChangeWords } from "@/stores/time-change-store"
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
 
-type Desk = "clock" | "bible" | "scenes" | "songs" | "stage" | "cameras" | "obs" | "prepare"
+type Desk = "clock" | "bible" | "scenes" | "songs" | "stage" | "cameras" | "obs" | "prepare" | "outputs" | "director"
 /** Which desks a role gets on a joined computer (the host checks every command again). */
 const DESKS: Record<string, readonly Desk[]> = {
-  timekeeper: ["clock"], bible: ["bible"], screens: ["scenes"], worship: ["songs"], stage: ["stage"], camera: ["cameras", "scenes"], obs: ["obs"],
-  present: ["clock", "bible", "songs", "scenes", "stage"], configure: ["clock", "bible", "songs", "scenes", "stage"],
+  timekeeper: ["clock"], bible: ["bible"], screens: ["outputs", "scenes"], worship: ["songs"], stage: ["stage"], camera: ["cameras", "scenes"], obs: ["obs"],
+  // The Present and settings desks are the director (#197): the readiness board and the team first.
+  present: ["director", "clock", "bible", "songs", "outputs", "scenes", "stage"], configure: ["director", "clock", "bible", "songs", "outputs", "scenes", "stage"],
   // An editor prepares scenes (nothing live); view only follows the service, the run of show, Talk and notices.
   editor: ["prepare", "scenes"], viewer: [],
 }
@@ -76,8 +80,35 @@ export function OperatorsPanel() {
     <div className="grid gap-3 lg:grid-cols-2">
       <HostCard />
       <JoinCard />
+      <MainDirector />
     </div>
   )
+}
+
+/**
+ * The director's board on this computer (#197): its own readiness checks and who has joined it,
+ * while it hosts with someone paired. A joined Present desk sees the same from the host.
+ */
+function MainDirector() {
+  const devices = useSettingsStore((s) => s.remoteDevices)
+  const joined = useJoin((s) => s.status !== "off")
+  if (devices.length === 0 || joined) return null
+  return <MainDirectorBoard />
+}
+
+function MainDirectorBoard() {
+  const devices = useSettingsStore((s) => s.remoteDevices)
+  const { ready, checks } = useReadiness()
+  const [seen, setSeen] = useState<HostStatus | null>(null)
+  useEffect(() => {
+    let alive = true
+    const look = () => void invoke<unknown>("host_status").then((s) => alive && setSeen(readHostStatus(s))).catch(() => {})
+    look()
+    const t = setInterval(look, 5000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
+  const crew: CrewRow[] = presenceRows(devices, seen?.desks ?? []).filter((r) => r.device).map(({ device: d, seen: p }) => ({ name: d!.name, role: d!.role ?? "configure", connected: !!seen?.running && p?.connected === true, lastSeenMs: p?.lastSeenMs ?? null, ...(d!.paused ? { paused: true } : {}) }))
+  return <div className="lg:col-span-2"><DirectorBoard readiness={{ ready, checks }} crew={crew} /></div>
 }
 
 function HostCard() {
@@ -225,11 +256,13 @@ function JoinedDesk() {
             <p className="truncate text-sm font-semibold">{live.program.onAir ? live.program.reference ?? "On air" : "Nothing on air"}</p>
             {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
+          {desks.includes("director") && <DirectorBoard readiness={live.readiness} crew={live.presence} />}
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
           {desks.includes("prepare") && <PrepareDesk />}
-          {desks.includes("bible") && <BibleDesk live={live} />}
+          {desks.includes("bible") && <BibleConsole live={live} />}
           {desks.includes("songs") && <SongsDesk live={live} />}
           {desks.includes("cameras") && <CameraDesk live={live} />}
+          {desks.includes("outputs") && <OutputMap live={live} />}
           {desks.includes("scenes") && <ScenesDesk live={live} role={me?.role ?? "present"} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
@@ -502,29 +535,6 @@ function PrepareDesk() {
         <Button size="sm" variant="outline" type="submit" disabled={!ok || !song.trim()}>Preview song</Button>
       </form>
       {said && <p role="status" className="text-muted-foreground">{said}</p>}
-    </section>
-  )
-}
-
-/** The Bible source: type a reference and activate it; step through the passage; take it off (Bible operator). */
-function BibleDesk({ live }: { live: LiveStateV1 }) {
-  const ok = useCanSend()
-  const [reference, setReference] = useState("")
-  const bible = live.sources.find((s) => s.id === "bible")
-  const send = useJoin.getState().send
-  return (
-    <section aria-label="Bible desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
-      <p className="font-semibold">Bible {bible ? <span className="font-normal text-muted-foreground">· {[bible.reference, activatedLabel(bible)].filter(Boolean).join(" · ")}{bible.on ? "" : " (off)"}</span> : <span className="font-normal text-muted-foreground">· nothing yet</span>}</p>
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (reference.trim()) void send({ command: "bible_activate", value: reference.trim() }) }}>
-        <input aria-label="Bible reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Romans 8:28" maxLength={120} className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" />
-        <Button size="sm" type="submit" disabled={!ok || !reference.trim()}>Activate</Button>
-      </form>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" disabled={!ok} onClick={() => void send({ command: "verse_prev" })}>Previous verse</Button>
-        <Button size="sm" variant="outline" disabled={!ok} onClick={() => void send({ command: "verse_next" })}>Next verse</Button>
-        {bible?.on ? <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "clear_source", value: "bible" })}>Take the Bible off</Button> : bible ? <Button size="sm" variant="ghost" disabled={!ok} onClick={() => void send({ command: "restore_source", value: "bible" })}>Restore the Bible</Button> : null}
-      </div>
-      <p className="text-muted-foreground">The verse reaches every feed that follows Bible; the main screens show it too unless a song, hymn or slide is up there.</p>
     </section>
   )
 }

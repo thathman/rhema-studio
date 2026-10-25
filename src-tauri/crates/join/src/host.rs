@@ -143,6 +143,21 @@ pub async fn cameras(host: &Host, token: &str) -> Result<serde_json::Value, Stri
     Err(if status == 423 { format!("paused: {why}") } else { why })
 }
 
+/// Look something up in the host's library (desk consoles, #197): `{"what": "search", …}` as the
+/// host's `/api/v1/lookup` takes it. The host checks this desk's role; its refusal is said as it is.
+pub async fn lookup(host: &Host, token: &str, asked: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let r = host.client(Some(Duration::from_secs(8)))?.post(host.url("/api/v1/lookup")).header("X-Rhema-Key", token).json(asked).send().await.map_err(|e| host.unreachable(&e))?;
+    let status = r.status().as_u16();
+    let v = r.json::<serde_json::Value>().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        return Ok(v);
+    }
+    if status == 404 {
+        return Err("The host is an older Rhema Studio that cannot be searched from here: update it".into());
+    }
+    Err(v.get("error").and_then(|e| e.as_str()).map_or_else(|| format!("The host answered {status}"), String::from))
+}
+
 /// An OBS companion's tally to its host: the cameras on its OBS program and preview, and those its
 /// OBS plays, for the host's Production → Cameras.
 pub async fn tally(host: &Host, token: &str, tally: &serde_json::Value) -> Result<(), String> {

@@ -9,6 +9,7 @@ import type { LiveStateV1 } from "@/lib/live-state"
 import { useCanSend, useJoin, type SendResult } from "@/stores/join-store"
 import { deskEditable } from "@/lib/desk-scenes"
 import { NoSignalChoice } from "@/studio/production/scene-composer"
+import { SectionStepper, SongLibrary } from "@/studio/production/desk-consoles"
 import { CONTENT_TYPES } from "@/types/broadcast"
 import type { SceneLayer, SceneLayerKind } from "@/types"
 
@@ -29,21 +30,21 @@ function Result({ result }: { result: SendResult | null }) {
   return <p role="alert" className="text-destructive">{result.error}</p>
 }
 
-/** Songs and hymns (Worship): show or preview one from the host's library by title; take the lyrics off and back. */
+/**
+ * Songs and hymns (Worship): find one in the host's library (title, words or hymn number) and show
+ * it or put it in the main desk's Preview; step the song on the screens section by section; take
+ * the lyrics off and back.
+ */
 export function SongsDesk({ live }: { live: LiveStateV1 }) {
   const ok = useCanSend()
-  const [title, setTitle] = useState("")
   const [result, setResult] = useState<SendResult | null>(null)
-  const send = async (command: { command: string; value?: string }) => setResult(await useJoin.getState().send(command))
+  const send = async (command: { command: string; value?: string | number }) => setResult(await useJoin.getState().send(command))
   const lyrics = live.sources.filter((s) => s.id === "song" || s.id === "hymn")
   return (
     <section aria-label="Worship desk" className={box}>
       <p className="font-semibold">Songs and hymns</p>
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (title.trim()) void send({ command: "song_show", value: title.trim() }) }}>
-        <input aria-label="Song or hymn title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title, as in the host's library" maxLength={120} className={cn(field, "flex-1")} />
-        <Button size="sm" type="submit" disabled={!ok || !title.trim()}>Show</Button>
-        <Button size="sm" type="button" variant="outline" disabled={!ok || !title.trim()} title="Into the main desk's Preview only: nothing goes live" onClick={() => void send({ command: "song_preview", value: title.trim() })}>Preview</Button>
-      </form>
+      <SongLibrary onSend={(c) => void send(c)} />
+      <SectionStepper live={live} onSend={(c) => void send(c)} />
       {lyrics.length > 0 && (
         <ul className="flex flex-col gap-1">
           {lyrics.map((s) => (
@@ -55,7 +56,7 @@ export function SongsDesk({ live }: { live: LiveStateV1 }) {
         </ul>
       )}
       <Result result={result} />
-      <p className="text-muted-foreground">A song or hymn shows from its first slide on the main screens and every lyrics feed. The main desk moves through the slides.</p>
+      <p className="text-muted-foreground">A song or hymn shows from its first slide on the main screens and every lyrics feed. Sections move only within the song on the screens; the main desk moves on through the service.</p>
     </section>
   )
 }

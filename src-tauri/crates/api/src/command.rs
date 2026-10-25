@@ -46,7 +46,9 @@ pub enum RemoteCommand {
     Resume,
     /// Activate the Bible source with a typed reference ("Romans 8:28", "jn 3 16"): every feed that
     /// follows Bible takes it; the main screens too unless a song, hymn or slide is up (ADR 0001).
-    BibleActivate(String),
+    /// A Bible desk may name the translation it chose (`{"reference": …, "translation": "KJV"}`);
+    /// a plain reference is in the host's own, as before.
+    BibleActivate(BibleRef),
     /// Put a typed reference in the host's Preview only (an action request answered with Preview,
     /// Rhema Comms C2): nothing goes live until the main desk shows it.
     BiblePreview(String),
@@ -54,6 +56,9 @@ pub enum RemoteCommand {
     /// live from its first slide, or put in the host's Preview only.
     SongShow(String),
     SongPreview(String),
+    /// Step the song or hymn on the screens to its next (+1) or previous (−1) section, from a Worship
+    /// desk: only within that song, never on to the next item of the service.
+    SongSection(i32),
     /// Take one live source off its feeds ("bible", "song", "hymn", "slide", "picture"), or put it back.
     ClearSource(String),
     RestoreSource(String),
@@ -92,6 +97,58 @@ pub enum RemoteCommand {
 pub struct AuxTimerIn {
     pub id: String,
     pub action: String,
+}
+
+/// A reference to activate, with the translation a Bible desk chose (its abbreviation, as the host
+/// lists them), or a plain reference (older desks, OSC, the phone page).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BibleRef {
+    Plain(String),
+    With {
+        reference: String,
+        #[serde(default)]
+        translation: Option<String>,
+    },
+}
+
+impl BibleRef {
+    #[must_use]
+    pub fn reference(&self) -> &str {
+        match self {
+            BibleRef::Plain(r) | BibleRef::With { reference: r, .. } => r,
+        }
+    }
+
+    /// The translation asked for: short, letters, digits and a few marks only (an abbreviation).
+    #[must_use]
+    pub fn translation(&self) -> Option<String> {
+        match self {
+            BibleRef::With { translation: Some(t), .. } => Some(t.trim().chars().filter(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | ' ')).take(16).collect::<String>()).filter(|t| !t.is_empty()),
+            _ => None,
+        }
+    }
+}
+
+impl From<&str> for BibleRef {
+    fn from(r: &str) -> Self {
+        BibleRef::Plain(r.to_string())
+    }
+}
+
+impl From<String> for BibleRef {
+    fn from(r: String) -> Self {
+        BibleRef::Plain(r)
+    }
+}
+
+impl fmt::Display for BibleRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.translation() {
+            Some(t) => write!(f, "{} {t}", self.reference()),
+            None => write!(f, "{}", self.reference()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -236,6 +293,7 @@ impl fmt::Display for RemoteCommand {
             RemoteCommand::BiblePreview(r) => write!(f, "bible_preview({r})"),
             RemoteCommand::SongShow(t) => write!(f, "song_show({t})"),
             RemoteCommand::SongPreview(t) => write!(f, "song_preview({t})"),
+            RemoteCommand::SongSection(n) => write!(f, "song_section({n:+})"),
             RemoteCommand::ClearSource(id) => write!(f, "clear_source({id})"),
             RemoteCommand::RestoreSource(id) => write!(f, "restore_source({id})"),
             RemoteCommand::TakeScene(t) => write!(f, "take_scene({} → {})", t.scene, t.output),
@@ -529,6 +587,7 @@ mod tests {
             RemoteCommand::BiblePreview("John 3:16".into()),
             RemoteCommand::SongShow("Amazing Grace".into()),
             RemoteCommand::SongPreview("Amazing Grace".into()),
+            RemoteCommand::SongSection(1),
             RemoteCommand::ClearSource("bible".into()),
             RemoteCommand::RestoreSource("bible".into()),
             RemoteCommand::TakeScene(SceneTake { output: "main".into(), scene: "s".into() }),
@@ -564,14 +623,14 @@ mod tests {
                 RemoteCommand::BiblePrev => {}
                 RemoteCommand::AddToQueue => {}
                 RemoteCommand::EventNext | RemoteCommand::EventPrev | RemoteCommand::EventStart(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => {}
-                RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
+                RemoteCommand::BibleActivate(_) | RemoteCommand::BiblePreview(_) | RemoteCommand::SongShow(_) | RemoteCommand::SongPreview(_) | RemoteCommand::SongSection(_) | RemoteCommand::ClearSource(_) | RemoteCommand::RestoreSource(_) | RemoteCommand::TakeScene(_) | RemoteCommand::ReleaseScene(_) => {}
                 RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::StageMessage(_) | RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_) => {}
                 RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) => {}
                 RemoteCommand::AuxTimer(_) => {}
             }
         }
 
-        assert_eq!(cmds.len(), 43);
+        assert_eq!(cmds.len(), 44);
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_adjust","value":1}"#).unwrap(), RemoteCommand::TimerAdjust(1));
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"timer_start"}"#).unwrap(), RemoteCommand::TimerStart);
         let off: RemoteCommand = serde_json::from_str(r#"{"command":"event_offset","value":-5}"#).unwrap();
@@ -625,6 +684,22 @@ mod tests {
         assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"obs_preview","value":"Sermon"}"#).unwrap(), RemoteCommand::ObsPreview("Sermon".into()));
         assert_eq!(RemoteCommand::ObsProgram("Wide".into()).to_string(), "obs_program(Wide)");
         assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"save_scene","value":{"name":"x"}}"#).is_err(), "a scene is needed");
+    }
+
+    #[test]
+    fn desk_console_commands_parse_and_a_plain_reference_still_works() {
+        let plain: RemoteCommand = serde_json::from_str(r#"{"command":"bible_activate","value":"John 3:16"}"#).unwrap();
+        assert_eq!(plain, RemoteCommand::BibleActivate("John 3:16".into()));
+        let with: RemoteCommand = serde_json::from_str(r#"{"command":"bible_activate","value":{"reference":"John 3:16","translation":"YOR"}}"#).unwrap();
+        let RemoteCommand::BibleActivate(ref r) = with else { panic!("bible_activate") };
+        assert_eq!((r.reference(), r.translation().as_deref()), ("John 3:16", Some("YOR")));
+        assert_eq!(with.to_string(), "bible_activate(John 3:16 YOR)");
+        let odd = BibleRef::With { reference: "Ps 23".into(), translation: Some(" <b>KJV</b>\n".into()) };
+        assert_eq!(odd.translation().as_deref(), Some("bKJVb"), "letters and digits only, never markup");
+        assert_eq!(BibleRef::With { reference: "Ps 23".into(), translation: Some("  ".into()) }.translation(), None);
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"song_section","value":-1}"#).unwrap(), RemoteCommand::SongSection(-1));
+        assert!(serde_json::from_str::<RemoteCommand>(r#"{"command":"song_section","value":"next"}"#).is_err());
+        assert_eq!(RemoteCommand::SongSection(1).to_string(), "song_section(+1)");
     }
 
     #[test]

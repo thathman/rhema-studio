@@ -22,6 +22,11 @@ pub trait CommandSink: Send + Sync {
     fn media_file(&self, _file: &str) -> Option<std::path::PathBuf> {
         None
     }
+    /// Answer a joined desk's lookup in this computer's library (`crate::lookup`), already checked
+    /// for its role. An error is said to the desk as it is.
+    fn lookup(&self, _q: &crate::lookup::Lookup) -> Result<serde_json::Value, String> {
+        Err("this host cannot look that up".into())
+    }
 }
 
 /// A sink that adds `"by"` (the sender) to every frontend event it carries.
@@ -145,10 +150,16 @@ impl CommandDispatcher {
                 let payload = serde_json::json!({ "id": id }).to_string();
                 sink.emit_event("remote:event_start", &payload)
             }
-            RemoteCommand::BibleActivate(reference) => sink.emit_event("remote:bible_activate", &serde_json::json!({ "reference": reference }).to_string()),
+            // The translation a Bible desk chose rides along only when it named one (older hosts' events are unchanged).
+            RemoteCommand::BibleActivate(r) => sink.emit_event("remote:bible_activate", &match r.translation() {
+                Some(t) => serde_json::json!({ "reference": r.reference(), "translation": t }),
+                None => serde_json::json!({ "reference": r.reference() }),
+            }.to_string()),
             RemoteCommand::BiblePreview(reference) => sink.emit_event("remote:bible_preview", &serde_json::json!({ "reference": reference.chars().take(120).collect::<String>() }).to_string()),
             RemoteCommand::SongShow(title) => sink.emit_event("remote:song_show", &serde_json::json!({ "title": title.chars().take(120).collect::<String>() }).to_string()),
             RemoteCommand::SongPreview(title) => sink.emit_event("remote:song_preview", &serde_json::json!({ "title": title.chars().take(120).collect::<String>() }).to_string()),
+            // One section at a time, either way.
+            RemoteCommand::SongSection(n) => sink.emit_event("remote:song_section", &serde_json::json!({ "step": (*n).signum() }).to_string()),
             RemoteCommand::ClearSource(id) => sink.emit_event("remote:clear_source", &serde_json::json!({ "id": id }).to_string()),
             RemoteCommand::RestoreSource(id) => sink.emit_event("remote:restore_source", &serde_json::json!({ "id": id }).to_string()),
             RemoteCommand::TakeScene(t) => sink.emit_event("remote:take_scene", &serde_json::json!({ "output": t.output, "scene": t.scene }).to_string()),
@@ -377,6 +388,20 @@ mod tests {
             assert_eq!(event, name);
             assert!(payload.contains(has), "{payload}");
         }
+    }
+
+    #[test]
+    fn desk_console_commands_emit_their_events() {
+        let sink = MockSink::new();
+        let chosen = RemoteCommand::BibleActivate(crate::command::BibleRef::With { reference: "John 3:16".into(), translation: Some("YOR".into()) });
+        CommandDispatcher::dispatch(&chosen, &sink).unwrap();
+        assert_eq!(sink.last_event(), ("remote:bible_activate".to_string(), r#"{"reference":"John 3:16","translation":"YOR"}"#.to_string()));
+        CommandDispatcher::dispatch(&RemoteCommand::BibleActivate("John 3:16".into()), &sink).unwrap();
+        assert_eq!(sink.last_event().1, r#"{"reference":"John 3:16"}"#, "a plain reference is as before");
+        CommandDispatcher::dispatch(&RemoteCommand::SongSection(5), &sink).unwrap();
+        assert_eq!(sink.last_event(), ("remote:song_section".to_string(), r#"{"step":1}"#.to_string()), "one section at a time");
+        CommandDispatcher::dispatch(&RemoteCommand::SongSection(-3), &sink).unwrap();
+        assert_eq!(sink.last_event().1, r#"{"step":-1}"#);
     }
 
     #[test]

@@ -1328,6 +1328,28 @@ Rhema with a saved service (a song and two slides), Desk menu → Your name = "T
 | 10ex.9 | Production → Scenes. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
 | 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
 
+### 10ft. Desk consoles on joined computers: Bible, Worship, Screens, Director (#197)
+
+Two computers on the church network: **A** hosts with a Bible translation or two, songs and the CAC
+hymn book imported, and Auto Bible listening; **B** joins it. Change B's role on A for each part.
+
+| # | Step | Expected | Result |
+|---|------|----------|--------|
+| 10ft.1 | B as **Bible**: the translation list. | It lists A's translations (not B's own), A's active one chosen. | Unverified |
+| 10ft.2 | B: type "John 3:16", Find; change the translation, Find again. | The verse and the two after it show on B under "Preview here only", in the chosen translation. A's screens do not change. | Unverified |
+| 10ft.3 | B: **Activate John 3:16** (Yorùbá chosen). | A puts John 3:16 up in Yorùbá on the Bible feeds (and the main screens, unless a song is up), "by" B in the log. | Unverified |
+| 10ft.4 | B: type words ("all things work together"), Find; pick a result. | A's verses with those words list; the picked one shows in the preview. | Unverified |
+| 10ft.5 | A: say "Psalm 23 verse 1" with Auto Bible listening. B: **Heard** list. | Psalm 23:1 appears on B with a percentage within a few seconds; nothing goes up on A until B presses Activate. | Unverified |
+| 10ft.6 | B as **Worship**: find "CAC 245", then a song by a word of its lyrics. | The hymn and the song list with their numbers; Show puts it up on A from its first slide; Preview puts it in A's Preview only. | Unverified |
+| 10ft.7 | With a song up on A: B **Next section**, **Previous section**; at the last section. | A moves one section (verse to chorus, not slide by slide within a long verse) and never on to the next item; B shows "Chorus (2 of 4)"; Next is greyed at the last section. | Unverified |
+| 10ft.8 | Two worship desks press Next section at the same moment. | The song moves one section; the other desk says "Someone changed this first — look again". | Unverified |
+| 10ft.9 | B as **Bible** or **Stage**: try a section step (e.g. through a script or an old desk). | Refused for the role; nothing changes on A. | Unverified |
+| 10ft.10 | B as **Screens**: the output map. Turn an output off on A; take a scene. | Every output with On/Off and the scene it shows, updated within two seconds; the map has no buttons. In rehearsal it shows the real screens' scenes. | Unverified |
+| 10ft.11 | B as **Present**: the Director board. Unplug a desk; let a check fail on A (OBS off, a screen unplugged). | The same checks as A's Show health; the team list shows each desk's role and Connected / Seen n min ago, never an address. | Unverified |
+| 10ft.12 | A (main desk) with a desk paired: Production → Operators. | The Director board shows below the host card with A's own checks and the team. | Unverified |
+| 10ft.13 | B as Worship, Stage, Screens, Timekeeper or View only. | No Director board and no Heard list on those desks. | Unverified |
+| 10ft.14 | B as **Stage**, with an extra timer on A that belongs to Stage: two stage desks press Start at the same moment. | It starts once; the other desk says "Someone changed this first — look again". | Unverified |
+
 ### 10fk. Host/Join hardening: who is connected, cutting a desk, browser pages, key by default, https, Editor and View only (#162, #197, #63)
 
 Two computers on the church network: **A** hosts (Settings → Remote control, HTTP listener on the

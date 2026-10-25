@@ -5,7 +5,9 @@ const sent: Record<string, unknown>[] = []
 /** What the host answers the next join_command with: a note, or a refusal (as join.rs marks it). */
 let answer: { note?: string; refuse?: string } = {}
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(async (cmd: string, a: { command?: Record<string, unknown> } = {}) => {
+  invoke: vi.fn(async (cmd: string, a: { command?: Record<string, unknown>; asked?: Record<string, unknown> } = {}) => {
+    // The host's song library, as join_lookup answers it (desk consoles).
+    if (cmd === "join_lookup" && a.asked?.what === "songs") return { songs: [{ id: "s1", title: "Great Is Thy Faithfulness", numbers: ["CAC 12"], firstLine: "Great is thy faithfulness", hymn: false }] }
     if (cmd !== "join_command") return null
     sent.push(a.command ?? {})
     const { note, refuse } = answer
@@ -74,9 +76,11 @@ describe("each specialist desk sees only its part", () => {
     expect(await seen("present")).toEqual(["Event clock desk", "Bible desk", "Worship desk", "Scenes desk", "Stage desk"])
   })
 
-  it("a worship desk shows a song by title and takes the lyrics off", async () => {
+  it("a worship desk finds a song in the host's library, shows it and takes the lyrics off", async () => {
     const el = await render("worship")
-    await type(el.querySelector<HTMLInputElement>('[aria-label="Song or hymn title"]')!, "Great Is Thy Faithfulness")
+    await type(el.querySelector<HTMLInputElement>('[aria-label="Song title, words or hymn number"]')!, "CAC 12")
+    await click(button(el, "Find"))
+    expect(el.textContent).toContain("CAC 12")
     await click(button(el, "Show"))
     await click(button(el, "Take it off"))
     expect(sent).toEqual([{ command: "song_show", value: "Great Is Thy Faithfulness" }, { command: "clear_source", value: "song" }])
