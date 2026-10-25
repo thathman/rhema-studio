@@ -1,4 +1,6 @@
 import { BookOpenIcon, ImageIcon, MusicIcon, PresentationIcon, ZapIcon } from "lucide-react"
+import { engageFromItem } from "@/lib/engage"
+import { EngageItemEditor } from "@/studio/engage/quiz-editor"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -68,7 +70,7 @@ export function ItemEditor() {
           )}
           {isSlideItem(item) && <CustomSlideEditor item={item} />}
           {isImageItem(item) && <ImageItemControls item={item} />}
-          {isCueItem(item) && <CueItemEditor item={item} />}
+          {isCueItem(item) && (engageFromItem(item) ? <EngageItemEditor item={item} /> : <CueItemEditor item={item} />)}
           {kind === "verse" && <p className="px-2 pt-3 text-xs text-muted-foreground">Shown in the translation it was added with (or the service's, if the operator overrides it in Present).</p>}
           {!isImageItem(item) && !isCueItem(item) && <BackgroundPicker item={item} />}
           {!isCueItem(item) && <LookAndScene item={item} />}
