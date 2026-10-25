@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.46 · **Updated:** 2026-10-25 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.47 · **Updated:** 2026-10-25 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -23,9 +23,9 @@ The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) i
 | [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
 | [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | OPEN | #414 pins scene layout revisions; broader shared-asset and approved-release revision integrity remains to be implemented and reviewed. |
 | [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | OPEN | #414 ran all frontend tests, typecheck, lint and build. No real desktop, projector, OBS, NDI receiver, TV or network hardware was tested for this branch. |
-| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | NEXT | Verify current behavior on main, then fix and test the shared library selection/Add flow. |
+| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415), stacked on #414: Hymn Book details/shared editor, plus stable-ID selection and close/focus after successful Add across content pickers. On audited main, these suites fail 12 tests (including the #384 queue-order regression fixed by dependency #414); one deduplicated-Add test passes. This branch passes the targeted 13 tests and full 1,774-test suite, typecheck, lint and build. Component tests only; desktop and device acceptance remain open. |
 
-PR #414 is open and unmerged. The existing main CI and open PR baseline are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
+PRs #414 and #415 are open and unmerged. PR #415 depends on #414's queue insertion API; its CI was queued when this snapshot was written. The main CI and open PR baseline are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
@@ -209,6 +209,8 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 **Changes to task status:** maintain a brief revision history below (date, task IDs, PR/issue, verified evidence). Start with explicit PR links and no speculative completion claims.
 
 ## Revision history
+
+- **2026-10-25 (rev 0.47):** #385 and #386 IN PR via stacked PR #415; baseline suites reproduced 12 failures (including the #384 regression addressed by #414) and 1 pass; branch tests pass (13 focused, 1,774 full-suite), typecheck, lint and build pass. UI/device acceptance remains open.
 
 - **2026-10-21 (rev 0.43):** PRs #111–#122 merged; stale "later" notes in done criteria replaced with the PRs that did the work.
 - **2026-10-21 (rev 0.42):** PRs #96–#110 merged (see DEVELOPMENT-STATUS); QA-001 unsigned installer artifact built from `main`.

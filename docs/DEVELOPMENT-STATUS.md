@@ -6,12 +6,13 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Current takeover snapshot
 
-- Target repository: `thathman/rhema-studio`; verified `main` head is `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). The focused work is in [PR #414](https://github.com/thathman/rhema-studio/pull/414), branch `fix/p0-live-scene-and-queue-insertions`; it is open and unmerged.
+- Target repository: `thathman/rhema-studio`; verified `main` head is `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). [PR #414](https://github.com/thathman/rhema-studio/pull/414) is open and unmerged on `fix/p0-live-scene-and-queue-insertions`. [PR #415](https://github.com/thathman/rhema-studio/pull/415) is open and unmerged on `fix/hymn-picker-workflow`, stacked on #414.
 - Current PR #414 addresses #383 and #384. It adds output scene snapshots, makes saving a scene leave on-air output unchanged until Take, and replaces Add-then-reorder behavior with the queue store's insertion API. It does not complete #398 shared-asset revision integrity or #411 physical-system acceptance.
+- Current PR #415 addresses #385 and #386. Hymn Book selection opens ordered bilingual details and the shared song editor. Successful Add paths pass the inserted queue ID back to Prepare, close the picker and restore focus; stable IDs preserve selection between duplicate Scripture references. It depends on #414's insertion API. No schema or migration changes.
 - Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the repository implementation contract. The PRD and task history below predate this issue batch.
 - Latest CI on target `main` is [successful on the verified head](https://github.com/thathman/rhema-studio/actions/runs/40158839409).
-- Open PRs at takeover: [#4](https://github.com/thathman/rhema-studio/pull/4), [#278](https://github.com/thathman/rhema-studio/pull/278), [#352](https://github.com/thathman/rhema-studio/pull/352), and [#367](https://github.com/thathman/rhema-studio/pull/367). #352 and #367 warn that merging publishes the website; none was merged as part of this work.
-- Next implementation sequence: #385 and #386. Then continue the verified issue index; leave #398 and #411 open until their remaining work is demonstrated.
+- Open PRs at takeover: [#4](https://github.com/thathman/rhema-studio/pull/4), [#278](https://github.com/thathman/rhema-studio/pull/278), [#352](https://github.com/thathman/rhema-studio/pull/352), and [#367](https://github.com/thathman/rhema-studio/pull/367). Since takeover, #414 and #415 were opened. #352 and #367 warn that merging publishes the website; none was merged as part of this work.
+- Next implementation sequence: #387, then continue the verified issue index; leave #398 and #411 open until their remaining work is demonstrated.
 
 ## Integrated `main`
 
@@ -25,7 +26,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- Current open PRs are listed in the takeover snapshot above; check GitHub for changes after 2026-10-25.
+- Current open PRs include #414 and #415, stacked as noted above, plus the takeover PRs listed above. #415 CI was queued on GitHub when this snapshot was written; check the PR for updated checks.
 
 ## Active milestone
 
@@ -33,7 +34,9 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- PR #414 local branch: `bunx vitest run` — 243 files, 1,762 tests passed; `bun run typecheck`, `bun run lint`, and `bun run build` passed. The build retains existing Vite mixed-import and large-chunk warnings.
+- PR #414 local branch: `bunx vitest run` — 243 files, 1,762 tests passed; `bun run typecheck`, `bun run lint`, and `bun run build` passed. The build retains existing Vite mixed-import and large-chunk warnings. GitHub CI for #414 passed.
+- PR #415 local branch: the new 3 focused files / 13 tests pass; full `bunx vitest run` passes 245 files / 1,774 tests; `bun run typecheck`, `bun run lint`, `bun run build`, and `git diff --check` pass. Against audited main, these suites produced 12 failures (including the #384 queue-order regression addressed by #414) and 1 pass. The build retains existing Vite mixed-import and large-chunk warnings. GitHub CI was in progress at snapshot time.
+- No headed browser or desktop interaction session was available for #415. Its observed UI evidence is component interaction in jsdom; no display, OBS, network camera, receiver or other physical device was tested. Do not treat #411 or hardware acceptance as complete.
 - CI on target `main`: the run on the verified head is successful (linked above). No Rust source changed in PR #414, so no separate Rust test run was performed for that branch.
 
 ## Unverified (release-acceptance blockers, not development blockers)
