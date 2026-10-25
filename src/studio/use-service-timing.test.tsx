@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
@@ -23,8 +23,12 @@ function Probe() {
   return <span>{timing ? `${hhmm(timing.plannedEnd)} ${hhmm(timing.expectedEnd)}` : "none"}</span>
 }
 
+afterEach(() => vi.useRealTimers())
+
 describe("one timing for Prepare and Present", () => {
   it("gives the planned and expected end from the run of show", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(at(10, 5))
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     useQueueStore.setState({ items: [slide("a", 10), slide("b", 20)], headers: [{ id: "m", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }] })
     useJournalStore.setState({ entries: [{ at: at(10, 5), mono: 0, kind: "event", label: "a", itemId: "a" }] })
