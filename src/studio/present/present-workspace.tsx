@@ -1,4 +1,5 @@
 import { outputOnAir } from "@/lib/output-on-air"
+import { EngageHostControl } from "@/studio/engage/host-control"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
 import { useEffect, useSyncExternalStore } from "react"
@@ -96,6 +97,7 @@ export function PresentWorkspace() {
               onClick={openOutputs}
               title="Open outputs"
             />
+            <EngageHostControl />
             <div role="group" aria-label="Present view" className="ml-2 flex rounded-md border border-border p-0.5">
               {(["standard", "production"] as const).map((v) => (
                 <button
