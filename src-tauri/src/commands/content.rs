@@ -71,8 +71,8 @@ pub fn content_create_program(
 }
 
 #[tauri::command]
-pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Option<String>, title: String, body: String) -> CmdResult<ServiceLogSummary> {
-    with_db(&state, |db| db.save_service_log(program_id.as_deref(), &title, &body))
+pub fn content_save_service_log(state: State<'_, ContentState>, program_id: Option<String>, title: String, body: String, transcript: Option<String>) -> CmdResult<ServiceLogSummary> {
+    with_db(&state, |db| db.save_service_log(program_id.as_deref(), &title, &body, transcript.as_deref()))
 }
 
 /// Song usage between two ISO dates, for licence (CCLI) reports.
@@ -89,6 +89,12 @@ pub fn content_list_service_logs(state: State<'_, ContentState>, query: Option<S
 #[tauri::command]
 pub fn content_get_service_log(state: State<'_, ContentState>, id: String) -> CmdResult<Option<ServiceLog>> {
     with_db(&state, |db| db.get_service_log(&id))
+}
+
+/// Remove the transcripts of kept logs older than `days` days (the church's retention; 0 keeps them).
+#[tauri::command]
+pub fn content_remove_old_log_transcripts(state: State<'_, ContentState>, days: u32) -> CmdResult<usize> {
+    with_db(&state, |db| db.remove_old_log_transcripts(days))
 }
 
 #[tauri::command]

@@ -15,22 +15,11 @@ import { useShellStore } from "@/studio/shell-store"
 import { ShortcutsDialog } from "@/studio/shell/shortcuts-dialog"
 import { switchMode } from "@/stores/companion-mode"
 import { useSetupStatus } from "@/studio/setup/use-setup-status"
-
-/** The roles a host can give a joined computer, as the Desk menu names them. */
-const ROLES: Record<string, string> = { timekeeper: "Timekeeper", bible: "Bible", screens: "Screens", present: "Present", configure: "Present and settings" }
-
-/** What each role lets this desk do (the host checks every command again; it always keeps every control). */
-const ROLE_PERMITS: Record<string, string> = {
-  timekeeper: "Start and move the event clock. Nothing on the screens.",
-  bible: "Send passages to the Bible source. Nothing else on the screens.",
-  screens: "Take congregation scenes. Nothing else.",
-  present: "Move through the service, send Bible passages and take scenes.",
-  configure: "Everything Present does, and the host's settings too.",
-}
+import { roleLabel, rolePermits } from "@/lib/remote-roles"
 
 /** What this desk is, honestly: the main desk on its own, or the role a host gave it while joined. */
 function deskRole(status: JoinStatus, me: { role: string } | null, host: string): string {
-  if (status === "connected" && me) return `${ROLES[me.role] ?? me.role} desk · joined ${host || "a host"}`
+  if (status === "connected" && me) return `${roleLabel(me.role)} desk · joined ${host || "a host"}`
   if ((status === "connecting" || status === "reconnecting") && host) return `Main desk · joining ${host}…`
   return "Main desk"
 }
@@ -223,7 +212,7 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
           <div role="group" aria-labelledby="desk-role" className="rounded-md border border-border px-2.5 py-2">
             <p id="desk-role" className="text-xs font-semibold">{role}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {joined ? ROLE_PERMITS[joined.role] ?? "What the host allows." : "Every control, on this computer. Desks that join it do only what their role allows."}
+              {joined ? rolePermits(joined.role) : "Every control, on this computer. Desks that join it do only what their role allows."}
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {joined || status !== "off" ? (

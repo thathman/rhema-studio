@@ -132,6 +132,8 @@ struct Feed {
     /// The newest frame a page said it drew, and when (receiver trust, #246 item 9).
     acked: u64,
     acked_at: Option<std::time::Instant>,
+    /// When the newest frame was published, for how long it took a page to draw it (#246 C17).
+    published_at: Option<std::time::Instant>,
     /// What its pages last said about the cameras they play (#213).
     video: crate::feed_video::FeedVideo,
     /// The page's clock minus the host's (ms), the largest a page said lately, and when (#196: a TV
@@ -158,7 +160,7 @@ pub struct FeedStatus {
 
 impl Feed {
     fn new(token: String) -> Self {
-        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
+        Self { token, tvs: Vec::new(), current: None, seq: 0, tx: broadcast::channel(16).0, acked: 0, acked_at: None, published_at: None, video: crate::feed_video::FeedVideo::default(), clock: None }
     }
 
     /// Whether a key opens this feed: the feed's own (`Some(None)`) or a paired TV's (`Some(Some(tv))`).
@@ -205,18 +207,22 @@ impl FeedHub {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(f) = feeds.get_mut(id) {
             f.seq += 1;
+            f.published_at = Some(std::time::Instant::now());
             f.current = Some((f.seq, json.clone()));
             let _ = f.tx.send((f.seq, json));
         }
     }
 
-    /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent).
-    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> bool {
+    /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent). Err: refused.
+    /// `Ok(Some(ms))`: the first page to draw the newest frame, `ms` after it was published (#246 C17).
+    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> Result<Option<u64>, ()> {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(f) = feeds.get_mut(id).filter(|f| f.admits(token).is_some()) else {
-            return false;
-        };
+        let f = feeds.get_mut(id).filter(|f| f.admits(token).is_some()).ok_or(())?;
+        let mut first = None;
         if seq <= f.seq && seq >= f.acked {
+            if seq == f.seq && seq > f.acked {
+                first = f.published_at.map(|t| u64::try_from(t.elapsed().as_millis()).unwrap_or(u64::MAX));
+            }
             f.acked = seq;
             f.acked_at = Some(std::time::Instant::now());
         }
@@ -229,7 +235,7 @@ impl FeedHub {
             let keep = f.clock.filter(|(old, at)| now.duration_since(*at) < CLOCK_REPORT_FOR && old.abs() > skew.abs());
             f.clock = Some(keep.unwrap_or((skew, now)));
         }
-        true
+        Ok(first)
     }
 
     /// How the feed is doing, for the output card.
@@ -1688,7 +1694,17 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
     if !state.rate.allow(peer.ip()) {
         return StatusCode::TOO_MANY_REQUESTS;
     }
-    if state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000))) { StatusCode::NO_CONTENT } else { StatusCode::FORBIDDEN }
+    match state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000))) {
+        Err(()) => StatusCode::FORBIDDEN,
+        Ok(first) => {
+            // The first page to draw a new frame: the app logs which screen showed what, and how soon
+            // (#246 C17). Once per frame; the app keeps only content changes.
+            if let Some(after_ms) = first {
+                let _ = state.sink.emit_event("feed:acked", &serde_json::json!({ "id": id, "seq": ack.seq, "afterMs": after_ms }).to_string());
+            }
+            StatusCode::NO_CONTENT
+        }
+    }
 }
 
 /// `GET /api/v1/feed/{id}/events?k=<secret>`: the feed's frames as server-sent events.
@@ -2379,6 +2395,28 @@ mod tests {
         let mut h = result.handle;
         h.stop();
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Per-target acks (#246 C17): the first page to draw a new frame is reported once, with how soon.
+    #[test]
+    fn the_first_draw_of_a_new_frame_is_reported_once() {
+        let feeds = new_feed_hub();
+        feeds.set(&[("tv".into(), "s3cret".into())]);
+        assert_eq!(feeds.ack("tv", "s3cret", 0, None, None), Ok(None), "nothing published yet");
+        feeds.publish("tv", "{}".into());
+        assert_eq!(feeds.ack("tv", "wrong", 1, None, None), Err(()), "refused without the secret");
+        assert!(matches!(feeds.ack("tv", "s3cret", 1, None, None), Ok(Some(ms)) if ms < 5_000), "first draw of frame 1");
+        assert_eq!(feeds.ack("tv", "s3cret", 1, None, None), Ok(None), "a page re-acking the same frame is not news");
+        feeds.publish("tv", "{}".into());
+        feeds.publish("tv", "{}".into());
+        assert_eq!(feeds.ack("tv", "s3cret", 2, None, None), Ok(None), "an older frame than the newest");
+        assert!(matches!(feeds.ack("tv", "s3cret", 3, None, None), Ok(Some(_))), "the newest frame, first drawn");
+        assert_eq!(feeds.ack("tv", "s3cret", 3, None, None), Ok(None));
+        // A paired TV acks with its own key (#198): its first draw counts the same.
+        feeds.set_keys(&[FeedKeys { id: "tv".into(), token: "s3cret".into(), tvs: vec![("192.168.1.40:8095".into(), "tv-own-key".into())] }]);
+        feeds.publish("tv", "{}".into());
+        assert!(matches!(feeds.ack("tv", "tv-own-key", 4, None, None), Ok(Some(_))), "a TV's own key opens the ack too");
+        assert_eq!(feeds.ack("tv", "s3cret", 4, None, None), Ok(None), "the second page on the same frame is not news");
     }
 
     async fn ack_clock(port: u16, clock: i64) -> String {

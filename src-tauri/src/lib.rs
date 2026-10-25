@@ -220,6 +220,7 @@ pub fn run() {
             commands::media::church_folder_open,
             commands::content::content_get_service_log,
             commands::content::content_delete_service_log,
+            commands::content::content_remove_old_log_transcripts,
             commands::content::content_list_song_attachments,
             commands::content::content_add_song_attachment,
             commands::content::content_remove_song_attachment,

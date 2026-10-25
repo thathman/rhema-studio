@@ -38,6 +38,8 @@ import { TalkDevices, TalkRulesSettings } from "@/studio/talk"
 import { useAudioTest } from "@/hooks/use-audio-test"
 import { useBibleStore, useSettingsStore } from "@/stores"
 import { useTranscriptStore } from "@/stores/transcript-store"
+import { retentionWords } from "@/lib/journal-transcript"
+import { TRANSCRIPT_RETENTION_DAYS } from "@/stores/settings-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dialog"
 import { markSearchHits, searchElsewhere, searchSettings, searchWords, type ElsewhereId } from "@/lib/settings-search"
@@ -390,6 +392,33 @@ function SpeechSection() {
           </p>
         </div>
       )}
+      <TranscriptRetention />
+    </div>
+  )
+}
+
+/** How long a transcript kept with a service log stays (#246 C17): the church's choice, applied to every kept log. */
+function TranscriptRetention() {
+  const days = useSettingsStore((s) => s.transcriptRetentionDays)
+  const setDays = useSettingsStore((s) => s.setTranscriptRetentionDays)
+  return (
+    <div className="flex flex-col gap-2">
+      <label htmlFor="transcript-retention" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Transcripts in kept logs
+      </label>
+      <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+        <SelectTrigger id="transcript-retention" aria-label="Keep transcripts in kept logs" className="h-8 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TRANSCRIPT_RETENTION_DAYS.map((d) => (
+            <SelectItem key={d} value={String(d)}>Keep {retentionWords(d)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        What was said goes into a service log only when you tick it for that log. Older transcripts are taken out of their logs (the log stays) when Rhema starts and when you change this. Live speech is never saved on its own.
+      </p>
     </div>
   )
 }

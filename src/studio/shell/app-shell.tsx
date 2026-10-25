@@ -46,6 +46,7 @@ import "@/stores/on-live-cues"
 import "@/stores/stage-time-warnings"
 import "@/stores/stage-finish"
 import "@/lib/app-tick"
+import { removeOldTranscripts } from "@/lib/journal-transcript"
 
 /** What the top bar calls each page. */
 const TITLES: Record<Workspace, string> = { home: "Overview", prepare: "Service builder", present: "Live console", production: "Production control", library: "Library", design: "Design studio", team: "Team", archive: "Archive", settings: "Settings", more: "More tools" }
@@ -96,6 +97,9 @@ export function AppShell() {
   useEffect(() => startCountdownChime(), [])
   // Browser feeds: the LAN listener knows each feed and its secret.
   useEffect(() => startBrowserFeeds(), [])
+  // Kept transcripts older than the church allows lose their transcript (#246 C17), at start and on a change.
+  const transcriptDays = useSettingsStore((s) => s.transcriptRetentionDays)
+  useEffect(() => { void removeOldTranscripts(transcriptDays) }, [transcriptDays])
   // Cameras (#209): the camera page's list, and the camera router when cameras are added.
   useEffect(() => startCameras(), [])
   // What was on the screens, for recovery after an unexpected close.

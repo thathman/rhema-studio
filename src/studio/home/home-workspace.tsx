@@ -1,3 +1,4 @@
+import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { useSettingsStore } from "@/stores/settings-store"
 import { openProductionTab } from "@/studio/production/production-tab"
 import { approvalState } from "@/lib/approval"
@@ -160,6 +161,7 @@ export function HomeWorkspace() {
                         {c.fixLabel ?? "Fix"}
                       </Button>
                     )}
+                    {c.dismiss && <Button size="sm" variant="ghost" onClick={() => useDismissedChecks.getState().dismiss(c.dismiss!)}>Got it</Button>}
                   </li>
                 ))}
               </ul>

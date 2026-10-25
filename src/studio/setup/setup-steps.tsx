@@ -70,7 +70,7 @@ export function ChurchStep({ error }: { error: string | null }) {
         />
       </Field>
       <div className="rounded-lg border border-dashed border-border bg-muted/40 px-4 py-3">
-        <p className="text-[0.625rem] font-semibold text-muted-foreground">Home will read</p>
+        <p className="text-[0.6875rem] font-semibold text-muted-foreground">Home will read</p>
         <p className="mt-1 truncate text-[0.6875rem] font-extrabold tracking-[0.16em] uppercase" title={shown ? `${shown} workspace` : "Set up your church"}>{shown ? `${shown} workspace` : "Set up your church"}</p>
       </div>
       <Field id="setup-campus" label="Campus or ministry (optional)" hint="Only on this computer.">

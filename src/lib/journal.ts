@@ -9,7 +9,7 @@ export interface JournalEntry {
   /** Monotonic ms, for durations (immune to clock changes). */
   mono: number
   /** "event": a run-of-show event started (the event clock, ADR 0001); the others are what the screens and desk did. */
-  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing" | "event" | "source" | "recovery" | "scene"
+  kind: "live" | "clear" | "restore" | "quick" | "message" | "rehearsal" | "remote" | "obs" | "sound" | "timing" | "event" | "source" | "recovery" | "scene" | "shown"
   /** Reference, title or message text. */
   label: string
   itemId?: string | null
@@ -19,6 +19,8 @@ export interface JournalEntry {
   by?: string
   /** The source's or scene Take's revision (one count for both): higher is newer. */
   revision?: number
+  /** A "shown" entry (#246 C17): the screen whose page first drew the new content, and how soon (ms). */
+  afterMs?: number
   /** A scene entry: the output it was taken to or released from, and the scene (absent: back to its own feed). */
   outputId?: string
   sceneId?: string
@@ -39,7 +41,7 @@ export function actualDurations(entries: JournalEntry[], nowMono: number): Actua
     .filter((e) => e.kind === "live" || e.kind === "quick" || e.kind === "restore")
     .map((e) => {
       const i = entries.indexOf(e)
-      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "source" && n.kind !== "recovery" && n.kind !== "scene")
+      const next = entries.slice(i + 1).find((n) => n.kind !== "message" && n.kind !== "rehearsal" && n.kind !== "remote" && n.kind !== "obs" && n.kind !== "sound" && n.kind !== "timing" && n.kind !== "event" && n.kind !== "source" && n.kind !== "recovery" && n.kind !== "scene" && n.kind !== "shown")
       return { entry: e, itemId: e.itemId ?? null, label: e.label, ms: Math.max(0, (next?.mono ?? nowMono) - e.mono) }
     })
 }
@@ -100,14 +102,19 @@ export interface RundownLine {
   inserted?: boolean
 }
 
+/** Line breaks (and other control characters) in typed words as spaces. */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const oneLine = (s: string) => s.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ")
+
 export function formatJournal(title: string, entries: JournalEntry[], nowMono: number, planned: Map<string, number> = new Map(), rundown?: RundownLine[]): string {
   const lines = [`${title}`, `Service log — ${entries[0] ? new Date(entries[0].at).toLocaleDateString() : ""}`, ""]
   const durations = actualDurations(entries, nowMono)
   for (const e of entries) {
     const d = durations.find((x) => x.entry === e)
-    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", source: "source", recovery: "RECOVERED", scene: "SCENE" }[e.kind]
+    const verb = { live: "LIVE", clear: "clear", restore: "restore", quick: "quick screen", message: "stage message", rehearsal: "rehearsal", remote: "remote", obs: "OBS", sound: "sound", timing: "timer", event: "EVENT", source: "source", recovery: "RECOVERED", scene: "SCENE", shown: "shown" }[e.kind]
     const dur = d && (e.kind === "live" || e.kind === "quick" || e.kind === "restore") ? `  (${mmss(d.ms)})` : ""
-    lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${e.label}${dur}${e.source && e.kind !== "source" ? `  · ${e.source}` : ""}`)
+    // One entry, one line: typed words (a notice, a hold reason, a scene name) never start a line of their own.
+    lines.push(`${hhmm(e.at)}  ${verb.padEnd(13)} ${oneLine(e.label)}${dur}${e.source && e.kind !== "source" ? `  · ${oneLine(e.source)}` : ""}`)
   }
   const totals = actualByItem(entries, nowMono)
   const versus = (ms: number | undefined, plan: number | undefined) =>

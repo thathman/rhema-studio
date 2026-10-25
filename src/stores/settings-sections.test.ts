@@ -158,7 +158,7 @@ describe("settings in three parts: church, machine, operator (#298 M11)", () => 
     const st = useSettingsStore.getState()
     expect(settingsSection(st, "operator").operatorName).toBe("Tolu")
     expect(settingsSection(st, "machine").gain).toBe(1.2)
-    expect(Object.keys(settingsSection(st, "church")).sort()).toEqual(["brandKit", "customMacros", "hymnFirstLanguage", "requireApproval", "talkRules"])
+    expect(Object.keys(settingsSection(st, "church")).sort()).toEqual(["brandKit", "customMacros", "hymnFirstLanguage", "requireApproval", "talkRules", "transcriptRetentionDays"])
   })
 })
 

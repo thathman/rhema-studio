@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { cameraChangeBetween, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { monotonicNow } from "@/stores/timer-store"
@@ -72,12 +72,15 @@ export function journalText(): string {
 /** Something was logged since the log was last kept. */
 export const journalUnkept = () => useJournalStore.getState().added > useJournalStore.getState().keptAt
 
-/** Keep the log in the library (Earlier logs); `extra` is appended (the transcript, when ticked). */
-export async function keepJournal(extra = ""): Promise<void> {
+/**
+ * Keep the log in the library (Earlier logs); `transcript` (what was said, when ticked) is kept
+ * apart from the log, so the church's retention removes only it (#246 C17).
+ */
+export async function keepJournal(transcript = ""): Promise<void> {
   const current = useServiceStore.getState().current
   const added = useJournalStore.getState().added
   const title = `${current?.title ?? "Service"} — ${new Date().toLocaleDateString()}`
-  await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: journalText() + extra })
+  await invoke("content_save_service_log", { programId: current?.id ?? null, title, body: journalText(), transcript: transcript || null })
   useJournalStore.setState({ keptAt: added })
 }
 
@@ -196,7 +199,17 @@ useBroadcastStore.subscribe((s, prev) => {
       add(b.on ? { kind: "message", label: `${b.message ?? s.stageMessage}${by}`, ...meta } : { kind: "message", label: `cleared${b.message ? `: ${b.message}` : ""}${by}`, ...meta })
     } else {
       const name = id.slice("camera:".length)
-      const label = useSettingsStore.getState().cameras.find((c) => c.name === name)?.label ?? name
+      const cameras = useSettingsStore.getState().cameras
+      const own = cameras.find((c) => c.name === name)
+      const label = own?.label ?? name
+      // Retry, backup and Freeze are controls, not a hide or a restore (#213): "Pulpit camera: frozen · by Tolu".
+      const change = a?.on === b.on || !a ? cameraChangeBetween(a, b) : null
+      if (change) {
+        const backup = own?.backup ? cameraWords(cameras.find((c) => c.name === own.backup)?.label ?? own.backup) : "its backup"
+        const words = { retry: "retried", backup: `switched to backup ${backup}`, unbackup: "back on its own camera", freeze: "frozen", unfreeze: "unfrozen" }[change]
+        add({ kind: "source", label: `${cameraWords(label)}: ${words}${by}`, source: "Cameras", ...meta })
+        continue
+      }
       add({ kind: "source", label: `${cameraWords(label)} ${b.on ? "back in scenes" : "hidden from scenes"}${by}`, source: "Cameras", ...meta })
     }
   }

@@ -1,4 +1,4 @@
-import { transcriptSection } from "@/lib/journal-transcript"
+import { retentionWords, transcriptSection } from "@/lib/journal-transcript"
 import { useTranscriptStore } from "@/stores/transcript-store"
 import { open as openDialog } from "@tauri-apps/plugin-dialog"
 import { useEffect, useState } from "react"
@@ -254,6 +254,7 @@ export function JournalBlock() {
   // AR-004: the transcript goes into a log only when ticked for that log; never by default.
   const [withTranscript, setWithTranscript] = useState(false)
   const provider = useSettingsStore((s) => (s.sttProvider === "deepgram" ? "Deepgram (cloud)" : "Whisper (on this computer)"))
+  const retention = useSettingsStore((s) => s.transcriptRetentionDays)
   const keepLog = async () => {
     setBusy(true)
     try {
@@ -291,7 +292,7 @@ export function JournalBlock() {
           <span>
             Include what was said ({finalCount} recognised passage{finalCount === 1 ? "" : "s"})
             <span className="block text-[0.6875rem] text-muted-foreground">
-              Machine-recognised speech, not checked. It then stays in the kept log (searchable under Earlier logs) until the log is deleted. Keep it only if the people speaking know it is recorded.
+              Machine-recognised speech, not checked. It then stays in the kept log (searchable under Earlier logs) {retentionWords(retention)} (Settings → Speech). Keep it only if the people speaking know it is recorded.
             </span>
           </span>
         </label>

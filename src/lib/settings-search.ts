@@ -23,8 +23,8 @@ export const SETTINGS_SEARCH_INDEX: Record<SettingsSection, { labels: string[]; 
     keywords: ["microphone", "mic", "sound", "level", "volume", "gain", "audio", "headset", "headphones", "talk", "intercom", "comms"],
   },
   speech: {
-    labels: ["Provider", "Cloud (Deepgram)", "Local (Whisper)", "Deepgram API Key", "Withdraw"],
-    keywords: ["transcription", "listening", "speech", "api key", "cloud keys", "key", "offline", "consent"],
+    labels: ["Provider", "Cloud (Deepgram)", "Local (Whisper)", "Deepgram API Key", "Withdraw", "Transcripts in kept logs"],
+    keywords: ["transcription", "listening", "speech", "api key", "cloud keys", "key", "offline", "consent", "transcript", "retention", "privacy"],
   },
   remote: {
     labels: [

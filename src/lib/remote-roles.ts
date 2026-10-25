@@ -31,5 +31,10 @@ export function roleLabel(role: string): string {
   return r ? r.name : role
 }
 
+/** What a role lets its desk do, in plain words (the Desk menu, Operators); a role this build does not know says so. */
+export function rolePermits(role: string): string {
+  return REMOTE_ROLES.find((x) => x.id === role)?.may ?? "What the host allows."
+}
+
 /** Whether a desk with this role may make or change scenes (Screens, settings, Editor; a camera desk its camera boxes). */
 export const editsScenes = (role: string | undefined): boolean => role === "screens" || role === "configure" || role === "camera" || role === "editor"

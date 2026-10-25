@@ -619,6 +619,17 @@ export function cameraControlled(cur: StateSource | undefined, change: CameraCha
   return next
 }
 
+/**
+ * Which operator control changed a camera source between two states (Retry, backup, Freeze), or null
+ * for a hide or a restore. The service log names the control, not "back in scenes" (#213).
+ */
+export function cameraChangeBetween(a: StateSource | undefined, b: StateSource): CameraChange | null {
+  if ((b.retry ?? 0) > (a?.retry ?? 0)) return "retry"
+  if (!!b.backup !== !!a?.backup) return b.backup ? "backup" : "unbackup"
+  if (!!b.hold !== !!a?.hold) return b.hold ? "freeze" : "unfreeze"
+  return null
+}
+
 /** The same as a patch, to go with the change it records in one update (none in rehearsal). */
 function sourceMark(id: StateSourceId, on: boolean, extra: SourceExtra = {}): Pick<BroadcastState, "stateSources"> | Record<string, never> {
   const s = useBroadcastStore.getState()
@@ -1331,7 +1342,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (s.rehearsal) return
     const id = cameraSourceId(name)
     const cur = s.stateSources[id]
-    markSource(id, cur?.on !== false, cameraControlled(cur, change))
+    // A control keeps the camera as it was (in scenes or hidden): the log names the control from the change.
+    markSource(id, cur?.on ?? true, cameraControlled(cur, change))
     get().syncBroadcastOutput()
   },
   saveScene: (scene) => {

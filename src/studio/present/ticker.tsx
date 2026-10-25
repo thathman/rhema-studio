@@ -104,9 +104,9 @@ export function TickerRow() {
       <span className="ml-auto flex shrink-0 items-center gap-2">
         <TickerControl />
         {ticker ? (
-          <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().setTicker(null)}><SquareIcon /> Stop<span className="max-[1200px]:sr-only"> ticker</span></Button>
+          <Button size="sm" variant="outline" title="Stop the ticker (Shift+T)" onClick={() => useBroadcastStore.getState().setTicker(null)}><SquareIcon /> Stop<span className="max-[1200px]:sr-only"> ticker</span></Button>
         ) : (
-          <Button size="sm" disabled={!hasWords} onClick={() => void take()} title={hasWords ? undefined : "Type the announcements first (Ticker)"}><PlayIcon /> Take<span className="max-[1200px]:sr-only"> ticker live</span></Button>
+          <Button size="sm" disabled={!hasWords} onClick={() => void take()} title={hasWords ? "Take the ticker live (Shift+T)" : "Type the announcements first (Ticker)"}><PlayIcon /> Take<span className="max-[1200px]:sr-only"> ticker live</span></Button>
         )}
       </span>
     </div>

@@ -15,6 +15,7 @@ import { defaultSetup } from "@/lib/setup-readiness"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
+import { REMOTE_ROLES } from "@/lib/remote-roles"
 import { DeskMenu } from "./desk-menu"
 
 /** The Desk menu at the foot of the sidebar (#299): name, role, Light/Dark/System, Settings, setup. */
@@ -164,9 +165,23 @@ describe("the Desk menu", () => {
     const leave = vi.fn(async () => {})
     await act(async () => useJoin.setState({ status: "connected", me: { name: "Ade", role: "timekeeper" }, leave }))
     await openMenu()
-    expect(document.body.textContent).toContain("Start and move the event clock")
+    expect(document.body.textContent).toContain("Moves the event clock")
     await act(async () => row("Leave this host").click())
     expect(leave).toHaveBeenCalledTimes(1)
+  })
+
+  it("names every joined role and what it may do, from the one role list (#299)", async () => {
+    for (const r of REMOTE_ROLES) {
+      await act(async () => useJoin.setState({ status: "connected", me: { name: "Ade", role: r.id } }))
+      expect(trigger().getAttribute("aria-label")).toContain(`${r.name} desk · joined`)
+      await openMenu()
+      expect(document.body.textContent).toContain(r.may)
+      expect(document.body.textContent).not.toContain("What the host allows.")
+      await openMenu()
+    }
+    await act(async () => useJoin.setState({ status: "connected", me: { name: "Ade", role: "future-role" } }))
+    await openMenu()
+    expect(document.body.textContent).toContain("What the host allows.")
   })
 
   it("keeps the last session's screens after Not now, and puts them back only after a second click (#299 1.18)", async () => {

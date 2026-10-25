@@ -179,6 +179,9 @@ export interface SettingsState {
   /** CL-002: hold the first go-live of a service that is not approved as it stands (off by default). */
   requireApproval: boolean
   setRequireApproval: (on: boolean) => void
+  /** How long a transcript kept with a service log stays (#246 C17), in days; 0: until the log is deleted. */
+  transcriptRetentionDays: number
+  setTranscriptRetentionDays: (days: number) => void
   /** The church folder (NAS or synced) where services are published and opened; "" = not set (#72). */
   churchFolder: string
   setChurchFolder: (folder: string) => void
@@ -322,6 +325,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   customMacros: [],
   churchFolder: "",
   requireApproval: false,
+  transcriptRetentionDays: 0,
   cloudSpeechConsentAt: "",
   openedPackages: [],
   openedFrom: {},
@@ -424,6 +428,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCustomMacros: (customMacros) => set({ customMacros }),
   setCloudSpeechConsent: (agreed) => set({ cloudSpeechConsentAt: agreed ? new Date().toISOString() : "" }),
   setRequireApproval: (requireApproval) => set({ requireApproval }),
+  setTranscriptRetentionDays: (days) => set({ transcriptRetentionDays: validRetentionDays(days) ? days : 0 }),
   setChurchFolder: (churchFolder) => set({ churchFolder: churchFolder.trim() }),
   noteOpenedFrom: (programId, from) => set((s) => ({ openedFrom: Object.fromEntries([...Object.entries(s.openedFrom).filter(([k]) => k !== programId), [programId, from]].slice(-1000)) })),
   // ponytail: newest 2000 read comments; a very long-lived template could see old ones as new again. Raise the cap if that happens.
@@ -448,6 +453,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
 }))
 
 /** The companion's delay buffer choices (ms); a saved value must be a whole number in this range. */
+/** The choices for how long kept transcripts stay (0: until the log is deleted). */
+export const TRANSCRIPT_RETENTION_DAYS = [0, 30, 90, 365] as const
+export function validRetentionDays(days: unknown): days is number {
+  return typeof days === "number" && (TRANSCRIPT_RETENTION_DAYS as readonly number[]).includes(days)
+}
+
 export const COMPANION_LATENCY_MS = { min: 80, max: 1000 }
 export function validCompanionLatency(ms: unknown): ms is number {
   return typeof ms === "number" && Number.isInteger(ms) && ms >= COMPANION_LATENCY_MS.min && ms <= COMPANION_LATENCY_MS.max
@@ -480,6 +491,8 @@ function acceptable(key: string, value: unknown): boolean {
     }
     case "companionLatencyMs":
       return validCompanionLatency(value)
+    case "transcriptRetentionDays":
+      return validRetentionDays(value)
     case "obsProfiles":
       return Array.isArray(value)
     case "lanAddressAtService":
@@ -544,7 +557,7 @@ function acceptable(key: string, value: unknown): boolean {
  * Every saved setting is in exactly one part (settings-sections.test.ts checks it).
  */
 export const SETTINGS_SECTIONS = {
-  church: ["brandKit", "customMacros", "requireApproval", "hymnFirstLanguage", "talkRules"],
+  church: ["brandKit", "customMacros", "requireApproval", "hymnFirstLanguage", "talkRules", "transcriptRetentionDays"],
   machine: [
     "setup",
     "churchFolder",

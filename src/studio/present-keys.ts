@@ -2,7 +2,7 @@
  * Keyboard mapping for the Standard present view. Pure so it is testable
  * without a DOM; the hook in present-workspace wires it to `window`.
  */
-export type PresentKeyAction = "next" | "prev" | "clear" | "restore" | "verseNext" | "versePrev"
+export type PresentKeyAction = "next" | "prev" | "clear" | "restore" | "verseNext" | "versePrev" | "ticker"
 
 interface KeyLike {
   key: string
@@ -43,6 +43,10 @@ export function keyToPresentAction(e: KeyLike): PresentKeyAction | null {
       return e.shiftKey ? "versePrev" : "prev"
     case "Escape":
       return e.shiftKey ? "restore" : "clear"
+    // Shift+T: Take the news ticker, or Stop it when it runs (#187). Shift, so a stray T does nothing.
+    case "T":
+    case "t":
+      return e.shiftKey ? "ticker" : null
     default:
       return null
   }

@@ -1,3 +1,4 @@
+import { useDismissedChecks } from "@/studio/dismissed-checks"
 import { offsetWords, useServiceOffset } from "@/stores/service-offset-store"
 import { RUN_STATE_WORDS } from "@/lib/timing-state"
 import type { SectionTiming } from "@/lib/timing-engine"
@@ -542,6 +543,7 @@ function Preflight({ ready, checks, fix }: { ready: boolean; checks: ReadinessCh
               {c.detail && <span className="block text-muted-foreground">{c.detail}</span>}
             </span>
             {c.fix && c.status !== "ok" && <Button size="sm" variant="soft" onClick={() => fix(c)}>{c.fixLabel ?? "Fix"}</Button>}
+            {c.dismiss && <Button size="sm" variant="ghost" onClick={() => useDismissedChecks.getState().dismiss(c.dismiss!)}>Got it</Button>}
           </li>
         ))}
       </ul>

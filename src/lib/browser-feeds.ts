@@ -1,9 +1,11 @@
 import { useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { newFeedToken } from "@/lib/output-on-air"
 import { useFeedHealthStore } from "@/lib/show-health"
 import { SKEW_WARN_MS, skewWords } from "@/lib/desk-freshness"
-import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
+import { useJournalStore } from "@/stores/journal-store"
 import type { PageVideo } from "@/lib/camera-playback"
 import { tvKeys } from "@/lib/feed-receivers"
 
@@ -63,7 +65,54 @@ export async function revokeTv(outputId: string, address: string): Promise<void>
 
 export function startBrowserFeeds(): () => void {
   void sync()
-  return useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs) void sync() })
+  const stop = useBroadcastStore.subscribe((s, p) => { if (s.outputs !== p.outputs) void sync() })
+  // The first page to draw a new frame (crates/api http.rs ack): which screen showed what, and how soon.
+  let alive = true
+  let unlisten: (() => void) | undefined
+  void listen<string>("feed:acked", (e) => {
+    try {
+      const a = JSON.parse(e.payload) as { id?: unknown; afterMs?: unknown }
+      if (typeof a.id === "string" && typeof a.afterMs === "number") noteFeedShown(a.id, a.afterMs)
+    } catch { /* not ours */ }
+  }).then((u) => { if (alive) unlisten = u; else u() }).catch(() => {})
+  return () => {
+    alive = false
+    stop()
+    unlisten?.()
+  }
+}
+
+/** What an output's frame shows, in the log's words: the scene, Black, the reference, or a clear screen. */
+export function frameWords(frame: OutputFrame | undefined): string | null {
+  if (!frame) return null
+  if (frame.scene) return `the ${useBroadcastStore.getState().scenes.find((x) => x.id === frame.scene!.sceneId)?.name ?? "scene"} scene`
+  const v = frame.verse
+  if (!v) return "a clear screen"
+  if (v.screen === "black") return "Black"
+  if (v.screen === "logo") return "the logo"
+  return v.reference || v.lines?.[0] || "a slide"
+}
+
+/** What each screen was last logged as showing: a page re-drawing the same content (a timer beat) is not news. */
+const lastShown = new Map<string, string>()
+
+/**
+ * A browser feed's page first drew a new frame (#243/#246 C17, per-target acknowledgement): one log
+ * line for that screen, "Foyer TV showed John 3:16 after 0.4 s", only when what it shows changed.
+ */
+export function noteFeedShown(id: string, afterMs: number): void {
+  const s = useBroadcastStore.getState()
+  const output = s.outputs.find((o) => o.id === id)
+  if (!output || s.rehearsal) return
+  const words = frameWords(s.outputFrames[id])
+  if (!words || lastShown.get(id) === words) return
+  lastShown.set(id, words)
+  useJournalStore.getState().add({ kind: "shown", label: `${output.name} showed ${words} after ${(Math.max(0, afterMs) / 1000).toFixed(1)} s`, outputId: id, afterMs })
+}
+
+/** Tests: forget what each screen was last logged as showing. */
+export function resetFeedShown(): void {
+  lastShown.clear()
 }
 
 /**
