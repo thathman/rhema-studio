@@ -26,7 +26,10 @@ import { useRouterHealth } from "@/lib/cameras"
 import { invoke } from "@tauri-apps/api/core"
 import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
 import { outputDestination, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
-import { congregationProgramName } from "@/lib/program-names"
+import { congregationProgramName, onlineProgramName } from "@/lib/program-names"
+import { useObsStore } from "@/stores/obs-store"
+import { recordWords, streamWords } from "@/lib/obs-status"
+import { CLAP_LISTEN_MS, TONE_DBFS, TONE_HZ, canChooseToneOutput, clapTest, clapWords, startTestTone } from "@/lib/sound-check"
 import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { safeArea, safeAreaWords } from "@/lib/theme-look"
 import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, ReceiverTv, Scene } from "@/types"
@@ -407,7 +410,7 @@ const ICON: Record<ReadinessCheck["status"], React.ReactNode> = {
 function Health() {
   const { ready, checks, openOutputs, setWorkspace } = useReadiness()
   const needs = useNeeds()
-  const fix = (c: ReadinessCheck) => (c.fix === "outputs" ? openOutputs() : c.fix === "prepare" ? setWorkspace("prepare") : c.fix === "cameras" ? openProductionTab("cameras") : openSettings("diagnostics"))
+  const fix = (c: ReadinessCheck) => (c.fix === "outputs" ? openOutputs() : c.fix === "prepare" ? setWorkspace("prepare") : c.fix === "cameras" ? openProductionTab("cameras") : c.fix === "obs" ? openProductionTab("obs") : openSettings("diagnostics"))
   const live = useMachineHealth()
   return (
     <div className="flex flex-col gap-[18px]">
@@ -417,8 +420,10 @@ function Health() {
         <ComputerHealth health={live.health} failed={live.failed} />
         <CapacityHealth />
         <NdiHealth ndi={live.ndi} />
+        <ObsHealth />
         <CamerasHealth />
         <FeedsHealth />
+        <SoundCheck />
       </div>
     </div>
   )
@@ -530,6 +535,118 @@ function Preflight({ ready, checks, fix }: { ready: boolean; checks: ReadinessCh
           </li>
         ))}
       </ul>
+    </Card>
+  )
+}
+
+/**
+ * Online (OBS) (#213 "check OBS online output separately", #208): the online program as OBS reports
+ * it, apart from the congregation's: connected or not, its program scene, the church camera on it,
+ * the stream and the recording. Information only; OBS is changed on the OBS tab.
+ */
+function ObsHealth() {
+  const enabled = useSettingsStore((s) => s.obs.enabled)
+  const status = useObsStore((s) => s.status)
+  const error = useObsStore((s) => s.error)
+  const program = useObsStore((s) => s.program)
+  const video = useObsStore((s) => s.video)
+  const stream = useObsStore((s) => s.stream)
+  const record = useObsStore((s) => s.recordOutput)
+  const cameras = useSettingsStore((s) => s.cameras)
+  const router = useRouterHealth()
+  const onObs = useObsProgramCameras(router.status)
+  const connected = status === "connected"
+  const s = streamWords(connected ? stream : null)
+  const r = recordWords(connected ? record : null)
+  const tone = (t: string) => (t === "live" ? "ok" : t) as HealthLine["tone"]
+  const camNames = [...onObs].map((n) => cameraWords(cameras.find((c) => c.name === n)?.label ?? n))
+  return (
+    <Card kicker="Online (OBS)" title={onlineProgramName(connected ? video : null)} badge={<Badge tone={!enabled ? "off" : connected ? (stream?.active ? "live" : "ok") : "warn"}>{!enabled ? "Off" : connected ? (stream?.active ? "Streaming" : "Connected") : status === "connecting" ? "Connecting" : "Not connected"}</Badge>}>
+      {!enabled ? (
+        <p className="text-xs text-muted-foreground">OBS is not connected. It is optional: connect it in Settings → Remote control to see the online program here.</p>
+      ) : !connected ? (
+        <p className="text-xs text-confidence-mid">{status === "connecting" ? "Connecting to OBS…" : `Not connected${error ? `: ${error}` : ""}. Rhema Studio keeps trying every 15 seconds.`}</p>
+      ) : (
+        <ul aria-label="Online (OBS)" className="flex flex-col divide-y divide-border">
+          <HealthRow label="Scene" lines={[{ text: program ?? "Not reported", tone: program ? "ok" : "off" }]} />
+          <HealthRow label="Camera" lines={[camNames.length ? { text: `${camNames.join(", ")} on OBS's program`, tone: "ok" } : { text: "No church camera found on OBS's program", tone: "off" }]} />
+          <HealthRow label="Stream" lines={[{ text: s.text, tone: tone(s.tone) }]} />
+          <HealthRow label="Recording" lines={[{ text: r.text, tone: tone(r.tone) }]} />
+        </ul>
+      )}
+      <div><Button size="sm" variant="outline" onClick={() => openProductionTab("obs")}><RadioIcon /> Open OBS</Button></div>
+    </Card>
+  )
+}
+
+/**
+ * Sound checks (#213 rehearsal test): a 1 kHz tone at −18 dBFS on a chosen output until Stop, and a
+ * clap test that listens on the microphone for a few seconds. Only when pressed; nothing is kept.
+ */
+function SoundCheck() {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  const [output, setOutput] = useState("")
+  const [tone, setTone] = useState<{ stop: () => void; where: string } | null>(null)
+  const [toneError, setToneError] = useState<string | null>(null)
+  const [clap, setClap] = useState<string | null>(null)
+  const [listening, setListening] = useState(false)
+  const choose = canChooseToneOutput()
+  const talkInput = useSettingsStore((s) => s.talkInputId)
+  useEffect(() => {
+    let live = true
+    void navigator.mediaDevices?.enumerateDevices?.().then((d) => { if (live) setDevices(d) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+  // Leaving the page stops the tone.
+  useEffect(() => () => tone?.stop(), [tone])
+  const outputs = devices.filter((d) => d.kind === "audiooutput" && d.deviceId && d.deviceId !== "default")
+  const play = async () => {
+    setToneError(null)
+    try {
+      const t = await startTestTone(output)
+      setTone({ stop: t.stop, where: t.where === "chosen" ? outputs.find((d) => d.deviceId === output)?.label || "the chosen output" : "this computer's sound output" })
+    } catch (e) {
+      setToneError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const stopTone = () => {
+    tone?.stop()
+    setTone(null)
+  }
+  const listen = async () => {
+    setListening(true)
+    setClap(null)
+    try {
+      setClap(clapWords(await clapTest(talkInput)))
+    } catch (e) {
+      setClap(`The microphone could not be opened: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setListening(false)
+    }
+  }
+  return (
+    <Card kicker="Before the service" title="Sound check" badge={tone && <Badge tone="live">Tone playing</Badge>}>
+      <div className="flex flex-col gap-2 text-xs">
+        <p className="font-semibold">Test tone · {TONE_HZ / 1000} kHz at {TONE_DBFS} dBFS</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {choose && outputs.length > 0 && (
+            <select aria-label="Test tone output" value={output} disabled={!!tone} onChange={(e) => setOutput(e.target.value)} className="h-8 max-w-56 rounded-md border border-input bg-card px-1.5">
+              <option value="">This computer's sound output</option>
+              {outputs.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Sound output"}</option>)}
+            </select>
+          )}
+          {tone ? <Button size="sm" variant="destructive" onClick={stopTone}><PauseIcon /> Stop tone</Button> : <Button size="sm" variant="outline" onClick={() => void play()}><PlayIcon /> Play test tone</Button>}
+        </div>
+        {tone && <p role="status">Playing on {tone.where} until you press Stop tone.</p>}
+        {toneError && <p role="status" className="font-semibold text-confidence-mid">The tone could not play: {toneError}</p>}
+        <p className="text-muted-foreground">{choose ? "" : "This computer plays the tone on its sound output (it cannot choose another here). "}Turn the sound desk's fader down first: line-up level is loud through a PA.</p>
+      </div>
+      <div className="flex flex-col gap-2 border-t border-border pt-3 text-xs">
+        <p className="font-semibold">Clap test</p>
+        <div><Button size="sm" variant="outline" disabled={listening} onClick={() => void listen()}>{listening ? `Listening for ${CLAP_LISTEN_MS / 1000} s… clap now` : "Listen for a clap"}</Button></div>
+        {clap && <p role="status">{clap}</p>}
+        <p className="text-muted-foreground">Listens on the talk microphone (or the system's) for a few seconds, only when pressed. Nothing is recorded or sent.</p>
+      </div>
     </Card>
   )
 }

@@ -71,6 +71,27 @@ describe("secrets in the system keychain (RG-08)", () => {
     expect(again.useSettingsStore.getState().obs.password).toBe("obs-pass-99")
   })
 
+  it("keeps each saved OBS computer's password in the keychain, never in the file or a backup (#197)", async () => {
+    const { hydrateSettings, useSettingsStore, settingsForBackup, currentSecrets } = await import("./settings-store")
+    await hydrateSettings()
+    useSettingsStore.getState().setObsProfiles([
+      { id: "obs-a", label: "Main stream PC", host: "192.168.1.30", port: 4455, password: "main-pass-1" },
+      { id: "obs-b", label: "Backup laptop", host: "192.168.1.31", port: 4455, password: "" },
+    ])
+    await settle()
+    expect(JSON.parse(JSON.parse(keychain!).obsProfilePasswords)).toEqual({ "obs-a": "main-pass-1" })
+    const saved = (file.get("machine") as Record<string, unknown>).obsProfiles as Array<{ label: string; password: string }>
+    expect(saved.map((p) => [p.label, p.password])).toEqual([["Main stream PC", ""], ["Backup laptop", ""]])
+    expect(JSON.stringify(settingsForBackup())).not.toContain("main-pass-1")
+    expect(JSON.stringify(settingsForBackup())).not.toContain("Main stream PC")
+    expect(currentSecrets()).toContain("main-pass-1")
+
+    vi.resetModules()
+    const again = await import("./settings-store")
+    await again.hydrateSettings()
+    expect(again.useSettingsStore.getState().obsProfiles.map((p) => [p.label, p.password])).toEqual([["Main stream PC", "main-pass-1"], ["Backup laptop", ""]])
+  })
+
   it("keeps secrets in the file when the keychain is unavailable", async () => {
     keychainUp = false
     file.set("deepgramApiKey", "dg-1234567890")

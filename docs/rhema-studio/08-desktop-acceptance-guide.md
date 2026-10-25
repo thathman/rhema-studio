@@ -1627,6 +1627,25 @@ Needs `design-packs/rhema-worship-expressions.rhema-design.json` from this branc
 | 10fp.9 | Archive → Backups → Back up now…; **Remove pack** on the pack's heading; Archive → Backups → Restore from a backup… → that file. | Remove leaves your copies. The restore's list says "Design packs in the library: 0 packs → 1 pack"; afterwards the pack is back. | Unverified |
 | 10fp.10 | Use "Graphics only for OBS"; show it on an NDI output with alpha; look in OBS. | Only the lyrics, name band and ticker show; the rest is transparent. | Unverified |
 
+### 10fr. OBS status, transitions, saved OBS computers; preflight checks (#197, #213)
+
+Needs OBS 30+ with its WebSocket server on (on this computer or another), at least one audio input, and two monitors for 10fr.8.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fr.1 | Settings → Remote control → OBS: Test with the address and password, then Save the connection as “Main stream PC”. Add a wrong address and Test it. | Test says "Reached OBS 30.x (WebSocket 5.x)" without switching anything in OBS; the wrong one says why it was not reached. The saved row says In use. | Unverified |
+| 10fr.2 | Save a second OBS as “Backup laptop”; Use it; Use “Main stream PC” again. Quit and start Rhema. | Rhema connects to the one in use each time. Both are still listed with their passwords (from the keychain); a backup file contains neither. | Unverified |
+| 10fr.3 | Production → OBS; start streaming (or recording) in OBS. | Stream and recording show live, the time, the bitrate (after a few seconds) and dropped frames; "OBS itself" shows its fps and CPU. Stop in OBS: Not streaming. | Unverified |
+| 10fr.4 | Speak into OBS's mic; mute and unmute it in OBS. | OBS inputs and sound shows the level moving and Muted; Rhema has no mute buttons; nothing in OBS changes from Rhema. | Unverified |
+| 10fr.5 | Choose another transition in OBS's transition; then turn on rehearsal. | OBS's transition changes to it (in OBS too) and the log has it; in rehearsal the select is disabled and says why. On a joined desk it is text only. | Unverified |
+| 10fr.6 | Production → Show health. | Online (OBS) shows the program scene, the church camera on it (if a camera Media Source is on the program), stream and recording. The preflight has an OBS line; quit OBS: it warns "not connected". | Unverified |
+| 10fr.7 | Unplug the router's internet (the LAN stays). | The preflight still says "Works without the internet"; nothing warns. | Unverified |
+| 10fr.8 | Put a stage output on the main screen (the one with the menu bar) and the congregation output on the projector. | "a stage output is on this computer's main screen" warning; the screens line lists each output's resolution and says refresh is not reported. | Unverified |
+| 10fr.9 | Take a service live once; change this computer's address (another DHCP lease or Wi-Fi); open Home. | Warns that the network address changed (old → new) and suggests a DHCP reservation. | Unverified |
+| 10fr.10 | Give an output a look whose font lacks ẹ ọ ṣ (e.g. a display font without them). | "… cannot draw every Yorùbá letter" warning; with the built-in looks: "Fonts draw Yorùbá". | Unverified |
+| 10fr.11 | On a joined desk, set its clock a minute off. | Its preflight says the clock is 1 min … ahead of / behind the host's. | Unverified |
+| 10fr.12 | Show health → Sound check: Play test tone (choose the desk output where offered), then Stop tone; Listen for a clap and clap; again in silence. | A steady 1 kHz tone at −18 dBFS on the chosen output until Stop; "Heard the clap" with its level; silence says what to check. The microphone light goes off after 5 s. | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

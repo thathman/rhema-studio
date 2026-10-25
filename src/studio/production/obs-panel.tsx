@@ -9,6 +9,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useJoin } from "@/stores/join-store"
 import { openProductionTab } from "@/studio/production/production-tab"
+import { levelWords, meterFill, recordWords, statsWords, streamWords, type ObsLine } from "@/lib/obs-status"
 
 function Tag({ tone, children }: { tone: "program" | "preview" | "ok" | "warn" | "off"; children: React.ReactNode }) {
   const cls = {
@@ -33,6 +34,83 @@ function ObsAction({ held, reasonId, disabled, onClick, ...rest }: React.Compone
       className={cn(rest.className, held && "cursor-not-allowed opacity-50")}
       onClick={held ? undefined : onClick}
     />
+  )
+}
+
+const LINE_TONE: Record<ObsLine["tone"], string> = { ok: "text-foreground", live: "font-semibold text-foreground", warn: "font-semibold text-confidence-mid", off: "text-muted-foreground" }
+
+/** OBS's stream, recording and render figures as OBS reports them (#197, #213). Read only. */
+export function ObsOutputs() {
+  const stream = useObsStore((s) => s.stream)
+  const record = useObsStore((s) => s.recordOutput)
+  const stats = useObsStore((s) => s.stats)
+  const rows: Array<[string, ObsLine]> = [["Stream", streamWords(stream)], ["Recording", recordWords(record)], ["OBS itself", statsWords(stats)]]
+  return (
+    <ul aria-label="OBS outputs" className="flex flex-col divide-y divide-border">
+      {rows.map(([label, line]) => (
+        <li key={label} aria-label={label} className="flex items-start gap-3 py-2">
+          <span className="w-20 shrink-0 font-semibold">{label}</span>
+          <span className={cn("min-w-0 flex-1", LINE_TONE[line.tone])}>{line.text}</span>
+          {line.tone === "live" && <Tag tone="program">{label === "Stream" ? "Live" : "Rec"}</Tag>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** OBS's inputs, with the mute state and level of those with sound. Shown only: nothing here mutes or changes them. */
+function ObsInputs() {
+  const inputs = useObsStore((s) => s.inputs)
+  if (!inputs) return <p className="text-muted-foreground">Asking OBS for its inputs…</p>
+  if (inputs.length === 0) return <p className="text-muted-foreground">OBS has no inputs.</p>
+  const audio = inputs.filter((i) => i.muted !== null)
+  const other = inputs.filter((i) => i.muted === null)
+  return (
+    <div className="flex flex-col gap-2">
+      {audio.length > 0 && (
+        <ul aria-label="OBS audio inputs" className="flex flex-col divide-y divide-border">
+          {audio.map((i) => (
+            <li key={i.name} aria-label={i.name} className="flex flex-col gap-1 py-1.5">
+              <span className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-medium">{i.name}</span>
+                <span className={i.muted ? "font-semibold text-confidence-mid" : "text-muted-foreground"}>{levelWords(i)}</span>
+              </span>
+              <span aria-hidden className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <span className={cn("block h-full rounded-full", i.muted ? "bg-muted-foreground/40" : "bg-confidence-high")} style={{ width: `${Math.round(meterFill(i.levelDb) * 100)}%` }} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {other.length > 0 && <p className="text-muted-foreground">Without sound: {other.map((i) => i.name).join(", ")}</p>}
+      <p className="text-muted-foreground">Read from OBS; mute and levels are changed in OBS.</p>
+    </div>
+  )
+}
+
+/** OBS's transition for its next switch; changed only by choosing one here (not in rehearsal). */
+function ObsTransition({ held, reasonId, joined }: { held: boolean; reasonId: string; joined: boolean }) {
+  const transitions = useObsStore((s) => s.transitions)
+  const transition = useObsStore((s) => s.transition)
+  if (transitions.length === 0) return null
+  if (joined) return <p className="text-muted-foreground">OBS's transition: {transition ?? "—"}</p>
+  return (
+    <label className="flex flex-wrap items-center gap-2">
+      <span className="font-semibold">OBS's transition</span>
+      <select
+        aria-label="OBS transition"
+        value={transition ?? ""}
+        disabled={held}
+        aria-describedby={held ? reasonId : undefined}
+        title={held ? OBS_REHEARSAL_REASON : undefined}
+        onChange={(e) => void useObsStore.getState().setTransition(e.target.value)}
+        className="h-8 max-w-56 rounded-md border border-input bg-card px-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {transition === null && <option value="">—</option>}
+        {transitions.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+      <span className="text-muted-foreground">How OBS's next switch looks. It does not switch anything.</span>
+    </label>
   )
 }
 
@@ -115,6 +193,7 @@ export function ObsPanel() {
               </ObsAction>
             )}
             {joined && <p className="rounded-md bg-muted px-2.5 py-2">This computer has joined a host: OBS's scenes are changed from the main desk. Here they are shown only.</p>}
+            <ObsTransition held={held} reasonId={reasonId} joined={joined} />
           </>
         )}
       </section>
@@ -162,6 +241,22 @@ export function ObsPanel() {
           </ul>
         )}
       </section>
+
+      {connected && (
+        <>
+          <section aria-label="OBS stream and recording" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-xs">
+            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">As OBS reports them</p>
+            <h3 className="text-sm font-bold">Stream and recording</h3>
+            <ObsOutputs />
+            <p className="text-muted-foreground">Start and stop the stream in OBS. Bitrate is worked out from what OBS has sent since the last reading.</p>
+          </section>
+          <section aria-label="OBS inputs" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-xs">
+            <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">From OBS, shown only</p>
+            <h3 className="text-sm font-bold">OBS inputs and sound</h3>
+            <ObsInputs />
+          </section>
+        </>
+      )}
     </div>
   )
 }

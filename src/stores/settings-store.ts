@@ -59,6 +59,23 @@ export interface ObsSettings {
   password: string
 }
 
+/**
+ * A saved OBS to connect to (#197): "Main stream PC", "Backup laptop". Using one copies it into
+ * the connection above. Each password is kept in the system keychain with the other secrets.
+ */
+export interface ObsProfile {
+  id: string
+  label: string
+  host: string
+  port: number
+  password: string
+}
+
+export function isObsProfile(v: unknown): v is ObsProfile {
+  const o = v as Partial<ObsProfile> | null
+  return typeof o === "object" && o !== null && typeof o.id === "string" && !!o.id && typeof o.label === "string" && typeof o.host === "string" && typeof o.port === "number" && Number.isInteger(o.port) && o.port > 0 && o.port < 65536 && typeof o.password === "string"
+}
+
 export function pushRemoteKeys(): Promise<void> {
   remoteKeysPush = remoteKeysPush.then(async () => {
     const s = useSettingsStore.getState()
@@ -201,6 +218,14 @@ export interface SettingsState {
   /** Optional OBS connection (obs-websocket v5). */
   obs: ObsSettings
   setObs: (patch: Partial<ObsSettings>) => void
+  /** Saved OBS connections, this computer's only (never in a backup). */
+  obsProfiles: ObsProfile[]
+  setObsProfiles: (profiles: ObsProfile[]) => void
+  /**
+   * This computer's network address when the last service went live (#213 preflight), to notice
+   * a changed address (phones, TVs, OBS and desks that saved the old one cannot find it). Null until then.
+   */
+  lanAddressAtService: string | null
   /** First-install setup (#298): where it was left, this computer's name, and Home's reminder. */
   setup: SetupProfile
   setSetup: (patch: Partial<SetupProfile>) => void
@@ -296,6 +321,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
   obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "" },
   setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
+  obsProfiles: [],
+  setObsProfiles: (obsProfiles) => set({ obsProfiles }),
+  lanAddressAtService: null,
   setup: defaultSetup(),
   setSetup: (patch) => set((s) => ({ setup: { ...s.setup, ...patch } })),
   hostLookSeen: "",
@@ -410,6 +438,10 @@ function acceptable(key: string, value: unknown): boolean {
     }
     case "companionLatencyMs":
       return validCompanionLatency(value)
+    case "obsProfiles":
+      return Array.isArray(value)
+    case "lanAddressAtService":
+      return typeof value === "string"
     case "remoteAuthRequired":
     case "cameraRouterAuto":
     case "companionMode":
@@ -485,6 +517,8 @@ export const SETTINGS_SECTIONS = {
     "remoteAuthRequired",
     "remoteListeners",
     "obs",
+    "obsProfiles",
+    "lanAddressAtService",
     "cameras",
     "cameraRouterAuto",
     "companionMode",
@@ -540,7 +574,7 @@ export function settingsSection(state: SettingsState, section: SettingsSection):
 export const NOT_IN_BACKUP = [
   "deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken",
   "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "joinSecure", "mcpEnabled", "cloudSpeechConsentAt",
-  "companionMode",
+  "companionMode", "obsProfiles", "lanAddressAtService",
 ] as const satisfies readonly PersistedKey[]
 const notInBackup = (key: string) => (NOT_IN_BACKUP as readonly string[]).includes(key)
 
@@ -605,23 +639,39 @@ export function restoreSettingsFromBackup(parts: unknown): string[] {
 // file's copies are blanked; `secretsInKeychain: true` in the file says so.
 // Without a keychain the file keeps the values, as before.
 
-type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken"
-const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken"]
+type SecretName = "deepgramApiKey" | "openaiApiKey" | "claudeApiKey" | "remoteSecret" | "obsPassword" | "joinToken" | "obsProfilePasswords"
+const SECRET_NAMES: SecretName[] = ["deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "obsPassword", "joinToken", "obsProfilePasswords"]
 const KEYCHAIN_TIMEOUT_MS = 5000
 
 function readSecret(s: SettingsState, name: SecretName): string {
+  if (name === "obsProfilePasswords") {
+    // The saved OBS connections' passwords, as one JSON value by profile id ("" when none has one).
+    const map = Object.fromEntries((s.obsProfiles ?? []).filter((p) => p.password).map((p) => [p.id, p.password]))
+    return Object.keys(map).length ? JSON.stringify(map) : ""
+  }
   return (name === "obsPassword" ? s.obs.password : (s[name] as string | null)) ?? ""
 }
 
 function withSecret(s: Partial<SettingsState>, name: SecretName, value: string, base: SettingsState): Partial<SettingsState> {
   if (name === "obsPassword") return { ...s, obs: { ...(s.obs ?? base.obs), password: value } }
+  if (name === "obsProfilePasswords") {
+    let map: Record<string, unknown> = {}
+    try {
+      map = value ? (JSON.parse(value) as Record<string, unknown>) : {}
+    } catch {
+      map = {}
+    }
+    const profiles = s.obsProfiles ?? base.obsProfiles ?? []
+    return { ...s, obsProfiles: profiles.map((p) => ({ ...p, password: typeof map[p.id] === "string" ? (map[p.id] as string) : value ? p.password : "" })) }
+  }
   return { ...s, [name]: value }
 }
 
 /** The current secrets, for the diagnostics export to redact. */
 export function currentSecrets(): string[] {
   const s = useSettingsStore.getState()
-  return SECRET_NAMES.map((n) => readSecret(s, n)).filter(Boolean)
+  // Each saved OBS connection's password on its own, as it could appear in a log.
+  return [...SECRET_NAMES.filter((n) => n !== "obsProfilePasswords").map((n) => readSecret(s, n)), ...s.obsProfiles.map((p) => p.password)].filter(Boolean)
 }
 
 /** The keychain holds our entry but it could not be read this session: never overwrite it. */
@@ -645,6 +695,7 @@ function readSetting(key: string, value: unknown): unknown {
   if (key === "customMacros") return (value as unknown[]).filter(isCustomMacro)
   if (key === "setup") return normalizeSetup(value)
   if (key === "cameras") return (value as unknown[]).filter(isCameraSource)
+  if (key === "obsProfiles") return (value as unknown[]).filter(isObsProfile)
   return value
 }
 
