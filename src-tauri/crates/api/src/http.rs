@@ -784,10 +784,11 @@ fn host_trusted(host: &str, ports: &[u16]) -> bool {
     name_ok && port.is_some_and(|p| ports.contains(&p))
 }
 
-/// The pages a browser opens from this server (phone remote, camera, feeds) and what they load:
-/// their `Host` is checked even without an `Origin`.
+/// The pages a browser opens from this server (phone remote, camera, feeds) and what they load,
+/// and the two answers that need no key (status: what is on air; health): their `Host` is checked
+/// even without an `Origin`, since a rebound page's same-origin read sends none.
 fn browser_page(path: &str) -> bool {
-    path == "/remote" || path == "/camera" || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
+    matches!(path, "/remote" | "/camera" | "/api/v1/status" | "/api/v1/health") || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
 }
 
 /// Refuse a request a browser sent for another web page: its `Origin` is neither this listener's
@@ -1935,7 +1936,7 @@ mod tests {
         let tcp = tokio::net::TcpStream::connect(("127.0.0.1", tls_port)).await.unwrap();
         let name = rustls::pki_types::ServerName::try_from("127.0.0.1").unwrap();
         let mut tls = tokio_rustls::TlsConnector::from(Arc::new(client)).connect(name, tcp).await.expect("the chain checks");
-        tls.write_all(b"GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").await.unwrap();
+        tls.write_all(format!("GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1:{tls_port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
         let mut out = Vec::new();
         let _ = tls.read_to_end(&mut out).await;
         let text = String::from_utf8_lossy(&out);
@@ -3038,6 +3039,7 @@ mod tests {
             assert!(!host_trusted(bad, &ports), "{bad}");
         }
         assert!(browser_page("/feed/l3") && browser_page("/remote") && browser_page("/camera") && browser_page("/assets/feed.js") && browser_page("/api/v1/feed/l3/events") && browser_page("/api/v1/camera/pulpit/whip"));
+        assert!(browser_page("/api/v1/status") && browser_page("/api/v1/health"));
         assert!(!browser_page("/api/v1/command") && !browser_page("/api/v1/live") && !browser_page("/remotes"));
     }
 
@@ -3060,7 +3062,11 @@ mod tests {
         assert_eq!(sink.command_count(), 1);
         // The phone and feed pages by address work; by another name they are refused, origin or not.
         assert!(raw(port, "GET /remote HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
-        for path in ["/remote", "/feed/l3?k=s3cret", "/api/v1/feed/l3/events?k=s3cret", "/camera?name=pulpit&k=x"] {
+        // What is on air and the health answer need no key: by address yes, by a rebound name no.
+        for path in ["/api/v1/status", "/api/v1/health"] {
+            assert!(raw(port, &format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\nConnection: close\r\n\r\n")).await.starts_with("HTTP/1.1 200"), "{path}");
+        }
+        for path in ["/remote", "/feed/l3?k=s3cret", "/api/v1/feed/l3/events?k=s3cret", "/camera?name=pulpit&k=x", "/api/v1/status", "/api/v1/health"] {
             let r = raw(port, &format!("GET {path} HTTP/1.1\r\nHost: evil.example:{{port}}\r\nConnection: close\r\n\r\n")).await;
             assert!(r.starts_with("HTTP/1.1 421"), "{path}: {r}");
         }
