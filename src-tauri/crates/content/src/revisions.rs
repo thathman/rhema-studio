@@ -376,7 +376,7 @@ mod tests {
         let song = db.create_song(&words("Amazing grace")).unwrap();
         let p = db.create_program("Sunday", None).unwrap();
         // Never approved: no pins (and no table yet).
-        assert!(db.approved_songs(&p.id).unwrap().is_empty());
+        assert_eq!(db.approved_songs(&p.id).unwrap().len(), 0);
         let item = ItemInput { kind: "song".into(), reference: "Amazing Grace".into(), payload: Some(format!(r#"{{"song_id":"{}","languages":["en"],"title_slide":true}}"#, song.song.id)), ..ItemInput::default() };
         let saved = db.replace_items(&p.id, 1, &[item.clone(), item]).unwrap();
         db.approve_program(&p.id, saved.program.revision).unwrap();
