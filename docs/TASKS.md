@@ -2,7 +2,7 @@
 
 > **Unified UX takeover, owner-approved 2026-10-26:** [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md) with [delivery/PR dependency matrix](rhema-studio/31-codex-delivery-matrix.md) tracks cross-route work (#442–#448), existing event/source contracts (#243/#409/#410), and hardware acceptance (#411). Reconcile these into stable task IDs after verifying main and active PRs. Do not auto-upgrade task status from issue/PR creation.
 
-**Backlog revision:** 0.45 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.46 · **Updated:** 2026-10-25 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -14,6 +14,20 @@
 - Track separate **code quality** vs **volunteer UX acceptance**. An intuitive app is not established merely by unit tests.
 
 ## Current active work
+
+### Live takeover issue status (2026-10-25)
+
+The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) is newer than the dated backlog entries below and is the current source for the takeover sequence.
+
+| GitHub issue | Current state | Evidence / next gate |
+|---|---|---|
+| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Full automated suite passes; desktop and device acceptance remain open. |
+| [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
+| [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | OPEN | #414 pins scene layout revisions; broader shared-asset and approved-release revision integrity remains to be implemented and reviewed. |
+| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | OPEN | #414 ran all frontend tests, typecheck, lint and build. No real desktop, projector, OBS, NDI receiver, TV or network hardware was tested for this branch. |
+| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | NEXT | Verify current behavior on main, then fix and test the shared library selection/Add flow. |
+
+PR #414 is open and unmerged. The existing main CI and open PR baseline are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
