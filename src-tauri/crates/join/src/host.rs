@@ -56,6 +56,11 @@ impl Host {
         Ok(Self { base: format!("https://{host}:{tls_port}"), tls: Some(std::sync::Arc::new(tls)) })
     }
 
+    /// Whether this host is reached over https with its certificate pinned.
+    pub fn is_secure(&self) -> bool {
+        self.base.starts_with("https://")
+    }
+
     /// The full address of one of the host's pages ("/api/v1/me").
     pub fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base)
@@ -156,9 +161,19 @@ enum FollowError {
 }
 use FollowError::{Lost, Refused};
 
+/// How a followed stream ended without an error.
+enum Ended {
+    /// The host closed it, or this computer stopped following.
+    Closed,
+    /// The host changed this desk (revoked, paused, another role) and ended its stream (`rejoin`).
+    Rejoin,
+}
+
 /// Follow the host's Live State until `stop` says so: `emit("join:live", snapshot)` for each one,
-/// and `emit("join:state", …)` for the connection ("connected", "reconnecting" with the reason,
-/// "refused", "stopped"). Reconnects by itself, waiting a little longer each time (at most 10 s).
+/// and `emit("join:state", …)` for the connection ("connected" with `secure` and what the host
+/// makes of this desk now (`me`), "reconnecting" with the reason, "refused", "stopped"). Reconnects
+/// by itself, waiting a little longer each time (at most 10 s); at once when the host changed this
+/// desk, which ends its stream.
 pub async fn follow_live(host: Host, token: String, mut stop: watch::Receiver<bool>, emit: impl Fn(&'static str, String)) {
     let mut wait = 1u64;
     loop {
@@ -170,11 +185,15 @@ pub async fn follow_live(host: Host, token: String, mut stop: watch::Receiver<bo
             break;
         }
         match result {
+            Ok(Ended::Rejoin) => {
+                wait = 1;
+                continue;
+            }
             Err(Refused(status)) => {
                 emit("join:state", serde_json::json!({ "state": "refused", "error": format!("The host refused this computer ({status}): pair again") }).to_string());
                 return;
             }
-            Ok(()) | Err(Lost(_)) => {
+            Ok(Ended::Closed) | Err(Lost(_)) => {
                 let reason = match result {
                     Err(Lost(e)) => e,
                     _ => "the host closed the connection".into(),
@@ -191,7 +210,7 @@ pub async fn follow_live(host: Host, token: String, mut stop: watch::Receiver<bo
     emit("join:state", serde_json::json!({ "state": "stopped" }).to_string());
 }
 
-async fn follow(host: &Host, token: &str, stop: &mut watch::Receiver<bool>, emit: &impl Fn(&'static str, String)) -> Result<(), FollowError> {
+async fn follow(host: &Host, token: &str, stop: &mut watch::Receiver<bool>, emit: &impl Fn(&'static str, String)) -> Result<Ended, FollowError> {
     let r = host
         .client(None)
         .map_err(Lost)?
@@ -208,19 +227,25 @@ async fn follow(host: &Host, token: &str, stop: &mut watch::Receiver<bool>, emit
     if !r.status().is_success() {
         return Err(Lost(format!("the host answered {status}")));
     }
-    emit("join:state", serde_json::json!({ "state": "connected" }).to_string());
+    // What the host makes of this desk now (it may have changed while it was away); an older host
+    // or a slow answer leaves the desk as it was.
+    let me = me(host, token).await.ok();
+    emit("join:state", serde_json::json!({ "state": "connected", "secure": host.is_secure(), "me": me }).to_string());
     let mut body = r.bytes_stream();
     let mut buf = String::new();
     loop {
         let chunk = tokio::select! {
             c = body.next() => c,
-            _ = stop.changed() => return Ok(()),
+            _ = stop.changed() => return Ok(Ended::Closed),
         };
-        let Some(chunk) = chunk else { return Ok(()) };
+        let Some(chunk) = chunk else { return Ok(Ended::Closed) };
         buf.push_str(&String::from_utf8_lossy(&chunk.map_err(|e| Lost(e.to_string()))?));
         // A message ends with a blank line; keep any unfinished one.
         while let Some(end) = buf.find("\n\n") {
             let message: String = buf.drain(..end + 2).collect();
+            if sse_event(&message) == "rejoin" {
+                return Ok(Ended::Rejoin);
+            }
             if let Some(data) = sse_data(&message) {
                 emit("join:live", data);
             }
@@ -240,6 +265,11 @@ fn lost_reason(host: &Host, e: &reqwest::Error) -> String {
     }
     let _ = host;
     e.to_string()
+}
+
+/// The name of one server-sent event ("message" when it has none).
+pub fn sse_event(message: &str) -> &str {
+    message.lines().find_map(|l| l.strip_prefix("event:")).map_or("message", str::trim)
 }
 
 /// The data of one server-sent event named "live" (multi-line data joined), or None.
@@ -275,6 +305,32 @@ pub(crate) mod tests {
         assert_eq!(sse_data("event: live\ndata: line 1\ndata: line 2\n\n").as_deref(), Some("line 1\nline 2"));
         assert_eq!(sse_data(": keep-alive\n\n"), None);
         assert_eq!(sse_data("event: other\ndata: x\n\n"), None);
+        assert_eq!(sse_event("event: rejoin\ndata: the host changed this desk\n\n"), "rejoin");
+        assert_eq!(sse_data("event: rejoin\ndata: the host changed this desk\n\n"), None, "never taken as a Live State");
+        assert_eq!(sse_event(": keep-alive\n\n"), "message");
+    }
+
+    #[tokio::test]
+    async fn the_host_ending_the_stream_with_rejoin_connects_again_at_once_with_what_this_desk_is_now() {
+        let address = pretend_host(|path| match path {
+            "/api/v1/me" => (200, r#"{"name":"Ade","role":"viewer","paused":true}"#.into()),
+            _ => (200, "event: live\ndata: {\"v\":1}\n\nevent: rejoin\ndata: x\n\n".into()),
+        })
+        .await;
+        let (tx, rx) = watch::channel(false);
+        let said = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = said.clone();
+        let started = std::time::Instant::now();
+        let run = tokio::spawn(follow_live(Host::plain(&address).unwrap(), "k".into(), rx, move |e, p| log.lock().unwrap().push((e, p))));
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let _ = tx.send(true);
+        let _ = run.await;
+        let said = said.lock().unwrap().clone();
+        let connected: Vec<_> = said.iter().filter(|(e, p)| *e == "join:state" && p.contains("connected")).collect();
+        assert!(connected.len() >= 2, "connected again within 400 ms, not after a wait: {said:?}");
+        assert!(connected[0].1.contains("\"viewer\"") && connected[0].1.contains("\"secure\":false"), "{}", connected[0].1);
+        assert!(!said.iter().any(|(_, p)| p.contains("reconnecting")), "no Reconnecting flash: {said:?}");
+        assert!(started.elapsed() < Duration::from_secs(3));
     }
 
     /// A pretend host on 127.0.0.1: answers each request with `reply(path)` and closes.

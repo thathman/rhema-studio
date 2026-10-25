@@ -6,9 +6,10 @@ import { validLimit, type CapacityKind, type CapacityOverrides } from "@/lib/cap
 /**
  * present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join).
  * worship: songs and hymns; stage: the stage message; camera: cameras in scenes; obs: OBS through the host (#215 G10);
- * obs-companion: a computer that runs OBS only and reads the church's cameras into it (#209). See src/lib/remote-roles.ts.
+ * obs-companion: a computer that runs OBS only and reads the church's cameras into it (#209).
+ * editor: prepares (Preview, queue, scenes) and never goes live; viewer: follows and changes nothing. See src/lib/remote-roles.ts.
  */
-export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens" | "worship" | "stage" | "camera" | "obs" | "obs-companion"
+export type RemoteRole = "present" | "configure" | "timekeeper" | "bible" | "screens" | "worship" | "stage" | "camera" | "obs" | "obs-companion" | "editor" | "viewer"
 
 /**
  * The talk channels' rules (Rhema Comms, #251), set on the main desk: which desk roles may hear and
@@ -29,6 +30,17 @@ export interface RemoteDevice {
   role?: RemoteRole
   /** The main desk has taken back control (#243): its commands wait; it still sees the service and talks. Absent = not paused. */
   paused?: boolean
+}
+
+/** A host's https link, kept at pairing (see `joinSecure`). */
+export interface JoinSecure {
+  port: number
+  fingerprint: string
+}
+
+export function isJoinSecure(v: unknown): v is JoinSecure {
+  const j = v as JoinSecure
+  return typeof v === "object" && v !== null && typeof j.port === "number" && Number.isInteger(j.port) && j.port > 0 && j.port < 65536 && typeof j.fingerprint === "string" && /^[0-9a-f]{64}$/.test(j.fingerprint)
 }
 
 let remoteKeysPush: Promise<void> = Promise.resolve()
@@ -156,7 +168,13 @@ export interface SettingsState {
   joinAddress: string
   joinName: string
   joinToken: string
-  setJoin: (patch: { joinAddress?: string; joinName?: string; joinToken?: string }) => void
+  /**
+   * The host's https link as kept at pairing: its port and the SHA-256 fingerprint of its
+   * certificate authority (as Rhema Studio Companion pins it, #209). From then on this computer talks
+   * to that host only over https and only with that authority. Null: paired over plain http.
+   */
+  joinSecure: JoinSecure | null
+  setJoin: (patch: { joinAddress?: string; joinName?: string; joinToken?: string; joinSecure?: JoinSecure | null }) => void
   /** The talk channel's headset on this computer (Rhema Comms): microphone and where the crew is heard, by device id; "" = the system's. */
   talkInputId: string
   talkOutputId: string
@@ -169,7 +187,7 @@ export interface SettingsState {
   setTimekeeperCountdown: (patch: Partial<TimekeeperCountdown>) => void
   /** Paired controllers: SHA-256 of each token, never the token. */
   remoteDevices: RemoteDevice[]
-  /** Once any key or device exists this stays on; with it on and no keys, every command is refused. */
+  /** Once any key or device exists this stays on; with it on and no keys, every command is refused. On for new installs; a saved value is kept. */
   remoteAuthRequired: boolean
   setRemoteAuthRequired: (on: boolean) => void
   /**
@@ -262,6 +280,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   joinAddress: "",
   joinName: "",
   joinToken: "",
+  joinSecure: null,
   setJoin: (patch) => set(patch),
   talkInputId: "",
   talkOutputId: "",
@@ -271,7 +290,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   timekeeperCountdown: { to: "next", chime: false, chimeMinutes: 2 },
   setTimekeeperCountdown: (patch) => set((s) => ({ timekeeperCountdown: { ...s.timekeeperCountdown, ...patch } })),
   remoteDevices: [],
-  remoteAuthRequired: false,
+  // New installs need a key or a paired device before anything on the network is accepted. A saved
+  // value is kept (settings are read one by one), so an existing church's setup does not change.
+  remoteAuthRequired: true,
   remoteListeners: { osc: false, http: false, oscPort: 8000, httpPort: 8080, lan: true },
   obs: { enabled: false, host: "127.0.0.1", port: 4455, password: "" },
   setObs: (patch) => set((s) => ({ obs: { ...s.obs, ...patch } })),
@@ -405,6 +426,8 @@ function acceptable(key: string, value: unknown): boolean {
       const t = value as Partial<TimekeeperCountdown>
       return typeof value === "object" && value !== null && isCountdownTo(t.to) && typeof t.chime === "boolean" && typeof t.chimeMinutes === "number" && Number.isInteger(t.chimeMinutes) && t.chimeMinutes >= 0 && t.chimeMinutes <= 30
     }
+    case "joinSecure":
+      return isJoinSecure(value)
     case "remoteDevices":
       return Array.isArray(value) && value.every((d) => typeof d === "object" && d !== null && typeof (d as { hash?: unknown }).hash === "string" && typeof (d as { name?: unknown }).name === "string")
     case "openedFrom":
@@ -454,6 +477,7 @@ export const SETTINGS_SECTIONS = {
     "joinAddress",
     "joinName",
     "joinToken",
+    "joinSecure",
     "hostLookSeen",
     "talkInputId",
     "talkOutputId",
@@ -515,7 +539,7 @@ export function settingsSection(state: SettingsState, section: SettingsSection):
  */
 export const NOT_IN_BACKUP = [
   "deepgramApiKey", "openaiApiKey", "claudeApiKey", "remoteSecret", "joinToken",
-  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "mcpEnabled", "cloudSpeechConsentAt",
+  "remoteDevices", "remoteAuthRequired", "remoteListeners", "joinAddress", "joinName", "joinSecure", "mcpEnabled", "cloudSpeechConsentAt",
   "companionMode",
 ] as const satisfies readonly PersistedKey[]
 const notInBackup = (key: string) => (NOT_IN_BACKUP as readonly string[]).includes(key)

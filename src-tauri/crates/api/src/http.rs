@@ -13,7 +13,7 @@ use axum::{
 use axum::response::sse::{Event, KeepAlive, Sse};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, watch};
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::command::RemoteCommand;
 use crate::dispatch::{CommandDispatcher, CommandSink};
@@ -40,6 +40,8 @@ pub struct HttpConfig {
     pub tls: Option<TlsListener>,
     /// Phone cameras and the camera router their page publishes to (#209).
     pub cameras: crate::cameras::SharedCameras,
+    /// Who is connected now and when each paired desk was last seen (Production → Operators).
+    pub presence: crate::presence::SharedPresence,
 }
 
 /// The https listener: its port, this computer's certificate and the local CA that signed it.
@@ -62,6 +64,7 @@ impl Default for HttpConfig {
             voice: new_voice_hub(),
             tls: None,
             cameras: crate::cameras::new_camera_hub(),
+            presence: crate::presence::new_presence(),
         }
     }
 }
@@ -486,6 +489,11 @@ struct AppState<S: CommandSink> {
     feeds: SharedFeeds,
     voice: SharedVoice,
     cameras: crate::cameras::SharedCameras,
+    presence: crate::presence::SharedPresence,
+    /// The https port once it listens: `/api/v1/health` says it, so a joining computer pairs over it.
+    tls_port: std::sync::OnceLock<u16>,
+    /// True once the listener is stopping: open streams end with it (stopping hosting cuts every desk).
+    stopping: watch::Receiver<bool>,
     sink: Arc<S>,
     status: Arc<tokio::sync::RwLock<StatusSnapshot>>,
     keys: KeySet,
@@ -541,11 +549,16 @@ where
         .parse()
         .map_err(|e| CommandError::DispatchFailed(format!("Invalid bind address: {e}")))?;
 
+    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
+    let ports = Arc::new(ListenPorts::default());
     let state = Arc::new(AppState {
+        stopping: shutdown_rx.clone(),
         live: config.live.clone(),
         feeds: config.feeds.clone(),
         voice: config.voice.clone(),
         cameras: config.cameras.clone(),
+        presence: config.presence.clone(),
+        tls_port: std::sync::OnceLock::new(),
         sink,
         status,
         keys: config.keys.clone(),
@@ -556,7 +569,7 @@ where
     });
 
     let app = Router::new()
-        .route("/api/v1/health", get(health_handler))
+        .route("/api/v1/health", get(health_handler::<S>))
         .route("/api/v1/status", get(status_handler::<S>))
         .route("/api/v1/command", post(command_handler::<S>))
         .route("/api/v1/pair", post(pair_handler::<S>))
@@ -577,8 +590,11 @@ where
         .route("/api/v1/cameras/tally", post(companion_tally_handler::<S>))
         // Undocumented alias for the path the code shipped with before #146.
         .route("/api/v1/control", post(command_handler::<S>))
-        .layer(CorsLayer::permissive())
-        .with_state(state);
+        // Rhema's own pages are served from here (same origin) and its windows call through Rust, so
+        // no other web page may use this API from a browser on the network (see `same_origin_only`).
+        .layer(app_cors())
+        .layer(axum::middleware::from_fn_with_state(ports.clone(), same_origin_only))
+        .with_state(state.clone());
     // The local CA's certificate (public): a phone installs it to trust the https page.
     let app = match config.tls.as_ref() {
         Some(t) => {
@@ -593,12 +609,16 @@ where
     })?;
 
     let bound_port = listener.local_addr().map(|a| a.port()).unwrap_or(config.port);
+    let _ = ports.http.set(bound_port);
 
-    let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let tls_port = match config.tls.as_ref() {
         Some(t) => Some(serve_tls(t, &config.host, app.clone(), shutdown_tx.subscribe()).await?),
         None => None,
     };
+    if let Some(p) = tls_port {
+        let _ = ports.https.set(p);
+        let _ = state.tls_port.set(p);
+    }
 
     tokio::spawn(async move {
         log::info!("HTTP API server started on {bind_addr} (port {bound_port})");
@@ -670,6 +690,10 @@ struct HealthResponse {
     status: &'static str,
     service: &'static str,
     version: String,
+    /// The https port when this host runs it: a joining computer pairs and works over it, with this
+    /// host's certificate pinned (absent: http only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tls_port: Option<u16>,
 }
 
 static APP_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -679,12 +703,117 @@ pub fn set_app_version(version: &str) {
     let _ = APP_VERSION.set(version.to_string());
 }
 
-async fn health_handler() -> impl IntoResponse {
+async fn health_handler<S: CommandSink + 'static>(AxumState(state): AxumState<Arc<AppState<S>>>) -> impl IntoResponse {
     Json(HealthResponse {
         status: "ok",
         service: "rhema",
         version: APP_VERSION.get().cloned().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string()),
+        tls_port: state.tls_port.get().copied(),
     })
+}
+
+/// The origins of Rhema's own windows (Tauri's web view on macOS/Linux and on Windows).
+const APP_ORIGINS: [&str; 3] = ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"];
+
+/// Whether a browser request from `origin` may use this API: Rhema's own windows, or a page this
+/// listener served itself (the phone remote, camera and feed pages, a TV's feed), whose origin is
+/// the address it was asked for (`host`). Any other web page open in a browser on the network is not.
+fn origin_allowed(origin: &str, host: Option<&str>) -> bool {
+    if APP_ORIGINS.iter().any(|o| o.eq_ignore_ascii_case(origin)) {
+        return true;
+    }
+    let origin = origin.to_ascii_lowercase();
+    let authority = origin.strip_prefix("http://").or_else(|| origin.strip_prefix("https://"));
+    match (authority, host) {
+        (Some(a), Some(h)) => !a.is_empty() && !a.contains('/') && a.eq_ignore_ascii_case(h.trim()),
+        _ => false,
+    }
+}
+
+/// CORS for Rhema's own windows only; a page this listener served needs none (same origin).
+fn app_cors() -> CorsLayer {
+    use axum::http::{header, HeaderName, HeaderValue, Method};
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(APP_ORIGINS.iter().map(|o| HeaderValue::from_static(o))))
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, HeaderName::from_static("x-rhema-key")])
+}
+
+/// The ports this server listens on, once bound: a `Host` must name one of them.
+#[derive(Debug, Default)]
+struct ListenPorts {
+    http: std::sync::OnceLock<u16>,
+    https: std::sync::OnceLock<u16>,
+}
+
+/// Whether a request's `Host` names this computer the way a page of ours can be reached: an IP
+/// address (v4, or v6 in brackets), `localhost`, or a `.local` name (this computer's mDNS name), on
+/// one of this server's ports. Any other name is refused: DNS rebinding points an attacker's own
+/// name (evil.example) at this computer's address, and then its page's origin and the `Host` match.
+/// A missing port is the scheme's default (80 / 443), which this server never listens on.
+fn host_trusted(host: &str, ports: &[u16]) -> bool {
+    let host = host.trim();
+    let (name, port) = if let Some(rest) = host.strip_prefix('[') {
+        let Some((v6, after)) = rest.split_once(']') else { return false };
+        if v6.parse::<std::net::Ipv6Addr>().is_err() {
+            return false;
+        }
+        (None, after.strip_prefix(':'))
+    } else {
+        match host.rsplit_once(':') {
+            Some((n, p)) => (Some(n), Some(p)),
+            None => (Some(host), None),
+        }
+    };
+    let port: Option<u16> = match port {
+        Some(p) => match p.parse() {
+            Ok(p) => Some(p),
+            Err(_) => return false,
+        },
+        None => None,
+    };
+    let name_ok = match name {
+        None => true,
+        Some(n) => {
+            let n = n.to_ascii_lowercase();
+            n.parse::<std::net::Ipv4Addr>().is_ok()
+                || n == "localhost"
+                || (n.len() > ".local".len() && n.ends_with(".local") && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.'))
+        }
+    };
+    name_ok && port.is_some_and(|p| ports.contains(&p))
+}
+
+/// The pages a browser opens from this server (phone remote, camera, feeds) and what they load,
+/// and the two answers that need no key (status: what is on air; health): their `Host` is checked
+/// even without an `Origin`, since a rebound page's same-origin read sends none.
+fn browser_page(path: &str) -> bool {
+    matches!(path, "/remote" | "/camera" | "/api/v1/status" | "/api/v1/health") || ["/feed/", "/assets/", "/api/v1/feed/", "/api/v1/camera/"].iter().any(|p| path.starts_with(p))
+}
+
+/// Refuse a request a browser sent for another web page: its `Origin` is neither this listener's
+/// own address nor Rhema Studio's window, or it reached us under a name that is not ours (DNS
+/// rebinding, `host_trusted`). A browser always says the origin of a cross-site request that could
+/// change something, so this also stops the ones CORS would let through unasked (a form's plain
+/// POST). The pages a browser opens from here are checked by name always. Controllers that are not
+/// browsers (Companion, Stream Deck, OSC bridges) send no origin and are checked by their key.
+async fn same_origin_only(AxumState(ports): AxumState<Arc<ListenPorts>>, req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    let origin = req.headers().get(axum::http::header::ORIGIN).cloned();
+    let host = req.headers().get(axum::http::header::HOST).and_then(|h| h.to_str().ok()).map(str::to_string).or_else(|| req.uri().authority().map(|a| a.as_str().to_string()));
+    if origin.is_some() || browser_page(req.uri().path()) {
+        let listening: Vec<u16> = [ports.http.get(), ports.https.get()].into_iter().flatten().copied().collect();
+        if !host.as_deref().is_some_and(|h| host_trusted(h, &listening)) {
+            log::warn!("HTTP request refused: asked for under another name ({host:?})");
+            return (StatusCode::MISDIRECTED_REQUEST, "Rhema Studio answers only at this computer's own address").into_response();
+        }
+    }
+    if let Some(origin) = origin {
+        if !origin.to_str().is_ok_and(|o| origin_allowed(o, host.as_deref())) {
+            log::warn!("HTTP request refused: from another web page ({origin:?})");
+            return (StatusCode::FORBIDDEN, "Rhema Studio answers only its own pages and windows").into_response();
+        }
+    }
+    next.run(req).await
 }
 
 /// The phone remote: one self-contained page (pair, then Next/Previous/
@@ -856,7 +985,10 @@ fn live_reader<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers: &
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     match check_key(&state.keys, presented_key(headers)) {
-        Ok(Some(entry)) => Ok(entry),
+        Ok(Some(entry)) => {
+            state.presence.saw(&entry, peer.ip());
+            Ok(entry)
+        }
         Ok(None) if peer.ip().is_loopback() => Ok(crate::keys::KeyEntry { hash: String::new(), name: "This computer".into(), role: crate::keys::Role::Configure, paused: false }),
         Ok(None) => Err(StatusCode::FORBIDDEN),
         Err(_) => Err(StatusCode::UNAUTHORIZED),
@@ -898,40 +1030,91 @@ async fn live_handler<S: CommandSink + 'static>(
     }
 }
 
+/// Whether the key a stream was opened with still reads the Live State exactly as then: still
+/// listed with the same name, role and control (this computer itself: keys still off). Revoking,
+/// pausing or changing a desk's role ends its stream at once; a desk that may still read connects
+/// again and is served by what it is now.
+fn still_reads(keys: &KeySet, entry: &crate::keys::KeyEntry) -> bool {
+    let keys = keys.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if entry.hash.is_empty() {
+        return !keys.require_auth;
+    }
+    keys.require_auth && keys.entries.iter().any(|e| e == entry)
+}
+
+/// Resolves once the listener is stopping: a stream that would otherwise never end ends with it.
+fn until_stopped(mut stopping: watch::Receiver<bool>) -> impl std::future::Future<Output = ()> {
+    async move {
+        while !*stopping.borrow_and_update() {
+            if stopping.changed().await.is_err() {
+                break;
+            }
+        }
+    }
+}
+
+/// How often an open stream looks whether its key changed (revoked, paused, another role).
+const KEY_CHECK: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// One open Live State stream: what it follows and who it is for.
+struct LiveStream {
+    rx: broadcast::Receiver<String>,
+    first: Option<String>,
+    entry: crate::keys::KeyEntry,
+    keys: KeySet,
+    tick: tokio::time::Interval,
+    /// Counts the desk as connected (Production → Operators) until the stream ends.
+    _connected: Option<crate::presence::StreamGuard>,
+}
+
 /// `GET /api/v1/live/events`: the Live State as server-sent events, the current one first, then
-/// each change; a comment every 15 s keeps the connection open through idle routers.
+/// each change; a comment every 15 s keeps the connection open through idle routers. When the
+/// desk's key changes (revoked, paused, given another role) the stream says `rejoin` and ends.
 async fn live_events_handler<S: CommandSink + 'static>(
     AxumState(state): AxumState<Arc<AppState<S>>>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> axum::response::Response {
-    let reader = match live_reader(&state, peer, &headers) {
-        Ok(entry) => notice_reader(entry),
+    let entry = match live_reader(&state, peer, &headers) {
+        Ok(entry) => entry,
         Err(code) => return code.into_response(),
     };
     // Production → Cameras names a desk that watches a camera from this address (#209).
-    if let Some(e) = &reader {
-        state.cameras.saw_desk(peer.ip(), &e.name);
+    if !entry.hash.is_empty() {
+        state.cameras.saw_desk(peer.ip(), &entry.name);
     }
-    let rx = state.live.tx.subscribe();
-    let first = state.live.current();
-    let stream = futures_util::stream::unfold((rx, first, reader), |(mut rx, first, reader)| async move {
-        if let Some(json) = first {
+    let mut tick = tokio::time::interval(KEY_CHECK);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let open = LiveStream { rx: state.live.tx.subscribe(), first: state.live.current(), _connected: state.presence.stream_opened(&entry, peer.ip()), entry, keys: state.keys.clone(), tick };
+    let stream = futures_util::stream::unfold(Some(open), |open| async move {
+        let mut s = open?;
+        let reader = notice_reader(s.entry.clone());
+        if let Some(json) = s.first.take() {
             let data = live_for(&json, reader.as_ref());
-            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(data)), (rx, None, reader)));
+            return Some((Ok::<_, std::convert::Infallible>(Event::default().event("live").data(data)), Some(s)));
         }
         loop {
-            match rx.recv().await {
-                Ok(json) => {
-                    let data = live_for(&json, reader.as_ref());
-                    return Some((Ok(Event::default().event("live").data(data)), (rx, None, reader)));
+            tokio::select! {
+                r = s.rx.recv() => match r {
+                    Ok(json) => {
+                        let data = live_for(&json, reader.as_ref());
+                        return Some((Ok(Event::default().event("live").data(data)), Some(s)));
+                    }
+                    // Slow reader: skip to the newest; the next message is the whole state anyway.
+                    Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => return None,
+                },
+                _ = s.tick.tick() => {
+                    if !still_reads(&s.keys, &s.entry) {
+                        log::info!("Live State stream for {} ended: its key changed", s.entry.name);
+                        // The last message; the stream (and the desk's place in Operators) ends with it.
+                        return Some((Ok(Event::default().event("rejoin").data("the host changed this desk")), None));
+                    }
                 }
-                // Slow reader: skip to the newest; the next message is the whole state anyway.
-                Err(broadcast::error::RecvError::Lagged(_)) => {}
-                Err(broadcast::error::RecvError::Closed) => return None,
             }
         }
     });
+    let stream = futures_util::StreamExt::take_until(stream, until_stopped(state.stopping.clone()));
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
 }
 
@@ -943,7 +1126,11 @@ fn companion_key<S: CommandSink>(state: &AppState<S>, peer: SocketAddr, headers:
     if !state.rate.allow(peer.ip()) {
         return Err((StatusCode::TOO_MANY_REQUESTS, "too many requests; slow down"));
     }
-    match check_key(&state.keys, presented_key(headers)) {
+    let key = check_key(&state.keys, presented_key(headers));
+    if let Ok(Some(e)) = &key {
+        state.presence.saw(e, peer.ip());
+    }
+    match key {
         Ok(Some(e)) if e.role != crate::keys::Role::ObsCompanion => Err((StatusCode::FORBIDDEN, "This computer is not an OBS companion of this host. On the host: Settings → Remote control, set its role to OBS companion.")),
         Ok(Some(e)) if e.paused => Err((StatusCode::LOCKED, crate::keys::PAUSED_MESSAGE)),
         Ok(Some(e)) => Ok(e),
@@ -1261,6 +1448,7 @@ async fn feed_events_handler<S: CommandSink + 'static>(
             }
         }
     });
+    let stream = futures_util::StreamExt::take_until(stream, until_stopped(state.stopping.clone()));
     Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(15))).into_response()
 }
 
@@ -1300,7 +1488,10 @@ async fn command_handler<S: CommandSink + 'static>(
             log::warn!("HTTP command refused for {}: {why}", entry.name);
             return (StatusCode::FORBIDDEN, CommandResponse::refused(why));
         }
-        Ok(Some(entry)) => (entry.name, Some(entry.hash), entry.role),
+        Ok(Some(entry)) => {
+            state.presence.saw(&entry, peer.ip());
+            (entry.name, Some(entry.hash), entry.role)
+        }
         // An open remote (no keys) may do everything, as before.
         Ok(None) => ("an open remote".to_string(), None, crate::keys::Role::Configure),
     };
@@ -1414,6 +1605,8 @@ fn refusal_for(role: crate::keys::Role, cmd: &RemoteCommand) -> &'static str {
         Role::Camera => "this device runs the cameras: it may hide or show a camera and change the camera boxes in scenes only",
         Role::Obs => "this device is the OBS director: it may switch OBS scenes only",
         Role::ObsCompanion => "this computer is an OBS companion: it reads the church's cameras into its own OBS and sends no commands",
+        Role::Editor => "this device prepares: it may put a verse or a song in the main desk's Preview, add to the queue and make or change scenes, never what is live",
+        Role::Viewer => "this device is view only: it follows the service and may use Talk and notices, nothing else",
         _ if matches!(cmd, RemoteCommand::ObsPreview(_) | RemoteCommand::ObsTake | RemoteCommand::ObsProgram(_)) => "only a desk the main desk made OBS director may switch OBS",
         _ if matches!(cmd, RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_)) => "this device may present but not make or change scenes",
         _ => "this device may present but not change settings",
@@ -1431,6 +1624,7 @@ mod tests {
         assert!(recent.first_time("press-2"), "a new press");
     }
     use super::*;
+    use crate::keys::{hash_key, key_set_from};
     use std::sync::Mutex;
 
     struct MockSink {
@@ -1530,14 +1724,16 @@ mod tests {
     async fn get_with(port: u16, path: &str, headers: &str, read_bytes: Option<usize>) -> String {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.expect("connect");
-        stream.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n{headers}Connection: close\r\n\r\n").as_bytes()).await.expect("write");
+        stream.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{headers}Connection: close\r\n\r\n").as_bytes()).await.expect("write");
         let mut out = Vec::new();
         match read_bytes {
             None => { stream.read_to_end(&mut out).await.expect("read"); }
             Some(n) => {
                 let mut buf = [0u8; 1024];
+                // Up to n bytes, or what came within 2 s of the last (the headers' length varies).
                 while out.len() < n {
-                    let r = tokio::time::timeout(std::time::Duration::from_secs(2), stream.read(&mut buf)).await.expect("in time").expect("read");
+                    let Ok(r) = tokio::time::timeout(std::time::Duration::from_secs(2), stream.read(&mut buf)).await else { break };
+                    let r = r.expect("read");
                     if r == 0 { break; }
                     out.extend_from_slice(&buf[..r]);
                 }
@@ -1740,7 +1936,7 @@ mod tests {
         let tcp = tokio::net::TcpStream::connect(("127.0.0.1", tls_port)).await.unwrap();
         let name = rustls::pki_types::ServerName::try_from("127.0.0.1").unwrap();
         let mut tls = tokio_rustls::TlsConnector::from(Arc::new(client)).connect(name, tcp).await.expect("the chain checks");
-        tls.write_all(b"GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").await.unwrap();
+        tls.write_all(format!("GET /api/v1/health HTTP/1.1\r\nHost: 127.0.0.1:{tls_port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
         let mut out = Vec::new();
         let _ = tls.read_to_end(&mut out).await;
         let text = String::from_utf8_lossy(&out);
@@ -1780,7 +1976,7 @@ mod tests {
                 use sha2::Digest;
                 let shown = tls.get_ref().1.peer_certificates().unwrap()[0].clone();
                 let seen: String = sha2::Sha256::digest(shown.as_ref()).iter().map(|b| format!("{b:02x}")).collect();
-                tls.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                tls.write_all(format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{tls_port}\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
                 let mut out = Vec::new();
                 let _ = tls.read_to_end(&mut out).await;
                 (seen, String::from_utf8_lossy(&out).to_string())
@@ -1958,7 +2154,7 @@ mod tests {
         let send = |method: &'static str, path: &'static str, body: &'static str, extra: &'static str| async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut s = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: x\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            s.write_all(format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
             let mut out = String::new();
             s.read_to_string(&mut out).await.unwrap();
             out
@@ -2798,5 +2994,233 @@ mod tests {
         assert!(events.iter().all(|(_, p)| !p.contains(r#""why":"x""#)), "{events:?}");
         let mut handle = result.handle;
         handle.stop();
+    }
+
+    /// Send exactly this request (with `{port}` filled in) and read the whole answer.
+    async fn raw(port: u16, request: &str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await.expect("connect");
+        stream.write_all(request.replace("{port}", &port.to_string()).as_bytes()).await.expect("write");
+        let mut out = Vec::new();
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), stream.read_to_end(&mut out)).await;
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
+    #[test]
+    fn the_origins_a_browser_may_call_from() {
+        assert!(origin_allowed("http://192.168.1.20:8080", Some("192.168.1.20:8080")), "a page this listener served");
+        assert!(origin_allowed("https://192.168.1.20:8081", Some("192.168.1.20:8081")), "the same over https (a TV's feed)");
+        assert!(origin_allowed("HTTP://Studio.local:8080", Some("studio.local:8080")));
+        for app in ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"] {
+            assert!(origin_allowed(app, None), "{app}");
+        }
+        for (o, h) in [
+            ("http://evil.example", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:9999", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:8080.evil.example", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:8080/x", Some("192.168.1.20:8080")),
+            ("null", Some("192.168.1.20:8080")),
+            ("http://192.168.1.20:8080", None),
+            ("file://", Some("x")),
+            ("http://", Some("")),
+            ("tauri://localhost.evil", None),
+        ] {
+            assert!(!origin_allowed(o, h), "{o} for {h:?}");
+        }
+    }
+
+    #[test]
+    fn only_this_computers_own_names_on_its_ports_are_trusted() {
+        let ports = [8080, 8081];
+        for ok in ["192.168.1.20:8080", "192.168.1.20:8081", "127.0.0.1:8080", "[::1]:8080", "[fe80::1]:8081", "localhost:8080", "Studio-Mac.local:8080", "LOCALHOST:8081"] {
+            assert!(host_trusted(ok, &ports), "{ok}");
+        }
+        for bad in ["evil.example:8080", "evil.example", "192.168.1.20", "192.168.1.20:9090", "192.168.1.20:x", "[::1]", "[nonsense]:8080", "local:8080", ".local:8080", "evil.local.example:8080", "localhost.evil:8080", "", "1.2.3.4.5:8080"] {
+            assert!(!host_trusted(bad, &ports), "{bad}");
+        }
+        assert!(browser_page("/feed/l3") && browser_page("/remote") && browser_page("/camera") && browser_page("/assets/feed.js") && browser_page("/api/v1/feed/l3/events") && browser_page("/api/v1/camera/pulpit/whip"));
+        assert!(browser_page("/api/v1/status") && browser_page("/api/v1/health"));
+        assert!(!browser_page("/api/v1/command") && !browser_page("/api/v1/live") && !browser_page("/remotes"));
+    }
+
+    #[tokio::test]
+    async fn a_rebound_name_is_refused_and_the_address_works() {
+        let sink = Arc::new(MockSink::new());
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), feeds, ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let post = |host: &str, origin: &str| format!("POST /api/v1/command HTTP/1.1\r\nHost: {host}\r\nOrigin: {origin}\r\nX-Rhema-Key: tok\r\nContent-Type: application/json\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{{\"command\":\"next\"}}");
+        // DNS rebinding: the attacker's name points at this computer; origin and host agree.
+        let rebound = raw(port, &post("evil.example:{port}", "http://evil.example:{port}")).await;
+        assert!(rebound.starts_with("HTTP/1.1 421"), "{rebound}");
+        assert_eq!(sink.command_count(), 0);
+        // This computer's address with its own page's origin: works.
+        assert!(raw(port, &post("127.0.0.1:{port}", "http://127.0.0.1:{port}")).await.starts_with("HTTP/1.1 200"));
+        assert_eq!(sink.command_count(), 1);
+        // The phone and feed pages by address work; by another name they are refused, origin or not.
+        assert!(raw(port, "GET /remote HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
+        // What is on air and the health answer need no key: by address yes, by a rebound name no.
+        for path in ["/api/v1/status", "/api/v1/health"] {
+            assert!(raw(port, &format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\nConnection: close\r\n\r\n")).await.starts_with("HTTP/1.1 200"), "{path}");
+        }
+        for path in ["/remote", "/feed/l3?k=s3cret", "/api/v1/feed/l3/events?k=s3cret", "/camera?name=pulpit&k=x", "/api/v1/status", "/api/v1/health"] {
+            let r = raw(port, &format!("GET {path} HTTP/1.1\r\nHost: evil.example:{{port}}\r\nConnection: close\r\n\r\n")).await;
+            assert!(r.starts_with("HTTP/1.1 421"), "{path}: {r}");
+        }
+        // A controller that is not a browser (no origin) keeps working by key, whatever name it used.
+        assert!(raw(port, &post("studio.lan:{port}", "").replace("Origin: \r\n", "")).await.starts_with("HTTP/1.1 200"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn another_web_page_on_the_network_cannot_send_commands_through_a_browser() {
+        let sink = Arc::new(MockSink::new());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), ..Default::default() };
+        let result = start_http_server(config, sink.clone(), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let post = |origin: &str| format!("POST /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{{port}}\r\n{origin}X-Rhema-Key: tok\r\nContent-Type: application/json\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{{\"command\":\"next\"}}");
+        // A page from somewhere else, even with a key it got hold of: refused, nothing done.
+        for origin in ["Origin: http://evil.example\r\n", "Origin: null\r\n", "Origin: http://127.0.0.1:1\r\n"] {
+            let r = raw(port, &post(origin)).await;
+            assert!(r.starts_with("HTTP/1.1 403"), "{origin}: {r}");
+        }
+        // Its plain form post (no preflight) is refused the same way.
+        let form = raw(port, "POST /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nContent-Type: text/plain\r\nContent-Length: 18\r\nConnection: close\r\n\r\n{\"command\":\"next\"}").await;
+        assert!(form.starts_with("HTTP/1.1 403"), "{form}");
+        assert_eq!(sink.command_count(), 0);
+        // Reading the Live State or the feed stream from another page: refused too.
+        let read = raw(port, "GET /api/v1/live HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nX-Rhema-Key: tok\r\nConnection: close\r\n\r\n").await;
+        assert!(read.starts_with("HTTP/1.1 403"), "{read}");
+        // A browser's preflight for another page gets no permission.
+        let pre = raw(port, "OPTIONS /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, x-rhema-key\r\nConnection: close\r\n\r\n").await;
+        assert!(pre.starts_with("HTTP/1.1 403") && !pre.to_lowercase().contains("access-control-allow-origin"), "{pre}");
+        // The phone page this listener served (same origin), Rhema's own window, and a controller
+        // that is not a browser (no origin) all work.
+        assert!(raw(port, &post("Origin: http://127.0.0.1:{port}\r\n")).await.starts_with("HTTP/1.1 200"));
+        let app = raw(port, &post("Origin: tauri://localhost\r\n")).await;
+        assert!(app.starts_with("HTTP/1.1 200") && app.to_lowercase().contains("access-control-allow-origin: tauri://localhost"), "{app}");
+        assert!(raw(port, &post("")).await.starts_with("HTTP/1.1 200"));
+        let pre = raw(port, "OPTIONS /api/v1/command HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://tauri.localhost\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: content-type, x-rhema-key\r\nConnection: close\r\n\r\n").await;
+        assert!(pre.starts_with("HTTP/1.1 200") && pre.to_lowercase().contains("access-control-allow-origin: http://tauri.localhost"), "{pre}");
+        assert_eq!(sink.command_count(), 3);
+        // Rhema's pages themselves load without an origin, as a browser asks for a page.
+        assert!(raw(port, "GET /remote HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await.starts_with("HTTP/1.1 200"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn the_pages_rhema_serves_still_reach_it_from_their_own_origin() {
+        // The feed page (OBS, a TV), its frames, acks and media, all from the page's own address.
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        feeds.publish("l3", r#"{"verse":null}"#.into());
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), feeds, ..Default::default() };
+        let result = start_http_server(config, Arc::new(PageSink), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let page = raw(port, "GET /feed/l3?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(page.starts_with("HTTP/1.1 200"), "{page}");
+        let script = raw(port, "GET /assets/feed.js HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nConnection: close\r\n\r\n").await;
+        assert!(script.starts_with("HTTP/1.1 200"), "{script}");
+        let ack = raw(port, "POST /api/v1/feed/l3/ack?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: 9\r\nConnection: close\r\n\r\n{\"seq\":1}").await;
+        assert!(!ack.starts_with("HTTP/1.1 403"), "{ack}");
+        let events = get_with(port, "/api/v1/feed/l3/events?k=s3cret", &format!("Origin: http://127.0.0.1:{port}\r\n"), Some(200)).await;
+        assert!(events.contains("text/event-stream"), "same origin: {events}");
+        let foreign = raw(port, "GET /api/v1/feed/l3/events?k=s3cret HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nOrigin: http://evil.example\r\nConnection: close\r\n\r\n").await;
+        assert!(foreign.starts_with("HTTP/1.1 403"), "{foreign}");
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn pausing_revoking_or_changing_a_desk_ends_its_live_stream_at_once() {
+        use crate::keys::{KeyEntry, Keys, Role};
+        let desk = KeyEntry { hash: hash_key("tok"), name: "Desk C".into(), role: Role::Present, paused: false };
+        let keys: KeySet = Arc::new(std::sync::RwLock::new(Keys { require_auth: true, entries: vec![desk.clone()] }));
+        let live = new_live_hub();
+        live.publish(r#"{"v":1,"now":"Sermon"}"#.into());
+        let presence = crate::presence::new_presence();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: keys.clone(), live, presence: presence.clone(), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let follow = || tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await });
+        let ended = |h: tokio::task::JoinHandle<String>| async move { tokio::time::timeout(std::time::Duration::from_secs(3), h).await.expect("the stream ended at once").unwrap() };
+
+        // Connected: listed as connected on the host card.
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(presence.list().iter().map(|d| (d.name.as_str(), d.connected, d.address.as_str())).collect::<Vec<_>>(), [("Desk C", true, "127.0.0.1")]);
+        // Paused: the stream ends with "rejoin"; the desk may connect again and still reads (paused).
+        keys.write().unwrap().entries[0].paused = true;
+        let out = ended(stream).await;
+        assert!(out.contains("Sermon") && out.contains("event: rejoin"), "{out}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(!presence.list()[0].connected, "no longer connected once its stream ended");
+        assert!(get_with(port, "/api/v1/live", "X-Rhema-Key: tok\r\n", None).await.contains("200 OK"), "a paused desk still sees the service");
+        // Another role: ends too (it is served by its new role when it comes back).
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        keys.write().unwrap().entries[0].role = Role::Viewer;
+        assert!(ended(stream).await.contains("event: rejoin"));
+        // Nothing changed for this desk (the list pushed again as it was): the stream stays open.
+        let stream = follow();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        let same = keys.read().unwrap().entries.clone();
+        keys.write().unwrap().entries = same;
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        assert!(!stream.is_finished(), "an unchanged key keeps its stream");
+        // Revoked: ends, and it cannot come back.
+        keys.write().unwrap().entries.clear();
+        assert!(ended(stream).await.contains("event: rejoin"));
+        assert!(get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await.contains("401"));
+        let mut h = result.handle;
+        h.stop();
+    }
+
+    #[tokio::test]
+    async fn stopping_hosting_ends_every_open_stream() {
+        let live = new_live_hub();
+        live.publish(r#"{"v":1}"#.into());
+        let feeds = new_feed_hub();
+        feeds.set(&[("l3".into(), "s3cret".into())]);
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), keys: key_set_from(&[("tok", "Laptop")]), live, feeds, ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let port = result.bound_port;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let desk = tokio::spawn(async move { get_with(port, "/api/v1/live/events", "X-Rhema-Key: tok\r\n", None).await });
+        let tv = tokio::spawn(async move { get_with(port, "/api/v1/feed/l3/events?k=s3cret", "", None).await });
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let mut h = result.handle;
+        h.stop();
+        for s in [desk, tv] {
+            let out = tokio::time::timeout(std::time::Duration::from_secs(3), s).await.expect("ended with the listener").unwrap();
+            assert!(out.contains("text/event-stream"), "{out}");
+        }
+    }
+
+    #[tokio::test]
+    async fn health_says_the_https_port_so_a_joining_computer_pairs_over_it() {
+        let ca = crate::tls::make_ca().unwrap();
+        let server = crate::tls::make_server(&ca, &["127.0.0.1".into()]).unwrap();
+        let config = HttpConfig { port: 0, host: "127.0.0.1".into(), tls: Some(TlsListener { port: 0, server, ca_cert: ca.cert.clone() }), ..Default::default() };
+        let result = start_http_server(config, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        let tls_port = result.tls_port.expect("https port");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let health = raw_http_request(result.bound_port, "GET", "/api/v1/health", None).await;
+        assert!(health.contains(&format!("\"tls_port\":{tls_port}")), "{health}");
+        let mut h = result.handle;
+        h.stop();
+        let plain = start_http_server(HttpConfig { port: 0, host: "127.0.0.1".into(), ..Default::default() }, Arc::new(MockSink::new()), new_shared_status()).await.expect("bind");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(!raw_http_request(plain.bound_port, "GET", "/api/v1/health", None).await.contains("tls_port"), "no https: not said");
+        let mut h = plain.handle;
+        h.stop();
     }
 }

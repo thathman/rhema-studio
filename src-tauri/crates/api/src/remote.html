@@ -408,7 +408,7 @@
   // the main desk). The computer mixes what the phone hears, so the levels go to it.
   const CHANNELS = [["production", "Production"], ["stage", "Stage & worship"]]
   const HOST_KEY = "to:host"
-  const ROLE_NAMES = { timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present only", configure: "Present and change settings" }
+  const ROLE_NAMES = { timekeeper: "Timekeeper", bible: "Bible", worship: "Worship", screens: "Screens", stage: "Stage", camera: "Camera", obs: "OBS director", present: "Present only", configure: "Present and change settings", editor: "Editor", viewer: "View only" }
   let talkTo = "all", listen = CHANNELS.map((c) => c[0]), muted = {}
   const isHostName = (n) => /\(main desk\)$|^Main desk$/.test(n)
   const allowedChannels = (live) => CHANNELS.filter(([id]) => { const r = live && live.talkRights && live.talkRights[id]; return !r || !me || r.includes(me.role) })

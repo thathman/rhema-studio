@@ -1328,6 +1328,27 @@ Rhema with a saved service (a song and two slides), Desk menu → Your name = "T
 | 10ex.9 | Production → Scenes. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
 | 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
 
+### 10fk. Host/Join hardening: who is connected, cutting a desk, browser pages, key by default, https, Editor and View only (#162, #197, #63)
+
+Two computers on the church network: **A** hosts (Settings → Remote control, HTTP listener on the
+network), **B** joins it (Production → Operators → Join a host). A phone on the same Wi-Fi.
+
+| # | Step | Expected | Result |
+|---|------|----------|--------|
+| 10fk.1 | New install (or a fresh user account) of this build: Settings → Remote control. | **Require a key or a paired device** is ticked, with "On (the setting on new installs)". On an existing install that had it unticked, it stays unticked and says "as this computer was set up before". | Unverified |
+| 10fk.2 | A: tick **Secure page for phones (https)**, start the HTTP listener. Production → Operators. | The host card lists this computer's address(es) as `ip:port` (one per network), "Secure link on port 8081; certificate xxxx xxxx xxxx xxxx", and a **Stop hosting** button. | Unverified |
+| 10fk.3 | B: Join a host, pick A, type the code, Join. | B connects; its desk header says **Encrypted · certificate xxxx …**, the same four groups as A's card. A's card shows B **Connected now** with B's address. | Unverified |
+| 10fk.4 | B: Leave. Wait two minutes. | A's card shows B "Seen just now", then "Seen 2 min ago"; the dot is grey. Join B again: Connected now. | Unverified |
+| 10fk.5 | A: **Take back control** of B. Then give it back. | Within a second B shows "Paused by the main desk" (its stream is cut and it reconnects at once; it never shows "Reconnecting…" for more than a moment). Given back: controls return. | Unverified |
+| 10fk.6 | A: Settings → Remote control: change B's role (e.g. Present only → View only). | Within a second B's desk shows the new role and only its controls (View only: run of show, Talk, notices; no buttons that change anything). | Unverified |
+| 10fk.7 | A: revoke B. | Within a second B says the host refused it and to pair again; it no longer gets any update. B disappears from A's card. | Unverified |
+| 10fk.8 | Set a desk to **Editor**. On it: Prepare → Preview verse "Romans 8:28", Preview song; edit a scene that is not on a screen, then one that is. | The verse and song go to A's Preview only (nothing live). The off-screen scene changes at once; the on-screen one waits for A to accept. The editor has no Take buttons; Bible Activate / Next verse from it is refused. | Unverified |
+| 10fk.9 | A: turn https off, restart the listener. Pair a new desk C. | C's desk shows **Not encrypted.** with the steps to turn the secure link on. A's card says "No secure link". B (paired over https) says it cannot reach the host's secure link rather than falling back to plain http. | Unverified |
+| 10fk.10 | On any computer, save a page with `<script>fetch("http://<A>:8080/api/v1/command",{method:"POST",headers:{"Content-Type":"application/json","X-Rhema-Key":"<a real key>"},body:'{"command":"next"}'})</script>` and open it in a browser. | Nothing happens on A (the browser console shows a blocked/403 request); A's log says "from another web page". | Unverified |
+| 10fk.11 | Check every page A serves still works: phone remote (`/remote`, pair and Next), a camera page, a browser feed in OBS and in a desktop browser, a Google TV receiver feed, the phone talk page over https. | All work as before. | Unverified |
+| 10fk.13 | DNS rebinding: in /etc/hosts on B add `<A's IP> rebind.test`, open `http://rebind.test:8080/remote` and `http://rebind.test:8080/feed/<id>?k=<secret>` in a browser on B. Then `http://<A's IP>:8080/remote`, and `http://<A's computer name>.local:8080/remote`. | The two rebind.test pages get "Rhema Studio answers only at this computer's own address" (421). By IP and by .local name they open as usual. | Unverified |
+| 10fk.12 | A: Production → Operators → **Stop hosting** → confirm. | Every joined desk, phone and browser feed disconnects within a couple of seconds; A's own service and screens carry on. The listener stays off when Rhema is opened again. | Unverified |
+
 ### 10fb. Rhema Camera app for Android (#209)
 
 Needs an Android phone (8 or newer) on the church Wi-Fi with `android-camera/build/rhema-camera.apk` installed (`cd android-camera && ./build.sh`, then `adb install -r build/rhema-camera.apk`), and OBS for step 10.

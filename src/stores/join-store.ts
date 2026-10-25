@@ -21,6 +21,12 @@ interface JoinState {
   paused: boolean
   /** A passing note that is not an error (the host moved to another service and this desk refreshed). */
   note: string | null
+  /**
+   * How this desk reaches the host while connected: true = https with the host's certificate
+   * checked (kept at pairing); false = plain http (the host does not run https, or was paired
+   * without it), which the desk warns about; null = not connected yet.
+   */
+  secure: boolean | null
   live: LiveStateV1 | null
   /** This desk's monotonic time when `live` arrived: a running timer counts on from it (no clock skew). */
   receivedAt: number
@@ -106,9 +112,12 @@ async function listenOnce() {
   })
   await listen<string>("join:state", (e) => {
     try {
-      const p = JSON.parse(e.payload) as { state: string; error?: string }
+      const p = JSON.parse(e.payload) as { state: string; error?: string; secure?: boolean; me?: { name?: unknown; role?: unknown; paused?: unknown } | null }
       const status: JoinStatus = p.state === "connected" ? "connected" : p.state === "reconnecting" ? "reconnecting" : p.state === "refused" ? "refused" : "off"
-      useJoin.setState({ status, error: p.error ?? null })
+      // Each (re)connection says what the host makes of this desk now: the main desk may have
+      // changed its role or taken back control while it was away (the host ends the stream then).
+      const me = p.me && typeof p.me.name === "string" && typeof p.me.role === "string" ? { me: { name: p.me.name, role: p.me.role }, paused: p.me.paused === true } : {}
+      useJoin.setState({ status, error: p.error ?? null, ...(typeof p.secure === "boolean" ? { secure: p.secure } : {}), ...me })
     } catch {
       // ignore
     }
@@ -121,26 +130,30 @@ export const useJoin = create<JoinState>((set, get) => ({
   me: null,
   paused: false,
   note: null,
+  secure: null,
   live: null,
   receivedAt: 0,
   clockSkewMs: null,
   pair: async (address, code, name, asCompanion = false) => {
     set({ status: "connecting", error: null })
     try {
-      const token = await invoke<string>("join_pair", asCompanion ? { address, code, name, role: "obs-companion" } : { address, code, name })
-      useSettingsStore.getState().setJoin({ joinAddress: address.trim(), joinName: name.trim(), joinToken: token })
+      const paired = await invoke<Paired | string>("join_pair", asCompanion ? { address, code, name, role: "obs-companion" } : { address, code, name })
+      const { token, secure } = typeof paired === "string" ? { token: paired, secure: null } : paired
+      useSettingsStore.getState().setJoin({ joinAddress: address.trim(), joinName: name.trim(), joinToken: token, joinSecure: secure })
       await get().connect()
     } catch (e) {
       set({ status: "off", error: String(e) })
     }
   },
   connect: async () => {
-    const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
+    const { joinAddress: address, joinToken: token, joinSecure } = useSettingsStore.getState()
     if (!address || !token) return
     await listenOnce()
     gaps = []
-    set({ status: "connecting", error: null, clockSkewMs: null })
+    set({ status: "connecting", error: null, clockSkewMs: null, secure: null })
     try {
+      // How this host is reached, as kept at pairing: https with its certificate authority, or http.
+      await invoke("join_secure", { address, secure: joinSecure ? { port: joinSecure.port, fingerprint: joinSecure.fingerprint } : null })
       const me = await invoke<{ name: string; role: string; paused?: boolean }>("join_me", { address, token })
       set({ me: { name: me.name, role: me.role }, paused: me.paused === true })
       await invoke("join_connect", { address, token })
@@ -151,8 +164,8 @@ export const useJoin = create<JoinState>((set, get) => ({
   leave: async (forget = false) => {
     await invoke("join_disconnect").catch(() => {})
     gaps = []
-    set({ status: "off", live: null, me: null, error: null, paused: false, note: null, clockSkewMs: null })
-    if (forget) useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "" })
+    set({ status: "off", live: null, me: null, error: null, paused: false, note: null, clockSkewMs: null, secure: null })
+    if (forget) useSettingsStore.getState().setJoin({ joinAddress: "", joinToken: "", joinSecure: null })
   },
   send: async (command) => {
     const { joinAddress: address, joinToken: token } = useSettingsStore.getState()
@@ -184,6 +197,9 @@ export const useJoin = create<JoinState>((set, get) => ({
     }
   },
 }))
+
+/** What pairing gives back (src-tauri/src/commands/join.rs `Paired`). */
+type Paired = { token: string; secure: { port: number; fingerprint: string } | null }
 
 /** A joined desk may send commands: connected, and the main desk has not taken back control. */
 export const useCanSend = () => useJoin((s) => s.status === "connected" && !s.paused)

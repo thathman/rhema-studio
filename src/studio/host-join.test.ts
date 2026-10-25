@@ -103,7 +103,7 @@ describe("publishing without timers (a hidden window holds them back)", () => {
 describe("joining a host", () => {
   it("pairs, keeps the token, learns its role, follows the Live State and sends commands", async () => {
     await useJoin.getState().pair(" 192.168.1.20:8080 ", "123456", "Femi's laptop")
-    expect(calls.map((c) => c.cmd)).toEqual(["join_pair", "join_me", "join_connect"])
+    expect(calls.map((c) => c.cmd)).toEqual(["join_pair", "join_secure", "join_me", "join_connect"])
     expect(useSettingsStore.getState()).toMatchObject({ joinAddress: "192.168.1.20:8080", joinToken: "token-123", joinName: "Femi's laptop" })
     expect(useJoin.getState().me).toEqual({ name: "Femi's laptop", role: "timekeeper" })
     handlers.get("join:state")!({ payload: JSON.stringify({ state: "connected" }) })
@@ -193,6 +193,6 @@ describe("one service at a time (#246 C16)", () => {
     expect(useJoin.getState().error).toBeNull()
     expect(useJoin.getState().note).toContain("different service")
     await new Promise((r) => setTimeout(r, 0))
-    expect(calls.map((c) => c.cmd)).toEqual(["join_command", "join_me", "join_connect"])
+    expect(calls.map((c) => c.cmd)).toEqual(["join_command", "join_secure", "join_me", "join_connect"])
   })
 })

@@ -35,6 +35,7 @@ const OLD_FILE: Record<string, unknown> = {
   joinAddress: "192.168.1.10:8080",
   joinName: "Tolu · Sanctuary desk",
   joinToken: "join-token-123456",
+  joinSecure: { port: 8081, fingerprint: "ab".repeat(32) },
   talkInputId: "headset-mic",
   talkOutputId: "headset-ears",
   timekeeperCountdown: { to: "endby:sermon", chime: true, chimeMinutes: 5 },

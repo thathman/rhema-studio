@@ -233,6 +233,8 @@ pub struct HttpRuntime {
     tls_ca_fingerprint: Option<String>,
     /// Phone cameras and the camera router (#209); kept across restarts of the listener.
     cameras: rhema_api::SharedCameras,
+    /// Who is connected and when each desk was last seen (Production → Operators); cleared on stop.
+    presence: rhema_api::SharedPresence,
     /// The church name (Brand Kit) this host announces itself by (#197).
     church: String,
     /// This host's announcement on the network, while the listener is reachable from it (#197).
@@ -253,6 +255,7 @@ impl HttpRuntime {
             feeds: new_feed_hub(),
             voice: new_voice_hub(),
             cameras: rhema_api::new_camera_hub(),
+            presence: rhema_api::new_presence(),
             church: String::new(),
             advert: None,
         }
@@ -313,9 +316,9 @@ pub async fn start_http(
     lan: Option<bool>,
     https: Option<bool>,
 ) -> Result<u16, String> {
-    let (status, live, feeds, voice, cameras, already_running) = {
+    let (status, live, feeds, voice, cameras, presence, already_running) = {
         let runtime = state.lock().map_err(|e| e.to_string())?;
-        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.voice.clone(), runtime.cameras(), runtime.handle.is_some())
+        (runtime.shared_status(), runtime.live.clone(), runtime.feeds.clone(), runtime.voice.clone(), runtime.cameras(), runtime.presence.clone(), runtime.handle.is_some())
     };
 
     if already_running {
@@ -347,6 +350,7 @@ pub async fn start_http(
         voice,
         tls,
         cameras,
+        presence,
     };
 
     let sink = Arc::new(TauriSink { app });
@@ -383,6 +387,7 @@ pub async fn stop_http(state: State<'_, Mutex<HttpRuntime>>) -> Result<(), Strin
             runtime.tls_port = None;
             runtime.tls_fingerprint = None;
             runtime.tls_ca_fingerprint = None;
+            runtime.presence.clear();
             runtime.refresh_advert();
             log::info!("HTTP API server stopped");
             Ok(())
@@ -404,6 +409,59 @@ pub async fn get_http_status(
         port: runtime.bound_port,
         tls_port: runtime.tls_port,
         tls_certificate: runtime.tls_ca_fingerprint.clone(),
+    })
+}
+
+/// What Production → Operators shows about hosting: whether the listener runs and for whom, this
+/// computer's addresses on the church network, its https port and certificate check, and each
+/// paired desk with whether it is connected now and when it was last seen.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostStatus {
+    pub running: bool,
+    pub lan: bool,
+    pub port: Option<u16>,
+    pub tls_port: Option<u16>,
+    /// The local CA's fingerprint (https on): each joined computer shows the same.
+    pub ca_fingerprint: Option<String>,
+    /// "192.168.1.20:8080", one per network this computer is on (wired, Wi-Fi).
+    pub addresses: Vec<String>,
+    pub desks: Vec<rhema_api::DeskPresence>,
+}
+
+/// This computer's IPv4 addresses on its networks (private first, then link-local); never loopback.
+fn lan_addresses() -> Vec<std::net::Ipv4Addr> {
+    let mut ips: Vec<std::net::Ipv4Addr> = if_addrs::get_if_addrs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|i| match i.ip() {
+            std::net::IpAddr::V4(v4) if !v4.is_loopback() && !v4.is_unspecified() && (v4.is_private() || v4.is_link_local()) => Some(v4),
+            _ => None,
+        })
+        .collect();
+    ips.sort_by_key(|ip| (ip.is_link_local(), *ip));
+    ips.dedup();
+    ips
+}
+
+#[tauri::command]
+pub fn host_status(state: State<'_, Mutex<HttpRuntime>>, remote: State<'_, RemoteKeys>) -> Result<HostStatus, String> {
+    // Only desks that still have a key here: a revoked one is gone from the card at once.
+    let listed: Vec<String> = remote.keys.read().map_err(|e| e.to_string())?.entries.iter().map(|e| e.hash.clone()).collect();
+    let runtime = state.lock().map_err(|e| e.to_string())?;
+    let running = runtime.handle.as_ref().is_some_and(rhema_api::HttpHandle::is_active);
+    let addresses = match (running && runtime.lan, runtime.bound_port) {
+        (true, Some(port)) => lan_addresses().into_iter().map(|ip| format!("{ip}:{port}")).collect(),
+        _ => Vec::new(),
+    };
+    Ok(HostStatus {
+        running,
+        lan: runtime.lan,
+        port: runtime.bound_port,
+        tls_port: runtime.tls_port,
+        ca_fingerprint: runtime.tls_ca_fingerprint.clone(),
+        addresses,
+        desks: if running { runtime.presence.list().into_iter().filter(|d| listed.contains(&d.hash)).collect() } else { Vec::new() },
     })
 }
 
