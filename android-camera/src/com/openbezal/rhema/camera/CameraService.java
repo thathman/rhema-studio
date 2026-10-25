@@ -57,8 +57,11 @@ public final class CameraService extends Service {
     private final IBinder binder = new Local();
     private HandlerThread camThread;
     private HandlerThread encThread;
+    /** Where the battery and heat report is sent from (network, off the camera's threads). */
+    private HandlerThread reportThread;
     private Handler cam;
     private Handler enc;
+    private Handler reporter;
     private Handler main;
     private SharedPreferences prefs;
     private Rig rig;
@@ -107,6 +110,9 @@ public final class CameraService extends Service {
         encThread = new HandlerThread("rhema-encoder");
         encThread.start();
         enc = new Handler(encThread.getLooper());
+        reportThread = new HandlerThread("rhema-report");
+        reportThread.start();
+        reporter = new Handler(reportThread.getLooper());
         gpu = new Gpu();
         rig = new Rig(this, cam, new Rig.Listener() {
             @Override
@@ -158,6 +164,7 @@ public final class CameraService extends Service {
         });
         camThread.quitSafely();
         encThread.quitSafely();
+        reportThread.quitSafely();
         current = null;
         super.onDestroy();
     }
@@ -753,6 +760,29 @@ public final class CameraService extends Service {
     }
 
     private long batteryLogAt;
+    private long reportAt;
+    private volatile boolean reportFailing;
+
+    /** Tell Rhema the battery and heat (#213), from the report thread; a failure is logged once until it works again. */
+    private void report() {
+        final Pairing p = Prefs.pairing(this);
+        if (p == null || p.statusUrl() == null) return;
+        float[] b = battery();
+        final String body = Report.body(b[0], b[2] > 0, b[1], Build.VERSION.SDK_INT >= 29 ? thermalStatus : -1, thermalStep > 0);
+        reporter.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int code = Report.send(p, body);
+                    if (!Report.ok(code) && !reportFailing) Log.w(TAG, "battery report: Rhema answered " + code);
+                    reportFailing = !Report.ok(code);
+                } catch (IOException e) {
+                    if (!reportFailing) Log.w(TAG, "battery report: " + e.getMessage());
+                    reportFailing = true;
+                }
+            }
+        });
+    }
 
     Publisher publisher() {
         return pub;
@@ -773,6 +803,11 @@ public final class CameraService extends Service {
                 lastFrames = frames;
             }
             lastTick = now;
+            if (sending && now - reportAt >= Report.EVERY_MS) {
+                reportAt = now;
+                report();
+            }
+            if (!sending) reportAt = 0;
             if (sending && now - batteryLogAt >= 60000) {
                 batteryLogAt = now;
                 float[] b = battery();

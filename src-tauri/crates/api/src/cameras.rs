@@ -38,6 +38,9 @@ pub const COMPANION_PATH: &str = "companion/";
 /// A companion's tally older than this is not shown (its OBS or the companion went away).
 const TALLY_FRESH: Duration = Duration::from_secs(15);
 
+/// A phone's battery and heat report older than this is not shown (it reports every 30 s, #213).
+const PHONE_FRESH: Duration = Duration::from_secs(95);
+
 /// Where the router listens for WHIP, and the encrypted reading link companions use.
 #[derive(Clone)]
 pub struct RouterTarget {
@@ -83,7 +86,7 @@ pub struct ObsTally {
 }
 
 /// One camera as the router sees it, with who reads it (#209).
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CameraWatch {
     pub name: String,
@@ -110,6 +113,47 @@ pub struct CameraWatch {
     pub watchers: Vec<Watcher>,
     /// What each OBS companion said about it.
     pub obs: Vec<ObsTally>,
+    /// The phone's own battery and heat (Rhema Studio Cam reports them every 30 s, #213); None
+    /// when it has not reported lately (another camera app, an older Cam, or it went quiet).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phone: Option<PhoneReport>,
+}
+
+/// What Rhema Studio Cam says about its phone (`POST /api/v1/camera/<name>/status`).
+#[derive(Debug, Clone, Copy, Default, serde::Deserialize, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PhoneStatus {
+    /// Battery level, 0–100.
+    pub battery: Option<f64>,
+    /// Plugged in.
+    pub charging: bool,
+    /// Battery temperature (°C).
+    pub temperature: Option<f64>,
+    /// Android's thermal status: 0 none, 1 light, 2 moderate, 3 severe, 4 critical, 5 emergency, 6 shutdown.
+    pub thermal: Option<u8>,
+    /// The app sends a smaller or slower picture to cool the phone.
+    pub cooling: bool,
+}
+
+impl PhoneStatus {
+    /// Only sensible values.
+    #[must_use]
+    pub fn clean(mut self) -> Self {
+        self.battery = self.battery.filter(|b| b.is_finite() && (0.0..=100.0).contains(b));
+        self.temperature = self.temperature.filter(|t| t.is_finite() && (-40.0..=120.0).contains(t));
+        self.thermal = self.thermal.filter(|t| *t <= 6);
+        self
+    }
+}
+
+/// A phone's last report, for the operator.
+#[derive(Debug, Clone, Copy, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneReport {
+    #[serde(flatten)]
+    pub status: PhoneStatus,
+    /// Milliseconds since it came.
+    pub ago_ms: u64,
 }
 
 /// One companion's report: the cameras on its OBS program and preview, and those OBS plays.
@@ -161,6 +205,8 @@ pub struct CameraHub {
     tallies: RwLock<HashMap<String, (String, Instant, Tally)>>,
     /// Paired desks by the address they follow the host from, to name who watches a camera.
     desks: RwLock<HashMap<IpAddr, String>>,
+    /// Each phone's last battery and heat report, by camera name (#213).
+    phones: RwLock<HashMap<String, (Instant, PhoneStatus)>>,
 }
 
 // Never print a camera's secret (HttpConfig is Debug).
@@ -189,8 +235,29 @@ pub fn valid_camera_name(name: &str) -> bool {
 impl CameraHub {
     /// Replace the list of cameras (name, secret); bad names and short secrets are dropped.
     pub fn set(&self, list: &[(String, String)]) {
-        let map = list.iter().filter(|(n, t)| valid_camera_name(n) && t.len() >= 16).cloned().collect();
+        let map: HashMap<String, String> = list.iter().filter(|(n, t)| valid_camera_name(n) && t.len() >= 16).cloned().collect();
+        // A removed camera's phone report goes with it.
+        self.phones.write().unwrap_or_else(PoisonError::into_inner).retain(|n, _| map.contains_key(n));
         *self.cameras.write().unwrap_or_else(PoisonError::into_inner) = map;
+    }
+
+    /// A camera's phone reported its battery and heat, signed in with the camera's own secret
+    /// (`Authorization: Bearer <secret>`). False (and nothing kept) for a wrong secret.
+    pub fn set_phone(&self, name: &str, token: &str, status: PhoneStatus) -> bool {
+        if !self.knows(name, token) {
+            return false;
+        }
+        self.phones.write().unwrap_or_else(PoisonError::into_inner).insert(name.to_string(), (Instant::now(), status.clean()));
+        true
+    }
+
+    /// A camera's phone report, while fresh.
+    #[must_use]
+    pub fn phone(&self, name: &str) -> Option<PhoneReport> {
+        let phones = self.phones.read().unwrap_or_else(PoisonError::into_inner);
+        let (at, status) = phones.get(name)?;
+        let age = at.elapsed();
+        (age < PHONE_FRESH).then(|| PhoneReport { status: *status, ago_ms: u64::try_from(age.as_millis()).unwrap_or(u64::MAX) })
     }
 
     /// The router started (Some) or stopped (None).
@@ -247,6 +314,7 @@ impl CameraHub {
         let mut fresh: Vec<&(String, Instant, Tally)> = tallies.values().filter(|(_, at, _)| at.elapsed() < TALLY_FRESH).collect();
         fresh.sort_by(|a, b| a.0.cmp(&b.0));
         for cam in &mut list {
+            cam.phone = self.phone(&cam.name);
             cam.obs = fresh
                 .iter()
                 .filter_map(|(desk, _, t)| {
@@ -482,6 +550,30 @@ mod tests {
         // Unpaired: its tally goes with it.
         hub.sync_readers(&[]);
         assert!(hub.watch().iter().all(|c| c.obs.is_empty()));
+    }
+
+    #[test]
+    fn a_phone_reports_its_battery_with_its_own_secret_only() {
+        let hub = CameraHub::default();
+        hub.set(&[("pulpit".into(), "0123456789abcdef".into()), ("choir".into(), "fedcba9876543210".into())]);
+        hub.set_watch(vec![CameraWatch { name: "pulpit".into(), live: true, ..CameraWatch::default() }]);
+        let s = PhoneStatus { battery: Some(18.0), charging: false, temperature: Some(41.5), thermal: Some(3), cooling: true };
+        assert!(!hub.set_phone("pulpit", "fedcba9876543210", s), "another camera's secret");
+        assert!(!hub.set_phone("pulpit", "", s));
+        assert!(hub.watch()[0].phone.is_none());
+        assert!(hub.set_phone("pulpit", "0123456789abcdef", s));
+        let p = hub.watch()[0].phone.expect("its report");
+        assert_eq!(p.status, s);
+        assert!(p.ago_ms < 1000);
+        let json = serde_json::to_value(hub.watch()[0].clone()).unwrap();
+        assert_eq!((json["phone"]["battery"].as_f64(), json["phone"]["thermal"].as_u64(), json["phone"]["cooling"].as_bool()), (Some(18.0), Some(3), Some(true)));
+        // Odd values are dropped, not kept.
+        assert!(hub.set_phone("pulpit", "0123456789abcdef", PhoneStatus { battery: Some(250.0), temperature: Some(f64::NAN), thermal: Some(9), ..PhoneStatus::default() }));
+        let p = hub.phone("pulpit").unwrap().status;
+        assert_eq!((p.battery, p.temperature, p.thermal), (None, None, None));
+        // Removing the camera drops its report.
+        hub.set(&[("choir".into(), "fedcba9876543210".into())]);
+        assert!(hub.phone("pulpit").is_none());
     }
 
     #[test]

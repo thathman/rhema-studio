@@ -2,6 +2,10 @@ import { create } from "zustand"
 import { presentSlide } from "@/hooks/use-broadcast"
 import { buildSlides } from "@/lib/lyrics"
 import { outputOnAir } from "@/lib/output-on-air"
+import { networkMeasures, playbackTrouble, screenPlayback, useWindowPlayback } from "@/lib/camera-playback"
+import { measuredOn } from "@/lib/glass-latency"
+import { useFeedHealthStore } from "@/lib/show-health"
+import { useSettingsStore } from "@/stores/settings-store"
 import { presentQueueItem } from "@/lib/remote-actions"
 import { outputsForScreens, useBroadcastStore, type LiveSlide } from "@/stores/broadcast-store"
 import { useDetectionStore } from "@/stores/detection-store"
@@ -56,6 +60,11 @@ export interface OutputMapRow {
   /** Who took a scene to it or released it last, and when (host wall ms), outside rehearsal (absent: no one yet, or an older host). */
   by?: string
   at?: number
+  /**
+   * How its screens play the scene's cameras, measured there (#213): "Pulpit on Projector: 30 fps,
+   * jitter 4 ms, 0.1% lost · lag ≈ 240 ms (25 Oct)". Absent when none plays a camera.
+   */
+  signal?: string[]
 }
 
 /** A verse Auto Bible heard, for a Bible desk to Activate with one click. */
@@ -183,15 +192,29 @@ export async function stepLiveSection(step: 1 | -1 | "chorus"): Promise<string |
 /** Every output as the real screens have it (never rehearsal's scenes), for a Screens desk's map. */
 export function outputMap(): OutputMapRow[] {
   const b = useBroadcastStore.getState()
-  return outputsForScreens(b).map((o) => ({
-    id: o.id,
-    name: o.name,
-    kind: o.type,
-    role: o.role ?? "congregation",
-    on: outputOnAir(o, b.outputStatus[o.id]),
-    scene: o.sceneId ? (b.scenes.find((sc) => sc.id === o.sceneId)?.name ?? null) : null,
-    ...(b.sceneTakes[o.id] ? { ...(b.sceneTakes[o.id].by ? { by: b.sceneTakes[o.id].by } : {}), at: b.sceneTakes[o.id].at } : {}),
-  }))
+  const outputs = outputsForScreens(b)
+  const pages = Object.fromEntries(Object.entries(useFeedHealthStore.getState()).map(([id, h]) => [id, h?.video]))
+  const screens = screenPlayback(outputs, useWindowPlayback.getState(), pages)
+  const { cameras, cameraLatency } = useSettingsStore.getState()
+  return outputs.map((o) => {
+    const signal = screens.filter((s) => s.outputId === o.id).map((s) => {
+      const label = cameras.find((c) => c.name === s.camera)?.label ?? (s.camera || "Camera")
+      const lag = cameraLatency.find((m) => m.camera === s.camera && m.outputId === o.id)
+      const trouble = playbackTrouble(s)
+      const parts = [s.held ? "frozen by the operator" : !s.playing ? "not playing" : s.fps === null ? "measuring…" : `${Math.round(s.fps)} fps`, ...networkMeasures(s)]
+      return `${label} on ${s.where}: ${parts.join(", ")}${trouble && s.playing ? ` (${trouble})` : ""}${lag ? ` · lag ≈ ${Math.round(lag.ms)} ms (${measuredOn(lag.at)})` : ""}`
+    })
+    return {
+      id: o.id,
+      name: o.name,
+      kind: o.type,
+      role: o.role ?? "congregation",
+      on: outputOnAir(o, b.outputStatus[o.id]),
+      scene: o.sceneId ? (b.scenes.find((sc) => sc.id === o.sceneId)?.name ?? null) : null,
+      ...(b.sceneTakes[o.id] ? { ...(b.sceneTakes[o.id].by ? { by: b.sceneTakes[o.id].by } : {}), at: b.sceneTakes[o.id].at } : {}),
+      ...(signal.length ? { signal } : {}),
+    }
+  })
 }
 
 /** The latest verses Auto Bible heard (never the words said around them). */
@@ -213,5 +236,17 @@ export function watchDeskConsoles(soon: () => void): (() => void)[] {
     useSongStore.subscribe((s, p) => { if (s.songs !== p.songs) soon() }),
     useDetectionStore.subscribe((s, p) => { if (s.detections !== p.detections) soon() }),
     useSharedReadiness.subscribe(() => soon()),
+    // The screens' camera measures (every 2 s): published only when the map's words change.
+    ...(() => {
+      let last = JSON.stringify(outputMap())
+      const check = () => {
+        const now = JSON.stringify(outputMap())
+        if (now !== last) {
+          last = now
+          soon()
+        }
+      }
+      return [useWindowPlayback.subscribe(check), useFeedHealthStore.subscribe(check)]
+    })(),
   ]
 }

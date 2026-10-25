@@ -5,6 +5,7 @@
  */
 import { VideoMeter } from "@/lib/video-meter"
 import { cameraPathOf } from "@/lib/live-sources"
+import { NO_RTC, rtcReading, rtcSample, type RtcReading, type RtcSample } from "@/lib/rtc-stats"
 
 export type WhepSignal = (url: string, sdp: string) => Promise<string>
 
@@ -23,7 +24,19 @@ export interface CameraPlayback {
   height: number | null
   /** Frozen by the operator on purpose (the last frame is held). */
   held: boolean
+  /** WebRTC's own counters (#213): jitter (ms), packets lost (%), round trip to the router (ms). */
+  jitterMs?: number | null
+  lossPct?: number | null
+  rttMs?: number | null
+  /** Frames a second arriving from the network, and decoded, on this screen. */
+  recvFps?: number | null
+  decodeFps?: number | null
+  /** From asking the router to the first frame on this screen (ms), for the latest connection. */
+  firstFrameMs?: number | null
 }
+
+/** How often a player reads WebRTC's counters. */
+const STATS_MS = 2000
 
 export class WhepPlayer {
   readonly video: HTMLVideoElement
@@ -43,6 +56,13 @@ export class WhepPlayer {
   readonly key: string
   private readonly signal: WhepSignal
   private readonly onChange: () => void
+  private statsTimer: ReturnType<typeof setInterval> | null = null
+  private lastStats: RtcSample | null = null
+  /** WebRTC's counters as last read (every 2 s). */
+  rtc: RtcReading = NO_RTC
+  /** When the latest connection was asked for, and how long its first frame took (ms). */
+  private askedAt = 0
+  firstFrameMs: number | null = null
 
   constructor(url: string, signal: WhepSignal, onChange: () => void, key = url) {
     this.url = url
@@ -53,17 +73,46 @@ export class WhepPlayer {
     this.video.muted = true
     this.video.playsInline = true
     // The first frame (and a new size) is when it can be drawn: say so.
-    this.video.addEventListener("loadeddata", () => this.onChange())
+    this.video.addEventListener("loadeddata", () => {
+      if (this.firstFrameMs === null && this.askedAt > 0) this.firstFrameMs = Math.round(performance.now() - this.askedAt)
+      this.onChange()
+    })
     this.video.addEventListener("resize", () => this.onChange())
     this.meter = new VideoMeter(this.video)
+    this.statsTimer = setInterval(() => void this.readStats(), STATS_MS)
     void this.connect()
+  }
+
+  /** Read WebRTC's counters for the video now (a browser without them leaves the reading empty). */
+  async readStats(): Promise<RtcReading> {
+    const pc = this.pc
+    if (!pc || typeof pc.getStats !== "function") return this.rtc
+    try {
+      const cur = rtcSample(await pc.getStats(), performance.now())
+      if (pc !== this.pc) return this.rtc
+      if (!cur) return this.rtc
+      this.rtc = rtcReading(this.lastStats, cur)
+      this.lastStats = cur
+    } catch {
+      // A closed connection: the next one starts afresh.
+    }
+    return this.rtc
   }
 
   private async connect() {
     if (this.closed) return
+    // No WebRTC here (a test page, a very old browser): nothing to play, said as failed.
+    if (typeof RTCPeerConnection === "undefined") {
+      this.state = "failed"
+      return
+    }
     this.state = "connecting"
     const pc = new RTCPeerConnection({ iceServers: [] })
     this.pc = pc
+    this.lastStats = null
+    this.rtc = NO_RTC
+    this.askedAt = performance.now()
+    this.firstFrameMs = null
     pc.addTransceiver("video", { direction: "recvonly" })
     pc.ontrack = (e) => {
       this.video.srcObject = e.streams[0] ?? new MediaStream([e.track])
@@ -127,12 +176,19 @@ export class WhepPlayer {
       width: this.video.videoWidth || null,
       height: this.video.videoHeight || null,
       held: this.held,
+      jitterMs: this.rtc.jitterMs,
+      lossPct: this.rtc.lossPct,
+      rttMs: this.rtc.rttMs,
+      recvFps: this.held ? null : this.rtc.recvFps,
+      decodeFps: this.held ? null : this.rtc.decodeFps,
+      firstFrameMs: this.firstFrameMs,
     }
   }
 
   close() {
     this.closed = true
     this.meter.close()
+    if (this.statsTimer) clearInterval(this.statsTimer)
     if (this.retry) clearTimeout(this.retry)
     this.pc?.close()
     this.pc = null

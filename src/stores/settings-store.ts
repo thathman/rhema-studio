@@ -2,6 +2,7 @@ import type { OpenedFrom } from "@/lib/church-folder"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { validLimit, type CapacityKind, type CapacityOverrides } from "@/lib/capacity"
+import { isLatencyMeasure, isSixtyFlag, type LatencyMeasure, type SixtyFlag } from "@/lib/glass-latency"
 
 /**
  * present: move through the service; configure: settings too; timekeeper: only the event clock; bible: only the Bible source; screens: only congregation scenes (Host/Join).
@@ -263,6 +264,12 @@ export interface SettingsState {
   /** Start the camera router with Rhema while any camera is added (never when none is). */
   cameraRouterAuto: boolean
   setCameraRouterAuto: (on: boolean) => void
+  /** Camera lag measured with the screen test's clock (#213), the newest per camera and output. */
+  cameraLatency: LatencyMeasure[]
+  setCameraLatency: (list: LatencyMeasure[]) => void
+  /** What each screen last showed with a 60 fps camera (#213 1080p60 capability), by screen. */
+  screenSixty: Record<string, SixtyFlag>
+  setScreenSixty: (flags: Record<string, SixtyFlag>) => void
   /**
    * This computer runs OBS only (#209): Rhema shows the OBS companion screen (join the host, the
    * church's cameras, add them to this OBS) and none of the studio, and loads no Bible models.
@@ -364,6 +371,10 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCameras: (cameras) => set({ cameras }),
   cameraRouterAuto: true,
   setCameraRouterAuto: (cameraRouterAuto) => set({ cameraRouterAuto }),
+  cameraLatency: [],
+  setCameraLatency: (cameraLatency) => set({ cameraLatency }),
+  screenSixty: {},
+  setScreenSixty: (screenSixty) => set({ screenSixty }),
   companionMode: false,
   setCompanionMode: (companionMode) => set({ companionMode }),
   companionLatencyMs: 200,
@@ -507,8 +518,10 @@ function acceptable(key: string, value: unknown): boolean {
       return Array.isArray(value) && value.every((x) => typeof x === "string")
     case "customMacros":
     case "cameras":
+    case "cameraLatency":
       return Array.isArray(value) // entries are checked one by one in hydrateSettings
     case "serviceTimers":
+    case "screenSixty":
       return typeof value === "object" && value !== null && !Array.isArray(value) // entries are checked one by one in readSetting
     case "brandKit":
       return typeof value === "object" && !Array.isArray(value)
@@ -554,6 +567,8 @@ export const SETTINGS_SECTIONS = {
     "lanAddressAtService",
     "cameras",
     "cameraRouterAuto",
+    "cameraLatency",
+    "screenSixty",
     "companionMode",
     "companionLatencyMs",
     "capacityLimits",
@@ -732,6 +747,8 @@ function readSetting(key: string, value: unknown): unknown {
   if (key === "customMacros") return (value as unknown[]).filter(isCustomMacro)
   if (key === "setup") return normalizeSetup(value)
   if (key === "cameras") return (value as unknown[]).filter(isCameraSource)
+  if (key === "cameraLatency") return (value as unknown[]).filter(isLatencyMeasure).slice(0, 64)
+  if (key === "screenSixty") return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([, f]) => isSixtyFlag(f)).slice(0, 32))
   if (key === "obsProfiles") return (value as unknown[]).filter(isObsProfile)
   if (key === "serviceTimers") return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([id, plans]) => (Array.isArray(plans) ? [[id, plans.filter(isServiceTimerPlan).slice(0, 8)]] : [])))
   return value

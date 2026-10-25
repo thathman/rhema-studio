@@ -13,6 +13,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { ScreenTestRow } from "./screen-test"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { usePhaseRun } from "@/stores/phase-run-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import type { BroadcastOutput } from "@/types"
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -44,6 +45,7 @@ beforeEach(async () => {
   for (const id of Object.keys(b.outputTests)) b.endOutputTest(id)
   useBroadcastStore.setState({ outputs: [projector, lobby], outputStatus: { main: { previewOpen: true, ndiActive: false } }, isLive: false, liveVerse: null, rehearsal: false })
   usePhaseRun.setState({ run: null })
+  useSettingsStore.setState({ cameras: [], cameraLatency: [] })
   Object.assign(feed, { watching: 1, seq: 3, acked: 3 })
   emitTo.mockClear()
 })
@@ -134,5 +136,41 @@ describe("Test this screen (#298 scenario F)", () => {
     useBroadcastStore.setState({ outputStatus: { tv: { previewOpen: false, ndiActive: false, feedActive: true } } })
     await render(lobby)
     expect(document.body.textContent).toContain("Connected, not shown (1 page open)")
+  })
+
+  it("Measure camera lag (#213): the clock goes to this output only, after confirming, with the camera to film it", async () => {
+    await render(projector)
+    expect(button("Measure camera lag"), "no cameras yet: not offered").toBeUndefined()
+    if (root) await act(async () => root!.unmount())
+    root = null
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "p".repeat(32) }, { name: "choir", label: "Choir", token: "c".repeat(32) }] })
+    await render(projector)
+    await click("Measure camera lag")
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("Show the camera-lag clock on Projector?")
+    expect(frames("broadcast-main")).toEqual([])
+    const pick = document.querySelector('select[aria-label="Camera to measure"]') as HTMLSelectElement
+    await act(async () => {
+      pick.value = "choir"
+      pick.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+    await click("Show the clock")
+    const sent = frames("broadcast-main") as unknown as { latencyClock?: boolean; theme: { id: string } }[]
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ latencyClock: true, theme: { id: "screen-test" } })
+    expect(document.querySelector('[aria-label="Measure Choir against Projector"]')).not.toBeNull()
+    // The router is not running here: the picture cannot be shown, and Freeze still holds the clock.
+    expect(document.body.textContent).toContain("The camera router is not running here")
+    await click("Freeze")
+    const input = document.querySelector('input[aria-label="Time in the camera\'s picture"]') as HTMLInputElement
+    expect(input).not.toBeNull()
+    expect(button("Save measurement")?.disabled).toBe(true)
+    await click("End test")
+    expect(document.querySelector('[aria-label="Measure Choir against Projector"]')).toBeNull()
+  })
+
+  it("an NDI output offers no camera-lag clock (there is no screen to film)", async () => {
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit", token: "p".repeat(32) }] })
+    await render({ ...projector, id: "n", type: "ndi" })
+    expect(button("Measure camera lag")).toBeUndefined()
   })
 })

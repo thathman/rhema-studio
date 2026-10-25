@@ -1,4 +1,7 @@
-import { screenPlayback, useWindowPlayback, type ScreenPlayback } from "@/lib/camera-playback"
+import { useEffect } from "react"
+import { screenPlayback, sixtyVerdict, useWindowPlayback, type ScreenPlayback } from "@/lib/camera-playback"
+import { sixtyKey, withSixty } from "@/lib/glass-latency"
+import { useSettingsStore } from "@/stores/settings-store"
 import type { RouterStatus } from "@/lib/cameras"
 import { useFeedHealthStore } from "@/lib/show-health"
 import { useBroadcastStore } from "@/stores/broadcast-store"
@@ -25,4 +28,20 @@ export function useObsProgramCameras(router: RouterStatus | null | undefined): S
   const set = new Set(local ?? [])
   for (const p of router?.paths ?? []) if ((p.obs ?? []).some((o) => o.program)) set.add(p.name)
   return set
+}
+
+/**
+ * Remember what each screen showed with a 60 fps camera (#213 1080p60 capability): keeps up, or
+ * not (then "use 1080p30 for this screen"). Saved only when a verdict changes (or once a day).
+ */
+export function useRememberSixty(screens: readonly ScreenPlayback[]): void {
+  useEffect(() => {
+    const before = useSettingsStore.getState().screenSixty
+    let flags = before
+    for (const s of screens) {
+      const v = sixtyVerdict(s)
+      if (v) flags = withSixty(flags, sixtyKey(s.outputId, s.where), s.where, v === "keeps-up", s.fps)
+    }
+    if (flags !== before) useSettingsStore.getState().setScreenSixty(flags)
+  }, [screens])
 }

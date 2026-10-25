@@ -1328,6 +1328,29 @@ Rhema with a saved service (a song and two slides), Desk menu → Your name = "T
 | 10ex.9 | Production → Scenes. | Above the scenes: **Congregation program (screens, 1080p30)** (from the NDI output), and a line naming the Online program as OBS's. Edit the NDI output to 720p: it reads 720p30. With two congregation NDI outputs at different sizes it lists both ("1080p30 / 720p30"). | Unverified |
 | 10ex.10 | Production → Screens. | The NDI card's second line ends "Congregation program (screens, 1080p30)"; the display card's "Congregation program (screens, 1080p)". Stage and signage cards still say Stage and Signage. | Unverified |
 
+### 10fy. Measured camera signal: network counters, camera lag, 1080p60 per screen, camera card, phone battery and heat (#213, #208, #209)
+
+Rhema Studio on a computer with a projector or second screen (the "Main Display" output, a scene with a
+camera on it), the camera router on, one phone with Rhema Studio Cam 1.2 (this branch's APK) and,
+for rows 7 and 11, a Google TV with a browser feed. A second phone or camera helps for row 4.
+
+| # | Step | Expected | Result |
+|---|------|----------|--------|
+| 10fy.1 | Take a scene with the phone's camera on Main Display. Show health → Cameras, the camera's line for Main Display. | After a few seconds: "30 fps, 0.1% dropped, 1920×1080, jitter … ms, …% lost, round trip … ms" (numbers measured, not blank). | Unverified |
+| 10fy.2 | Walk the phone to the edge of the Wi-Fi (or start a large download on the same Wi-Fi). | Jitter and loss rise; above 2% lost or 60 ms jitter the line turns amber and Show health's attention list names the screen. | Unverified |
+| 10fy.3 | Setup → Screens: **Measure camera lag** on Main Display, choose the phone, confirm, **Show the clock**. | Main Display (only) shows a large running clock "47.215" with "TEST – not on air". The setup shows the camera's picture beside this computer's running clock. | Unverified |
+| 10fy.4 | Point the phone at Main Display. **Freeze**; type the digits the frozen camera picture shows; **Save measurement**. Repeat twice. | "≈ 200–400 ms behind" (typical); the toast and Show health → Cameras read "Pulpit → Main Display ≈ … ms (measured 25 Oct)". End test restores Main Display exactly. | Unverified |
+| 10fy.5 | Type nonsense, or digits more than 10 s off. | Save is greyed with a plain reason; nothing is saved. | Unverified |
+| 10fy.6 | Quit and reopen Rhema Studio. | The measurement is still in Show health and on the camera card. | Unverified |
+| 10fy.7 | With the browser feed on the Google TV: Measure camera lag on that feed, film the TV. | The TV shows the clock; a measurement saves for "Pulpit → <feed name>". | Unverified |
+| 10fy.8 | Set the phone to 60 fps (Rhema Studio Cam: Sports 60) on a screen that cannot keep up (the Google TV, or a slow laptop). | That screen's line ends "cannot keep up with 60 frames a second: use 1080p30 for this screen"; Show health lists it under "Screens at 60 frames a second". A screen that keeps up says so. | Unverified |
+| 10fy.9 | Production → Cameras with the phone sending; scroll the card out of view and back. | The card shows a small live, silent picture; scrolled away it says "Paused while off screen" and the router's watcher count drops by one. The QR code is under "QR code for the phone". | Unverified |
+| 10fy.10 | **Test camera** on the card. | After about 5 s: "First picture after 0.6 s · 30 fps here · jitter … · lag to Main Display ≈ … ms (measured …)" (or "lag not measured yet"). | Unverified |
+| 10fy.11 | Pair the phone again with the card's Rhema Studio Cam QR code (the link now has `api=`). Start sending; wait 30 s. | The card and Show health show "Phone: Battery 54%, charging · 33 °C · heat: normal". Unplug the charger below 20%: an amber "Battery low (…) and not charging" line, and the attention list names it (high while on air). | Unverified |
+| 10fy.12 | Warm the phone (sun, a case, a long 1080p60 run) until Rhema Studio Cam cools itself. | "The phone is hot: Rhema Studio Cam sends a smaller or slower picture…" on the card and in Show health. | Unverified |
+| 10fy.13 | Phone paired with an older link (no `api=`), or another camera app. | No phone line, no error; the picture works as before. The phone's tally is unchanged. | Unverified |
+| 10fy.14 | A Screens desk joined: the output map. | Each output with a camera lists "Pulpit on Main Display (this computer): 30 fps, jitter … · lag ≈ … ms (…)". | Unverified |
+
 ### 10ga. Comms and desk consoles, round two: Queue from desks and phones, phone Talk rejoin and volumes, OBS desk, Screens ticker, Worship key and set, output owners (#251, #197)
 
 Two computers on the church network: **A** hosts with OBS connected (any scene collection, recording to a

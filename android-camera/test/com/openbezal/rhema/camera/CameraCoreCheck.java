@@ -34,6 +34,7 @@ public final class CameraCoreCheck {
         lut();
         exposure();
         pace();
+        report();
         if (failed > 0) {
             System.out.println(failed + " camera check(s) failed");
             System.exit(1);
@@ -463,6 +464,25 @@ public final class CameraCoreCheck {
             thrown = true;
         }
         check(name + " is refused", thrown);
+    }
+
+    /** The battery and heat report (#213): its body, where it goes and how it signs in. */
+    static void report() {
+        check("report: body", Report.body(54.4f, true, 33.46f, 2, false).equals("{\"battery\":54,\"charging\":true,\"temperature\":33.5,\"thermal\":2,\"cooling\":false}"));
+        check("report: unknown values are left out", Report.body(-1, false, -100, -1, true).equals("{\"charging\":false,\"cooling\":true}"));
+        check("report: no port in an older link, no report", Pairing.parse(LINK).statusUrl() == null);
+        Pairing p = Pairing.parse(LINK + "&api=8081");
+        check("report: where it goes", "https://192.168.1.20:8081/api/v1/camera/pulpit/status".equals(p.statusUrl()));
+        check("report: the port survives the round trip", Pairing.parse(p.link()).api == 8081);
+        check("report: the secret goes in a header", Report.authorization(p).equals("Bearer " + TOKEN) && !p.statusUrl().contains(TOKEN));
+        boolean refused = false;
+        try {
+            Pairing.parse(LINK + "&api=99999");
+        } catch (IllegalArgumentException e) {
+            refused = true;
+        }
+        check("report: a bad port is refused", refused);
+        check("report: taken", Report.ok(204) && !Report.ok(403));
     }
 
     static void check(String name, boolean ok) {

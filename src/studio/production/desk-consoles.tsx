@@ -236,6 +236,11 @@ export function OutputMap({ live }: { live: LiveStateV1 }) {
             <span>{o.role === "congregation" ? (o.scene ?? "its own feed") : o.role === "stage" ? "stage display" : "signage loop"}</span>
             {o.at !== undefined && <span className="text-muted-foreground" title="Who took a scene to it, or sent it back to its own feed, last">{activatedLabel({ by: o.by, activatedAt: o.at }) || "taken"}</span>}
             <span className={cn("text-[0.625rem] font-bold uppercase", o.on ? "text-primary-text" : "text-muted-foreground")}>{o.on ? "On" : "Off"}</span>
+            {(o.signal ?? []).length > 0 && (
+              <ul aria-label={`Cameras on ${o.name}`} className="w-full pl-4 text-muted-foreground">
+                {o.signal!.map((line, i) => <li key={i}>{line}</li>)}
+              </ul>
+            )}
           </li>
         ))}
       </ul>

@@ -7,7 +7,7 @@ everything else is in Settings. It sends to the camera router that comes with Rh
 encrypted, on the church network only. Rhema's scenes and TVs and OBS take it from there as they take
 any camera.
 
-Version 1.0.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
+Version 1.2.0.0 · package `com.openbezal.rhema.camera` · Android 8 (API 26) and newer · target API 34.
 
 ## Using it
 
@@ -109,6 +109,13 @@ shown.
   Phones from the last few years have several times this GPU.
 - **Heat** (Android 10+): bitrate −30 % when the phone is warm; at most 1080p and 30 fps when hot;
   720p when very hot. Settings shows battery %, temperature and the battery current.
+- **Told to Rhema Studio** (1.2): while sending, every 30 s the app tells Rhema Studio the battery %,
+  whether it is charging, the battery temperature, Android's heat level and whether it is cooling the
+  phone. It goes over https to Rhema Studio's secure listener (the port is in the pairing link as
+  `api=`; the same pinned certificate as the picture), signed in with the camera's own secret in a
+  header, never in the address. Production → Cameras and Show health show it and warn when the
+  battery is under 20 % and not charging, or the phone is hot. A link made before this version has no
+  `api=`: pair again (scan the camera's Rhema Studio Cam QR code) to turn the report on.
 
 ## Building
 

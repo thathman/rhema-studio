@@ -4,6 +4,13 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Measured camera signal: network counters, camera lag, 1080p60 per screen, live camera cards, phone battery and heat (#213, #208, #209)
+- Every Rhema Studio screen and browser feed page now measures each camera's **jitter, packets lost, round trip to the camera router and frames decoded** (WebRTC's own counters) beside the frames it shows. Show health, the camera card and a Screens desk's output map say them; heavy loss or jitter is listed as needing attention.
+- **Measure camera lag** (Setup → Screens): after confirming, one screen or browser feed shows a large running clock; point a camera at it, press Freeze, type the time the camera's picture shows, and **Save measurement**. Show health then says e.g. "Pulpit → Main Display ≈ 240 ms (measured 25 Oct)". The operator reads the digits; Rhema Studio does not read them off the picture.
+- **1080p60 per screen**: a screen playing a 60 fps camera that cannot keep up (fewer frames decoded or shown, or dropped) says "use 1080p30 for this screen"; each screen's last result is kept and listed in Show health.
+- **Camera cards** in Production → Cameras show a small live picture of each sending camera (silent; it stops while scrolled out of view) and a **Test camera** button: time to the first picture, frames a second, jitter, loss and the measured lag.
+- **Rhema Studio Cam 1.2** reports the phone's battery, charging, temperature and heat every 30 s, over https to Rhema Studio with the camera's own secret in a header. The camera card and Show health warn when the battery is under 20% and not charging or the phone is hot. Pair the phone again once (the link now carries the report port). The phone's tally is unchanged.
+
 ### Comms and desk consoles, round two (#251, #197)
 - **Queue a request from any desk that adds to the queue, and from a phone**: a verse or song asked for in a notice now has **Queue** on joined Present, settings and Editor desks and on the phone page, as on the main desk. It goes into the host's run of show for later; nothing is shown. Two desks answering the same request queue it once.
 - **Phone Talk comes back by itself** after a dropped connection, waiting a little longer each time (1 s, 2 s, 4 s… up to 30 s). The microphone stays off until the person presses Talk again.

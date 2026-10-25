@@ -63,6 +63,23 @@ graphics chip (Studio, Cinematic, Warm Sanctuary, Natural, Black & White). See
    pretending to be Rhema is refused, and the app never falls back to unencrypted RTSP. **New link**
    and removing the camera disconnect it, as for the camera page. Rhema renews its certificate when the
    computer's address changes or after a year: scan the new link then.
+4. From Rhema Studio Cam 1.2 the link also carries `api=<port>`, the port of Rhema's secure phone
+   listener. While sending, the app tells Rhema its battery, charging, temperature and heat every
+   30 s (`POST /api/v1/camera/<name>/status` over https, the same pinned certificate, the camera's
+   secret in the `Authorization` header, never in the address). The camera card and Show health show
+   it and warn on a low battery not charging or a hot phone. A phone paired with an older link
+   sends no report until it is paired again.
+
+## Measuring a camera
+
+- Every screen and TV measures each camera it plays: frames shown and dropped, and WebRTC's own
+  jitter, packets lost, round trip to the router and frames decoded. Show health and the camera card
+  say them. A screen that cannot keep up with a 60 fps camera says "use 1080p30 for this screen".
+- **Test camera** on a card plays the camera here for a few seconds: time to the first picture,
+  frames a second, jitter and loss, and the measured lag if there is one.
+- **Measure camera lag** (Setup → Screens) shows a running clock on one screen or feed; film it with
+  the camera, Freeze, type the time the camera's picture shows and save. Show health keeps
+  "Pulpit → Main Display ≈ 240 ms (measured 25 Oct)" for each camera and screen measured.
 
 ## Other camera apps
 

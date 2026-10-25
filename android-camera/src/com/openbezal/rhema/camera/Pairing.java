@@ -10,10 +10,12 @@ import java.util.Map;
 
 /**
  * A camera's pairing link from Rhema's Cameras card:
- * rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=…&fp=…
+ * rhema-camera://pair?host=192.168.1.20&port=8322&name=pulpit&user=cam-pulpit&token=…&fp=…&api=8081
  * It says where Rhema's camera router is, which camera this phone is, the camera's own password
  * (its link's secret) and the SHA-256 fingerprint of Rhema's certificate, which is the only
- * certificate this phone will send to. Plain Java (no Android), so build.sh can test it.
+ * certificate this phone will send to; and (from Rhema Studio 1.x with this app 1.2) the port of
+ * Rhema's secure listener, where the app reports its battery and heat (same certificate). Plain
+ * Java (no Android), so build.sh can test it.
  */
 final class Pairing {
     final String host;
@@ -25,8 +27,10 @@ final class Pairing {
     final String fp;
     /** What the operator called the camera ("Pulpit"); may be empty. */
     final String label;
+    /** Rhema's secure listener (https, the same certificate), for the battery and heat report; 0 when the link has none. */
+    final int api;
 
-    private Pairing(String host, int port, String name, String user, String token, String fp, String label) {
+    private Pairing(String host, int port, String name, String user, String token, String fp, String label, int api) {
         this.host = host;
         this.port = port;
         this.name = name;
@@ -34,6 +38,7 @@ final class Pairing {
         this.token = token;
         this.fp = fp;
         this.label = label;
+        this.api = api;
     }
 
     /** Reads a pairing link; the message of the exception says plainly what is wrong with it. */
@@ -71,7 +76,16 @@ final class Pairing {
         if (!hex64(fp)) throw new IllegalArgumentException("The link's certificate fingerprint is not a SHA-256 fingerprint");
         String label = q.containsKey("label") ? q.get("label") : "";
         if (label.length() > 40) label = label.substring(0, 40);
-        return new Pairing(host, port, name, user, token, fp, label);
+        int api = 0;
+        if (q.containsKey("api")) {
+            try {
+                api = Integer.parseInt(q.get("api"));
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("The link's report port is not a number");
+            }
+            if (api < 1 || api > 65535) throw new IllegalArgumentException("The link's report port is out of range");
+        }
+        return new Pairing(host, port, name, user, token, fp, label, api);
     }
 
     /** Where this camera publishes: always RTSP over TLS, never plain RTSP. */
@@ -82,7 +96,12 @@ final class Pairing {
     /** The link again (what Settings keeps). */
     String link() {
         return "rhema-camera://pair?host=" + host + "&port=" + port + "&name=" + name + "&user=" + user + "&token=" + token + "&fp=" + fp
-                + (label.isEmpty() ? "" : "&label=" + encode(label));
+                + (label.isEmpty() ? "" : "&label=" + encode(label)) + (api == 0 ? "" : "&api=" + api);
+    }
+
+    /** Where the battery and heat report goes, or null when the link has no report port. */
+    String statusUrl() {
+        return api == 0 ? null : "https://" + host + ":" + api + "/api/v1/camera/" + name + "/status";
     }
 
     /** What to call this camera on screen. */
