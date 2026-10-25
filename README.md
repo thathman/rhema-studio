@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="brand/02_Product_Logos/Rhema-Studio-White-Text.png" />
+    <source media="(prefers-color-scheme: dark)" srcset="brand/02_Product_Logos/Rhema-Studio-Light-Text.png" />
     <img src="brand/02_Product_Logos/Rhema-Studio-Dark-Text.png" alt="Rhema Studio" width="420" />
   </picture>
 </p>

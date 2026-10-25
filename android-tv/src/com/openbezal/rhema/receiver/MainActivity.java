@@ -193,7 +193,7 @@ public class MainActivity extends Activity {
         info.setLineSpacing(0, 1.25f);
         info.setGravity(Gravity.CENTER);
 
-        // The approved landscape logo (brand/02_Product_Logos/Rhema-Studio-Receiver-White-Text.png, as is).
+        // The approved landscape logo (brand/02_Product_Logos/Rhema-Studio-Receiver-Light-Text.png, as is).
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.receiver_logo);
         logo.setAdjustViewBounds(true);

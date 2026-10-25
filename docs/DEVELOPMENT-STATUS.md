@@ -26,6 +26,7 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
+- Final supplied brand pack update (PR #422): all pack files verify against the supplied SHA-256 manifest; Studio, web, Receiver, Cam and Companion marks/icons use supplied assets, and generated Tauri icon sizes were refreshed from the supplied master mark/adaptive assets. `brand-files.test.ts` passes 6/6; root typecheck, lint and build pass; website production build and the changed website logo file lint pass. Whole website lint reports existing errors in generated `web/.source` files and `web/app/_lib/use-platform.ts`. Android build/device acceptance was not performed.
 - Frontend: 669 vitest tests pass (two render-heavy tests can time out on a heavily loaded machine; given 30 s, #176, #180); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
 - Rust: `rhema-content` 62 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
 - Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).

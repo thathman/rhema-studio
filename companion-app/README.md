@@ -120,5 +120,5 @@ signed; the first open needs right-click → Open). On an Intel Mac building for
   the pinned https link, its own files, the tray and starting with the computer. No NDI, speech,
   models, Bible, content database or camera router.
 - `companion-app/src-tauri/icons`: the owner's approved Rhema Studio icon from the brand pack
-  (`04_Launcher_Assets`): `icon.ico`, `icon.icns` and `512x512.png` (Companion-Launcher-512) byte for
+  (`04_Launcher_Icons`): `icon.ico`, `icon.icns` and `512x512.png` byte for
   byte; the 32, 128 and 256 pixel PNGs are scaled down from that 512 PNG, never redrawn.
