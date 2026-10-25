@@ -2412,6 +2412,11 @@ mod tests {
         assert_eq!(feeds.ack("tv", "s3cret", 2, None, None), Ok(None), "an older frame than the newest");
         assert!(matches!(feeds.ack("tv", "s3cret", 3, None, None), Ok(Some(_))), "the newest frame, first drawn");
         assert_eq!(feeds.ack("tv", "s3cret", 3, None, None), Ok(None));
+        // A paired TV acks with its own key (#198): its first draw counts the same.
+        feeds.set_keys(&[FeedKeys { id: "tv".into(), token: "s3cret".into(), tvs: vec![("192.168.1.40:8095".into(), "tv-own-key".into())] }]);
+        feeds.publish("tv", "{}".into());
+        assert!(matches!(feeds.ack("tv", "tv-own-key", 4, None, None), Ok(Some(_))), "a TV's own key opens the ack too");
+        assert_eq!(feeds.ack("tv", "s3cret", 4, None, None), Ok(None), "the second page on the same frame is not news");
     }
 
     async fn ack_clock(port: u16, clock: i64) -> String {
