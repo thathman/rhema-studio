@@ -90,7 +90,7 @@ beforeEach(() => {
   mockInvoke.mockReset()
   useQueueStore.setState({ items: [], activeIndex: null })
   useBibleStore.setState({ activeTranslationId: 1, secondaryTranslationId: null, translations: [KJV] })
-  useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], missingTranslations: [] })
+  useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
 })
 
 describe("conversions", () => {
@@ -172,6 +172,72 @@ describe("conversions", () => {
     expect(rundownSignature(a)).toBe(rundownSignature(b))
     expect(rundownSignature([a[1], a[0]])).not.toBe(rundownSignature(a))
     expect(rundownSignature([{ ...a[0], id: "other" }, a[1]])).not.toBe(rundownSignature(a))
+  })
+})
+
+describe("approved design revisions", () => {
+  it("captures the scene and look revisions with the saved service approval", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("@/stores/broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const broadcast = useBroadcastStore.getState()
+    const theme = broadcast.themes[0]
+    const scene = newScene("Sermon", SCENE_PRESETS[0])
+    scene.layers[0] = { ...scene.layers[0], themeId: theme.id }
+    useBroadcastStore.setState({ scenes: [scene] })
+    const planned = { ...queueItem("John 3:16", 43, 3, 16), scene_id: scene.id, look_id: theme.id }
+    useQueueStore.setState({ items: [planned], activeIndex: null })
+    useServiceStore.setState({ current: { ...program, revision: 4 }, dirty: false })
+    mockInvoke.mockImplementation(async (cmd: string) => cmd === "content_approve_program_with_designs" ? { ...program, revision: 4, approved_revision: 4 } : cmd === "media_list" ? [] : null)
+
+    expect(await useServiceStore.getState().approve()).toBe("ok")
+
+    const [, args] = mockInvoke.mock.calls.find(([cmd]) => cmd === "content_approve_program_with_designs")!
+    const designs = (args as { designs: { scenes: Record<string, { scene: { updatedAt: number }; outputs: Record<string, { themes: Record<string, { id: string }> }> }>; looks: Record<string, { id: string }> } }).designs
+    expect(designs.scenes[scene.id].scene.updatedAt).toBe(scene.updatedAt)
+    expect(designs.scenes[scene.id].outputs.main.themes[theme.id].id).toBe(theme.id)
+    expect(designs.looks[theme.id].id).toBe(theme.id)
+    expect(useServiceStore.getState().approvedDesignRevision).toBe(4)
+  })
+
+  it("refuses to approve a service that names a scene missing from this computer", async () => {
+    useQueueStore.setState({ items: [{ ...queueItem("John 3:16", 43, 3, 16), scene_id: "missing-scene" }], activeIndex: null })
+    useServiceStore.setState({ current: { ...program, revision: 4 }, dirty: false })
+    mockInvoke.mockImplementation(async (cmd: string) => cmd === "media_list" ? [] : null)
+
+    expect(await useServiceStore.getState().approve()).toBe("error")
+    expect(mockInvoke).not.toHaveBeenCalledWith("content_approve_program_with_designs", expect.anything())
+    expect(useServiceStore.getState().error).toMatch(/Scene missing-scene is not on this computer/)
+  })
+
+  it("loads the approved scene/look manifest when reopening its service", async () => {
+    const approvedProgram = { ...program, approved_revision: 2 }
+    const manifest = { version: 1 as const, scenes: {}, looks: {}, media_ids: [] }
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "content_get_program") return { ...stored, program: approvedProgram }
+      if (cmd === "content_approved_designs") return manifest
+      if (cmd === "get_verse") return null
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(useServiceStore.getState().approvedDesigns).toEqual(manifest)
+    expect(useServiceStore.getState().approvedDesignRevision).toBe(2)
+    expect(useServiceStore.getState().approvedDesignsError).toBeNull()
+  })
+
+  it("marks approvals made before scene/look snapshots as legacy", async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "content_get_program") return { ...stored, program: { ...program, approved_revision: 2 } }
+      if (cmd === "content_approved_designs") return null
+      if (cmd === "get_verse") return null
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(useServiceStore.getState().approvedDesigns).toBeNull()
+    expect(useServiceStore.getState().approvedDesignsError).toMatch(/predates saved scene and look snapshots/)
   })
 })
 

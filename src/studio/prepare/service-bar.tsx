@@ -72,6 +72,7 @@ export function ServiceBar() {
   const saving = useServiceStore((s) => s.saving)
   const loading = useServiceStore((s) => s.loading)
   const error = useServiceStore((s) => s.error)
+  const approvedDesignsError = useServiceStore((s) => s.approvedDesignsError)
   const conflict = useServiceStore((s) => s.conflict)
   const unsupported = useServiceStore((s) => s.unsupportedItems)
   const missing = useServiceStore((s) => s.missingTranslations)
@@ -399,6 +400,11 @@ export function ServiceBar() {
           >
             <BadgeCheckIcon /> {approval === "approved" ? "Approved" : approval === "changed" ? "Approve again" : "Approve"}
           </Button>
+          {approval === "approved" && approvedDesignsError && (
+            <span role="status" className="inline-flex items-center gap-1 text-xs text-tone-amber-foreground" title={approvedDesignsError}>
+              <TriangleAlertIcon className="size-3.5" /> Design revisions not pinned
+            </span>
+          )}
 
           {conflict && (
             <Button size="sm" variant="outline" className="border-confidence-mid text-confidence-mid" onClick={() => void reload()} title={`Saved elsewhere as revision ${conflict.actual}; you opened revision ${conflict.expected}`}>

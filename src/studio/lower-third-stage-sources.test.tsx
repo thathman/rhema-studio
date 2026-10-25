@@ -19,7 +19,7 @@ import { existingFeed, FEED_PRESETS, readyMadeFeed } from "@/lib/feed-presets"
 import { feedFrame, followerCount } from "@/lib/live-sources"
 import { buildLiveState } from "@/lib/live-state"
 import { outputPresentation } from "@/lib/output-summary"
-import { newLayer, newScene } from "@/lib/scenes"
+import { newLayer, newScene, SCENE_PRESETS } from "@/lib/scenes"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useJournalStore } from "@/stores/journal-store"
@@ -210,6 +210,31 @@ describe("scene takes record who took them", () => {
     useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     useBroadcastStore.getState().saveScene({ ...scene, name: "Welcome updated" })
     expect(buildLiveState().outputs[0]).toMatchObject({ sceneName: "Welcome", sceneNeedsUpdate: true })
+  })
+
+  it("marks a scene for refresh when its referenced look changes", () => {
+    const theme = useBroadcastStore.getState().themes[0]
+    const scene = newScene("Scripture")
+    scene.layers[0] = { ...scene.layers[0], themeId: theme.id }
+    useBroadcastStore.setState({ scenes: [scene] })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    expect(buildLiveState().outputs[0].sceneNeedsUpdate).toBeUndefined()
+
+    useBroadcastStore.getState().saveTheme({ ...theme, updatedAt: theme.updatedAt + 1, verseText: { ...theme.verseText, color: "#f0c000" } })
+
+    expect(buildLiveState().outputs[0].sceneNeedsUpdate).toBe(true)
+  })
+
+  it("marks a logo scene for refresh when the church logo changes", () => {
+    const scene = newScene("Welcome", SCENE_PRESETS.find((preset) => preset.id === "welcome")!)
+    useBroadcastStore.setState({ scenes: [scene] })
+    useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,old" })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
+    expect(buildLiveState().outputs[0].sceneNeedsUpdate).toBeUndefined()
+
+    useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,new" })
+
+    expect(buildLiveState().outputs[0].sceneNeedsUpdate).toBe(true)
   })
 
   it("records an explicit refresh of a saved scene revision", () => {

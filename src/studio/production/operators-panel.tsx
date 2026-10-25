@@ -582,6 +582,12 @@ function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
             {live.outputs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
           <span className="text-muted-foreground">shows {output.sceneName ?? live.scenes.find((s) => s.id === output.sceneId)?.name ?? "its own feed"}</span>
+          {output.sceneAt !== undefined && <span className="text-xs text-muted-foreground" title={`Take ${output.sceneRevision ?? "?"}${output.sceneBy ? ` by ${output.sceneBy}` : ""}`}>
+            Taken {new Date(output.sceneAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}{output.sceneBy ? ` by ${output.sceneBy}` : ""}
+            {output.sceneLiveDesignRevision !== undefined ? ` · Live design ${new Date(output.sceneLiveDesignRevision).toLocaleString()}${output.sceneLiveDesignBy ? ` by ${output.sceneLiveDesignBy}` : ""}` : ""}
+            {output.sceneApprovedRevision !== undefined ? ` · Approved service v${output.sceneApprovedRevision}${output.sceneApprovedBy ? ` by ${output.sceneApprovedBy}` : ""}${output.sceneApprovedAt ? ` at ${new Date(output.sceneApprovedAt).toLocaleString()}` : ""}${output.sceneApprovedAppearanceComplete === false ? " · some output looks were unavailable" : ""}` : ""}
+            {output.sceneNeedsUpdate && output.sceneSavedRevision !== undefined ? ` · Saved update ${new Date(output.sceneSavedRevision).toLocaleString()}${output.sceneSavedBy ? ` by ${output.sceneSavedBy}` : ""}` : ""}
+          </span>}
         </div>
       ) : (
         <p className="text-muted-foreground">The host has no congregation output.</p>
@@ -589,7 +595,7 @@ function ScenesDesk({ live, role }: { live: LiveStateV1; role: string }) {
       <ul className="flex flex-wrap gap-1.5">
         {live.scenes.map((s) => (
           <li key={s.id} className="flex items-center gap-0.5">
-            {takes && output && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate)} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
+            {takes && output && <Button size="sm" variant={s.id === output.sceneId ? "default" : "outline"} disabled={!ok || (s.id === output.sceneId && !output.sceneNeedsUpdate)} title={s.id === output.sceneId && output.sceneNeedsUpdate ? "A saved scene, look, or logo changed after this Take. Refresh deliberately to use the newer design." : undefined} onClick={() => void send({ command: "take_scene", value: { output: output.id, scene: s.id } })}>{s.id === output.sceneId && output.sceneNeedsUpdate ? "Refresh" : "Take"} {s.name}</Button>}
             {!takes && <span className="px-1 font-medium">{s.name}</span>}
             {edits && deskEditable(s) && <Button size="sm" variant="ghost" aria-label={cameraOnly ? `Change the cameras in ${s.name}` : `Edit ${s.name}`} disabled={!ok} onClick={() => { setSaid(""); setEditing(s.id) }}>{cameraOnly ? "Cameras…" : "Edit…"}</Button>}
           </li>

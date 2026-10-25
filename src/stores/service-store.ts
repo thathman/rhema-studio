@@ -5,6 +5,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
 import type {
   ItemInput,
+  ApprovedDesignSnapshot,
   Program,
   ProgramItem,
   ProgramWithItems,
@@ -25,6 +26,9 @@ import { intentPayload, parseItemIntent } from "@/lib/item-intent"
 import { itemTimingPayload, parseItemTiming } from "@/lib/item-timing"
 import { interleave, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
+import { approvedDesignBlockers, captureApprovedDesigns } from "@/lib/approved-designs"
+import { useMediaStore } from "@/stores/media-store"
+import { useSettingsStore } from "@/stores/settings-store"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
 
@@ -55,6 +59,11 @@ interface ServiceState {
   unsupportedItems: ProgramItem[]
   /** Translation codes the open service names that are not installed here. */
   missingTranslations: string[]
+  /** Immutable scene/look assets for the approved revision, if this build captured them. */
+  approvedDesigns: ApprovedDesignSnapshot | null
+  approvedDesignRevision: number | null
+  /** Explains a legacy approval or why its manifest could not be loaded. */
+  approvedDesignsError: string | null
 
   loadPrograms: () => Promise<boolean>
   /** Create an empty service and open it. Refuses while another service has unsaved changes. */
@@ -707,6 +716,9 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
   conflict: null,
   unsupportedItems: [],
   missingTranslations: [],
+  approvedDesigns: null,
+  approvedDesignRevision: null,
+  approvedDesignsError: null,
 
   loadPrograms: async () => {
     set({ loading: true })
@@ -740,7 +752,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     const program = await get().createProgram(title, serviceDate, { discard: true })
     if (!program) return "failed"
     baseline = "" // the rundown is not yet what the database has
-    set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [], missingTranslations: [] })
+    set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
     // Item ids are unique across services: items taken from another service (or copied) get new ones, or the save is refused.
     // In the same tick as the new service becoming current, so the original never looks changed.
     renewItemIds(holders)
@@ -766,8 +778,29 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (!current) return "error"
     if (get().dirty) return "unsaved"
     try {
-      const program = await invoke<Program>("content_approve_program", { id: current.id, expectedRevision: current.revision })
-      set((s) => ({ current: program, programs: s.programs.map((p) => (p.id === program.id ? program : p)), error: null }))
+      const media = await useMediaStore.getState().list()
+      if (useMediaStore.getState().error) {
+        set({ error: `Could not check local media before approval: ${useMediaStore.getState().error}` })
+        return "error"
+      }
+      if (get().current?.id !== current.id || get().current?.revision !== current.revision) return "conflict"
+      if (get().dirty) return "unsaved"
+      const broadcast = useBroadcastStore.getState()
+      const blockers = approvedDesignBlockers(useQueueStore.getState().items, broadcast.scenes, broadcast.themes, broadcast.outputs, media)
+      if (blockers.length) {
+        set({ error: blockers.join(" ") })
+        return "error"
+      }
+      const designs = captureApprovedDesigns(
+        useQueueStore.getState().items,
+        broadcast.scenes,
+        broadcast.themes,
+        broadcast.outputs,
+        useSettingsStore.getState().brandKit.logoUrl,
+        media,
+      )
+      const program = await invoke<Program>("content_approve_program_with_designs", { id: current.id, expectedRevision: current.revision, designs })
+      set((s) => ({ current: program, programs: s.programs.map((p) => (p.id === program.id ? program : p)), approvedDesigns: designs, approvedDesignRevision: program.approved_revision ?? null, approvedDesignsError: null, error: null }))
       return "ok"
     } catch (e) {
       if (isContentCommandError(e) && e.kind === "conflict") {
@@ -891,18 +924,28 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         if (rememberedServiceId() === id) remember(null) // not again at the next start
         if (get().current?.id === id) {
           closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
-          set({ current: null, dirty: false })
+          set({ current: null, dirty: false, approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
           remember(null)
         }
         return "missing"
       }
       const bible = useBibleStore.getState()
       const { items, headers, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+      let approvedDesigns: ApprovedDesignSnapshot | null = null
+      let approvedDesignsError: string | null = null
+      if (data.program.approved_revision !== null && data.program.approved_revision !== undefined) {
+        try {
+          approvedDesigns = await invoke<ApprovedDesignSnapshot | null>("content_approved_designs", { programId: id, revision: data.program.approved_revision })
+          if (!approvedDesigns) approvedDesignsError = "This approved service predates saved scene and look snapshots."
+        } catch (e) {
+          approvedDesignsError = describe(e)
+        }
+      }
       baseline = rundownSignature(items, headers)
       useQueueStore.setState({ items, headers, activeIndex: null })
       // Undo never reaches into the service open before.
       useQueueStore.getState().resetHistory()
-      set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported, missingTranslations })
+      set({ current: data.program, dirty: false, error: null, conflict: null, unsupportedItems: unsupported, missingTranslations, approvedDesigns, approvedDesignRevision: approvedDesigns ? data.program.approved_revision ?? null : null, approvedDesignsError })
       remember(data.program.id)
       // Fill in verse text so preview works before anything is presented.
       // Text is not part of the signature, so this never marks dirty.
@@ -1006,7 +1049,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       await invoke("content_delete_program", { id, expectedRevision: target.revision })
       set((st) => ({
         programs: st.programs.filter((p) => p.id !== id),
-        ...(st.current?.id === id ? { current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [] } : {}),
+        ...(st.current?.id === id ? { current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null } : {}),
         error: null,
       }))
       if (get().current === null) remember(null)
@@ -1021,7 +1064,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     if (get().dirty && !opts?.discard) return "unsaved"
     // The rundown stays on screen: as it is now it belongs to a saved service (or was just discarded).
     closedBaseline = rundownSignature(operatorItems(useQueueStore.getState().items))
-    set({ current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [] })
+    set({ current: null, dirty: false, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
     remember(null)
     return "closed"
   },

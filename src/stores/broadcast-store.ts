@@ -30,10 +30,10 @@ import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/
 import { useMediaStore } from "@/stores/media-store"
 import { feedLost, overscanPct } from "@/lib/feed-receivers"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
-import { normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneOwns } from "@/lib/scenes"
+import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
-import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
+import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from "@/types"
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
@@ -180,6 +180,8 @@ interface BroadcastState {
    * rehearsal ends. `by`: who took it (default: see currentActor).
    */
   takeScene: (outputId: string, sceneId: string, by?: string) => void
+  /** Take an immutable scene/look revision stored with an approved service revision. */
+  takeSceneRevision: (outputId: string, scene: Scene, appearance: SceneAppearanceSnapshot, programId: string, revision: number, by?: string, appearanceComplete?: boolean, approval?: { approvedAt?: string | null; approvedBy?: string | null }) => void
   /** Back to the output's own feed, full frame; Restore takes the scene again. */
   releaseScene: (outputId: string, by?: string) => void
   /** The scene an output last showed, for Restore. Session state. */
@@ -551,7 +553,10 @@ function tickerKey(t: Ticker | null): number {
 function resyncThemeOutputs(themeId: string | null): void {
   if (!themeId) return
   const s = useBroadcastStore.getState()
-  for (const o of s.outputs) if (themeIdsOf(o).includes(themeId)) s.syncBroadcastOutputFor(o.id)
+  for (const o of s.outputs) {
+    const scene = sceneForOutput(o, s.scenes)
+    if (themeIdsOf(o).includes(themeId) || scene?.layers.some((layer) => layer.themeId === themeId)) s.syncBroadcastOutputFor(o.id)
+  }
 }
 
 let activations = 0
@@ -982,7 +987,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const owns = sceneOwns(scene)
       const liveOverlay = overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null)
       const liveTicker = tickerForScreens(s)
-      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, output, scene)
+      const draft = s.liveDesign && s.draftTheme && scene.layers.some((layer) =>
+        layer.themeId === s.draftTheme!.id ||
+        (!layer.themeId && ["feed", "clock", "camera", "ticker", "lowerThird"].includes(layer.kind) && themeIdsOf(output).includes(s.draftTheme!.id)),
+      ) ? s.draftTheme : null
+      const sceneOutput = draft
+        ? { ...output, sceneAppearanceSnapshot: { themes: { ...(output.sceneAppearanceSnapshot?.themes ?? {}), [draft.id]: draft }, logoUrl: output.sceneAppearanceSnapshot?.logoUrl ?? useSettingsStore.getState().brandKit.logoUrl } }
+        : output
+      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, sceneOutput, scene)
       const overlay = followsLowerThird(output) && !owns.lowerThird ? liveOverlay : null
       const ticker = followsTicker(output) && !owns.ticker ? liveTicker : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
@@ -1368,7 +1380,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   saveScene: (scene) => {
     const s = get()
     const at = s.scenes.findIndex((x) => x.id === scene.id)
-    const next = { ...scene, updatedAt: Math.max(Date.now(), (s.scenes[at]?.updatedAt ?? 0) + 1) }
+    const next = { ...scene, updatedAt: Math.max(Date.now(), (s.scenes[at]?.updatedAt ?? 0) + 1), updatedBy: currentActor() ?? null }
     set({ scenes: at < 0 ? [...s.scenes, next] : s.scenes.map((x, i) => (i === at ? next : x)) })
   },
   deleteScene: (id) => {
@@ -1378,8 +1390,25 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   takeScene: (outputId, sceneId, by = currentActor()) => {
     const scene = get().scenes.find((x) => x.id === sceneId)
     if (!scene) return
+    const output = get().outputs.find((x) => x.id === outputId)
+    const appearance = output && !get().rehearsal
+      ? captureSceneAppearance(scene, output, get().themes, useSettingsStore.getState().brandKit.logoUrl)
+      : undefined
     set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
-    get().updateOutput(outputId, { sceneId, ...(!get().rehearsal ? { sceneSnapshot: normalizeScene(scene) ?? scene } : {}) })
+    get().updateOutput(outputId, { sceneId, ...(!get().rehearsal ? { sceneSnapshot: normalizeScene(scene) ?? scene, sceneAppearanceSnapshot: appearance } : {}) })
+  },
+  takeSceneRevision: (outputId, scene, appearance, programId, revision, by = currentActor(), appearanceComplete = true, approval = {}) => {
+    if (!programId.trim() || !Number.isSafeInteger(revision) || revision < 0 || !get().outputs.some((output) => output.id === outputId)) return
+    const snapshot = normalizeScene(scene)
+    if (!snapshot) return
+    if (get().rehearsal) {
+      set({ sceneReturn: { ...get().sceneReturn, [outputId]: scene.id }, ...sceneTake(outputId, scene.id, by) })
+      get().updateOutput(outputId, { sceneId: scene.id })
+      return
+    }
+    const appearanceSnapshot = JSON.parse(JSON.stringify({ ...appearance, approved: { programId, revision, appearanceComplete, ...approval } })) as SceneAppearanceSnapshot
+    set({ sceneReturn: { ...get().sceneReturn, [outputId]: scene.id }, ...sceneTake(outputId, scene.id, by) })
+    get().updateOutput(outputId, { sceneId: scene.id, sceneSnapshot: snapshot, sceneAppearanceSnapshot: appearanceSnapshot })
   },
   releaseScene: (outputId, by = currentActor()) => {
     if (!get().outputs.find((o) => o.id === outputId)?.sceneId) return

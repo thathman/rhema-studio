@@ -31,6 +31,7 @@ const { useQueueStore } = await import("@/stores/queue-store")
 const { useBibleStore } = await import("@/stores/bible-store")
 const { useObsStore } = await import("@/stores/obs-store")
 const { useSettingsStore } = await import("@/stores/settings-store")
+const { useServiceStore } = await import("@/stores/service-store")
 const { newScene } = await import("@/lib/scenes")
 const { MAIN_OUTPUT_ID, defaultNdiSettings } = await import("@/types")
 
@@ -63,11 +64,34 @@ beforeEach(async () => {
     items: [slide("welcome"), slide("sermon", [`scene.take:${scene.id}`, "obs.scene:Sermon"], { scene_id: scene.id }), slide("after"), reading("john", ["source.only", "obs.scene:Sermon"])],
     activeIndex: null,
   })
+  useServiceStore.setState({ current: null, approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
   await connectObs()
   requests.length = 0
 })
 
 describe("an item's Take steps", () => {
+  it("takes the scene/look revisions pinned by the approved service", async () => {
+    const theme = useBroadcastStore.getState().themes[0]
+    const approvedScene = { ...scene, background: "#001122", updatedAt: scene.updatedAt - 1 }
+    useServiceStore.setState({
+      current: { id: "service-1", title: "Sunday", service_date: null, revision: 3, approved_revision: 3, approved_at: "2026-10-25T10:00:00.000Z", approved_by: "Pastor Ade", created_at: "", updated_at: "", item_count: 0 },
+      approvedDesignRevision: 3,
+      approvedDesigns: {
+        version: 1,
+        scenes: { [scene.id]: { scene: approvedScene, outputs: { [MAIN_OUTPUT_ID]: { themes: { [theme.id]: theme }, logoUrl: null } } } },
+        looks: { [theme.id]: theme },
+        media_ids: [],
+      },
+    })
+
+    await presentQueueItem(1)
+
+    expect(useBroadcastStore.getState().outputFrames[MAIN_OUTPUT_ID].scene?.background).toBe("#001122")
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === MAIN_OUTPUT_ID)?.sceneAppearanceSnapshot?.approved).toEqual({ programId: "service-1", revision: 3, appearanceComplete: true, approvedAt: "2026-10-25T10:00:00.000Z", approvedBy: "Pastor Ade" })
+    const { buildLiveState } = await import("@/lib/live-state")
+    expect(buildLiveState().outputs[0]).toMatchObject({ sceneApprovedServiceId: "service-1", sceneApprovedRevision: 3, sceneApprovedAppearanceComplete: true, sceneApprovedAt: "2026-10-25T10:00:00.000Z", sceneApprovedBy: "Pastor Ade" })
+  })
+
   it("run on the operator's own Take, after its content is up, and once per item", async () => {
     await presentQueueItem(1)
     expect(useBroadcastStore.getState().liveItemId).toBe("sermon")

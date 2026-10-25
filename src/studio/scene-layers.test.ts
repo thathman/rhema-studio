@@ -158,12 +158,16 @@ describe("a scene with a ticker or lower-third layer owns it (#243)", () => {
     expect(sent("broadcast-main")!.scene?.layers.find((l) => l.kind === "ticker")?.ticker).toBeNull()
   })
 
-  it("a new Brand Kit logo reaches a scene on air", () => {
+  it("a new Brand Kit logo waits for an explicit scene refresh", () => {
     const scene = newScene("Logo", SCENE_PRESETS[0])
     scene.layers = [newLayer("logo")]
     useBroadcastStore.getState().saveScene(scene)
+    useSettingsStore.setState({ brandKit: { ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,AA" } })
     useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     useSettingsStore.setState({ brandKit: { ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,BB" } })
+    expect(sent("broadcast-main")!.scene?.layers[0].imageUrl).toBe("data:image/png;base64,AA")
+
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     expect(sent("broadcast-main")!.scene?.layers[0].imageUrl).toBe("data:image/png;base64,BB")
   })
 })

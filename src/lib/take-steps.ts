@@ -3,7 +3,9 @@ import { takeSteps, type ParsedTakeStep } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useObsStore } from "@/stores/obs-store"
 import { useSettingsStore } from "@/stores/settings-store"
-import type { BroadcastOutput, QueueItem } from "@/types"
+import type { ApprovedSceneSnapshot, BroadcastOutput, QueueItem } from "@/types"
+import { captureSceneAppearance } from "@/lib/scenes"
+import { useServiceStore } from "@/stores/service-store"
 
 export { takesSourceOnly } from "@/lib/item-intent"
 
@@ -35,7 +37,11 @@ export async function runTakeSteps(item: QueueItem): Promise<void> {
 
 function takeItemScene(step: Extract<ParsedTakeStep, { kind: "scene" }>): void {
   const b = useBroadcastStore.getState()
-  const scene = b.scenes.find((s) => s.id === step.sceneId)
+  const service = useServiceStore.getState()
+  const approved = service.current?.approved_revision === service.approvedDesignRevision
+    ? service.approvedDesigns?.scenes[step.sceneId]
+    : undefined
+  const scene = approved?.scene ?? b.scenes.find((s) => s.id === step.sceneId)
   if (!scene) {
     toast.warning("Scene not taken", { description: "This item's scene is not on this computer. Choose another in Prepare." })
     return
@@ -45,7 +51,37 @@ function takeItemScene(step: Extract<ParsedTakeStep, { kind: "scene" }>): void {
     toast.warning(`${scene.name} not taken`, { description: "The screen this item names is not here, or is not a congregation screen." })
     return
   }
-  for (const o of targets) if (o.sceneId !== scene.id) b.takeScene(o.id, scene.id)
+  for (const o of targets) {
+    const appearance = approved && service.current
+      ? approvedAppearance(approved, scene, o, b.themes, service.approvedDesigns?.looks ?? {})
+      : null
+    const alreadyShowing = o.sceneId === scene.id && o.sceneSnapshot?.updatedAt === scene.updatedAt
+    const takenApproval = o.sceneAppearanceSnapshot?.approved
+    const alreadyApproved = !!appearance && takenApproval?.appearanceComplete !== false && takenApproval?.programId === service.current?.id && takenApproval?.revision === service.current?.approved_revision
+    if (alreadyShowing && (!appearance || alreadyApproved)) continue
+    if (appearance && service.current?.approved_revision !== null && service.current?.approved_revision !== undefined) {
+      b.takeSceneRevision(o.id, scene, appearance, service.current.id, service.current.approved_revision, undefined, !!approved?.outputs[o.id], { approvedAt: service.current.approved_at, approvedBy: service.current.approved_by })
+    } else {
+      b.takeScene(o.id, scene.id)
+    }
+  }
+}
+
+function approvedAppearance(
+  approved: ApprovedSceneSnapshot,
+  scene: ApprovedSceneSnapshot["scene"],
+  output: BroadcastOutput,
+  currentThemes: ReturnType<typeof useBroadcastStore.getState>["themes"],
+  approvedLooks: NonNullable<ReturnType<typeof useServiceStore.getState>["approvedDesigns"]>["looks"],
+) {
+  const exact = approved.outputs[output.id]
+  if (exact) return exact
+  // A new output may have been added since approval. Reuse any saved look revisions
+  // it names, while keeping the approved scene geometry and the captured church logo.
+  const themes = Object.values(approvedLooks)
+  const fallbackAppearance = Object.values(approved.outputs)[0]
+  const availableThemes = themes.length ? themes : currentThemes
+  return captureSceneAppearance(scene, output, availableThemes, fallbackAppearance?.logoUrl ?? null)
 }
 
 async function switchObs(scene: string, reference: string): Promise<void> {

@@ -145,6 +145,81 @@ describe("broadcast store sync", () => {
     expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(edited.background)
   })
 
+  it("records who saved the reusable scene revision", async () => {
+    const [{ useBroadcastStore }, { useSettingsStore }, { newScene }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/stores/settings-store"),
+      import("@/lib/scenes"),
+    ])
+    useSettingsStore.setState({ operatorName: "Tolu" })
+    const scene = newScene("Welcome")
+    useBroadcastStore.getState().saveScene(scene)
+
+    expect(useBroadcastStore.getState().scenes.find((saved) => saved.id === scene.id)).toMatchObject({ updatedBy: "Tolu" })
+  })
+
+  it("keeps the look revision taken with a scene until an explicit Take", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const state = useBroadcastStore.getState()
+    const theme = state.themes[0]
+    const scene = newScene("On air with a look", SCENE_PRESETS[0])
+    scene.layers[0] = { ...scene.layers[0], themeId: theme.id }
+    state.saveScene(scene)
+    state.takeScene("main", scene.id)
+
+    const expectedColor = theme.verseText.color
+    const editedTheme = { ...theme, verseText: { ...theme.verseText, color: "#ff00aa" } }
+    useBroadcastStore.getState().saveTheme(editedTheme)
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.layers[0]).toMatchObject({
+      theme: { verseText: { color: expectedColor } },
+    })
+  })
+
+  it("keeps the church logo taken with a scene until an explicit Take", async () => {
+    const [{ useBroadcastStore }, { useSettingsStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/stores/settings-store"),
+      import("@/lib/scenes"),
+    ])
+    const scene = newScene("Welcome", SCENE_PRESETS.find((preset) => preset.id === "welcome")!)
+    useBroadcastStore.getState().saveScene(scene)
+    useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,first" })
+    useBroadcastStore.getState().takeScene("main", scene.id)
+
+    useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: "data:image/png;base64,second" })
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.layers.find((layer) => layer.kind === "logo")?.imageUrl).toBe("data:image/png;base64,first")
+  })
+
+  it("can Take the scene and look revisions stored with an approved service", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const state = useBroadcastStore.getState()
+    const theme = state.themes[0]
+    const draft = newScene("Sermon", SCENE_PRESETS[0])
+    draft.layers[0] = { ...draft.layers[0], themeId: theme.id }
+    state.saveScene(draft)
+    const approved = { ...draft, background: "#001122", updatedAt: draft.updatedAt - 1 }
+
+    useBroadcastStore.getState().takeSceneRevision("main", approved, { themes: { [theme.id]: theme }, logoUrl: null }, "service-1", 7)
+    useBroadcastStore.getState().saveTheme({ ...theme, verseText: { ...theme.verseText, color: "#ff00aa" } })
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+
+    expect(useBroadcastStore.getState().outputFrames.main.scene).toMatchObject({
+      background: "#001122",
+      layers: [{ theme: { verseText: { color: theme.verseText.color } } }],
+    })
+    expect(useBroadcastStore.getState().outputs[0].sceneAppearanceSnapshot).toMatchObject({ approved: { programId: "service-1", revision: 7 } })
+  })
+
   it("duplicateOutput copies config with fresh id, unique name and NDI source name", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const state = useBroadcastStore.getState()
