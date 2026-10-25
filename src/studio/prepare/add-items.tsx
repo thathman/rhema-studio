@@ -10,6 +10,7 @@ import { MediaLibrary } from "@/studio/prepare/media-library"
 import { ReusePanel } from "@/studio/prepare/reuse-panel"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { useQueueStore } from "@/stores"
+import { EngageAddPanel } from "@/studio/engage/quiz-editor"
 
 /**
  * Add to the service: scripture, songs, the hymn book, slides, pictures and
@@ -32,6 +33,7 @@ export function AddItems({ className }: { className?: string }) {
               <TabsTrigger value="bible">Bible</TabsTrigger>
               <TabsTrigger value="songs">Songs</TabsTrigger>
               <TabsTrigger value="hymns">Hymn book</TabsTrigger>
+              <TabsTrigger value="quiz">Quiz</TabsTrigger>
               <TabsTrigger value="slides">Slides</TabsTrigger>
               <TabsTrigger value="media">Pictures</TabsTrigger>
               <TabsTrigger value="reuse">Reuse</TabsTrigger>
@@ -44,6 +46,9 @@ export function AddItems({ className }: { className?: string }) {
             </TabsContent>
             <TabsContent value="hymns" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
               <HymnBook />
+            </TabsContent>
+            <TabsContent value="quiz" className="min-h-0 flex-1 overflow-y-auto pt-3">
+              <EngageAddPanel />
             </TabsContent>
             <TabsContent value="slides" className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3">
               <SlideComposer />
