@@ -335,6 +335,13 @@ impl ContentDb {
         for (version, sql) in pending {
             let tx = conn.transaction()?;
             tx.execute_batch(sql)?;
+            // Logs kept before the transcript had its own column: moved there once, with the column (#246 C17).
+            if *version == "0013_service_log_transcript" {
+                let n = logs::split_legacy_transcripts(&tx)?;
+                if n > 0 {
+                    log::info!("[content] moved {n} kept transcript(s) into their own column");
+                }
+            }
             tx.execute("INSERT INTO schema_migrations (version) VALUES (?1)", params![version])?;
             tx.commit()?;
             log::info!("[content] applied migration {version}");

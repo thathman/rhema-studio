@@ -213,11 +213,11 @@ impl FeedHub {
         }
     }
 
-    /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent). None: refused.
-    /// `Some(Some(ms))`: the first page to draw the newest frame, `ms` after it was published (#246 C17).
-    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> Option<Option<u64>> {
+    /// A page drew frame `seq` (only with the feed's secret; never ahead of what was sent). Err: refused.
+    /// `Ok(Some(ms))`: the first page to draw the newest frame, `ms` after it was published (#246 C17).
+    fn ack(&self, id: &str, token: &str, seq: u64, video: Option<(std::net::IpAddr, Vec<crate::feed_video::CameraPlayback>)>, clock: Option<i64>) -> Result<Option<u64>, ()> {
         let mut feeds = self.feeds.write().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let f = feeds.get_mut(id).filter(|f| f.admits(token).is_some())?;
+        let f = feeds.get_mut(id).filter(|f| f.admits(token).is_some()).ok_or(())?;
         let mut first = None;
         if seq <= f.seq && seq >= f.acked {
             if seq == f.seq && seq > f.acked {
@@ -235,7 +235,7 @@ impl FeedHub {
             let keep = f.clock.filter(|(old, at)| now.duration_since(*at) < CLOCK_REPORT_FOR && old.abs() > skew.abs());
             f.clock = Some(keep.unwrap_or((skew, now)));
         }
-        Some(first)
+        Ok(first)
     }
 
     /// How the feed is doing, for the output card.
@@ -1695,8 +1695,8 @@ async fn feed_ack_handler<S: CommandSink + 'static>(
         return StatusCode::TOO_MANY_REQUESTS;
     }
     match state.feeds.ack(&id, q.get("k").map_or("", String::as_str), ack.seq, ack.video.map(|v| (peer.ip(), v)), ack.clock.map(|c| c.clamp(-86_400_000, 86_400_000))) {
-        None => StatusCode::FORBIDDEN,
-        Some(first) => {
+        Err(()) => StatusCode::FORBIDDEN,
+        Ok(first) => {
             // The first page to draw a new frame: the app logs which screen showed what, and how soon
             // (#246 C17). Once per frame; the app keeps only content changes.
             if let Some(after_ms) = first {
@@ -2402,16 +2402,16 @@ mod tests {
     fn the_first_draw_of_a_new_frame_is_reported_once() {
         let feeds = new_feed_hub();
         feeds.set(&[("tv".into(), "s3cret".into())]);
-        assert_eq!(feeds.ack("tv", "s3cret", 0, None, None), Some(None), "nothing published yet");
+        assert_eq!(feeds.ack("tv", "s3cret", 0, None, None), Ok(None), "nothing published yet");
         feeds.publish("tv", "{}".into());
-        assert_eq!(feeds.ack("tv", "wrong", 1, None, None), None, "refused without the secret");
-        assert!(matches!(feeds.ack("tv", "s3cret", 1, None, None), Some(Some(ms)) if ms < 5_000), "first draw of frame 1");
-        assert_eq!(feeds.ack("tv", "s3cret", 1, None, None), Some(None), "a page re-acking the same frame is not news");
+        assert_eq!(feeds.ack("tv", "wrong", 1, None, None), Err(()), "refused without the secret");
+        assert!(matches!(feeds.ack("tv", "s3cret", 1, None, None), Ok(Some(ms)) if ms < 5_000), "first draw of frame 1");
+        assert_eq!(feeds.ack("tv", "s3cret", 1, None, None), Ok(None), "a page re-acking the same frame is not news");
         feeds.publish("tv", "{}".into());
         feeds.publish("tv", "{}".into());
-        assert_eq!(feeds.ack("tv", "s3cret", 2, None, None), Some(None), "an older frame than the newest");
-        assert!(matches!(feeds.ack("tv", "s3cret", 3, None, None), Some(Some(_))), "the newest frame, first drawn");
-        assert_eq!(feeds.ack("tv", "s3cret", 3, None, None), Some(None));
+        assert_eq!(feeds.ack("tv", "s3cret", 2, None, None), Ok(None), "an older frame than the newest");
+        assert!(matches!(feeds.ack("tv", "s3cret", 3, None, None), Ok(Some(_))), "the newest frame, first drawn");
+        assert_eq!(feeds.ack("tv", "s3cret", 3, None, None), Ok(None));
     }
 
     async fn ack_clock(port: u16, clock: i64) -> String {
