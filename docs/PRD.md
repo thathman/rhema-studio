@@ -9,6 +9,8 @@
 
 > **Source of truth policy.** This document defines the product outcomes and acceptance criteria. TASKS.md defines implementation units and records status. RELEASE-PLAN.md defines release eligibility. Detailed design notes reside in docs/rhema-studio/01–07 on the unmerged Studio development stack. Resolve contradictions through a reviewed PR and record decisions; do not quietly rewrite completed history.
 
+> **Architecture update (2026-10-25).** For architecture decisions, owner-ratified GitHub issue [#243](https://github.com/thathman/rhema-studio/issues/243), cross-feature contracts [#246](https://github.com/thathman/rhema-studio/issues/246), and [ADR 0001](rhema-studio/21-adr-0001-live-sources-scenes.md) supersede earlier proposal wording. This PRD remains an outcome specification, not evidence of current implementation; use the current issue index [#382](https://github.com/thathman/rhema-studio/issues/382) and [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md) for delivery state.
+
 ## 1. Vision and boundaries
 
 **Promise:** Prepare anywhere. Create beautifully. Collaborate confidently. Present reliably. Preserve what matters.
