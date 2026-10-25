@@ -10,6 +10,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useMediaStore } from "@/stores/media-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSoundStore } from "@/stores/sound-store"
+import { presentQueueItem } from "@/lib/remote-actions"
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 const slide = (id: string, title: string): SlideQueueItem => ({ id, kind: "slide", slide: { title, body: "" }, reference: title, confidence: 1, source: "manual", added_at: 0 })
@@ -22,22 +23,22 @@ beforeEach(() => {
   mockInvoke.mockResolvedValue(null)
   played.length = 0
   useMediaStore.setState({ assets: [asset("walkin"), asset("gone", false)] as never, loaded: true })
-  useSoundStore.setState({ assetId: null, playing: false, play: async ({ id }: { id: string }) => { played.push(id); useSoundStore.setState({ assetId: id, playing: true }) } } as never)
+  useSoundStore.setState({ assetId: null, playing: false, play: async ({ id }: { id: string }) => { played.push(id); useSoundStore.setState({ assetId: id, playing: true }); return true } } as never)
   useBroadcastStore.setState({ isLive: false, liveVerse: null, liveItemId: null, presentWarning: null, rehearsal: false })
   useQueueStore.setState({ items: [slide("s1", "Welcome"), sound("a1", "walkin", "Walk-in"), slide("s2", "Announcements"), sound("a2", "gone", "Old track")], activeIndex: null })
 })
 
 describe("sound items in the service (MD-002)", () => {
   it("play when reached, leave the screens alone, and Next carries on after them", async () => {
-    presentActions.next()
+    await presentActions.next()
     await flush()
     expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Welcome")
-    presentActions.next()
+    await presentActions.next()
     await flush()
     expect(played).toEqual(["walkin"])
     expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Welcome")
     expect(useQueueStore.getState().activeIndex).toBe(1)
-    presentActions.next()
+    await presentActions.next()
     await flush()
     expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Announcements")
     expect(useSoundStore.getState().assetId).toBe("walkin")
@@ -45,16 +46,16 @@ describe("sound items in the service (MD-002)", () => {
 
   it("does not restart a sound already playing, reports a missing file, and stays silent in rehearsal", async () => {
     useQueueStore.getState().setActive(0)
-    presentActions.next()
+    await presentActions.next()
     await flush()
-    presentActions.prev()
+    await presentActions.prev()
     await flush()
-    presentActions.next()
+    await presentActions.next()
     await flush()
     expect(played).toEqual(["walkin"])
 
     useQueueStore.getState().setActive(2)
-    presentActions.next()
+    await presentActions.next()
     await flush()
     expect(useBroadcastStore.getState().presentWarning).toContain("missing")
 
@@ -79,13 +80,45 @@ describe("sound items in the service (MD-002)", () => {
     const v: Verse = { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "For God so loved" }
     const verseItem: VerseQueueItem = { id: "v1", verse: v, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0 }
     useQueueStore.setState({ items: [verseItem, sound("a1", "walkin", "Walk-in")], activeIndex: null })
-    presentActions.next()
-    presentActions.next()
+    const verseTake = presentActions.next()
     await flush()
+    expect(useQueueStore.getState().activeIndex).toBeNull()
+    await presentQueueItem(1)
     expect(played).toEqual(["walkin"])
+    expect(useQueueStore.getState().activeIndex).toBe(1)
     resolve(v)
-    await flush()
-    await flush()
+    await verseTake
     expect(useBroadcastStore.getState().liveVerse?.reference).toContain("3:16")
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+  })
+
+  it("does not let late audio playback move the rundown back after a later visual Take", async () => {
+    let startPlayback!: () => void
+    useSoundStore.setState({
+      assetId: null,
+      playing: false,
+      play: () => new Promise<boolean>((resolve) => {
+        startPlayback = () => {
+          useSoundStore.setState({ assetId: "walkin", playing: true })
+          resolve(true)
+        }
+      }),
+    } as never)
+    useQueueStore.setState({
+      items: [slide("s1", "Welcome"), sound("a1", "walkin", "Walk-in"), slide("s2", "Announcements")],
+      activeIndex: 0,
+    })
+
+    const audioTake = presentQueueItem(1)
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+
+    await presentQueueItem(2)
+    expect(useQueueStore.getState().activeIndex).toBe(2)
+    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Announcements")
+
+    startPlayback()
+    await audioTake
+    expect(useQueueStore.getState().activeIndex).toBe(2)
+    expect(useBroadcastStore.getState().liveVerse?.reference).toBe("Announcements")
   })
 })

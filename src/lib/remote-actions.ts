@@ -11,6 +11,12 @@ import { serviceSongNow } from "@/stores/song-pins-store"
 import { approvalHolds } from "@/stores/approval-gate-store"
 import { runTakeSteps, takesSourceOnly } from "@/lib/take-steps"
 import { toast } from "sonner"
+import { useJournalStore } from "@/stores/journal-store"
+import { useTakeAttemptStore, type TakeAttemptOutcome } from "@/stores/take-attempt-store"
+
+// Audio and Bible-source-only Takes do not supersede a pending audience visual.
+// Their rundown commit is ignored if a visual Take has since been requested.
+let latestVisualTake = 0
 
 /**
  * After an item's content is presented by the operator's own Take: its armed Take steps run once,
@@ -27,6 +33,27 @@ function isUp(item: QueueItem): boolean {
   const b = useBroadcastStore.getState()
   if (takesSourceOnly(item)) return b.sources.bible?.on === true && b.sources.bible.itemId === item.id
   return b.isLive && b.liveItemId === item.id
+}
+
+function beginTakeAttempt(itemId: string | null, reference: string): number {
+  const by = currentActor()
+  const id = useTakeAttemptStore.getState().begin({ itemId, reference, ...(by ? { by } : {}) })
+  useJournalStore.getState().add({ kind: "take", label: `Take pending: ${reference}`, itemId, ...(by ? { by } : {}) })
+  return id
+}
+
+/** Record the attempt separately; only a successful result moves the rundown position. */
+function finishTakeAttempt(id: number, itemId: string | null, reference: string, outcome: TakeAttemptOutcome, positionGeneration: number, error?: string): void {
+  useTakeAttemptStore.getState().finish(id, outcome, error)
+  const attempt = useTakeAttemptStore.getState().attempts.find((current) => current.id === id)
+  if (outcome === "presented" && itemId && positionGeneration === latestVisualTake) {
+    const index = useQueueStore.getState().items.findIndex((item) => item.id === itemId)
+    if (index !== -1) useQueueStore.getState().setActive(index)
+  }
+  const status = attempt?.status ?? (outcome === "presented" ? "succeeded" : outcome === "superseded" ? "superseded" : "failed")
+  const reason = error ? `: ${error}` : outcome !== "presented" ? ` (${outcome})` : ""
+  const by = attempt?.by
+  useJournalStore.getState().add({ kind: "take", label: `Take ${status}: ${reference}${reason}`, itemId, ...(by ? { by } : {}) })
 }
 
 /** A reading armed "Bible feeds only": its Take activates the Bible source; the main screens keep what they show. */
@@ -63,7 +90,6 @@ function findLiveQueueIndex(): number | null {
 export async function presentQueueItem(index: number, slide: number | "last" = 0, songAs?: { arrangement_id: string | null; languages: string[]; song?: SongWithSections }, opts: { automatic?: boolean } = {}): Promise<void> {
   const item = useQueueStore.getState().items[index]
   if (!item) return
-  // Before the active item moves: a held go-live must change nothing (CL-002).
   const id = item.id
   const again = () => {
     const i = useQueueStore.getState().items.findIndex((x) => x.id === id)
@@ -72,40 +98,41 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   // A cue-only moment (#193) shows nothing: taking it fires its cues; the screens keep what they show.
   if (isCueItem(item)) return takeCueItem(item, index)
   const sourceOnly = takesSourceOnly(item)
+  const positionGeneration = isSoundItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
   // A reading for the Bible feeds only does not reach the main screens, like Activate on Bible feeds.
-  if (!isSoundItem(item) && !sourceOnly && approvalHolds(again)) return
+  const attemptId = beginTakeAttempt(id, item.reference)
+  if (!isSoundItem(item) && !sourceOnly && approvalHolds(again)) {
+    finishTakeAttempt(attemptId, id, item.reference, "held_for_approval", positionGeneration)
+    return
+  }
   // A timed move or a phase that runs by itself is not the operator's Take: its steps do not run.
   const took = afterTake(item, !opts.automatic && !isUp(item))
-  useQueueStore.getState().setActive(index)
-  if (isSlideItem(item)) {
-    await presentCustomSlide(item, { goLive: true }).then(took).catch((e) => console.warn("[remote-actions] presentQueueItem (slide) failed:", e))
-    return
+  try {
+    let outcome: PresentOutcome
+    if (isSlideItem(item)) outcome = await presentCustomSlide(item, { goLive: true })
+    else if (isImageItem(item)) outcome = await presentImage(item, { goLive: true })
+    else if (isSongItem(item)) {
+      // Stepping within the live song keeps the arrangement it went live with.
+      const songItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
+      outcome = await presentSlide(songItem, slide, { goLive: true, song: songAs?.song })
+    } else {
+      // Navigate the Bible panel to the presented verse, as detections do.
+      useBibleStore.getState().setPendingNavigation({
+        bookNumber: item.verse.book_number,
+        chapter: item.verse.chapter,
+        verse: item.verse.verse,
+      })
+      outcome = sourceOnly
+        ? await takeOnBibleFeeds(item)
+        : await presentVerse(item.verse, { item, goLive: true, itemId: item.id, background: item.background })
+    }
+    finishTakeAttempt(attemptId, id, item.reference, outcome, positionGeneration)
+    took(outcome)
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    finishTakeAttempt(attemptId, id, item.reference, "error", positionGeneration, error)
+    console.warn("[remote-actions] presentQueueItem failed:", e)
   }
-  if (isImageItem(item)) {
-    await presentImage(item, { goLive: true }).then(took).catch((e) => console.warn("[remote-actions] presentQueueItem (image) failed:", e))
-    return
-  }
-  if (isSongItem(item)) {
-    // Stepping within the live song keeps the arrangement it went live with.
-    const songItem = songAs ? { ...item, song: { ...item.song, arrangement_id: songAs.arrangement_id, languages: songAs.languages } } : item
-    await presentSlide(songItem, slide, { goLive: true, song: songAs?.song }).then(took).catch((e) =>
-      console.warn("[remote-actions] presentQueueItem (song) failed:", e),
-    )
-    return
-  }
-  // Navigate the Bible panel to the presented verse, as detections do
-  useBibleStore.getState().setPendingNavigation({
-    bookNumber: item.verse.book_number,
-    chapter: item.verse.chapter,
-    verse: item.verse.verse,
-  })
-  if (sourceOnly) {
-    await takeOnBibleFeeds(item).then(took).catch((e) => console.warn("[remote-actions] presentQueueItem (Bible feeds) failed:", e))
-    return
-  }
-  await presentVerse(item.verse, { item, goLive: true, itemId: item.id, background: item.background }).then(took).catch((e) =>
-    console.warn("[remote-actions] presentQueueItem failed:", e),
-  )
 }
 
 /**
@@ -114,6 +141,7 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
  * the timekeeper starts its event. Nothing on the screens changes. Not in rehearsal.
  */
 async function takeCueItem(item: CueQueueItem, index: number): Promise<void> {
+  // Cue-only moments are event actions, not screen Takes: their event clock and cue semantics stay independent.
   useQueueStore.getState().setActive(index)
   if (useBroadcastStore.getState().rehearsal) {
     toast.info(`Rehearsal: the cues of ${item.reference} were not run`)
@@ -280,7 +308,6 @@ export const remoteActions = {
       const at = useQueueStore.getState().items.findIndex((i) => i.id === cue.id)
       return at === -1 ? Promise.resolve() : takeCueItem(cue, at)
     }
-    if (approvalHolds(() => void remoteActions.sendToLive())) return Promise.resolve()
     const bible = useBibleStore.getState()
     const queue = useQueueStore.getState()
     if (bible.selectedSlide) {
@@ -288,9 +315,16 @@ export const remoteActions = {
       // The copy taken when the song went live only while that song is still on air.
       const stillLive = useBroadcastStore.getState().liveSlide?.itemId === item.id
       const idx = queue.items.findIndex((i) => i.id === item.id)
-      if (idx !== -1) queue.setActive(idx)
       // The rundown's copy carries the steps armed in Prepare since it was put in Preview.
-      const took = afterTake(queue.items[idx] ?? item, !isUp(item))
+      const queueItem = queue.items[idx] ?? item
+      const sourceOnly = isVerseItem(item) && idx !== -1 && takesSourceOnly(queueItem)
+      const positionGeneration = isSoundItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
+      const attemptId = beginTakeAttempt(idx === -1 ? null : item.id, queueItem.reference)
+      if (approvalHolds(() => void remoteActions.sendToLive())) {
+        finishTakeAttempt(attemptId, idx === -1 ? null : item.id, queueItem.reference, "held_for_approval", positionGeneration)
+        return Promise.resolve()
+      }
+      const took = afterTake(queueItem, !isUp(item))
       const presenting: Promise<PresentOutcome> = isSlideItem(item)
         ? presentCustomSlide(item, { goLive: true })
         : isImageItem(item)
@@ -298,16 +332,38 @@ export const remoteActions = {
           : isSongItem(item)
             ? presentSlide(item, index, { goLive: true, song: stillLive ? song : undefined })
             : Promise.resolve<PresentOutcome>("empty")
-      return presenting.then(took).catch((e) => console.warn("[remote-actions] sendToLive (slide) failed:", e))
+      return presenting.then((outcome) => {
+        finishTakeAttempt(attemptId, idx === -1 ? null : item.id, queueItem.reference, outcome, positionGeneration)
+        took(outcome)
+      }).catch((e) => {
+        const error = e instanceof Error ? e.message : String(e)
+        finishTakeAttempt(attemptId, idx === -1 ? null : item.id, queueItem.reference, "error", positionGeneration, error)
+        console.warn("[remote-actions] sendToLive (slide) failed:", e)
+      })
     }
     const selectedVerse = bible.selectedVerse
     if (!selectedVerse) return Promise.resolve()
     const idx = queue.findDuplicate(selectedVerse.book_number, selectedVerse.chapter, selectedVerse.verse)
     const rundownItem = idx === -1 ? null : queue.items[idx]
-    if (idx !== -1) queue.setActive(idx)
+    const itemId = rundownItem?.id ?? null
+    const reference = rundownItem?.reference ?? `${selectedVerse.book_name} ${selectedVerse.chapter}:${selectedVerse.verse}`
+    const sourceOnly = rundownItem !== null && takesSourceOnly(rundownItem)
+    const positionGeneration = sourceOnly ? latestVisualTake : ++latestVisualTake
+    const attemptId = beginTakeAttempt(itemId, reference)
+    if (approvalHolds(() => void remoteActions.sendToLive())) {
+      finishTakeAttempt(attemptId, itemId, reference, "held_for_approval", positionGeneration)
+      return Promise.resolve()
+    }
     const took = rundownItem ? afterTake(rundownItem, !isUp(rundownItem)) : () => {}
     // A reading armed "Bible feeds only" in Prepare: Take live sends it there, in its own translations.
-    if (rundownItem && takesSourceOnly(rundownItem)) return takeOnBibleFeeds(rundownItem).then(took).catch((e) => console.warn("[remote-actions] sendToLive (Bible feeds) failed:", e))
+    if (rundownItem && sourceOnly) return takeOnBibleFeeds(rundownItem).then((outcome) => {
+      finishTakeAttempt(attemptId, itemId, reference, outcome, positionGeneration)
+      took(outcome)
+    }).catch((e) => {
+      const error = e instanceof Error ? e.message : String(e)
+      finishTakeAttempt(attemptId, itemId, reference, "error", positionGeneration, error)
+      console.warn("[remote-actions] sendToLive (Bible feeds) failed:", e)
+    })
     const previewed = bible.translations.find((t) => t.id === selectedVerse.translation_id)?.abbreviation ?? null
     return presentVerse(selectedVerse, {
       goLive: true,
@@ -317,7 +373,14 @@ export const remoteActions = {
         translation: previewed,
         secondary_translation: rundownItem && isVerseItem(rundownItem) ? (rundownItem.secondary_translation ?? null) : null,
       },
-    }).then(took).catch((e) => console.warn("[remote-actions] sendToLive failed:", e))
+    }).then((outcome) => {
+      finishTakeAttempt(attemptId, itemId, reference, outcome, positionGeneration)
+      took(outcome)
+    }).catch((e) => {
+      const error = e instanceof Error ? e.message : String(e)
+      finishTakeAttempt(attemptId, itemId, reference, "error", positionGeneration, error)
+      console.warn("[remote-actions] sendToLive failed:", e)
+    })
   },
 
   /** Queue the verse showing in Program preview. Duplicates are dropped by the store. */

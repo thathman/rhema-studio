@@ -66,6 +66,21 @@ beforeEach(() => {
 })
 
 describe("each specialist desk sees only its part", () => {
+  it("shows a host Take attempt without confusing it with the current program or event clock", async () => {
+    const state: LiveStateV1 = {
+      ...live,
+      program: { onAir: true, reference: "Welcome slide", rehearsal: false },
+      event: { mode: "own", currentId: "event-welcome" },
+      rundown: [{ id: "event-welcome", reference: "Welcome", plannedMinutes: 5 }],
+      takeAttempts: [{ id: 9, itemId: "sermon", reference: "Psalm 23", status: "pending", startedAt: 10_000, by: "Main desk" }],
+    }
+    const el = await render("viewer", state)
+
+    expect(el.textContent).toContain("Take pending: Psalm 23")
+    expect(el.textContent).toContain("Welcome slide")
+    expect(el.textContent).toContain("Welcome")
+  })
+
   it("Worship, Stage, Camera and OBS director", async () => {
     const desks = ["Event clock desk", "Bible desk", "Worship desk", "Scenes desk", "Stage desk", "Camera desk", "OBS desk"]
     const seen = async (role: string) => { const el = await render(role); return desks.filter((d) => has(el, d)) }

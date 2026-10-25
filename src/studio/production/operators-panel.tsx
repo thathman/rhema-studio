@@ -31,6 +31,7 @@ import { certificateWords } from "@/lib/host-certificate"
 import { presenceRows, readHostStatus, seenWords, type HostStatus } from "@/lib/host-presence"
 import { mayRunAuxTimer } from "@/stores/aux-timers-store"
 import { timeChangeWords } from "@/stores/time-change-store"
+import { TakeAttemptNotice } from "@/studio/present/take-attempt-notice"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
@@ -269,6 +270,7 @@ function JoinedDesk() {
             <p className="truncate text-sm font-semibold">{live.program.onAir ? live.program.reference ?? "On air" : "Nothing on air"}</p>
             {live.sources.filter((s) => s.on).length > 0 && <p className="mt-1 truncate text-[0.6875rem] text-[#9fb2b0]">Live sources: {live.sources.filter((s) => s.on).map((s) => [sourceName(s.id), s.reference, activatedLabel(s)].filter(Boolean).join(" · ")).join("   ")}</p>}
           </div>
+          <TakeAttemptNotice attempts={live.takeAttempts} />
           {desks.includes("director") && <DirectorBoard readiness={live.readiness} crew={live.presence} />}
           {desks.includes("clock") && <ClockDesk live={live} stale={fresh.stale} />}
           {desks.includes("prepare") && <PrepareDesk />}

@@ -26,6 +26,7 @@ import { useAuxTimers } from "@/stores/aux-timers-store"
 import { useTimeChange } from "@/stores/time-change-store"
 import { deskConsoleState, watchDeskConsoles, type HeardVerse, type LiveLyrics, type OutputMapRow, type SharedReadiness, type WorshipSetItem } from "@/lib/desk-consoles"
 import { recordWords, streamWords, type ObsLine } from "@/lib/obs-status"
+import { useTakeAttemptStore, type TakeAttempt } from "@/stores/take-attempt-store"
 
 /**
  * The host's Live State for joined computers (Host/Join, ARCH-004; ADR 0001): what is on the
@@ -40,6 +41,8 @@ export interface LiveStateV1 {
   /** The service open on the host (#246 C16): a desk tags each command with its id, so the host refuses one meant for another service. id and revision are absent from older hosts. */
   service: { id?: string; title: string; revision?: number } | null
   program: { onAir: boolean; reference: string | null; rehearsal: boolean }
+  /** The host's latest Take attempts. Optional on older hosts; separate from on-air content and event time. */
+  takeAttempts?: Omit<TakeAttempt, "error">[]
   /**
    * Each live source; `activatedAt` and `by` (who activated it) are absent from older hosts. After the
    * content sources: "ticker", "timer", "lowerThird", "stage" and each "camera:<name>" (reference: the
@@ -216,6 +219,12 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     church: useSettingsStore.getState().brandKit.churchName.trim(),
     service: current ? { id: current.id, title: current.title, revision: current.revision } : null,
     program: { onAir: b.isLive, reference: b.isLive ? (b.liveVerse?.reference || null) : null, rehearsal: b.rehearsal },
+    takeAttempts: useTakeAttemptStore.getState().attempts.slice(-10).map(({ id, itemId, reference, status, startedAt, finishedAt, outcome, by }) => ({
+      id, itemId, reference, status, startedAt,
+      ...(finishedAt !== undefined ? { finishedAt } : {}),
+      ...(outcome ? { outcome } : {}),
+      ...(by ? { by } : {}),
+    })),
     sources: [
       ...[...CONTENT_TYPES, "quick" as const].flatMap((id) => {
         const s = b.sources[id]
