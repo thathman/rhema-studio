@@ -1,4 +1,5 @@
 import type { SectionInput, SectionKind, SongQueueItem, SongSummary, SongWithSections, VerseRenderData } from "@/types"
+import { isHymnSong } from "@/lib/song-kind"
 
 /** One screen of a song: a section (or part of one) in one or two languages. */
 export interface LyricSlide {
@@ -244,7 +245,14 @@ export function songQueueItem(song: SongSummary, id: string = crypto.randomUUID(
   return {
     id,
     kind: "song",
-    song: { song_id: song.id, title: song.title, arrangement_id: null, languages: languages.length ? languages : [song.primary_language] },
+    song: {
+      song_id: song.id,
+      title: song.title,
+      ...(isHymnSong({ hymn_numbers: song.numbers }, song.tags) ? { hymn: true } : {}),
+      ...(song.numbers.length ? { hymn_numbers: [...song.numbers] } : {}),
+      arrangement_id: null,
+      languages: languages.length ? languages : [song.primary_language],
+    },
     reference: song.title,
     confidence: 1,
     source: "manual",

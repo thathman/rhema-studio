@@ -80,6 +80,10 @@ export interface VerseQueueItem extends QueueItemBase {
 export interface SongQueueRef {
   song_id: string
   title: string
+  /** Saved identity: hymn and song stay distinct even if the library later changes. */
+  hymn?: boolean
+  /** Human-readable hymnbook numbers captured when this item was added. */
+  hymn_numbers?: string[]
   /** null = the song's default arrangement. */
   arrangement_id: string | null
   /** Language tags to show, first is primary; empty = the song's primary language. */

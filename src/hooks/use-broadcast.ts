@@ -13,7 +13,7 @@ import { songSlides, toLyricRenderData } from "@/lib/lyrics"
 import { pinnedSong } from "@/stores/song-pins-store"
 import { useSongStore } from "@/stores/song-store"
 import { useSoundStore } from "@/stores/sound-store"
-import { CAC_TAG } from "@/lib/cac-hymnbook"
+import { hymnNumbersFromLibrary, isHymnSong } from "@/lib/song-kind"
 import { approvalHolds } from "@/stores/approval-gate-store"
 
 export function toVerseRenderData(
@@ -299,9 +299,14 @@ export async function presentSlide(
   const layer = await backgroundLayer(item.background)
   if (ticket !== presentSeq) return "superseded"
   useBibleStore.getState().selectSlide({ item, index: i })
-  // A hymn of the hymn book has its own look where an output gives it one.
-  const content = song.song.tags.split(",").some((t) => t.trim().toLowerCase() === CAC_TAG) ? "hymn" : "song"
-  useBroadcastStore.getState().setLiveVerse({ ...toLyricRenderData(song, slide), ...layer, content }, null, {
+  // Keep the planned hymn identity even if its library metadata changes after it was added.
+  const libraryNumbers = hymnNumbersFromLibrary(song.numbers)
+  const hymnNumbers = item.song.hymn_numbers?.length ? item.song.hymn_numbers : libraryNumbers
+  const hymn = isHymnSong(item.song, song.song.tags, libraryNumbers)
+  const content = hymn ? "hymn" : "song"
+  const lyric = toLyricRenderData(song, slide)
+  const referenceLabel = hymnNumbers.length ? `${hymnNumbers.join(", ")} · ` : hymn ? "Hymn · " : ""
+  useBroadcastStore.getState().setLiveVerse({ ...lyric, reference: `${referenceLabel}${lyric.reference}`, ...layer, content }, null, {
     goLive: opts.goLive,
     by,
     slide: { itemId: item.id, songId: song.song.id, index: i, total: slides.length, arrangementId: item.song.arrangement_id, languages: item.song.languages, song },
