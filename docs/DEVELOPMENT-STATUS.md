@@ -1,10 +1,20 @@
 # Rhema Studio — Development Status
 
-> **Snapshot warning (2026-10-26):** This page was last reconciled 2026-10-22 and is not a live representation of current main/open PRs. Start with the [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md), inspect GitHub head/PRs/CI, and record verified deltas before asserting implementation or acceptance. This warning does not update the historical snapshot below.
+> **Historical snapshot warning:** The integrated-main and test sections below were last reconciled on 2026-10-22. For current architecture and open work, start with the [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md) and the verified takeover delta immediately below.
 
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-22
+**Updated:** 2026-10-26 (verified takeover delta; historical sections below are retained)
+
+## Verified takeover delta (2026-10-26)
+
+- Current GitHub `main` is `d982db84e39f43bc5c31a53619aaac937c3dd136`.
+- PR #414 is open for #383/#384; PR #415 is open for #385/#386 and is stacked on #414. Both currently pass their four hosted checks.
+- PR #416 is open for #387, stacked on #415. It keeps deliberate repeated Scripture occurrences distinct while preserving suggestion deduplication and stable selection through save/reopen. Its branch is being refreshed against the latest #415 base; recheck hosted CI on the refreshed head.
+- PRs #420 and #457 are open for approved scene/look revision integrity and draft-only visual editing. Their current hosted checks pass; neither is merged.
+- PR #438 is an open, synthetic native-app journey slice for #411. The hosted app journeys and standard checks pass, but this does not establish projector, TV, OBS/NDI, camera, Windows or physical church-system acceptance.
+- Event-first work is split across open PRs #430, #454, #455 and #456; #456's hosted checks passed on retry. Phase-view work is in open PRs #460 and #462; #462 checks pass and #460's Rust and Companion jobs are still running at this snapshot.
+- These are review branches, not merged or released product. Check each PR's latest head and checks before relying on its status.
 
 ## Integrated `main`
 

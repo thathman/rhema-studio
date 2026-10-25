@@ -2,7 +2,7 @@
 
 > **Unified UX takeover, owner-approved 2026-10-26:** [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md) with [delivery/PR dependency matrix](rhema-studio/31-codex-delivery-matrix.md) tracks cross-route work (#442–#448), existing event/source contracts (#243/#409/#410), and hardware acceptance (#411). Reconcile these into stable task IDs after verifying main and active PRs. Do not auto-upgrade task status from issue/PR creation.
 
-**Backlog revision:** 0.45 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.46 · **Updated:** 2026-10-26 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -14,6 +14,19 @@
 - Track separate **code quality** vs **volunteer UX acceptance**. An intuitive app is not established merely by unit tests.
 
 ## Current active work
+
+### Verified takeover delta — 2026-10-26
+
+| GitHub issues | State | Evidence / next gate |
+|---|---|---|
+| [#383, #384 — Scene Save and queue insertion safety](https://github.com/thathman/rhema-studio/pull/414) | IN PR | #414 is open and its hosted checks pass. Review the actual scene snapshot and stable insertion changes; desktop/device acceptance remains separate. |
+| [#385, #386 — Hymn details and Add selection](https://github.com/thathman/rhema-studio/pull/415) | IN PR | #415 is open on #414 and its hosted checks pass. The native synthetic journey is separately covered in #438; no physical hardware acceptance is implied. |
+| [#387 — Repeated planned Scripture references](https://github.com/thathman/rhema-studio/pull/416) | IN PR | #416 preserves distinct manual occurrence IDs and keeps AI suggestion deduplication. Its branch is refreshing onto the current #415 head; recheck hosted CI after that update. |
+| [#398 — Approved scene and look revisions](https://github.com/thathman/rhema-studio/pull/420) | IN PR | #420 and follow-up #457 remain open with passing hosted checks. Approved snapshots and draft-only visual editing still require review/integration. |
+| [#409, #444 — Event-first Prepare](https://github.com/thathman/rhema-studio/pull/454) | IN PR | #430/#454 establish the event model and Add flow; #455/#456 extend reversible grouping and event moves. All are open; current #456 hosted checks pass after retry. |
+| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/pull/438) | PARTIAL IN PR | #438 automates four synthetic native-app journeys and passes hosted checks. Projector/TV, OBS/NDI, cameras, Windows and physical church-system recovery remain unverified. |
+
+The current source-of-truth for wider cross-route scope is the Unified Handover, not the dated task rows below. Open PRs are not merged, accepted or shipped.
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
@@ -198,6 +211,7 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 
 ## Revision history
 
+- **2026-10-26 (rev 0.46):** Reconciled the current main SHA and verified open delivery state for the P0 safety, Hymn/Add, approved revision, event-first Prepare and partial QA slices. PRs remain unmerged; physical-device acceptance remains open.
 - **2026-10-21 (rev 0.43):** PRs #111–#122 merged; stale "later" notes in done criteria replaced with the PRs that did the work.
 - **2026-10-21 (rev 0.42):** PRs #96–#110 merged (see DEVELOPMENT-STATUS); QA-001 unsigned installer artifact built from `main`.
 - **2026-10-21 (rev 0.41):** owner decision #33 recorded (bundled translations ship as upstream); PRs #89–#95 merged (NDI receivers, video, lower thirds, monitors, multiview, reuse, OBS); MD-002 video, MD-004, OP-004, AR-002, AR-003 merged.
