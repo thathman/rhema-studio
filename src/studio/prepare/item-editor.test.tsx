@@ -88,6 +88,25 @@ describe("Prepare confidence preview (#389)", () => {
     expect(lastPayload()).toMatchObject({ timer: null, message: null })
   })
 
+  it("shows the next visible item across hidden items and a disabled phase", async () => {
+    const selected = { ...item }
+    const hidden = { ...item, id: "hidden", reference: "Hidden item", hidden: true }
+    const skipped = { ...item, id: "skipped", reference: "Disabled phase item" }
+    const following = { ...item, id: "following", reference: "Following prayer" }
+    useQueueStore.setState({
+      items: [selected, hidden, skipped, following],
+      headers: [
+        { id: "main", type: "phase", name: "Main", at: 0, rule: "manual" },
+        { id: "disabled", type: "phase", name: "Disabled", at: 2, rule: "manual", disabled: true },
+        { id: "following", type: "phase", name: "Following", at: 3, rule: "manual" },
+      ],
+      activeIndex: 0,
+    })
+    await act(async () => root!.render(<StagePreview item={selected} index={0} />))
+
+    expect(lastPayload().next).toBe("Following prayer")
+  })
+
   it("shows the currently selected section from the service arrangement", async () => {
     useBibleStore.setState({ selectedSlide: { item, index: 0 } })
     await act(async () => root!.render(<StagePreview item={item} index={0} />))

@@ -195,6 +195,28 @@ describe("remoteActions queue navigation", () => {
     expect(useQueueStore.getState().activeIndex).toBe(1)
   })
 
+  it("remote Next skips hidden items and a disabled phase", () => {
+    const items = [
+      queueItemFor(genesisOneOne),
+      { ...queueItemFor(johnThreeSixteen), id: "hidden", hidden: true },
+      { ...queueItemFor(johnThreeSixteen), id: "disabled-phase" },
+      { ...queueItemFor(genesisOneOne), id: "following-phase" },
+    ]
+    useQueueStore.setState({
+      items,
+      activeIndex: 0,
+      headers: [
+        { id: "main", type: "phase", name: "Main", at: 0, rule: "manual" },
+        { id: "disabled", type: "phase", name: "Disabled", at: 2, rule: "manual", disabled: true },
+        { id: "following", type: "phase", name: "Following", at: 3, rule: "manual" },
+      ],
+    })
+
+    remoteActions.queueNext()
+
+    expect(useQueueStore.getState().activeIndex).toBe(3)
+  })
+
   it("does nothing on an empty queue", () => {
     remoteActions.queueNext()
 

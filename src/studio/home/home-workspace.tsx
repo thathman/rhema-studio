@@ -14,7 +14,7 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceStore } from "@/stores/service-store"
 import { type ReadinessCheck, type ReadinessFix } from "@/studio/readiness"
 import { isImageItem, isSongItem } from "@/types"
-import { plannedTimes } from "@/lib/run-of-show"
+import { nextVisibleItem, plannedTimes } from "@/lib/run-of-show"
 import { formatMinutes } from "@/lib/service-timing"
 import { useReadiness } from "@/studio/use-readiness"
 import { ChurchFolderCard } from "@/studio/home/church-folder-card"
@@ -44,7 +44,7 @@ export function HomeWorkspace() {
     else openSettings("diagnostics")
   }
 
-  const next = items[activeIndex === null ? 0 : Math.min(activeIndex + 1, items.length - 1)]
+  const next = nextVisibleItem(items, headers, activeIndex)
   // Warnings need something done; notes ("Listening is off") are listed but not counted against readiness.
   const okCount = checks.filter((c) => c.status === "ok").length
   const warnings = checks.filter((c) => c.status === "warn")
@@ -133,7 +133,7 @@ export function HomeWorkspace() {
                         <KindTile item={it} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold">{it.reference}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{kindLabel(it, songs)}{it.planned_minutes ? ` · ${it.planned_minutes} min` : ""}{next?.id === it.id && activeIndex !== null ? " · next" : ""}</span>
+                          <span className="block truncate text-xs text-muted-foreground">{kindLabel(it, songs)}{it.planned_minutes ? ` · ${it.planned_minutes} min` : ""}{next?.item.id === it.id && activeIndex !== null ? next.kind === "moment" ? " · next moment" : " · next" : ""}</span>
                         </span>
                         <ChevronRightIcon className="size-4 text-muted-foreground" />
                       </button>
