@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
 vi.mock("@tauri-apps/plugin-dialog", () => ({ ask: vi.fn(async () => true) }))
+const toasts = vi.hoisted(() => [] as unknown[])
+vi.mock("sonner", () => ({ toast: Object.assign((...a: unknown[]) => void toasts.push(a), { error: (...a: unknown[]) => void toasts.push(["error", ...a]), success: (...a: unknown[]) => void toasts.push(a) }) }))
+vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => ({ get: async () => undefined, set: async () => {}, save: async () => {} })) }))
 
 import { act } from "react"
 import { createRoot } from "react-dom/client"
@@ -12,6 +15,8 @@ import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useProductionTab } from "@/studio/production/production-tab"
+import { resetDesignPacksForTests, useDesignPackStore } from "@/lib/design-packs"
+import pack from "../../../design-packs/rhema-worship-expressions.rhema-design.json?raw"
 
 beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -20,6 +25,8 @@ beforeEach(() => {
   document.body.replaceChildren()
   useBroadcastStore.setState({ themes: BUILTIN_THEMES, scenes: [] })
   useProductionTab.setState({ requested: null, scene: null })
+  resetDesignPacksForTests()
+  toasts.length = 0
 })
 
 async function render() {
@@ -61,5 +68,40 @@ describe("Design → Library (#299)", () => {
   it("an announcement look previews as a notice slide", async () => {
     const el = await render()
     expect(card(el, "Classic · Announcement").textContent).toContain("Full screen · Notices · Dark")
+  })
+
+  it("Import design pack: the pack's looks join the library under its name, Use works on them, and nothing goes on air", { timeout: 60_000 }, async () => {
+    const el = await render()
+    const before = useBroadcastStore.getState()
+    const input = el.querySelector<HTMLInputElement>('input[type="file"]')!
+    // jsdom's File has no text() (WebKit's has): read it the old way.
+    File.prototype.text ??= function (this: File) {
+      return new Promise<string>((resolve) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result))
+        r.readAsText(this)
+      })
+    }
+    const file = new File([pack], "rhema-worship-expressions.rhema-design.json", { type: "application/json" })
+    Object.defineProperty(input, "files", { value: [file], configurable: true })
+    await act(async () => void input.dispatchEvent(new Event("change", { bubbles: true })))
+    await vi.waitFor(() => expect(toasts.map((t) => JSON.stringify(t))).toEqual([expect.stringContaining("Imported")]), { timeout: 15_000 })
+    expect(useDesignPackStore.getState().packs).toHaveLength(1)
+    // Shown on its own: the pack's family is chosen, with its name over its looks.
+    await vi.waitFor(() => expect([...el.querySelectorAll("section")].map((x) => x.getAttribute("aria-label"))).toEqual(["Rhema Studio · Worship Expressions"]), { timeout: 15_000 })
+    expect(el.querySelectorAll("li")).toHaveLength(120)
+    const after = useBroadcastStore.getState()
+    expect([after.outputs, after.scenes, after.themes, after.isLive]).toEqual([before.outputs, before.scenes, before.themes, before.isLive])
+
+    const use = [...card(el, "Midnight Blue · Camera + Bible band").querySelectorAll("button")].find((b) => b.textContent?.includes("Use")) as HTMLButtonElement
+    await act(async () => use.click())
+    expect(useBroadcastStore.getState().scenes[0]?.libraryLookId).toBe("rhema-worship-expressions/midnight-camera-bible")
+
+    const remove = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Remove pack")) as HTMLButtonElement
+    await act(async () => remove.click())
+    await vi.waitFor(() => expect(useDesignPackStore.getState().packs).toHaveLength(0), { timeout: 15_000 })
+    // The copy stays the church's; the library shows every family again.
+    expect(useBroadcastStore.getState().scenes).toHaveLength(1)
+    expect(el.querySelector('section[aria-label="Church Classic"]')).not.toBeNull()
   })
 })
