@@ -683,6 +683,7 @@ where
         .route("/camera", get(camera_page_handler::<S>))
         .route("/api/v1/camera/{name}/whip", post(camera_whip_handler::<S>))
         .route("/api/v1/camera/{name}/whip/{session}", axum::routing::patch(camera_session_handler::<S>).delete(camera_session_handler::<S>))
+        .route("/api/v1/camera/{name}/status", post(camera_status_handler::<S>))
         .route("/api/v1/cameras/watch", get(companion_cameras_handler::<S>))
         .route("/api/v1/cameras/tally", post(companion_tally_handler::<S>))
         // Undocumented alias for the path the code shipped with before #146.
@@ -1486,6 +1487,29 @@ async fn camera_whip_handler<S: CommandSink + 'static>(
         return code.into_response();
     }
     state.cameras.forward(axum::http::Method::POST, &name, None, &headers, body).await
+}
+
+/// `POST /api/v1/camera/{name}/status` with `Authorization: Bearer <the camera's secret>`: Rhema
+/// Studio Cam's battery and heat, every 30 s while it sends (#213). The secret goes in a header,
+/// never in the address (addresses end up in logs).
+async fn camera_status_handler<S: CommandSink + 'static>(
+    AxumState(state): AxumState<Arc<AppState<S>>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> axum::response::Response {
+    if !state.rate.allow(peer.ip()) {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let token = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("Bearer ")).unwrap_or("").trim();
+    if body.len() > 4096 {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    }
+    let Ok(status) = serde_json::from_slice::<crate::cameras::PhoneStatus>(&body) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if state.cameras.set_phone(&name, token, status) { StatusCode::NO_CONTENT.into_response() } else { StatusCode::FORBIDDEN.into_response() }
 }
 
 /// `PATCH` (more ICE candidates) and `DELETE` (hang up) on a camera's WHIP session.
@@ -2320,13 +2344,14 @@ mod tests {
         assert!(st.acked_ago_ms.is_some());
         assert!(st.video.is_empty(), "no page said what it plays yet");
         // A page playing a camera says how it plays (#213), with its acknowledgement.
-        let report = r#"{"seq":2,"video":[{"camera":"pulpit","playing":true,"fps":29.8,"decoded":900,"dropped":2,"droppedPct":0.2,"frameAgeMs":40,"width":1920,"height":1080}]}"#;
+        let report = r#"{"seq":2,"video":[{"camera":"pulpit","playing":true,"fps":29.8,"decoded":900,"dropped":2,"droppedPct":0.2,"frameAgeMs":40,"width":1920,"height":1080,"jitterMs":4.5,"lossPct":0.1,"rttMs":2.0,"recvFps":60.0,"decodeFps":59.8,"firstFrameMs":640}]}"#;
         assert!(raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=s3cret", Some(report), "").await.contains("204"));
         assert!(raw_http_request_with(port, "POST", "/api/v1/feed/l3/ack?k=wrong", Some(report), "").await.contains("403"));
         let st = feeds.status("l3").unwrap();
         assert_eq!(st.video.len(), 1);
         assert_eq!(st.video[0].from, "127.0.0.1");
         assert_eq!((st.video[0].cameras[0].camera.as_str(), st.video[0].cameras[0].fps, st.video[0].cameras[0].dropped_pct), ("pulpit", Some(29.8), Some(0.2)));
+        assert_eq!((st.video[0].cameras[0].jitter_ms, st.video[0].cameras[0].loss_pct, st.video[0].cameras[0].decode_fps, st.video[0].cameras[0].first_frame_ms), (Some(4.5), Some(0.1), Some(59.8), Some(640.0)));
         // A page says how far its clock is from the host's beats (#196): the one furthest off is kept.
         assert_eq!(st.clock_skew_ms, None, "no page said yet");
         assert!(ack_clock(port, -4200).await.contains("204"));
@@ -2414,6 +2439,13 @@ mod tests {
             format!("DELETE /pulpit/whip/5e55-10n auth={basic} type=- if-match=- body="),
         ]);
 
+        // The Cam app's battery and heat: with the camera's secret in a header only.
+        let report = r#"{"battery":54,"charging":true,"temperature":33.5,"thermal":0,"cooling":false}"#;
+        assert!(send("POST", "/api/v1/camera/pulpit/status", report, "Content-Type: application/json\r\nAuthorization: Bearer wrong\r\n").await.contains("403"));
+        assert!(send("POST", "/api/v1/camera/pulpit/status?k=0123456789abcdef", report, "Content-Type: application/json\r\n").await.contains("403"), "never the secret in the address");
+        assert!(send("POST", "/api/v1/camera/pulpit/status", "not json", "Authorization: Bearer 0123456789abcdef\r\n").await.contains("400"));
+        assert!(send("POST", "/api/v1/camera/pulpit/status", report, "Content-Type: application/json\r\nAuthorization: Bearer 0123456789abcdef\r\n").await.contains("204"));
+        assert_eq!(cameras.phone("pulpit").map(|p| (p.status.battery, p.status.charging)), Some((Some(54.0), true)));
         // A removed camera's link stops at once.
         cameras.set(&[]);
         assert!(send("POST", "/api/v1/camera/pulpit/whip?k=0123456789abcdef", "v=0 offer", "Content-Type: application/sdp\r\n").await.contains("403"));

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { availableMonitors } from "@tauri-apps/api/window"
 import { toast } from "sonner"
-import { MonitorPlayIcon, SquareIcon, TriangleAlertIcon } from "lucide-react"
+import { MonitorPlayIcon, SquareIcon, TimerIcon, TriangleAlertIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ndiResolutionDimensions } from "@/lib/broadcast-output-control"
 import { useFeedHealth } from "@/lib/browser-feeds"
@@ -9,9 +9,11 @@ import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { outputOnAir } from "@/lib/output-on-air"
 import type { EquipmentItem } from "@/lib/setup-readiness"
 import { useFeedHealthStore } from "@/lib/show-health"
-import { feedAckLabel, testPatternFrame, testPatternUrl, testRisks, type PatternSpec } from "@/lib/test-pattern"
+import { feedAckLabel, latencyClockFrame, testPatternFrame, testPatternUrl, testRisks, type PatternSpec } from "@/lib/test-pattern"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { usePhaseRun } from "@/stores/phase-run-store"
+import { useSettingsStore } from "@/stores/settings-store"
+import { CameraLag } from "@/studio/setup/camera-lag"
 import { StatusRow } from "@/studio/setup/status-rows"
 import type { BroadcastOutput } from "@/types"
 
@@ -53,6 +55,12 @@ export function ScreenTestRow({ output, item }: { output: BroadcastOutput; item:
   const [stage, setStage] = useState<"idle" | "confirm" | "again">("idle")
   const [risks, setRisks] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  // The camera-lag test (#213): the clock instead of the bars alone, and the camera that films it.
+  const cameras = useSettingsStore((s) => s.cameras)
+  const [mode, setMode] = useState<"pattern" | "clock">("pattern")
+  const [lagCamera, setLagCamera] = useState("")
+  const [clockOn, setClockOn] = useState<string | null>(null)
+  const canLag = output.type !== "ndi" && cameras.length > 0
   const endButton = useRef<HTMLButtonElement>(null)
   const id = output.id
 
@@ -71,10 +79,14 @@ export function ScreenTestRow({ output, item }: { output: BroadcastOutput; item:
     if (testing) endButton.current?.focus()
   }, [testing])
 
-  const ask = () => {
+  const ask = (m: "pattern" | "clock" = "pattern") => {
     setRisks([])
+    setMode(m)
+    if (m === "clock" && !cameras.some((c) => c.name === lagCamera)) setLagCamera(cameras[0]?.name ?? "")
     setStage("confirm")
   }
+  // The test ended (End test, or from elsewhere): the lag panel goes with it.
+  if (!testing && clockOn) setClockOn(null)
   const confirm = () => {
     // Checked again now: something may have gone on air since the button was pressed.
     const st = useBroadcastStore.getState().outputStatus[id]
@@ -96,7 +108,9 @@ export function ScreenTestRow({ output, item }: { output: BroadcastOutput; item:
         toast.error("The test pattern could not be drawn", { description: "Nothing was changed on the screen." })
         return
       }
-      useBroadcastStore.getState().startOutputTest(id, testPatternFrame(url, spec))
+      const clock = mode === "clock" && cameras.some((c) => c.name === lagCamera)
+      useBroadcastStore.getState().startOutputTest(id, clock ? latencyClockFrame(url, spec) : testPatternFrame(url, spec))
+      setClockOn(clock ? lagCamera : null)
     } finally {
       setBusy(false)
       setStage("idle")
@@ -114,9 +128,16 @@ export function ScreenTestRow({ output, item }: { output: BroadcastOutput; item:
             <Button ref={endButton} size="sm" onClick={end}><SquareIcon /> End test</Button>
           </>
         ) : (
-          <Button size="sm" variant="outline" disabled={!on || stage !== "idle"} title={on ? undefined : "Turn it on in Outputs first"} onClick={ask}>
-            <MonitorPlayIcon /> Test this screen
-          </Button>
+          <>
+            <Button size="sm" variant="outline" disabled={!on || stage !== "idle"} title={on ? undefined : "Turn it on in Outputs first"} onClick={() => ask("pattern")}>
+              <MonitorPlayIcon /> Test this screen
+            </Button>
+            {canLag && (
+              <Button size="sm" variant="outline" disabled={!on || stage !== "idle"} title={on ? "Shows a running clock on this screen for a camera to film" : "Turn it on in Outputs first"} onClick={() => ask("clock")}>
+                <TimerIcon /> Measure camera lag
+              </Button>
+            )}
+          </>
         )}
       </StatusRow>
       {stage !== "idle" && !testing && (
@@ -124,11 +145,21 @@ export function ScreenTestRow({ output, item }: { output: BroadcastOutput; item:
           <div role="alertdialog" aria-labelledby={`test-${id}-title`} aria-describedby={`test-${id}-text`} className="rounded-lg border border-border bg-muted/40 p-3">
             <p id={`test-${id}-title`} className="flex items-center gap-1.5 text-sm font-semibold">
               {stage === "again" && <TriangleAlertIcon className="size-4 text-confidence-mid" />}
-              {stage === "again" ? "People may be watching this output" : `Show a test pattern on ${output.name}?`}
+              {stage === "again" ? "People may be watching this output" : mode === "clock" ? `Show the camera-lag clock on ${output.name}?` : `Show a test pattern on ${output.name}?`}
             </p>
             <div id={`test-${id}-text`} className="mt-1 text-xs text-muted-foreground">
               {stage === "again" ? (
                 <ul className="list-disc space-y-0.5 pl-4">{risks.map((r) => <li key={r}>{r}</li>)}</ul>
+              ) : mode === "clock" ? (
+                <div className="flex flex-col gap-2">
+                  <p>Only {output.name} changes: it shows a large running clock and “TEST – not on air” until you press End test. Every other screen, stream and feed stays as it is.</p>
+                  <label className="flex items-center gap-1.5 text-foreground">
+                    Camera to measure
+                    <select aria-label="Camera to measure" value={lagCamera} onChange={(e) => setLagCamera(e.target.value)} className="h-8 rounded-md border border-input bg-card px-2">
+                      {cameras.map((c) => <option key={c.name} value={c.name}>{c.label}</option>)}
+                    </select>
+                  </label>
+                </div>
               ) : (
                 <p>Only {output.name} changes: it shows bars, its name and size, and “TEST – not on air” until you press End test. Every other screen, stream and feed stays as it is.</p>
               )}
@@ -136,12 +167,16 @@ export function ScreenTestRow({ output, item }: { output: BroadcastOutput; item:
             <div className="mt-3 flex flex-wrap justify-end gap-2">
               <Button size="sm" variant="ghost" autoFocus onClick={() => setStage("idle")}>Cancel</Button>
               <Button size="sm" variant={stage === "again" ? "destructive" : "default"} disabled={busy} onClick={confirm}>
-                {stage === "again" ? "Show it anyway" : "Show test pattern"}
+                {stage === "again" ? "Show it anyway" : mode === "clock" ? "Show the clock" : "Show test pattern"}
               </Button>
             </div>
           </div>
         </li>
       )}
+      {testing && clockOn && (() => {
+        const cam = cameras.find((c) => c.name === clockOn)
+        return cam ? <li className="pb-3"><CameraLag output={output} cam={cam} /></li> : null
+      })()}
     </>
   )
 }

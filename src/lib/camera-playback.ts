@@ -55,7 +55,37 @@ export function playbackTrouble(c: CameraPlayback): string | null {
   if (c.frameAgeMs !== null && c.frameAgeMs > 3000) return `no new frame for ${Math.round(c.frameAgeMs / 1000)} s`
   if (c.droppedPct !== null && c.droppedPct >= 5) return `${fmt(c.droppedPct)}% of frames dropped`
   if (c.fps !== null && c.fps > 0 && c.fps < 15) return `only ${fmt(c.fps)} frames a second`
+  if (typeof c.lossPct === "number" && c.lossPct >= 2) return `${fmt(c.lossPct)}% of its packets lost on the network`
+  if (typeof c.jitterMs === "number" && c.jitterMs >= 60) return `jitter of ${Math.round(c.jitterMs)} ms (an unsteady network)`
+  if (sixtyVerdict(c) === "short") return SIXTY_HINT
   return null
+}
+
+/** Said when a screen cannot keep up with a 60 fps camera (#213: 1080p60 only with capability). */
+export const SIXTY_HINT = "cannot keep up with 60 frames a second: use 1080p30 for this screen"
+
+/**
+ * Whether this screen keeps up with a camera sending about 60 frames a second, from what it
+ * measured: "keeps-up", "short" (it decodes or shows clearly fewer, or drops frames), or null when
+ * the camera does not send at 60 (nothing to tell) or there is not enough measured yet.
+ */
+export function sixtyVerdict(c: CameraPlayback): "keeps-up" | "short" | null {
+  if (c.held || !c.playing) return null
+  const incoming = c.recvFps ?? null
+  if (incoming === null || incoming < 50) return null
+  const decoded = c.decodeFps ?? null
+  if ((decoded !== null && decoded < incoming - 5) || (c.fps !== null && c.fps < 52) || (c.droppedPct !== null && c.droppedPct >= 3)) return "short"
+  if (c.fps !== null && c.fps >= 56 && (c.droppedPct ?? 0) < 1) return "keeps-up"
+  return null
+}
+
+/** WebRTC's network measures in words: "jitter 4 ms, 0.1% lost, round trip 3 ms" (only those known). */
+export function networkMeasures(c: Pick<CameraPlayback, "jitterMs" | "lossPct" | "rttMs">): string[] {
+  const out: string[] = []
+  if (typeof c.jitterMs === "number") out.push(`jitter ${Math.round(c.jitterMs)} ms`)
+  if (typeof c.lossPct === "number") out.push(`${fmt(c.lossPct)}% lost`)
+  if (typeof c.rttMs === "number") out.push(`round trip ${Math.round(c.rttMs)} ms`)
+  return out
 }
 
 const fmt = (n: number) => (Math.round(n * 10) / 10).toString()
@@ -68,6 +98,8 @@ export function playbackWords(c: CameraPlayback): { text: string; tone: "ok" | "
   const parts = [c.fps === null ? "measuring…" : `${fmt(c.fps)} fps`]
   if (c.droppedPct !== null) parts.push(`${fmt(c.droppedPct)}% dropped`)
   if (c.width && c.height) parts.push(`${c.width}×${c.height}`)
+  if (typeof c.decodeFps === "number" && c.fps !== null && Math.abs(c.decodeFps - c.fps) >= 2) parts.push(`${fmt(c.decodeFps)} decoded a second`)
+  parts.push(...networkMeasures(c))
   const text = parts.join(", ")
   return trouble ? { text: `${text}: ${trouble}`, tone: "warn" } : { text, tone: "ok" }
 }

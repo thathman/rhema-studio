@@ -40,6 +40,41 @@ export interface RouterPath {
   watchers?: { kind: string; name: string; remote: boolean }[]
   /** What each OBS companion said: on its program, in its preview, receiving it. */
   obs?: { desk: string; program: boolean; preview: boolean; receiving: boolean }[]
+  /** The phone's battery and heat, as Rhema Studio Cam last reported them (#213); absent when it has not lately. */
+  phone?: PhoneReport
+}
+
+/** Rhema Studio Cam's report of its phone, every 30 s while it sends (#213). */
+export interface PhoneReport {
+  /** 0–100, or null when the phone does not say. */
+  battery: number | null
+  charging: boolean
+  /** Battery temperature (°C). */
+  temperature: number | null
+  /** Android's thermal status: 0 none … 6 shutdown; null before Android 10. */
+  thermal: number | null
+  /** The app sends a smaller or slower picture to cool the phone. */
+  cooling: boolean
+  agoMs: number
+}
+
+const THERMAL = ["normal", "warm", "hot", "very hot", "critical", "emergency", "shutting down"]
+
+/**
+ * A phone's battery and heat in words, and what to warn about: a battery under 20% that is not
+ * charging, and a phone hot enough that Android (or the app) slows it down.
+ */
+export function phoneWords(p: PhoneReport): { text: string; warnings: string[] } {
+  const parts: string[] = []
+  if (p.battery !== null) parts.push(`Battery ${Math.round(p.battery)}%${p.charging ? ", charging" : ""}`)
+  else if (p.charging) parts.push("Charging")
+  if (p.temperature !== null) parts.push(`${Math.round(p.temperature * 10) / 10} °C`)
+  if (p.thermal !== null) parts.push(`heat: ${THERMAL[p.thermal] ?? "unknown"}`)
+  const warnings: string[] = []
+  if (p.battery !== null && p.battery < 20 && !p.charging) warnings.push(`Battery low (${Math.round(p.battery)}%) and not charging: plug the phone in`)
+  if ((p.thermal ?? 0) >= 4) warnings.push("The phone is critically hot and may stop sending: give it air or shade now")
+  else if ((p.thermal ?? 0) >= 2 || p.cooling) warnings.push("The phone is hot: Rhema Studio Cam sends a smaller or slower picture to cool it. Give it air or shade, or take it off its charger")
+  return { text: parts.join(" · ") || "Reporting", warnings }
 }
 
 export interface RouterStatus {
@@ -113,11 +148,14 @@ export function rtmpUrl(host: string, ports: RouterPorts, cam: CameraSource): st
 /**
  * The Rhema Studio Cam app's pairing link (Android): where the router's RTSPS is, which camera the phone
  * is, its publish password (the same secret as its page link, so New link closes this too) and the
- * fingerprint of the only certificate the app will send to. Null while the router has no RTSPS.
+ * fingerprint of the only certificate the app will send to, and the secure listener's port it
+ * reports its battery and heat to. Null while the router has no RTSPS.
  */
-export function cameraAppLink(host: string, ports: RouterPorts, cam: CameraSource, fingerprint: string | null | undefined): string | null {
+export function cameraAppLink(host: string, ports: RouterPorts, cam: CameraSource, fingerprint: string | null | undefined, apiPort?: number | null): string | null {
   if (!ports.rtsps || !fingerprint || !/^[0-9a-f]{64}$/.test(fingerprint)) return null
   const q = new URLSearchParams({ host, port: String(ports.rtsps), name: cam.name, user: publishUser(cam.name), token: cam.token, fp: fingerprint, label: cam.label })
+  // Rhema's secure listener (same certificate): where the app reports its battery and heat (#213).
+  if (apiPort && Number.isInteger(apiPort) && apiPort > 0 && apiPort < 65536) q.set("api", String(apiPort))
   return `rhema-camera://pair?${q.toString().replace(/\+/g, "%20")}`
 }
 

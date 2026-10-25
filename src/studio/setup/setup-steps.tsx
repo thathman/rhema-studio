@@ -235,7 +235,7 @@ export function ScreensStep({ onLeave }: { onLeave?: Leave }) {
             {outputs.map((o) => <ScreenTestRow key={o.id} output={o} item={items.find((i) => i.id === `output-${o.id}`)} />)}
           </ul>
         )}
-        <p className="text-xs text-muted-foreground">Test this screen shows a test pattern on that one output, after you confirm, until you end the test. It works on outputs that are on.</p>
+        <p className="text-xs text-muted-foreground">Test this screen shows a test pattern on that one output, after you confirm, until you end the test. It works on outputs that are on. Measure camera lag shows a running clock there instead, for a camera to film: Rhema Studio saves how far that camera runs behind.</p>
       </section>
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-xs text-muted-foreground">

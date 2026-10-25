@@ -28,10 +28,13 @@ import { drawStage, stageOnCanvas, stageSurface } from "@/lib/stage-canvas"
 import { sceneStatic } from "@/lib/no-signal"
 import { outputPace } from "@/lib/output-pace"
 import { CountdownFade } from "@/lib/countdown-display"
+import { latencyClock } from "@/lib/latency-clock"
 
 
 /** Read output ID from URL query param (?output=main or ?output=alt). Defaults to "main". */
 const OUTPUT_ID = new URLSearchParams(window.location.search).get("output") ?? "main"
+/** The screen test's camera-lag clock (#213), over everything while the test frame asks for it. */
+const lagClock = latencyClock()
 
 // Tell the main window when the NDI stream dies on the network (a few pushes
 // failing in a row) and when it comes back, so the operator sees it and the
@@ -102,6 +105,8 @@ interface BroadcastPayload {
    * scene with its own ticker or lower-third layer arrives without `ticker` / `overlay` (it owns them).
    */
   scene?: SceneFrame
+  /** The screen test's camera-lag clock is up (#213). */
+  latencyClock?: boolean
 }
 
 // A canvas per scene layer, where its look is drawn whole before it is placed.
@@ -490,6 +495,7 @@ function BroadcastCanvas() {
       if (fadeFrom) requestAnimationFrame(animateFade)
     }
     const unlisten = currentWindow.listen<BroadcastPayload>("broadcast:verse-update", (event) => {
+      lagClock.show(event.payload.latencyClock === true)
       if (event.payload.role === "stage") {
         videoPlayer?.sync(undefined)
         stageRef.current = event.payload.stage ?? { current: null, next: null, note: null, timer: null, message: null, band: null }

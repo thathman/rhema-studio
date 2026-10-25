@@ -51,6 +51,23 @@ beforeEach(() => {
 const FP = "ab".repeat(32)
 
 describe("Cameras panel (#209)", () => {
+  it("a sending camera's card: its live picture, Test camera, the phone's battery and heat (#213), the report port in the Cam link", async () => {
+    answers.camera_router_status = router({ ports: { ...PORTS, rtsps: 8322 }, rtspsFingerprint: FP, paths: [{ name: "pulpit", live: true, source: "rtspSession", readers: 1, tracks: ["H264"], phone: { battery: 14, charging: false, temperature: 41, thermal: 2, cooling: true, agoMs: 3000 } }] })
+    useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit cam", token: "c".repeat(32) }], cameraLatency: [{ camera: "pulpit", outputId: "main", ms: 240, at: Date.now() }] })
+    useBroadcastStore.setState({ outputs: [{ id: "main", name: "Main Display" } as never] })
+    const el = await mount()
+    const text = el.textContent ?? ""
+    expect(el.querySelector('[aria-label="Pulpit cam live picture"]'), "a muted video from the router").toBeTruthy()
+    expect((el.querySelector('[aria-label="Pulpit cam live picture"]') as HTMLVideoElement).muted).toBe(true)
+    expect(text).toContain("QR code for the phone")
+    expect(text).toContain("Phone: Battery 14% · 41 °C · heat: hot")
+    expect(text).toContain("Battery low (14%) and not charging: plug the phone in")
+    expect(text).toContain("The phone is hot")
+    expect(text).toContain("Pulpit cam → Main Display ≈ 240 ms (measured")
+    expect(button(el, "Test camera")?.disabled).toBe(false)
+    expect(text).toContain("&api=8081")
+  })
+
   it("offers the Rhema Studio Cam app's pairing link while the router serves RTSPS", async () => {
     answers.camera_router_status = router({ ports: { ...PORTS, rtsps: 8322 }, rtspsFingerprint: FP })
     useSettingsStore.setState({ cameras: [{ name: "pulpit", label: "Pulpit cam", token: "c".repeat(32) }] })

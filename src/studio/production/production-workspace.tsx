@@ -16,13 +16,14 @@ import { openSettings } from "@/lib/settings-dialog"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { useBroadcastStore, type OutputFrame } from "@/stores/broadcast-store"
 import { CameraControls } from "@/studio/production/camera-controls"
-import { useObsProgramCameras, useScreenPlayback } from "@/studio/production/camera-hooks"
+import { useObsProgramCameras, useRememberSixty, useScreenPlayback } from "@/studio/production/camera-hooks"
 import { playbackWords } from "@/lib/camera-playback"
 import { cameraPathOf } from "@/lib/live-sources"
 import { attention, cameraHealth, cameraStateWords, cameraWords, capacityAttention, cpuWords, feedSummary, heatWords, memoryWords, ndiRateWords, networkWords, showing, tvCheckWords, useFeedHealthStore, type Attention, type CameraHealth, type HealthLine } from "@/lib/show-health"
 import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, capacityLimits, capacityUse, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
 import { useMachineHealth, type NdiMeasure } from "@/studio/production/use-machine-health"
-import { useRouterHealth } from "@/lib/cameras"
+import { phoneWords, useRouterHealth } from "@/lib/cameras"
+import { latencyWords, measuresOf, sixtyWords } from "@/lib/glass-latency"
 import { invoke } from "@tauri-apps/api/core"
 import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
 import { outputDestination, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
@@ -668,6 +669,10 @@ function CamerasHealth() {
   const onObs = useObsProgramCameras(router.status)
   const ours = cams.filter((c) => c.state !== "elsewhere")
   const sending = ours.filter((c) => c.state === "sending").length
+  const lags = useSettingsStore((s) => s.cameraLatency)
+  const sixty = useSettingsStore((s) => s.screenSixty)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  useRememberSixty(useScreenPlayback())
   return (
     <Card kicker="Signal" title="Cameras" badge={ours.length > 0 && <Badge tone={sending === ours.length ? "ok" : "warn"}>{sending} of {ours.length} sending</Badge>}>
       {cams.length === 0 ? (
@@ -702,6 +707,20 @@ function CamerasHealth() {
                       })}
                     </ul>
                   )}
+                  {c.phone && (() => {
+                    const p = phoneWords(c.phone)
+                    return (
+                      <span className="mt-1 block">
+                        <span className="block text-muted-foreground">Phone: {p.text}</span>
+                        {p.warnings.map((w) => <span key={w} role="alert" className="block font-semibold text-confidence-mid">{w}</span>)}
+                      </span>
+                    )
+                  })()}
+                  {measuresOf(lags, c.key).length > 0 && (
+                    <ul aria-label={`${c.label} lag`} className="mt-1 flex flex-col text-muted-foreground">
+                      {measuresOf(lags, c.key).map((m) => <li key={m.outputId}>{latencyWords(m, sources, outputs)}</li>)}
+                    </ul>
+                  )}
                   {source && <span className="mt-1.5 block"><CameraControls cam={source} /></span>}
                 </span>
               </li>
@@ -709,6 +728,18 @@ function CamerasHealth() {
           })}
         </ul>
       )}
+      {Object.keys(sixty).length > 0 && (
+        <div className="flex flex-col gap-0.5 border-t border-border pt-2 text-xs">
+          <p className="font-semibold">Screens at 60 frames a second</p>
+          <ul aria-label="Screens at 60 frames a second" className="flex flex-col">
+            {Object.entries(sixty).map(([k, f]) => {
+              const w = sixtyWords(f)
+              return <li key={k} className={cn(w.tone === "warn" ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{w.text}</li>
+            })}
+          </ul>
+        </div>
+      )}
+      {ours.length > 0 && lags.length === 0 && <p className="text-xs text-muted-foreground">Camera lag not measured yet: Setup → Screens → Measure camera lag.</p>}
       <div><Button size="sm" variant="outline" onClick={() => openProductionTab("cameras")}><VideoIcon /> Open Cameras</Button></div>
     </Card>
   )

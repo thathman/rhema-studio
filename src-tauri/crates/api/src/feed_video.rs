@@ -38,6 +38,15 @@ pub struct CameraPlayback {
     pub height: Option<u32>,
     /// The operator froze it (the page holds the last frame on purpose).
     pub held: bool,
+    /// WebRTC's own counters on the page: jitter (ms), packets lost (%), round trip to the router (ms).
+    pub jitter_ms: Option<f64>,
+    pub loss_pct: Option<f64>,
+    pub rtt_ms: Option<f64>,
+    /// Frames a second arriving from the network, and decoded, on the page.
+    pub recv_fps: Option<f64>,
+    pub decode_fps: Option<f64>,
+    /// From asking the router to the page's first frame (ms).
+    pub first_frame_ms: Option<f64>,
 }
 
 impl CameraPlayback {
@@ -49,6 +58,12 @@ impl CameraPlayback {
         let within = |v: Option<f64>, max: f64| v.filter(|x| x.is_finite() && *x >= 0.0).map(|x| x.min(max));
         self.fps = within(self.fps, 240.0);
         self.dropped_pct = within(self.dropped_pct, 100.0);
+        self.jitter_ms = within(self.jitter_ms, 60_000.0);
+        self.loss_pct = within(self.loss_pct, 100.0);
+        self.rtt_ms = within(self.rtt_ms, 60_000.0);
+        self.recv_fps = within(self.recv_fps, 240.0);
+        self.decode_fps = within(self.decode_fps, 240.0);
+        self.first_frame_ms = within(self.first_frame_ms, 600_000.0);
         self.width = self.width.filter(|w| (1..=16384).contains(w));
         self.height = self.height.filter(|h| (1..=16384).contains(h));
         self
@@ -103,7 +118,7 @@ mod tests {
     use super::*;
 
     fn cam(name: &str, fps: f64) -> CameraPlayback {
-        CameraPlayback { camera: name.into(), playing: true, fps: Some(fps), decoded: Some(900), dropped: Some(2), dropped_pct: Some(0.2), frame_age_ms: Some(30), width: Some(1920), height: Some(1080), held: false }
+        CameraPlayback { camera: name.into(), playing: true, fps: Some(fps), decoded: Some(900), dropped: Some(2), dropped_pct: Some(0.2), frame_age_ms: Some(30), width: Some(1920), height: Some(1080), held: false, ..CameraPlayback::default() }
     }
 
     #[test]
@@ -129,12 +144,13 @@ mod tests {
     fn a_report_is_cleaned_before_it_is_kept() {
         let mut v = FeedVideo::default();
         let t0 = Instant::now();
-        let odd = CameraPlayback { camera: "Bad Name\n".into(), fps: Some(f64::NAN), dropped_pct: Some(250.0), width: Some(0), ..cam("x", 1.0) };
+        let odd = CameraPlayback { camera: "Bad Name\n".into(), fps: Some(f64::NAN), dropped_pct: Some(250.0), width: Some(0), jitter_ms: Some(-3.0), loss_pct: Some(400.0), rtt_ms: Some(f64::INFINITY), decode_fps: Some(59.9), ..cam("x", 1.0) };
         v.report("10.0.0.2".parse().unwrap(), (0..40).map(|_| odd.clone()).collect(), t0);
         let p = v.pages(t0);
         assert_eq!(p[0].cameras.len(), MAX_CAMERAS);
         let c = &p[0].cameras[0];
         assert_eq!((c.camera.as_str(), c.fps, c.dropped_pct, c.width), ("", None, Some(100.0), None));
+        assert_eq!((c.jitter_ms, c.loss_pct, c.rtt_ms, c.decode_fps), (None, Some(100.0), None, Some(59.9)));
         // A report without the newer fields reads as nothing known.
         let bare: CameraPlayback = serde_json::from_str(r#"{"camera":"pulpit"}"#).unwrap();
         assert_eq!(bare, CameraPlayback { camera: "pulpit".into(), ..CameraPlayback::default() });

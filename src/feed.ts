@@ -15,6 +15,7 @@ import { normalizeTheme } from "@/lib/theme-migrations"
 import { cameraReports, syncCameras, WhepPlayer } from "@/lib/whep"
 import type { BroadcastTheme, VerseRenderData } from "@/types/broadcast"
 import type { LowerThird, SceneFrame, StagePayload, Ticker } from "@/types"
+import { latencyClock } from "@/lib/latency-clock"
 
 /**
  * A browser feed (ARCH-002): an output drawn by a web page on the church network, for OBS Browser
@@ -34,6 +35,8 @@ interface Frame {
   scene?: SceneFrame
   role?: "congregation" | "stage"
   stage?: StagePayload
+  /** The screen test's camera-lag clock is up (#213). */
+  latencyClock?: boolean
 }
 
 const canvas = document.getElementById("feed") as HTMLCanvasElement
@@ -176,6 +179,8 @@ addEventListener("resize", () => { placeCameras(); redraw() })
 
 /** Host time minus this machine's, from the latest frame (clock layers count by the host). */
 let offset = 0
+/** The screen test's camera-lag clock (#213), counting by the host's clock. */
+const lagClock = latencyClock(() => Date.now() + offset)
 let ticking = false
 
 /** A countdown display (Design → Countdown): its blend between steps, and whether it moves now. */
@@ -293,6 +298,7 @@ let lastFade = 0
 
 function show(next: Frame) {
   if (typeof next.hostNow === "number") offset = next.hostNow - Date.now()
+  lagClock.show(next.latencyClock === true && !next.off)
   // A Take or release fades when the scene says so; Black and Logo always cut.
   const key = next.off ? "off" : next.scene?.sceneId ?? (next.verse?.screen ? "screen" : "own")
   const ms = next.scene?.fadeMs ?? lastFade

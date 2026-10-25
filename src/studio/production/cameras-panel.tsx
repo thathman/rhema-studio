@@ -2,12 +2,14 @@ import { useEffect, useState } from "react"
 import QRCode from "qrcode"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
-import { PlusIcon, PowerIcon, VideoIcon } from "lucide-react"
+import { ActivityIcon, PlusIcon, PowerIcon, VideoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { openSettings } from "@/lib/settings-dialog"
 import { newLayer } from "@/lib/scenes"
-import { cameraAppLink, cameraName, cameraPageUrl, newCameraSecret, routerStatus, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
+import { cameraAppLink, cameraName, cameraPageUrl, newCameraSecret, phoneWords, routerStatus, rtmpUrl, rtspUrl, srtUrl, startRouter, stopRouter, whepUrl, type RouterPath, type RouterStatus } from "@/lib/cameras"
+import { cameraTestWords, testCamera } from "@/lib/camera-test"
+import { latencyWords, measuresOf } from "@/lib/glass-latency"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore, type CameraSource } from "@/stores/settings-store"
 import { ConfirmDelete } from "@/studio/ui/confirm-delete"
@@ -16,7 +18,8 @@ import { readMbps, WIFI_COMFORT_MBPS } from "@/lib/obs-companion"
 import { cameraMeasures } from "@/lib/show-health"
 import { measuredFps, playbackWords } from "@/lib/camera-playback"
 import { CameraControls } from "@/studio/production/camera-controls"
-import { useObsProgramCameras, useScreenPlayback } from "@/studio/production/camera-hooks"
+import { useObsProgramCameras, useRememberSixty, useScreenPlayback } from "@/studio/production/camera-hooks"
+import { CameraThumb } from "@/studio/production/camera-thumb"
 
 interface HttpStatus {
   running: boolean
@@ -69,6 +72,7 @@ export function CamerasPanel() {
   const host = router?.lanAddress ?? null
   const phonePage = http?.running && http.lan && http.tls_port ? http.tls_port : null
   const onObs = useObsProgramCameras(router)
+  useRememberSixty(useScreenPlayback())
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-3 lg:grid-cols-2">
@@ -247,6 +251,51 @@ function CameraApp({ cam, link }: { cam: CameraSource; link: string | null }) {
   )
 }
 
+/** Test camera (#209): play it here a few seconds and say what was measured, with its lag if measured. */
+function TestCamera({ cam, whep }: { cam: CameraSource; whep: string | null }) {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ text: string; tone: "ok" | "warn" } | null>(null)
+  const lags = useSettingsStore((s) => s.cameraLatency)
+  const cameras = useSettingsStore((s) => s.cameras)
+  const outputs = useBroadcastStore((s) => s.outputs)
+  const run = async () => {
+    if (!whep) return
+    setBusy(true)
+    setResult(null)
+    try {
+      const r = await testCamera(whep, (url, sdp) => invoke<string>("whep_offer", { url, sdp }))
+      const lag = measuresOf(useSettingsStore.getState().cameraLatency, cam.name)[0]
+      setResult(cameraTestWords(r, lag ? latencyWords(lag, cameras, outputs).replace(/^.*? → /, "to ") : null))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const measured = measuresOf(lags, cam.name)
+  return (
+    <div className="flex flex-col gap-1">
+      <div><Button size="sm" variant="outline" disabled={!whep || busy} onClick={() => void run()}><ActivityIcon /> {busy ? "Testing… (about 5 s)" : "Test camera"}</Button></div>
+      {result && <p role="status" className={cn(result.tone === "warn" ? "font-semibold text-confidence-mid" : "text-muted-foreground")}>{result.text}</p>}
+      {measured.length > 0 && !result && (
+        <ul aria-label={`${cam.label} lag`} className="text-muted-foreground">
+          {measured.map((m) => <li key={m.outputId}>{latencyWords(m, cameras, outputs)}</li>)}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** The phone's battery and heat, as Rhema Studio Cam reports them every 30 s (#213), with warnings. */
+function PhoneLine({ path }: { path: RouterPath | undefined }) {
+  if (!path?.phone) return null
+  const p = phoneWords(path.phone)
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="text-muted-foreground">Phone: {p.text}</p>
+      {p.warnings.map((w) => <p key={w} role="alert" className="font-semibold text-confidence-mid">{w}</p>)}
+    </div>
+  )
+}
+
 function CameraCard({ cam, host, router, path, phonePage, onObs }: { cam: CameraSource; host: string | null; router: RouterStatus | null; path: RouterPath | undefined; phonePage: number | null; onObs: boolean }) {
   const screens = useScreenPlayback().filter((s) => s.camera === cam.name)
   const scenes = useBroadcastStore((s) => s.scenes)
@@ -281,14 +330,26 @@ function CameraCard({ cam, host, router, path, phonePage, onObs }: { cam: Camera
       <Card kicker="Camera" title={cam.label} badge={state && <Tone tone={path?.live && !path.frozen ? "ok" : "warn"}>{state}</Tone>}>
         <div className="flex flex-wrap items-start gap-4">
           <div className="flex w-full max-w-[17rem] flex-col gap-2">
-            {link && qr?.url === link ? (
+            {path?.live && <CameraThumb url={whep} label={cam.label} />}
+            {path?.live ? (
+              link && qr?.url === link && (
+                <details className="text-muted-foreground">
+                  <summary className="cursor-pointer">QR code for the phone</summary>
+                  <img src={qr.data} alt={`QR code of the ${cam.label} camera page`} className="mt-2 size-36 rounded-md bg-white p-1" />
+                </details>
+              )
+            ) : link && qr?.url === link ? (
               <img src={qr.data} alt={`QR code of the ${cam.label} camera page`} className="size-36 rounded-md bg-white p-1" />
             ) : (
               <div className="flex size-36 items-center justify-center rounded-md bg-muted text-center text-muted-foreground"><VideoIcon className="size-6" /></div>
             )}
-            <p className="text-muted-foreground">
-              {link ? "Scan with the phone for this angle (on the church Wi-Fi), allow the camera and press Start camera. Keep the phone charging." : "The QR code appears once secure phone pages are on (Settings → Remote control)."}
-            </p>
+            {!path?.live && (
+              <p className="text-muted-foreground">
+                {link ? "Scan with the phone for this angle (on the church Wi-Fi), allow the camera and press Start camera. Keep the phone charging." : "The QR code appears once secure phone pages are on (Settings → Remote control)."}
+              </p>
+            )}
+            <PhoneLine path={path} />
+            {path?.live && <TestCamera cam={cam} whep={whep} />}
             {path?.live && path.frozen && <p role="alert" className="font-semibold text-confidence-mid">Connected, but nothing has arrived for {Math.max(3, Math.round((path.dataAgeMs ?? 3000) / 1000))} s. Check the phone (is its camera app open and the screen on?), or press Retry.</p>}
             {path?.live && <p>{[path.tracks.join(", ") || "Video", ...cameraMeasures({ width: path.width, height: path.height, kbps: path.kbps, fps: measuredFps(cam.name, screens), screens })].join(" · ")} · watched by {watching} {watching === 1 ? "screen or program" : "screens or programs"}</p>}
             {onObs && <p><Tone tone="ok">On OBS</Tone> <span>On OBS's program now: the stream shows this camera too.</span></p>}
@@ -317,7 +378,7 @@ function CameraCard({ cam, host, router, path, phonePage, onObs }: { cam: Camera
               </div>
             )}
             {rtsp && <Copyable label="For OBS on this computer (Media Source, untick Local File)" value={rtsp} />}
-            {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint)} />}
+            {host && ports && router?.running && <CameraApp cam={cam} link={cameraAppLink(host, ports, cam, router.rtspsFingerprint, phonePage)} />}
             {rtsp && <p className="text-muted-foreground">OBS on another computer: install Rhema Studio there and choose “This computer runs OBS only”. It adds the cameras to its OBS by itself, encrypted and with its own sign-in.</p>}
             {!host && <p className="text-muted-foreground">Addresses appear once the camera router is on and this computer is on the network.</p>}
             {host && ports && (

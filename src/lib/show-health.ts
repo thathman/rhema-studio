@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import type { FeedHealth } from "@/lib/browser-feeds"
-import type { RouterStatus } from "@/lib/cameras"
+import { phoneWords, type PhoneReport, type RouterStatus } from "@/lib/cameras"
 import { outputOnAir } from "@/lib/output-on-air"
 import { overLimits, type CapacityLimits, type CapacityUse } from "@/lib/capacity"
 import { cameraPathOf, cameraSourceId, type StateSources } from "@/lib/live-sources"
@@ -54,6 +54,8 @@ export interface CameraHealth {
   /** The operator's controls now: switched to its backup (that camera's label), frozen. */
   onBackup?: string
   held?: boolean
+  /** The phone's battery and heat (Rhema Studio Cam), as it last reported. */
+  phone?: PhoneReport
 }
 
 // Kept here for its callers; it lives with the camera sources now.
@@ -78,6 +80,7 @@ export function cameraHealth(cameras: CameraSource[], scenes: Scene[], outputs: 
       const live = state === "sending" || state === "frozen"
       r = { key, label, state, tracks: live ? (path?.tracks ?? []) : [], readers: live ? (path?.readers ?? 0) : 0, urls: [], scenes: [], assigned: [], onAir: [] }
       if (live && path) Object.assign(r, { kbps: path.kbps ?? null, width: path.width ?? null, height: path.height ?? null, dataAgeMs: path.dataAgeMs ?? null })
+      if (ours && path?.phone) r.phone = path.phone
       if (ours) {
         const screens = (more.screens ?? []).filter((s) => s.camera === key)
         if (more.screens) Object.assign(r, { screens, fps: measuredFps(key, screens) })
@@ -203,6 +206,11 @@ export function attention(outputs: BroadcastOutput[], status: Record<string, Bro
     const f = feeds[o.id]
     if (o.type === "browser" && f?.behind) out.push({ level: "high", outputId: o.id, text: `${o.name}: a page is not showing the latest (stuck or slow browser)` })
     else if (o.type === "browser" && f && f.watching === 0) out.push({ level: "medium", outputId: o.id, text: `${o.name}: no page is showing it` })
+  }
+  // A phone camera running out of battery or too hot (Rhema Studio Cam says so, #213): before it stops.
+  for (const c of cams?.cameras ?? []) {
+    if (!c.phone) continue
+    for (const w of phoneWords(c.phone).warnings) out.push({ level: c.onAir.length > 0 ? "high" : "medium", outputId: "cameras", text: `${cameraWords(c.label)}: ${w}` })
   }
   return out.sort((a, b) => (a.level === b.level ? 0 : a.level === "high" ? -1 : 1))
 }
