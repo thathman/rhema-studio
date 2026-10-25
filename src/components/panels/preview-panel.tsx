@@ -4,10 +4,11 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
 import { toCustomSlideRenderData, toImageRenderData, toVideoRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
-import { isImageItem, isSlideItem, isSongItem } from "@/types"
+import { isCueItem, isImageItem, isSlideItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
-import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
+import { songSlides, toLyricRenderData } from "@/lib/lyrics"
+import { useServiceSong } from "@/stores/song-pins-store"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { ItemPlan } from "@/studio/prepare/item-plan"
 import { planLines } from "@/lib/item-intent"
@@ -32,7 +33,8 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
   useEffect(() => {
     if (previewMediaId && !previewUrl && !previewIsVideo) void useMediaStore.getState().dataUrl(previewMediaId)
   }, [previewMediaId, previewUrl, previewIsVideo])
-  const savedSong = useSongStore((s) => (previewSongId ? s.songs[previewSongId] : undefined))
+  // The approved service's words of the song when it has them (#193), else the library's.
+  const savedSong = useServiceSong(previewSongId)
   // A slide picked from the live song shows the song as it went live (what Show live will present).
   const liveSlideItemId = useBroadcastStore((s) => s.liveSlide?.itemId ?? null)
   const previewSong = (selectedSlide?.song && liveSlideItemId === selectedSlide.item.id ? selectedSlide.song : undefined) ?? savedSong
@@ -84,11 +86,14 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
     verseData = previewIsSound
       ? { kind: "slide", reference: "", segments: [], lines: [`♪ ${selectedSlide.item.image.name}`, "Plays on this computer; the screens stay as they are"] }
       : previewIsVideo ? toVideoRenderData(selectedSlide.item, "") : previewUrl ? toImageRenderData(selectedSlide.item, previewUrl) : null
+  } else if (selectedSlide && isCueItem(selectedSlide.item)) {
+    // A cue-only moment (#193): Take fires its cues; nothing changes on the screens.
+    verseData = { kind: "slide", reference: "", segments: [], lines: [`Cue: ${selectedSlide.item.reference}`, "Take fires its cues; the screens keep what they show"] }
   } else if (selectedSlide && isSlideItem(selectedSlide.item)) {
     verseData = toCustomSlideRenderData(selectedSlide.item)
   } else if (selectedSlide && isSongItem(selectedSlide.item)) {
     // A song slide in preview: exactly what Show live will present.
-    const slides = previewSong ? buildSlides(previewSong, selectedSlide.item.song.arrangement_id, selectedSlide.item.song.languages) : []
+    const slides = previewSong ? songSlides(previewSong, selectedSlide.item.song) : []
     const slide = slides[Math.min(selectedSlide.index, slides.length - 1)]
     verseData = previewSong && slide ? toLyricRenderData(previewSong, slide) : null
   }

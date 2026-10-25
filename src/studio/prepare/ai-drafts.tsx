@@ -51,6 +51,7 @@ export function AiDrafts() {
     if (useServiceStore.getState().closeProgram({ discard: true }) !== "closed") return
     const { items, headers } = draftToRundown(leaveOut(d, outOf(d)), undefined, names)
     useQueueStore.setState({ items, headers, activeIndex: null })
+    useQueueStore.getState().resetHistory() // the closed service's states are not the draft's
     setReplace(null)
     setPicking(null)
     setOpen(false)

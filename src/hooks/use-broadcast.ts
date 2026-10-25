@@ -9,7 +9,8 @@ import type { ImageQueueItem, SlideQueueItem, SongQueueItem, SongWithSections, V
 import { useMediaStore } from "@/stores/media-store"
 import { loadThemeImage } from "@/lib/theme-image-cache"
 import { isMissing, resolveTranslations, type ItemTranslations } from "@/lib/translation-policy"
-import { buildSlides, toLyricRenderData } from "@/lib/lyrics"
+import { songSlides, toLyricRenderData } from "@/lib/lyrics"
+import { pinnedSong } from "@/stores/song-pins-store"
 import { useSongStore } from "@/stores/song-store"
 import { useSoundStore } from "@/stores/sound-store"
 import { CAC_TAG } from "@/lib/cac-hymnbook"
@@ -277,7 +278,8 @@ export async function presentSlide(
   let song = null
   try {
     // Stepping within the live song uses it as it went live (see LiveSlide.song).
-    song = opts.song ?? (await useSongStore.getState().load(item.song.song_id))
+    // Otherwise the approved service's words of the song, when it has them (#193), else the library's.
+    song = opts.song ?? pinnedSong(item.song.song_id) ?? (await useSongStore.getState().load(item.song.song_id))
   } catch (e) {
     console.warn("[broadcast] song load failed:", e)
   }
@@ -286,7 +288,7 @@ export async function presentSlide(
     warn(`${item.song.title} not shown: the song is no longer in the library.`)
     return "empty"
   }
-  const slides = buildSlides(song, item.song.arrangement_id, item.song.languages)
+  const slides = songSlides(song, item.song)
   const langs = item.song.languages.length ? item.song.languages : [song.song.primary_language]
   if (slides.length === 0) {
     warn(`${item.song.title} not shown: it has no lyrics in ${langs.join(" / ").toUpperCase()}.`)

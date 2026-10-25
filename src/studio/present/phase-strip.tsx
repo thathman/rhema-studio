@@ -16,7 +16,8 @@ export function PhaseStrip() {
   const headers = useQueueStore((s) => s.headers)
   const items = useQueueStore((s) => s.items)
   const run = usePhaseRun((s) => s.run)
-  const auto = headers.filter((h) => h.type === "phase" && (h.rule === "loop" || h.rule === "auto_once"))
+  // A phase skipped for this service (#193) has nothing to run.
+  const auto = headers.filter((h) => h.type === "phase" && !h.disabled && (h.rule === "loop" || h.rule === "auto_once"))
   if (auto.length === 0) return null
   const running = run ? headers.find((h) => h.id === run.headerId) : null
   const range = running ? phaseRange(items.length, headers, running.id) : null

@@ -10,7 +10,7 @@ import {
 import { useBroadcastStore, useQueueStore } from "@/stores"
 import { presentCustomSlide, presentImage, presentSlide, presentVerse } from "@/hooks/use-broadcast"
 import { bibleActions } from "@/hooks/use-bible"
-import { isImageItem, isSlideItem, isSongItem, type QueueItem } from "@/types"
+import { isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem } from "@/types"
 
 function QueueItemRow({
   item,
@@ -38,6 +38,7 @@ function QueueItemRow({
       void presentSlide(item, 0)
       return
     }
+    if (!isVerseItem(item)) return
     // Navigate the Bible panel to the presented verse, as detections do
     bibleActions.navigateToVerse(
       item.verse.book_number,

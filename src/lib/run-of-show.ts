@@ -25,6 +25,8 @@ export interface OutlineHeader {
   starts_at?: string
   /** Loop phases: seconds each item stays up while the phase runs by itself (3–3600). */
   advance_seconds?: number
+  /** Phases: skipped for this service (#193). Its items stay, but Present passes over them like hidden ones. */
+  disabled?: boolean
   /** Keys this build does not edit, kept as they were. */
   payload_extra?: Record<string, unknown>
 }
@@ -93,8 +95,35 @@ export interface SectionSummary {
   minutes: number
 }
 
-/** Each header's item count and planned minutes, by header id. */
-export function sectionSummaries(items: Array<{ planned_minutes?: number | null }>, headers: OutlineHeader[]): Record<string, SectionSummary> {
+/**
+ * Whether Present passes over the item at `index` (#193): it is hidden, or its phase is skipped for
+ * this service. It stays in the service (and in Prepare); Next, Previous, timed moves and phase
+ * runs step over it, Present's running order leaves it out, and it takes no planned time.
+ */
+export function isSkipped(items: ReadonlyArray<{ hidden?: boolean | null }>, headers: OutlineHeader[], index: number): boolean {
+  return !!items[index]?.hidden || !!phaseAt(headers, index)?.disabled
+}
+
+/** The items as the plan counts them: a skipped one keeps its place but takes no time and has no fixed start. */
+export function timedItems<T extends { hidden?: boolean | null; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null }>(items: T[], headers: OutlineHeader[]): T[] {
+  if (!items.some((_, i) => isSkipped(items, headers, i))) return items
+  return items.map((it, i) => (isSkipped(items, headers, i) ? { ...it, planned_minutes: null, starts_at: null, gap_minutes: null } : it))
+}
+
+/** The items with every one Present passes over marked hidden (a skipped phase's too), for views that know only items (the stage's Next). */
+export function markSkipped<T extends { hidden?: boolean | null }>(items: T[], headers: OutlineHeader[]): T[] {
+  if (!headers.some((h) => h.disabled)) return items
+  return items.map((it, i) => (!it.hidden && isSkipped(items, headers, i) ? { ...it, hidden: true } : it))
+}
+
+/** A church-named phase (#193) before the item at `at`: run by hand until its rule is changed. */
+export function newPhase(at: number, name = "New phase", newId: () => string = () => crypto.randomUUID()): OutlineHeader {
+  return { id: newId(), type: "phase", name, at, rule: "manual", role: "custom" }
+}
+
+/** Each header's item count and planned minutes, by header id. Skipped items count, but take no minutes. */
+export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | null; hidden?: boolean | null }>, headers: OutlineHeader[]): Record<string, SectionSummary> {
+  const items = timedItems(rawItems, headers)
   const sorted = [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
   const out: Record<string, SectionSummary> = {}
   sorted.forEach((h, k) => {
@@ -197,7 +226,7 @@ export interface Timeline {
   rows: TimelineRow[]
 }
 
-type Timed = { reference: string; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null }
+type Timed = { reference: string; planned_minutes?: number | null; starts_at?: string | null; gap_minutes?: number | null; hidden?: boolean | null }
 
 /**
  * When an item is planned to start, in minutes from the first day's midnight, after an item planned
@@ -215,7 +244,8 @@ export function plannedStartMinutes(after: number, item: { starts_at?: string | 
  * start), each main-service item's planned time, and the projected finish, `delay` minutes later
  * than planned when running late (the plan itself does not change). Null without a start time.
  */
-export function planTimeline(items: Timed[], headers: OutlineHeader[], delay = 0): Timeline | null {
+export function planTimeline(rawItems: Timed[], headers: OutlineHeader[], delay = 0): Timeline | null {
+  const items = timedItems(rawItems, headers)
   const main = headers.find((h) => h.type === "phase" && h.role === "main") ?? headers.find((h) => h.type === "phase" && h.rule === "manual")
   const start = clockMinutes(main?.starts_at)
   if (!main || start === null) return null
@@ -229,6 +259,7 @@ export function planTimeline(items: Timed[], headers: OutlineHeader[], delay = 0
   rows.push({ kind: "milestone", label: `${main.name} begins`, time: clockText(start) })
   let t = start
   for (let i = main.at; i < end; i++) {
+    if (isSkipped(items, headers, i)) continue
     const minutes = items[i].planned_minutes ?? 0
     const from = plannedStartMinutes(t, items[i])
     rows.push({ kind: "item", label: items[i].reference, time: clockText(from), minutes, index: i, ...(from > t ? { pause: from - t } : {}), ...(clockMinutes(items[i].starts_at) !== null ? { fixed: true } : {}) })
@@ -247,6 +278,7 @@ export function plannedTimes(items: Timed[], headers: OutlineHeader[]): Map<numb
   let t = clockMinutes(plan?.warmupStart)
   if (range && t !== null) {
     for (let i = range.start; i < range.end; i++) {
+      if (isSkipped(items, headers, i)) continue
       at.set(i, clockText(t))
       t += items[i].planned_minutes ?? 0
     }
@@ -274,12 +306,26 @@ export function dwellSeconds(header: OutlineHeader, plannedMinutes: number | nul
     : planned ?? header.advance_seconds ?? DEFAULT_ADVANCE_SECONDS
 }
 
-/** The item after `current` in a running phase: a loop wraps to its first item, a run-once phase ends (null). */
-export function nextInPhase(rule: PhaseRule, start: number, end: number, current: number): number | null {
-  if (end <= start) return null
-  if (current < start || current >= end) return start
-  if (current + 1 < end) return current + 1
-  return rule === "loop" ? start : null
+/**
+ * The item after `current` in a running phase: a loop wraps to its first item, a run-once phase
+ * ends (null). Items `skip` says no to (hidden ones, cue-only moments) are passed over.
+ */
+export function nextInPhase(rule: PhaseRule, start: number, end: number, current: number, skip: (index: number) => boolean = () => false): number | null {
+  const plain = (c: number): number | null => {
+    if (end <= start) return null
+    if (c < start || c >= end) return start
+    if (c + 1 < end) return c + 1
+    return rule === "loop" ? start : null
+  }
+  let at = current
+  for (let n = 0; n <= end - start; n++) {
+    const next = plain(at)
+    if (next === null || !skip(next)) return next
+    // Wrapped round to where it began: nothing in the phase may run.
+    if (next === current) return null
+    at = next
+  }
+  return null
 }
 
 /** The phase an item sits in: the last phase header at or above it (null outside any phase). */

@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event"
 import { catchUpPhaseRun } from "@/stores/phase-run-store"
 import { catchUpTimedAdvance } from "@/stores/timed-advance-store"
+import { catchUpItemCues } from "@/stores/on-live-cues"
 import { refreshLiveState } from "@/lib/live-state"
 import { refreshStageCountdown } from "@/stores/stage-finish"
 import { checkCountdownChime } from "@/stores/countdown-chime"
@@ -9,6 +10,7 @@ import { checkCountdownChime } from "@/stores/countdown-chime"
 void listen("app:tick", () => {
   catchUpPhaseRun()
   catchUpTimedAdvance()
+  catchUpItemCues()
   refreshLiveState()
   refreshStageCountdown()
   checkCountdownChime()

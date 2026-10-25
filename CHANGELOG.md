@@ -4,6 +4,18 @@ Rhema Studio is a fork of [Rhema](https://github.com/openbezal/rhema) (MIT, upst
 
 ## Unreleased
 
+### Editing the run of show: your own phases, undo, copy and paste, hide, several at once, cues at every moment, approved songs (#193, #196)
+- **Phases of your own**: **Phase** under the order of service adds one (before the selected item) beside the pre-service loop, warm-up and main service; rename or remove it from its menu. **Skip this phase in this service** keeps a phase and its items but Present passes over them (no pre-service loop this week).
+- **Undo and Redo** (Cmd+Z, Shift+Cmd+Z, and buttons above the order of service) for every change to the order of service: adding, removing, moving, renaming, settings. Typing in one field is one step; undo never changes what is on air.
+- **Copy and paste** items (Cmd+C, Cmd+V, or Copy and Paste): the copies land after the selected item, in its phase, also in another service.
+- **Hide** an item (the eye on its row): it stays in the service but Present leaves it out and Next goes past it, as do timed moves, loops and the stage's Next.
+- **Several at once**: Shift-click picks a range, Cmd-click one more; then Move up, Move down, Move to a phase or group, Hide, Copy or Remove them together.
+- **Cues at every moment** (Signals → Cues): besides what happens as an item goes live, cues for when it starts, when its planned time is up, when it is paused (a hold, or the timer paused) and when it ends: a stage message, an OBS recording marker (a chapter, and a line in the service log), or a timer step. None changes what the congregation sees; none runs in rehearsal.
+- **Cue-only items** (**Cue** under the order of service): a moment with nothing on screen, such as "Sermon begins" with an OBS marker. Taking it fires its cues and starts its time; the screens keep what they show.
+- **Title slide first** on a song item: a slide with the title and authors before the words.
+- **Approved songs keep their words**: approving a service now keeps each song's words as they were. A song edited in the library afterwards shows **Changed since approval**, and Present shows the approved words unless the operator chooses **Use the new words** (or the service is approved again).
+- Older services open and save exactly as before. A service with a cue-only item opens in an older build but cannot be saved there; service files with cue-only items are version 3.
+
 ### Cameras: what really arrives and what each screen really shows, and recovery controls (#213, #208)
 - Connected is no longer counted as working. Production → Cameras and Show health show each camera's picture size, its rate in Mbit/s, and the frames a second Rhema's own screens and TVs really show. A camera the router still has but that sends nothing for more than 3 seconds shows **Frozen** (with how long nothing has arrived), and its screens show the camera's fallback (colour bars, static, words) instead of a still picture passed off as live.
 - Each Google TV and browser page that plays a camera reports how it plays it: Show health says, for example, "Foyer TV: pulpit camera 29.8 fps, 0.2% dropped", and lists a screen that is dropping frames, showing too few, or getting no new frame.

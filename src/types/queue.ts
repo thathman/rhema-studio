@@ -31,6 +31,14 @@ interface QueueItemBase {
   comments?: ItemComment[] | null
   /** What happens as it goes live (issue #193): a stage-only message, one cue that never changes the screen. */
   on_live?: OnLive | null
+  /**
+   * Its cue list beyond `on_live` (#193, #196 R6): what runs as it starts, when its planned time is
+   * up, when it is paused, and when it ends. None changes what the congregation sees. Older builds
+   * keep it untouched and run only `on_live`.
+   */
+  cues?: ItemCue[] | null
+  /** Kept in the service, but skipped by Next/Previous and timed runs and not shown in Present (#193). */
+  hidden?: boolean | null
   /** Moves on to the next item of its phase after its planned minutes, while timed moves are on in Present (issue #193). */
   auto_advance?: boolean | null
   /**
@@ -76,6 +84,8 @@ export interface SongQueueRef {
   arrangement_id: string | null
   /** Language tags to show, first is primary; empty = the song's primary language. */
   languages: string[]
+  /** A slide with the song's title (and authors) before its words (#193). */
+  title_slide?: boolean
 }
 
 export interface SongQueueItem extends QueueItemBase {
@@ -116,7 +126,17 @@ export interface ImageQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem
+/**
+ * A moment in the run of show that shows nothing (#193): taking it fires its cues (an OBS
+ * recording chapter, a stage message, the timer) and starts its event; the screens keep what they
+ * show. Its `reference` is its name.
+ */
+export interface CueQueueItem extends QueueItemBase {
+  kind: "cue"
+  verse?: undefined
+}
+
+export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem | CueQueueItem
 
 export function isVerseItem(item: QueueItem): item is VerseQueueItem {
   return item.kind === undefined || item.kind === "verse"
@@ -132,6 +152,10 @@ export function isSlideItem(item: QueueItem): item is SlideQueueItem {
 
 export function isImageItem(item: QueueItem): item is ImageQueueItem {
   return item.kind === "image"
+}
+
+export function isCueItem(item: QueueItem): item is CueQueueItem {
+  return item.kind === "cue"
 }
 
 /**
@@ -156,6 +180,20 @@ export interface ItemComment {
 /** Cues an item may run as it goes live: none changes what the congregation sees. */
 export const GO_LIVE_CUES = ["timer.start", "timer.fresh", "timer.pause", "stage.clearMessage"] as const
 export type GoLiveCue = (typeof GO_LIVE_CUES)[number]
+
+/** When an item's cue runs (#196 R6): as its event starts, when its planned time is up, when it is paused (a hold or the timer), when it ends. */
+export const CUE_TRIGGERS = ["live", "finish", "pause", "end"] as const
+export type CueTrigger = (typeof CUE_TRIGGERS)[number]
+/** What an item's cue may do: the go-live cues, a stage-only message, an OBS recording marker. Never the screens. */
+export const ITEM_CUE_DOES = [...GO_LIVE_CUES, "stage.message", "obs.mark"] as const
+export type ItemCueDo = (typeof ITEM_CUE_DOES)[number]
+
+export interface ItemCue {
+  on: CueTrigger
+  do: ItemCueDo
+  /** The stage message, or the marker's name (the item's name when empty). One line, at most 120 characters. */
+  text?: string
+}
 
 export interface OnLive {
   /** Shown on stage outputs only. One line, at most 120 characters. */

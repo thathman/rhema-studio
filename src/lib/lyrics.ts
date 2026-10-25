@@ -184,6 +184,22 @@ export function buildSlides(
   return slides.map((s, index) => ({ ...s, index, total: slides.length }))
 }
 
+/** A title slide's section id: no section of the song has it. */
+export const TITLE_SLIDE = ""
+
+/**
+ * The slides of a song item: its arrangement and languages, and its title slide first when the
+ * item asks for one (#193): the title, and the authors under it.
+ */
+export function songSlides(song: SongWithSections, ref: Pick<SongQueueItem["song"], "arrangement_id" | "languages" | "title_slide">, max = DEFAULT_MAX_LYRIC_LINES): LyricSlide[] {
+  const slides = buildSlides(song, ref.arrangement_id, ref.languages, max)
+  if (!ref.title_slide || slides.length === 0) return slides
+  const authors = song.song.authors.trim()
+  const title: LyricSlide = { sectionId: TITLE_SLIDE, sectionLabel: "Title", lines: [song.song.title, ...(authors ? [authors] : [])], missing: [], index: 0, total: 0 }
+  const all = [title, ...slides]
+  return all.map((s, index) => ({ ...s, index, total: all.length }))
+}
+
 function splitInto(lines: string[], parts: number): string[][] {
   const size = Math.ceil(lines.length / parts)
   const out: string[][] = []

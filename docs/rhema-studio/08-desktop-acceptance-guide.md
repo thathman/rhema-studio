@@ -1606,6 +1606,26 @@ Needs `design-packs/rhema-worship-expressions.rhema-design.json` from this branc
 | 10fp.9 | Archive → Backups → Back up now…; **Remove pack** on the pack's heading; Archive → Backups → Restore from a backup… → that file. | Remove leaves your copies. The restore's list says "Design packs in the library: 0 packs → 1 pack"; afterwards the pack is back. | Unverified |
 | 10fp.10 | Use "Graphics only for OBS"; show it on an NDI output with alpha; look in OBS. | Only the lyrics, name band and ticker show; the rest is transparent. | Unverified |
 
+### 10fq. Editing the run of show: phases, undo, copy and paste, hide, several at once, cues, approved songs (#193, #196 R6)
+
+Needs a saved service with phases (Prepare → Organise into phases), two songs from the library, a verse and a slide; OBS recording for 10fq.10. Rehearsal off unless a step says so.
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 10fq.1 | Select an item in the Main service; **Phase** under the order of service; rename it "Baptism" from its ⋯ menu. | A new phase "Baptism · Manual" starts at that item; it shows in the phase strip. Save, close and reopen: still there. | Unverified |
+| 10fq.2 | Pre-service loop ⋯ → **Skip this phase in this service**. | The phase shows **Skipped**, its items are dimmed, its minutes leave the totals. In Present the phase and its items are not in the running order, the strip has no Start for it, and Next goes past them. **Use this phase in this service** brings it back. | Unverified |
+| 10fq.3 | Remove an item, move another, rename a group; press **Undo** three times (or Cmd+Z), then **Redo** (Shift+Cmd+Z). | Each step comes back in order and goes again. Typing a note is one step. Cmd+Z in a text field undoes the typing only. Undo never changes what is on air. | Unverified |
+| 10fq.4 | Shift-click from the first to the third item; Cmd-click a fifth. | Four rows picked; a bar "4 picked" above the list with Move up, Move down, Move to, Hide, Copy, Remove. | Unverified |
+| 10fq.5 | With them picked: Move down, then Move to → a group; Hide; Remove; Undo. | They move together and keep their order; Move to puts them at the end of that group; Hide marks each **Hidden**; Remove takes all four and one Undo brings them back. | Unverified |
+| 10fq.6 | Pick two items, **Copy** (or Cmd+C); open another service; select an item and **Paste** (or Cmd+V). | The copies land after the selected item, in its phase, in the order copied, as new items (the first service is unchanged). Save works. | Unverified |
+| 10fq.7 | Hide an item in the Main service (the eye on its row); Present it. | Present's running order leaves it out; Next steps from the item before it to the one after; the stage's Next names the one after. Prepare still lists it as Hidden, and it stays in the saved service. | Unverified |
+| 10fq.8 | On an item: Signals → **Cues** → Add a cue: "When it ends" + "OBS recording marker"; another: "When its planned time is up" + "Stage message" "Wrap up now" (give it 1 minute planned). Present it, wait a minute, then Next. | After a minute the stage shows "Wrap up now" (also if Rhema is behind another window); at Next the service log has an OBS line for the item. The rundown's bell lists both cues. Nothing on the congregation screens changes. | Unverified |
+| 10fq.9 | Add a cue "When it is paused" + "Stage message" "Paused"; while the item is up, Hold (Present's timer) and later Resume. | The stage shows "Paused" at the hold. In rehearsal none of the cues of 10fq.8 and 10fq.9 run. | Unverified |
+| 10fq.10 | **Cue** under the order of service; name it "Sermon begins" (its cue: OBS marker). In Present, with a song live, double-click it (or Preview and Take). | The song stays on the screens; OBS gets a chapter "Sermon begins" (or the log says OBS was not recording); the service timer and Next now count from "Sermon begins". In rehearsal: "the cues … were not run". | Unverified |
+| 10fq.11 | On a song item, tick **Title slide first**. Present it. | The first slide shows the song's title and authors; Next goes to the first verse; the stage and NDI show the same. Unticked, the song starts at its words as before. | Unverified |
+| 10fq.12 | Approve the service. Edit the first song's words in the library (Prepare → Songs). Back in Prepare select the song item. | The item says **Changed since approval** (in Prepare and in Present). Present shows the approved words. In Present, under the song, **Use the new words** shows the edited words for this service; **Use the approved words** goes back. Approving again makes the new words the approved ones. | Unverified |
+| 10fq.13 | Open a service saved before this build (no new parts) and save it without changes; open it in the previous build. | It opens as before, nothing is marked unsaved, and the previous build opens and saves it. A service with a cue-only item opens in the previous build but cannot be saved there (it names the item it cannot edit). | Unverified |
+
 ### 10dz. Rhema finds Google TVs by itself (#198)
 
 | # | Step | Expected | Result |

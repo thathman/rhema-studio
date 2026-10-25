@@ -54,6 +54,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
       className={cn(
         "flex items-center gap-1.5 rounded-lg",
         phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
+        header.disabled && "opacity-60",
       )}
     >
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
@@ -77,6 +78,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
         )}
         <span className="flex shrink-0 items-center gap-1.5">
           {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
+          {phase && header.disabled && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title="Its items stay in the service; Present passes over them">Skipped</Badge>}
           <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
         </span>
       </span>
@@ -89,6 +91,10 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
           <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
           {phase && (
             <>
+              {/* #193: a phase this service does without (no pre-service loop this week), kept for next time. */}
+              <DropdownMenuItem onSelect={() => useQueueStore.getState().updateHeader(header.id, { disabled: header.disabled ? undefined : true })}>
+                {header.disabled ? "Use this phase in this service" : "Skip this phase in this service"}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs text-muted-foreground">How it runs</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={header.rule ?? "manual"} onValueChange={(v) => useQueueStore.getState().updateHeader(header.id, { rule: v as PhaseRule })}>

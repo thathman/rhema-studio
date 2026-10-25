@@ -4,7 +4,7 @@ import { bibleActions } from "@/hooks/use-bible"
 import { isMissing, resolveTranslations } from "@/lib/translation-policy"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useBibleStore } from "@/stores/bible-store"
-import { isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
+import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem, type SongWithSections } from "@/types"
 import { presentQuickScreen, type QuickScreen } from "@/hooks/use-broadcast"
 import { useSongStore } from "@/stores/song-store"
 
@@ -30,7 +30,8 @@ export const presentActions = {
    * the active translation and the preview would stop matching live.
    */
   previewItem: (item: QueueItem) => {
-    if (isSlideItem(item) || isImageItem(item)) {
+    // A cue-only moment previews as what it will do (#193): nothing on the screens.
+    if (isSlideItem(item) || isImageItem(item) || isCueItem(item)) {
       useBibleStore.getState().selectSlide({ item, index: 0 })
       return
     }

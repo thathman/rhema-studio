@@ -2,9 +2,9 @@ import { useId, type ReactNode } from "react"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronsLeftIcon, ChevronsRightIcon, MonitorIcon, RotateCcwIcon, SquareIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { outputOnAir } from "@/lib/output-on-air"
-import { buildSlides } from "@/lib/lyrics"
+import { songSlides } from "@/lib/lyrics"
+import { useServiceSong } from "@/stores/song-pins-store"
 import { useBroadcastStore, useQueueStore } from "@/stores"
-import { useSongStore } from "@/stores/song-store"
 import { presentActions } from "@/studio/present-actions"
 import { isSongItem } from "@/types"
 import { usePreviewLabel } from "@/hooks/use-preview-label"
@@ -13,7 +13,7 @@ import { usePreviewLabel } from "@/hooks/use-preview-label"
 function useNextHint(): string {
   const liveSlide = useBroadcastStore((s) => s.liveSlide)
   const items = useQueueStore((s) => s.items)
-  const saved = useSongStore((s) => (liveSlide ? s.songs[liveSlide.songId] : undefined))
+  const saved = useServiceSong(liveSlide?.songId)
   // The song as it went live: what Next steps through.
   const song = liveSlide?.song ?? saved
   if (!liveSlide || !song) return "→ / PgDn"
@@ -21,7 +21,7 @@ function useNextHint(): string {
   if (!item || !isSongItem(item)) return "→ / PgDn"
   // The arrangement the song went live with: the one Next steps through.
   const arrangement = liveSlide.arrangementId !== undefined ? liveSlide.arrangementId : item.song.arrangement_id
-  const next = buildSlides(song, arrangement, liveSlide.languages ?? item.song.languages)[liveSlide.index + 1]
+  const next = songSlides(song, { arrangement_id: arrangement, languages: liveSlide.languages ?? item.song.languages, title_slide: item.song.title_slide })[liveSlide.index + 1]
   return next ? `Next: ${next.sectionLabel}` : "→ / PgDn"
 }
 
