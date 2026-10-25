@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.49 · **Updated:** 2026-10-25 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.50 · **Updated:** 2026-10-25 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -22,12 +22,13 @@ The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) i
 | [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Full automated suite passes; desktop and device acceptance remain open. |
 | [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
 | [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | OPEN | #414 pins scene layout revisions; broader shared-asset and approved-release revision integrity remains to be implemented and reviewed. |
-| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | OPEN | #417 ran the full 1,779-test frontend suite, typecheck, lint, build, 72 Rust content tests and Clippy. Browser surfaces were unavailable; no native desktop, projector, OBS, NDI receiver, TV or network hardware was tested. |
+| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | OPEN | #418 ran the full 1,787-test frontend suite, typecheck, lint, build, 72 Rust content tests and Clippy. Component tests only; no headed browser, native desktop, projector, OBS, NDI receiver, TV or network hardware was tested. |
 | [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415), stacked on #414: Hymn Book details/shared editor, plus stable-ID selection and close/focus after successful Add across content pickers. On audited main, these suites fail 12 tests (including the #384 queue-order regression fixed by dependency #414); one deduplicated-Add test passes. This branch passes the targeted 13 tests and full 1,774-test suite, typecheck, lint and build. Component tests only; desktop and device acceptance remain open. |
 | [#387 — Allow repeated planned Scripture references](https://github.com/thathman/rhema-studio/issues/387) | IN PR | [PR #416](https://github.com/thathman/rhema-studio/pull/416), based on #415: explicit manual repeats keep distinct item IDs through search, save/reopen, approval revisions and Take. Full 1,781-test suite, typecheck, lint, build, and 71 content tests passed; CI is green. |
 | [#388 — Keep hymn identity and number across the service](https://github.com/thathman/rhema-studio/issues/388) | IN PR | [PR #417](https://github.com/thathman/rhema-studio/pull/417), stacked on #415: additive hymn identity/number snapshots survive save/reopen and archive; legacy items fall back to library metadata. No migration. Full 1,779-test suite, typecheck, lint, build, 72 content tests and Clippy passed. Component tests only; headed browser, desktop and device acceptance remain open. |
+| [#389 — Stage confidence preview displays placeholder instead of song lyrics](https://github.com/thathman/rhema-studio/issues/389) | IN PR | [PR #418](https://github.com/thathman/rhema-studio/pull/418), stacked on #417: confidence preview uses approved/live song snapshots, selected arrangement slide and bilingual lyrics; carries live timer/message and stage style; reports missing local words or audio without placeholders. Eight focused regressions; 1,787 frontend tests, typecheck, lint, build, 72 content tests and Clippy pass. No browser/native/device acceptance claimed. |
 
-PRs #414–#417 are open and unmerged. PR #415 depends on #414's queue insertion API; #416 and #417 are sibling branches based on #415. Check each linked PR for live CI status. The verified main CI and current open PR baseline are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
+PRs #414–#418 are open and unmerged. PR #415 depends on #414's queue insertion API; #416 and #417 are sibling branches based on #415; #418 is stacked on #417. Check each linked PR for live CI status. The verified main CI and current open PR baseline are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
@@ -211,6 +212,8 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 **Changes to task status:** maintain a brief revision history below (date, task IDs, PR/issue, verified evidence). Start with explicit PR links and no speculative completion claims.
 
 ## Revision history
+
+- **2026-10-25 (rev 0.50):** #389 IN PR via #418, stacked on #417; approved/live snapshots, selected bilingual arrangement slide, stage style, live timer/message and honest local missing-content states covered by eight regression cases. Full frontend suite 1,787/1,787, typecheck, lint, build, 72 Rust content tests and Clippy pass; physical/device validation remains open.
 
 - **2026-10-25 (rev 0.47):** #385 and #386 IN PR via stacked PR #415; baseline suites reproduced 12 failures (including the #384 regression addressed by #414) and 1 pass; branch tests pass (13 focused, 1,774 full-suite), typecheck, lint and build pass. UI/device acceptance remains open.
 
