@@ -135,7 +135,7 @@ export function EngageHostControl() {
               </label>
               <p className="text-xs text-muted-foreground">{quiz ? `${quiz.questions.length} questions · ${quiz.lobbySeconds}s lobby · ${quiz.questionSeconds}s per question` : "Create an approved Quiz event in Prepare first."}</p>
               <label className="flex flex-col gap-1">Public quiz service HTTPS address
-                <Input type="url" autoComplete="url" placeholder="https://engage.yourchurch.org" value={endpoint} onChange={e => setEndpoint(e.target.value)} />
+                <Input type="url" autoComplete="url" placeholder="https://engage.example" value={endpoint} onChange={e => setEndpoint(e.target.value)} />
               </label>
               <label className="flex flex-col gap-1">Host creation key
                 <Input type="password" autoComplete="off" placeholder="Private secret configured on cloud worker" value={key} onChange={e => setKey(e.target.value)} />
