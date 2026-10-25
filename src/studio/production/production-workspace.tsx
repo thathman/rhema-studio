@@ -24,7 +24,8 @@ import { CAPACITY_KINDS, NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, capacityLimits,
 import { useMachineHealth, type NdiMeasure } from "@/studio/production/use-machine-health"
 import { useRouterHealth } from "@/lib/cameras"
 import { invoke } from "@tauri-apps/api/core"
-import { feedHealthLabel, useFeedHealth } from "@/lib/browser-feeds"
+import { feedHealthLabel, revokeTv, useFeedHealth } from "@/lib/browser-feeds"
+import { hostLostWords, overscanPct, screenPrivacyWords, tvKeyWords, tvSizeWords } from "@/lib/feed-receivers"
 import { outputDestination, outputFollows, outputPresentation, outputTransport } from "@/lib/output-summary"
 import { congregationProgramName, onlineProgramName } from "@/lib/program-names"
 import { useObsStore } from "@/stores/obs-store"
@@ -34,6 +35,7 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { safeArea, safeAreaWords } from "@/lib/theme-look"
 import type { BroadcastOutput, BroadcastOutputStatus, BroadcastTheme, ReceiverTv, Scene } from "@/types"
 import { useJournalStore } from "@/stores/journal-store"
+import { useMediaStore } from "@/stores/media-store"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { useReadiness } from "@/studio/use-readiness"
@@ -383,6 +385,7 @@ function OutputInspector({ output: o, status: st, frame, scenes, themes }: { out
         {role === "congregation" && <CameraFollowsObs output={o} scenes={scenes} row={row} />}
         {o.type === "ndi" && on && typeof st?.ndiReceivers === "number" && row("Signal", `${st.ndiReceivers} ${st.ndiReceivers === 1 ? "receiver" : "receivers"}`)}
         {o.type === "browser" && on && feedHealthLabel(feed) && row("Signal", <span className={cn(feed?.behind && "text-destructive")}>{feedHealthLabel(feed)}</span>)}
+        {o.type === "browser" && row("TVs", (o.tvs ?? []).length > 0 ? <TvList output={o} /> : <span className="text-muted-foreground">None yet: Edit output → Show on a Google TV. {hostLostWords(o.hostLost)}.</span>)}
       </dl>
       <div className="mt-auto flex justify-end border-t border-border px-3 py-2">
         <Button size="sm" variant="outline" onClick={() => useShellStore.getState().editOutput(o.id)} aria-label={`Edit ${o.name}`}><SettingsIcon /> Edit output</Button>
@@ -740,11 +743,7 @@ function FeedsHealth() {
                   <span className={cn(sum.tone === "warn" ? "font-semibold text-confidence-mid" : sum.tone === "ok" ? "text-foreground" : "text-muted-foreground")}>{sum.text}</span>
                 </span>
                 <FeedPlayback output={o} />
-                {(o.tvs ?? []).length > 0 && (
-                  <ul aria-label={`Google TVs showing ${o.name}`} className="ml-7 flex flex-col gap-1">
-                    {o.tvs!.map((tv) => <TvRow key={tv.address} output={o} tv={tv} />)}
-                  </ul>
-                )}
+                {(o.tvs ?? []).length > 0 && <div className="ml-7"><TvList output={o} /></div>}
               </li>
             )
           })}
@@ -771,15 +770,42 @@ function FeedPlayback({ output }: { output: BroadcastOutput }) {
   )
 }
 
-function TvRow({ output, tv }: { output: BroadcastOutput; tv: ReceiverTv }) {
+/**
+ * A browser feed's paired TVs (#198): each one's display size, whether its link is its own or the
+ * feed's shared one, the feed's rule for a lost host, whether its page follows the feed now, and
+ * Check TV / Revoke. Revoking a TV with its own key cuts that TV at once; the others carry on.
+ */
+export function TvList({ output }: { output: BroadcastOutput }) {
+  const tvs = output.tvs ?? []
+  const health = useFeedHealthStore((s) => s[output.id])
+  const assets = useMediaStore((s) => s.assets)
+  if (tvs.length === 0) return null
+  const picture = output.hostLost?.mediaId ? assets.find((a) => a.id === output.hostLost?.mediaId)?.name : undefined
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted-foreground">{screenPrivacyWords(output)} · {hostLostWords(output.hostLost, picture)}{output.overscan ? ` · ${overscanPct(output.overscan)}% kept clear at each edge` : ""}</span>
+      <ul aria-label={`TVs showing ${output.name}`} className="flex flex-col gap-1">
+        {tvs.map((tv) => <TvRow key={tv.address} output={output} tv={tv} watching={tv.token && health ? (health.tvs?.[tv.address] ?? 0) : undefined} />)}
+      </ul>
+    </div>
+  )
+}
+
+function TvRow({ output, tv, watching }: { output: BroadcastOutput; tv: ReceiverTv; watching?: number }) {
   const outputs = useBroadcastStore((s) => s.outputs)
   const [check, setCheck] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [confirm, setConfirm] = useState(false)
   const ask = async () => {
     setBusy(true)
     try {
-      const reply = await invoke<{ name: string; feed: string | null; problem: string | null }>("tv_status", { address: tv.address })
+      const reply = await invoke<{ name: string; feed: string | null; problem: string | null; width?: number; height?: number }>("tv_status", { address: tv.address })
       setCheck(tvCheckWords(reply, output.id, outputs))
+      // Its display's size, kept for the list (Rhema Studio Receiver 1.5 says it).
+      if (reply.width && reply.height && (reply.width !== tv.width || reply.height !== tv.height)) {
+        const o = useBroadcastStore.getState().outputs.find((x) => x.id === output.id)
+        if (o) useBroadcastStore.getState().updateOutput(o.id, { tvs: (o.tvs ?? []).map((t) => (t.address === tv.address ? { ...t, width: reply.width, height: reply.height } : t)) })
+      }
     } catch (e) {
       setCheck({ ok: false, text: String(e) })
     } finally {
@@ -787,16 +813,29 @@ function TvRow({ output, tv }: { output: BroadcastOutput; tv: ReceiverTv }) {
     }
   }
   const forget = () => useBroadcastStore.getState().updateOutput(output.id, { tvs: (output.tvs ?? []).filter((t) => t.address !== tv.address) })
+  const label = tv.name || tv.address
   return (
     <li className="flex flex-wrap items-center gap-2">
       <TvIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="min-w-0">
         <span className="font-medium">{tv.name || "Google TV"}</span>
-        <span className="text-muted-foreground"> · {tv.address} · sent {hhmm(tv.sentAt)}</span>
+        <span className="text-muted-foreground"> · {tv.address} · sent {hhmm(tv.sentAt)} · {tvSizeWords(tv)}</span>
+        <span className="block text-muted-foreground">{tvKeyWords(tv)}{watching !== undefined ? (watching > 0 ? " · following the feed now" : " · not connected now") : ""}</span>
       </span>
       <span className="flex-1" />
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => void ask()} aria-label={`Check ${tv.name || tv.address}`}>Check TV</Button>
-      <Button size="sm" variant="ghost" onClick={forget} aria-label={`Forget ${tv.name || tv.address}`}>Forget</Button>
+      <Button size="sm" variant="outline" disabled={busy} onClick={() => void ask()} aria-label={`Check ${label}`}>Check TV</Button>
+      {tv.token ? (
+        confirm ? (
+          <span className="flex items-center gap-1">
+            <Button size="sm" variant="destructive" onClick={() => { setConfirm(false); void revokeTv(output.id, tv.address) }} aria-label={`Confirm revoke ${label}`}>Revoke now</Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>Keep</Button>
+          </span>
+        ) : (
+          <Button size="sm" variant="ghost" onClick={() => setConfirm(true)} aria-label={`Revoke ${label}`} title="Its link stops working at once and its screen goes back to its code; the other screens carry on">Revoke</Button>
+        )
+      ) : (
+        <Button size="sm" variant="ghost" onClick={forget} aria-label={`Forget ${label}`} title="Takes it off this list only: it keeps the feed's shared link until the feed gets a new link">Forget</Button>
+      )}
       {check && <span role="status" className={cn("basis-full pl-5.5", check.ok ? "text-confidence-high" : "text-confidence-mid")}>{check.text}</span>}
     </li>
   )

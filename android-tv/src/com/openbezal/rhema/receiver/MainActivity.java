@@ -1,8 +1,13 @@
 package com.openbezal.rhema.receiver;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.net.Uri;
 import android.net.http.SslCertificate;
@@ -15,7 +20,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.view.Display;
 import android.view.Gravity;
+import android.view.PixelCopy;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -34,6 +41,8 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -54,6 +63,12 @@ import java.util.List;
  * Since 1.3 the link is Rhema's https page, sent encrypted with the fingerprint of Rhema's own
  * certificate; the TV opens the page only from a computer showing exactly that certificate, so
  * nobody on the network can read the link or stand in for Rhema.
+ *
+ * Since 1.5: the link carries this TV's own key (Rhema can revoke this TV alone; the page then
+ * goes back to this code screen); GET /status says the display's size; the last picture of the
+ * feed is kept (one bounded JPEG in the app's own storage) and shown at start until Rhema Studio
+ * answers; and "Start with the TV" (off by default) is turned on and off on the code screen with
+ * ← or → on the remote.
  */
 public class MainActivity extends Activity {
     static final int PORT = 8095;
@@ -91,6 +106,15 @@ public class MainActivity extends Activity {
     private NsdManager.RegistrationListener advert;
     /** The last page load stopped because the certificate was not the one Rhema sent. */
     private boolean certRefused;
+    /** The last picture of the feed (1.5), shown at start until the page is up. */
+    private ImageView still;
+    /** A small line over the kept picture while Rhema Studio does not answer. */
+    private TextView note;
+    /** The display's size in pixels, for GET /status (the server thread reads it). */
+    private volatile int displayW;
+    private volatile int displayH;
+    /** How often the picture is kept while a feed shows. */
+    private static final long STILL_EVERY_MS = 60_000;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -140,7 +164,9 @@ public class MainActivity extends Activity {
             public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse res) {
                 if (!req.isForMainFrame()) return;
                 if (res.getStatusCode() == 403) {
-                    problem = "This screen's link no longer works (a new link was made in Rhema Studio). Send the feed again.";
+                    // Revoked (1.5) or a new link: its kept picture goes too.
+                    forgetStill();
+                    problem = "This screen's link no longer works (this TV was revoked, or a new link was made in Rhema Studio). Send the feed again.";
                     showInfo(true);
                 } else {
                     retry("Rhema Studio answered " + res.getStatusCode() + "; trying again…");
@@ -149,7 +175,15 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (problem == null && shown() != null) hideInfo();
+                if (problem == null && shown() != null) {
+                    hideInfo();
+                    note.setVisibility(View.GONE);
+                    // The page draws its first frame a moment after it loads; then the kept picture goes.
+                    ui.removeCallbacks(hideStill);
+                    ui.postDelayed(hideStill, 2_000);
+                    ui.removeCallbacks(keepStill);
+                    ui.postDelayed(keepStill, 8_000);
+                }
             }
         });
 
@@ -175,8 +209,24 @@ public class MainActivity extends Activity {
         panel.addView(logo, logoSize);
         panel.addView(info, new LinearLayout.LayoutParams(-2, -2));
 
+        still = new ImageView(this);
+        still.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        still.setBackgroundColor(Color.BLACK);
+        still.setVisibility(View.GONE);
+        note = new TextView(this);
+        note.setTextColor(Color.rgb(255, 197, 71));
+        note.setTextSize(16);
+        note.setBackgroundColor(Color.argb(160, 0, 0, 0));
+        note.setPadding(24, 10, 24, 10);
+        note.setVisibility(View.GONE);
+
         FrameLayout root = new FrameLayout(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(still, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout.LayoutParams corner = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        corner.topMargin = (int) (16 * dp);
+        corner.rightMargin = (int) (16 * dp);
+        root.addView(note, corner);
         root.addView(panel, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
         setContentView(root);
         immersive();
@@ -187,10 +237,13 @@ public class MainActivity extends Activity {
             prefs.edit().remove("url").remove("pin").apply();
             problem = "Rhema Studio Receiver was updated and now opens only Rhema Studio's secure page. Send the feed again: in Rhema Studio, Outputs → the feed → Show on a Google TV.";
         }
+        measureDisplay();
         server = new ShowServer(PORT, this);
         server.start();
         advertise();
         if (shown() != null) {
+            // The last picture of this feed, until Rhema Studio answers (1.5).
+            showStill();
             web.loadUrl(shown());
             panel.setVisibility(View.GONE);
         } else {
@@ -225,9 +278,161 @@ public class MainActivity extends Activity {
 
     private void retry(String why) {
         problem = why;
-        showInfo(true);
+        if (still.getVisibility() == View.VISIBLE && panel.getVisibility() != View.VISIBLE) {
+            // The last picture stays up (1.5); a small line says it is not live. OK shows the code.
+            note.setText("Not updating · " + why);
+            note.setVisibility(View.VISIBLE);
+        } else {
+            showInfo(true);
+        }
         ui.removeCallbacks(reload);
         ui.postDelayed(reload, 5_000);
+    }
+
+    /** The kept picture of the feed (1.5): one JPEG in the app's own storage. */
+    private File stillFile() {
+        return new File(getFilesDir(), "last-screen.jpg");
+    }
+
+    /** Shows the kept picture, when it is of the feed shown now. */
+    private void showStill() {
+        File f = stillFile();
+        if (!Guard.stillFits(prefs.getString("stillOf", null), shown(), f.length())) return;
+        try {
+            Bitmap b = BitmapFactory.decodeFile(f.getPath());
+            if (b == null) return;
+            still.setImageBitmap(b);
+            still.setVisibility(View.VISIBLE);
+        } catch (Throwable e) {
+            // A broken file: start without it.
+        }
+    }
+
+    private final Runnable hideStill = new Runnable() {
+        @Override
+        public void run() {
+            if (problem != null) return;
+            still.setVisibility(View.GONE);
+            still.setImageDrawable(null);
+        }
+    };
+
+    /** Forgets the kept picture (a revoked or replaced feed). */
+    private void forgetStill() {
+        ui.removeCallbacks(keepStill);
+        still.setVisibility(View.GONE);
+        still.setImageDrawable(null);
+        note.setVisibility(View.GONE);
+        prefs.edit().remove("stillOf").apply();
+        //noinspection ResultOfMethodCallIgnored
+        stillFile().delete();
+    }
+
+    /**
+     * Keeps a picture of the screen while a feed shows (1.5), every STILL_EVERY_MS: what a TV
+     * started without Rhema Studio shows first. Only of the live page (no code, no message on it).
+     */
+    private final Runnable keepStill = new Runnable() {
+        @Override
+        public void run() {
+            ui.removeCallbacks(keepStill);
+            ui.postDelayed(keepStill, STILL_EVERY_MS);
+            final String url = shown();
+            if (url == null || problem != null || certRefused || panel.getVisibility() == View.VISIBLE || still.getVisibility() == View.VISIBLE) return;
+            int[] size = Guard.stillSize(web.getWidth(), web.getHeight());
+            if (size == null) return;
+            final Bitmap bmp;
+            try {
+                bmp = Bitmap.createBitmap(size[0], size[1], Bitmap.Config.ARGB_8888);
+            } catch (Throwable noMemory) {
+                return;
+            }
+            if (Build.VERSION.SDK_INT >= 26) {
+                // The window as shown (the page's canvas included); it is scaled to the bitmap.
+                try {
+                    PixelCopy.request(getWindow(), bmp, new PixelCopy.OnPixelCopyFinishedListener() {
+                        @Override
+                        public void onPixelCopyFinished(int result) {
+                            if (result == PixelCopy.SUCCESS) saveStill(bmp, url);
+                            else bmp.recycle();
+                        }
+                    }, ui);
+                } catch (Throwable e) {
+                    bmp.recycle();
+                }
+            } else {
+                Canvas c = new Canvas(bmp);
+                c.scale((float) size[0] / web.getWidth(), (float) size[1] / web.getHeight());
+                web.draw(c);
+                saveStill(bmp, url);
+            }
+        }
+    };
+
+    /** Writes the picture away from the screen's thread, whole or not at all. */
+    private void saveStill(final Bitmap bmp, final String url) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                File tmp = new File(getFilesDir(), "last-screen.tmp");
+                boolean ok = false;
+                try (FileOutputStream out = new FileOutputStream(tmp)) {
+                    ok = bmp.compress(Bitmap.CompressFormat.JPEG, 80, out);
+                } catch (Throwable e) {
+                    ok = false;
+                } finally {
+                    bmp.recycle();
+                }
+                final boolean fits = ok && tmp.length() > 0 && tmp.length() <= Guard.STILL_MAX_BYTES;
+                if (!fits || !tmp.renameTo(stillFile())) {
+                    //noinspection ResultOfMethodCallIgnored
+                    tmp.delete();
+                    return;
+                }
+                ui.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        // Kept only for the feed it was taken of (a new one may have come meanwhile).
+                        if (url.equals(shown())) prefs.edit().putString("stillOf", url).apply();
+                    }
+                });
+            }
+        }, "rhema-keep-picture").start();
+    }
+
+    /** The display's size (its mode: a 4K TV says 3840×2160 even when apps draw at 1080p). */
+    private void measureDisplay() {
+        try {
+            Display d = getWindowManager().getDefaultDisplay();
+            Display.Mode m = d.getMode();
+            displayW = m.getPhysicalWidth();
+            displayH = m.getPhysicalHeight();
+        } catch (Throwable e) {
+            displayW = getResources().getDisplayMetrics().widthPixels;
+            displayH = getResources().getDisplayMetrics().heightPixels;
+        }
+    }
+
+    /** For GET /status: the display's width and height in pixels (0 when not known). */
+    int[] displaySize() {
+        return new int[] {displayW, displayH};
+    }
+
+    /** Whether the app opens by itself when the TV starts (off unless turned on here). */
+    private boolean startsWithTv() {
+        return prefs.getBoolean("boot", false);
+    }
+
+    /** ← or → on the code screen: Start with the TV on or off (the boot receiver with it). */
+    private void toggleStartWithTv() {
+        boolean on = !startsWithTv();
+        prefs.edit().putBoolean("boot", on).apply();
+        try {
+            getPackageManager().setComponentEnabledSetting(new ComponentName(this, BootReceiver.class),
+                    on ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
+        } catch (RuntimeException e) {
+            prefs.edit().putBoolean("boot", false).apply();
+        }
     }
 
     private final Runnable reload = new Runnable() {
@@ -254,7 +459,8 @@ public class MainActivity extends Activity {
         t.append(shown() == null ? "To show a screen here: in Rhema Studio, Outputs → a browser feed → Show on a Google TV.\n\n" : "To show another screen: in Rhema Studio, Outputs → a browser feed → Show on a Google TV.\n\n");
         t.append("TV name   ").append(name()).append("\n");
         t.append("TV address   ").append(ip == null ? "not on a network" : ip).append("\n");
-        t.append(triesLeft > 0 ? "Code   " + code.digits : "Too many tries: press OK for a new code");
+        t.append(triesLeft > 0 ? "Code   " + code.digits : "Too many tries: press OK for a new code").append("\n\n");
+        t.append("Start with the TV   ").append(startsWithTv() ? "On" : "Off").append("   (← or → to change)");
         info.setText(t);
         panel.setVisibility(View.VISIBLE);
         codeOnScreen(true);
@@ -268,6 +474,14 @@ public class MainActivity extends Activity {
         int k = event.getKeyCode();
         if (k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER || k == KeyEvent.KEYCODE_MENU) {
             if (event.getAction() == KeyEvent.ACTION_UP) okPressed();
+            return true;
+        }
+        // On the code screen only: ← or → turns Start with the TV on or off (1.5).
+        if ((k == KeyEvent.KEYCODE_DPAD_LEFT || k == KeyEvent.KEYCODE_DPAD_RIGHT) && panel.getVisibility() == View.VISIBLE) {
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                toggleStartWithTv();
+                showInfo(shown() == null || problem != null);
+            }
             return true;
         }
         return super.dispatchKeyEvent(event);
@@ -286,7 +500,10 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean focus) {
         super.onWindowFocusChanged(focus);
-        if (focus) immersive();
+        if (focus) {
+            immersive();
+            measureDisplay();
+        }
     }
 
     /**
@@ -439,6 +656,8 @@ public class MainActivity extends Activity {
         ui.post(new Runnable() {
             @Override
             public void run() {
+                // Another feed (or this TV's new key): the picture kept of the last one goes.
+                if (!url.equals(shown())) forgetStill();
                 prefs.edit().putString("url", url).putString("pin", pin).apply();
                 problem = null;
                 certRefused = false;

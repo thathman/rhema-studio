@@ -1,6 +1,7 @@
 import { resolveMonitorIndex } from "@/lib/monitor-health"
 import { NDI_60_MIN_CORES, NDI_60_MIN_MEMORY_GB, physicalCores, suits60fps, useMachineInfo } from "@/lib/capacity"
-import { feedUrl } from "@/lib/browser-feeds"
+import { beginTvKey, endTvKey, feedUrl } from "@/lib/browser-feeds"
+import { hostLostWords, MAX_OVERSCAN, overscanPct } from "@/lib/feed-receivers"
 import { newFeedToken } from "@/lib/output-on-air"
 import { invoke } from "@tauri-apps/api/core"
 import QRCode from "qrcode"
@@ -38,7 +39,7 @@ import { rememberTv } from "@/lib/show-health"
 import { CONTENT_NAMES, FEED_NAMES } from "@/lib/content-names"
 import { followsLowerThird, followsTicker } from "@/lib/live-sources"
 import { useSettingsStore } from "@/stores/settings-store"
-import type { OutputCameraFallback } from "@/types"
+import type { HostLostRule, OutputCameraFallback } from "@/types"
 import type {
   BroadcastOutput,
   BroadcastOutputType,
@@ -353,7 +354,9 @@ export function OutputEditorDialog({
                   if (saved) useBroadcastStore.getState().updateOutput(saved.id, { tvs: rememberTv(saved.tvs, tv) })
                 }}
               />
-            ) : form.type === "display" ? (
+            ) : null}
+            {form.type === "browser" && <FeedScreenRules hostLost={form.hostLost} overscan={form.overscan} onChange={(p) => patch(p)} />}
+            {form.type === "browser" ? null : form.type === "display" ? (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <span
@@ -576,6 +579,55 @@ export function OutputEditorDialog({
  * frozen at the router (#213): the scene's own choice, or this output's own (colour bars, TV static,
  * words, nothing, or another camera while that one sends).
  */
+/**
+ * A browser feed's screens (#198): what they show when they stop hearing from this computer, and
+ * how much of each edge to keep clear for a TV that crops the picture (overscan).
+ */
+export function FeedScreenRules({ hostLost, overscan, onChange }: { hostLost?: HostLostRule; overscan?: number; onChange: (p: { hostLost?: HostLostRule; overscan?: number }) => void }) {
+  const assets = useMediaStore((s) => s.assets)
+  const loaded = useMediaStore((s) => s.loaded)
+  const loading = useMediaStore((s) => s.loading)
+  const mode = hostLost?.mode ?? "last"
+  useEffect(() => {
+    if (mode === "picture" && !loaded && !loading) void useMediaStore.getState().list()
+  }, [mode, loaded, loading])
+  const pictures = assets.filter((a) => a.kind === "image" && a.present)
+  const picture = pictures.find((a) => a.id === hostLost?.mediaId)
+  const field = "h-8 rounded-md border border-input bg-card px-1.5 text-xs"
+  return (
+    <div role="group" aria-label="This feed's screens" className="flex flex-col gap-2 text-xs">
+      <label className="flex flex-col gap-0.5">
+        <span className="text-muted-foreground">When a screen loses this computer</span>
+        <select aria-label="When a screen loses this computer" value={mode} onChange={(e) => {
+          const m = e.target.value as HostLostRule["mode"]
+          onChange({ hostLost: m === "last" ? undefined : m === "picture" ? { mode: "picture", ...(hostLost?.mediaId ? { mediaId: hostLost.mediaId } : pictures[0] ? { mediaId: pictures[0].id } : {}) } : { mode: "countdown" } })
+        }} className={field}>
+          <option value="last">Keep the last picture (as before)</option>
+          <option value="picture">Show a picture from the library</option>
+          <option value="countdown">Count down to the service start</option>
+        </select>
+      </label>
+      {mode === "picture" && (pictures.length === 0 ? (
+        <p className="text-muted-foreground">No pictures in the library yet. Add some in Prepare → Pictures; until then the screen keeps the last picture.</p>
+      ) : (
+        <select aria-label="The picture shown" value={hostLost?.mediaId ?? ""} onChange={(e) => onChange({ hostLost: { mode: "picture", mediaId: e.target.value } })} className={field}>
+          {!picture && <option value="">Choose a picture</option>}
+          {pictures.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      ))}
+      <span className="text-muted-foreground">
+        {hostLostWords(hostLost, picture?.name)}. A screen counts this computer as lost after 10 seconds without hearing from it{mode === "countdown" ? "; it counts to the run of show's start time by this computer's clock (no start time: it keeps the last picture)" : ""}. It goes back to the live picture as soon as it hears again.
+      </span>
+      <label className="flex items-center gap-2">
+        <span className="text-muted-foreground">Keep clear at each edge (overscan)</span>
+        <Input type="number" aria-label="Overscan percent" min={0} max={MAX_OVERSCAN} step={0.5} value={overscanPct(overscan)} onChange={(e) => onChange({ overscan: overscanPct(Number(e.target.value)) || undefined })} className="h-7 w-20 text-xs" />
+        <span className="text-muted-foreground">%</span>
+      </label>
+      <span className="text-muted-foreground">For a TV that cuts off the picture's edges: the whole feed is drawn smaller by this much on every side. 0 for OBS and most TVs (set the TV's picture size to “Fit” or “Just scan” first).</span>
+    </div>
+  )
+}
+
 export function CameraFallbackChoice({ value, onChange }: { value: OutputCameraFallback | undefined; onChange: (v: OutputCameraFallback | undefined) => void }) {
   const cameras = useSettingsStore((s) => s.cameras)
   const mode = value?.mode ?? "scene"
@@ -752,6 +804,8 @@ export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: str
   const url = token && where?.host && where.port ? feedUrl(where.host, where.port, id, token) : null
   // A Google TV gets only the https link (#198): the link and the page stay private on the network.
   const secureUrl = token && where?.host && where.tlsPort ? feedUrl(where.host, where.tlsPort, id, token, true) : null
+  // …with its own key in it, so it can be revoked alone (#198).
+  const ownLink = where?.host && where.tlsPort ? (key: string) => feedUrl(where.host!, where.tlsPort!, id, key, true) : undefined
   // A TV or tablet opens it by scanning, instead of typing a long link (#198).
   const [code, setCode] = useState<{ url: string; data: string } | null>(null)
   useEffect(() => {
@@ -779,10 +833,10 @@ export function FeedLink({ id, token, onRenew, onTv }: { id: string; token?: str
             <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(url).catch(() => {})}>Copy link</Button>
             <Button type="button" size="sm" variant="ghost" onClick={onRenew} title="The old link stops working when you save">New link</Button>
           </div>
-          {where?.lan && <ShowOnTv url={secureUrl} onShown={onTv} />}
+          {where?.lan && <ShowOnTv url={secureUrl} onShown={onTv} outputId={id} ownLink={ownLink} />}
         </>
       )}
-      <p className="text-muted-foreground">OBS: add a Browser source with this link at the feed's size (1920×1080). Anyone with the link can watch this feed on the network; a new link closes the old one. Videos do not play in a browser feed.</p>
+      <p className="text-muted-foreground">OBS: add a Browser source with this link at the feed's size (1920×1080). Anyone with the link can watch this feed on the network; a new link closes the old one. A Google TV sent the feed gets a link of its own, which a new link does not close: revoke it in its list. Videos do not play in a browser feed.</p>
     </div>
   )
 }
@@ -796,7 +850,7 @@ type FoundTv = { name: string; address: string }
  * TV's screen is still needed, and Rhema Studio checks it with the TV before the link is sent (tv_show).
  * `url` is the feed's https link; without one (the secure page is off) nothing can be sent.
  */
-export function ShowOnTv({ url, onShown }: { url: string | null; onShown?: (tv: ReceiverTv) => void }) {
+export function ShowOnTv({ url, onShown, outputId, ownLink }: { url: string | null; onShown?: (tv: ReceiverTv) => void; outputId?: string; ownLink?: (key: string) => string }) {
   const [address, setAddress] = useState("")
   const [code, setCode] = useState("")
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
@@ -831,14 +885,17 @@ export function ShowOnTv({ url, onShown }: { url: string | null; onShown?: (tv: 
     if (!url) return
     setBusy(true)
     setStatus(null)
+    // Its own key for a saved feed (#198): known to the listener before the link goes, kept only if it works.
+    const key = outputId && ownLink ? await beginTvKey(outputId, address).catch(() => null) : null
     try {
-      const name = await invoke<string>("tv_show", { address, code, url })
+      const name = await invoke<string>("tv_show", { address, code, url: key && ownLink ? ownLink(key) : url })
       setStatus({ ok: true, text: `${name || "The TV"} is showing this feed. It shows it again by itself after a restart; Show health lists it under this feed.` })
       setCode("")
-      onShown?.({ name, address: address.trim(), sentAt: Date.now() })
+      onShown?.({ name, address: address.trim(), sentAt: Date.now(), ...(key ? { token: key } : {}) })
     } catch (e) {
       setStatus({ ok: false, text: String(e) })
     } finally {
+      if (outputId && key) await endTvKey(outputId, key).catch(() => {})
       setBusy(false)
     }
   }

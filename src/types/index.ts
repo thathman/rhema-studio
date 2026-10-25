@@ -36,6 +36,7 @@ export type {
   BroadcastOutputStatus,
   BroadcastOutputType,
   ReceiverTv,
+  HostLostRule,
   OutputCameraFallback,
 } from "./broadcast-output"
 export { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "./broadcast-output"

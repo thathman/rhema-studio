@@ -310,20 +310,30 @@ struct TvStatusReply {
     feed: Option<String>,
     problem: Option<String>,
     error: Option<String>,
+    /// The TV's display in pixels (Rhema Studio Receiver 1.5); absent from older receivers.
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
-/// What a Rhema Receiver says it shows (#213 Check TV): the feed's id, never its secret link.
+/// What a Rhema Receiver says it shows (#213 Check TV): the feed's id, never its secret link, and
+/// (1.5) its display's size.
 #[derive(Serialize, Debug, PartialEq)]
 pub struct TvStatus {
     name: String,
     feed: Option<String>,
     problem: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    height: Option<u32>,
 }
 
 /// A receiver's answer in plain words; a receiver before 1.1 has no status to give (404).
 fn tv_status_from(reply: TvStatusReply, not_found: bool) -> Result<TvStatus, String> {
     if reply.ok {
-        Ok(TvStatus { name: reply.name.unwrap_or_default(), feed: reply.feed.filter(|f| !f.is_empty()), problem: reply.problem.filter(|p| !p.is_empty()) })
+        // A size only when both are plausible (a TV, not a bad answer).
+        let size = reply.width.zip(reply.height).filter(|(w, h)| (1..=16_384).contains(w) && (1..=16_384).contains(h));
+        Ok(TvStatus { name: reply.name.unwrap_or_default(), feed: reply.feed.filter(|f| !f.is_empty()), problem: reply.problem.filter(|p| !p.is_empty()), width: size.map(|s| s.0), height: size.map(|s| s.1) })
     } else if not_found {
         Err("This TV's Rhema Studio Receiver is too old to be checked: install version 1.1 or newer on it.".into())
     } else {
@@ -394,8 +404,13 @@ mod tests {
         let reply = |v: serde_json::Value| serde_json::from_value::<TvStatusReply>(v).unwrap();
         assert_eq!(
             tv_status_from(reply(serde_json::json!({ "ok": true, "name": "Foyer TV", "feed": "foyer" })), false),
-            Ok(TvStatus { name: "Foyer TV".into(), feed: Some("foyer".into()), problem: None })
+            Ok(TvStatus { name: "Foyer TV".into(), feed: Some("foyer".into()), problem: None, width: None, height: None })
         );
+        // Receiver 1.5 says its display's size; a nonsense size is left out.
+        let sized = tv_status_from(reply(serde_json::json!({ "ok": true, "name": "Hall TV", "feed": "hall", "width": 3840, "height": 2160 })), false).unwrap();
+        assert_eq!((sized.width, sized.height), (Some(3840), Some(2160)));
+        let odd = tv_status_from(reply(serde_json::json!({ "ok": true, "name": "TV", "width": 0, "height": 2160 })), false).unwrap();
+        assert_eq!((odd.width, odd.height), (None, None));
         assert_eq!(tv_status_from(reply(serde_json::json!({ "ok": true, "name": "TV" })), false).unwrap().feed, None, "nothing shown yet");
         let old = tv_status_from(reply(serde_json::json!({ "ok": false, "error": "Rhema Receiver only takes POST /show" })), true).unwrap_err();
         assert!(old.contains("1.1"), "{old}");

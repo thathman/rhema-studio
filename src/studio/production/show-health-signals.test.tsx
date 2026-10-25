@@ -94,7 +94,7 @@ describe("Show health: cameras and Google TVs (#213)", () => {
   it("lists the TVs a feed was sent to; Check TV asks the TV what it shows; Forget removes it", async () => {
     answers.tv_status = { name: "Foyer Google TV", feed: "foyer", problem: null }
     const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
-    const tvs = el.querySelector('[aria-label="Google TVs showing Foyer TV"]')!
+    const tvs = el.querySelector('[aria-label="TVs showing Foyer TV"]')!
     expect(tvs.textContent).toContain("Foyer Google TV · 192.168.1.40")
     await act(async () => button(tvs, "Check TV")!.click())
     await flush()
@@ -148,7 +148,48 @@ describe("Show on a Google TV remembers the TV (#213)", () => {
     await act(async () => button(document.body, "Show on TV")!.click())
     await flush()
     expect(calls.find((c) => c.cmd === "tv_show")?.args).toMatchObject({ address: "192.168.1.41", code: "123456", url: expect.stringMatching(/^https:\/\/192\.168\.1\.20:8081\/feed\/hall\?k=/) })
-    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "hall")?.tvs).toEqual([{ name: "Hall TV", address: "192.168.1.41", sentAt: expect.any(Number) }])
+    // Its own key (#198): in its link (not the feed's), known to the listener before the link went, and kept.
+    const own = (calls.find((c) => c.cmd === "tv_show")!.args.url as string).split("?k=")[1]
+    expect(own).toMatch(/^[0-9a-f]{32}$/)
+    expect(own).not.toBe(hall.feedToken)
+    const sets = calls.filter((c) => c.cmd === "feeds_set")
+    const before = calls.findIndex((c) => c.cmd === "tv_show")
+    expect(calls.slice(0, before).some((c) => c.cmd === "feeds_set" && JSON.stringify(c.args).includes(own))).toBe(true)
+    expect(JSON.stringify(sets.at(-1)!.args)).toContain(own)
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "hall")?.tvs).toEqual([{ name: "Hall TV", address: "192.168.1.41", sentAt: expect.any(Number), token: own }])
     expect(document.body.textContent).toContain("Show health lists it under this feed")
+  })
+})
+
+describe("TVs showing a feed: revoke one (#198)", () => {
+  it("lists each TV's size, link and the feed's rule; Revoke withdraws only that TV's key", async () => {
+    const hall: BroadcastOutput = {
+      ...foyer, id: "hall", name: "Hall", hostLost: { mode: "countdown" }, overscan: 2.5,
+      tvs: [{ name: "Hall TV", address: "192.168.1.41:8095", sentAt: Date.now(), token: "a".repeat(32), width: 1920, height: 1080 }, { name: "Old TV", address: "192.168.1.42:8095", sentAt: Date.now() }],
+    }
+    useBroadcastStore.setState({ outputs: [main, hall], outputStatus: { hall: { previewOpen: false, ndiActive: false, feedActive: true } } })
+    answers.feed_status = { watching: 1, seq: 4, acked: 4, tvs: [{ id: "192.168.1.41:8095", watching: 1 }] }
+    answers.tv_status = { name: "Old TV", feed: "hall", problem: null, width: 3840, height: 2160 }
+    const el = await mount(<><SignalWatch /><ProductionWorkspace /></>)
+    await flush()
+    const list = el.querySelector('[aria-label="TVs showing Hall"]')!
+    const text = list.parentElement!.textContent!
+    expect(text).toContain("Public screen · If this computer is lost: counts down to the service start · 2.5% kept clear at each edge")
+    expect(text).toContain("Hall TV · 192.168.1.41:8095")
+    expect(text).toContain("1920×1080")
+    expect(text).toContain("Private link: its own key · following the feed now")
+    expect(text).toContain("Shared link")
+    expect(button(list, "Revoke Old TV"), "a shared-link TV cannot be revoked alone").toBeUndefined()
+    // Check TV keeps the size the TV said.
+    await act(async () => button(list, "Check Old TV")!.click())
+    await flush()
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "hall")!.tvs![1]).toMatchObject({ width: 3840, height: 2160 })
+    calls.length = 0
+    await act(async () => button(list, "Revoke Hall TV")!.click())
+    await act(async () => button(list, "Confirm revoke Hall TV")!.click())
+    await flush()
+    expect(useBroadcastStore.getState().outputs.find((o) => o.id === "hall")!.tvs!.map((t) => t.name)).toEqual(["Old TV"])
+    const set = calls.filter((c) => c.cmd === "feeds_set").at(-1)!
+    expect(set.args).toEqual({ feeds: [{ id: "hall", token: "f".repeat(32), tvs: [] }] })
   })
 })

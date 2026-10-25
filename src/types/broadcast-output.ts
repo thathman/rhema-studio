@@ -371,6 +371,10 @@ export interface BroadcastOutput {
   ndi: BroadcastOutputNdiSettings
   /** Browser feeds: the Google TVs Rhema sent this feed to (Show on a Google TV), to check on them in Show health (#213). */
   tvs?: ReceiverTv[]
+  /** Browser feeds: what its screens show when they stop hearing from this computer (#198); absent: they keep the last frame. */
+  hostLost?: HostLostRule
+  /** Browser feeds: percent of each edge kept clear for TVs that crop the picture (overscan, 0–10); absent: none. */
+  overscan?: number
   /** What a scene's camera box shows on this output while its camera is not sending (#213); absent: the scene's own choice. */
   cameraFallback?: OutputCameraFallback
 }
@@ -395,6 +399,25 @@ export interface ReceiverTv {
   address: string
   /** When it was sent (wall-clock ms). */
   sentAt: number
+  /**
+   * The TV's own key in the link it was sent (#198, this build on), so it can be revoked alone.
+   * Absent: it was sent the feed's shared link (an earlier build); only a new link stops it.
+   */
+  token?: string
+  /** Its display in pixels, as it last said (Check TV; Rhema Studio Receiver 1.5). */
+  width?: number
+  height?: number
+}
+
+/**
+ * What a browser feed's screens show when they stop hearing from this computer (#198): "last"
+ * keeps the last frame (with the small "Not updating" mark), "picture" a library picture,
+ * "countdown" a countdown to the service start (the run of show's start time).
+ */
+export interface HostLostRule {
+  mode: "last" | "picture" | "countdown"
+  /** "picture": the media library picture. */
+  mediaId?: string
 }
 
 /** Runtime on-air state for an output, reconciled from the OS. */
