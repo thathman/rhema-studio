@@ -8,7 +8,7 @@ import type {
   BroadcastOutputStatus,
   BroadcastTheme,
   Verse,
-  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook } from "@/types"
+  VerseRenderData, LowerThird, LowerThirdStyle, StageAux, StageClock, StageFinish, StageStyle, Ticker, TickerPreset, TickerStyle, CountdownLook } from "@/types"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, outputWindowLabel } from "@/types"
 import { BUILTIN_THEMES, LOWER_THIRDS, CLASSIC_DARK } from "@/lib/builtin-themes"
 import { normalizeTheme } from "@/lib/theme-migrations"
@@ -32,7 +32,8 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
 import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
 import type { CountdownTargets } from "@/lib/countdown"
-import { countdownFrame, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
+import { zoneCity } from "@/lib/stage-clock"
+import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -215,6 +216,9 @@ interface BroadcastState {
   /** When the service is expected to end (kept by stage-finish.ts from the timing engine). */
   stageFinish: StageFinish | null
   setStageFinish: (finish: StageFinish | null) => void
+  /** The time of day on the stage, when its design shows one (kept by stage-finish.ts, once a minute). */
+  stageClock: StageClock | null
+  setStageClock: (clock: StageClock | null) => void
   /** Auxiliary timers shown on the stage (kept by aux-timers-store.ts). */
   stageAux: StageAux[]
   setStageAux: (aux: StageAux[]) => void
@@ -727,6 +731,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   tickerStyle: DEFAULT_TICKER_STYLE,
   stageStyle: DEFAULT_STAGE_STYLE,
   stageFinish: null,
+  stageClock: null,
+  setStageClock: (stageClock) => {
+    set({ stageClock })
+    for (const o of get().outputs) if (o.role === "stage") get().syncBroadcastOutputFor(o.id)
+  },
   stageAux: [],
   setStageAux: (stageAux) => {
     set({ stageAux })
@@ -744,6 +753,8 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const scene = o.sceneId && (o.role ?? "congregation") === "congregation" ? get().scenes.find((x) => x.id === o.sceneId) : undefined
       if (scene?.layers.some((l) => l.kind === "clock" && l.visible && l.clockShows === "countdown")) get().syncBroadcastOutputFor(o.id)
     }
+    // A countdown display counting to an item's start or a group's end follows it as it moves.
+    if (countsToTarget(get().countdownLook)) syncCountdownOutputs()
   },
   stageCountdown: null,
   setStageCountdown: (stageCountdown) => {
@@ -899,7 +910,11 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         stage: applyStageStyle({ ...buildStagePayload({
           isLive: shown !== null, liveVerse: shown, items: q.items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}) }, s.stageStyle),
+        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
+          // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
+          ...(output.stageLayout && output.stageLayout !== "countdown" ? { layout: output.stageLayout } : {}),
+          ...(output.stageOrientation ? { portrait: output.stageOrientation } : {}),
+          ...(output.stageNight ? { night: true } : {}) }, s.stageStyle),
       })
       return
     }
@@ -984,7 +999,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         : {}),
     }))
     if ("role" in patch && patch.role !== "signage") forgetSignage(id)
-    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch) get().syncBroadcastOutputFor(id)
+    if (patch.themeId || "themeFor" in patch || "language" in patch || "role" in patch || "signage" in patch || "lowerThirds" in patch || "shows" in patch || "sceneId" in patch || "stageLayout" in patch || "stageOrientation" in patch || "stageNight" in patch) get().syncBroadcastOutputFor(id)
   },
   removeOutput: (id) => {
     if (id === MAIN_OUTPUT_ID) return
@@ -1698,11 +1713,14 @@ function churchZone(): string {
 /** A countdown display's frame: what its look counts now, the item on now and the next one. */
 function stageCountdownFrame(s: BroadcastState, items: QueueItemLike[], activeIndex: number | null) {
   const zone = churchZone()
-  const counting = lookCounting(s.countdownLook, s.countdownSources, useTimerStore.getState().timer, monotonicNow(), Date.now(), zone)
+  const counting = lookCounting(s.countdownLook, s.countdownSources, useTimerStore.getState().timer, monotonicNow(), Date.now(), zone, s.countdowns)
   const item = activeIndex === null ? null : items[activeIndex]?.reference ?? null
   const next = (activeIndex === null ? items[0] : items[activeIndex + 1])?.reference ?? null
   // A browser feed's screen may be set to another zone: the time of day is the church's (or this computer's).
-  return countdownFrame(s.countdownLook, counting, { item, next, zone: zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "" })
+  const frame = countdownFrame(s.countdownLook, counting, { item, next, zone: zone || Intl.DateTimeFormat().resolvedOptions().timeZone || "" })
+  // The stage design's clock choices (#196 R2.6) reach the countdown display's time of day too.
+  const st = s.stageStyle
+  return { ...frame, ...(st.clockHours ? { hours: st.clockHours } : st.showClock ? { hours: 24 as const } : {}), ...(st.showClock && st.secondZone ? { zone2: { label: st.secondZoneLabel?.trim() || zoneCity(st.secondZone), zone: st.secondZone } } : {}) }
 }
 type QueueItemLike = { reference: string }
 

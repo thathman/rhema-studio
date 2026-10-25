@@ -22,6 +22,10 @@ export interface CountdownTargets {
   end: CountdownTarget | null
   /** Each item with an "end by", by item id. */
   endBy: Record<string, CountdownTarget>
+  /** Each item's start, by item id: expected while still to come, as it really began once it has. Absent: none. */
+  starts?: Record<string, CountdownTarget>
+  /** Each group of the main service's expected end, by group id. Absent: none. */
+  groupEnds?: Record<string, CountdownTarget>
 }
 
 export const NO_COUNTDOWNS: CountdownTargets = { next: null, end: null, endBy: {} }
@@ -32,27 +36,42 @@ export function countdownTargets(timing: ServiceTiming | null, zone = ""): Count
   // Skipped items are never next; neither is anything done or on now.
   const next = timing.events.find((e) => e.state === "upcoming")
   const endBy: Record<string, CountdownTarget> = {}
-  for (const e of timing.events) if (e.hardStop !== null) endBy[e.id] = { label: `${e.label} · end by ${clockAt(e.hardStop, zone)}`, at: e.hardStop }
-  return { next: next ? { label: next.label, at: next.expectedStart } : null, end: { label: "End of the main service", at: timing.expectedEnd }, endBy }
+  const starts: Record<string, CountdownTarget> = {}
+  for (const e of timing.events) {
+    if (e.hardStop !== null) endBy[e.id] = { label: `${e.label} · end by ${clockAt(e.hardStop, zone)}`, at: e.hardStop }
+    // A skipped item never starts; one that began keeps the moment it really did.
+    const at = e.state === "upcoming" ? e.expectedStart : e.state === "skipped" ? null : e.actualStart
+    if (at !== null) starts[e.id] = { label: `${e.label} starts`, at }
+  }
+  const groupEnds: Record<string, CountdownTarget> = {}
+  for (const s of timing.sections) if (s.type === "group" && !s.loop && s.expectedEnd !== null) groupEnds[s.id] = { label: `End of ${s.name}`, at: s.expectedEnd }
+  return { next: next ? { label: next.label, at: next.expectedStart } : null, end: { label: "End of the main service", at: timing.expectedEnd }, endBy, starts, groupEnds }
 }
 
 export function isCountdownTo(v: unknown): v is CountdownTo {
-  return v === "next" || v === "end" || (typeof v === "string" && /^endby:.{1,120}$/.test(v))
+  return v === "next" || v === "end" || (typeof v === "string" && /^(endby|start|groupend):.{1,120}$/.test(v))
 }
 
 export function countdownTarget(targets: CountdownTargets | null | undefined, to: CountdownTo | undefined): CountdownTarget | null {
   if (!targets || !to) return null
   if (to === "next") return targets.next
   if (to === "end") return targets.end
+  if (to.startsWith("start:")) return targets.starts?.[to.slice("start:".length)] ?? null
+  if (to.startsWith("groupend:")) return targets.groupEnds?.[to.slice("groupend:".length)] ?? null
   return targets.endBy[to.slice("endby:".length)] ?? null
 }
 
-/** What a picker offers: the next item, the service end, then each "end by" in the run of show. */
-export function countdownChoices(targets: CountdownTargets | null | undefined): { value: CountdownTo; label: string }[] {
+/**
+ * What a picker offers: the next item, the service end, each "end by" in the run of show, then each
+ * item's start and each group's end (#196 R2.4: count down to anything in the run of show).
+ */
+export function countdownChoices(targets: CountdownTargets | null | undefined): { value: CountdownTo; label: string; group?: "start" | "groupend" }[] {
   return [
     { value: "next", label: "The next item" },
     { value: "end", label: "The end of the main service" },
     ...Object.entries(targets?.endBy ?? {}).map(([id, t]) => ({ value: `endby:${id}` as CountdownTo, label: t.label })),
+    ...Object.entries(targets?.starts ?? {}).map(([id, t]) => ({ value: `start:${id}` as CountdownTo, label: t.label, group: "start" as const })),
+    ...Object.entries(targets?.groupEnds ?? {}).map(([id, t]) => ({ value: `groupend:${id}` as CountdownTo, label: t.label, group: "groupend" as const })),
   ]
 }
 
@@ -67,7 +86,15 @@ export function steadyTarget(prev: CountdownTarget | null, next: CountdownTarget
 
 export function steadyTargets(prev: CountdownTargets | null, next: CountdownTargets, now: number): CountdownTargets {
   if (!prev) return next
-  return { next: steadyTarget(prev.next, next.next, now), end: steadyTarget(prev.end, next.end, now), endBy: next.endBy }
+  const steady = (a: Record<string, CountdownTarget> | undefined, b: Record<string, CountdownTarget> | undefined) =>
+    b && Object.fromEntries(Object.entries(b).map(([id, t]) => [id, steadyTarget(a?.[id] ?? null, t, now) ?? t]))
+  return {
+    next: steadyTarget(prev.next, next.next, now),
+    end: steadyTarget(prev.end, next.end, now),
+    endBy: next.endBy,
+    ...(next.starts ? { starts: steady(prev.starts, next.starts) } : {}),
+    ...(next.groupEnds ? { groupEnds: steady(prev.groupEnds, next.groupEnds) } : {}),
+  }
 }
 
 /**
@@ -81,7 +108,8 @@ export function countdownLine(to: CountdownTo, target: CountdownTarget, now: num
   return { label: `${name} in`, text: formatMs(Math.max(0, left) + 999), tone: left <= 120_000 ? "warn" : "ok" }
 }
 
-export type Chime = "before" | "zero"
+/** "over": the service timer has just run out (#196 R2.8). */
+export type Chime = "before" | "zero" | "over"
 
 /** A chime missed by more than this (the computer asleep, the window held back) is let go, not played late. */
 const CHIME_LATE_MS = 10_000

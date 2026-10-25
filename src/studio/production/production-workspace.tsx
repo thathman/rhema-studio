@@ -39,6 +39,7 @@ import { useServiceTiming } from "@/studio/use-service-timing"
 import { useReadiness } from "@/studio/use-readiness"
 import { HoldControl } from "@/studio/present/service-timer"
 import { AuxTimersPanel } from "@/studio/present/aux-timers"
+import { timeChangeWords, useTimeChange } from "@/stores/time-change-store"
 import type { ReadinessCheck } from "@/studio/readiness"
 import { SceneComposer } from "@/studio/production/scene-composer"
 import { OperatorsPanel } from "@/studio/production/operators-panel"
@@ -149,7 +150,7 @@ function Timekeeper() {
   const tone = timerTone(timer, now, timing?.events.find((e) => e.state === "live")?.warnMs)
   const shown = timer.durationMs > 0 ? remainingMs(timer, now) : elapsedMs(timer, now)
   const correct = (minutes: number) => {
-    useTimerStore.getState().adjustMinutes(minutes)
+    useTimerStore.getState().adjustMinutes(minutes, useSettingsStore.getState().operatorName.trim() || null)
     useJournalStore.getState().add({ kind: "timing", label: `timer corrected by ${minutes > 0 ? "+" : "−"}${Math.abs(minutes)} min` })
   }
   const late = timing ? Math.round(timing.lateMs / 60_000) : 0
@@ -177,6 +178,7 @@ function Timekeeper() {
           <Button variant="outline" onClick={() => resetTimerLogged()}><RotateCcwIcon /> Reset</Button>
         </div>
         <RunningLate />
+        <LastTimeChange />
         <HoldControl />
       </Card>
       <Card kicker="Planned vs expected" title="The run of show" badge={<div className="flex items-center gap-2"><Badge tone={state === "running" ? "ok" : state === "held" || state === "untrusted" ? "warn" : "off"}>{RUN_STATE_WORDS[state]}</Badge><Button size="sm" variant="ghost" onClick={() => useShellStore.getState().setWorkspace("prepare")}>Edit run of show</Button></div>}>
@@ -233,7 +235,7 @@ function CountdownCard() {
   const target = countdownTarget(targets, prefs.to)
   const line = target ? countdownLine(prefs.to, target, now) : null
   return (
-    <Card kicker="Countdown" title="Time until" badge={prefs.chime ? <Badge tone="ok">Chime on</Badge> : undefined}>
+    <Card kicker="Countdown" title="Time until" badge={prefs.chime || prefs.overtimeChime ? <Badge tone="ok">Chime on</Badge> : undefined}>
       <label className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold">Count down to</span>
         <CountdownSelect label="Count down to" value={prefs.to} onChange={(to) => set({ to: to ?? "next" })} className="min-w-0 flex-1" />
@@ -251,6 +253,10 @@ function CountdownCard() {
         <select aria-label="When the chime sounds" value={prefs.chimeMinutes} disabled={!prefs.chime} onChange={(e) => set({ chimeMinutes: Number(e.target.value) })} className="h-7 rounded-md border border-input bg-card px-1.5">
           {CHIME_MINUTES.map((m) => <option key={m} value={m}>{m === 0 ? "At zero only" : `${m} min before, and at zero`}</option>)}
         </select>
+        <label className="flex basis-full items-center gap-2 font-semibold">
+          <input type="checkbox" className="size-4" checked={!!prefs.overtimeChime} onChange={(e) => set({ overtimeChime: e.target.checked })} />
+          Chime when the service timer runs over
+        </label>
         <span className="basis-full text-muted-foreground">A short tone here only. The screens, the stage and the online feed never hear it.</span>
       </div>
     </Card>
@@ -846,6 +852,18 @@ function RunningLate() {
       <span className="text-muted-foreground" role="status">{offsetWords(minutes)}{minutes !== 0 && by ? ` (${by})` : ""}; {mode === "push" ? "every item still to come moves by it, pauses and fixed starts too" : "pauses take it up first and fixed starts keep their time"}. It moves only what is expected, not the plan or the screens.</span>
     </div>
   )
+}
+
+/** Who last changed the time, what and when (#196 R2.9): the same line a joined Timekeeper desk shows. */
+function LastTimeChange() {
+  const last = useTimeChange((s) => s.last)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  if (!last) return null
+  return <p className="text-xs text-muted-foreground" role="status" aria-label="Last change to the time">Last change: {timeChangeWords(last, now, (ms) => timeText(ms, churchTimeZone()))}</p>
 }
 
 /** Finish the service (#196 R3.7): the event clock stops, and whatever never started counts as skipped. Nothing on a screen changes. */

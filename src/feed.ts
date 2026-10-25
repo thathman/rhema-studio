@@ -4,8 +4,9 @@ import { drawScene, drawTickerLayer, LayerFader, sceneOverlay } from "@/lib/scen
 import { syncSceneVideos, videoReady } from "@/lib/scene-videos"
 import { feedMotion, feedNext, tickerStrips } from "@/lib/feed-motion"
 import { noiseFrame } from "@/lib/no-signal"
-import { drawStage } from "@/lib/stage-canvas"
+import { drawStage, stageSurface } from "@/lib/stage-canvas"
 import { CountdownFade, nextChangeIn } from "@/lib/countdown-display"
+import { feedStale, pageClockSkew } from "@/lib/feed-freshness"
 import { drawTicker } from "@/lib/ticker-draw"
 import { tickerReserve } from "@/lib/ticker"
 import { entranceProgress } from "@/lib/lower-third-style"
@@ -206,12 +207,14 @@ function draw() {
     return
   }
   if (f.role === "stage" && f.stage) {
-    if (canvas.width !== 1920 || canvas.height !== 1080) {
-      canvas.width = 1920
-      canvas.height = 1080
+    // A browser on a tall screen (a TV app or tablet set to portrait) gets a tall picture (#196 R6).
+    const { width: sw, height: sh } = stageSurface(f.stage, innerWidth, innerHeight)
+    if (canvas.width !== sw || canvas.height !== sh) {
+      canvas.width = sw
+      canvas.height = sh
     }
     // A countdown display counts by the host's clock, blending between its colour steps.
-    countdownMoving = drawStage(ctx, 1920, 1080, f.stage, { now: Date.now() + offset, fade: countdownFade }).moving
+    countdownMoving = drawStage(ctx, sw, sh, f.stage, { now: Date.now() + offset, fade: countdownFade }).moving
     return
   }
   countdownMoving = false
@@ -355,7 +358,38 @@ setInterval(() => {
 }, 2000)
 // EventSource reconnects by itself; the host sends the current frame first.
 const events = new EventSource(`/api/v1/feed/${encodeURIComponent(id)}/events?k=${encodeURIComponent(key)}`)
+
+/**
+ * Out of date (#196): when the host has not been heard (no frame, no beat) for a while, a small
+ * "Not updating" mark in a corner, so a still picture or a stopped timer is not taken for live.
+ */
+let lastHeard = performance.now()
+let beats = false
+let beatCount = 0
+const staleMark = document.createElement("div")
+staleMark.setAttribute("role", "status")
+staleMark.textContent = "Not updating"
+Object.assign(staleMark.style, { position: "fixed", top: "1.2vh", right: "1.2vw", padding: "0.4vh 0.8vw", borderRadius: "0.6vh", background: "rgba(0,0,0,0.6)", color: "#ffc547", font: "600 1.6vh system-ui, sans-serif", zIndex: "10", display: "none", pointerEvents: "none" })
+document.body.appendChild(staleMark)
+const heard = () => { lastHeard = performance.now(); checkStale() }
+function checkStale() {
+  const stale = feedStale({ now: performance.now(), lastHeard, beats, connected: events.readyState === EventSource.OPEN })
+  const show = stale ? "block" : "none"
+  if (staleMark.style.display !== show) staleMark.style.display = show
+}
+setInterval(checkStale, 1000)
+events.addEventListener("error", checkStale)
+// The host's clock, between frames: count by it, and tell the host how far this screen's clock is off (it warns over 2 s).
+events.addEventListener("beat", (e) => {
+  const hostNow = Number((e as MessageEvent<string>).data)
+  if (!Number.isFinite(hostNow)) return
+  beats = true
+  heard()
+  offset = hostNow - Date.now()
+  if (drawnSeq > 0 && beatCount++ % 2 === 0) void ack({ seq: drawnSeq, clock: pageClockSkew(hostNow, Date.now()) })
+})
 events.addEventListener("frame", (e) => {
+  heard()
   const ev = e as MessageEvent<string>
   try {
     show(JSON.parse(ev.data) as Frame)

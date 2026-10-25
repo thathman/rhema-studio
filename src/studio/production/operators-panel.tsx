@@ -26,6 +26,8 @@ import { editsScenes, REMOTE_ROLES, roleLabel } from "@/lib/remote-roles"
 import { Card, JoinForm } from "@/studio/production/join-form"
 import { certificateWords } from "@/lib/host-certificate"
 import { presenceRows, readHostStatus, seenWords, type HostStatus } from "@/lib/host-presence"
+import { mayRunAuxTimer } from "@/stores/aux-timers-store"
+import { timeChangeWords } from "@/stores/time-change-store"
 
 // The join form has its own module so Rhema Studio Companion (#209) shows it without the studio's desks.
 export { JoinForm }
@@ -231,6 +233,7 @@ function JoinedDesk() {
           {desks.includes("scenes") && <ScenesDesk live={live} role={me?.role ?? "present"} />}
           {desks.includes("stage") && <StageDesk live={live} />}
           {desks.includes("obs") && <ObsDesk live={live} />}
+          <DeskAuxTimers live={live} role={me?.role ?? "present"} stale={fresh.stale} />
           <RunOfShowView live={live} stale={fresh.stale} />
           <section aria-label="Talk desk" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
             <p className="font-semibold">Talk</p>
@@ -294,6 +297,8 @@ function ClockDesk({ live, stale }: { live: LiveStateV1; stale: boolean }) {
         <Button size="sm" disabled={!next || off} onClick={() => void send({ command: "event_next" })}>{next ? `Start ${next.reference}` : "Last event"}</Button>
       </div>
       <DeskTimer live={live} stale={stale} />
+      {/* Who changed the time last (#196 R2.9; absent from older hosts). */}
+      {live.timeChange !== undefined && <p role="status" aria-label="Last change to the time" className="text-muted-foreground">{live.timeChange ? <>Last change: {timeChangeWords({ what: live.timeChange.what, by: live.timeChange.by ?? null, at: live.timeChange.at }, live.at, (ms) => hhmm(ms, live.timing?.timeZone))}</> : "Nobody has changed the time yet."}</p>}
       <DeskHold live={live} />
       <ol aria-label="The host's run of show" className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border">
         {live.rundown.map((r) => (
@@ -393,6 +398,59 @@ function DeskTimer({ live, stale }: { live: LiveStateV1; stale: boolean }) {
       <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "timer_adjust", value: -1 })}>−1 min</Button>
       <Button size="sm" variant="outline" disabled={off} onClick={() => void send({ command: "timer_adjust", value: 1 })}>+1 min</Button>
     </div>
+  )
+}
+
+/**
+ * The host's extra timers (#196 R2.5), counting on from when the state arrived. A desk that keeps
+ * time, or whose role a timer belongs to, may start, pause and reset it; every other desk sees
+ * them read only. Hidden for an older host that does not send them, and when there are none.
+ */
+function DeskAuxTimers({ live, role, stale }: { live: LiveStateV1; role: string; stale: boolean }) {
+  const ok = useCanSend()
+  const receivedAt = useJoin((s) => s.receivedAt)
+  const [now, setNow] = useState(() => performance.now())
+  const [said, setSaid] = useState("")
+  const timers = live.auxTimers ?? []
+  const anyRunning = timers.some((t) => t.running)
+  useEffect(() => {
+    if (!anyRunning) return
+    const id = setInterval(() => setNow(performance.now()), 500)
+    return () => clearInterval(id)
+  }, [anyRunning])
+  if (timers.length === 0) return null
+  const send = async (id: string, action: "start" | "pause" | "reset") => {
+    const r = await useJoin.getState().send({ command: "aux_timer", value: { id, action } })
+    setSaid(r.ok ? "" : r.error)
+  }
+  return (
+    <section aria-label="Extra timers" className="flex flex-col gap-2 rounded-md border border-border p-2.5">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <p className="font-semibold">Extra timers</p>
+        {stale && <span className="font-semibold text-confidence-mid">may be out of date</span>}
+      </div>
+      <ul className="flex flex-col gap-1.5">
+        {timers.map((t) => {
+          const elapsed = t.elapsedMs + (t.running ? Math.max(0, now - receivedAt) : 0)
+          const left = t.durationMs - elapsed
+          const runs = mayRunAuxTimer(role, t.owner ?? "")
+          return (
+            <li key={t.id} className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 flex-1 truncate font-medium">{t.label}{t.owner ? <span className="font-normal text-muted-foreground"> · {roleLabel(t.owner)}</span> : null}</span>
+              <span className={cn("w-16 text-right font-mono font-semibold tabular-nums", left < 0 && "text-destructive", left >= 0 && left <= 120_000 && "text-confidence-mid", stale && "opacity-50")} role="timer">{left < 0 ? `−${formatMs(-left)}` : formatMs(left)}</span>
+              <span className="w-14 text-muted-foreground">{t.running ? "running" : "paused"}</span>
+              {runs ? (
+                <>
+                  <Button size="xs" disabled={!ok} onClick={() => void send(t.id, t.running ? "pause" : "start")}>{t.running ? "Pause" : "Start"}</Button>
+                  <Button size="xs" variant="ghost" disabled={!ok} onClick={() => void send(t.id, "reset")}>Reset</Button>
+                </>
+              ) : <span className="text-muted-foreground">read only</span>}
+            </li>
+          )
+        })}
+      </ul>
+      {said && <p role="alert" className="text-destructive">{said}</p>}
+    </section>
   )
 }
 

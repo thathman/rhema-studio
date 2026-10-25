@@ -14,10 +14,13 @@ const COUNTS: ReadonlyArray<readonly [CountdownCounts, string]> = [
   ["aux", "An extra timer (Production → Timekeeper)"],
   ["until", "Time until a time of day"],
   ["start", "Time until the service starts (run of show)"],
+  ["itemStart", "Time until an item starts (run of show)"],
+  ["groupEnd", "Time until a group ends (run of show)"],
 ]
 
 /** The preview's whole time: a 10-minute timer, or the minutes before a time of day. */
-const sampleTotal = (look: CountdownLook) => (look.counts === "until" || look.counts === "start" ? look.leadMinutes : 10) * 60_000
+const toInstant = (look: CountdownLook) => look.counts === "until" || look.counts === "start" || look.counts === "itemStart" || look.counts === "groupEnd"
+const sampleTotal = (look: CountdownLook) => (toInstant(look) ? look.leadMinutes : 10) * 60_000
 
 function sampleLabel(look: CountdownLook): string {
   switch (look.counts) {
@@ -26,6 +29,8 @@ function sampleLabel(look: CountdownLook): string {
     case "aux": return look.auxLabel || "Communion prep"
     case "until": return `Until ${look.until || "10:00"}`
     case "start": return "Service starts 10:00"
+    case "itemStart": return "Sermon starts"
+    case "groupEnd": return "End of Worship"
   }
 }
 
@@ -51,6 +56,8 @@ export function CountdownDesigner() {
   const look = useBroadcastStore((s) => s.countdownLook)
   const message = useBroadcastStore((s) => s.stageMessage)
   const auxTimers = useAuxTimers((s) => s.timers)
+  const targets = useBroadcastStore((s) => s.countdowns)
+  const targetChoices = Object.entries((look.counts === "groupEnd" ? targets?.groupEnds : targets?.starts) ?? {})
   const canvas = useRef<HTMLCanvasElement>(null)
   const fade = useRef(new CountdownFade())
   const [at, setAt] = useState(100)
@@ -96,7 +103,7 @@ export function CountdownDesigner() {
         <div className="flex min-w-0 flex-col gap-2 xl:sticky xl:top-0">
           <canvas ref={canvas} width={1280} height={720} className="aspect-video w-full rounded-lg border border-border" role="img" aria-label={`Countdown display preview at ${countdownText(total, leftMs)}`} />
           <div className="flex items-start gap-3 text-xs">
-            <span className="shrink-0 pt-0.5 text-muted-foreground">{look.counts === "until" || look.counts === "start" ? `The last ${look.leadMinutes} minutes` : "A 10-minute timer"} at</span>
+            <span className="shrink-0 pt-0.5 text-muted-foreground">{toInstant(look) ? `The last ${look.leadMinutes} minutes` : "A 10-minute timer"} at</span>
             <span className="relative min-w-0 flex-1 pb-4">
               <input
                 type="range"
@@ -145,7 +152,17 @@ export function CountdownDesigner() {
               <input type="time" aria-label="The time of day to count down to" value={look.until} onChange={(e) => patch({ until: e.target.value })} className="h-7 rounded border border-border bg-background px-1.5" />
             </Row>
           )}
-          {(look.counts === "until" || look.counts === "start") && (
+          {(look.counts === "itemStart" || look.counts === "groupEnd") && (
+            <Row label={look.counts === "itemStart" ? "Item" : "Group"}>
+              <select aria-label={look.counts === "itemStart" ? "The item whose start it counts to" : "The group whose end it counts to"} value={look.targetId ?? ""} onChange={(e) => patch({ targetId: e.target.value })} className="h-7 min-w-0 flex-1 rounded-md border border-input bg-card px-1.5">
+                <option value="">Choose…</option>
+                {targetChoices.map(([id, t]) => <option key={id} value={id}>{t.label}</option>)}
+                {look.targetId && !targetChoices.some(([id]) => id === look.targetId) && <option value={look.targetId}>Not in this run of show</option>}
+              </select>
+            </Row>
+          )}
+          {(look.counts === "itemStart" || look.counts === "groupEnd") && <p className="-mt-1 text-xs text-muted-foreground">Its expected time from the run of show: it moves as the service runs late or early. {targetChoices.length === 0 ? (look.counts === "groupEnd" ? "The open service has no groups with times yet (Prepare; the main service needs a start time)." : "The main service needs a start time (Prepare).") : ""}</p>}
+          {toInstant(look) && (
             <Row label="Percentages of">
               <input type="number" aria-label="Minutes the percentages are of" min={1} max={240} value={look.leadMinutes} onChange={(e) => patch({ leadMinutes: Math.min(240, Math.max(1, Math.round(Number(e.target.value) || 1))) })} className="h-7 w-16 rounded border border-border bg-background px-1.5 tabular-nums" />
               <span className="text-muted-foreground">minutes before it</span>

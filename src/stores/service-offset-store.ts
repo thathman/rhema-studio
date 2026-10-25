@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { OffsetMode } from "@/lib/timing-engine"
 import { useJournalStore } from "@/stores/journal-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useTimeChange } from "@/stores/time-change-store"
 
 /**
  * Running late or early (#196 R2.9 / R3): one shared offset for the whole service, in minutes,
@@ -34,22 +35,29 @@ export const useServiceOffset = create<OffsetState>((set, get) => ({
   setMode: (mode, by) => {
     if (mode === get().mode) return
     set({ mode })
+    useTimeChange.getState().note(mode === "push" ? "lateness pushes everything still to come" : "pauses take up lateness", by)
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}${mode === "push" ? "lateness now pushes everything still to come, pauses and fixed starts too" : "pauses take up lateness again, and fixed starts keep their time"}` })
   },
   adjust: (delta, by) => {
     const minutes = clamp(get().minutes + delta)
     if (minutes === get().minutes) return
     set({ minutes, by: by ?? null })
+    useTimeChange.getState().note(`${delta > 0 ? "+" : "−"}${Math.abs(delta)} min (${words(minutes)})`, by)
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}${words(minutes)} (${delta > 0 ? "+" : "−"}${Math.abs(delta)} min)` })
   },
   reset: (by) => {
     if (get().minutes === 0) return
     set({ minutes: 0, by: by ?? null })
+    useTimeChange.getState().note("back on schedule", by)
     useJournalStore.getState().add({ kind: "timing", label: `${by ? `${by}: ` : ""}back on schedule` })
   },
 }))
 
 // Another service opened: its own timing, not the last one's lateness.
-useServiceStore.subscribe((s, p) => { if (s.current?.id !== p.current?.id) useServiceOffset.setState({ minutes: 0, by: null }) })
+useServiceStore.subscribe((s, p) => {
+  if (s.current?.id === p.current?.id) return
+  useServiceOffset.setState({ minutes: 0, by: null })
+  useTimeChange.getState().clear()
+})
 
 export { words as offsetWords }

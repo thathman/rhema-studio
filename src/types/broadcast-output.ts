@@ -162,6 +162,29 @@ export interface StagePayload {
   style?: StageStyle
   /** A countdown display (Design → Countdown) shows only this, the message and a few small lines. */
   countdown?: CountdownFrame
+  /** The time of day, when the stage design shows it (#196 R2.6): the church's, and a second zone's. */
+  clock?: StageClock | null
+  /** This output's layout for one role (#196 R6); absent: everything, as before. */
+  layout?: StageRoleLayout
+  /** Drawn for a screen standing on its side (see StageOrientation); absent: landscape. */
+  portrait?: StageOrientation
+  /** Low-light colours for a dark platform: dim, warm, never bright white. */
+  night?: boolean
+}
+
+/** A stage screen's layout for who reads it: the pastor's confidence monitor, the band, the stage manager. */
+export type StageRoleLayout = "pastor" | "band" | "manager"
+/**
+ * A screen on its side: "cw" turned a quarter turn clockwise, "ccw" anticlockwise. A landscape
+ * picture (a TV, NDI) is drawn turned so it reads upright; a tall window is drawn tall.
+ */
+export type StageOrientation = "cw" | "ccw"
+
+export interface StageClock {
+  /** "10:42" or "10:42 AM", as the design chooses. */
+  time: string
+  /** A second time zone ("London 09:42"), when the design has one. */
+  second?: { label: string; time: string }
 }
 
 /**
@@ -183,9 +206,10 @@ export interface CountdownStep {
 
 /**
  * What the countdown display counts: the service timer, the item on now (its planned minutes from
- * when it started), a named extra timer, a time of day, or the service's start (run of show).
+ * when it started), a named extra timer, a time of day, the service's start (run of show), a chosen
+ * item's expected start or a group's expected end (#196 R2.4).
  */
-export type CountdownCounts = "timer" | "item" | "aux" | "until" | "start"
+export type CountdownCounts = "timer" | "item" | "aux" | "until" | "start" | "itemStart" | "groupEnd"
 
 /** The countdown display's design (Design → Countdown): one big time, readable from the back. */
 export interface CountdownLook {
@@ -194,6 +218,8 @@ export interface CountdownLook {
   auxLabel: string
   /** counts "until": the time of day, "HH:MM". */
   until: string
+  /** counts "itemStart" / "groupEnd": the item's or the group's id in the run of show (absent in older looks: ""). */
+  targetId?: string
   /** Counting to a time: the percentages are of this many minutes before it. */
   leadMinutes: number
   /** Before any step: the colours it starts in. */
@@ -232,6 +258,10 @@ export interface CountdownFrame {
   next: string | null
   /** The time zone for the time of day (the church's; "" = the screen's own). */
   zone: string
+  /** The time of day in 12 hours ("10:42 AM") or 24 ("10:42"); absent: the screen's language decides. */
+  hours?: 12 | 24
+  /** A second time zone under the time of day (Design → Stage), when one is chosen. */
+  zone2?: { label: string; zone: string }
 }
 
 export interface StageAux {
@@ -267,6 +297,14 @@ export interface StageStyle {
   warnWhenOver: boolean
   /** A countdown on the stage to the next item or a milestone (#196 R2); absent: none. */
   countdown?: CountdownTo
+  /** The time of day on the stage (#196 R2.6); absent: not shown, as before. */
+  showClock?: boolean
+  /** 12- or 24-hour clock; absent: 24. */
+  clockHours?: 12 | 24
+  /** A second time zone beside the time of day ("Europe/London"); absent or "": none. */
+  secondZone?: string
+  /** What the second zone is called on the stage ("London"); "": the zone's city. */
+  secondZoneLabel?: string
   /** The Design → Library look this was copied from (Reset puts it back as that look has it). */
   libraryLookId?: string
 }
@@ -298,8 +336,16 @@ export interface BroadcastOutput {
    * put on air last, as before.
    */
   shows?: FeedSourceKind[]
-  /** A stage output's layout: "countdown" shows the countdown display (Design → Countdown); absent: the full stage view. */
-  stageLayout?: "countdown"
+  /**
+   * A stage output's layout: "countdown" shows the countdown display (Design → Countdown); one for a
+   * role (#196 R6): "pastor" (a confidence monitor), "band", "manager" (the stage manager); absent:
+   * the full stage view. An older build shows the full view for a layout it does not know.
+   */
+  stageLayout?: "countdown" | StageRoleLayout
+  /** A stage output on a screen standing on its side; absent: landscape. */
+  stageOrientation?: StageOrientation
+  /** A stage output in low-light colours (a dark platform); absent: off. */
+  stageNight?: boolean
   /** The congregation scene this output shows (its program, ADR 0001); absent: its own feed, full frame. */
   sceneId?: string
   /** Browser feeds: the secret in the feed's link (renewing it closes the old link). */

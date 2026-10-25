@@ -11,6 +11,8 @@ import { timingInputNow } from "@/stores/timing-input"
 import { useTimingTrust } from "@/stores/timing-trust-store"
 import { countdownLine, countdownTarget, countdownTargets, steadyTargets } from "@/lib/countdown"
 import { updateCountdownTiming } from "@/stores/countdown-sources"
+import { stageClock } from "@/lib/stage-clock"
+import { validTimeZone } from "@/lib/church-time"
 
 /**
  * Keeps the stage display's "Ends 10:42 · 5 min late" (issue #196): the run of show's timing
@@ -49,6 +51,13 @@ export function refreshStageCountdown(now = Date.now()) {
   if (JSON.stringify(line) !== JSON.stringify(b.stageCountdown)) b.setStageCountdown(line)
 }
 
+/** The stage's time of day (#196 R2.6), when its design shows one: sent only when the minute (or the design) changes. */
+export function refreshStageClock(now = Date.now()) {
+  const b = useBroadcastStore.getState()
+  const clock = stageClock(now, b.stageStyle, validTimeZone(useSettingsStore.getState().setup.timeZone))
+  if (JSON.stringify(clock) !== JSON.stringify(b.stageClock)) b.setStageClock(clock)
+}
+
 useQueueStore.subscribe((s, prev) => { if (s.items !== prev.items || s.headers !== prev.headers) updateStageFinish() })
 useJournalStore.subscribe((s, prev) => { if (s.entries !== prev.entries) updateStageFinish() })
 useEventClock.subscribe((s, prev) => { if (s.currentId !== prev.currentId) updateStageFinish() })
@@ -56,6 +65,7 @@ useServiceOffset.subscribe((s, prev) => { if (s.minutes !== prev.minutes || s.mo
 useHold.subscribe((s, prev) => { if (s.hold !== prev.hold) updateStageFinish() })
 useTimingTrust.subscribe((s, prev) => { if (s.untrusted !== prev.untrusted) updateStageFinish() })
 useSettingsStore.subscribe((s, prev) => { if (s.setup.timeZone !== prev.setup.timeZone) updateStageFinish() })
-useBroadcastStore.subscribe((s, prev) => { if (s.stageStyle !== prev.stageStyle) refreshStageCountdown() })
+useBroadcastStore.subscribe((s, prev) => { if (s.stageStyle !== prev.stageStyle) { refreshStageCountdown(); refreshStageClock() } })
+useSettingsStore.subscribe((s, prev) => { if (s.setup.timeZone !== prev.setup.timeZone) refreshStageClock() })
 setInterval(updateStageFinish, 15_000)
-setInterval(() => refreshStageCountdown(), 1_000)
+setInterval(() => { refreshStageCountdown(); refreshStageClock() }, 1_000)

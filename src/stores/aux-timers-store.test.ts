@@ -9,7 +9,7 @@ const { isRunning } = await import("@/lib/timer")
 
 describe("auxiliary timers (issue #196 R2.5)", () => {
   it("count down on their own, amber in the last two minutes, red and negative once over", () => {
-    const t = { id: "c", label: "Communion prep", onStage: true, timer: { durationMs: 5 * 60_000, startedAt: 0, accumulatedMs: 0 } }
+    const t = { id: "c", label: "Communion prep", onStage: true, owner: "", timer: { durationMs: 5 * 60_000, startedAt: 0, accumulatedMs: 0 } }
     expect(stageAuxLines([t], 4 * 60_000)).toEqual([{ label: "Communion prep", text: "1:00", tone: "warn" }])
     expect(stageAuxLines([t], 6 * 60_000)).toEqual([{ label: "Communion prep", text: "−1:00", tone: "over" }])
     expect(stageAuxLines([{ ...t, onStage: false }], 0)).toEqual([])

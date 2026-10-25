@@ -1,5 +1,6 @@
 import type { CountdownCounts, CountdownFrame, CountdownLook, CountdownStep } from "@/types"
 import { formatMs } from "@/lib/timer"
+import { countdownTarget, type CountdownTargets } from "@/lib/countdown"
 
 /**
  * The countdown display (owner request 2026-10-24): one big time for the stage, a confidence
@@ -37,7 +38,7 @@ export const DEFAULT_COUNTDOWN_LOOK: CountdownLook = {
   showClock: true,
 }
 
-const COUNTS: readonly CountdownCounts[] = ["timer", "item", "aux", "until", "start"]
+const COUNTS: readonly CountdownCounts[] = ["timer", "item", "aux", "until", "start", "itemStart", "groupEnd"]
 const hex = (v: unknown, fallback: string) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : fallback)
 const flag = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback)
 const num = (v: unknown, lo: number, hi: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback)
@@ -66,6 +67,8 @@ export function normalizeCountdownLook(raw: Partial<CountdownLook> | null | unde
     counts: COUNTS.includes(r.counts as CountdownCounts) ? (r.counts as CountdownCounts) : d.counts,
     auxLabel: text(r.auxLabel, 40),
     until: typeof r.until === "string" && /^([01]?\d|2[0-3]):[0-5]\d$/.test(r.until) ? r.until : "",
+    // Only when one is chosen, so a look saved before reads as it was.
+    ...(text(r.targetId, 120) ? { targetId: text(r.targetId, 120) } : {}),
     leadMinutes: Math.round(num(r.leadMinutes, 1, 240, d.leadMinutes)),
     background: hex(r.background, d.background),
     text: hex(r.text, d.text),
@@ -204,15 +207,20 @@ export class CountdownFade {
 }
 
 /** What the look counts, in words, for the designer and the outputs list. */
-export function countsName(look: Pick<CountdownLook, "counts" | "auxLabel" | "until">): string {
+export function countsName(look: Pick<CountdownLook, "counts" | "auxLabel" | "until"> & { targetName?: string }): string {
   switch (look.counts) {
     case "timer": return "The service timer"
     case "item": return "The item on now"
     case "aux": return look.auxLabel ? `The extra timer “${look.auxLabel}”` : "An extra timer"
     case "until": return look.until ? `Time until ${look.until}` : "Time until a time of day"
     case "start": return "Time until the service starts"
+    case "itemStart": return look.targetName ? `Time until ${look.targetName} starts` : "Time until an item starts"
+    case "groupEnd": return look.targetName ? `Time until ${look.targetName} ends` : "Time until a group ends"
   }
 }
+
+/** Whether the look counts to something in the run of show's countdown targets (it follows them as they move). */
+export const countsToTarget = (look: Pick<CountdownLook, "counts">): boolean => look.counts === "itemStart" || look.counts === "groupEnd"
 
 /** The host's side: the service timer as a countdown frame's counting part. `mono` and `wall` are the same moment. */
 export interface Counting {
@@ -314,6 +322,7 @@ export function lookCounting(
   mono: number,
   wall: number,
   zone = "",
+  targets: CountdownTargets | null = null,
 ): Counting {
   const idle = (label: string, why: string): Counting => ({ label, totalMs: 0, endsAt: null, leftMs: 0, idle: why })
   switch (look.counts) {
@@ -338,6 +347,15 @@ export function lookCounting(
     }
     case "start":
       return sources.start === null ? idle("Service starts", "The run of show has no start time") : instantCounting(`Service starts ${hhmm(sources.start, zone)}`, sources.start, look.leadMinutes)
+    case "itemStart":
+    case "groupEnd": {
+      const id = look.targetId ?? ""
+      const what = look.counts === "itemStart" ? "an item" : "a group"
+      if (!id) return idle("Time until", `Choose ${what} to count down to (Design → Countdown)`)
+      const t = countdownTarget(targets, look.counts === "itemStart" ? `start:${id}` : `groupend:${id}`)
+      // Its label names it ("Sermon starts", "End of Worship"); the expected time moves as the service runs late or early.
+      return t ? instantCounting(t.label, t.at, look.leadMinutes) : idle("Time until", look.counts === "itemStart" ? "That item is not in the main service's run of show (or it was skipped)" : "That group is not in the main service, or has no time yet")
+    }
   }
 }
 

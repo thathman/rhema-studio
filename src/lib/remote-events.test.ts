@@ -45,11 +45,12 @@ const EXPECTED_EVENT_NAMES = [
   "remote:obs_program",
   "remote:notice_send",
   "remote:notice_ack",
+  "remote:aux_timer",
 ]
 
 describe("REMOTE_EVENTS", () => {
   it("has one entry per RemoteCommand variant", () => {
-    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(40)
+    expect(Object.keys(REMOTE_EVENTS)).toHaveLength(41)
   })
 
   it("matches the event names the Rust dispatcher emits", () => {

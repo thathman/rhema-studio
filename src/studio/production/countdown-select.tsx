@@ -15,8 +15,11 @@ export function CountdownSelect({ value, onChange, label, off, className }: { va
   return (
     <select aria-label={label} value={current} onChange={(e) => onChange((e.target.value || undefined) as CountdownTo | undefined)} className={cn("h-8 rounded-md border border-input bg-card px-1.5", className)}>
       {off && <option value="">{off}</option>}
-      {choices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-      {current && !choices.some((c) => c.value === current) && <option value={current}>An item's end by (not in this run of show)</option>}
+      {choices.filter((c) => !c.group).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+      {/* Any item's start, or a group's end (#196 R2.4). */}
+      {choices.some((c) => c.group === "start") && <optgroup label="An item starts">{choices.filter((c) => c.group === "start").map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</optgroup>}
+      {choices.some((c) => c.group === "groupend") && <optgroup label="A group ends">{choices.filter((c) => c.group === "groupend").map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</optgroup>}
+      {current && !choices.some((c) => c.value === current) && <option value={current}>{current.startsWith("start:") ? "An item's start" : current.startsWith("groupend:") ? "A group's end" : "An item's end by"} (not in this run of show)</option>}
     </select>
   )
 }

@@ -87,6 +87,7 @@ impl CommandDispatcher {
             // The reason is a short line for the stage and the log (80 characters, one line).
             RemoteCommand::Hold(r) => sink.emit_event("remote:hold", &serde_json::json!({ "reason": r.as_deref().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").chars().take(80).collect::<String>(), "by": by }).to_string()),
             RemoteCommand::Resume => sink.emit_event("remote:resume", &serde_json::json!({ "by": by }).to_string()),
+            RemoteCommand::AuxTimer(t) => sink.emit_event("remote:aux_timer", &serde_json::json!({ "id": t.id.chars().take(100).collect::<String>(), "action": t.action, "by": by }).to_string()),
             // A scene from a joined desk (#243 SC.16) names the sending key, so a change that waits for
             // the main desk is a request from that desk, which it then sees answered. The host logs
             // what it did with it itself.
@@ -113,7 +114,7 @@ impl CommandDispatcher {
         sink: &dyn CommandSink,
     ) -> Result<(), CommandError> {
         match cmd {
-            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume => Self::dispatch_as(cmd, sink, "a remote"),
+            RemoteCommand::NoticeSend(_) | RemoteCommand::NoticeAck(_) | RemoteCommand::VoiceTalk(_) | RemoteCommand::VoiceLeave | RemoteCommand::VoiceChannels(_) | RemoteCommand::SaveScene(_) | RemoteCommand::DeleteScene(_) | RemoteCommand::EventOffset(_) | RemoteCommand::TimerStart | RemoteCommand::TimerPause | RemoteCommand::TimerAdjust(_) | RemoteCommand::Hold(_) | RemoteCommand::Resume | RemoteCommand::AuxTimer(_) => Self::dispatch_as(cmd, sink, "a remote"),
             RemoteCommand::Next => sink.emit_event("remote:next", "{}"),
             RemoteCommand::Prev => sink.emit_event("remote:prev", "{}"),
             RemoteCommand::Theme(name) => {
@@ -344,6 +345,18 @@ mod tests {
         CommandDispatcher::dispatch(&RemoteCommand::Resume, &sink).unwrap();
         assert_eq!(sink.last_event(), ("remote:resume".to_string(), r#"{"by":"a remote"}"#.to_string()));
         assert_eq!(sink.event_count(), 3, "the host logs these itself: no separate audit line");
+    }
+
+    #[test]
+    fn an_extra_timer_goes_to_the_host_with_who_sent_it() {
+        let sink = MockSink::new();
+        let cmd = RemoteCommand::AuxTimer(crate::command::AuxTimerIn { id: "x".repeat(150), action: "start".into() });
+        CommandDispatcher::dispatch_from(&cmd, &sink, "Worship desk", Some("k1")).unwrap();
+        let (event, payload) = sink.last_event();
+        assert_eq!(event, "remote:aux_timer");
+        let v: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!((v["action"].as_str(), v["by"].as_str(), v["id"].as_str().map(str::len)), (Some("start"), Some("Worship desk"), Some(100)));
+        assert_eq!(serde_json::from_str::<RemoteCommand>(r#"{"command":"aux_timer","value":{"id":"a","action":"pause"}}"#).unwrap(), RemoteCommand::AuxTimer(crate::command::AuxTimerIn { id: "a".into(), action: "pause".into() }));
     }
 
     #[test]
