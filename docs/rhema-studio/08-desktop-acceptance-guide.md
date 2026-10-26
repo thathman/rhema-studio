@@ -246,6 +246,7 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 |---|---|---|
 | 10k.1 | With the projector showing a verse and NDI into OBS, turn Rehearsal on. Present three other items, a quick screen, Clear, Restore. | Projector, OBS and the stage screen never change; the app's Live panel and rundown behave normally; the header reads REHEARSAL. |
 | 10k.2 | Turn Rehearsal off. | Every output shows what it showed before rehearsal (ADR 0001); what was rehearsed is not shown. "Show this live" instead puts the rehearsed content on every output. |
+| 10k.3 | Take a scene to the projector, save an edit to that same scene, turn Rehearsal on, then Take the edited scene. Check the app's rehearsal preview and the projector/NDI output. Turn Rehearsal off without "Show this live", then Take the edited scene outside rehearsal. | Rehearsal previews the edited revision in the app; public outputs keep the original revision during rehearsal and after leaving; only the deliberate Take outside rehearsal applies the edit. | Unverified |
 
 ## 10l. Cues
 
