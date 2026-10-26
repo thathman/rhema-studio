@@ -187,10 +187,9 @@ describe("Connections hub (#401)", () => {
     await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Pair phone, controller or OBS computer"))!.click())
     const start = [...document.body.querySelectorAll("button")].find((button) => button.textContent?.includes("Show pairing code")) as HTMLButtonElement
     await act(async () => start.click())
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
     expect(mockedInvoke).toHaveBeenCalledWith("remote_pair_start")
     expect(document.body.querySelector('[aria-label="Pairing code"]')?.textContent).toBe("381624")
-    expect(document.body.querySelector('img[alt="Pairing link QR code"]')).not.toBeNull()
+    await vi.waitFor(() => expect(document.body.querySelector('img[alt="Pairing link QR code"]')).not.toBeNull())
     expect(document.body.textContent).toContain("OBS Companion computer")
     expect(document.body.textContent).toContain("within two minutes")
     expect(useBroadcastStore.getState().isLive).toBe(false)
