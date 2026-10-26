@@ -10,8 +10,9 @@ periodic review, so feature PRs leave those files alone.
 - **Main checked:** `d982db84e39f43bc5c31a53619aaac937c3dd136`. **Branch / PR:** `branding/final-logo-pack`, PR #422, based on `fix/timing-test-clock`; open and unmerged.
 - **Behaviour / documentation:** `docs/brand/ASSET-MAP.md` records the exact Studio, Companion, Receiver, Cam, launcher, phone-page and website assets and their consumers. The Studio Vite app at `127.0.0.1:3000` is served from `/Users/hendrix/rhema-final-logos`; its Setup screen uses the supplied Studio lockup. The map distinguishes the paired Companion wordmark from the compact embedded OBS-only camera glyph.
 - **Verification at `3190f10`:** hosted CI passed. The focused brand/Setup/sidebar/Companion set passed 5 files / 38 tests; typecheck, lint, Studio build, Companion web build and website build passed. The localhost preview rendered the lockup and the referenced logo URLs returned 200. The pack hash test checks its source files and copied platform icons.
-- **Not verified:** no Android Cam APK build or physical-device test; the website was not deployed. The new documentation commit still needs its own hosted CI run.
-- **Next:** check CI for the asset-map commit; keep website publication and device acceptance as separate owner-reviewed steps.
+- **Hosted checks at `0f128be`:** Manual run `40373945225` passed frontend typecheck/tests/build, lint and Rust. Its Companion job remained at **Install Linux dependencies** after a prolonged stall and was canceled. Automatic run `40373892877` failed in `oven-sh/setup-bun@v2` for frontend and lint before project checks ran; Companion passed, while Rust stalled at the same Linux dependency-install step and was canceled. Full hosted CI is therefore incomplete due runner setup, not a demonstrated project failure. These runs cover `0f128be`; this log update will produce a documentation-only head.
+- **Not verified:** no Android Cam APK build or physical-device test; the website was not deployed. The localhost preview confirmed the supplied Studio lockup, not every platform surface on physical hardware.
+- **Next:** rerun hosted CI when Linux dependency setup is healthy; keep website publication and device acceptance as separate owner-reviewed steps.
 
 ## 2026-10-25 — Small fixes from issue audit 3 (#299, #213, #243/#246 C17, #187, #215)
 
