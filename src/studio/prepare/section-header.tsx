@@ -85,6 +85,13 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
   }
   const count = summary?.count ?? 0
   const minutes = summary?.minutes ?? 0
+  const countLabel = phase && summary?.eventCount
+    ? [
+        `${summary.eventCount} event${summary.eventCount === 1 ? "" : "s"}`,
+        ...(summary.momentCount ? [`${summary.momentCount} moment${summary.momentCount === 1 ? "" : "s"}`] : []),
+        ...(summary.looseItemCount ? [`${summary.looseItemCount} item${summary.looseItemCount === 1 ? "" : "s"}`] : []),
+      ].join(" · ")
+    : `${count} ${header.event ? count === 1 ? "moment" : "moments" : count === 1 ? "item" : "items"}`
   return (
     <>
     <li
@@ -143,7 +150,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
           {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
           {phase && header.disabled && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title="Its items stay in the service; Present passes over them">Skipped</Badge>}
           {header.event && <Badge variant="outline" className="h-5 text-[0.625rem] font-bold tracking-wide uppercase" title="Event status follows approval of the saved service revision. It does not authorize a live Take.">{approval === "changed" ? "Changed" : approval === "approved" ? "Approved" : "Draft"}</Badge>}
-          <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {header.event ? count === 1 ? "moment" : "moments" : count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+          <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{countLabel}{minutes ? ` · ${minutes} min` : ""}</span>
         </span>
       </span>
       <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={() => useAddDialog.getState().openFor(header.id)}><PlusIcon /></Button>

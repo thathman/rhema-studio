@@ -587,8 +587,25 @@ describe("Prepare never takes anything live (#299)", () => {
       "Event: Sermon",
       "Phase: Post-service loop",
     ])
+    expect(el.querySelector('[aria-label="Phase: Main service"]')?.textContent).toContain("1 event")
     expect(useQueueStore.getState().headers.find((header) => header.id === event.id)).toEqual(event)
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("shows event, moment, and loose-item counts separately in a phase summary", async () => {
+    useQueueStore.setState({
+      items: [slide("Loose welcome"), slide("Sermon Scripture"), slide("Sermon slide")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "prayer", type: "group", name: "Prayer", at: 1, event: { schema_version: 1, duration_minutes: 8 } },
+        { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1, duration_minutes: 40 } },
+        { id: "post", type: "phase", name: "Post-service", at: 3, rule: "loop", role: "post" },
+      ],
+      activeIndex: null,
+    })
+    const el = await renderPrepare()
+
+    expect(el.querySelector('[aria-label="Phase: Main service"]')?.textContent).toContain("2 events · 2 moments · 1 item")
   })
 
   it("does not expose non-draggable phase rows as disabled parents of phase controls", async () => {

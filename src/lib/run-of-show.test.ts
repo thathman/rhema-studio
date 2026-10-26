@@ -40,6 +40,23 @@ describe("section summaries", () => {
     const hs = [h("Warm", 0), h("Main", 2), h("Praise", 2, "group"), h("Word", 4, "group")]
     expect(sectionSummaries(items, hs)).toEqual({ Warm: { count: 2, minutes: 5 }, Main: { count: 3, minutes: 15 }, Praise: { count: 2, minutes: 5 }, Word: { count: 1, minutes: 10 } })
   })
+  it("summarizes phase events, their moments, and loose items without changing the phase duration", () => {
+    const items = [{ planned_minutes: 3 }, { planned_minutes: 2 }, { planned_minutes: 4 }]
+    const hs: OutlineHeader[] = [
+      { id: "main", type: "phase", name: "Main", at: 0, role: "main" },
+      { id: "prayer", type: "group", name: "Prayer", at: 1, event: { schema_version: 1, duration_minutes: 5 } },
+      { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1, duration_minutes: 40 } },
+      { id: "post", type: "phase", name: "Post", at: 3, role: "post" },
+    ]
+
+    expect(sectionSummaries(items, hs).main).toEqual({
+      count: 3,
+      minutes: 48,
+      eventCount: 2,
+      momentCount: 2,
+      looseItemCount: 1,
+    })
+  })
   it("the default phases put everything in the main service", () => {
     const ids = ["p", "w", "m", "o"]
     const phases = defaultPhases(3, () => ids.shift()!)

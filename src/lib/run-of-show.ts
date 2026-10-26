@@ -266,6 +266,12 @@ export interface SectionSummary {
   count: number
   /** Their planned minutes. */
   minutes: number
+  /** Phase-only breakdown when this phase contains event headers. */
+  eventCount?: number
+  /** Queue items owned by those events. */
+  momentCount?: number
+  /** Queue items before the phase's first event. */
+  looseItemCount?: number
 }
 
 /**
@@ -303,13 +309,24 @@ export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | nu
   sorted.forEach((h, k) => {
     const end = sectionEndAt(sorted, k, rawItems.length)
     const slice = rawItems.slice(h.at, end)
+    const nextPhaseIndex = sorted.findIndex((candidate, index) => index > k && candidate.type === "phase")
+    const phaseHeaders = h.type === "phase" ? sorted.slice(k + 1, nextPhaseIndex === -1 ? sorted.length : nextPhaseIndex) : []
+    const events = phaseHeaders.map((candidate) => ({ candidate, index: sorted.indexOf(candidate) })).filter(({ candidate }) => !!candidate.event)
+    const momentCount = events.reduce((sum, { candidate, index }) => {
+      const eventEnd = sectionEndAt(sorted, index, rawItems.length)
+      return sum + Math.max(0, Math.min(end, eventEnd) - Math.max(h.at, candidate.at))
+    }, 0)
     const nestedMomentGroup = h.type === "group" && sorted.some((event) => event.event && h.at >= event.at && h.at < sectionEndAt(sorted, sorted.indexOf(event), rawItems.length))
     const minutes = h.event
       ? phaseAt(headers, h.at)?.disabled ? 0 : h.event.duration_minutes ?? slice.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
       : nestedMomentGroup
         ? slice.reduce((sum, item, offset) => sum + (isSkipped(rawItems, headers, h.at + offset) ? 0 : item.planned_minutes ?? 0), 0)
         : clockItems.filter((item) => item.sourceAt >= h.at && item.sourceAt < end).reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
-    out[h.id] = { count: slice.length, minutes }
+    out[h.id] = {
+      count: slice.length,
+      minutes,
+      ...(events.length > 0 ? { eventCount: events.length, momentCount, looseItemCount: Math.max(0, slice.length - momentCount) } : {}),
+    }
   })
   return out
 }
