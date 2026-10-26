@@ -98,13 +98,16 @@ export interface SongQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-/** An announcement or any free-text screen: one slide, no library behind it. */
+/** An announcement or free-text screen. Library-backed items hold a content snapshot plus source identity. */
 export interface CustomSlide {
   title: string
   /** Plain text; each line is drawn on its own line. */
   body: string
   /** A safe http(s) link shown as a QR code with the text beside it (SG-003). */
   link?: string
+  /** The reusable library source this occurrence was copied from. The content above stays local to this service item. */
+  source_asset_id?: string
+  source_revision?: number
 }
 
 export interface SlideQueueItem extends QueueItemBase {

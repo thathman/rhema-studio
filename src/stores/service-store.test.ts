@@ -633,6 +633,19 @@ describe("createFromRundown", () => {
     expect(JSON.parse(input.payload ?? "{}")).toMatchObject({ title: "Hi", body: "There", transition: "fade", future: { x: 1 } })
   })
 
+  it("preserves reusable slide source identity while keeping service copy edits independent", () => {
+    const sourceSlide = { id: "rs1", kind: "slide", slide: { title: "Welcome", body: "Library wording", source_asset_id: "source-1", source_revision: 4 }, reference: "Welcome", confidence: 1, source: "manual", added_at: 0 } as unknown as QueueItem
+    const [saved] = toItemInputs([sourceSlide])
+    expect(JSON.parse(saved.payload ?? "{}")).toMatchObject({ title: "Welcome", body: "Library wording", source_asset_id: "source-1", source_revision: 4 })
+
+    const reopened = toQueueItems({ program, items: [item("rs1", "Welcome", 0, 0, 0, { kind: "slide", book_number: null, chapter: null, verse: null, payload: saved.payload ?? null })] }, 1, []).items[0]
+    expect(reopened).toMatchObject({ slide: { source_asset_id: "source-1", source_revision: 4, body: "Library wording" } })
+    if (reopened.kind !== "slide") throw new Error("expected a slide")
+    const editedOccurrence = { ...reopened, slide: { ...reopened.slide, body: "This Sunday only" } }
+    const [serviceCopy] = toItemInputs([editedOccurrence])
+    expect(JSON.parse(serviceCopy.payload ?? "{}")).toMatchObject({ body: "This Sunday only", source_asset_id: "source-1", source_revision: 4 })
+  })
+
   it("an edit made while a load is running still counts as unsaved once the load ends", async () => {
     await openStored()
     useServiceStore.setState({ loading: true })

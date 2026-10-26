@@ -25,6 +25,7 @@ mod logs;
 mod media;
 mod package;
 mod revisions;
+mod slides;
 mod songs;
 mod usage;
 pub use folder::*;
@@ -32,6 +33,7 @@ pub use logs::*;
 pub use media::*;
 pub use package::*;
 pub use revisions::*;
+pub use slides::*;
 pub use songs::*;
 pub use usage::*;
 use std::sync::Mutex;
@@ -82,6 +84,7 @@ pub const MIGRATIONS: &[Migration] = &[
     ("0012_song_alternate_titles", include_str!("../migrations/0012_song_alternate_titles.sql")),
     ("0013_service_log_transcript", include_str!("../migrations/0013_service_log_transcript.sql")),
     ("0014_approved_design_snapshots", include_str!("../migrations/0014_approved_design_snapshots.sql")),
+    ("0015_reusable_slides", include_str!("../migrations/0015_reusable_slides.sql")),
 ];
 
 /// Item kinds this version can read and write. Future kinds arrive with a
@@ -1274,7 +1277,7 @@ mod tests {
     #[test]
     fn migrations_apply_once_and_in_order() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides"]);
     }
 
     #[test]
@@ -1609,7 +1612,7 @@ lines"}"#.to_string(), false),
         let older = &MIGRATIONS[..5];
         let err = ContentDb::open_with_migrations(&tmp.db(), older).unwrap_err();
         match &err {
-            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots"]),
+            ContentError::NewerSchema { versions } => assert_eq!(versions, &vec!["0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides"]),
             other => panic!("{other:?}"),
         }
         assert!(err.to_string().contains("newer Rhema Studio"));
@@ -1630,7 +1633,7 @@ lines"}"#.to_string(), false),
             p.id
         };
         let db = ContentDb::open(&tmp.db()).unwrap();
-        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots"]);
+        assert_eq!(db.applied_migrations().unwrap(), vec!["0001_programs", "0002_item_identity", "0003_songs", "0004_media", "0005_revisions", "0006_song_key_tempo", "0007_approval", "0008_service_logs", "0009_song_attachments", "0010_archive_templates", "0011_revision_saved_by", "0012_song_alternate_titles", "0013_service_log_transcript", "0014_approved_design_snapshots", "0015_reusable_slides"]);
         let backup = db.last_backup().expect("backup before migrating an existing file").to_path_buf();
         assert!(backup.exists());
         assert!(backup.to_string_lossy().contains("before-0002_item_identity"));
