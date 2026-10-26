@@ -55,14 +55,25 @@ import { toItemInputs } from "@/stores/service-store"
 const slide = (id: string): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "words" }, reference: id, confidence: 1, source: "manual", added_at: 0, planned_minutes: 3 }) as unknown as QueueItem
 
+const RUNDOWN_VIEW_KEY = "rhema.prepare.rundown-view.v1"
+const preferenceStorage = new Map<string, string>()
+const localStorageMock = {
+  getItem: (key: string) => preferenceStorage.get(key) ?? null,
+  setItem: (key: string, value: string) => { preferenceStorage.set(key, String(value)) },
+  removeItem: (key: string) => { preferenceStorage.delete(key) },
+  clear: () => preferenceStorage.clear(),
+}
+
 let root: Root | null = null
 afterEach(() => {
   act(() => root?.unmount())
   root = null
-  try { window.localStorage.removeItem("rhema.prepare.rundown-view.v1") } catch { /* unavailable in the Node test runner */ }
+  try { window.localStorage.removeItem(RUNDOWN_VIEW_KEY) } catch { /* unavailable in the Node test runner */ }
   useAddDialog.getState().close()
+  preferenceStorage.clear()
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
+  vi.unstubAllGlobals()
 })
 
 async function renderPrepare() {
@@ -75,6 +86,80 @@ async function renderPrepare() {
 }
 
 describe("Prepare never takes anything live (#299)", () => {
+  it("switches rundown views 20 times without changing the plan or live state (#409, #444)", async () => {
+    vi.stubGlobal("localStorage", localStorageMock)
+    const items = [slide("Pre-service"), slide("Opening prayer"), slide("Sermon"), slide("Closing")]
+    const headers = [
+      { id: "pre", type: "phase" as const, name: "Pre-service", at: 0, rule: "loop" as const, role: "pre" as const, advance_seconds: 30 },
+      { id: "prayer", type: "group" as const, name: "Opening Prayer", at: 1, event: { schema_version: 1 as const, duration_minutes: 15 } },
+      { id: "main", type: "phase" as const, name: "Main service", at: 2, rule: "manual" as const, role: "main" as const, starts_at: "10:00" },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: 2 })
+    useBroadcastStore.setState({ isLive: true, liveVerse: null, liveSlide: null, liveItemId: "on-air" })
+    const planBefore = {
+      items: useQueueStore.getState().items,
+      headers: useQueueStore.getState().headers,
+      activeIndex: useQueueStore.getState().activeIndex,
+    }
+    const liveBefore = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+    }
+    const assertPlanAndLiveUnchanged = () => {
+      const plan = useQueueStore.getState()
+      expect(plan.items).toEqual(planBefore.items)
+      expect(plan.headers).toEqual(planBefore.headers)
+      expect(plan.activeIndex).toBe(planBefore.activeIndex)
+      const live = useBroadcastStore.getState()
+      expect(live.isLive).toBe(liveBefore.isLive)
+      expect(live.liveItemId).toBe(liveBefore.liveItemId)
+    }
+    const clickView = async (name: "Simple list" | "Grouped by phase") => {
+      const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.textContent?.trim() === name)
+      expect(button).toBeDefined()
+      await act(async () => button!.click())
+    }
+
+    let el = await renderPrepare()
+    expect(el.querySelector('[aria-label="Phase: Pre-service"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
+    const collapsePre = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Pre-service"]')!
+    await act(async () => collapsePre.click())
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(2)
+
+    await clickView("Simple list")
+    expect(localStorageMock.getItem(RUNDOWN_VIEW_KEY)).toBe("simple")
+    expect(el.querySelector('[aria-label="Phase: Pre-service"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Event: Opening Prayer"]')).not.toBeNull()
+    const visibleItems = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')].map((button) => button.textContent ?? "")
+    expect(visibleItems).toHaveLength(4)
+    expect(visibleItems.map((label) => ["Pre-service", "Opening prayer", "Sermon", "Closing"].find((name) => label.includes(name)))).toEqual(["Pre-service", "Opening prayer", "Sermon", "Closing"])
+    assertPlanAndLiveUnchanged()
+
+    for (let flip = 0; flip < 20; flip += 1) {
+      const name = flip % 2 === 0 ? "Grouped by phase" : "Simple list"
+      await clickView(name)
+      expect(localStorageMock.getItem(RUNDOWN_VIEW_KEY)).toBe(flip % 2 === 0 ? "grouped" : "simple")
+      expect(el.querySelector('[aria-label="Phase: Pre-service"]') !== null).toBe(flip % 2 === 0)
+      expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
+      expect(el.querySelector('[aria-label="Event: Opening Prayer"]') !== null).toBe(flip % 2 !== 0)
+      expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(flip % 2 === 0 ? 2 : 4)
+      assertPlanAndLiveUnchanged()
+    }
+
+    act(() => root?.unmount())
+    root = null
+    document.body.replaceChildren()
+    el = await renderPrepare()
+    expect(el.querySelector('[aria-label="Phase: Pre-service"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Event: Opening Prayer"]')).not.toBeNull()
+    await clickView("Grouped by phase")
+    expect(el.querySelector('[aria-label="Phase: Pre-service"]')).not.toBeNull()
+    assertPlanAndLiveUnchanged()
+  })
+
   it("clicking, double-clicking and keys on rundown items only preview", async () => {
     useQueueStore.setState({
       items: [slide("Welcome"), slide("Notices"), slide("Blessing")],
@@ -337,36 +422,7 @@ describe("Prepare never takes anything live (#299)", () => {
     createDraft.mockRestore()
   })
 
-  it("switching simple and grouped views preserves the phase plan and current live output", async () => {
-    const items = [slide("Welcome"), slide("Sermon moment"), slide("Closing")]
-    const headers = [
-      { id: "main", type: "phase" as const, name: "Main service", at: 0, rule: "manual" as const, role: "main" as const, starts_at: "10:00" },
-      { id: "sermon", type: "group" as const, name: "Sermon", at: 1, event: { schema_version: 1 as const, duration_minutes: 40 } },
-      { id: "post", type: "phase" as const, name: "Post-service loop", at: 2, rule: "loop" as const, role: "post" as const, advance_seconds: 30 },
-    ]
-    useQueueStore.setState({ items, headers, activeIndex: 1 })
-    useBroadcastStore.setState({ isLive: true, liveItemId: "Sermon moment", liveSlide: null, liveVerse: null })
-    const planBefore = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
-    const liveBefore = useBroadcastStore.getState()
-    const el = await renderPrepare()
-    expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
-
-    const simple = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Simple list")
-    const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")
-    expect(simple).not.toBeNull()
-    expect(grouped).not.toBeNull()
-    for (let i = 0; i < 20; i++) {
-      await act(async () => simple!.click())
-      expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
-      expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
-      await act(async () => grouped!.click())
-      expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
-    }
-
-    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(planBefore)
-    expect(useBroadcastStore.getState()).toEqual(liveBefore)
-  })
-
+  // The richer persistence/collapse-state regression above covers this view switch.
   it("requires confirmation to remove phases and restores their exact state with Undo", async () => {
     const items = [slide("Welcome"), slide("Sermon moment"), slide("Closing")]
     const headers = [

@@ -33,7 +33,11 @@ type RundownView = "simple" | "grouped"
 const RUNDOWN_VIEW_KEY = "rhema.prepare.rundown-view.v1"
 
 function storedRundownView(): RundownView {
-  try { return window.localStorage.getItem(RUNDOWN_VIEW_KEY) === "simple" ? "simple" : "grouped" } catch { return "grouped" }
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(RUNDOWN_VIEW_KEY) === "simple" ? "simple" : "grouped"
+  } catch {
+    return "grouped"
+  }
 }
 
 function todayInChurchZone(now = new Date()): { date: string; label: string } {
@@ -82,9 +86,13 @@ export function PrepareWorkspace() {
     : selectedItem
       ? { kind: "row", itemId: selectedItem.item.id }
       : { kind: "end" }
-  const changeRundownView = (view: RundownView) => {
+  const chooseRundownView = (view: RundownView) => {
     setRundownView(view)
-    try { window.localStorage.setItem(RUNDOWN_VIEW_KEY, view) } catch { /* This view choice is optional when storage is unavailable. */ }
+    try {
+      localStorage.setItem(RUNDOWN_VIEW_KEY, view)
+    } catch {
+      // The display remains usable if this device does not allow local preferences.
+    }
   }
   const onEventCreated = async (id: string) => {
     setSelectedEventId(id)
@@ -158,7 +166,7 @@ export function PrepareWorkspace() {
 
       <EventOverview />
 
-      {rundownView === "grouped" && <PhaseStrip />}
+      <PhaseStrip />
 
       <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel" data-tour="prepare-rundown">
@@ -171,10 +179,6 @@ export function PrepareWorkspace() {
               <RundownTools />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <div role="group" aria-label="Running order view" className="flex items-center rounded-md border border-border p-0.5">
-                <Button type="button" size="xs" variant={rundownView === "simple" ? "secondary" : "ghost"} aria-pressed={rundownView === "simple"} onClick={() => changeRundownView("simple")}>Simple list</Button>
-                <Button type="button" size="xs" variant={rundownView === "grouped" ? "secondary" : "ghost"} aria-pressed={rundownView === "grouped"} onClick={() => changeRundownView("grouped")}>Grouped by phase</Button>
-              </div>
               <div className="flex items-center gap-1.5">
                 {phaseCount > 0 && (
                   <DropdownMenu>
@@ -210,6 +214,13 @@ export function PrepareWorkspace() {
               </DialogContent>
             </Dialog>
           )}
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+            <span id="prepare-rundown-view-label" className="shrink-0 text-[0.625rem] font-bold tracking-wide text-muted-foreground uppercase">View</span>
+            <div role="group" aria-labelledby="prepare-rundown-view-label" className="flex min-w-0 items-center gap-1">
+              <Button type="button" size="sm" variant={rundownView === "simple" ? "secondary" : "ghost"} aria-pressed={rundownView === "simple"} onClick={() => chooseRundownView("simple")} className="h-11 min-w-[5.5rem] px-2 text-[0.6875rem]">Simple list</Button>
+              <Button type="button" size="sm" variant={rundownView === "grouped" ? "secondary" : "ghost"} aria-pressed={rundownView === "grouped"} onClick={() => chooseRundownView("grouped")} className="h-11 min-w-[5.5rem] px-2 text-[0.6875rem]">Grouped by phase</Button>
+            </div>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <RundownList mode="prepare" selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} groupedByPhase={rundownView === "grouped"} onEventCreated={onEventCreated} eventsDisabled={creatingDraft} />
           </div>
