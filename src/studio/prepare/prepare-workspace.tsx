@@ -3,6 +3,8 @@ import { timeText } from "@/lib/church-time"
 import { churchTimeZone } from "@/stores/timing-input"
 import { Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useQueueStore } from "@/stores"
 import { useServiceStore } from "@/stores/service-store"
@@ -16,7 +18,7 @@ import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { RULE_LABEL, defaultPhases, newPhase, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
-import { CalendarDaysIcon, ClockIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
+import { CalendarDaysIcon, ClockIcon, EllipsisIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
 import type { CueQueueItem } from "@/types"
@@ -54,6 +56,7 @@ export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
+  const phaseCount = headers.filter((header) => header.type === "phase").length
   const orderRows = runOfShowClockRows(items, headers).rows
   const eventCount = orderRows.filter((row) => row.kind === "event").length
   const looseItemCount = orderRows.filter((row) => row.kind === "item").length
@@ -70,6 +73,7 @@ export function PrepareWorkspace() {
   const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(timedItems(s.items, s.headers))))
   const service = useServiceStore((s) => s.current)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [removePhasesOpen, setRemovePhasesOpen] = useState(false)
   // On a narrower window the timing column folds away; this brings it back over the editor.
   const [timingOpen, setTimingOpen] = useState(false)
   const weekday = service?.service_date ? new Date(`${service.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long" }) : null
@@ -171,9 +175,41 @@ export function PrepareWorkspace() {
                 <Button type="button" size="xs" variant={rundownView === "simple" ? "secondary" : "ghost"} aria-pressed={rundownView === "simple"} onClick={() => changeRundownView("simple")}>Simple list</Button>
                 <Button type="button" size="xs" variant={rundownView === "grouped" ? "secondary" : "ghost"} aria-pressed={rundownView === "grouped"} onClick={() => changeRundownView("grouped")}>Grouped by phase</Button>
               </div>
-              <AddEventPalette target={eventTarget} onCreated={onEventCreated} disabled={creatingDraft} label="Add Event" ariaLabel="Add event" />
+              <div className="flex items-center gap-1.5">
+                {phaseCount > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button type="button" size="xs" variant="ghost" aria-label="Phase options"><EllipsisIcon /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem variant="destructive" onSelect={() => setRemovePhasesOpen(true)}>Remove phases…</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                <AddEventPalette target={eventTarget} onCreated={onEventCreated} disabled={creatingDraft} label="Add Event" ariaLabel="Add event" />
+              </div>
             </div>
           </div>
+          {phaseCount > 0 && (
+            <Dialog open={removePhasesOpen} onOpenChange={setRemovePhasesOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Remove all phases?</DialogTitle>
+                  <DialogDescription>
+                    This removes phase timing, loop rules, skipped status and phase-level assignments. Events, groups and content stay in their current order. Use Undo in the rundown toolbar to restore the exact phase setup; nothing goes live.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setRemovePhasesOpen(false)}>Keep phases</Button>
+                  <Button variant="destructive" onClick={() => {
+                    useQueueStore.getState().removePhases()
+                    setRemovePhasesOpen(false)
+                    toast.success("Phases removed", { description: "Events and content remain in the rundown. Use Undo to restore the phase setup." })
+                  }}>Remove phases</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto">
             <RundownList mode="prepare" selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} groupedByPhase={rundownView === "grouped"} onEventCreated={onEventCreated} eventsDisabled={creatingDraft} />
           </div>
@@ -246,6 +282,7 @@ function RundownFooter() {
   const count = useQueueStore((s) => s.items.length)
   const hasPhases = useQueueStore((s) => s.headers.some((h) => h.type === "phase"))
   const sel = useSelectedItem()
+  const [organisePhasesOpen, setOrganisePhasesOpen] = useState(false)
   const addGroup = () => {
     const at = sel?.index ?? 0
     useQueueStore.getState().setHeaders([...useQueueStore.getState().headers, { id: crypto.randomUUID(), type: "group", name: "New group", at }])
@@ -264,10 +301,34 @@ function RundownFooter() {
   return (
     <div className="flex flex-wrap gap-2 border-t border-border p-2.5">
       {!hasPhases && (
-        <Button size="sm" variant="soft" onClick={() => useQueueStore.getState().setHeaders([...defaultPhases(count), ...useQueueStore.getState().headers])} title="Pre-service loop, warm-up, main service and post-service loop; what is here goes into the main service">
+        <Button size="sm" variant="soft" onClick={() => setOrganisePhasesOpen(true)} title="Add phase structure around the current running order">
           <LayersIcon /> Organise into phases
         </Button>
       )}
+      <Dialog open={organisePhasesOpen} onOpenChange={setOrganisePhasesOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Organise this service into phases?</DialogTitle>
+            <DialogDescription>
+              Adds Pre-service loop, Warm-up, Main service and Post-service loop. Existing items keep their IDs and order and are placed in Main service. This only changes the plan; it does not start a phase or change an output. Use Undo to restore the previous rundown.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOrganisePhasesOpen(false)}>Keep current list</Button>
+            <Button onClick={() => {
+              const queue = useQueueStore.getState()
+              if (queue.headers.some((header) => header.type === "phase")) {
+                setOrganisePhasesOpen(false)
+                toast.info("Phases are already set", { description: "Use the running order view buttons to show or hide them." })
+                return
+              }
+              queue.setHeaders([...defaultPhases(queue.items.length), ...queue.headers])
+              setOrganisePhasesOpen(false)
+              toast.success("Phases added", { description: "Your items are in Main service. Use Undo to restore the previous rundown." })
+            }}>Add phases</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Button size="sm" variant="outline" onClick={addGroup} title={sel ? `A group starting at ${sel.item.reference}` : "A group at the top"}>
         <FolderPlusIcon /> Group
       </Button>

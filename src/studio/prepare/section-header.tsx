@@ -1,9 +1,13 @@
 import { useState } from "react"
+import { useDroppable } from "@dnd-kit/react"
+import { defaultCollisionDetection } from "@dnd-kit/collision"
 import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react"
+import { toast } from "sonner"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { AddEventPalette } from "@/studio/prepare/add-event-palette"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useQueueStore } from "@/stores"
@@ -41,8 +45,18 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
 
 /** A phase or group in the order of service: name, how it runs, its items and minutes; collapsible. */
 export function SectionHeader({ header, summary, collapsed, selected = false, onSelect, onToggle, onEventCreated, eventsDisabled = false }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; onSelect?: () => void; onToggle: () => void; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
+  const { ref: dropRef, isDropTarget } = useDroppable({
+    id: `section:${header.id}`,
+    data: { kind: "section", headerId: header.id },
+    collisionPriority: 4,
+    collisionDetector: (input) => {
+      const collision = defaultCollisionDetection(input)
+      return collision ? { ...collision, priority: 100 } : null
+    },
+  })
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
+  const [removePhaseOpen, setRemovePhaseOpen] = useState(false)
   const service = useServiceStore((state) => state.current)
   const serviceDirty = useServiceStore((state) => state.dirty)
   const approval = eventPlanApprovalState(service, serviceDirty)
@@ -57,12 +71,15 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
   const count = summary?.count ?? 0
   const minutes = summary?.minutes ?? 0
   return (
+    <>
     <li
+      ref={dropRef}
       aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
         "flex items-center gap-1.5 rounded-lg",
         phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : header.event ? cn("mt-1 ml-1 rounded-md border bg-card px-2 py-1.5", selected ? "border-primary/50 bg-primary/5" : "border-border") : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
         header.disabled && "opacity-60",
+        isDropTarget && "ring-2 ring-inset ring-primary",
       )}
     >
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
@@ -152,11 +169,36 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
             </>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => useQueueStore.getState().removeHeader(header.id)}>
-            Remove the {kind} (its items stay)
-          </DropdownMenuItem>
+          {phase ? (
+            <DropdownMenuItem variant="destructive" onSelect={() => setRemovePhaseOpen(true)}>
+              Remove phase…
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem variant="destructive" onSelect={() => useQueueStore.getState().removeHeader(header.id)}>
+              Remove the {kind} (its items stay)
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
+    {phase && (
+      <Dialog open={removePhaseOpen} onOpenChange={setRemovePhaseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove “{header.name}”?</DialogTitle>
+            <DialogDescription>The phase and its timing and running rule will be removed. Events and items stay in the service. Undo in the rundown toolbar restores the exact phase; nothing goes live.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemovePhaseOpen(false)}>Keep phase</Button>
+            <Button variant="destructive" onClick={() => {
+              useQueueStore.getState().removeHeader(header.id)
+              setRemovePhaseOpen(false)
+              toast.success("Phase removed", { description: "Events and items remain in the service. Use Undo to restore the phase." })
+            }}>Remove phase</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   )
 }

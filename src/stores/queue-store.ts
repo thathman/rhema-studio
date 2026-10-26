@@ -27,6 +27,8 @@ interface QueueState {
   updateHeader: (id: string, patch: Partial<OutlineHeader>) => void
   /** Remove a phase or group; its items stay where they are. */
   removeHeader: (id: string) => void
+  /** Remove every phase in one undoable edit; events, groups and items stay. */
+  removePhases: () => void
   /** Flash-highlight a queue item briefly (1.5 s). */
   flashItem: (id: string) => void
   /** Find an existing item by book+chapter+verse. Returns its index or -1. */
@@ -57,7 +59,13 @@ interface QueueState {
   moveItems: (ids: string[], dir: -1 | 1) => void
   /** Move items, in their order, to the end of a phase or group. */
   moveToSection: (ids: string[], headerId: string) => void
+  /** Move items, in rundown order, before/after a stable item or to the end of a stable section. */
+  moveItemsToTarget: (ids: string[], target: QueueMoveTarget) => void
 }
+
+export type QueueMoveTarget =
+  | { kind: "before" | "after"; itemId: string }
+  | { kind: "section"; headerId: string }
 
 export interface RundownSnapshot {
   items: QueueItem[]
@@ -196,7 +204,13 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   removeItem: (id) => set((state) => withoutItem(state, id)),
   updateItem: (id, patch) =>
     set((state) => ({ items: state.items.map((i) => (i.id === id ? patch(i) : i)) }), `item:${id}`),
-  reorderItems: (fromIndex, toIndex) => set((state) => moved(state, fromIndex, toIndex)),
+  reorderItems: (fromIndex, toIndex) => {
+    const state = get()
+    const source = state.items[fromIndex]
+    const target = state.items[toIndex]
+    if (!source || !target || fromIndex === toIndex) return
+    state.moveItemsToTarget([source.id], { kind: fromIndex < toIndex ? "after" : "before", itemId: target.id })
+  },
   setActive: (activeIndex) => set({ activeIndex, removedActive: null }),
   clearQueue: () => set({ items: [], headers: [], activeIndex: null, removedActive: null }),
   setHeaders: (headers) => set({ headers }),
@@ -204,6 +218,11 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   setAddTarget: (addTarget) => set({ addTarget }),
   updateHeader: (id, patch) => set((state) => ({ headers: state.headers.map((h) => (h.id === id ? { ...h, ...patch, id } : h)) }), `header:${id}`),
   removeHeader: (id) => set((state) => ({ headers: state.headers.filter((h) => h.id !== id) })),
+  removePhases: () =>
+    set((state) => {
+      const headers = state.headers.filter((header) => header.type !== "phase")
+      return headers.length === state.headers.length ? state : { headers }
+    }),
   flashItem: (id) => {
     if (flashTimer) clearTimeout(flashTimer)
     set({ highlightedId: id })
@@ -318,19 +337,44 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
       }
       return next === state ? state : { items: next.items, headers: next.headers, activeIndex: next.activeIndex }
     }),
-  moveToSection: (ids, headerId) =>
+  moveToSection: (ids, headerId) => get().moveItemsToTarget(ids, { kind: "section", headerId }),
+  moveItemsToTarget: (ids, target) =>
     set((state) => {
-      if (!state.headers.some((h) => h.id === headerId)) return state
-      let next: Rundown = state
-      for (const id of state.items.filter((i) => ids.includes(i.id)).map((i) => i.id)) {
-        const from = next.items.findIndex((i) => i.id === id)
-        const item = next.items[from]
-        const items = next.items.filter((i) => i.id !== id)
-        const headers = headersAfterRemove(next.headers, from)
-        const at = sectionEnd(items.length, headers, headerId)
-        next = { ...next, ...withActiveKept(next, [...items.slice(0, at), item, ...items.slice(at)]), headers: headersAfterAppend(headers, at, headerId) }
+      const picked = new Set(ids)
+      const moving = state.items.filter((item) => picked.has(item.id))
+      if (moving.length === 0) return state
+      if (target.kind === "section" && !state.headers.some((header) => header.id === target.headerId)) return state
+      if (target.kind !== "section" && picked.has(target.itemId)) return state
+
+      const movingIds = new Set(moving.map((item) => item.id))
+      let headers = state.headers
+      for (const index of state.items.map((item, index) => movingIds.has(item.id) ? index : -1).filter((index) => index >= 0).reverse()) {
+        headers = headersAfterRemove(headers, index)
       }
-      return { items: next.items, headers: next.headers, activeIndex: next.activeIndex }
+      const remaining = state.items.filter((item) => !movingIds.has(item.id))
+      let at: number
+      if (target.kind === "section") {
+        at = sectionEnd(remaining.length, headers, target.headerId)
+      } else {
+        const targetIndex = remaining.findIndex((item) => item.id === target.itemId)
+        if (targetIndex === -1) return state
+        at = targetIndex + (target.kind === "after" ? 1 : 0)
+      }
+
+      const items = [...remaining.slice(0, at), ...moving, ...remaining.slice(at)]
+      if (target.kind === "section") {
+        headers = moving.reduce((current, _item, offset) => headersAfterAppend(current, at + offset, target.headerId), headers)
+      } else {
+        const movesBoundary = target.kind === "after"
+        headers = headers.map((header) => header.at > at || (movesBoundary && header.at === at)
+          ? { ...header, at: header.at + moving.length }
+          : header)
+      }
+
+      const sameItems = items.every((item, index) => item.id === state.items[index]?.id)
+      const sameHeaders = headers.every((header, index) => header.id === state.headers[index]?.id && header.at === state.headers[index]?.at)
+      if (sameItems && sameHeaders) return state
+      return { ...withActiveKept(state, items), headers }
     }),
   }
 })

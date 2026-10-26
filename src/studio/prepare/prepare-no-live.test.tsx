@@ -366,6 +366,88 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
+  it("requires confirmation to remove phases and restores their exact state with Undo", async () => {
+    const items = [slide("Welcome"), slide("Sermon moment"), slide("Closing")]
+    const headers = [
+      { id: "warmup", type: "phase" as const, name: "Warm-up", at: 0, rule: "loop" as const, starts_at: "09:30", advance_seconds: 45 },
+      { id: "sermon", type: "group" as const, name: "Sermon", at: 1, event: { schema_version: 1 as const, duration_minutes: 40, ownership: "Pastor" } },
+      { id: "moments", type: "group" as const, name: "Bible moments", at: 2, payload_extra: { cue: "keep" } },
+      { id: "post", type: "phase" as const, name: "Post-service loop", at: 3, rule: "loop" as const, disabled: true, starts_at: "12:00" },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: 1 })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const planBefore = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    const openOptions = async () => {
+      await act(async () => {
+        const trigger = el.querySelector<HTMLButtonElement>('button[aria-label="Phase options"]')!
+        const pointerDown = new Event("pointerdown", { bubbles: true })
+        Object.assign(pointerDown, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+        trigger.dispatchEvent(pointerDown)
+      })
+      const remove = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === "Remove phases…")!
+      await act(async () => {
+        const pointerDown = new Event("pointerdown", { bubbles: true })
+        Object.assign(pointerDown, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+        remove.dispatchEvent(pointerDown)
+        remove.dispatchEvent(new Event("pointerup", { bubbles: true }))
+        remove.click()
+      })
+    }
+
+    await openOptions()
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("loop rules")
+    const keep = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Keep phases")!
+    await act(async () => keep.click())
+    expect(useQueueStore.getState().headers).toEqual(planBefore.headers)
+
+    await openOptions()
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Remove phases")!
+    await act(async () => confirm.click())
+    expect(useQueueStore.getState().headers).toEqual(headers.filter((header) => header.type !== "phase"))
+    expect(useQueueStore.getState().items).toEqual(items)
+    expect(useQueueStore.getState().activeIndex).toBe(1)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+
+    const undo = el.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')!
+    await act(async () => undo.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(planBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("explains phase placement before organising and keeps items and output unchanged", async () => {
+    const items = [slide("Welcome"), slide("Sermon moment"), slide("Closing")]
+    const event = { id: "sermon", type: "group" as const, name: "Sermon", at: 1, event: { schema_version: 1 as const, duration_minutes: 40 } }
+    useQueueStore.setState({ items, headers: [event], activeIndex: 1 })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const planBefore = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[title="Add phase structure around the current running order"]')!.click())
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("placed in Main service")
+    const keep = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Keep current list")!
+    await act(async () => keep.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(planBefore)
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[title="Add phase structure around the current running order"]')!.click())
+    const add = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add phases")!
+    await act(async () => add.click())
+    const state = useQueueStore.getState()
+    expect(state.items.map((item) => item.id)).toEqual(items.map((item) => item.id))
+    expect(state.activeIndex).toBe(planBefore.activeIndex)
+    expect(state.headers.filter((header) => header.type === "phase").map((header) => header.name)).toEqual([
+      "Pre-service loop", "Warm-up", "Main service", "Post-service loop",
+    ])
+    expect(state.headers.find((header) => header.id === event.id)).toEqual(event)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')!.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(planBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
   it("adds an event at the end of its chosen phase before the next phase boundary", async () => {
     useQueueStore.setState({
       items: [slide("Opening"), slide("Sermon"), slide("Closing")],
@@ -444,6 +526,68 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelector('[aria-label="Group: Scripture moments"]')).toBeNull()
     expect(el.querySelector('[aria-label="Event: Closing prayer"]')).not.toBeNull()
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(1)
+  })
+
+  it("requires confirmation to remove a phase and Undo restores it without changing the live program", async () => {
+    const phase = { id: "main", type: "phase" as const, name: "Main service", at: 0, rule: "manual" as const, role: "main" as const }
+    useQueueStore.setState({ items: [slide("Welcome")], headers: [phase], activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    const before = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    const trigger = el.querySelector<HTMLButtonElement>('button[aria-label="Main service: options"]')!
+    await act(async () => {
+      const pointerDown = new Event("pointerdown", { bubbles: true })
+      Object.assign(pointerDown, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      trigger.dispatchEvent(pointerDown)
+    })
+    const remove = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Remove phase…")!
+    await act(async () => {
+      const pointerDown = new Event("pointerdown", { bubbles: true })
+      Object.assign(pointerDown, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      remove.dispatchEvent(pointerDown)
+      remove.dispatchEvent(new Event("pointerup", { bubbles: true }))
+      remove.click()
+    })
+
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Events and items stay in the service")
+    expect(useQueueStore.getState().headers).toEqual([phase])
+    expect(useBroadcastStore.getState()).toEqual(before)
+
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Remove phase")!
+    await act(async () => confirm.click())
+    expect(useQueueStore.getState().headers).toEqual([])
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["Welcome"])
+    expect(useBroadcastStore.getState()).toEqual(before)
+
+    await act(async () => useQueueStore.getState().undo())
+    expect(useQueueStore.getState().headers).toEqual([phase])
+    expect(useBroadcastStore.getState()).toEqual(before)
+  })
+
+  it("moves a row across a phase boundary with the accessible controls and leaves the live program unchanged", async () => {
+    useQueueStore.setState({
+      items: [slide("Opening"), slide("Prayer"), slide("Sermon")],
+      headers: [
+        { id: "pre", type: "phase", name: "Pre-service", at: 0, rule: "manual", role: "pre" },
+        { id: "main", type: "phase", name: "Main service", at: 1, rule: "manual", role: "main" },
+      ],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    const moveDown = el.querySelector<HTMLButtonElement>('button[aria-label="Move down"]')!
+
+    await act(async () => moveDown.click())
+
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["Prayer", "Opening", "Sermon"])
+    expect(useQueueStore.getState().headers.find((header) => header.id === "main")?.at).toBe(0)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    await act(async () => useQueueStore.getState().undo())
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["Opening", "Prayer", "Sermon"])
+    expect(useQueueStore.getState().headers.find((header) => header.id === "main")?.at).toBe(1)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
   it("says whether the service is saved, next to its name", async () => {

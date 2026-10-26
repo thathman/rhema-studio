@@ -3,7 +3,7 @@ import { NewerVersionNotice } from "@/studio/prepare/newer-version-notice"
 import { UnreadComments } from "@/studio/prepare/unread-comments"
 import { useSettingsStore } from "@/stores/settings-store"
 import { publishLineage, publishToChurchFolder, unchangedCopy } from "@/lib/church-folder"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { BadgeCheckIcon, CalendarIcon, CopyIcon, EllipsisIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { approvalBlockers, approvalLabel, approvalState } from "@/lib/approval"
@@ -95,7 +95,7 @@ export function ServiceBar() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [dupOpen, setDupOpen] = useState(false)
-  const [pendingServiceAction, setPendingServiceAction] = useState<"new" | "duplicate" | null>(null)
+  const pendingServiceAction = useRef<"new" | "duplicate" | null>(null)
   const [dupTitle, setDupTitle] = useState("")
   const [dupDate, setDupDate] = useState("")
   const [editOpen, setEditOpen] = useState(false)
@@ -326,14 +326,14 @@ export function ServiceBar() {
             align="end"
             className="w-56"
             onCloseAutoFocus={() => {
-              const action = pendingServiceAction
+              const action = pendingServiceAction.current
               if (!action) return
-              setPendingServiceAction(null)
+              pendingServiceAction.current = null
               if (action === "new") setNewOpen(true)
               else setDupOpen(true)
             }}
           >
-            <DropdownMenuItem disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : undefined} onSelect={() => setPendingServiceAction("new")}>
+            <DropdownMenuItem disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : undefined} onSelect={() => { pendingServiceAction.current = "new" }}>
               <PlusIcon /> New service
             </DropdownMenuItem>
             {current && (
@@ -345,7 +345,7 @@ export function ServiceBar() {
                   onSelect={() => {
                     setDupTitle(`${current.title} (copy)`)
                     setDupDate(current.service_date ?? "")
-                    setPendingServiceAction("duplicate")
+                    pendingServiceAction.current = "duplicate"
                   }}
                 >
                   <CopyIcon /> Duplicate service

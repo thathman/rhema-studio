@@ -171,7 +171,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                 // the title's room; until then they let clicks through to the row.
                 <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-r-md bg-card/95 pl-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
                   <Button variant="ghost" size="icon-xs" className="size-11" aria-label="Move up" disabled={index === 0}
-                    onClick={() => useQueueStore.getState().reorderItems(index, index - 1)}>
+                    onClick={() => { const before = items[index - 1]; if (before) useQueueStore.getState().moveItemsToTarget([item.id], { kind: "before", itemId: before.id }) }}>
                     <ArrowUpIcon />
                   </Button>
                   <AddEventPalette
@@ -183,7 +183,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
                     ariaLabel={`Add event before ${item.reference}`}
                   />
                   <Button variant="ghost" size="icon-xs" className="size-11" aria-label="Move down" disabled={index === items.length - 1}
-                    onClick={() => useQueueStore.getState().reorderItems(index, index + 1)}>
+                    onClick={() => { const after = items[index + 1]; if (after) useQueueStore.getState().moveItemsToTarget([item.id], { kind: "after", itemId: after.id }) }}>
                     <ArrowDownIcon />
                   </Button>
                   <Button variant="ghost" size="icon-xs" className="size-11" aria-label={item.hidden ? `Show ${item.reference} in Present` : `Hide ${item.reference} in Present`} title={item.hidden ? "Show it in Present again" : "Hide: kept in the service, skipped in Present"}
@@ -260,8 +260,20 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
     <DragDropProvider
       onDragEnd={(event) => {
         if (event.canceled) return
-        const { source } = event.operation
-        if (isSortable(source) && source.initialIndex !== source.index) useQueueStore.getState().reorderItems(source.initialIndex, source.index)
+        const { source, target } = event.operation
+        if (!isSortable(source) || !target) return
+        const sourceId = String(source.id)
+        const targetData = target.data as { kind?: string; headerId?: string }
+        const queue = useQueueStore.getState()
+        if (targetData.kind === "section" && targetData.headerId) {
+          queue.moveItemsToTarget([sourceId], { kind: "section", headerId: targetData.headerId })
+          return
+        }
+        const targetId = String(target.id)
+        const sortableTargetId = sourceId === targetId ? queue.items[source.index]?.id : targetId
+        if (!sortableTargetId || sourceId === sortableTargetId || !queue.items.some((item) => item.id === sortableTargetId)) return
+        const after = source.index > source.initialIndex
+        queue.moveItemsToTarget([sourceId], { kind: after ? "after" : "before", itemId: sortableTargetId })
       }}
     >
       {list}
@@ -272,9 +284,9 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
 
 /** A rundown row; sortable (with a grip handle) only in prepare mode. */
 function Row({ id, index, sortable, children }: { id: string; index: number; sortable: boolean; children: React.ReactNode }) {
-  const { ref, handleRef, isDragging } = useSortable({ id, index, disabled: !sortable })
+  const { ref, handleRef, isDragging, isDropTarget } = useSortable({ id, index, disabled: !sortable })
   return (
-    <li ref={sortable ? ref : undefined} className={cn("flex flex-col", isDragging && "opacity-60")}>
+    <li ref={sortable ? ref : undefined} className={cn("flex flex-col rounded-md", isDragging && "opacity-60", isDropTarget && "ring-2 ring-inset ring-primary")}>
       {sortable ? (
         <div className="flex items-stretch">
           <button

@@ -133,4 +133,70 @@ describe("several items at once (#193)", () => {
     expect(ids()).toEqual(["d", "c", "a", "b"])
     expect(q().headers.find((h) => h.id === "p2")!.at).toBe(1)
   })
+
+  it("moves selected items before a stable item id across phases in one undoable edit", () => {
+    useQueueStore.setState({
+      items: [...q().items, slide("e"), slide("f")],
+      headers: [
+        phase("p1", 0),
+        { id: "event1", type: "group", name: "Event 1", at: 1, event: { schema_version: 1 } },
+        { id: "moments", type: "group", name: "Moments", at: 2 },
+        { id: "event2", type: "group", name: "Event 2", at: 4, event: { schema_version: 1 } },
+        phase("p2", 5),
+      ],
+    })
+
+    q().moveItemsToTarget(["a", "c"], { kind: "before", itemId: "e" })
+
+    expect(ids()).toEqual(["b", "d", "a", "c", "e", "f"])
+    expect(q().headers.find((h) => h.id === "event2")?.at).toBe(2)
+    expect(q().headers.find((h) => h.id === "p2")?.at).toBe(5)
+    expect(q().past).toHaveLength(1)
+
+    q().undo()
+    expect(ids()).toEqual(["a", "b", "c", "d", "e", "f"])
+    expect(q().headers.find((h) => h.id === "event2")?.at).toBe(4)
+    q().redo()
+    expect(ids()).toEqual(["b", "d", "a", "c", "e", "f"])
+  })
+
+  it("moves an item into a nested group by header id and keeps the active item selected", () => {
+    useQueueStore.setState({ headers: [phase("p1", 0), { id: "event", type: "group", name: "Sermon", at: 0, event: { schema_version: 1 } }, { id: "moments", type: "group", name: "Bible moments", at: 1 }, phase("p2", 3)] })
+    q().setActive(1)
+
+    q().moveItemsToTarget(["a"], { kind: "section", headerId: "moments" })
+
+    expect(ids()).toEqual(["b", "c", "a", "d"])
+    expect(q().headers.find((h) => h.id === "p2")?.at).toBe(3)
+    expect(q().items[q().activeIndex ?? -1].id).toBe("b")
+    expect(q().past).toHaveLength(1)
+    q().undo()
+    expect(ids()).toEqual(["a", "b", "c", "d"])
+    expect(q().headers.find((h) => h.id === "p2")?.at).toBe(3)
+    expect(q().items[q().activeIndex ?? -1].id).toBe("b")
+  })
+
+  it("removes every phase in one undoable edit while preserving events, groups, items and active position", () => {
+    const headers: OutlineHeader[] = [
+      { ...phase("warmup", 0), rule: "loop", starts_at: "09:30", advance_seconds: 45 },
+      { id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1, duration_minutes: 40, ownership: "Pastor" } },
+      { id: "moments", type: "group", name: "Bible moments", at: 2, payload_extra: { cue: "keep" } },
+      { ...phase("post", 3), disabled: true, starts_at: "12:00" },
+    ]
+    useQueueStore.setState({ headers, activeIndex: 2 })
+    const itemsBefore = q().items
+    const activeIdBefore = q().items[q().activeIndex!].id
+
+    q().removePhases()
+
+    expect(q().headers).toEqual(headers.filter((header) => header.type !== "phase"))
+    expect(q().items).toBe(itemsBefore)
+    expect(q().items[q().activeIndex!].id).toBe(activeIdBefore)
+    expect(q().past).toHaveLength(1)
+
+    q().undo()
+    expect(q().headers).toEqual(headers)
+    expect(q().items).toBe(itemsBefore)
+    expect(q().items[q().activeIndex!].id).toBe(activeIdBefore)
+  })
 })

@@ -11,6 +11,7 @@ import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
 import type { OutlineHeader } from "@/lib/run-of-show"
+import { projectRunOfShowEvents } from "@/lib/run-of-show"
 
 const program = {
   id: "p1",
@@ -258,6 +259,88 @@ describe("bilingual service round trip", () => {
     await openStored()
     useQueueStore.setState((s) => ({ items: s.items.map((i, n) => (n === 0 ? { ...i, notes: "Pause here" } : i)) }))
     expect(useServiceStore.getState().dirty).toBe(true)
+  })
+})
+
+describe("five-event Run of Show round trip (#444)", () => {
+  it("saves and reopens stable event, moment, timing and audience intent data without changing live playback", async () => {
+    let db: ProgramWithItems = { program: { ...program, item_count: 0 }, items: [] }
+    mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "content_get_program") return db
+      if (cmd === "content_replace_items") {
+        const rows = args?.items as ProgramItem[]
+        db = {
+          program: { ...db.program, revision: db.program.revision + 1, item_count: rows.length },
+          items: rows.map((row, position) => ({ ...row, program_id: "p1", position })),
+        }
+        return db
+      }
+      return null
+    })
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+
+    const verse = (id: string, reference: string, book: number, chapter: number, number: number): QueueItem => ({
+      ...queueItem(reference, book, chapter, number), id, translation: "KJV", secondary_translation: null, notes: `${id} note`,
+    })
+    const slide = (id: string, title: string, body: string): QueueItem => ({
+      id, kind: "slide", slide: { title, body }, reference: title, confidence: 1, source: "manual", added_at: 0,
+    }) as unknown as QueueItem
+    const items = [
+      verse("prayer-scripture", "Psalms 23:1", 19, 23, 1),
+      slide("prayer-cue", "Prayer", "Pray for the church"),
+      slide("worship-lyrics", "Worship", "Holy, holy, holy"),
+      verse("sermon-john", "John 3:16", 43, 3, 16),
+      verse("sermon-romans", "Romans 8:28", 45, 8, 28),
+      verse("sermon-psalm", "Psalms 46:1", 19, 46, 1),
+      slide("response-slide", "Response", "Come forward"),
+      slide("quiz-question", "Post-service quiz", "Who built the ark?"),
+    ]
+    const headers: OutlineHeader[] = [
+      { id: "phase-warmup", type: "phase", name: "Warm-up", at: 0, notes: null, rule: "auto_once", role: "warmup", starts_at: "09:45" },
+      { id: "phase-main", type: "phase", name: "Main service", at: 0, notes: null, rule: "manual", role: "main", starts_at: "10:00" },
+      {
+        id: "event-prayer", type: "group", name: "Opening Prayer", at: 0, notes: "Lead with care",
+        event: {
+          schema_version: 1, role: "Prayer", duration_minutes: 15, ownership: "Pastor",
+          payload_extra: { scene_intentions: { congregation: "camera-plus-scripture", obs: "scripture-lower-third", stage: "private-timer" }, lower_third: "Pastor A" },
+        },
+      },
+      { id: "prayer-moments", type: "group", name: "Prayer moments", at: 1, notes: null },
+      { id: "event-worship", type: "group", name: "Worship", at: 2, notes: null, event: { schema_version: 1, role: "Worship", duration_minutes: 20, ownership: "Worship leader" } },
+      { id: "event-sermon", type: "group", name: "Sermon", at: 3, notes: "Three Scripture moments", event: { schema_version: 1, role: "Sermon", duration_minutes: 40, ownership: "Pastor" } },
+      { id: "sermon-scripture", type: "group", name: "Scripture moments", at: 4, notes: null },
+      { id: "sermon-response", type: "group", name: "Response", at: 6, notes: null },
+      { id: "event-closing", type: "group", name: "Closing prayer", at: 6, notes: null, event: { schema_version: 1, role: "Prayer", duration_minutes: 5, ownership: "Prayer lead" } },
+      { id: "event-quiz", type: "group", name: "Post-service quiz", at: 7, notes: null, event: { schema_version: 1, role: "Quiz", duration_minutes: 10, ownership: "Host" } },
+      { id: "phase-post", type: "phase", name: "Post-service loop", at: 8, notes: null, rule: "loop", role: "post", advance_seconds: 30 },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: 3 })
+    const { useBroadcastStore } = await import("./broadcast-store")
+    useBroadcastStore.setState({ isLive: true, liveItemId: "currently-on-air", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const planBefore = structuredClone({ items, headers })
+
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+    expect(useServiceStore.getState().dirty).toBe(false)
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+
+    const reopened = useQueueStore.getState()
+    expect(reopened.items.map((item) => item.id)).toEqual(planBefore.items.map((item) => item.id))
+    expect(reopened.headers).toEqual(planBefore.headers)
+    expect(projectRunOfShowEvents(reopened.items, reopened.headers).map((event) => [event.id, event.duration_minutes, event.moments.map((moment) => moment.id)])).toEqual([
+      ["event-prayer", 15, ["prayer-scripture", "prayer-cue"]],
+      ["event-worship", 20, ["worship-lyrics"]],
+      ["event-sermon", 40, ["sermon-john", "sermon-romans", "sermon-psalm"]],
+      ["event-closing", 5, ["response-slide"]],
+      ["event-quiz", 10, ["quiz-question"]],
+    ])
+    expect(reopened.headers.find((header) => header.id === "event-prayer")?.event?.payload_extra).toEqual({
+      scene_intentions: { congregation: "camera-plus-scripture", obs: "scripture-lower-third", stage: "private-timer" },
+      lower_third: "Pastor A",
+    })
+    expect(db.items.map((row) => row.id)).toContain("event-prayer")
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    useBroadcastStore.setState({ isLive: false, liveItemId: null, liveSlide: null, liveVerse: null })
   })
 })
 
