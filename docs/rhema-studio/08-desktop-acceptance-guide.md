@@ -1,8 +1,8 @@
 # 08 — Desktop Acceptance Guide (integration gate)
 
-Status of this guide: **a manual checklist**. Every step below is to be performed by a
-person on a real desktop build. Nothing here has been marked as passed by automation.
-Section 11 lists exactly what *has* been verified by automation and what has not.
+Status of this guide: **a manual checklist with one automated native-app journey**. The
+automation covers the scoped Hymn Book path recorded in section 11; the remaining steps
+below still require manual desktop or device acceptance.
 
 Build under test: the stacked branches at the heads recorded in
 `09-integration-merge-plan.md`. Run from source with `bun tauri dev`, or from the
@@ -256,21 +256,34 @@ Browser check performed on the dev server (not the desktop app, songs-editor PR)
 
 ## 11. What automation has and has not verified
 
-Verified by automation on the exact heads in `09-integration-merge-plan.md`:
+The automated native Tauri scenario is repeatable with:
 
-- Frontend unit tests (275), including service store round trips: bilingual
-  open/save/reopen under a different active translation, uninstalled translation
-  warning, conflict handling, save races, unsaved-change protection.
-- Rust content crate tests (15) on real temporary files: reopen, backup then migrate,
-  rollback on failed save, two-handle conflict, corrupt file refused.
-- TypeScript build, lint on Studio paths, `cargo check` and clippy on Linux.
-- A real desktop launch on an Intel Mac: database created at the real app-data path,
-  migrations applied once, restart does not re-migrate, integrity check passes.
+```sh
+bash scripts/mac-qa/run-hymn-journey.sh
+```
 
-Not verified by automation (needs the checklist above): every interactive step in
-sections 1–10l, NDI/OBS, OSC/HTTP against a running app, Yoruba speech, Windows
-launch. The Windows artifact's *contents* can be inspected without Windows (see the
-report), but launching it cannot.
+It builds a `qa-bridge` app with the separate `com.openbezal.rhema.qa` identity and
+uses a scratch profile. Its invented CAC Main 999 fixture stays in that test database.
+On the Intel Mac, 2026-10-26, against the open fix stack through PR #428, the journey
+passed: select a hymn and read its bilingual details; edit and save the library hymn;
+choose Yorùbá first; Add closes the picker and selects the inserted event; choose a
+look; save, close and reopen the service; view the rendered Yorùbá words in Present
+Preview. Live remained off. The same run against current `main` reproduced #385 at the
+missing selected-hymn details pane. The test uses in-app WebView interaction and a
+QA-only store fixture for the service; it is not an external keyboard or screen-reader
+test. The `Desktop QA (native Tauri)` workflow is configured to run this scenario on an
+Intel macOS runner for relevant pull requests and retain its synthetic report and app
+log; its hosted-runner result is pending this PR.
+
+The PR #428 branch also passes the full frontend suite (1,833/1,833), typecheck, lint,
+production build, and its GitHub CI checks. These checks and the single native journey
+do not complete issue #411.
+
+Still unverified: the other interactive steps in sections 1–10l; onboarding and other
+application entrypoints; external keyboard and screen-reader operation; projector/TV
+receivers; OBS; NDI; MediaMTX and phone cameras; offline cold start with the real LAN
+system; device/network failure injection; long-run performance; and Windows launch.
+No physical-system result is claimed.
 
 ### 10m. One language per output (OP-003)
 

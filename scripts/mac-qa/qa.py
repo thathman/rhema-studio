@@ -13,10 +13,10 @@ js = f"""(async () => {{
   try {{
     const qa = window.__rhemaQa ? window.__rhemaQa() : undefined;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const result = await (async (qa, sleep) => {{ {body} }})(qa, sleep);
+    const result = await (async (qa, sleep) => {{ {body}; return await runScenario(); }})(qa, sleep);
     await report({{ ok: true, result }});
   }} catch (e) {{
-    await report({{ ok: false, error: String(e && e.stack || e) }});
+    await report({{ ok: false, error: String(e && e.message || e), stack: String(e && e.stack || "") }});
   }}
 }})();"""
 tmp = os.path.join(d, "in", f".{label}__{name}.tmp")
