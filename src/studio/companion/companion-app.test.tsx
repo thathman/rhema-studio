@@ -47,6 +47,7 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { useJoin } from "@/stores/join-store"
 import { useCompanion } from "@/stores/companion-store"
 import { CompanionApp } from "@/studio/companion/companion-app"
+import { CompanionScreen } from "@/studio/companion/companion-screen"
 
 let root: Root
 let host: HTMLDivElement
@@ -81,11 +82,19 @@ describe("Rhema Studio Companion's window (#209)", () => {
     await act(async () => root.render(<CompanionApp />))
     await settle()
     expect(host.querySelector('[aria-label="OBS companion"]')).not.toBeNull()
+    expect(host.querySelector('img[aria-hidden="true"]')).not.toBeNull()
     expect(text()).toContain("Rhema Studio Companion")
     expect(text()).toContain("The church's cameras, in this computer's OBS")
     expect(button("Open the full studio")).toBeUndefined()
     expect(host.querySelector("nav")).toBeNull()
     expect(text()).toContain("Rhema Studio Companion 1.0.0.0")
+  })
+
+  it("keeps the OBS camera glyph in the embedded companion view", async () => {
+    await act(async () => root.render(<CompanionScreen />))
+    expect(text()).toContain("OBS companion")
+    expect(host.querySelector('img[aria-hidden="true"]')).toBeNull()
+    expect(host.querySelector("header svg.lucide-camera")).not.toBeNull()
   })
 
   it("shows the host's certificate before pairing, and joins only once it is read", async () => {

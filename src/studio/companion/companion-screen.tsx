@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { CameraIcon, PlusIcon, ShieldCheckIcon } from "lucide-react"
+import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import { ObsSettingsBlock } from "@/components/settings/obs-settings-block"
 import { cn } from "@/lib/utils"
@@ -48,7 +49,7 @@ function Header({ aside, secure }: { aside?: ReactNode; secure: boolean }) {
   const device = useSettingsStore((s) => s.setup.deviceName.trim())
   return (
     <header className="flex flex-wrap items-start gap-3 border-b border-border pb-4">
-      <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CameraIcon className="size-5" /></span>
+      {secure ? <BrandMark tone="auto" className="size-10 rounded-lg" /> : <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CameraIcon className="size-5" /></span>}
       <div className="min-w-0 flex-1">
         <p className="text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">{secure ? "Rhema Studio Companion" : "OBS companion"}{device ? ` · ${device}` : ""}</p>
         <h1 className="text-xl font-bold tracking-[-0.02em]">The church's cameras, in this computer's OBS</h1>
