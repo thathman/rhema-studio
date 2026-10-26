@@ -112,7 +112,7 @@ export function ProductionWorkspace() {
           <div className="min-w-0">
             <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">One service · production control</p>
             <h1 className="mt-1 text-2xl leading-tight font-bold tracking-[-0.035em]">Production control</h1>
-            <p className="mt-1 text-xs text-muted-foreground">The service's timing, screens and readiness in one place. Nothing here takes anything live.</p>
+            <p className="mt-1 max-w-3xl text-xs text-muted-foreground">Monitoring only reads device status. Scene edits and OBS preview stay private until the relevant Take. Taking a scene changes the selected room display; switching in OBS changes the online stream. In rehearsal, scene Takes do not reach room displays and OBS program switches are blocked.</p>
           </div>
           <div className="flex flex-wrap gap-2"><Badge tone="ok">This computer</Badge></div>
         </header>

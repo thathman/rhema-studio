@@ -627,9 +627,9 @@ function ProgramBar({ congregation, target, onTarget, draft, dirty, onSave, onTa
       </span>
       {draft && dirty && <Button size="sm" variant="outline" onClick={onSave} className="border-input bg-transparent text-foreground hover:bg-muted"><SaveIcon /> Save scene</Button>}
       {/* In rehearsal nothing reaches a screen, so Take is not red. */}
-      {draft && <Button size="sm" onClick={onTake} className={rehearsal ? "border border-gold bg-transparent text-tone-amber-foreground hover:bg-muted" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
-      {showing && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-input bg-transparent text-foreground hover:bg-muted">Back to its own feed</Button>}
-      {restorable && <Button size="sm" variant="outline" onClick={() => useBroadcastStore.getState().takeScene(target.id, restorable.id)} className="border-input bg-transparent text-foreground hover:bg-muted"><UndoIcon /> Restore {restorable.name}</Button>}
+      {draft && <Button size="sm" onClick={onTake} aria-label={rehearsal ? `Rehearse ${draft.name} on ${target.name}` : `Take ${draft.name} to ${target.name}`} className={rehearsal ? "border border-gold bg-transparent text-tone-amber-foreground hover:bg-muted" : "bg-live-pulse text-white hover:bg-live-pulse/90"} title={rehearsal ? `Rehearse ${draft.name} on ${target.name}: the screen keeps its scene${dirty ? " (saves it first)" : ""}` : `Put ${draft.name} on ${target.name}${dirty ? " (saves it first)" : ""}`}>Take {draft.name}</Button>}
+      {showing && <Button size="sm" variant="outline" aria-label={rehearsal ? `Rehearse back to ${target.name}'s own feed` : `Back to ${target.name}'s own feed`} onClick={() => useBroadcastStore.getState().releaseScene(target.id)} className="border-input bg-transparent text-foreground hover:bg-muted">Back to its own feed</Button>}
+      {restorable && <Button size="sm" variant="outline" aria-label={rehearsal ? `Rehearse restore ${restorable.name} on ${target.name}` : `Restore ${restorable.name} to ${target.name}`} onClick={() => useBroadcastStore.getState().takeScene(target.id, restorable.id)} className="border-input bg-transparent text-foreground hover:bg-muted"><UndoIcon /> Restore {restorable.name}</Button>}
     </section>
   )
 }
