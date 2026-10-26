@@ -1,5 +1,5 @@
 import { keepFocusInList } from "@/lib/keep-focus"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { DragDropProvider } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, MessageSquareIcon, MusicIcon, PresentationIcon, StickyNoteIcon, XIcon, BellRingIcon, TimerIcon, EyeIcon, EyeOffIcon, ZapIcon } from "lucide-react"
@@ -22,6 +22,9 @@ import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { BulkBar } from "@/studio/prepare/bulk-bar"
 import { AddEventPalette } from "@/studio/prepare/add-event-palette"
 import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { nearestPlacementTarget, placementAtPointer, type RundownDropCandidate, type RundownDropPlacement } from "@/studio/prepare/drop-placement"
+
+type DropCue = { targetId: string; placement: RundownDropPlacement | "inside" }
 /**
  * The service rundown, built on the existing queue store.
  *
@@ -47,6 +50,8 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
   const picked = useRundownSelection((s) => s.ids)
   const summaries = sectionSummaries(items, headers)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [dropCue, setDropCue] = useState<DropCue | null>(null)
+  const dragOrigin = useRef<{ id: string; top: number; bottom: number } | null>(null)
   const toggle = (id: string) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
   const preview = (item: QueueItem) => presentActions.previewItem(item)
@@ -89,7 +94,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === nextShown
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
         return (
-          <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"}>
+          <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"} dropPlacement={dropCue?.targetId === item.id ? dropCue.placement === "inside" ? undefined : dropCue.placement : undefined}>
             <div
               className={cn(
                 "group relative flex items-center gap-2 rounded-md border px-2 transition-colors",
@@ -243,6 +248,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
               summary={summaries[r.header.id]}
               collapsed={collapsed.has(r.header.id)}
               selected={selectedEventId === r.header.id}
+              dropPlacement={dropCue?.targetId === `section:${r.header.id}` && dropCue.placement !== "inside" ? dropCue.placement : undefined}
               onSelect={r.header.event ? () => onSelectEvent?.(r.header.id) : undefined}
               onToggle={() => toggle(r.header.id)}
               onEventCreated={onEventCreated}
@@ -258,7 +264,58 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
     <>
     <BulkBar />
     <DragDropProvider
+      onDragStart={(event) => {
+        const source = event.operation.source
+        const bounds = source?.element?.getBoundingClientRect()
+        dragOrigin.current = source && bounds
+          ? { id: String(source.id), top: bounds.top, bottom: bounds.bottom }
+          : null
+      }}
+      onDragMove={(event) => {
+        const { source, target, position } = event.operation
+        if (!source || !target) {
+          setDropCue((current) => current === null ? current : null)
+          return
+        }
+        const sourceData = source.data as { kind?: string }
+        const targetData = target.data as { kind?: string; headerType?: string; isEvent?: boolean }
+        const targetId = String(target.id)
+        let next: DropCue | null = null
+        if (targetData.kind === "section") {
+          if (sourceData.kind === "event") {
+            if (targetData.headerType === "phase") next = { targetId, placement: "inside" }
+            else if (targetData.isEvent && String(source.id) !== targetId) {
+              const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+              if (bounds) next = { targetId, placement: placementAtPointer(position.current.y, bounds) }
+            }
+          } else {
+            next = { targetId, placement: "inside" }
+          }
+        } else if (sourceData.kind !== "event") {
+          const sourceId = String(source.id)
+          if (isSortable(target) && sourceId !== targetId) {
+            const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+            if (bounds) next = { targetId, placement: placementAtPointer(position.current.y, bounds) }
+          } else if (sourceId === targetId) {
+            const origin = dragOrigin.current
+            const isBackAtOrigin = origin?.id === sourceId && position.current.y >= origin.top && position.current.y <= origin.bottom
+            if (!isBackAtOrigin) {
+              const candidates = Array.from(document.querySelectorAll<HTMLElement>("[data-rundown-item-id]"))
+                .map((element): RundownDropCandidate => {
+                  const bounds = element.getBoundingClientRect()
+                  return { id: element.dataset.rundownItemId ?? "", top: bounds.top, bottom: bounds.bottom }
+                })
+              const nearest = nearestPlacementTarget(position.current.y, candidates, sourceId)
+              if (nearest) next = nearest
+            }
+          }
+        }
+        setDropCue((current) => current?.targetId === next?.targetId && current?.placement === next?.placement ? current : next)
+      }}
       onDragEnd={(event) => {
+        setDropCue(null)
+        const origin = dragOrigin.current
+        dragOrigin.current = null
         if (event.canceled) return
         const { source, target } = event.operation
         if (!source || !target) return
@@ -271,9 +328,11 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
             queue.moveEventToTarget(sourceData.headerId, { kind: "phase", phaseId: targetData.headerId })
             return
           }
-          const eventTarget = targetData as { kind?: string; headerId?: string; eventOrder?: number; isEvent?: boolean }
+          const eventTarget = targetData as { kind?: string; headerId?: string; isEvent?: boolean }
           if (eventTarget.kind === "section" && eventTarget.isEvent && eventTarget.headerId && eventTarget.headerId !== sourceData.headerId) {
-            const placement = sourceData.eventOrder !== undefined && eventTarget.eventOrder !== undefined && sourceData.eventOrder < eventTarget.eventOrder ? "after" : "before"
+            const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+            if (!bounds) return
+            const placement = placementAtPointer(event.operation.position.current.y, bounds)
             queue.moveEventToTarget(sourceData.headerId, { kind: "event", eventId: eventTarget.headerId, placement })
           }
           return
@@ -283,11 +342,28 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
           queue.moveItemsToTarget([sourceId], { kind: "section", headerId: targetData.headerId })
           return
         }
-        const targetId = String(target.id)
-        const sortableTargetId = sourceId === targetId ? queue.items[source.index]?.id : targetId
-        if (!sortableTargetId || sourceId === sortableTargetId || !queue.items.some((item) => item.id === sortableTargetId)) return
-        const after = source.index > source.initialIndex
-        queue.moveItemsToTarget([sourceId], { kind: after ? "after" : "before", itemId: sortableTargetId })
+        let targetId = String(target.id)
+        let placement: RundownDropPlacement
+        if (sourceId === targetId) {
+          const pointerY = event.operation.position.current.y
+          const isBackAtOrigin = origin?.id === sourceId && pointerY >= origin.top && pointerY <= origin.bottom
+          if (isBackAtOrigin) return
+          const candidates = Array.from(document.querySelectorAll<HTMLElement>("[data-rundown-item-id]"))
+            .map((element): RundownDropCandidate => {
+              const bounds = element.getBoundingClientRect()
+              return { id: element.dataset.rundownItemId ?? "", top: bounds.top, bottom: bounds.bottom }
+            })
+          const nearest = nearestPlacementTarget(pointerY, candidates, sourceId)
+          if (!nearest) return
+          targetId = nearest.targetId
+          placement = nearest.placement
+        } else {
+          const bounds = target.shape?.boundingRectangle ?? target.element?.getBoundingClientRect()
+          if (!bounds) return
+          placement = placementAtPointer(event.operation.position.current.y, bounds)
+        }
+        if (!queue.items.some((item) => item.id === targetId)) return
+        queue.moveItemsToTarget([sourceId], { kind: placement, itemId: targetId })
       }}
     >
       {list}
@@ -297,10 +373,11 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
 }
 
 /** A rundown row; sortable (with a grip handle) only in prepare mode. */
-function Row({ id, index, sortable, children }: { id: string; index: number; sortable: boolean; children: React.ReactNode }) {
+function Row({ id, index, sortable, dropPlacement, children }: { id: string; index: number; sortable: boolean; dropPlacement?: RundownDropPlacement; children: React.ReactNode }) {
   const { ref, handleRef, isDragging, isDropTarget } = useSortable({ id, index, disabled: !sortable })
   return (
-    <li ref={sortable ? ref : undefined} className={cn("flex flex-col rounded-md", isDragging && "opacity-60", isDropTarget && "ring-2 ring-inset ring-primary")}>
+    <li ref={sortable ? ref : undefined} data-rundown-item-id={sortable ? id : undefined} className={cn("relative flex flex-col rounded-md", isDragging && "opacity-60", isDropTarget && "ring-2 ring-inset ring-primary")}>
+      {dropPlacement && <span aria-hidden="true" className={cn("pointer-events-none absolute inset-x-2 z-10 h-0.5 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]", dropPlacement === "before" ? "-top-0.5" : "-bottom-0.5")} />}
       {sortable ? (
         <div className="flex items-stretch">
           <button

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useQueueStore } from "@/stores"
 import { DEFAULT_ADVANCE_SECONDS, RULE_LABEL, type OutlineHeader, type PhaseRole, type PhaseRule, type SectionSummary } from "@/lib/run-of-show"
+import type { RundownDropPlacement } from "./drop-placement"
 import { cn } from "@/lib/utils"
 import { eventPlanApprovalState } from "@/lib/approval"
 import { useServiceStore } from "@/stores/service-store"
@@ -44,7 +45,7 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
 }
 
 /** A phase or group in the order of service: name, how it runs, its items and minutes; collapsible. */
-export function SectionHeader({ header, summary, collapsed, selected = false, onSelect, onToggle, onEventCreated, eventsDisabled = false }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; onSelect?: () => void; onToggle: () => void; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
+export function SectionHeader({ header, summary, collapsed, selected = false, dropPlacement, onSelect, onToggle, onEventCreated, eventsDisabled = false }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; dropPlacement?: RundownDropPlacement; onSelect?: () => void; onToggle: () => void; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
   const headers = useQueueStore((state) => state.headers)
   const orderedEvents = headers.map((candidate, order) => ({ candidate, order }))
     .filter(({ candidate }) => !!candidate.event)
@@ -90,13 +91,14 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
       ref={setHeaderRef}
       aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
-        "flex items-center gap-1.5 rounded-lg",
+        "relative flex items-center gap-1.5 rounded-lg",
         phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : header.event ? cn("mt-1 ml-1 rounded-md border bg-card px-2 py-1.5", selected ? "border-primary/50 bg-primary/5" : "border-border") : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
         header.disabled && "opacity-60",
         isDragging && "opacity-60",
         isDropTarget && "ring-2 ring-inset ring-primary",
       )}
     >
+      {dropPlacement && <span aria-hidden="true" className={cn("pointer-events-none absolute inset-x-3 z-10 h-0.5 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]", dropPlacement === "before" ? "-top-1" : "-bottom-1")} />}
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
         {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
       </button>
