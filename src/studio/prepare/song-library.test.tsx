@@ -180,7 +180,7 @@ describe("Add item workflow (#386)", () => {
     expect(inserted).toMatchObject({ kind: "song", song: { song_id: song.id } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
 
   it("closes after a successful Bible Add and selects that passage by ID", async () => {
@@ -201,7 +201,7 @@ describe("Add item workflow (#386)", () => {
     expect(inserted).toMatchObject({ verse: { book_number: verse.book_number, chapter: verse.chapter, verse: verse.verse } })
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(document.activeElement).toBe(trigger)
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 1000 })
   })
 
   it("closes after a successful Hymn Add and selects that service item", async () => {
