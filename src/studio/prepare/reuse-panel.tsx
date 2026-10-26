@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useServiceStore, toQueueItems } from "@/stores/service-store"
-import { appendInOrder, copyForReuse } from "@/lib/reuse"
+import { copyForReuse } from "@/lib/reuse"
 import { isVerseItem, type ProgramWithItems, type QueueItem, type Verse } from "@/types"
 
 const KIND: Record<string, string> = { verse: "Scripture", song: "Song", slide: "Slide", image: "Picture or video" }
@@ -16,7 +16,7 @@ const KIND: Record<string, string> = { verse: "Scripture", song: "Song", slide: 
  * welcome, the benediction, last week's sermon series graphic) and add
  * copies to the open service. The earlier service is not changed.
  */
-export function ReusePanel() {
+export function ReusePanel({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const programs = useServiceStore((s) => s.programs)
   const current = useServiceStore((s) => s.current)
   const [query, setQuery] = useState("")
@@ -52,16 +52,28 @@ export function ReusePanel() {
 
   const add = async () => {
     const copies = copyForReuse(items, chosen)
-    const added = appendInOrder(copies, (i) => useQueueStore.getState().addItem(i), () => useQueueStore.getState().items.length, (a, b) => { if (useQueueStore.getState().addTarget === null) useQueueStore.getState().reorderItems(a, b) })
-    const skipped = copies.length - added
-    toast.success(`${added} item${added === 1 ? "" : "s"} added${skipped ? `; ${skipped} verse${skipped === 1 ? " was" : "s were"} already in the service` : ""}`)
-    setChosen(new Set())
+    const inserted = copies.flatMap((item) => {
+      const id = useQueueStore.getState().addItem(item, "end")
+      return id ? [{ id, item }] : []
+    })
+    const skipped = copies.length - inserted.length
+    const lastAdded = inserted.at(-1)
+    if (lastAdded) {
+      toast.success(`${inserted.length} item${inserted.length === 1 ? "" : "s"} added${skipped ? `; ${skipped} verse${skipped === 1 ? " was" : "s were"} already in the service` : ""}`)
+      setChosen(new Set())
+      onAdded?.(lastAdded.id)
+    } else if (skipped) {
+      toast.info("No new items added", { description: `${skipped} verse${skipped === 1 ? " was" : "s were"} already in the service. Uncheck them to continue.` })
+    } else {
+      toast.error("No items added", { description: "Choose one or more items from the earlier service first." })
+    }
     // Verse text for the preview, as opening a service does.
     await Promise.all(
-      copies.filter(isVerseItem).map(async (item) => {
+      inserted.map(async ({ id, item }) => {
+        if (!isVerseItem(item)) return
         try {
           const v = await invoke<Verse | null>("get_verse", { translationId: item.verse.translation_id, bookNumber: item.verse.book_number, chapter: item.verse.chapter, verse: item.verse.verse })
-          if (v?.text) useQueueStore.getState().backfillText(item.id, v.text)
+          if (v?.text) useQueueStore.getState().backfillText(id, v.text)
         } catch {
           // presentVerse fetches the text again when it goes live.
         }

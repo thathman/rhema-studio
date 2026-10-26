@@ -88,7 +88,7 @@ describe("a service's phases and groups", () => {
     ]
     useQueueStore.setState({ items, headers, activeIndex: null, addTarget: "sermon" })
     const moment: QueueItem = { id: "x", kind: "cue", reference: "Prayer cue", confidence: 1, source: "manual", added_at: 0 }
-    useQueueStore.getState().addItem(moment)
+    expect(useQueueStore.getState().addItem(moment, "end")).toBe("x")
     expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["a", "b", "c", "x", "d"])
     expect(useQueueStore.getState().headers.map(({ id, at }) => [id, at])).toEqual([["sermon", 0], ["scripture", 2], ["response", 4]])
     expect(projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)[0].moments.map((item) => item.id)).toEqual(["a", "b", "c", "x"])

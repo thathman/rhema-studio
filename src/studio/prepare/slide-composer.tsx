@@ -26,7 +26,7 @@ const EXAMPLES = [
  * it to the service. The preview follows as you type; nothing presents.
  * Each slide lives in the service it was made for (no library yet).
  */
-export function SlideComposer() {
+export function SlideComposer({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
   const [mode, setMode] = useState<"free" | "announcement" | "qr" | "reading">("free")
@@ -58,13 +58,7 @@ export function SlideComposer() {
   }
   // A responsive reading is always one slide per exchange (leader, then people).
   const pages = mode === "qr" ? [] : mode === "reading" ? readingPages(body) : slidePages(composedBody)
-  const appendToService = (item: SlideQueueItem) => {
-    const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(item)
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
-  }
+  const appendToService = (item: SlideQueueItem) => useQueueStore.getState().addItem(item, "end")
   const reset = () => {
     setTitle("")
     setBody("")
@@ -75,22 +69,26 @@ export function SlideComposer() {
   /** One slide per paragraph (and per six lines), in order, so nothing has to shrink or scroll on screen. */
   const addPages = () => {
     if (pages.length < 2) return
+    let lastId: string | null = null
     pages.forEach((page, i) => {
       const d = draft()
-      appendToService({ ...d, id: crypto.randomUUID(), added_at: Date.now(), slide: { ...d.slide, body: page }, reference: slideLabel({ ...d.slide, body: page }, ` (${i + 1}/${pages.length})`) })
+      lastId = appendToService({ ...d, id: crypto.randomUUID(), added_at: Date.now(), slide: { ...d.slide, body: page }, reference: slideLabel({ ...d.slide, body: page }, ` (${i + 1}/${pages.length})`) })
     })
+    if (lastId) onAdded?.(lastId)
     reset()
   }
   const add = () => {
     if (empty) return
     if (mode === "reading") {
       if (pages.length === 1) {
-        appendToService({ ...draft(), id: crypto.randomUUID(), added_at: Date.now(), slide: { title, body: pages[0] } })
+        const id = appendToService({ ...draft(), id: crypto.randomUUID(), added_at: Date.now(), slide: { title, body: pages[0] } })
+        if (id) onAdded?.(id)
         reset()
       } else addPages()
       return
     }
-    appendToService({ ...draft(), id: crypto.randomUUID(), added_at: Date.now() })
+    const id = appendToService({ ...draft(), id: crypto.randomUUID(), added_at: Date.now() })
+    if (id) onAdded?.(id)
     setTitle("")
     setBody("")
     setWhen("")

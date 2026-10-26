@@ -377,7 +377,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
 function Row({ id, index, sortable, dropPlacement, children }: { id: string; index: number; sortable: boolean; dropPlacement?: RundownDropPlacement; children: React.ReactNode }) {
   const { ref, handleRef, isDragging, isDropTarget } = useSortable({ id, index, disabled: !sortable })
   return (
-    <li ref={sortable ? ref : undefined} data-rundown-item-id={sortable ? id : undefined} className={cn("relative flex flex-col rounded-md", isDragging && "opacity-60", isDropTarget && "ring-2 ring-inset ring-primary")}>
+    <li ref={sortable ? ref : undefined} data-rundown-item-id={sortable ? id : undefined} tabIndex={sortable ? -1 : undefined} className={cn("relative flex flex-col rounded-md", isDragging && "opacity-60", isDropTarget && "ring-2 ring-inset ring-primary")}>
       {dropPlacement && <span aria-hidden="true" className={cn("pointer-events-none absolute inset-x-2 z-10 h-0.5 rounded-full bg-primary shadow-[0_0_0_2px_hsl(var(--background))]", dropPlacement === "before" ? "-top-0.5" : "-bottom-0.5")} />}
       {sortable ? (
         <div className="flex items-stretch">

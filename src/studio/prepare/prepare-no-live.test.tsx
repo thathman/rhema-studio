@@ -71,7 +71,7 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   localStorageMock.removeItem(RUNDOWN_VIEW_KEY)
-  useAddDialog.getState().close()
+  act(() => useAddDialog.getState().close())
   preferenceStorage.clear()
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
@@ -422,7 +422,7 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelector('[aria-label="Event content"]')).toBeNull()
     expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
     expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
-    useAddDialog.getState().close()
+    act(() => useAddDialog.getState().close())
   })
 
   it("opens the event's Add item flow with that event as the insertion target", async () => {
@@ -439,7 +439,52 @@ describe("Prepare never takes anything live (#299)", () => {
     await act(async () => add!.click())
     expect(useQueueStore.getState().addTarget).toBe("sermon")
     expect(useAddDialog.getState().open).toBe(true)
-    useAddDialog.getState().close()
+    act(() => useAddDialog.getState().close())
+  })
+
+  it("adds a contextual slide to its event, opens it in Prepare, focuses its row, and keeps order and Live unchanged", async () => {
+    const items = [slide("Welcome"), slide("Sermon outline"), slide("Response")]
+    const headers = [
+      { id: "main", type: "phase" as const, name: "Main service", at: 0, rule: "manual" as const, role: "main" as const },
+      { id: "sermon", type: "group" as const, name: "Sermon", at: 1, event: { schema_version: 1 as const, duration_minutes: 40 } },
+      { id: "post", type: "phase" as const, name: "Post-service", at: 3, rule: "loop" as const, role: "post" as const },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: null, addTarget: null })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    const opener = el.querySelector<HTMLButtonElement>('button[aria-label="Add content to Sermon"]')!
+    await act(async () => opener.click())
+    expect(useQueueStore.getState().addTarget).toBe("sermon")
+
+    const slideTab = [...document.body.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((button) => button.textContent?.trim() === "Slides")!
+    await act(async () => {
+      slideTab.focus()
+      slideTab.click()
+    })
+    const title = document.body.querySelector<HTMLInputElement>('[aria-label="Slide title"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(title), "value")!.set!.call(title, "Sermon title")
+      title.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    const add = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!
+    await act(async () => add.click())
+
+    const state = useQueueStore.getState()
+    const inserted = state.items.find((item) => item.reference === "Sermon title")
+    expect(state.items.map((item) => item.reference)).toEqual(["Welcome", "Sermon outline", "Response", "Sermon title"])
+    expect(inserted).toBeDefined()
+    expect(projectRunOfShowEvents(state.items, state.headers).find((event) => event.id === "sermon")?.moments.at(-1)?.id).toBe(inserted?.id)
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(inserted?.id)
+    expect(useAddDialog.getState().open).toBe(false)
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+    expect(el.querySelector('button[aria-label="Add content to Sermon"]')).toBeNull()
+    expect(document.activeElement).toBe(document.querySelector(`[data-rundown-item-id="${inserted?.id}"]`))
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    expect(state.headers.find((header) => header.id === "sermon")?.at).toBe(1)
   })
 
   it("adds a searched event immediately before the selected moment and opens its details without taking it live", async () => {

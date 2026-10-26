@@ -18,7 +18,7 @@ import { imageQueueItem } from "@/lib/media-items"
  * app's media folder (named by content hash, so the same picture is never
  * stored twice); click to preview, Add to put it in the service.
  */
-export function MediaLibrary() {
+export function MediaLibrary({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const assets = useMediaStore((s) => s.assets)
   const urls = useMediaStore((s) => s.urls)
   const loading = useMediaStore((s) => s.loading)
@@ -59,11 +59,8 @@ export function MediaLibrary() {
   }
 
   const add = (a: MediaAssetStatus) => {
-    const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(imageQueueItem(a))
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    const id = useQueueStore.getState().addItem(imageQueueItem(a), "end")
+    if (id) onAdded?.(id)
   }
 
   const pictures = assets.filter((a) => a.kind === "image" || a.kind === "video")

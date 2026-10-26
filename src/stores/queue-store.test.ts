@@ -30,21 +30,29 @@ function makeItem(overrides: Partial<VerseQueueItem> = {}, verse: Partial<Verse>
 }
 
 beforeEach(() => {
-  useQueueStore.setState({ items: [], activeIndex: null, highlightedId: null })
+  useQueueStore.setState({ items: [], headers: [], activeIndex: null, highlightedId: null, addTarget: null })
 })
 
 describe("addItem", () => {
   it("prepends a new item", () => {
-    useQueueStore.getState().addItem(makeItem({ id: "a" }))
-    useQueueStore.getState().addItem(makeItem({ id: "b" }, { verse: 17 }))
+    expect(useQueueStore.getState().addItem(makeItem({ id: "a" }))).toBe("a")
+    expect(useQueueStore.getState().addItem(makeItem({ id: "b" }, { verse: 17 }))).toBe("b")
 
     const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items.map((i) => i.id)).toEqual(["b", "a"])
   })
 
+  it("inserts at the end by stable ID without moving existing items", () => {
+    useQueueStore.getState().addItem(makeItem({ id: "first" }))
+    useQueueStore.getState().addItem(makeItem({ id: "middle" }, { verse: 17 }))
+    expect(useQueueStore.getState().addItem(makeItem({ id: "last" }, { verse: 18 }), "end")).toBe("last")
+
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["middle", "first", "last"])
+  })
+
   it("drops an exact duplicate that adds no text", () => {
     useQueueStore.getState().addItem(makeItem({ id: "a" }))
-    useQueueStore.getState().addItem(makeItem({ id: "b" }))
+    expect(useQueueStore.getState().addItem(makeItem({ id: "b" }))).toBeNull()
 
     const items = useQueueStore.getState().items as VerseQueueItem[]
     expect(items).toHaveLength(1)

@@ -10,22 +10,44 @@ import { MediaLibrary } from "@/studio/prepare/media-library"
 import { ReusePanel } from "@/studio/prepare/reuse-panel"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { useQueueStore } from "@/stores"
+import { presentActions } from "@/studio/present-actions"
 
 /**
  * Add to the service: scripture, songs, the hymn book, slides, pictures and
- * videos, or items from an earlier service. It stays open to add several.
+ * videos, or items from an earlier service. A successful Add selects the new
+ * rundown item and returns focus to its row; unsuccessful adds leave the picker open.
  */
-export function AddItems({ className }: { className?: string }) {
+export function AddItems({ className, onSelectAddedItem }: { className?: string; onSelectAddedItem?: () => void }) {
   const open = useAddDialog((s) => s.open)
   const target = useQueueStore((s) => s.headers.find((h) => h.id === s.addTarget)?.name ?? null)
+  const added = (id: string) => {
+    const item = useQueueStore.getState().items.find((candidate) => candidate.id === id)
+    if (!item) return
+    onSelectAddedItem?.()
+    useAddDialog.getState().focusAddedItem(id)
+    presentActions.previewItem(item)
+    useAddDialog.getState().close()
+  }
   return (
     <>
-      <Button onClick={() => useAddDialog.getState().openFor(null)} className={className} data-tour="prepare-add"><PlusIcon /> Add item</Button>
+      <Button onClick={(event) => useAddDialog.getState().openFor(null, event.currentTarget)} className={className} data-tour="prepare-add"><PlusIcon /> Add item</Button>
       <Dialog open={open} onOpenChange={(o) => (o ? useAddDialog.setState({ open: true }) : useAddDialog.getState().close())}>
-        <DialogContent className="flex h-[min(46rem,88vh)] flex-col gap-3 sm:max-w-4xl">
+        <DialogContent
+          className="flex h-[min(46rem,88vh)] flex-col gap-3 sm:max-w-4xl"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            const { opener, focusItemId, clearOpener } = useAddDialog.getState()
+            const row = focusItemId
+              ? [...document.querySelectorAll<HTMLElement>("[data-rundown-item-id]")].find((element) => element.dataset.rundownItemId === focusItemId) ?? null
+              : null
+            if (row) row.focus()
+            else if (opener?.isConnected) opener.focus()
+            clearOpener()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{target ? `Add to ${target}` : "Add to the service"}</DialogTitle>
-            <DialogDescription>Passages, songs (in one or two languages), hymns, slides, pictures, videos and sound. {target ? `Added items go to the end of ${target}, in the order you add them` : "Added items go to the top of the order"}; nothing here goes live.</DialogDescription>
+            <DialogDescription>Passages, songs (in one or two languages), hymns, slides, pictures, videos and sound. {target ? `Added items go to the end of ${target}, in the order you add them` : "Added items go to the end of the order"}. A successful Add closes the picker and opens that item in Prepare; nothing here goes live.</DialogDescription>
           </DialogHeader>
           <Tabs defaultValue="bible" className="flex min-h-0 flex-1 flex-col">
             <TabsList>
@@ -37,22 +59,22 @@ export function AddItems({ className }: { className?: string }) {
               <TabsTrigger value="reuse">Reuse</TabsTrigger>
             </TabsList>
             <TabsContent value="bible" className="min-h-0 flex-1 overflow-hidden pt-3">
-              <QuickFind mode="prepare" scope="bible" autoFocus />
+              <QuickFind mode="prepare" scope="bible" autoFocus onAdded={added} />
             </TabsContent>
             <TabsContent value="songs" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
-              <SongLibrary />
+              <SongLibrary onAdded={added} />
             </TabsContent>
             <TabsContent value="hymns" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
-              <HymnBook />
+              <HymnBook onAdded={added} />
             </TabsContent>
             <TabsContent value="slides" className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3">
-              <SlideComposer />
+              <SlideComposer onAdded={added} />
             </TabsContent>
             <TabsContent value="media" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
-              <MediaLibrary />
+              <MediaLibrary onAdded={added} />
             </TabsContent>
             <TabsContent value="reuse" className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
-              <ReusePanel />
+              <ReusePanel onAdded={added} />
             </TabsContent>
           </Tabs>
         </DialogContent>

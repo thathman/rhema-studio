@@ -45,7 +45,7 @@ function hymnItem(song: SongSummary, first: "en" | "yo", id?: string) {
  * the service. The book is imported once from its file and stays on this
  * computer.
  */
-export function HymnBook() {
+export function HymnBook({ onAdded }: { onAdded?: (id: string) => void } = {}) {
   const [hymns, setHymns] = useState<Hymn[] | null>(null)
   const [part, setPart] = useState<CacPart>(1)
   const [query, setQuery] = useState("")
@@ -106,11 +106,8 @@ export function HymnBook() {
   }, [hymns, part, q, isNumber, wordHits])
 
   const add = (song: SongSummary) => {
-    const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(hymnItem(song, first))
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    const id = useQueueStore.getState().addItem(hymnItem(song, first), "end")
+    if (id) onAdded?.(id)
   }
 
   const importFile = async (f: File | undefined) => {

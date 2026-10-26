@@ -144,7 +144,7 @@ export function PrepareWorkspace() {
             </PopoverContent>
           </Popover>
           <AiDrafts />
-          <AddItems />
+          <AddItems onSelectAddedItem={() => setSelectedEventId(null)} />
           <Button
             variant="outline"
             className="hidden max-[1280px]:inline-flex"
