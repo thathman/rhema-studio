@@ -8,6 +8,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { useQueueStore } from "@/stores"
 import { DEFAULT_ADVANCE_SECONDS, RULE_LABEL, type OutlineHeader, type PhaseRole, type PhaseRule, type SectionSummary } from "@/lib/run-of-show"
 import { cn } from "@/lib/utils"
+import { eventPlanApprovalState } from "@/lib/approval"
+import { useServiceStore } from "@/stores/service-store"
 
 const ADVANCE_CHOICES = [5, 8, 10, 15, 20, 30, 60]
 
@@ -40,6 +42,9 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
 export function SectionHeader({ header, summary, collapsed, selected = false, onSelect, onToggle }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; onSelect?: () => void; onToggle: () => void }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
+  const service = useServiceStore((state) => state.current)
+  const serviceDirty = useServiceStore((state) => state.dirty)
+  const approval = eventPlanApprovalState(service, serviceDirty)
   const phase = header.type === "phase"
   const kind = phase ? "phase" : header.event ? "event" : "group"
   const finish = () => {
@@ -95,7 +100,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
         <span className="flex shrink-0 items-center gap-1.5">
           {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
           {phase && header.disabled && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title="Its items stay in the service; Present passes over them">Skipped</Badge>}
-          {header.event && <Badge variant="outline" className="h-5 text-[0.625rem] font-bold tracking-wide uppercase">{header.event.approval === "approved" ? "Approved" : "Draft"}</Badge>}
+          {header.event && <Badge variant="outline" className="h-5 text-[0.625rem] font-bold tracking-wide uppercase" title="Event status follows approval of the saved service revision. It does not authorize a live Take.">{approval === "changed" ? "Changed" : approval === "approved" ? "Approved" : "Draft"}</Badge>}
           <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
         </span>
       </span>

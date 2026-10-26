@@ -114,7 +114,6 @@ describe("conversions", () => {
       role: "sermon",
       duration_minutes: 40,
       ownership: "Pastor",
-      approval: "approved" as const,
     }
     const headers = [{ id: "sermon-event", type: "group", name: "Sermon", at: 0, notes: "Main message", event } as unknown as OutlineHeader]
     const moments = [queueItem("John 3:16", 43, 3, 16), queueItem("Romans 8:28", 45, 8, 28)]
@@ -131,7 +130,9 @@ describe("conversions", () => {
       chapter: null,
       verse: null,
       notes: "Main message",
-      payload: JSON.stringify({ run_of_show_event: event }),
+      // Older versions wrote event-level approval. It is ignored and removed
+      // on the next save because approval belongs to the service revision.
+      payload: JSON.stringify({ run_of_show_event: { ...event, approval: "approved" } }),
     })
     const storedMoments = moments.map((moment, position) => {
       const input = toItemInputs([moment])[0]

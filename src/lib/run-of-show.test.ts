@@ -83,10 +83,11 @@ describe("section summaries", () => {
     expect(projected.headers.find((header) => header.id === "main")?.at).toBe(0)
   })
 
-  it("creates events as unapproved versioned plans and retains unknown nested fields", () => {
-    expect(newRunOfShowEvent(2, () => "event")).toEqual({ id: "event", type: "group", name: "New event", at: 2, event: { schema_version: 1, approval: "draft" } })
-    expect(parseRunOfShowEvent({ schema_version: 1, approval: "approved", owner_id: "newer-build" })).toMatchObject({ schema_version: 1, approval: "approved", payload_extra: { owner_id: "newer-build" } })
-    expect(parseRunOfShowEvent({ schema_version: 2, approval: "approved" })).toBeNull()
+  it("creates versioned event plans and treats legacy approval as non-authoritative", () => {
+    expect(newRunOfShowEvent(2, () => "event")).toEqual({ id: "event", type: "group", name: "New event", at: 2, event: { schema_version: 1 } })
+    expect(parseRunOfShowEvent({ schema_version: 1, approval: "approved", owner_id: "newer-build" })).toEqual({ schema_version: 1, payload_extra: { owner_id: "newer-build" } })
+    expect(parseRunOfShowEvent({ schema_version: 1, role: "Prayer" })).toMatchObject({ schema_version: 1, role: "Prayer" })
+    expect(parseRunOfShowEvent({ schema_version: 2 })).toBeNull()
     expect(parseRunOfShowEvent({ schema_version: 1, approval: "draft", duration_minutes: 601 })).toBeNull()
   })
 })
