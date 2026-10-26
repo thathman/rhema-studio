@@ -39,12 +39,15 @@ describe("brand files (owner's pack)", () => {
       ["companion-app/src-tauri/icons/icon.ico", "brand/04_Launcher_Icons/Rhema-Studio-Windows.ico"],
       ["public/rhema.svg", "brand/01_Master_Mark/Rhema-Studio-Master-Mark.svg"],
       ["web/public/brand/rhema-mark.svg", "brand/01_Master_Mark/Rhema-Studio-Master-Mark.svg"],
+      ["web/public/brand/rhema-studio-dark-text.png", "brand/02_Product_Logos/Rhema-Studio-Dark-Text.png"],
+      ["web/public/brand/rhema-studio-light-text.png", "brand/02_Product_Logos/Rhema-Studio-Light-Text.png"],
       ["web/app/icon.svg", "brand/01_Master_Mark/Rhema-Studio-Master-Mark.svg"],
       ["android-tv/res/drawable-xhdpi/banner.png", "brand/03_Google_TV/Rhema-Studio-Receiver-Google-TV-Dark-320x180.png"],
       ["android-tv/res/drawable-nodpi/icon.png", "brand/04_Launcher_Icons/Rhema-Studio-Android-512.png"],
       ["android-tv/res/drawable-nodpi/receiver_logo.png", "brand/02_Product_Logos/Rhema-Studio-Receiver-Light-Text.png"],
       ["android-camera/res/drawable-nodpi/ic_launcher_fg.png", "brand/04_Launcher_Icons/Rhema-Studio-Android-Adaptive-Foreground-432.png"],
       ["android-camera/res/drawable-nodpi/ic_launcher_bg.png", "brand/04_Launcher_Icons/Rhema-Studio-Android-Adaptive-Background-432.png"],
+      ["android-camera/res/drawable-nodpi/cam_wordmark.png", "brand/02_Product_Logos/Rhema-Studio-Cam-Light-Text.png"],
     ]
     for (const [copy, source] of copies) expect(sha(copy), copy).toBe(sha(source))
   })
@@ -58,6 +61,12 @@ describe("brand files (owner's pack)", () => {
       for (const p of paths) expect(html, page).toContain(p)
       expect(html).toContain("<title>Rhema Studio")
     }
+  })
+
+  it("the Studio loading screen uses the official light and dark wordmarks", () => {
+    const html = read("index.html").toString()
+    expect(html).toContain("/brand/02_Product_Logos/Rhema-Studio-Dark-Text.png")
+    expect(html).toContain("/brand/02_Product_Logos/Rhema-Studio-Light-Text.png")
   })
 
   it("the apps are named as the family", () => {

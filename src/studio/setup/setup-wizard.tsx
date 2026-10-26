@@ -13,7 +13,7 @@ import { openProductionTab } from "@/studio/production/production-tab"
 import { BibleStep, BrandStep, ChurchStep, ConnectionsStep, FinishStep, OperatorStep, ScreensStep } from "@/studio/setup/setup-steps"
 import { RestoreView } from "@/studio/setup/restore-view"
 import { switchMode } from "@/stores/companion-mode"
-import { BrandMark } from "@/components/brand-mark"
+import { ProductLockup } from "@/components/product-lockup"
 
 /** Each step's name in the step list, its heading, and whether it may be skipped. */
 const STEP_INFO: Record<SetupStepId, { short: string; title: string; description: string; optional: boolean }> = {
@@ -221,10 +221,10 @@ function Welcome({ onMain, onJoin, onCompanion, onRestore, onLater }: { onMain: 
     // The welcome sizes to its four choices (data-setup-welcome) rather than the steps' fixed height.
     <div data-setup-welcome className="flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-8 max-[720px]:px-5">
       <div className="flex items-center gap-3">
-        <BrandMark tone="auto" className="size-11" />
+        <ProductLockup product="studio" tone="auto" className="h-9 max-w-[190px]" />
         <div>
           <p className="text-[0.625rem] font-bold tracking-[0.16em] text-muted-foreground uppercase">First time on this computer</p>
-          <DialogTitle className="mt-1 text-2xl font-bold tracking-[-0.035em]">Welcome to Rhema Studio</DialogTitle>
+          <DialogTitle className="mt-1 text-2xl font-bold tracking-[-0.035em]">Welcome</DialogTitle>
         </div>
       </div>
       <DialogDescription id="setup-step-description" className="mt-1 max-w-[560px] text-sm text-muted-foreground">

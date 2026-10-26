@@ -95,7 +95,8 @@ describe("the setup wizard", () => {
   it("welcome → main desk → church name is required, saves as typed, and Continue moves on", async () => {
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
-    expect(document.body.textContent).toContain("Welcome to Rhema Studio")
+    expect(document.body.textContent).toContain("Welcome")
+    expect(document.querySelector('img[alt="Rhema Studio"]')).not.toBeNull()
     await click("Set up this computer as the main desk")
     expect(useSettingsStore.getState().setup.mode).toBe("main")
     expect(heading()).toBe("Church identity")
@@ -259,7 +260,8 @@ describe("interrupted setup and restart (#298 H)", () => {
     useSettingsStore.setState({ setup: normalizeSetup({ lastStep: "cameras", stepsDone: 4 }) })
     useShellStore.setState({ setupOpen: true })
     await render(<SetupWizard />)
-    expect(document.body.textContent).toContain("Welcome to Rhema Studio")
+    expect(document.body.textContent).toContain("Welcome")
+    expect(document.querySelector('img[alt="Rhema Studio"]')).not.toBeNull()
   })
 })
 

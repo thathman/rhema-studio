@@ -10,26 +10,25 @@ export function RhemaLogo({
   wordmarkClassName?: string;
   size?: "sm" | "md" | "lg";
 }) {
-  const iconSize =
-    size === "sm" ? "size-6" : size === "lg" ? "size-10" : "size-[34px]";
-  const textSize =
-    size === "sm"
-      ? "text-lg tracking-[-0.6px] leading-6"
-      : size === "lg"
-        ? "text-[28px] tracking-[-1px] leading-[36px]"
-        : "text-2xl tracking-[-0.8px] leading-[32px]";
+  const height = size === "sm" ? "h-6" : size === "lg" ? "h-10" : "h-[34px]";
 
   return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
-      <span
-        className={cn("flex items-center justify-center", iconSize)}
+    <span className={cn("inline-flex items-center", className)}>
+      <Image
+        src="/brand/rhema-studio-dark-text.png"
+        width={2000}
+        height={440}
+        alt="Rhema Studio"
+        className={cn(height, "w-auto dark:hidden", wordmarkClassName)}
+      />
+      <Image
+        src="/brand/rhema-studio-light-text.png"
+        width={2000}
+        height={440}
+        alt="Rhema Studio"
         aria-hidden
-      >
-        <Image src="/brand/rhema-mark.svg" width={64} height={64} alt="" className="h-[60%] w-auto" />
-      </span>
-      <span className={cn("font-medium text-foreground", textSize, wordmarkClassName)}>
-        Rhema
-      </span>
+        className={cn(height, "hidden w-auto dark:block", wordmarkClassName)}
+      />
     </span>
   );
 }

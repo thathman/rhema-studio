@@ -82,7 +82,7 @@ describe("Rhema Studio Companion's window (#209)", () => {
     await act(async () => root.render(<CompanionApp />))
     await settle()
     expect(host.querySelector('[aria-label="OBS companion"]')).not.toBeNull()
-    expect(host.querySelector('img[aria-hidden="true"]')).not.toBeNull()
+    expect(host.querySelector('img[alt="Rhema Studio Companion"]')).not.toBeNull()
     expect(text()).toContain("Rhema Studio Companion")
     expect(text()).toContain("The church's cameras, in this computer's OBS")
     expect(button("Open the full studio")).toBeUndefined()
