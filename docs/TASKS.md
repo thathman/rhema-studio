@@ -1,6 +1,8 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.54 · **Updated:** 2026-10-26 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+> **Unified UX takeover, owner-approved 2026-10-26:** [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md) with [delivery/PR dependency matrix](rhema-studio/31-codex-delivery-matrix.md) tracks cross-route work (#442–#448), existing event/source contracts (#243/#409/#410), and hardware acceptance (#411). Reconcile these into stable task IDs after verifying main and active PRs. Do not auto-upgrade task status from issue/PR creation.
+
+**Backlog revision:** 0.45 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -12,20 +14,6 @@
 - Track separate **code quality** vs **volunteer UX acceptance**. An intuitive app is not established merely by unit tests.
 
 ## Current active work
-
-### Live takeover issue status (2026-10-26)
-
-The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) is newer than the dated backlog entries below and is the current source for the takeover sequence.
-
-| GitHub issue | Current state | Evidence / next gate |
-|---|---|---|
-| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Regression tests fail on audited `main` and pass on the branch, including backup restore. Coverage includes NDI, browser/TV feeds and rehearsal snapshots. Hosted run `40295549267` passes all four jobs; PR remains open/unmerged. |
-| [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): a shared insertion API returns the new item ID and covers beginning, middle, end, selected phase and nested group. The audit found no remaining index-zero Add reorder shortcut. Hosted run `40295549267` passes all four jobs; PR remains open/unmerged. |
-| [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | IN PR | [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses approved scene and look revisions. Hosted runs `40274254494` and `40281861351` pass all four jobs; shared asset and approval acceptance remain open. |
-| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | IN PROGRESS | [PR #438](https://github.com/thathman/rhema-studio/pull/438) passes the hosted native macOS bilingual-hymn journey with Live off. Real projector, TV, OBS/NDI, camera, Windows and offline church-system gates remain unverified. |
-| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415) restores the Hymn Book detail pane and Add selection, and fixes a delayed Bible translation refresh clearing the newly added hymn. Code head `e631b9c` passed hosted run `40283467943`; after syncing the latest #414 base, new documentation CI is pending. Chromium evidence with a synthetic bilingual hymn is recorded [here](rhema-studio/browser-acceptance/issue-386-hymn-add-selects-editor.md). #438 separately exercises the hymn flow on the open stack. |
-
-PRs #414, #415, #417, #420, #422, #427, #428, #437 and #438 are open and unmerged. #422's asset map covers Studio, Companion, Receiver/TV, Cam, phone pages, feeds, website and launchers; #437's Rust check is pending. The current base and hosted check evidence are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
@@ -209,15 +197,6 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 **Changes to task status:** maintain a brief revision history below (date, task IDs, PR/issue, verified evidence). Start with explicit PR links and no speculative completion claims.
 
 ## Revision history
-
-- **2026-10-26 (rev 0.54):** Verified both new #383 snapshot regressions fail on audited `main`; PR #414 focused scene/queue/UI regressions pass 66 tests and hosted run `40295549267` is green. PR #415 is synced to the current #414 base; docs-only CI is pending. PR #422's approved asset pack and live `:3000` mark/hash check are verified; all hosted jobs pass. No merge or device acceptance is claimed.
-- **2026-10-26 (rev 0.53):** #385/#386 remain IN PR via #415; run 40280945674 passed all four hosted jobs on code head `202f094`, and local frontend, typecheck, lint and build pass. #398 remains IN PR via #420; code head `9054bff` passed all hosted jobs after its focus assertion did not recur on full-suite retry. A docs-only #420 CI run is in progress. Neither issue is accepted; #411 physical-system gates remain open.
-- **2026-10-26 (rev 0.52):** #385/#386 remain IN PR via #415; latest run passes Frontend, Lint and Rust on `202f094`, with Companion in progress. #398 remains IN PR via #420; run 40274254494 passed all four jobs on `9054bff` after the first Frontend attempt's focus assertion failure did not recur on retry. Documentation-only follow-ups are pending. Neither issue is accepted; #411 physical-system gates remain open.
-- **2026-10-26 (rev 0.51):** Updated #385/#386 evidence for the delayed translation-refresh race fix and browser-shim hymn Add journey on PR #415 head `202f094`; local suite, typecheck, lint and build pass. Hosted checks were still in progress at that point.
-- **2026-10-26 (rev 0.50):** Reconciled PR #415 against current #414 after it advanced; the merged stack passes 245 frontend files / 1,777 tests, typecheck, lint and build. Verified PR #414's latest hosted CI is green and recorded PR #420's current Frontend CI failure for follow-up.
-- **2026-10-26 (rev 0.49):** PR #414 hosted CI passed on head `8a0cca5` (run 40272729012); local UI interactions and the 1,765-test full suite pass. PR remains open/unmerged.
-- **2026-10-26 (rev 0.48):** PR #414 adds visible pre-Take scope and revision details in Present and Production; local UI interactions and the 1,765-test full suite pass. Hosted checks for the updated PR head were pending.
-- **2026-10-26 (rev 0.47):** PR #414 adds baseline-failing backup restore, NDI and browser/TV regressions for pinned on-air scene revisions; local full suite is 1,765 tests. Reconciled open PR status for #398, #411, and the Hymn Book workflow against GitHub.
 
 - **2026-10-21 (rev 0.43):** PRs #111–#122 merged; stale "later" notes in done criteria replaced with the PRs that did the work.
 - **2026-10-21 (rev 0.42):** PRs #96–#110 merged (see DEVELOPMENT-STATUS); QA-001 unsigned installer artifact built from `main`.

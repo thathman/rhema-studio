@@ -1,25 +1,14 @@
 # Rhema Studio — Development Status
 
+> **Snapshot warning (2026-10-26):** This page was last reconciled 2026-10-22 and is not a live representation of current main/open PRs. Start with the [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md), inspect GitHub head/PRs/CI, and record verified deltas before asserting implementation or acceptance. This warning does not update the historical snapshot below.
+
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-26
-
-## Current takeover snapshot
-
-- Target repository: `thathman/rhema-studio`; verified `main` remains `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). P0 PR #414 is open and unmerged at `a868b24`; hosted Frontend, Lint, Rust and Companion checks passed in run `40295549267`.
-- Current open implementation stack: [PR #414](https://github.com/thathman/rhema-studio/pull/414) covers #383/#384; [#415](https://github.com/thathman/rhema-studio/pull/415) covers the Hymn Book detail/Add flow (#385/#386); #417 preserves hymn identity; #420 addresses #398; #427 reports recoverable hymn-search failures; #428 commits rundown position after successful Take; and #438 adds a native macOS hymn QA slice for #411. [PR #422](https://github.com/thathman/rhema-studio/pull/422) applies the approved final asset pack and its usage map. [PR #437](https://github.com/thathman/rhema-studio/pull/437) adds the Connections hub. These PRs remain open and unmerged.
-- PR #415 is now stacked on the current #414 head `a868b24`; its previous base was `47ab37a`. The latest code head `e631b9c` passed hosted Frontend, Lint, Rust and Companion in run `40283467943`. This branch's base-sync documentation follow-up is awaiting CI. The hymn-selection race fix, regression tests and Chromium evidence are on the PR branch.
-- PR #420's hosted code checks and documentation follow-up passed in runs `40274254494` and `40281861351`. #398 remains open for review of the complete revision-integrity contract and desktop/device acceptance.
-- PR #438's hosted native Intel Mac journey passed on head `501ac5b`; it verifies the edited bilingual hymn can be reopened and previewed while Live remains off. No projector, TV, OBS/NDI receiver, camera, Windows or physical church-system acceptance is claimed; #411 remains open.
-- Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the repository implementation contract. The PRD and task history below predate this issue batch.
-- Latest CI on target `main` is [successful on the verified head](https://github.com/thathman/rhema-studio/actions/runs/40158839409).
-- Open PRs at takeover: [#4](https://github.com/thathman/rhema-studio/pull/4), [#278](https://github.com/thathman/rhema-studio/pull/278), [#352](https://github.com/thathman/rhema-studio/pull/352), and [#367](https://github.com/thathman/rhema-studio/pull/367). #352 and #367 warn that merging publishes the website; none was merged as part of this work.
-- PR #422 has green hosted CI and a current local `:3000` screenshot showing the approved master mark; the served SVG's SHA-256 matches its branch asset. Android build/device checks are not claimed. PR #437's hosted Rust job is still running; no physical TVs, phones, cameras or OBS systems are claimed as tested.
-- Next: keep #383/#384 and #385/#386 in PR until integrated by the authorized owner, then continue #398 and #411. Green CI does not imply physical-system or owner acceptance.
+**Updated:** 2026-10-22
 
 ## Integrated `main`
 
-- Head: `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25; current as of this takeover snapshot)
+- Head: see `git log fork/main` (2026-10-22 17:45 WAT; every PR through #216 merged)
 - Contents: see CHANGELOG.md. `studio.db` is at migration 0012 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -29,7 +18,9 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- Current open PRs are listed in the takeover snapshot above; website PRs #352 and #367 explicitly warn that merging publishes the site. No publishing PR is merged as part of this work.
+- The owner's redesign continues: UX-03, UX-04 and UX-07 to UX-12 in TASKS.md (UX-01, 02, 05, 06 merged).
+
+- PR #4 `feature/speech-language-openai` (retargeted to `main`): Yoruba speech language and OpenAI Whisper provider. Kept independent until provider/bundling decisions are made (ST-004).
 
 ## Active milestone
 
@@ -37,13 +28,10 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- PR #414 head `a868b24`: local full suite 243 files / 1,766 tests, typecheck, lint and build passed (existing Vite mixed-import and large-chunk warnings remain). The 5-file focused scene/queue/UI regression set passed 66 tests. A temporary test against baseline `6eaa7dd` failed both scene-save snapshot regressions (2 failed, 34 passed), including saving an edited scene on air and restoring the captured revision from backup. Hosted run `40295549267` passed Frontend, Lint, Rust and Companion.
-- PR #438's hosted native Intel Mac journey passed on head `501ac5b` (run `40291653661`); it verifies the edited bilingual hymn can be reopened and previewed while Live remains off. Projector, TV, OBS/NDI, camera, Windows and physical church-system acceptance remain unverified.
-- PR #415 code head `e631b9c` passed hosted Frontend, Lint, Rust and Companion in run `40283467943`; the new base-sync docs follow-up is pending CI. Earlier local checks passed 246 files / 1,779 tests, typecheck, lint and build. The translation-refresh regression failed before its fix and passes after it. Chromium with a synthetic bilingual CAC hymn showed the inserted item selected in Event editor · 4 with Live off; see [#386 browser evidence](rhema-studio/browser-acceptance/issue-386-hymn-add-selects-editor.md). This is browser-shim evidence, not hardware acceptance.
-- PR #420's code and documentation heads pass hosted checks in runs `40274254494` and `40281861351`. No desktop/device acceptance is claimed.
-- PR #422 passes Frontend, Lint, Rust and Companion in hosted run `40284432086`. At `http://127.0.0.1:3000/`, the current running app rendered the supplied master mark; the served SVG hash matches the PR branch file. The source checkout contains uncommitted asset work; canonical `main` has not changed. Android device checks are unverified.
-- PR #437's Frontend, Lint and Companion checks pass; Rust is pending in run `40301930897`. Focused local pairing tests passed 11/11 before the hosted run.
-- CI on target `main`: the run on the verified head is successful (linked above). No Rust source changed in PR #414, so no separate Rust test run was performed for that branch.
+- Frontend: 669 vitest tests pass (two render-heavy tests can time out on a heavily loaded machine; given 30 s, #176, #180); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
+- Rust: `rhema-content` 62 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
+- Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
+- CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
 
 ## Unverified (release-acceptance blockers, not development blockers)
 
