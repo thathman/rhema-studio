@@ -176,6 +176,40 @@ describe("several items at once (#193)", () => {
     expect(q().items[q().activeIndex ?? -1].id).toBe("b")
   })
 
+  it("moves an event with its moments and nested groups into another phase as one undoable edit", () => {
+    const event = { id: "event1", type: "group" as const, name: "Opening prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 15 } }
+    const nested = { id: "event1-scripture", type: "group" as const, name: "Scripture moments", at: 1 }
+    useQueueStore.setState({
+      items: [slide("prayer"), slide("verse"), slide("sermon"), slide("quiz")],
+      headers: [
+        phase("pre", 0),
+        event,
+        nested,
+        phase("main", 2),
+        { id: "event2", type: "group", name: "Sermon", at: 2, event: { schema_version: 1, duration_minutes: 40 } },
+        phase("post", 4),
+      ],
+      activeIndex: 1,
+    })
+    const before = { items: q().items, headers: q().headers }
+
+    q().moveEventToTarget("event1", { kind: "phase", phaseId: "main" })
+
+    expect(ids()).toEqual(["sermon", "quiz", "prayer", "verse"])
+    expect(q().headers.map(({ id, at }) => [id, at])).toEqual([
+      ["pre", 0], ["main", 0], ["event2", 0], ["event1", 2], ["event1-scripture", 3], ["post", 4],
+    ])
+    expect(q().headers.find((header) => header.id === "event1")?.event?.duration_minutes).toBe(15)
+    expect(q().items[q().activeIndex ?? -1].id).toBe("verse")
+    expect(q().past).toHaveLength(1)
+
+    q().undo()
+    expect(q().items).toEqual(before.items)
+    expect(q().headers).toEqual(before.headers)
+    q().redo()
+    expect(ids()).toEqual(["sermon", "quiz", "prayer", "verse"])
+  })
+
   it("removes every phase in one undoable edit while preserving events, groups, items and active position", () => {
     const headers: OutlineHeader[] = [
       { ...phase("warmup", 0), rule: "loop", starts_at: "09:30", advance_seconds: 45 },

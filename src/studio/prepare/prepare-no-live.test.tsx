@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 // jsdom has no ResizeObserver (the drag-and-drop library needs one at import), CSS.escape or scrollIntoView.
 vi.hoisted(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+  ;(globalThis as { PointerEvent?: typeof PointerEvent }).PointerEvent ??= MouseEvent as unknown as typeof PointerEvent
   ;(globalThis as { CSS?: { escape: (s: string) => string } }).CSS ??= { escape: (s: string) => s }
 })
 // Lists come back empty; anything else has nothing to say.
@@ -587,6 +588,49 @@ describe("Prepare never takes anything live (#299)", () => {
     await act(async () => useQueueStore.getState().undo())
     expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["Opening", "Prayer", "Sermon"])
     expect(useQueueStore.getState().headers.find((header) => header.id === "main")?.at).toBe(1)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("moves a planned event with all its moments from the keyboard menu without changing Live", async () => {
+    useQueueStore.setState({
+      items: [slide("Prayer"), slide("Scripture"), slide("Sermon"), slide("Quiz")],
+      headers: [
+        { id: "pre", type: "phase", name: "Pre-service", at: 0, rule: "manual", role: "pre" },
+        { id: "prayer-event", type: "group", name: "Opening prayer", at: 0, event: { schema_version: 1, duration_minutes: 15 } },
+        { id: "prayer-moments", type: "group", name: "Prayer moments", at: 1 },
+        { id: "main", type: "phase", name: "Main service", at: 2, rule: "manual", role: "main" },
+        { id: "sermon-event", type: "group", name: "Sermon", at: 2, event: { schema_version: 1, duration_minutes: 40 } },
+        { id: "post", type: "phase", name: "Post-service", at: 4, rule: "manual", role: "post" },
+      ],
+      activeIndex: 1,
+    })
+    useQueueStore.getState().resetHistory()
+    useBroadcastStore.setState({ isLive: true, liveItemId: "live-sermon" })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    const options = el.querySelector<HTMLButtonElement>('button[aria-label="Opening prayer: options"]')!
+    await act(async () => {
+      const pointerDown = new Event("pointerdown", { bubbles: true })
+      Object.assign(pointerDown, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      options.dispatchEvent(pointerDown)
+    })
+    const moveDown = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find((item) => item.textContent?.trim() === "Move event down")!
+    await act(async () => {
+      const pointerDown = new Event("pointerdown", { bubbles: true })
+      Object.assign(pointerDown, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      moveDown.dispatchEvent(pointerDown)
+      moveDown.dispatchEvent(new Event("pointerup", { bubbles: true }))
+      moveDown.click()
+    })
+
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["Sermon", "Quiz", "Prayer", "Scripture"])
+    expect(useQueueStore.getState().headers.find((header) => header.id === "prayer-event")?.at).toBe(2)
+    expect(useQueueStore.getState().headers.find((header) => header.id === "prayer-moments")?.at).toBe(3)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    await act(async () => useQueueStore.getState().undo())
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(["Prayer", "Scripture", "Sermon", "Quiz"])
+    expect(useQueueStore.getState().headers.find((header) => header.id === "prayer-event")?.at).toBe(0)
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 

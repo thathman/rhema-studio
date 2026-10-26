@@ -261,10 +261,24 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
       onDragEnd={(event) => {
         if (event.canceled) return
         const { source, target } = event.operation
-        if (!isSortable(source) || !target) return
+        if (!source || !target) return
+        const sourceData = source.data as { kind?: string; headerId?: string; eventOrder?: number }
         const sourceId = String(source.id)
         const targetData = target.data as { kind?: string; headerId?: string }
         const queue = useQueueStore.getState()
+        if (sourceData.kind === "event" && sourceData.headerId) {
+          if (targetData.kind === "section" && targetData.headerId && (targetData as { headerType?: string }).headerType === "phase") {
+            queue.moveEventToTarget(sourceData.headerId, { kind: "phase", phaseId: targetData.headerId })
+            return
+          }
+          const eventTarget = targetData as { kind?: string; headerId?: string; eventOrder?: number; isEvent?: boolean }
+          if (eventTarget.kind === "section" && eventTarget.isEvent && eventTarget.headerId && eventTarget.headerId !== sourceData.headerId) {
+            const placement = sourceData.eventOrder !== undefined && eventTarget.eventOrder !== undefined && sourceData.eventOrder < eventTarget.eventOrder ? "after" : "before"
+            queue.moveEventToTarget(sourceData.headerId, { kind: "event", eventId: eventTarget.headerId, placement })
+          }
+          return
+        }
+        if (!isSortable(source)) return
         if (targetData.kind === "section" && targetData.headerId) {
           queue.moveItemsToTarget([sourceId], { kind: "section", headerId: targetData.headerId })
           return

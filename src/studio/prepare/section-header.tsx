@@ -1,7 +1,7 @@
-import { useState } from "react"
-import { useDroppable } from "@dnd-kit/react"
+import { useCallback, useState } from "react"
+import { useDraggable, useDroppable } from "@dnd-kit/react"
 import { defaultCollisionDetection } from "@dnd-kit/collision"
-import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, GripVerticalIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { AddEventPalette } from "@/studio/prepare/add-event-palette"
@@ -45,15 +45,29 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
 
 /** A phase or group in the order of service: name, how it runs, its items and minutes; collapsible. */
 export function SectionHeader({ header, summary, collapsed, selected = false, onSelect, onToggle, onEventCreated, eventsDisabled = false }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; onSelect?: () => void; onToggle: () => void; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
+  const headers = useQueueStore((state) => state.headers)
+  const orderedEvents = headers.map((candidate, order) => ({ candidate, order }))
+    .filter(({ candidate }) => !!candidate.event)
+    .sort((a, b) => a.candidate.at - b.candidate.at || a.order - b.order)
+  const eventOrder = orderedEvents.findIndex(({ candidate }) => candidate.id === header.id)
   const { ref: dropRef, isDropTarget } = useDroppable({
     id: `section:${header.id}`,
-    data: { kind: "section", headerId: header.id },
+    data: { kind: "section", headerId: header.id, headerType: header.type, isEvent: !!header.event, eventOrder },
     collisionPriority: 4,
     collisionDetector: (input) => {
       const collision = defaultCollisionDetection(input)
       return collision ? { ...collision, priority: 100 } : null
     },
   })
+  const { ref: draggableRef, handleRef, isDragging } = useDraggable({
+    id: `event:${header.id}`,
+    data: { kind: "event", headerId: header.id, eventOrder },
+    disabled: !header.event,
+  })
+  const setHeaderRef = useCallback((element: Element | null) => {
+    dropRef(element)
+    draggableRef(element)
+  }, [dropRef, draggableRef])
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
   const [removePhaseOpen, setRemovePhaseOpen] = useState(false)
@@ -73,18 +87,26 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
   return (
     <>
     <li
-      ref={dropRef}
+      ref={setHeaderRef}
       aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
         "flex items-center gap-1.5 rounded-lg",
         phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : header.event ? cn("mt-1 ml-1 rounded-md border bg-card px-2 py-1.5", selected ? "border-primary/50 bg-primary/5" : "border-border") : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
         header.disabled && "opacity-60",
+        isDragging && "opacity-60",
         isDropTarget && "ring-2 ring-inset ring-primary",
       )}
     >
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? "Show" : "Hide"} ${header.name}`} className="flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:size-3.5">
         {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
       </button>
+      {header.event && <button
+        ref={handleRef}
+        type="button"
+        aria-label={`Drag event ${header.name} with its moments`}
+        title="Drag this event and its moments to another event or phase"
+        className="flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:text-foreground active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring/50"
+      ><GripVerticalIcon className="size-3.5" /></button>}
       {/* On a narrow column how it runs and its counts wrap under the name rather than cutting both short. */}
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
         {renaming ? (
@@ -137,6 +159,11 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem onSelect={() => setRenaming(true)}>Rename</DropdownMenuItem>
+          {header.event && <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={eventOrder <= 0} onSelect={() => useQueueStore.getState().moveEvent(header.id, -1)}>Move event up</DropdownMenuItem>
+            <DropdownMenuItem disabled={eventOrder < 0 || eventOrder === orderedEvents.length - 1} onSelect={() => useQueueStore.getState().moveEvent(header.id, 1)}>Move event down</DropdownMenuItem>
+          </>}
           {phase && (
             <>
               {/* #193: a phase this service does without (no pre-service loop this week), kept for next time. */}
