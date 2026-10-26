@@ -10,10 +10,11 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 - Current GitHub `main` is `d982db84e39f43bc5c31a53619aaac937c3dd136`.
 - PR #414 is open for #383/#384; PR #415 is open for #385/#386 and is stacked on #414. Both currently pass their four hosted checks.
-- PR #416 is open for #387, stacked on #415. It keeps deliberate repeated Scripture occurrences distinct while preserving suggestion deduplication and stable selection through save/reopen. Its branch is being refreshed against the latest #415 base; recheck hosted CI on the refreshed head.
+- PR #416 is open for #387, stacked on #415. It keeps deliberate repeated Scripture occurrences distinct while preserving suggestion deduplication and stable selection through save/reopen. Its branch is refreshed on the latest #415 head; verify current checks on the PR before integration.
+- PR #417 is open for #388, stacked on #416. It preserves hymn identity, book part and number across Prepare, Present, Home, search and archive while retaining legacy song IDs and arrangements. Its UI tests are component-level; verify current hosted checks and keep physical-device acceptance separate.
 - PRs #420 and #457 are open for approved scene/look revision integrity and draft-only visual editing. Their current hosted checks pass; neither is merged.
 - PR #438 is an open, synthetic native-app journey slice for #411. The hosted app journeys and standard checks pass, but this does not establish projector, TV, OBS/NDI, camera, Windows or physical church-system acceptance.
-- Event-first work is split across open PRs #430, #454, #455 and #456; #456's hosted checks passed on retry. Phase-view work is in open PRs #460 and #462; #462 checks pass and #460's Rust and Companion jobs are still running at this snapshot.
+- Event-first work is split across open PRs #430, #454, #455 and #456; #456's hosted checks passed on retry. Phase-view work is in open PRs #460 and #462; #462 checks pass, and #460's first Rust and Companion attempt timed out during Linux dependency installation before all checks passed on retry.
 - These are review branches, not merged or released product. Check each PR's latest head and checks before relying on its status.
 
 ## Integrated `main`
