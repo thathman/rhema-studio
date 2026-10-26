@@ -10,6 +10,7 @@ import { RundownList } from "@/studio/present/rundown-list"
 import { SaveState, ServiceBar } from "@/studio/prepare/service-bar"
 import { formatMinutes, plannedTotalMs } from "@/lib/service-timing"
 import { ItemEditor } from "@/studio/prepare/item-editor"
+import { RunOfShowEventEditor } from "@/studio/prepare/run-of-show-event-editor"
 import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
@@ -31,6 +32,9 @@ import { cn } from "@/lib/utils"
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
+  const headers = useQueueStore((s) => s.headers)
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const selectedEvent = headers.find((header) => header.id === selectedEventId && header.event)
   // Hidden items and a skipped phase take no planned time (#193).
   const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(timedItems(s.items, s.headers))))
   const service = useServiceStore((s) => s.current)
@@ -99,13 +103,13 @@ export function PrepareWorkspace() {
             <RundownTools />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <RundownList mode="prepare" />
+            <RundownList mode="prepare" selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} />
           </div>
-          <RundownFooter />
+          <RundownFooter onEventAdded={setSelectedEventId} />
         </section>
 
         <section className="min-h-0 overflow-hidden rounded-lg border border-border bg-card shadow-panel">
-          <ItemEditor />
+          {selectedEvent ? <RunOfShowEventEditor header={selectedEvent} /> : <ItemEditor />}
         </section>
 
         {/* The show scheduler (approved design); on a narrower window it gives way to the editor, and Timing opens it over it. */}
@@ -158,7 +162,7 @@ function PhaseStrip() {
 }
 
 /** Under the order of service: organise it into phases, or put a group above the selected item. */
-function RundownFooter() {
+function RundownFooter({ onEventAdded }: { onEventAdded: (id: string) => void }) {
   const count = useQueueStore((s) => s.items.length)
   const hasPhases = useQueueStore((s) => s.headers.some((h) => h.type === "phase"))
   const sel = useSelectedItem()
@@ -168,7 +172,9 @@ function RundownFooter() {
   }
   const addEvent = () => {
     const queue = useQueueStore.getState()
-    queue.setHeaders([...queue.headers, newRunOfShowEvent(sel?.index ?? count)])
+    const event = newRunOfShowEvent(sel?.index ?? count)
+    queue.setHeaders([...queue.headers, event])
+    onEventAdded(event.id)
   }
   // A church-named phase (#193): before the selected item, else at the end; rename it from its menu.
   const addPhase = () => {

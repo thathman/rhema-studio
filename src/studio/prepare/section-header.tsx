@@ -37,7 +37,7 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
 }
 
 /** A phase or group in the order of service: name, how it runs, its items and minutes; collapsible. */
-export function SectionHeader({ header, summary, collapsed, onToggle }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; onToggle: () => void }) {
+export function SectionHeader({ header, summary, collapsed, selected = false, onSelect, onToggle }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; onSelect?: () => void; onToggle: () => void }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
   const phase = header.type === "phase"
@@ -55,7 +55,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
       aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
         "flex items-center gap-1.5 rounded-lg",
-        phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : header.event ? "mt-1 ml-1 rounded-md border border-border bg-card px-2 py-1.5" : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
+        phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : header.event ? cn("mt-1 ml-1 rounded-md border bg-card px-2 py-1.5", selected ? "border-primary/50 bg-primary/5" : "border-border") : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
         header.disabled && "opacity-60",
       )}
     >
@@ -76,7 +76,21 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
             className="h-7 min-w-0 flex-1 basis-32 text-sm"
           />
         ) : (
-          <span className={cn("min-w-0 max-w-full truncate", phase || header.event ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
+          header.event ? (
+            <button
+              type="button"
+              aria-label={`Edit event: ${header.name}`}
+              aria-pressed={selected}
+              onClick={onSelect}
+              onDoubleClick={() => setRenaming(true)}
+              className="min-w-0 max-w-full truncate rounded text-left text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              title="Open event details"
+            >
+              {header.name}
+            </button>
+          ) : (
+            <span className={cn("min-w-0 max-w-full truncate", phase ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
+          )
         )}
         <span className="flex shrink-0 items-center gap-1.5">
           {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}

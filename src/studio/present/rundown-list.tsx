@@ -33,7 +33,7 @@ import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type S
  * In `prepare` mode rows can be dragged by their handle to reorder; the
  * arrow buttons do the same from the keyboard.
  */
-export function RundownList({ mode }: { mode: "prepare" | "present" }) {
+export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { mode: "prepare" | "present"; selectedEventId?: string | null; onSelectEvent?: (id: string | null) => void }) {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const selected = useBibleStore((s) => s.selectedVerse)
@@ -51,6 +51,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const preview = (item: QueueItem) => presentActions.previewItem(item)
   // Prepare: Shift-click picks a range, Cmd/Ctrl-click one more (#193); a plain click picks and previews one.
   const pick = (item: QueueItem, e: React.MouseEvent) => {
+    onSelectEvent?.(null)
     const range = e.shiftKey
     const toggle = e.metaKey || e.ctrlKey
     useRundownSelection.getState().click(item.id, items.map((i) => i.id), { range, toggle })
@@ -226,7 +227,15 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
       {visible.map((r) =>
         "header" in r
           ? mode === "prepare"
-            ? <SectionHeader key={r.header.id} header={r.header} summary={summaries[r.header.id]} collapsed={collapsed.has(r.header.id)} onToggle={() => toggle(r.header.id)} />
+            ? <SectionHeader
+              key={r.header.id}
+              header={r.header}
+              summary={summaries[r.header.id]}
+              collapsed={collapsed.has(r.header.id)}
+              selected={selectedEventId === r.header.id}
+              onSelect={r.header.event ? () => onSelectEvent?.(r.header.id) : undefined}
+              onToggle={() => toggle(r.header.id)}
+            />
             : <SectionLabel key={r.header.id} header={r.header} summary={summaries[r.header.id]} />
           : renderItem(r.item, r.index),
       )}
