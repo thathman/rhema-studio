@@ -1,15 +1,22 @@
 /// <reference types="vitest/config" />
 import path from "path"
+import { realpathSync } from "node:fs"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, searchForWorkspaceRoot } from "vite"
 
 // https://vite.dev/config/
+// Worktrees share node_modules through a symlink. Vite resolves that symlink outside this
+// worktree and blocks packaged font files unless the real dependency directory is allowed.
+const workspaceRoot = searchForWorkspaceRoot(__dirname)
+const realNodeModules = realpathSync(path.resolve(__dirname, "node_modules"))
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 3000,
     strictPort: true,
+    fs: { allow: [workspaceRoot, realNodeModules] },
     watch: {
       // Keep the watcher out of multi-GB non-frontend dirs (Rust build
       // artifacts, ONNX models, NDI SDK). Crawling them blocks the dev
