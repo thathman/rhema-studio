@@ -10,6 +10,8 @@ import type {
   ProgramItem,
   ProgramWithItems,
   QueueItem,
+  MediaAsset,
+  AudioItemPayload,
   RevisionSummary,
   ImageItemPayload,
   SlideItemPayload,
@@ -17,7 +19,7 @@ import type {
   Translation,
   Verse,
 } from "@/types"
-import { GO_LIVE_CUES, isCueItem, isImageItem, isSlideItem, isVerseItem, type ItemCue, type OnLive } from "@/types"
+import { GO_LIVE_CUES, isAudioItem, isCueItem, isImageItem, isSlideItem, isVerseItem, type ItemCue, type OnLive } from "@/types"
 import { cleanCues } from "@/lib/item-cues"
 import { safeLink } from "@/lib/qr-bulletin"
 import { cleanComments, parseComments } from "@/lib/comments"
@@ -185,7 +187,28 @@ function itemInputs(
     ...(cleanName(i.ai_suggestion) ? { ai_suggestion: cleanName(i.ai_suggestion) } : {}),
   })
   return items.map((i): ItemInput =>
-    isImageItem(i)
+    isAudioItem(i)
+      ? {
+          id: i.id,
+          kind: "audio",
+          reference: i.audio.name,
+          book_number: null,
+          chapter: null,
+          verse: null,
+          translation: null,
+          secondary_translation: null,
+          notes: i.notes ?? null,
+          payload: JSON.stringify({
+            media_id: i.audio.media_id,
+            ...(i.audio.output_device_id ? { output_device_id: i.audio.output_device_id } : {}),
+            ...(typeof i.audio.volume === "number" && i.audio.volume !== 1 ? { volume: i.audio.volume } : {}),
+            ...(i.audio.loop ? { loop: true } : {}),
+            ...(i.audio.fade_in_ms ? { fade_in_ms: i.audio.fade_in_ms } : {}),
+            ...(i.audio.fade_out_ms ? { fade_out_ms: i.audio.fade_out_ms } : {}),
+            ...bg(i),
+          } satisfies AudioItemPayload & { background_media_id?: string }),
+        }
+      : isImageItem(i)
       ? {
           id: i.id,
           kind: "image",
@@ -280,6 +303,7 @@ const COMMON_PAYLOAD_KEYS = ["background_media_id", "planned_minutes", "end_by",
 const KNOWN_PAYLOAD_KEYS: Record<string, Set<string>> = {
   verse: new Set(COMMON_PAYLOAD_KEYS),
   image: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "loop", "sound"]),
+  audio: new Set([...COMMON_PAYLOAD_KEYS, "media_id", "fit", "sound", "output_device_id", "volume", "loop", "fade_in_ms", "fade_out_ms"]),
   slide: new Set([...COMMON_PAYLOAD_KEYS, "title", "body", "link"]),
   song: new Set([...COMMON_PAYLOAD_KEYS, "song_id", "hymn", "hymn_numbers", "arrangement_id", "languages", "title_slide"]),
   cue: new Set(COMMON_PAYLOAD_KEYS),
@@ -297,6 +321,18 @@ export function parsePayloadExtra(raw: string | null | undefined, kind: string):
   } catch {
     return undefined
   }
+}
+
+/** Read local media kinds so legacy image rows that reference audio can be decoded safely. */
+export async function loadMediaKinds(data?: ProgramWithItems): Promise<ReadonlyMap<string, MediaAsset["kind"]>> {
+  if (data && !data.items.some((item) => item.kind === "image")) return new Map()
+  let media = useMediaStore.getState()
+  if (!media.loaded || media.error) {
+    await media.list()
+    media = useMediaStore.getState()
+  }
+  if (media.error) throw new Error(`Could not check the local media library needed to open this service: ${media.error}`)
+  return new Map(media.assets.map((asset) => [asset.id, asset.kind]))
 }
 
 /** A go-live message and cue worth saving: one clean line, a known cue; null when neither. */
@@ -430,6 +466,38 @@ export function parseImagePayload(raw: string | null | undefined): { media_id: s
   }
 }
 
+/** The local audio cue payload, or null when its media id or settings are invalid. */
+export function parseAudioPayload(raw: string | null | undefined): AudioItemPayload | null {
+  if (!raw) return null
+  try {
+    const p = JSON.parse(raw) as Partial<AudioItemPayload>
+    if (typeof p.media_id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(p.media_id)) return null
+    if (p.output_device_id !== undefined) {
+      if (typeof p.output_device_id !== "string") return null
+      const deviceChars = Array.from(p.output_device_id)
+      if (deviceChars.length > 1024 || deviceChars.some((char) => {
+        const code = char.codePointAt(0) ?? 0
+        return code < 0x20 || code === 0x7f
+      })) return null
+    }
+    if (p.volume !== undefined && (typeof p.volume !== "number" || !Number.isFinite(p.volume) || p.volume < 0 || p.volume > 1)) return null
+    if (p.loop !== undefined && typeof p.loop !== "boolean") return null
+    const validFade = (ms: unknown): ms is number => typeof ms === "number" && Number.isInteger(ms) && ms >= 0 && ms <= 30_000
+    if (p.fade_in_ms !== undefined && !validFade(p.fade_in_ms)) return null
+    if (p.fade_out_ms !== undefined && !validFade(p.fade_out_ms)) return null
+    return {
+      media_id: p.media_id,
+      ...(p.output_device_id ? { output_device_id: p.output_device_id } : {}),
+      ...(p.volume !== undefined ? { volume: p.volume } : {}),
+      ...(p.loop ? { loop: true } : {}),
+      ...(p.fade_in_ms !== undefined && p.fade_in_ms > 0 ? { fade_in_ms: p.fade_in_ms } : {}),
+      ...(p.fade_out_ms !== undefined && p.fade_out_ms > 0 ? { fade_out_ms: p.fade_out_ms } : {}),
+    }
+  } catch {
+    return null
+  }
+}
+
 /** The custom-slide payload of a stored item, or null when it is not well-formed. */
 export function parseSlidePayload(raw: string | null | undefined): SlideItemPayload | null {
   if (!raw) return null
@@ -486,7 +554,8 @@ const findTranslation = (translations: Translation[], abbrev: string | null): Tr
 export function toQueueItems(
   data: ProgramWithItems,
   translationId: number,
-  translations: Translation[] = []
+  translations: Translation[] = [],
+  mediaKinds: ReadonlyMap<string, MediaAsset["kind"]> = new Map(),
 ): { items: QueueItem[]; headers: OutlineHeader[]; unsupported: ProgramItem[]; missingTranslations: string[] } {
   const items: QueueItem[] = []
   const headers: OutlineHeader[] = []
@@ -503,7 +572,67 @@ export function toQueueItems(
         unsupported.push(it)
         continue
       }
+      if (mediaKinds.get(image.media_id) === "audio") {
+        const audio = parseAudioPayload(it.payload)
+        if (!audio) {
+          unsupported.push(it)
+          continue
+        }
+        items.push({
+          id: it.id,
+          kind: "audio",
+          audio: { media_id: audio.media_id, name: it.reference, ...(audio.output_device_id ? { output_device_id: audio.output_device_id } : {}), ...(audio.volume !== undefined ? { volume: audio.volume } : {}), ...(audio.loop ? { loop: true } : {}), ...(audio.fade_in_ms ? { fade_in_ms: audio.fade_in_ms } : {}), ...(audio.fade_out_ms ? { fade_out_ms: audio.fade_out_ms } : {}) },
+          reference: it.reference,
+          confidence: 1,
+          source: "manual",
+          added_at: Date.now(),
+          notes: it.notes,
+          planned_minutes: parsePlannedMinutes(it.payload),
+          end_by: parseEndBy(it.payload),
+          ...parseFixedStartAndGap(it.payload),
+          ...parseItemTiming(it.payload),
+          ...parsePeople(it.payload),
+          comments: parseComments(it.payload),
+          on_live: parseOnLive(it.payload),
+          ...parseCuesAndHidden(it.payload),
+          auto_advance: parseAutoAdvance(it.payload),
+          ...parseItemIntent(it.payload),
+          ...parseAiSuggestion(it.payload),
+          payload_extra: parsePayloadExtra(it.payload, "audio"),
+        })
+        continue
+      }
       items.push({ id: it.id, kind: "image", image: { media_id: image.media_id, name: it.reference, fit: image.fit, ...(image.loop ? { loop: true } : {}), ...(image.sound === false ? { sound: false } : {}) }, reference: it.reference, confidence: 1, source: "manual", added_at: Date.now(), notes: it.notes, background: parseBackground(it.payload), planned_minutes: parsePlannedMinutes(it.payload), end_by: parseEndBy(it.payload), ...parseFixedStartAndGap(it.payload), ...parseItemTiming(it.payload), ...parsePeople(it.payload), comments: parseComments(it.payload), on_live: parseOnLive(it.payload), ...parseCuesAndHidden(it.payload), auto_advance: parseAutoAdvance(it.payload), ...parseItemIntent(it.payload), ...parseAiSuggestion(it.payload), payload_extra: parsePayloadExtra(it.payload, it.kind) })
+      continue
+    }
+    if (it.kind === "audio") {
+      const audio = parseAudioPayload(it.payload)
+      if (!audio) {
+        unsupported.push(it)
+        continue
+      }
+      items.push({
+        id: it.id,
+        kind: "audio",
+        audio: { media_id: audio.media_id, name: it.reference, ...(audio.output_device_id ? { output_device_id: audio.output_device_id } : {}), ...(audio.volume !== undefined ? { volume: audio.volume } : {}), ...(audio.loop ? { loop: true } : {}), ...(audio.fade_in_ms ? { fade_in_ms: audio.fade_in_ms } : {}), ...(audio.fade_out_ms ? { fade_out_ms: audio.fade_out_ms } : {}) },
+        reference: it.reference,
+        confidence: 1,
+        source: "manual",
+        added_at: Date.now(),
+        notes: it.notes,
+        planned_minutes: parsePlannedMinutes(it.payload),
+        end_by: parseEndBy(it.payload),
+        ...parseFixedStartAndGap(it.payload),
+        ...parseItemTiming(it.payload),
+        ...parsePeople(it.payload),
+        comments: parseComments(it.payload),
+        on_live: parseOnLive(it.payload),
+        ...parseCuesAndHidden(it.payload),
+        auto_advance: parseAutoAdvance(it.payload),
+        ...parseItemIntent(it.payload),
+        ...parseAiSuggestion(it.payload),
+        payload_extra: parsePayloadExtra(it.payload, it.kind),
+      })
       continue
     }
     if (it.kind === "slide") {
@@ -883,7 +1012,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
       return "failed"
     }
     const bible = useBibleStore.getState()
-    const { items, headers, unsupported } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+    const mediaKinds = await loadMediaKinds(data)
+    const { items, headers, unsupported } = toQueueItems(data, bible.activeTranslationId, bible.translations, mediaKinds)
     if (unsupported.length > 0) {
       set({ error: `The template has ${unsupported.length} item${unsupported.length === 1 ? "" : "s"} this version cannot copy. Open it in a newer Rhema Studio, or remove them there.` })
       return "failed"
@@ -930,7 +1060,8 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
         return "missing"
       }
       const bible = useBibleStore.getState()
-      const { items, headers, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations)
+      const mediaKinds = await loadMediaKinds(data)
+      const { items, headers, unsupported, missingTranslations } = toQueueItems(data, bible.activeTranslationId, bible.translations, mediaKinds)
       let approvedDesigns: ApprovedDesignSnapshot | null = null
       let approvedDesignsError: string | null = null
       if (data.program.approved_revision !== null && data.program.approved_revision !== undefined) {

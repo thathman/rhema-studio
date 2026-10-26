@@ -1,18 +1,18 @@
-import { cancelPendingPresents, presentCustomSlide, presentImage, presentSlide, presentVerse, type PresentOutcome } from "@/hooks/use-broadcast"
+import { cancelPendingPresents, presentAudioCue, presentCustomSlide, presentImage, presentSlide, presentVerse, type PresentOutcome } from "@/hooks/use-broadcast"
 import { fetchChapter, stepVerse } from "@/hooks/use-bible"
 import { resolveTranslations, isMissing } from "@/lib/translation-policy"
 import { useBibleStore } from "@/stores/bible-store"
 import { currentActor, useBroadcastStore } from "@/stores/broadcast-store"
 import { useQueueStore } from "@/stores/queue-store"
-import { isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type QueueItem, type SongWithSections } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type CueQueueItem, type QueueItem, type SongWithSections } from "@/types"
 import { previousVisibleItem, visibleRunItemFrom } from "@/lib/run-of-show"
-import { useMediaStore } from "@/stores/media-store"
 import { serviceSongNow } from "@/stores/song-pins-store"
 import { approvalHolds } from "@/stores/approval-gate-store"
 import { runTakeSteps, takesSourceOnly } from "@/lib/take-steps"
 import { toast } from "sonner"
 import { useJournalStore } from "@/stores/journal-store"
 import { useTakeAttemptStore, type TakeAttemptOutcome } from "@/stores/take-attempt-store"
+import { useSoundStore } from "@/stores/sound-store"
 
 // Audio and Bible-source-only Takes do not supersede a pending audience visual.
 // Their rundown commit is ignored if a visual Take has since been requested.
@@ -47,8 +47,15 @@ function finishTakeAttempt(id: number, itemId: string | null, reference: string,
   useTakeAttemptStore.getState().finish(id, outcome, error)
   const attempt = useTakeAttemptStore.getState().attempts.find((current) => current.id === id)
   if (outcome === "presented" && itemId && positionGeneration === latestVisualTake) {
-    const index = useQueueStore.getState().items.findIndex((item) => item.id === itemId)
-    if (index !== -1) useQueueStore.getState().setActive(index)
+    const queue = useQueueStore.getState()
+    const index = queue.items.findIndex((item) => item.id === itemId)
+    if (index !== -1) {
+      const previous = queue.activeIndex === null ? undefined : queue.items[queue.activeIndex]
+      const next = queue.items[index]
+      const sound = useSoundStore.getState()
+      if (previous && isAudioItem(previous) && previous.id !== next.id && sound.itemId === previous.id && sound.fadeOutMs > 0) sound.fadeOut(sound.fadeOutMs)
+      queue.setActive(index)
+    }
   }
   const status = attempt?.status ?? (outcome === "presented" ? "succeeded" : outcome === "superseded" ? "superseded" : "failed")
   const reason = error ? `: ${error}` : outcome !== "presented" ? ` (${outcome})` : ""
@@ -98,10 +105,10 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   // A cue-only moment (#193) shows nothing: taking it fires its cues; the screens keep what they show.
   if (isCueItem(item)) return takeCueItem(item, index)
   const sourceOnly = takesSourceOnly(item)
-  const positionGeneration = isSoundItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
+  const positionGeneration = isAudioItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
   // A reading for the Bible feeds only does not reach the main screens, like Activate on Bible feeds.
   const attemptId = beginTakeAttempt(id, item.reference)
-  if (!isSoundItem(item) && !sourceOnly && approvalHolds(again)) {
+  if (!isAudioItem(item) && !sourceOnly && approvalHolds(again)) {
     finishTakeAttempt(attemptId, id, item.reference, "held_for_approval", positionGeneration)
     return
   }
@@ -109,7 +116,8 @@ export async function presentQueueItem(index: number, slide: number | "last" = 0
   const took = afterTake(item, !opts.automatic && !isUp(item))
   try {
     let outcome: PresentOutcome
-    if (isSlideItem(item)) outcome = await presentCustomSlide(item, { goLive: true })
+    if (isAudioItem(item)) outcome = await presentAudioCue(item)
+    else if (isSlideItem(item)) outcome = await presentCustomSlide(item, { goLive: true })
     else if (isImageItem(item)) outcome = await presentImage(item, { goLive: true })
     else if (isSongItem(item)) {
       // Stepping within the live song keeps the arrangement it went live with.
@@ -168,12 +176,6 @@ function shownFrom(index: number, dir: 1 | -1): number {
  * item; stepping back into a song lands on its last slide.
  */
 /** A rundown item whose library file is a sound. */
-function isSoundItem(item: QueueItem | undefined): boolean {
-  if (!item || !isImageItem(item)) return false
-  const id = item.image.media_id
-  return useMediaStore.getState().assets.find((a) => a.id === id)?.kind === "audio"
-}
-
 function stepQueue(offset: number): Promise<void> {
   const { items, activeIndex } = useQueueStore.getState()
   if (items.length === 0) return Promise.resolve()
@@ -216,10 +218,10 @@ function stepQueue(offset: number): Promise<void> {
   // Sound items play only when reached going forward: Previous steps over
   // them (walk-in music does not start again on the way back), and Next at
   // the end of the service does not replay a final sound.
-  if (current !== null && isSoundItem(items[target])) {
+  if (current !== null && isAudioItem(items[target])) {
     if (offset < 0) {
-      while (target > 0 && isSoundItem(items[target])) target -= 1
-      if (isSoundItem(items[target])) return Promise.resolve()
+      while (target > 0 && isAudioItem(items[target])) target -= 1
+      if (isAudioItem(items[target])) return Promise.resolve()
     } else if (target === current) return Promise.resolve()
   }
   const atEdge = target === current
@@ -318,14 +320,16 @@ export const remoteActions = {
       // The rundown's copy carries the steps armed in Prepare since it was put in Preview.
       const queueItem = queue.items[idx] ?? item
       const sourceOnly = isVerseItem(item) && idx !== -1 && takesSourceOnly(queueItem)
-      const positionGeneration = isSoundItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
+      const positionGeneration = isAudioItem(item) || sourceOnly ? latestVisualTake : ++latestVisualTake
       const attemptId = beginTakeAttempt(idx === -1 ? null : item.id, queueItem.reference)
-      if (approvalHolds(() => void remoteActions.sendToLive())) {
+      if (!isAudioItem(item) && approvalHolds(() => void remoteActions.sendToLive())) {
         finishTakeAttempt(attemptId, idx === -1 ? null : item.id, queueItem.reference, "held_for_approval", positionGeneration)
         return Promise.resolve()
       }
       const took = afterTake(queueItem, !isUp(item))
-      const presenting: Promise<PresentOutcome> = isSlideItem(item)
+      const presenting: Promise<PresentOutcome> = isAudioItem(item)
+        ? presentAudioCue(item)
+        : isSlideItem(item)
         ? presentCustomSlide(item, { goLive: true })
         : isImageItem(item)
           ? presentImage(item, { goLive: true })

@@ -88,7 +88,7 @@ pub const MIGRATIONS: &[Migration] = &[
 /// migration and a renderer; until then they are rejected on write and
 /// surfaced untouched on read. A `song` item carries a JSON `payload`
 /// (`SongItemPayload`); its `reference` is the title, for display only.
-pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image", "phase", "group", "cue"];
+pub const SUPPORTED_KINDS: &[&str] = &["verse", "song", "slide", "image", "audio", "phase", "group", "cue"];
 /// A moment in the run of show that shows nothing (#193): it fires its cues (a stage message,
 /// an OBS recording chapter, the timer) when its turn comes. Its reference is its name.
 pub const CUE_KIND: &str = "cue";
@@ -1186,6 +1186,9 @@ pub(crate) fn validate_items(items: &[ItemInput]) -> Result<()> {
         }
         if kind == "image" {
             media::validate_image_payload(i, it.payload.as_deref())?;
+        }
+        if kind == "audio" {
+            media::validate_audio_payload(i, it.payload.as_deref())?;
         }
         if kind == "phase" {
             validate_phase_payload(i, it.payload.as_deref())?;

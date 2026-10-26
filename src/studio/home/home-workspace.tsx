@@ -237,6 +237,7 @@ function kindLabel(it: Item, songs: ReturnType<typeof useSongStore.getState>["so
   }
   if (it.kind === "slide") return "Slide"
   if (isImageItem(it)) return "Picture or video"
+  if (it.kind === "audio") return "Audio cue"
   return "Scripture"
 }
 

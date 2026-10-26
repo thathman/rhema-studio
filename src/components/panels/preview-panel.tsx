@@ -4,7 +4,7 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { useBibleStore, useBroadcastStore } from "@/stores"
 import { bibleActions } from "@/hooks/use-bible"
 import { toCustomSlideRenderData, toImageRenderData, toVideoRenderData, toVerseRenderData } from "@/hooks/use-broadcast"
-import { isCueItem, isImageItem, isSlideItem, isSongItem } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem } from "@/types"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { songSlides, toLyricRenderData } from "@/lib/lyrics"
@@ -80,7 +80,10 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
     "KJV"
 
   let verseData = selectedVerse ? toVerseRenderData(selectedVerse, translation) : null
-  if (selectedSlide && isImageItem(selectedSlide.item)) {
+  if (selectedSlide && isAudioItem(selectedSlide.item)) {
+    const output = selectedSlide.item.audio.output_device_id ? "the selected output on this computer" : "this computer’s default output"
+    verseData = { kind: "slide", reference: "", segments: [], lines: [`♪ ${selectedSlide.item.audio.name}`, `Local audio · ${output}`, "Congregation and OBS screens stay unchanged"] }
+  } else if (selectedSlide && isImageItem(selectedSlide.item)) {
     // A video previews as "▶ name"; it plays only on the outputs.
     // A sound item has no picture: Preview says what Show live will do.
     verseData = previewIsSound

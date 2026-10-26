@@ -10,6 +10,7 @@ import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanNam
 import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
+import { useMediaStore } from "./media-store"
 
 const program = {
   id: "p1",
@@ -90,6 +91,7 @@ beforeEach(() => {
   mockInvoke.mockReset()
   useQueueStore.setState({ items: [], activeIndex: null })
   useBibleStore.setState({ activeTranslationId: 1, secondaryTranslationId: null, translations: [KJV] })
+  useMediaStore.setState({ assets: [], loading: false, loaded: true, error: null })
   useServiceStore.setState({ programs: [], current: null, dirty: false, loading: false, saving: false, error: null, conflict: null, unsupportedItems: [], missingTranslations: [], approvedDesigns: null, approvedDesignRevision: null, approvedDesignsError: null })
 })
 
@@ -172,6 +174,42 @@ describe("conversions", () => {
     expect(rundownSignature(a)).toBe(rundownSignature(b))
     expect(rundownSignature([a[1], a[0]])).not.toBe(rundownSignature(a))
     expect(rundownSignature([{ ...a[0], id: "other" }, a[1]])).not.toBe(rundownSignature(a))
+  })
+})
+
+describe("legacy audio service reopening", () => {
+  it("checks local media metadata before decoding an older image row as an audio cue", async () => {
+    const oldService: ProgramWithItems = {
+      ...stored,
+      items: [item("legacy-audio", "Walk-in", 0, 0, 0, { kind: "image", payload: '{"media_id":"walkin","fit":"cover"}' })],
+    }
+    useMediaStore.setState({ assets: [], loaded: false, loading: false, error: null })
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "content_get_program") return oldService
+      if (command === "media_list") return [{ id: "walkin", kind: "audio", name: "Walk-in", file: "walk-in.mp3", hash: "hash", size: 10, mime: "audio/mpeg", width: null, height: null, duration_ms: null, source: "local", source_ref: "", original_path: "", created_at: "", path: "/media/walk-in.mp3", present: true }]
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("ok")
+    expect(mockInvoke).toHaveBeenCalledWith("media_list")
+    expect(useQueueStore.getState().items[0]).toMatchObject({ kind: "audio", audio: { media_id: "walkin", name: "Walk-in" } })
+  })
+
+  it("refuses to guess at an old image row when the local media catalog cannot be checked", async () => {
+    const oldService: ProgramWithItems = {
+      ...stored,
+      items: [item("legacy-audio", "Walk-in", 0, 0, 0, { kind: "image", payload: '{"media_id":"walkin","fit":"cover"}' })],
+    }
+    useMediaStore.setState({ assets: [], loaded: false, loading: false, error: null })
+    mockInvoke.mockImplementation(async (command: string) => {
+      if (command === "content_get_program") return oldService
+      if (command === "media_list") throw new Error("media database unavailable")
+      return null
+    })
+
+    expect(await useServiceStore.getState().openProgram("p1")).toBe("error")
+    expect(useQueueStore.getState().items).toEqual([])
+    expect(useServiceStore.getState().error).toContain("Could not check the local media library")
   })
 })
 

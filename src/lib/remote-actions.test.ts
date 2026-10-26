@@ -335,8 +335,8 @@ describe("queue position follows successful Takes", () => {
     const previous = queueItemFor(genesisOneOne)
     const soundItem = {
       id: "walk-in",
-      kind: "image",
-      image: { media_id: "audio-walk-in", name: "Walk-in", fit: "cover" },
+      kind: "audio",
+      audio: { media_id: "audio-walk-in", name: "Walk-in" },
       reference: "Walk-in",
       confidence: 1,
       source: "manual",

@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { invoke, convertFileSrc } from "@tauri-apps/api/core"
 import { open } from "@tauri-apps/plugin-dialog"
 import { readFile } from "@tauri-apps/plugin-fs"
-import { isImageItem, type MediaAssetStatus, type MediaImportResult, type QueueItem } from "@/types"
+import { isAudioItem, isImageItem, type MediaAssetStatus, type MediaImportResult, type QueueItem } from "@/types"
 import { useQueueStore } from "@/stores/queue-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 
@@ -46,7 +46,7 @@ function measure(url: string): Promise<{ width: number; height: number } | null>
 
 /** Where a picture or video is used outside saved services: the rundown on screen, signage loops and scenes' video layers. */
 export function mediaUsedHere(id: string): string[] {
-  const uses = (i: QueueItem) => i.background?.media_id === id || (isImageItem(i) && i.image.media_id === id)
+  const uses = (i: QueueItem) => i.background?.media_id === id || (isImageItem(i) && i.image.media_id === id) || (isAudioItem(i) && i.audio.media_id === id)
   const where: string[] = []
   if (useQueueStore.getState().items.some(uses)) where.push("the service on screen")
   // A scene's video layer plays the file itself (a picture layer keeps its own copy).
@@ -69,6 +69,7 @@ export const useMediaStore = create<MediaState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const assets = await invoke<MediaAssetStatus[]>("media_list")
+      if (!Array.isArray(assets)) throw new Error("The local media library returned an invalid list.")
       set({ assets, loading: false, loaded: true })
       return assets
     } catch (e) {

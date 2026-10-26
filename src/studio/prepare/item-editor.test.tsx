@@ -6,14 +6,22 @@ vi.mock("@/lib/stage-canvas", () => ({ drawStage }))
 vi.mock("@/studio/present/rundown-list", () => ({ SlideList: () => null }))
 vi.mock("@/components/panels/preview-panel", () => ({ PreviewPanel: () => null }))
 vi.mock("@/studio/prepare/timing-rules", () => ({ TimingRules: () => null }))
-vi.mock("@/studio/prepare/item-editor-parts", () => Object.fromEntries([
-  "BackgroundPicker", "CommentsEditor", "CueItemEditor", "CustomSlideEditor", "ImageItemControls", "ItemCuesEditor",
-  "LookAndScene", "NoteEditor", "GoLiveCues", "PlannedMinutes", "SongApprovalNote", "TakeSteps", "TimedAdvance", "SongItemControls",
-].map((name) => [name, () => null])))
+vi.mock("@/studio/prepare/item-editor-parts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/studio/prepare/item-editor-parts")>()
+  return {
+    ...actual,
+    ...Object.fromEntries([
+      "BackgroundPicker", "CommentsEditor", "CueItemEditor", "CustomSlideEditor", "ImageItemControls", "ItemCuesEditor",
+      "NoteEditor", "GoLiveCues", "PlannedMinutes", "SongApprovalNote", "TimedAdvance", "SongItemControls",
+    ].map((name) => [name, () => null])),
+    LookAndScene: () => "LOOK_AND_SCENE_CONTROLS",
+    TakeSteps: () => "TAKE_STEPS_CONTROLS",
+  }
+})
 
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import type { ImageQueueItem, MediaAssetStatus, SongQueueItem, SongWithSections } from "@/types"
+import type { AudioQueueItem, MediaAssetStatus, SongQueueItem, SongWithSections } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
 import { useSongPins } from "@/stores/song-pins-store"
@@ -22,7 +30,7 @@ import { useMediaStore } from "@/stores/media-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useTimerStore } from "@/stores/timer-store"
 import { stageFontVh } from "@/lib/stage"
-import { StagePreview } from "./item-editor"
+import { ItemEditor, StagePreview } from "./item-editor"
 
 const item: SongQueueItem = {
   id: "hymn-245",
@@ -169,8 +177,8 @@ describe("Prepare confidence preview (#389)", () => {
   })
 
   it("names an unavailable local audio file instead of implying it has stage lyrics", async () => {
-    const audio: ImageQueueItem = {
-      id: "audio-1", kind: "image", image: { media_id: "media-audio-1", name: "Opening track", fit: "contain" },
+    const audio: AudioQueueItem = {
+      id: "audio-1", kind: "audio", audio: { media_id: "media-audio-1", name: "Opening track" },
       reference: "Opening track", confidence: 1, source: "manual", added_at: 0,
     }
     const missingAsset: MediaAssetStatus = {
@@ -182,5 +190,37 @@ describe("Prepare confidence preview (#389)", () => {
     await act(async () => root!.render(<StagePreview item={audio} index={0} />))
 
     expect(document.body.textContent).toContain("Audio file “Opening track” is missing from this computer's media library.")
+  })
+
+  it("reports a media-library check failure instead of claiming the cue file is missing", async () => {
+    const audio: AudioQueueItem = {
+      id: "audio-1", kind: "audio", audio: { media_id: "media-audio-1", name: "Opening track" },
+      reference: "Opening track", confidence: 1, source: "manual", added_at: 0,
+    }
+    useMediaStore.setState({ assets: [], loaded: true, error: "Local media folder is unavailable" })
+
+    await act(async () => root!.render(<StagePreview item={audio} index={0} />))
+
+    expect(document.body.textContent).toContain("The local media library couldn't be checked: Local media folder is unavailable")
+    expect(document.body.textContent).not.toContain("is missing from this computer's media library")
+  })
+
+  it("shows local audio settings without exposing scene or screen routing controls in Prepare", async () => {
+    const audio: AudioQueueItem = {
+      id: "audio-1", kind: "audio", audio: { media_id: "media-audio-1", name: "Opening track", volume: 0.65, loop: true, fade_in_ms: 500, fade_out_ms: 1500 },
+      reference: "Opening track", confidence: 1, source: "manual", added_at: 0,
+    }
+    useQueueStore.setState({ items: [audio], headers: [], activeIndex: null })
+    useBibleStore.setState({ selectedSlide: { item: audio, index: 0 }, selectedQueueItemId: audio.id })
+    useMediaStore.setState({ assets: [], loaded: true, loading: false, error: null })
+
+    await act(async () => root!.render(<ItemEditor />))
+
+    expect(document.body.textContent).toContain("Local audio cue · congregation and OBS screens stay unchanged.")
+    expect(document.querySelector('[aria-label="Audio cue volume"]')).toHaveProperty("value", "0.65")
+    expect(document.querySelector('[aria-label="Audio fade in seconds"]')).toHaveProperty("value", "0.5")
+    expect(document.querySelector('[aria-label="Audio fade out seconds"]')).toHaveProperty("value", "1.5")
+    expect(document.body.textContent).not.toContain("LOOK_AND_SCENE_CONTROLS")
+    expect(document.body.textContent).not.toContain("TAKE_STEPS_CONTROLS")
   })
 })

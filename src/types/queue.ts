@@ -130,6 +130,28 @@ export interface ImageQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
+/** A local audio cue. It plays through this computer's audio output and has no screen content. */
+export interface AudioQueueRef {
+  media_id: string
+  name: string
+  /** A device id on this computer; absent means the system default output. */
+  output_device_id?: string
+  /** 0–1; absent means the current Sound control volume. */
+  volume?: number
+  /** Repeat until another cue or the operator stops it. */
+  loop?: boolean
+  /** Fade in when the cue starts, in milliseconds. */
+  fade_in_ms?: number
+  /** Fade out when a later rundown item succeeds, in milliseconds. */
+  fade_out_ms?: number
+}
+
+export interface AudioQueueItem extends QueueItemBase {
+  kind: "audio"
+  audio: AudioQueueRef
+  verse?: undefined
+}
+
 /**
  * A moment in the run of show that shows nothing (#193): taking it fires its cues (an OBS
  * recording chapter, a stage message, the timer) and starts its event; the screens keep what they
@@ -140,7 +162,7 @@ export interface CueQueueItem extends QueueItemBase {
   verse?: undefined
 }
 
-export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem | CueQueueItem
+export type QueueItem = VerseQueueItem | SongQueueItem | SlideQueueItem | ImageQueueItem | AudioQueueItem | CueQueueItem
 
 export function isVerseItem(item: QueueItem): item is VerseQueueItem {
   return item.kind === undefined || item.kind === "verse"
@@ -156,6 +178,10 @@ export function isSlideItem(item: QueueItem): item is SlideQueueItem {
 
 export function isImageItem(item: QueueItem): item is ImageQueueItem {
   return item.kind === "image"
+}
+
+export function isAudioItem(item: QueueItem): item is AudioQueueItem {
+  return item.kind === "audio"
 }
 
 export function isCueItem(item: QueueItem): item is CueQueueItem {

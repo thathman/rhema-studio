@@ -21,7 +21,7 @@ import { CUE_TRIGGERS } from "@/types"
 import { hymnNumbersFromLibrary, songKindLabel } from "@/lib/song-kind"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { BulkBar } from "@/studio/prepare/bulk-bar"
-import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 /**
  * The service rundown, built on the existing queue store.
  *
@@ -66,7 +66,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
     return (
       <p className="p-4 text-center text-xs text-muted-foreground">
         {mode === "prepare"
-          ? "Nothing in the service yet. Add item puts passages, songs, hymns, slides and pictures here."
+          ? "Nothing in the service yet. Add item puts passages, songs, hymns, slides, media and audio cues here."
           : "Nothing in the service yet. Use Quick find below, or open Prepare."}
       </p>
     )
@@ -76,18 +76,19 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
         const song = isSongItem(item)
         const custom = isSlideItem(item)
         const picture = isImageItem(item)
+        const audio = isAudioItem(item)
         const cue = isCueItem(item)
         const skipped = isSkipped(items, headers, index)
         const inPick = mode === "prepare" && picked.length > 1 && picked.includes(item.id)
         const isSelected = selectedQueueItemId
           ? selectedQueueItemId === item.id
-          : song || custom || picture || cue
+          : song || custom || picture || audio || cue
             ? selectedSlide?.item.id === item.id
             : !!selected && !selectedSlide &&
               selected.book_number === item.verse.book_number &&
               selected.chapter === item.verse.chapter &&
               selected.verse === item.verse.verse
-        const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
+        const onAir = !audio && isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === nextShown
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
         return (
@@ -111,13 +112,15 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 aria-selected={mode === "prepare" && picked.length > 1 ? inPick : undefined}
                 onClick={(e) => (mode === "prepare" ? pick(item, e) : preview(item))}
                 onDoubleClick={mode === "present" ? () => present(item, index) : undefined}
-                title={mode === "present" ? (cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
+                title={mode === "present" ? (audio ? "Click to preview, double-click to play audio on this computer; screens stay unchanged" : cue ? "Click to preview, double-click to fire its cues (the screens stay as they are)" : "Click to preview, double-click to show live") : "Click to preview"}
               >
                 <span className="w-5 shrink-0 text-right text-xs text-muted-foreground">{index + 1}</span>
                 {song && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={item.song.hymn ? "Hymn" : "Song"} />}
                 {custom && <PresentationIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Slide" />}
                 {picture && <MediaKindIcon mediaId={item.image.media_id} />}
                 {picture && <MissingMediaMark mediaId={item.image.media_id} />}
+                {audio && <MusicIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Audio cue" />}
+                {audio && <MissingMediaMark mediaId={item.audio.media_id} />}
                 {cue && <ZapIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Cue only" />}
                 {/* The title keeps its room: on a narrow row the details below wrap under it instead of squeezing it. */}
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -127,6 +130,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {item.ai_suggestion && <span className="shrink-0 rounded-[5px] bg-tone-amber px-1.5 py-0.5 text-[0.6875rem] font-semibold text-tone-amber-foreground" title={`Written by ${item.ai_suggestion}: check the words and accept them in Prepare`}>AI suggestion</span>}
                 {song && <SongBadges item={item} />}
                 {cue && <span className="shrink-0 text-[0.6875rem] text-muted-foreground">Cue only · nothing on screen</span>}
+                {audio && <span className="shrink-0 text-[0.6875rem] text-muted-foreground">Audio cue · local output; screens unchanged</span>}
                 {skipped && (
                   <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] font-semibold text-muted-foreground" title={item.hidden ? "Kept in the service; Present skips it" : "Its phase is skipped for this service"}>
                     <EyeOffIcon className="size-3" aria-hidden />{item.hidden ? "Hidden" : "Skipped"}

@@ -41,6 +41,7 @@ function itemIcon(it: QueueItem) {
   if (isSongItem(it)) return <MusicIcon />
   if (it.kind === "slide") return <PresentationIcon />
   if (isImageItem(it)) return <ImageIcon />
+  if (it.kind === "audio") return <MusicIcon />
   return <BookOpenIcon />
 }
 

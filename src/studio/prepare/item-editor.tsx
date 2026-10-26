@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useEffect, useRef, useState } from "react"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { drawStage } from "@/lib/stage-canvas"
-import { isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
+import { isAudioItem, isCueItem, isImageItem, isSlideItem, isSongItem, isVerseItem, type QueueItem, type StagePayload } from "@/types"
 import { SlideList } from "@/studio/present/rundown-list"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { hymnNumbersFromLibrary, isHymnSong, songKindLabel } from "@/lib/song-kind"
@@ -21,12 +21,13 @@ import { warnMs } from "@/lib/item-timing"
 import { elapsedMs, formatMs, remainingMs, timerTone } from "@/lib/timer"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { TimingRules } from "@/studio/prepare/timing-rules"
-import { BackgroundPicker, CommentsEditor, CueItemEditor, CustomSlideEditor, ImageItemControls, ItemCuesEditor, LookAndScene, NoteEditor, GoLiveCues, PlannedMinutes, SongApprovalNote, TakeSteps, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
+import { AudioItemControls, BackgroundPicker, CommentsEditor, CueItemEditor, CustomSlideEditor, ImageItemControls, ItemCuesEditor, LookAndScene, NoteEditor, GoLiveCues, PlannedMinutes, SongApprovalNote, TakeSteps, TimedAdvance, SongItemControls } from "@/studio/prepare/item-editor-parts"
 
 const KIND: Record<string, [string, React.ReactNode]> = {
   song: ["Song", <MusicIcon key="i" />],
   slide: ["Slide", <PresentationIcon key="i" />],
   image: ["Picture or video", <ImageIcon key="i" />],
+  audio: ["Audio cue", <MusicIcon key="i" />],
   verse: ["Scripture", <BookOpenIcon key="i" />],
   cue: ["Cue only", <ZapIcon key="i" />],
 }
@@ -44,7 +45,7 @@ export function ItemEditor() {
     )
   }
   const { item, index } = sel
-  const kind = isSongItem(item) ? "song" : isSlideItem(item) ? "slide" : isImageItem(item) ? "image" : isCueItem(item) ? "cue" : "verse"
+  const kind = isSongItem(item) ? "song" : isSlideItem(item) ? "slide" : isImageItem(item) ? "image" : isAudioItem(item) ? "audio" : isCueItem(item) ? "cue" : "verse"
   const badgeLabel = isSongItem(item)
     ? songKindLabel(item, songs[item.song.song_id] ? hymnNumbersFromLibrary(songs[item.song.song_id].numbers) : [], songs[item.song.song_id]?.song.tags)
     : KIND[kind][0]
@@ -83,10 +84,11 @@ export function ItemEditor() {
           )}
           {isSlideItem(item) && <CustomSlideEditor item={item} />}
           {isImageItem(item) && <ImageItemControls item={item} />}
+          {isAudioItem(item) && <AudioItemControls item={item} />}
           {isCueItem(item) && <CueItemEditor item={item} />}
           {kind === "verse" && <p className="px-2 pt-3 text-xs text-muted-foreground">Shown in the translation it was added with (or the service's, if the operator overrides it in Present).</p>}
-          {!isImageItem(item) && !isCueItem(item) && <BackgroundPicker item={item} />}
-          {!isCueItem(item) && <LookAndScene item={item} />}
+          {!isImageItem(item) && !isAudioItem(item) && !isCueItem(item) && <BackgroundPicker item={item} />}
+          {!isCueItem(item) && !isAudioItem(item) && <LookAndScene item={item} />}
         </TabsContent>
         <TabsContent value="notes" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           <NoteEditor item={item} />
@@ -100,7 +102,7 @@ export function ItemEditor() {
           <p className="px-2 pt-3 text-xs text-muted-foreground">Signals belong to this item, not the whole service. They never take anything live by themselves.</p>
           <GoLiveCues item={item} />
           <ItemCuesEditor item={item} />
-          {!isCueItem(item) && <TakeSteps item={item} />}
+          {!isCueItem(item) && !isAudioItem(item) && <TakeSteps item={item} />}
           <TimedAdvance item={item} />
         </TabsContent>
         <TabsContent value="timing" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
@@ -139,7 +141,7 @@ export function StagePreview({ item, index }: { item: QueueItem; index: number }
   const stageCountdown = useBroadcastStore((s) => s.stageCountdown)
   const timer = useTimerStore((s) => s.timer)
   useTimerStore((s) => s.tick)
-  const mediaId = isImageItem(item) ? item.image.media_id : null
+  const mediaId = isImageItem(item) ? item.image.media_id : isAudioItem(item) ? item.audio.media_id : null
   const media = useMediaStore((s) => mediaId ? s.assets.find((asset) => asset.id === mediaId) : undefined)
   const mediaLoaded = useMediaStore((s) => s.loaded)
   const mediaLoading = useMediaStore((s) => s.loading)
@@ -196,10 +198,10 @@ export function StagePreview({ item, index }: { item: QueueItem; index: number }
       }
     }
   }
-  if (isImageItem(item) && media?.kind === "audio") {
-    if (mediaLoaded && !media.present) warning = `Audio file “${media.name}” is missing from this computer's media library.`
-    else if (mediaError) warning = `The local media library couldn't be checked: ${mediaError}`
-    else warning = "This audio item adds no lyric text to the confidence screen."
+  if (isAudioItem(item)) {
+    if (mediaError) warning = `The local media library couldn't be checked: ${mediaError}`
+    else if (mediaLoaded && !media?.present) warning = `Audio file “${item.audio.name}” is missing from this computer's media library.`
+    else current = { title: item.audio.name, lines: ["Local audio cue · public screens stay unchanged"] }
   }
   const now = monotonicNow()
   const timerRunning = timer.startedAt !== null || timer.accumulatedMs > 0
