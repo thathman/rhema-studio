@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { setupStatusLabel, shortDeviceId } from "@/lib/setup-readiness"
 import { putBack, useRecovery } from "@/lib/live-recovery"
 import { Button } from "@/components/ui/button"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
 import { useJoin, type JoinStatus } from "@/stores/join-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -218,12 +218,12 @@ export function DeskMenu({ active, onSettings }: { active?: boolean; onSettings:
               {joined || status !== "off" ? (
                 <>
                   <Button size="xs" variant="outline" onClick={() => run(() => void useJoin.getState().leave())}>Leave this host</Button>
-                  <Button size="xs" variant="ghost" onClick={() => run(() => openProductionTab("operators"))}><UsersRoundIcon /> Operators</Button>
+                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> Connections</Button>
                 </>
               ) : (
                 <>
-                  <Button size="xs" variant="outline" onClick={() => run(() => openProductionTab("operators"))}><UsersRoundIcon /> See joined desks</Button>
-                  <Button size="xs" variant="ghost" onClick={() => run(() => openProductionTab("operators"))}>Join another host</Button>
+                  <Button size="xs" variant="outline" onClick={() => run(openConnectionsHub)}><UsersRoundIcon /> See joined desks</Button>
+                  <Button size="xs" variant="ghost" onClick={() => run(openConnectionsHub)}>Join another host</Button>
                 </>
               )}
             </div>

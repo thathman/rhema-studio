@@ -12,7 +12,6 @@ import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useJoin } from "@/stores/join-store"
 import { useRecovery } from "@/lib/live-recovery"
 import { defaultSetup } from "@/lib/setup-readiness"
-import { useProductionTab } from "@/studio/production/production-tab"
 import { useSettingsStore } from "@/stores/settings-store"
 import { useShellStore } from "@/studio/shell-store"
 import { REMOTE_ROLES } from "@/lib/remote-roles"
@@ -50,7 +49,7 @@ beforeEach(async () => {
   useSettingsStore.setState({ operatorName: "", joinAddress: "", setup: defaultSetup() })
   useJoin.setState({ status: "off", me: null, live: null })
   useRecovery.setState({ offer: null, dismissed: false })
-  useProductionTab.setState({ requested: null })
+  useShellStore.setState({ workspace: "home", goRequest: null })
   useShellStore.setState({ setupOpen: false, setupStatusOpen: false })
   await mount()
 })
@@ -153,11 +152,11 @@ describe("the Desk menu", () => {
     expect(useSettingsStore.getState().setup.deviceName).toBe("Media booth")
   })
 
-  it("the role row says what this desk may do and leads to Operators (#299 1.10)", async () => {
+  it("the role row says what this desk may do and opens Connections (#299 1.10, #401)", async () => {
     await openMenu()
     expect(document.body.textContent).toContain("Every control, on this computer")
     await act(async () => row("See joined desks").click())
-    expect(useProductionTab.getState().requested).toBe("operators")
+    expect(useShellStore.getState().goRequest).toBe("connections")
     expect(document.getElementById("desk-name")).toBeNull()
   })
 

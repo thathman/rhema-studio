@@ -43,9 +43,9 @@ import { TRANSCRIPT_RETENTION_DAYS } from "@/stores/settings-store"
 import { useTutorialStore } from "@/stores/tutorial-store"
 import { useSettingsDialogStore, type SettingsSection } from "@/lib/settings-dialog"
 import { markSearchHits, searchElsewhere, searchSettings, searchWords, type ElsewhereId } from "@/lib/settings-search"
-import { openProductionTab } from "@/studio/production/production-tab"
+import { openConnectionsHub } from "@/studio/connections/navigation"
+import { PairDeviceDialog } from "@/studio/connections/pair-device-dialog"
 import { REMOTE_EVENTS } from "@/lib/remote-events"
-import { qrDataUrl } from "@/lib/qr-bulletin"
 import { setDeskControl } from "@/lib/desk-control"
 import { asRemoteRole, REMOTE_ROLES } from "@/lib/remote-roles"
 import { ArrowUpRightIcon, EyeIcon, EyeOffIcon, MonitorIcon, PaletteIcon, SearchIcon, SparklesIcon } from "lucide-react"
@@ -683,51 +683,6 @@ function RemoteControlSection() {
   const remoteAuthRequired = useSettingsStore((s) => s.remoteAuthRequired)
   const setRemoteAuthRequired = useSettingsStore((s) => s.setRemoteAuthRequired)
   const anyKey = remoteSecret.trim().length > 0 || remoteDevices.length > 0
-  const [pairCode, setPairCode] = useState<string | null>(null)
-  const [pairStartedAt, setPairStartedAt] = useState("")
-  // The backend closes the window when a device pairs; hide the code once a device newer than the window appears.
-  const showPairCode = pairCode !== null && !remoteDevices.some((d) => d.paired_at > pairStartedAt)
-  const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [pairQr, setPairQr] = useState<{ host: string; url: string; image: string } | null>(null)
-  /** Rebuild the code for another address (a VPN or second network card can make the guess wrong). */
-  const showPairQr = async (host: string, code: string, port: number, tlsPort?: number | null) => {
-    // With https on, the phone opens the secure page, so it can talk too.
-    const url = tlsPort ? `https://${host}:${tlsPort}/remote#code=${code}` : `http://${host}:${port}/remote#code=${code}`
-    setPairQr({ host, url, image: await qrDataUrl(url) })
-  }
-  const startPairing = async () => {
-    try {
-      const code = await invoke<string>("remote_pair_start")
-      setPairStartedAt(new Date().toISOString())
-      setPairCode(code)
-      setPairQr(null)
-      // A phone scans this to open the remote page with the code filled in (in the
-      // fragment, so it never reaches a server log). Only offered when the running
-      // server accepts other devices (asked from the server; the tickbox may have changed since).
-      const status = await invoke<RemoteStatus>("get_http_status").catch(() => null)
-      const ip = status?.lan ? await invoke<string | null>("remote_lan_address").catch(() => null) : null
-      if (status?.lan && status.port) await showPairQr(ip ?? "", code, status.port, status.tls_port)
-      if (pairTimer.current) clearTimeout(pairTimer.current)
-      pairTimer.current = setTimeout(() => setPairCode(null), 120_000)
-    } catch (e) {
-      setHttpError(String(e))
-    }
-  }
-  const cancelPairing = async () => {
-    setPairCode(null)
-    if (pairTimer.current) clearTimeout(pairTimer.current)
-    await invoke("remote_pair_cancel").catch(() => {})
-  }
-  useEffect(() => {
-    // The backend closes the window on pairing, expiry or three wrong codes; closing Settings closes it too.
-    const closed = () => setPairCode(null)
-    window.addEventListener("rhema:pair-closed", closed)
-    return () => {
-      window.removeEventListener("rhema:pair-closed", closed)
-      if (pairTimer.current) clearTimeout(pairTimer.current)
-      void invoke("remote_pair_cancel").catch(() => {})
-    }
-  }, [])
 
   const [oscStatus, setOscStatus] = useState<RemoteStatus>({ running: false, port: null })
   const [httpStatus, setHttpStatus] = useState<RemoteStatus>({ running: false, port: null })
@@ -874,40 +829,8 @@ function RemoteControlSection() {
       <div className="flex flex-col gap-2 text-xs">
         <div className="flex items-center justify-between">
           <span>Paired devices</span>
-          {showPairCode ? (
-            <Button size="sm" variant="outline" className="text-xs" onClick={() => void cancelPairing()}>Cancel pairing</Button>
-          ) : (
-            <Button size="sm" variant="outline" className="text-xs" disabled={!httpStatus.running} title={httpStatus.running ? undefined : "Start the HTTP API first; devices pair over it"} onClick={() => void startPairing()}>Pair a device</Button>
-          )}
+          <PairDeviceDialog />
         </div>
-        {showPairCode && (
-          <div className="rounded-md border border-border bg-muted/40 p-3">
-            {pairQr && (
-              <div className="mb-2 flex items-center gap-3">
-                {pairQr.host ? <img src={pairQr.image} alt="Pairing code for a phone" className="size-32 rounded bg-white p-1" /> : null}
-                <div className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">
-                  <p>{pairQr.host ? <>Scan with the phone's camera (same Wi-Fi) and press Pair. Or open <code className="break-all">{pairQr.url.split("#")[0]}</code> and type the code.</> : "This computer's network address could not be found. Type it below (Wi-Fi settings show it) to get a code to scan."}</p>
-                  <label className="flex items-center gap-1">
-                    This computer's address
-                    <Input
-                      aria-label="This computer's address for the phone"
-                      defaultValue={pairQr.host}
-                      placeholder="192.168.1.20"
-                      className="h-6 w-32 text-[0.6875rem]"
-                      onBlur={(e) => { const h = e.target.value.trim(); if (pairCode && httpStatus.port && /^[\w.:-]+$/.test(h) && h !== pairQr.host) void showPairQr(h, pairCode, httpStatus.port) }}
-                    />
-                  </label>
-                  <span>Wrong address (VPN, cable and Wi-Fi on different networks)? Change it to the one the phone's Wi-Fi can reach.</span>
-                </div>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">On the device, within two minutes, send this code once:</p>
-            <p className="my-1 font-mono text-2xl tracking-[0.3em]">{pairCode}</p>
-            <p className="text-xs text-muted-foreground">
-              <code>POST http://&lt;this laptop&gt;:{httpStatus.port ?? httpPort}/api/v1/pair</code> with <code>{`{"code":"${pairCode}","name":"Tolu's phone"}`}</code>. The reply holds the device's token; it is shown once. Three wrong codes close the window.
-            </p>
-          </div>
-        )}
         {remoteDevices.length === 0 ? (
           <p className="text-xs text-muted-foreground">None yet. A paired device sends its own token instead of the shared key, can be revoked on its own, and starts as "Present only" (next, previous, show, hide, macros; not theme, opacity, confidence or the on-air switch).</p>
         ) : (
@@ -1183,8 +1106,8 @@ const SEARCHABLE = navItems.map((n) => ({ id: n.id, name: n.name, title: section
 const ELSEWHERE: Record<ElsewhereId, () => void> = {
   church: () => useShellStore.getState().openDesign("brand"),
   appearance: () => useShellStore.getState().openDeskMenu(),
-  cameras: () => openProductionTab("cameras"),
-  hosting: () => openProductionTab("operators"),
+  cameras: openConnectionsHub,
+  hosting: openConnectionsHub,
   "service-defaults": () => useShellStore.getState().goTo("team"),
   backups: () => useShellStore.getState().goTo("archive"),
 }
