@@ -2,6 +2,8 @@
 
 > Read [docs/CODEX-UNIFIED-HANDOFF.md](docs/CODEX-UNIFIED-HANDOFF.md) **before editing the product**. It indexes the owner-approved October 26 unified product redesign, the current issue/PR conflict matrix, route migration, Avnac editor, bilingual behavior, connected applications and acceptance tests.
 
+**Mandatory coverage preservation:** Read [docs/rhema-studio/32-feature-coverage-inventory.md](docs/rhema-studio/32-feature-coverage-inventory.md) after the handover. Earlier approved features (especially Rhema Comms simultaneous full-duplex PTT, private notices, MCP service drafts, quiz, rehearsal, independent outputs and church sync) may be described in separate issues; none may be dropped just because the unified route specification summarizes them.
+
 ## Source of truth
 
 1. Latest owner-ratified [#243](https://github.com/thathman/rhema-studio/issues/243) + architecture [#246](https://github.com/thathman/rhema-studio/issues/246) take precedence over obsolete early per-verse destination-selection designs.
