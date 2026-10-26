@@ -2,6 +2,10 @@
 
 > **START HERE for the 26 October product consolidation.** This is the approved product direction and implementation coordination entrypoint, **not** evidence that the code has already changed. Read the detailed contracts linked below before implementing. Do not interpret a screenshot, unmerged PR or green CI as an accepted production feature.
 
+## Complete scope index (added after coverage audit)
+
+The handover is intentionally an architecture document; **do not assume that features only summarized or linked here are optional**. Read the [complete feature coverage and preservation checklist](rhema-studio/32-feature-coverage-inventory.md) as the second required document after this handover. It includes owner-approved **Rhema Comms full-duplex simultaneous push-to-talk with speaking indicators and paired phones**, private Notices and event-linked Action Requests (#251); complete MCP service draft authoring (#252), Internet sermon quiz with timed lobby and leaderboard (#425), rehearsal isolation (#246), output-scoped group/individual Takes, licensing, signage, collaborative sync and the three connected apps. Each entry distinguishes requirements from verified implementation. The owner approved these features in earlier sessions; absence of detailed repetition in docs 28–31 is not permission to remove them.
+
 ## 1. Product statement
 
 **Rhema Studio is one church production system**, not a collection of separate tools. It lets a volunteer **Prepare a service → Run it Live → Review its History**, while Library and Design supply reusable content and visuals. One main computer can do **everything alone**, completely offline for the live sanctuary/OBS/stage pipeline, while authorized volunteers and receivers join when available.
