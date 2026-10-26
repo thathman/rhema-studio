@@ -292,11 +292,12 @@ synthetic QA translation with no Bible text. The app log is checked for missing 
 and the test restores pre-existing SQLite sidecars. It does not test Scripture content or
 search. CI artifacts are restricted to synthetic journey reports and the app log.
 
-PR #438's standard CI passes: frontend (1,833/1,833), typecheck, lint, production build,
-Rust, and Companion. Hosted native run [40288446961](https://github.com/thathman/rhema-studio/actions/runs/40288446961)
-passes the Hymn/Add, scene Save/Take and failed-Take journeys at `83b01e9`; the approved-scene
-journey passes locally and its hosted run is pending. These checks and the four scoped native
-journeys do not complete issue #411.
+PR #438's standard CI [40289671949](https://github.com/thathman/rhema-studio/actions/runs/40289671949)
+passes: frontend (1,833/1,833), typecheck, lint, production build, Rust, and Companion. Hosted
+native run [40289671818](https://github.com/thathman/rhema-studio/actions/runs/40289671818)
+passes all four journeys at `fe91dff`, including the approved-scene revision check. All four
+synthetic reports were inspected. These checks and the four scoped native journeys do not
+complete issue #411.
 
 Still unverified: the other interactive steps in sections 1–10l; onboarding and other
 application entrypoints; external keyboard and screen-reader operation; projector/TV
