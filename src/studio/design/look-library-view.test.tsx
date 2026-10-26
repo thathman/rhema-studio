@@ -11,6 +11,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn(async () => ({ get: asy
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { LookLibraryView } from "./look-library-view"
+import { DesignWorkspace } from "./design-workspace"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useShellStore } from "@/studio/shell-store"
@@ -35,9 +36,24 @@ async function render() {
   await act(async () => createRoot(el).render(<LookLibraryView onOpen={() => {}} />))
   return el
 }
+async function renderDesignWorkspace() {
+  const el = document.createElement("div")
+  document.body.appendChild(el)
+  useShellStore.setState({ designTab: "library" })
+  await act(async () => createRoot(el).render(<DesignWorkspace />))
+  return el
+}
 const card = (el: HTMLElement, name: string) => [...el.querySelectorAll("li")].find((li) => li.querySelector("h4")?.textContent === name) as HTMLLIElement
 
 describe("Design → Library (#299)", () => {
+  it("labels reusable looks Templates so the content Library stays distinct", async () => {
+    const el = await renderDesignWorkspace()
+    const tabs = [...el.querySelectorAll('[role="tab"]')] as HTMLButtonElement[]
+    const templates = tabs.find((tab) => tab.textContent?.trim() === "Templates")
+    expect(templates?.getAttribute("aria-selected")).toBe("true")
+    expect(tabs.some((tab) => tab.textContent?.trim() === "Library")).toBe(false)
+  })
+
   it("OBS overlay keeps the keyed lower thirds and tickers", async () => {
     const el = await render()
     const chip = [...el.querySelectorAll('[role="radio"]')].find((b) => b.textContent === "OBS overlay") as HTMLButtonElement

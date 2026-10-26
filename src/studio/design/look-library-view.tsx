@@ -60,7 +60,7 @@ const LANGUAGES: ReadonlyArray<readonly [LookLanguage | "both" | "all", string]>
 const storage = typeof localStorage === "undefined" ? null : localStorage
 
 /**
- * Design → Library: ready-made looks to start from. Use adds the church's own
+ * Design → Templates: ready-made looks to start from. Use adds the church's own
  * copy; nothing on a screen changes until that copy is chosen for an output.
  */
 export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: string) => void }) {
@@ -71,7 +71,7 @@ export function LookLibraryView({ onOpen }: { onOpen: (tab: DesignTab, id?: stri
   const [language, setLanguage] = useState<LookLanguage | "both" | "all">("all")
   const [favouritesOnly, setFavouritesOnly] = useState(false)
   const [favourites, setFavourites] = useState(() => readLookFavourites(storage))
-  // The built-in looks, then each imported design pack's, as one library: the same filters, Use and Reset.
+  // Built-in looks and imported design-pack templates share filters, Use and Reset.
   const packs = useDesignPackStore((s) => s.packs)
   const all = useMemo(() => libraryLooks(packs), [packs])
   const families = useMemo(() => libraryFamilies(packs), [packs])
@@ -173,7 +173,7 @@ function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => vo
       const n = pack.looks.length
       const ok = await confirm(
         here ? `Replace “${here.doc.name}” with this version?` : `Import “${pack.doc.name}”?`,
-        `${n} ${n === 1 ? "look" : "looks"} by ${pack.doc.author} (${pack.doc.license}) join Design → Library. ${here ? "Copies you already made from the old version stay as they are. " : ""}Nothing on the screens, outputs, cameras or scenes changes.`,
+        `${n} ${n === 1 ? "look" : "looks"} by ${pack.doc.author} (${pack.doc.license}) join Design → Templates. ${here ? "Copies you already made from the old version stay as they are. " : ""}Nothing on the screens, outputs, cameras or scenes changes.`,
         here ? "Replace" : "Import",
       )
       if (!ok) return
@@ -187,20 +187,20 @@ function ImportPackButton({ onImported }: { onImported: (pack: DesignPack) => vo
   return (
     <>
       <input ref={file} type="file" accept=".json,application/json" className="hidden" aria-label="Design pack file" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = "" }} />
-      <Button size="sm" variant="outline" onClick={() => file.current?.click()} title="Add the looks in a Rhema design pack (.rhema-design.json) to this library">
+      <Button size="sm" variant="outline" onClick={() => file.current?.click()} title="Add the looks in a Rhema design pack (.rhema-design.json) to Design templates">
         <UploadIcon /> Import design pack
       </Button>
     </>
   )
 }
 
-/** Take an imported pack out of the library; the church's copies of its looks stay. */
+/** Remove an imported pack from Templates; the church's copies of its looks stay. */
 function RemovePackButton({ pack }: { pack: DesignPack | undefined }) {
   if (!pack) return null
   const click = async () => {
-    if (!(await confirm(`Remove “${pack.doc.name}” from the library?`, "Its looks leave Design → Library. Copies you made from them stay in your looks, and nothing on the screens changes.", "Remove"))) return
+    if (!(await confirm(`Remove “${pack.doc.name}” from Design templates?`, "Its looks leave Design → Templates. Copies you made from them stay in your looks, and nothing on the screens changes.", "Remove"))) return
     await removeDesignPack(pack.doc.id)
-    toast(`Removed “${pack.doc.name}” from the library.`)
+    toast(`Removed “${pack.doc.name}” from Design templates.`)
   }
   return (
     <Button size="xs" variant="ghost" onClick={() => void click()}>
