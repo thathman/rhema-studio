@@ -127,11 +127,13 @@ Ordinary groups can sit inside an event as moment groups. Existing queue-item sc
 source, timing and cue fields remain attached to those moments.
 
 The current slices add event creation in Prepare, draft/approved status presentation,
-event-to-moments projection, nested-group insertion and collapse behavior, a plan editor
-for event title/role/owner/length/notes, and service save/reopen serialization. Editing
-an event returns it to draft; changing its plan does not change the live output. Keeping
-the stored kind as `group` lets older builds continue reading the rundown and preserve
-the event payload while saving.
+event-to-moments projection, nested-group insertion and collapse behavior, and service
+save/reopen serialization. The event editor has Content and Plan tabs: Content lists its
+ordered moments, opens one in the normal item editor for preview/edit, and opens Add with
+that event as the insertion target; Plan edits event title/role/owner/length/notes. Opening
+a moment changes Preview only; a deliberate Take in Present is still required to change an
+audience output. Editing an event returns it to draft. Keeping the stored kind as `group`
+lets older builds continue reading the rundown and preserve the event payload while saving.
 
 The event clock now resolves moments to their parent event, tracks the current moment
 separately for moment-specific cues, and steps between planned events rather than between

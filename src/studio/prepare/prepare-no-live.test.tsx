@@ -15,8 +15,10 @@ import { createRoot, type Root } from "react-dom/client"
 import { PrepareWorkspace } from "./prepare-workspace"
 import { saveStateOf } from "./save-state"
 import { useQueueStore } from "@/stores/queue-store"
+import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useAddDialog } from "@/studio/prepare/add-target"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
 import type { QueueItem } from "@/types"
@@ -30,6 +32,7 @@ let root: Root | null = null
 afterEach(() => {
   act(() => root?.unmount())
   root = null
+  useAddDialog.getState().close()
   document.body.replaceChildren()
   useServiceStore.setState({ current: null, dirty: false, saving: false })
 })
@@ -122,10 +125,14 @@ describe("Prepare never takes anything live (#299)", () => {
     const edit = el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: New event"]')
     expect(edit).not.toBeNull()
     await act(async () => edit!.click())
+    await act(async () => {
+      const planTab = el.querySelector<HTMLButtonElement>('button[aria-label="Event plan"]')!
+      planTab.focus()
+      planTab.click()
+    })
 
     const setValue = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
-      const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
-      Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(field, value)
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
       field.dispatchEvent(new Event("input", { bubbles: true }))
     }
     const duration = el.querySelector<HTMLInputElement>('[aria-label="Planned event length in minutes"]')!
@@ -160,6 +167,49 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.textContent).toContain("Draft")
   })
 
+  it("shows an event's ordered moments and opens one in the editor without taking it live", async () => {
+    useQueueStore.setState({
+      items: [slide("Camera and speaker"), slide("John 3:16"), slide("Closing cue")],
+      headers: [{ id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    const before = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening Prayer"]')!.click())
+
+    const contentTab = el.querySelector<HTMLButtonElement>('button[role="tab"][aria-label="Event content"]')
+    expect(contentTab).not.toBeNull()
+    expect(el.textContent).toContain("Camera and speaker")
+    expect(el.textContent).toContain("John 3:16")
+    expect(el.textContent).toContain("Closing cue")
+    expect(useQueueStore.getState().addTarget).toBeNull()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Open moment 2: John 3:16 in editor"]')!.click())
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("John 3:16")
+    expect(el.querySelector('[aria-label="Event content"]')).toBeNull()
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
+    useAddDialog.getState().close()
+  })
+
+  it("opens the event's Add item flow with that event as the insertion target", async () => {
+    useQueueStore.setState({
+      items: [slide("Welcome"), slide("Sermon"), slide("Closing")],
+      headers: [{ id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    const el = await renderPrepare()
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    const add = el.querySelector<HTMLButtonElement>('button[aria-label="Add content to Sermon"]')
+    expect(add).not.toBeNull()
+    await act(async () => add!.click())
+    expect(useQueueStore.getState().addTarget).toBe("sermon")
+    expect(useAddDialog.getState().open).toBe(true)
+    useAddDialog.getState().close()
+  })
+
   it("derives event approval from the saved service revision and marks unsaved edits changed", async () => {
     useQueueStore.setState({
       items: [slide("Sermon")],
@@ -178,9 +228,14 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(row().textContent).toContain("Approved") // legacy event.approval is ignored
 
     await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    await act(async () => {
+      const planTab = el.querySelector<HTMLButtonElement>('button[aria-label="Event plan"]')!
+      planTab.focus()
+      planTab.click()
+    })
     const duration = el.querySelector<HTMLInputElement>('[aria-label="Planned event length in minutes"]')!
     const setValue = (field: HTMLInputElement, value: string) => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, value)
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
       field.dispatchEvent(new Event("input", { bubbles: true }))
     }
     await act(async () => setValue(duration, "40"))

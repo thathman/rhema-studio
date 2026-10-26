@@ -22,6 +22,7 @@ import { useBibleStore } from "@/stores"
 import type { CueQueueItem } from "@/types"
 import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
+import { presentActions } from "@/studio/present-actions"
 import { cn } from "@/lib/utils"
 
 /**
@@ -109,7 +110,15 @@ export function PrepareWorkspace() {
         </section>
 
         <section className="min-h-0 overflow-hidden rounded-lg border border-border bg-card shadow-panel">
-          {selectedEvent ? <RunOfShowEventEditor header={selectedEvent} /> : <ItemEditor />}
+          {selectedEvent ? (
+            <RunOfShowEventEditor
+              header={selectedEvent}
+              onOpenMoment={(item) => {
+                setSelectedEventId(null)
+                presentActions.previewItem(item)
+              }}
+            />
+          ) : <ItemEditor />}
         </section>
 
         {/* The show scheduler (approved design); on a narrower window it gives way to the editor, and Timing opens it over it. */}
