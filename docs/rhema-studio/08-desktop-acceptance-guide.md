@@ -271,13 +271,16 @@ look; save, close and reopen the service; view the rendered Yorùbá words in Pr
 Preview. Live remained off. The same run against current `main` reproduced #385 at the
 missing selected-hymn details pane. The test uses in-app WebView interaction and a
 QA-only store fixture for the service; it is not an external keyboard or screen-reader
-test. The `Desktop QA (native Tauri)` workflow is configured to run this scenario on an
-Intel macOS runner for relevant pull requests and retain its synthetic report and app
-log; its hosted-runner result is pending this PR.
+test. The test runner creates a schema-valid temporary Bible database only when none is
+present; it contains a synthetic QA translation with no Bible text. The app log is
+checked for missing Bible tables, and the test restores pre-existing SQLite sidecars.
+It does not test Scripture content or search. On PR #438 head `57ab68e`, the
+`Desktop QA (native Tauri)` workflow passed on an Intel macOS runner; its seven-day
+artifact contains only the synthetic result and app log ([run 40269912631](https://github.com/thathman/rhema-studio/actions/runs/40269912631)).
 
-The PR #428 branch also passes the full frontend suite (1,833/1,833), typecheck, lint,
-production build, and its GitHub CI checks. These checks and the single native journey
-do not complete issue #411.
+PR #438's standard CI passes: frontend (1,833/1,833), typecheck, lint, production build,
+Rust, and Companion. These checks and the single native journey do not complete issue
+#411.
 
 Still unverified: the other interactive steps in sections 1–10l; onboarding and other
 application entrypoints; external keyboard and screen-reader operation; projector/TV
