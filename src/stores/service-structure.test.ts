@@ -42,6 +42,20 @@ describe("a service's phases and groups", () => {
     expect(JSON.parse(back[0].payload!)).toEqual({ later: 1, rule: "auto_once", role: "warmup", advance_seconds: 12 })
   })
 
+  it("round-trips event cue snapshots without dropping unrelated header data", () => {
+    const cues = [{ id: "cue-1", name: "Start prayer", trigger: "manual", steps: ["timer.fresh", "quick.pray"] }]
+    const source = program([
+      row("prayer", "group", "Opening Prayer", JSON.stringify({ run_of_show_event: { schema_version: 1, cues }, future_header_key: { keep: true } })),
+      row("moment", "verse", "John 3:16"),
+    ])
+    const { items, headers } = toQueueItems(source, 1, [])
+    expect(headers[0].event?.cues).toEqual(cues)
+    const saved = toItemInputs(items, undefined, undefined, headers)[0]
+    const payload = JSON.parse(saved.payload ?? "{}") as Record<string, unknown>
+    expect(payload.future_header_key).toEqual({ keep: true })
+    expect((payload.run_of_show_event as Record<string, unknown>).cues).toEqual(cues)
+  })
+
   it("a plain service has no headers and saves as before", () => {
     const { headers } = toQueueItems(program([row("a", "verse", "John 3:16")]), 1, [])
     expect(headers).toEqual([])
