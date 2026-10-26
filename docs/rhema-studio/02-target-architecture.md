@@ -126,15 +126,18 @@ and notes; following rundown items project as its moments until the next event o
 Ordinary groups can sit inside an event as moment groups. Existing queue-item scene,
 source, timing and cue fields remain attached to those moments.
 
-The current slice adds event creation in Prepare, draft/approved status presentation,
-event-to-moments projection, nested-group insertion and collapse behavior, and service
-save/reopen serialization. Keeping the stored kind as `group` lets older builds continue
-reading the rundown and preserve the unknown event payload while saving.
+The current slices add event creation in Prepare, draft/approved status presentation,
+event-to-moments projection, nested-group insertion and collapse behavior, a plan editor
+for event title/role/owner/length/notes, and service save/reopen serialization. Editing
+an event returns it to draft; changing its plan does not change the live output. Keeping
+the stored kind as `group` lets older builds continue reading the rundown and preserve
+the event payload while saving.
 
-This slice does not yet provide the event-details editor or connect an event's duration
-to the service timing engine and Timekeeper clock. The duration field is preserved in
-the event schema but is not yet an authoritative timer. Do not describe #409 as complete,
-and do not treat this branch as owner-accepted or hardware-verified.
+Event length is still a planning estimate: it does not drive the service timing engine
+or Timekeeper clock. Per-audience scenes, source bindings, event cues/signals, event-clock
+integration and a compatibility-preserving legacy migration remain unimplemented. Do
+not describe #409 as complete, and do not treat this branch as owner-accepted or
+hardware-verified.
 
 ## 9. Cross-platform notes
 
