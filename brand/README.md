@@ -2,6 +2,8 @@
 
 This directory contains the owner's final logo pack from `Rhema_Studio_Four_Product_Logos_FINAL.zip`. The source pack's `README.md` and `ASSET-MANIFEST.json` are preserved as `ASSET-README.md` and `ASSET-MANIFEST.json`; `src/lib/brand-files.test.ts` verifies every copied pack asset against its SHA-256 manifest entry.
 
+`ASSET-README.md` is the source ZIP's original note, written before these files were wired into Rhema Studio. This README is the current application usage map.
+
 The master mark keeps the supplied R and its upper-left bulge, with the two radio curves inside that bulge. It has no quotation marks. Use the SVG and PNG files as supplied; do not redraw, recolor, crop, or add effects.
 
 ## Product uses
@@ -23,3 +25,7 @@ The master mark keeps the supplied R and its upper-left bulge, with the two radi
 | Repository README and brand preview | Full Studio and product lockups for documentation only | `README.md`, `docs/brand/preview.html` | `02_Product_Logos/` and `03_Google_TV/` |
 
 The pack also includes dark/light SVG and PNG product lockups for Studio, Receiver, Cam and Companion in `brand/02_Product_Logos/`, plus dark/light SVG and PNG Google TV artwork at four sizes in `brand/03_Google_TV/`. The 320×180 dark TV file is the Receiver launcher banner; the other supplied variants remain approved source art. The website header uses the master mark with a text wordmark in `web/app/_components/ui/rhema-logo.tsx`; the website icon uses the master mark. Companion currently uses the mark with its product name as text rather than the supplied full lockup. Cam's Android adaptive icon uses its supplied foreground/background; its camera page uses the inline mark, and it has no branded page header. Tauri-generated size variants not supplied directly by the pack are generated from the supplied mark. Pack contents and copied platform assets are checked by `src/lib/brand-files.test.ts`. Product names, package identifiers, and the OpenBezal MIT credit are unchanged.
+
+## Interface fonts and local development
+
+The brand ZIP contains logo artwork; it does not contain the interface fonts. Rhema Studio imports Geist, IBM Plex Sans, Source Serif 4, Geist Mono and Inter from `@fontsource` in `src/index.css`; Vite bundles these into `build/assets` for production. In linked worktrees that share `node_modules` through a symlink, Vite must allow the dependency directory's real path for the development app and Companion. Without that, font requests return 403 and the UI falls back to system fonts, which makes the page look off-brand even while the logo files are correct.
