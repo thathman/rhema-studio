@@ -166,14 +166,14 @@ export function BroadcastOutputsDialog({
       toast.success(`Removed ${output.name}`)
     })
 
-  const handleEditorSubmit = (next: BroadcastOutput) => {
+  const handleEditorSubmit = (next: BroadcastOutput, options?: { continueSetup?: boolean }) => {
     const store = useBroadcastStore.getState()
     const existing = store.outputs.find((o) => o.id === next.id)
 
     if (!existing) {
       store.addOutput(next)
       setDraftId(crypto.randomUUID())
-      setEditingId(null)
+      setEditingId(options?.continueSetup ? next.id : null)
       return
     }
 
@@ -199,7 +199,7 @@ export function BroadcastOutputsDialog({
         else if (updated) toast.info(`Saved. ${updated.name} is off: turn it on when you are ready.`)
       }
     })
-    setEditingId(null)
+    setEditingId(options?.continueSetup ? next.id : null)
   }
 
   const monitorLabel = (output: BroadcastOutput) => {
@@ -290,6 +290,10 @@ export function BroadcastOutputsDialog({
           })
         }}
         onSubmit={handleEditorSubmit}
+        onToggleOutput={(output, enabled) => {
+          const saved = useBroadcastStore.getState().outputs.find((o) => o.id === output.id)
+          if (saved) handleToggle(saved, enabled)
+        }}
       />
     </>
   )
