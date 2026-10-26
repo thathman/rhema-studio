@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null) }))
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}) }))
@@ -17,9 +17,12 @@ const slide = (id: string, planned_minutes: number): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "" }, reference: id, confidence: 1, source: "manual", added_at: 0, planned_minutes }) as unknown as QueueItem
 const at = (h: number, m: number) => new Date(2026, 9, 25, h, m).getTime()
 
+afterEach(() => vi.restoreAllMocks())
+
 describe("run of show timing: actual times", () => {
   it("shows when the service began against its start, each item's time on air, and moves the finish", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    vi.spyOn(Date, "now").mockReturnValue(at(10, 14))
     useQueueStore.setState({
       items: [{ ...slide("Welcome", 3), assignees: ["Tolu", "Ade"], prepared_by: "Tolu, Ade" }, slide("Reading", 10)],
       headers: [{ id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }],
@@ -60,6 +63,7 @@ describe("run of show timing: actual times", () => {
 describe("run of show timing: an item jumped over", () => {
   it("says Skipped in the panel and the table, with no expected time or offset", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    vi.spyOn(Date, "now").mockReturnValue(at(10, 4))
     document.body.innerHTML = ""
     useQueueStore.setState({
       items: [slide("Welcome", 3), slide("Notices", 5), slide("Reading", 10)],
