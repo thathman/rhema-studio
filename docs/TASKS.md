@@ -21,7 +21,7 @@ The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) i
 
 | GitHub issue | Current state | Evidence / next gate |
 |---|---|---|
-| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Regressions cover backup restore, NDI frames and an enabled browser/TV feed. Present and Production show the affected output, scene revision, actor and rehearsal scope before Take. Local full suite and hosted CI pass; PR remains open/unmerged. |
+| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Regressions cover backup restore, NDI, browser/TV feeds and rehearsal of a newly saved revision while public screens retain their snapshot. Present and Production show the affected output, scene revision, actor and rehearsal scope before Take. Current local checks pass; hosted CI for the latest follow-up is pending. PR remains open/unmerged. |
 | [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
 | [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | IN PR | [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses approved scene and look revisions; shared asset and approval acceptance remain open. |
 | [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | IN PROGRESS | [PR #438](https://github.com/thathman/rhema-studio/pull/438) passes a hosted native macOS bilingual-hymn journey with Live off. Real projector, TV, OBS/NDI, camera, Windows and offline church-system gates remain unverified. |
@@ -212,6 +212,7 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 
 ## Revision history
 
+- **2026-10-26 (rev 0.50):** PR #414 adds a rehearsal regression and snapshot handling so rehearsing a saved edit to the same on-air scene previews the new revision in-app while public output and exit restore the captured revision. Local full suite, typecheck, lint and build pass; hosted CI for the new head is pending. No physical output test is claimed.
 - **2026-10-26 (rev 0.49):** PR #414 hosted CI passed on head `8a0cca5` (run 40272729012); local UI interactions and the 1,765-test full suite pass. PR remains open/unmerged.
 - **2026-10-26 (rev 0.48):** PR #414 adds visible pre-Take scope and revision details in Present and Production; local UI interactions and the 1,765-test full suite pass. Hosted checks for the updated PR head were pending.
 - **2026-10-26 (rev 0.47):** PR #414 adds baseline-failing backup restore, NDI and browser/TV regressions for pinned on-air scene revisions; local full suite is 1,765 tests. Reconciled open PR status for #398, #411, and the Hymn Book workflow against GitHub.

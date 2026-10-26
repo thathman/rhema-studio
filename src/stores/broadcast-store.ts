@@ -62,23 +62,27 @@ export interface RehearsalReturn extends ProgramSnapshot {
   timer: TimerState
   /** Each output's scene (by output id; an output not listed showed its own feed). */
   outputScenes: Record<string, string>
+  /** The exact scene revision each public output had when rehearsal began. */
+  outputSceneSnapshots: Record<string, Scene>
   /** The scene each output's Restore offered. */
   sceneReturn: Record<string, string>
 }
 
 /** The outputs as the real screens have them: in rehearsal, each with the scene it had before (what is saved). */
 export function outputsForScreens(s: { rehearsal: boolean; rehearsalReturn: RehearsalReturn | null; outputs: BroadcastOutput[] }): BroadcastOutput[] {
-  return s.rehearsal && s.rehearsalReturn ? withScenes(s.outputs, s.rehearsalReturn.outputScenes) : s.outputs
+  return s.rehearsal && s.rehearsalReturn ? withScenes(s.outputs, s.rehearsalReturn.outputScenes, s.rehearsalReturn.outputSceneSnapshots) : s.outputs
 }
 
 /** The outputs with these scenes on them (by output id); the rest back on their own feed. */
-function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>): BroadcastOutput[] {
+function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>, snapshots?: Record<string, Scene>): BroadcastOutput[] {
   return outputs.map((o) => {
     const sceneId = scenes[o.id]
-    if (o.sceneId === sceneId) return o
     const next: BroadcastOutput = { ...o }
     if (sceneId) next.sceneId = sceneId
     else delete next.sceneId
+    const snapshot = snapshots?.[o.id] ?? (o.sceneSnapshot?.id === sceneId ? o.sceneSnapshot : undefined)
+    if (snapshot) next.sceneSnapshot = snapshot
+    else delete next.sceneSnapshot
     return next
   })
 }
@@ -1188,19 +1192,23 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     if (rehearsal) {
       const { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, lowerThird, ticker, stageMessage, sceneReturn } = s
       const outputScenes = Object.fromEntries(s.outputs.flatMap((o) => (o.sceneId ? [[o.id, o.sceneId]] : [])))
-      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, sceneReturn } })
+      const outputSceneSnapshots = Object.fromEntries(s.outputs.flatMap((o) => {
+        const scene = sceneForOutput(o, s.scenes)
+        return scene ? [[o.id, scene]] : []
+      }))
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, sceneReturn } })
       return
     }
     const back = s.rehearsalReturn
     if (back) {
-      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, sceneReturn, ...program } = back
+      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, sceneReturn, ...program } = back
       // The lower third, ticker, stage message, timer and each screen's scene always come back
       // (a scene deleted meanwhile leaves its screen on its own feed); the program too unless the
       // operator chose Show this live.
       useTimerStore.setState({ timer })
       if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
       const kept = Object.fromEntries(Object.entries(outputScenes).filter(([, id]) => s.scenes.some((x) => x.id === id)))
-      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept), sceneReturn, rehearsal, rehearsalReturn: null })
+      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept, outputSceneSnapshots), sceneReturn, rehearsal, rehearsalReturn: null })
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
@@ -1379,7 +1387,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     const scene = get().scenes.find((x) => x.id === sceneId)
     if (!scene) return
     set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
-    get().updateOutput(outputId, { sceneId, ...(!get().rehearsal ? { sceneSnapshot: normalizeScene(scene) ?? scene } : {}) })
+    get().updateOutput(outputId, { sceneId, sceneSnapshot: normalizeScene(scene) ?? scene })
   },
   releaseScene: (outputId, by = currentActor()) => {
     if (!get().outputs.find((o) => o.id === outputId)?.sceneId) return
