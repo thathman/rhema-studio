@@ -1,0 +1,30 @@
+# Rhema Studio — Codex/engineering instructions
+
+> Read [docs/CODEX-UNIFIED-HANDOFF.md](docs/CODEX-UNIFIED-HANDOFF.md) **before editing the product**. It indexes the owner-approved October 26 unified product redesign, the current issue/PR conflict matrix, route migration, Avnac editor, bilingual behavior, connected applications and acceptance tests.
+
+**Mandatory coverage preservation:** Read [docs/rhema-studio/32-feature-coverage-inventory.md](docs/rhema-studio/32-feature-coverage-inventory.md) after the handover. Earlier approved features (especially Rhema Comms simultaneous full-duplex PTT, private notices, MCP service drafts, quiz, rehearsal, independent outputs and church sync) may be described in separate issues; none may be dropped just because the unified route specification summarizes them.
+
+## Source of truth
+
+1. Latest owner-ratified [#243](https://github.com/thathman/rhema-studio/issues/243) + architecture [#246](https://github.com/thathman/rhema-studio/issues/246) take precedence over obsolete early per-verse destination-selection designs.
+2. Follow the [handover](docs/CODEX-UNIFIED-HANDOFF.md) and linked workspace, language/editor, connected-device and delivery contracts. Use issue #442 as cross-route UX parent, #443 for Avnac, #444 Prepare, #445 connected apps, #446 languages, #447 canonical navigation, #448 slide/editor integration; QA #411.
+3. Inspect latest `main`, existing PRs, code and tests **before** claiming an issue remains broken or opening duplicate PRs. The Oct 26 snapshot in the handover is not automatically current.
+4. `docs/PRD.md` (Oct 20), `docs/TASKS.md` (Oct 22) and `docs/DEVELOPMENT-STATUS.md` (Oct 22) still include older architecture/status examples. Preserve their history and reconcile only against verified GitHub/code activity in an appropriately reviewed PR.
+
+## Architecture constraints
+
+- Local-first full **solo-host** church service is always functional; volunteers, cloud, OBS companion, camera apps and receivers are optional contributors, not prerequisites.
+- Named **independent live sources** (Bible, Hymns, Songs, Slides, Ticker, Timers and cameras) feed **separately composed** congregation, OBS, stage and signage outputs. A Bible operator activates a verse once; following outputs update according to subscriptions. No per-verse destination selection.
+- Separate **Plan / actual Live State / Execution History**; draft design Save and approval must not secretly update an on-air scene. Source Activate and Scene Take are distinct, scoped, authorized and audited.
+- Target primary UX destinations: Home, Prepare, Live (legacy Present+Production unified), Library (keep), Design, History (legacy Archive). Global Connections, Settings, Profile, Help; contextual Team. Do not delete capabilities when retiring a route.
+- One canonical content store, versioned native Avnac/Saraswati-backed design/editor, approved event/source revisions and shared context-preserving pickers; no second standalone design application. Language single/bilingual uses the same content workflow with output-specific display.
+- Local MediaMTX camera contribution streams once to independent OBS online and Rhema sanctuary programs; keep real playback pipeline and device security when changing Receiver/Cam/Companion UI. Google TV 1080p30 must be proven before promising 1080p60.
+- Rhema Engage (#425) uses the Internet for participants on mobile data by design; if it fails, local presentation and displays remain operational.
+- Product is currently intended for internal church use. Preserve third-party copyright and license provenance; the source repository is public, so verify obligations before copying GPL-licensed Avnac code into it.
+
+## Execution contract
+
+- Small PRs, failing regression tests first where feasible, UI/QA proof, backward-compatible migrations, offline and hardware gates. Do not conflate `IN PR`, `MERGED`, `ACCEPTED`, `SHIPPED`.
+- Match the owner's restrained neutral visual direction; no purple AI gradients, needless modal walls, two Present layouts or duplicate settings.
+- Don't merge website-publishing PRs, deploy public services, release builds, make destructive migrations or touch real church data without explicit owner approval. Respect any stricter repository-specific merge rules.
+- Update PRD/TASKS/manuals only from verified evidence; report affected routes, linked issues, PRs, tests, hardware results, omissions and next dependencies.
