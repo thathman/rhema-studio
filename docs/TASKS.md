@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.47 · **Updated:** 2026-10-25 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.50 · **Updated:** 2026-10-26 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -13,19 +13,19 @@
 
 ## Current active work
 
-### Live takeover issue status (2026-10-25)
+### Live takeover issue status (2026-10-26)
 
 The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) is newer than the dated backlog entries below and is the current source for the takeover sequence.
 
 | GitHub issue | Current state | Evidence / next gate |
 |---|---|---|
-| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Full automated suite passes; desktop and device acceptance remain open. |
+| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Regressions cover backup restore, NDI frames and an enabled browser/TV feed. Present and Production show the affected output, scene revision, actor and rehearsal scope before Take. Local full suite and hosted CI pass; PR remains open/unmerged. |
 | [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
-| [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | OPEN | #414 pins scene layout revisions; broader shared-asset and approved-release revision integrity remains to be implemented and reviewed. |
-| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | OPEN | #414 ran all frontend tests, typecheck, lint and build. No real desktop, projector, OBS, NDI receiver, TV or network hardware was tested for this branch. |
-| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415), stacked on #414: Hymn Book details/shared editor, plus stable-ID selection and close/focus after successful Add across content pickers. On audited main, these suites fail 12 tests (including the #384 queue-order regression fixed by dependency #414); one deduplicated-Add test passes. This branch passes the targeted 13 tests and full 1,774-test suite, typecheck, lint and build. Component tests only; desktop and device acceptance remain open. |
+| [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | IN PR | [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses approved scene and look revisions; its latest Frontend CI check failed and needs triage. Shared asset and approval acceptance remain open. |
+| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | IN PROGRESS | [PR #438](https://github.com/thathman/rhema-studio/pull/438) passes a hosted native macOS bilingual-hymn journey with Live off. Real projector, TV, OBS/NDI, camera, Windows and offline church-system gates remain unverified. |
+| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415) restores the Hymn Book detail pane and Add selection. Its branch now includes latest #414; full local suite (245 files / 1,777 tests), typecheck, lint and build pass. Updated hosted checks are pending. #438 exercises the hymn flow on the open stack. |
 
-PRs #414 and #415 are open and unmerged. PR #415 depends on #414's queue insertion API; its CI was queued when this snapshot was written. The main CI and open PR baseline are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
+PRs #414, #415, #417, #420, #427, #428 and #438 are open and unmerged. PR #415's base update is reconciled locally and awaits hosted checks; PR #420 has a current Frontend CI failure. The current base and hosted check evidence are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
@@ -210,7 +210,10 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 
 ## Revision history
 
-- **2026-10-25 (rev 0.47):** #385 and #386 IN PR via stacked PR #415; baseline suites reproduced 12 failures (including the #384 regression addressed by #414) and 1 pass; branch tests pass (13 focused, 1,774 full-suite), typecheck, lint and build pass. UI/device acceptance remains open.
+- **2026-10-26 (rev 0.50):** Reconciled PR #415 against current #414 after it advanced; the merged stack passes 245 frontend files / 1,777 tests, typecheck, lint and build. Verified PR #414's latest hosted CI is green and recorded PR #420's current Frontend CI failure for follow-up.
+- **2026-10-26 (rev 0.49):** PR #414 hosted CI passed on head `8a0cca5` (run 40272729012); local UI interactions and the 1,765-test full suite pass. PR remains open/unmerged.
+- **2026-10-26 (rev 0.48):** PR #414 adds visible pre-Take scope and revision details in Present and Production; local UI interactions and the 1,765-test full suite pass. Hosted checks for the updated PR head were pending.
+- **2026-10-26 (rev 0.47):** PR #414 adds baseline-failing backup restore, NDI and browser/TV regressions for pinned on-air scene revisions; local full suite is 1,765 tests. Reconciled open PR status for #398, #411, and the Hymn Book workflow against GitHub.
 
 - **2026-10-21 (rev 0.43):** PRs #111–#122 merged; stale "later" notes in done criteria replaced with the PRs that did the work.
 - **2026-10-21 (rev 0.42):** PRs #96–#110 merged (see DEVELOPMENT-STATUS); QA-001 unsigned installer artifact built from `main`.
