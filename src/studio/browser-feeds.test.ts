@@ -60,6 +60,20 @@ describe("browser feeds", () => {
     expect(calls.slice(before).filter((c) => c.cmd === "feed_publish")).toEqual([])
   })
 
+  it("publishes the taken scene revision to an enabled TV feed after a saved edit", async () => {
+    const { newScene, SCENE_PRESETS } = await import("@/lib/scenes")
+    const tv = useBroadcastStore.getState().outputs.find((o) => o.id === "tv")!
+    const scene = { ...newScene("TV program", SCENE_PRESETS[0]), background: "#000000" }
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene("tv", scene.id)
+    useBroadcastStore.getState().saveScene({ ...scene, background: "#123456" })
+
+    await enableOutput(tv)
+
+    const published = JSON.parse(calls.filter((c) => c.cmd === "feed_publish").at(-1)!.args.json as string)
+    expect(published.scene.background).toBe("#000000")
+  })
+
   it("say in plain words whether a page shows the latest frame (receiver trust)", () => {
     expect(feedHealthLabel(null)).toBeNull()
     expect(feedHealthLabel({ watching: 0, current: false, behind: false })).toBe("No page is showing it")
