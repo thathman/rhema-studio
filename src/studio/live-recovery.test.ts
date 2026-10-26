@@ -46,7 +46,7 @@ describe("live recovery", () => {
 
   it("puts back the program, its sources and the event, and logs it", async () => {
     useBroadcastStore.getState().setLiveVerse({ reference: "Romans 8:28", segments: [{ text: "And we know" }], content: "bible" }, null, { goLive: true })
-    useEventClock.setState({ currentId: null })
+    useEventClock.setState({ currentId: null, currentMomentId: null })
     const snap = { ...takeSnapshot(), eventId: null, outputsOn: [] }
     useBroadcastStore.setState({ isLive: false, liveVerse: null, sources: {} })
     useRecovery.setState({ offer: snap })

@@ -133,11 +133,20 @@ an event returns it to draft; changing its plan does not change the live output.
 the stored kind as `group` lets older builds continue reading the rundown and preserve
 the event payload while saving.
 
-Event length is still a planning estimate: it does not drive the service timing engine
-or Timekeeper clock. Per-audience scenes, source bindings, event cues/signals, event-clock
-integration and a compatibility-preserving legacy migration remain unimplemented. Do
-not describe #409 as complete, and do not treat this branch as owner-accepted or
-hardware-verified.
+The event clock now resolves moments to their parent event, tracks the current moment
+separately for moment-specific cues, and steps between planned events rather than between
+each moment. An event's planned length becomes its timing-engine row; when it has no event
+length, the row uses the sum of its moments' planned lengths. Prepare's timing panel,
+cuesheet, Timekeeper display, service finish projection and joined-desk Live State use
+these event rows. Legacy services without event headers retain one clock row per item.
+Live State adds event targets and a separate current moment while keeping old rundown data
+for older joined clients. Recovery carries both IDs and suppresses elapsed-time claims for
+an untrusted event after restart.
+
+Per-audience scenes, source bindings, event-level cues/signals and a compatibility-preserving
+legacy migration remain unimplemented. The existing content moments retain their own scene,
+source and cue metadata. Do not describe #409 as complete, and do not treat this branch as
+owner-accepted or hardware-verified.
 
 ## 9. Cross-platform notes
 

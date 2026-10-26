@@ -39,7 +39,7 @@ beforeEach(() => {
       { id: "main", type: "phase", name: "Main service", at: 1, rule: "manual", role: "main", starts_at: "10:00" },
     ],
   })
-  useEventClock.setState({ mode: "own", currentId: "Worship" })
+  useEventClock.setState({ mode: "own", currentId: "Worship", currentMomentId: "Worship" })
   useJournalStore.setState({ entries: [
     { at: at(10, 3), mono: 0, kind: "event", label: "Welcome", itemId: "Welcome" },
     { at: at(10, 9), mono: 6 * 60_000, kind: "event", label: "Worship", itemId: "Worship" },
@@ -118,7 +118,7 @@ describe("the read-only backstage run of show on a joined desk", () => {
 
   it("says so when the host sends no times (no start time, or an older host)", async () => {
     const live = buildLiveState(at(10, 12))
-    const old: LiveStateV1 = { ...live, rundown: live.rundown.map(({ id, reference, plannedMinutes }) => ({ id, reference, plannedMinutes })) }
+    const old: LiveStateV1 = { ...live, event: { mode: live.event.mode, currentId: live.event.currentId }, rundown: live.rundown.map(({ id, reference, plannedMinutes }) => ({ id, reference, plannedMinutes })) }
     const view = await renderDesk(old, "bible")
     expect(view?.textContent).toContain("No times from the host yet")
     expect(view!.querySelectorAll("button")).toHaveLength(0)

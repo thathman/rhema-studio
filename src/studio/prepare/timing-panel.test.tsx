@@ -39,7 +39,7 @@ describe("run of show timing: actual times", () => {
       ],
     })
     useBroadcastStore.setState({ isLive: true, liveItemId: "Reading" })
-    useEventClock.setState({ currentId: "Reading" })
+    useEventClock.setState({ currentId: "Reading", currentMomentId: "Reading" })
     const el = document.createElement("div")
     await act(async () => createRoot(el).render(<TimingPanel />))
     const text = el.textContent ?? ""
@@ -80,7 +80,7 @@ describe("run of show timing: an item jumped over", () => {
         { at: at(10, 3), mono: 180_000, kind: "event", label: "Reading", itemId: "Reading" },
       ],
     })
-    useEventClock.setState({ currentId: "Reading" })
+    useEventClock.setState({ currentId: "Reading", currentMomentId: "Reading" })
     const el = document.createElement("div")
     await act(async () => createRoot(el).render(<TimingPanel />))
     expect(el.textContent).toContain("Skipped")
