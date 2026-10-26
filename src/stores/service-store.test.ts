@@ -10,6 +10,7 @@ import { useServiceStore, toItemInputs, toQueueItems, rundownSignature, cleanNam
 import type { Translation } from "@/types"
 import { useQueueStore } from "./queue-store"
 import { useBibleStore } from "./bible-store"
+import type { OutlineHeader } from "@/lib/run-of-show"
 
 const program = {
   id: "p1",
@@ -105,6 +106,42 @@ describe("conversions", () => {
     expect(items.map((i) => i.id)).toEqual(["i1", "i2"])
     expect(items[0].verse).toMatchObject({ book_number: 19, chapter: 23, verse: 1, book_name: "Psalms", text: "" })
     expect(unsupported).toEqual([])
+  })
+
+  it("round trips a versioned service event with its moments through the legacy group row", () => {
+    const event = {
+      schema_version: 1 as const,
+      role: "sermon",
+      duration_minutes: 40,
+      ownership: "Pastor",
+      approval: "approved" as const,
+    }
+    const headers = [{ id: "sermon-event", type: "group", name: "Sermon", at: 0, notes: "Main message", event } as unknown as OutlineHeader]
+    const moments = [queueItem("John 3:16", 43, 3, 16), queueItem("Romans 8:28", 45, 8, 28)]
+    const saved = toItemInputs(moments, undefined, undefined, headers)
+    expect(saved[0]).toMatchObject({
+      id: "sermon-event",
+      kind: "group",
+      payload: JSON.stringify({ run_of_show_event: event }),
+    })
+
+    const storedEvent = item("sermon-event", "Sermon", 0, 0, 0, {
+      kind: "group",
+      book_number: null,
+      chapter: null,
+      verse: null,
+      notes: "Main message",
+      payload: JSON.stringify({ run_of_show_event: event }),
+    })
+    const storedMoments = moments.map((moment, position) => {
+      const input = toItemInputs([moment])[0]
+      return item(moment.id, input.reference, input.book_number!, input.chapter!, input.verse!, { position: position + 1 })
+    })
+    const { items: loadedMoments, headers: loadedHeaders, unsupported } = toQueueItems({ program, items: [storedEvent, ...storedMoments] }, 1, [KJV])
+    expect(unsupported).toEqual([])
+    expect(loadedMoments.map((moment) => moment.id)).toEqual(moments.map((moment) => moment.id))
+    expect(loadedHeaders).toEqual(headers)
+    expect(toItemInputs(loadedMoments, undefined, undefined, loadedHeaders)[0]).toMatchObject(saved[0])
   })
 
   it("unknown kinds and malformed verses are set aside, never converted", () => {

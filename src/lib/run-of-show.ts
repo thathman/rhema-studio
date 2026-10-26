@@ -1,15 +1,24 @@
 import { dayAt } from "@/lib/church-time"
 
 /**
- * The run of show's structure (issue #193): phases (pre-service loop, warm-up,
- * main service, post-service loop, or named ones) and groups inside them, kept
- * as headers between the rundown's items. `items` stays the plain ordered list
- * everything else uses (Next, Previous, the remote, the stage); a header only
- * says where it sits: before the item at index `at` (at = items.length: after
- * the last). Saved as `phase` / `group` rows in the service.
+ * The run of show's structure: phases and groups are headers between the rundown's
+ * items. A group may carry a versioned event plan; the following items are its moments.
+ * `items` stays the ordered list used by Next, Previous, remotes and the stage. Headers
+ * save as existing `phase` / `group` rows so older builds can keep unknown event data.
  */
 export type PhaseRule = "loop" | "auto_once" | "manual"
 export type PhaseRole = "pre" | "warmup" | "main" | "post" | "custom"
+
+/** Versioned plan metadata on a service event. The event's title/id/notes are its header fields. */
+export interface RunOfShowEventPlan {
+  schema_version: 1
+  role?: string
+  duration_minutes?: number
+  ownership?: string
+  approval: "draft" | "approved"
+  /** Event metadata written by a later build; retained on the next save. */
+  payload_extra?: Record<string, unknown>
+}
 
 export interface OutlineHeader {
   id: string
@@ -29,6 +38,72 @@ export interface OutlineHeader {
   disabled?: boolean
   /** Keys this build does not edit, kept as they were. */
   payload_extra?: Record<string, unknown>
+  /** Present on an event header. Its following rundown items are the event's moments. */
+  event?: RunOfShowEventPlan
+}
+
+export interface RunOfShowEvent<T> {
+  id: string
+  title: string
+  role?: string
+  duration_minutes?: number
+  ownership?: string
+  approval: RunOfShowEventPlan["approval"]
+  notes?: string | null
+  moments: T[]
+}
+
+const EVENT_APPROVALS: readonly RunOfShowEventPlan["approval"][] = ["draft", "approved"]
+const EVENT_FIELDS = new Set(["schema_version", "role", "duration_minutes", "ownership", "approval"])
+
+/** Read only this schema version; an unknown or malformed marker remains opaque payload data. */
+export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (raw.schema_version !== 1 || !EVENT_APPROVALS.includes(raw.approval as RunOfShowEventPlan["approval"])) return null
+  // eslint-disable-next-line no-control-regex
+  const text = (v: unknown) => typeof v === "string" && v.trim().length > 0 && v.trim().length <= 60 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) ? v.trim() : undefined
+  const role = text(raw.role)
+  const ownership = text(raw.ownership)
+  if (raw.role !== undefined && !role || raw.ownership !== undefined && !ownership) return null
+  const duration = raw.duration_minutes
+  if (duration !== undefined && (typeof duration !== "number" || !Number.isFinite(duration) || duration <= 0 || duration > 600)) return null
+  return {
+    schema_version: 1,
+    ...(role ? { role } : {}),
+    ...(duration !== undefined ? { duration_minutes: duration } : {}),
+    ...(ownership ? { ownership } : {}),
+    approval: raw.approval as RunOfShowEventPlan["approval"],
+    ...(Object.keys(raw).some((key) => !EVENT_FIELDS.has(key)) ? { payload_extra: Object.fromEntries(Object.entries(raw).filter(([key]) => !EVENT_FIELDS.has(key))) } : {}),
+  }
+}
+
+/** A section boundary: an event may contain ordinary groups; a group ends at the next header. */
+function sectionEndAt(headers: OutlineHeader[], sortedIndex: number, itemCount: number): number {
+  const h = headers[sortedIndex]
+  const boundary = headers.slice(sortedIndex + 1).find((next) =>
+    h.type === "phase" ? next.type === "phase" : h.event ? next.type === "phase" || !!next.event : true,
+  )
+  return boundary?.at ?? itemCount
+}
+
+/** Project legacy ordered rows into the event → moments model without rewriting their item ids. */
+export function projectRunOfShowEvents<T>(items: T[], headers: OutlineHeader[]): RunOfShowEvent<T>[] {
+  const sorted = sortHeaders(headers)
+  return sorted.flatMap((h, index) => {
+    if (!h.event) return []
+    const end = sectionEndAt(sorted, index, items.length)
+    return [{
+      id: h.id,
+      title: h.name,
+      ...(h.event.role ? { role: h.event.role } : {}),
+      ...(h.event.duration_minutes !== undefined ? { duration_minutes: h.event.duration_minutes } : {}),
+      ...(h.event.ownership ? { ownership: h.event.ownership } : {}),
+      approval: h.event.approval,
+      notes: h.notes,
+      moments: items.slice(h.at, end),
+    }]
+  })
 }
 
 const shift = (headers: OutlineHeader[], from: number, by: 1 | -1): OutlineHeader[] =>
@@ -39,13 +114,12 @@ export function headersAfterInsert(headers: OutlineHeader[], index: number): Out
   return shift(headers, index, 1)
 }
 
-/** Where an item appended to a section goes: the end of that phase or group. */
+/** Where an item appended to a section goes: the end of that phase, event or group. */
 export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId: string): number {
   const sorted = sortHeaders(headers)
   const k = sorted.findIndex((h) => h.id === headerId)
   if (k === -1) return 0
-  const h = sorted[k]
-  return sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? itemCount
+  return sectionEndAt(sorted, k, itemCount)
 }
 
 /**
@@ -56,7 +130,8 @@ export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId
 export function headersAfterAppend(headers: OutlineHeader[], index: number, headerId: string): OutlineHeader[] {
   const sorted = sortHeaders(headers)
   const k = sorted.findIndex((h) => h.id === headerId)
-  const after = new Set(sorted.slice(k + 1).filter((h) => h.at === index).map((h) => h.id))
+  const target = sorted[k]
+  const after = new Set(sorted.slice(k + 1).filter((h) => h.at === index && (target?.event ? h.type === "phase" || !!h.event : true)).map((h) => h.id))
   return headers.map((h) => (h.at > index || after.has(h.id) ? { ...h, at: h.at + 1 } : h))
 }
 
@@ -89,7 +164,7 @@ export function interleave<T>(items: T[], headers: OutlineHeader[]): OutlineRow<
 }
 
 export interface SectionSummary {
-  /** Items under the header (for a phase: down to the next phase; a group: to the next header). */
+  /** Items under the header: phases to next phase, events to next event/phase, groups to next header. */
   count: number
   /** Their planned minutes. */
   minutes: number
@@ -127,12 +202,16 @@ export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | nu
   const sorted = [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
   const out: Record<string, SectionSummary> = {}
   sorted.forEach((h, k) => {
-    // A phase runs to the next phase; a group to the next header of either kind.
-    const end = sorted.slice(k + 1).find((n) => (h.type === "phase" ? n.type === "phase" : true))?.at ?? items.length
+    const end = sectionEndAt(sorted, k, items.length)
     const slice = items.slice(h.at, end)
     out[h.id] = { count: slice.length, minutes: slice.reduce((m, i) => m + (i.planned_minutes ?? 0), 0) }
   })
   return out
+}
+
+/** A new event begins as an unapproved plan; taking one of its moments never approves it. */
+export function newRunOfShowEvent(at: number, newId: () => string = () => crypto.randomUUID()): OutlineHeader {
+  return { id: newId(), type: "group", name: "New event", at, event: { schema_version: 1, approval: "draft" } }
 }
 
 /** The four phases of a church event, the main service holding what is there. */

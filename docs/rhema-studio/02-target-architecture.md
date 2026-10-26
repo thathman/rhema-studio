@@ -117,7 +117,26 @@ Rule of thumb: **workspaces compose, modules own, runtime executes, engine draws
 Each step is independently shippable and reversible; none removes the legacy route
 until its replacement has tests.
 
-## 8. Cross-platform notes
+## 8. Run of Show events (#409; incremental implementation)
+
+The first event-model slice is implemented on `fix/event-first-run-of-show` and is not
+merged. A service event is represented by an existing `group` row with a versioned
+`run_of_show_event` payload. The row ID, reference and notes remain the event ID, title
+and notes; following rundown items project as its moments until the next event or phase.
+Ordinary groups can sit inside an event as moment groups. Existing queue-item scene,
+source, timing and cue fields remain attached to those moments.
+
+The current slice adds event creation in Prepare, draft/approved status presentation,
+event-to-moments projection, nested-group insertion and collapse behavior, and service
+save/reopen serialization. Keeping the stored kind as `group` lets older builds continue
+reading the rundown and preserve the unknown event payload while saving.
+
+This slice does not yet provide the event-details editor or connect an event's duration
+to the service timing engine and Timekeeper clock. The duration field is preserved in
+the event schema but is not yet an authoritative timer. Do not describe #409 as complete,
+and do not treat this branch as owner-accepted or hardware-verified.
+
+## 9. Cross-platform notes
 
 - Window management and monitor enumeration already go through Tauri; keep all platform
   branching in Rust.

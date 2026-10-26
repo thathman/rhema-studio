@@ -14,8 +14,8 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, defaultPhases, newPhase, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
-import { CalendarDaysIcon, ClockIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
+import { RULE_LABEL, defaultPhases, newPhase, newRunOfShowEvent, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { CalendarDaysIcon, CalendarPlusIcon, ClockIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
 import type { CueQueueItem } from "@/types"
@@ -166,6 +166,10 @@ function RundownFooter() {
     const at = sel?.index ?? 0
     useQueueStore.getState().setHeaders([...useQueueStore.getState().headers, { id: crypto.randomUUID(), type: "group", name: "New group", at }])
   }
+  const addEvent = () => {
+    const queue = useQueueStore.getState()
+    queue.setHeaders([...queue.headers, newRunOfShowEvent(sel?.index ?? count)])
+  }
   // A church-named phase (#193): before the selected item, else at the end; rename it from its menu.
   const addPhase = () => {
     const at = sel?.index ?? count
@@ -186,6 +190,9 @@ function RundownFooter() {
       )}
       <Button size="sm" variant="outline" onClick={addGroup} title={sel ? `A group starting at ${sel.item.reference}` : "A group at the top"}>
         <FolderPlusIcon /> Group
+      </Button>
+      <Button size="sm" variant="outline" onClick={addEvent} title={sel ? `A service event starting at ${sel.item.reference}` : "Add a service event at the end of the run of show"}>
+        <CalendarPlusIcon /> Event
       </Button>
       {hasPhases && (
         <Button size="sm" variant="outline" onClick={addPhase} title={sel ? `A phase of your own starting at ${sel.item.reference}` : "A phase of your own at the end"}>
