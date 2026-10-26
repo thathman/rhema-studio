@@ -86,6 +86,10 @@ async function renderPrepare() {
   return el
 }
 
+async function waitForRadixClose() {
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 150)))
+}
+
 describe("Prepare never takes anything live (#299)", () => {
   it("switches rundown views 20 times without changing the plan or live state (#409, #444)", async () => {
     const items = [slide("Pre-service"), slide("Opening prayer"), slide("Sermon"), slide("Closing")]
@@ -275,11 +279,13 @@ describe("Prepare never takes anything live (#299)", () => {
     const duplicateAction = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Duplicate service")!
     expect(duplicateAction).toBeDefined()
     await chooseAction(newAction)
+    await waitForRadixClose()
     expect(document.body.querySelector<HTMLInputElement>("#svc-title")).not.toBeNull()
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Cancel")!.click())
     await openActions()
     const duplicate = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Duplicate service")!
     await chooseAction(duplicate)
+    await waitForRadixClose()
     expect(document.body.querySelector<HTMLInputElement>("#dup-title")?.value).toBe("Sunday service (copy)")
   })
 
@@ -472,6 +478,7 @@ describe("Prepare never takes anything live (#299)", () => {
     })
     const add = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!
     await act(async () => add.click())
+    await waitForRadixClose()
 
     const state = useQueueStore.getState()
     const inserted = state.items.find((item) => item.reference === "Sermon title")
