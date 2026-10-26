@@ -69,7 +69,7 @@ interface ServiceState {
   /** Load a service into the rundown. Refuses while there are unsaved changes unless `discard`. */
   openProgram: (id: string, opts?: Discard) => Promise<OpenResult>
   /** Save the rundown as the current service's items. */
-  saveCurrent: () => Promise<SaveResult>
+  saveCurrent: (options?: { carryCommentHistory?: boolean }) => Promise<SaveResult>
   deleteProgram: (id: string, opts?: Discard) => Promise<DeleteResult>
   /** Detach the rundown from the saved service (keeps the rundown on screen). */
   closeProgram: (opts?: Discard) => CloseResult
@@ -742,7 +742,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     renewItemIds(holders)
     remember(program.id)
     if (!get().dirty) return "created"
-    const saved = await get().saveCurrent()
+    const saved = await get().saveCurrent({ carryCommentHistory: true })
     return saved === "saved" ? "created" : "created_unsaved"
   },
 
@@ -926,7 +926,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     }
   },
 
-  saveCurrent: async () => {
+  saveCurrent: async (options) => {
     const current = get().current
     if (!current) return "nothing"
     if (get().saving) return "nothing"
@@ -952,7 +952,7 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
     const snapshot = rundownSignature(snapshotItems, snapshotHeaders)
     set({ saving: true, conflict: null })
     try {
-      const data = await invoke<ProgramWithItems>("content_replace_items", {
+      const data = await invoke<ProgramWithItems>(options?.carryCommentHistory ? "content_replace_items_with_history" : "content_replace_items", {
         programId: current.id,
         expectedRevision: current.revision,
         items: toItemInputs(snapshotItems, translationAbbrev, active, snapshotHeaders),

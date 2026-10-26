@@ -173,6 +173,17 @@ pub fn content_replace_items(
     with_db(&state, |db| db.replace_items(&program_id, expected_revision, &items))
 }
 
+/// Save a deliberate new-service copy that carries its original team-comment history.
+#[tauri::command]
+pub fn content_replace_items_with_history(
+    state: State<'_, ContentState>,
+    program_id: String,
+    expected_revision: i64,
+    items: Vec<ItemInput>,
+) -> CmdResult<ProgramWithItems> {
+    with_db(&state, |db| db.replace_items_with_history(&program_id, expected_revision, &items))
+}
+
 #[tauri::command]
 pub fn content_delete_program(state: State<'_, ContentState>, id: String, expected_revision: i64) -> CmdResult<()> {
     with_db(&state, |db| db.delete_program(&id, expected_revision))

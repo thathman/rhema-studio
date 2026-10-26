@@ -113,7 +113,8 @@ export async function invoke(cmd: string, args: Record<string, unknown> = {}): P
       return program
     }
     case "content_get_program": return programs.get(String(args.id)) ?? null
-    case "content_replace_items": {
+    case "content_replace_items":
+    case "content_replace_items_with_history": {
       const p = programs.get(String(args.programId))
       if (!p) throw { kind: "not_found", message: "no such program" }
       if (p.program.revision !== args.expectedRevision) throw { kind: "conflict", message: "conflict", expected: args.expectedRevision, actual: p.program.revision }

@@ -16,6 +16,7 @@ import { interleave, isSkipped, sectionSummaries } from "@/lib/run-of-show"
 import { assigneesShort, itemAssignees } from "@/lib/assignees"
 import { SectionHeader, SectionLabel } from "@/studio/prepare/section-header"
 import { takeImpact } from "@/lib/cues"
+import { commentDeleted } from "@/lib/comments"
 import { cuesFor, cueText } from "@/lib/item-cues"
 import { CUE_TRIGGERS } from "@/types"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
@@ -86,6 +87,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
         const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === nextShown
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)
+        const activeCommentCount = item.comments?.filter((c) => !commentDeleted(c)).length ?? 0
         return (
           <Row key={item.id} id={item.id} index={index} sortable={mode === "prepare"}>
             <div
@@ -144,10 +146,10 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
                 {item.auto_advance && <TimerIcon className="size-3 shrink-0 text-muted-foreground" role="img" aria-label={`Moves on by itself after ${item.planned_minutes ?? 0} min while timed moves are on`} />}
                 {item.end_by ? <span className="shrink-0 text-[0.6875rem] text-muted-foreground tabular-nums" title="Finish by">by {item.end_by}</span> : null}
                 <PeopleMark item={item} />
-                {item.comments?.length ? (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${item.comments.length} team comment${item.comments.length === 1 ? "" : "s"}`}>
+                {activeCommentCount > 0 ? (
+                  <span className="inline-flex shrink-0 items-center gap-0.5 text-[0.6875rem] text-muted-foreground" title={`${activeCommentCount} team comment${activeCommentCount === 1 ? "" : "s"}`}>
                     <MessageSquareIcon className="size-3" aria-hidden />
-                    {item.comments.length}
+                    {activeCommentCount}
                     <span className="sr-only"> comments</span>
                   </span>
                 ) : null}

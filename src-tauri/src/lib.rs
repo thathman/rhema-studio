@@ -226,6 +226,7 @@ pub fn run() {
             commands::content::content_remove_song_attachment,
             commands::content::content_get_program,
             commands::content::content_replace_items,
+            commands::content::content_replace_items_with_history,
             commands::content::content_delete_program,
             commands::content::content_status,
             commands::setup::setup_data_paths,
