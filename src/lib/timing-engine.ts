@@ -294,11 +294,11 @@ function sectionTimings(input: TimingInput, main: OutlineHeader, t: ServiceTimin
     expectedStart: mainBegan ?? mainEvents[0]?.expectedStart ?? t.start, expectedEnd: t.expectedEnd,
     state: t.finished ? "done" : sectionState(mainEvents), loop: false,
   })
-  // Groups of the main service: from the next header (of either kind) back.
+  // A plain group ends at the next header; an event group includes any nested moment groups.
   const mainRange = phaseRange(items.length, headers, main.id)!
   sorted.forEach((g, k) => {
     if (g.type !== "group" || g.at < mainRange.start || g.at >= mainRange.end) return
-    const end = Math.min(sorted.slice(k + 1)[0]?.at ?? items.length, mainRange.end)
+    const end = Math.min(sorted.slice(k + 1).find((next) => g.event ? next.type === "phase" || !!next.event : true)?.at ?? items.length, mainRange.end)
     const evs = mainEvents.filter((e) => e.index >= g.at && e.index < end)
     if (!evs.length) return
     const first = evs.find((e) => e.state !== "skipped") ?? evs[0]

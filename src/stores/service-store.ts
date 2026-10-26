@@ -23,7 +23,7 @@ import { cleanComments, parseComments } from "@/lib/comments"
 import { cleanAssignees, parseAssignees, preparedByText } from "@/lib/assignees"
 import { intentPayload, parseItemIntent } from "@/lib/item-intent"
 import { itemTimingPayload, parseItemTiming } from "@/lib/item-timing"
-import { interleave, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
+import { interleave, parseRunOfShowEvent, type OutlineHeader, type PhaseRole, type PhaseRule } from "@/lib/run-of-show"
 import { isContentCommandError, SUPPORTED_ITEM_KINDS } from "@/types/content"
 
 export const CURRENT_SERVICE_KEY = "rhema-studio.service"
@@ -132,11 +132,19 @@ function headerInput(h: OutlineHeader): ItemInput {
   const payload = {
     ...(h.payload_extra ?? {}),
     ...(h.type === "phase" ? { ...(h.rule ? { rule: h.rule } : {}), ...(h.role ? { role: h.role } : {}), ...(h.starts_at && isClockTime(h.starts_at) ? { starts_at: h.starts_at } : {}), ...(isAdvanceSeconds(h.advance_seconds) ? { advance_seconds: h.advance_seconds } : {}), ...(h.disabled ? { disabled: true } : {}) } : {}),
+    ...(h.event ? { run_of_show_event: {
+      ...(h.event.payload_extra ?? {}),
+      schema_version: 1,
+      ...(h.event.role ? { role: h.event.role } : {}),
+      ...(h.event.duration_minutes !== undefined ? { duration_minutes: h.event.duration_minutes } : {}),
+      ...(h.event.ownership ? { ownership: h.event.ownership } : {}),
+      approval: h.event.approval,
+    } } : {}),
   }
   return {
     id: h.id,
     kind: h.type,
-    reference: h.name.trim() || (h.type === "phase" ? "Phase" : "Group"),
+    reference: h.name.trim() || (h.type === "phase" ? "Phase" : h.event ? "Event" : "Group"),
     book_number: null,
     chapter: null,
     verse: null,
@@ -570,10 +578,14 @@ function parseHeader(it: ProgramItem, at: number): OutlineHeader {
   } catch {
     // An unreadable payload: the header keeps its name and place.
   }
-  const { rule, role, starts_at, advance_seconds, ...others } = p
+  const event = it.kind === "group" ? parseRunOfShowEvent(p.run_of_show_event) : null
+  const { run_of_show_event, rule, role, starts_at, advance_seconds, ...others } = p
   // A phase skipped for this service (#193); on a group the key is not this build's and is kept.
   const { disabled, ...phaseRest } = others
-  const rest = it.kind === "phase" ? phaseRest : others
+  const rest = {
+    ...(it.kind === "phase" ? phaseRest : others),
+    ...(!event && run_of_show_event !== undefined ? { run_of_show_event } : {}),
+  }
   return {
     id: it.id,
     type: it.kind === "phase" ? "phase" : "group",
@@ -586,6 +598,7 @@ function parseHeader(it: ProgramItem, at: number): OutlineHeader {
     ...(it.kind === "phase" && isAdvanceSeconds(advance_seconds) ? { advance_seconds } : {}),
     ...(it.kind === "phase" && disabled === true ? { disabled: true } : {}),
     ...(Object.keys(rest).length ? { payload_extra: rest } : {}),
+    ...(event ? { event } : {}),
   }
 }
 

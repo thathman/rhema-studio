@@ -20,6 +20,7 @@ import { useServiceStore } from "@/stores/service-store"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
 import type { QueueItem } from "@/types"
+import { projectRunOfShowEvents } from "@/lib/run-of-show"
 
 const slide = (id: string): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "words" }, reference: id, confidence: 1, source: "manual", added_at: 0, planned_minutes: 3 }) as unknown as QueueItem
@@ -89,6 +90,42 @@ describe("Prepare never takes anything live (#299)", () => {
     await act(async () => present.click())
     expect(useShellStore.getState().workspace).toBe("present")
     expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
+  it("adds a versioned draft event to the service plan without changing live output", async () => {
+    useQueueStore.setState({ items: [slide("Sermon outline")], headers: [], activeIndex: null })
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null })
+    const el = await renderPrepare()
+    const preview = el.querySelector<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')!
+    await act(async () => preview.click())
+    const eventButton = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Event")!
+    await act(async () => eventButton.click())
+    expect(useQueueStore.getState().headers).toMatchObject([
+      { type: "group", name: "New event", at: 0, event: { schema_version: 1, approval: "draft" } },
+    ])
+    expect(projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)[0].moments.map((item) => item.id)).toEqual(["Sermon outline"])
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null })
+    expect(el.querySelector('[aria-label="Event: New event"]')).not.toBeNull()
+  })
+
+  it("collapsing an event hides its nested moment groups and their items", async () => {
+    useQueueStore.setState({
+      items: [slide("Sermon opener"), slide("John 3:16"), slide("Prayer")],
+      headers: [
+        { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40, approval: "draft" } },
+        { id: "scripture", type: "group", name: "Scripture moments", at: 1 },
+        { id: "prayer-event", type: "group", name: "Closing prayer", at: 2, event: { schema_version: 1, approval: "draft" } },
+      ],
+      activeIndex: null,
+    })
+    const el = await renderPrepare()
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(3)
+    const collapse = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Sermon"]')!
+    await act(async () => collapse.click())
+    expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Group: Scripture moments"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Event: Closing prayer"]')).not.toBeNull()
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(1)
   })
 
   it("says whether the service is saved, next to its name", async () => {

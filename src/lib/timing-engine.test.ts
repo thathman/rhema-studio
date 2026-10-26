@@ -376,7 +376,8 @@ describe("timing engine (issue #196)", () => {
         { id: "warm", type: "phase", name: "Warm-up", at: 1, rule: "auto_once", role: "warmup" },
         { id: "main", type: "phase", name: "Main service", at: 3, rule: "manual", role: "main", starts_at: "10:00" },
         { id: "g1", type: "group", name: "Worship", at: 3 },
-        { id: "g2", type: "group", name: "The Word", at: 5 },
+        { id: "g2", type: "group", name: "The Word", at: 5, event: { schema_version: 1, role: "sermon", duration_minutes: 35, approval: "approved" } },
+        { id: "g3", type: "group", name: "Scripture moments", at: 6 },
         { id: "post", type: "phase", name: "Post-service loop", at: 7, rule: "loop", role: "post" },
       ]
       const sec = (t: ReturnType<typeof serviceTiming>) => t!.sections.map((x) => `${x.id} ${x.plannedStart === null ? "-" : hhmm(x.plannedStart)}/${x.plannedEnd === null ? "-" : hhmm(x.plannedEnd)} → ${x.expectedStart === null ? "-" : hhmm(x.expectedStart)}/${x.expectedEnd === null ? "-" : hhmm(x.expectedEnd)} ${x.state}`)
@@ -387,6 +388,7 @@ describe("timing engine (issue #196)", () => {
         "main 10:00/11:00 → 10:00/11:00 upcoming",
         "g1 10:00/10:25 → 10:00/10:25 upcoming",
         "g2 10:25/11:00 → 10:25/11:00 upcoming",
+        "g3 10:55/11:00 → 10:55/11:00 upcoming",
         "post 11:00/- → 11:00/- upcoming",
       ])
       // The warm-up began two minutes late: it is expected to run to 10:02, and the loop before it ended as it began.
@@ -399,6 +401,7 @@ describe("timing engine (issue #196)", () => {
         "main 10:00/11:00 → 10:00/11:06 live",
         "g1 10:00/10:25 → 10:00/10:31 live",
         "g2 10:25/11:00 → 10:31/11:06 upcoming",
+        "g3 10:55/11:00 → 11:01/11:06 upcoming",
         "post 11:00/- → 11:06/- upcoming",
       ])
     })

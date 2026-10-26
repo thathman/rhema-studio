@@ -22,9 +22,10 @@ const TONE: Record<PhaseRole, string> = {
 /** In Present's running order: where the phase or group starts and how it runs (nothing to change here). */
 export function SectionLabel({ header, summary, action }: { header: OutlineHeader; summary?: SectionSummary; action?: React.ReactNode }) {
   const phase = header.type === "phase"
+  const kind = phase ? "Phase" : header.event ? "Event" : "Group"
   return (
     <li
-      aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
+      aria-label={`${kind}: ${header.name}`}
       className={cn("flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.625rem] font-bold tracking-[0.1em] uppercase", phase ? "mt-2 border-t border-[#334056] bg-[#1d3335] px-3 py-2 text-[#d6e8e1] first:mt-0" : "mt-1.5 px-2 pl-4 text-muted-foreground")}
     >
       <span className="min-w-0 max-w-full truncate">{header.name}</span>
@@ -40,6 +41,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
   const phase = header.type === "phase"
+  const kind = phase ? "phase" : header.event ? "event" : "group"
   const finish = () => {
     const n = name.trim()
     if (n && n !== header.name) useQueueStore.getState().updateHeader(header.id, { name: n.slice(0, 120) })
@@ -50,10 +52,10 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
   const minutes = summary?.minutes ?? 0
   return (
     <li
-      aria-label={`${phase ? "Phase" : "Group"}: ${header.name}`}
+      aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
       className={cn(
         "flex items-center gap-1.5 rounded-lg",
-        phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
+        phase ? cn("mt-2 px-2 py-1.5 first:mt-0", TONE[header.role ?? "custom"]) : header.event ? "mt-1 ml-1 rounded-md border border-border bg-card px-2 py-1.5" : "mt-1 ml-3 px-1.5 py-1 text-muted-foreground",
         header.disabled && "opacity-60",
       )}
     >
@@ -65,7 +67,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
         {renaming ? (
           <Input
             autoFocus
-            aria-label={`Name of the ${phase ? "phase" : "group"}`}
+            aria-label={`Name of the ${kind}`}
             value={name}
             maxLength={120}
             onChange={(e) => setName(e.target.value)}
@@ -74,11 +76,12 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
             className="h-7 min-w-0 flex-1 basis-32 text-sm"
           />
         ) : (
-          <span className={cn("min-w-0 max-w-full truncate", phase ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
+          <span className={cn("min-w-0 max-w-full truncate", phase || header.event ? "text-sm font-bold" : "text-xs font-semibold")} onDoubleClick={() => setRenaming(true)}>{header.name}</span>
         )}
         <span className="flex shrink-0 items-center gap-1.5">
           {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
           {phase && header.disabled && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title="Its items stay in the service; Present passes over them">Skipped</Badge>}
+          {header.event && <Badge variant="outline" className="h-5 text-[0.625rem] font-bold tracking-wide uppercase">{header.event.approval === "approved" ? "Approved" : "Draft"}</Badge>}
           <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
         </span>
       </span>
@@ -122,7 +125,7 @@ export function SectionHeader({ header, summary, collapsed, onToggle }: { header
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => useQueueStore.getState().removeHeader(header.id)}>
-            Remove the {phase ? "phase" : "group"} (its items stay)
+            Remove the {kind} (its items stay)
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

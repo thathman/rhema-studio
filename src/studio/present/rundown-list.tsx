@@ -198,20 +198,25 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
           </Row>
         )
   }
-  // Prepare shows the run of show's phases and groups between the items; a collapsed one hides its items.
+  // Prepare shows phases, events and their moments; a collapsed parent hides nested groups too.
   const rows = interleave(items, headers)
-  // Which rows show: a collapsed phase hides its groups and items; a collapsed group its items.
+  // Which rows show: phases contain events; events may contain moment groups; ordinary groups stay shallow.
   const visible: typeof rows = []
   let phaseId: string | null = null
+  let eventId: string | null = null
   let groupId: string | null = null
   let phaseOff = false
   for (const r of rows) {
     if ("header" in r) {
-      if (r.header.type === "phase") { phaseId = r.header.id; groupId = null; phaseOff = !!r.header.disabled } else groupId = r.header.id
+      if (r.header.type === "phase") { phaseId = r.header.id; eventId = null; groupId = null; phaseOff = !!r.header.disabled }
+      else if (r.header.event) { eventId = r.header.id; groupId = null }
+      else groupId = r.header.id
       // Present leaves out a phase skipped for this service, with its groups (#193).
       if (mode === "present" && phaseOff) continue
       if (r.header.type === "group" && phaseId && collapsed.has(phaseId)) continue
-    } else if ((phaseId && collapsed.has(phaseId)) || (groupId && collapsed.has(groupId))) continue
+      // The event's own header remains visible so it can be expanded again.
+      if (r.header.type === "group" && eventId && r.header.id !== eventId && collapsed.has(eventId)) continue
+    } else if ((phaseId && collapsed.has(phaseId)) || (eventId && collapsed.has(eventId)) || (groupId && collapsed.has(groupId))) continue
     // …and hidden items: they stay in the service, and Next passes over them.
     else if (mode === "present" && isSkipped(items, headers, r.index)) continue
     visible.push(r)
