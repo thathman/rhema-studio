@@ -272,8 +272,11 @@ Preview. Live remained off. The same run against current `main` reproduced #385 
 missing selected-hymn details pane. The scene journey takes Full screen to the congregation
 output, edits and saves its reusable name and background, verifies the on-air snapshot and
 frame remain on the taken revision, then verifies an explicit Take applies the saved
-revision. Both journeys assert Live content remains off. They use in-app WebView interaction
-and QA-only fixtures; they are not external keyboard or screen-reader tests. The runner
+revision. The Hymn journey also seeds Phase One (A/B) and Phase Two (C), opens the picker
+from Phase Two, and adds the Hymn. It verifies A/B/C/Hymn order, unchanged phase boundaries,
+successful selection, and the same structure after service save/reopen. All three journeys
+assert Live content remains off. They use in-app WebView interaction and QA-only fixtures;
+they are not external keyboard or screen-reader tests. The runner
 creates a schema-valid temporary Bible database only when none is present; it contains a
 synthetic QA translation with no Bible text. The app log is checked for missing Bible tables,
 and the test restores pre-existing SQLite sidecars. It does not test Scripture content or
@@ -281,7 +284,8 @@ search. CI artifacts are restricted to synthetic journey reports and the app log
 
 PR #438's standard CI passes: frontend (1,833/1,833), typecheck, lint, production build,
 Rust, and Companion. These checks and the two scoped native journeys do not complete issue
-#411. The combined native workflow still needs a hosted run after this update.
+#411. The hosted two-journey run [40286269840](https://github.com/thathman/rhema-studio/actions/runs/40286269840)
+passed before the #384 extension; the new combined hosted run is pending.
 
 Still unverified: the other interactive steps in sections 1–10l; onboarding and other
 application entrypoints; external keyboard and screen-reader operation; projector/TV
