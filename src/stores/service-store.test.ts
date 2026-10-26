@@ -430,6 +430,29 @@ describe("saving", () => {
 })
 
 describe("createFromRundown", () => {
+  it("saves a zero-moment event when creating a service from an event-only rundown", async () => {
+    useQueueStore.setState({
+      items: [],
+      headers: [{ id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, role: "Prayer" } }],
+    })
+    mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "content_create_program") return { ...program, id: "new", revision: 1, item_count: 0 }
+      if (cmd === "content_replace_items") {
+        const rows = args?.items as ProgramItem[]
+        expect(rows).toHaveLength(1)
+        expect(rows[0]).toMatchObject({ kind: "group", reference: "Opening Prayer" })
+        expect(rows[0].id).not.toBe("prayer") // a new service receives its own event-row id
+        expect(JSON.parse(String(rows[0].payload))).toMatchObject({ run_of_show_event: { schema_version: 1, role: "Prayer" } })
+        return { ...savedResponse(2, []), program: { ...program, id: "new", revision: 2, item_count: 1 } }
+      }
+      return null
+    })
+
+    expect(await useServiceStore.getState().createFromRundown("Service draft", "2026-10-26")).toBe("created")
+    expect(mockInvoke.mock.calls.some(([cmd]) => cmd === "content_replace_items")).toBe(true)
+    expect(useServiceStore.getState()).toMatchObject({ current: { id: "new", revision: 2 }, dirty: false })
+  })
+
   it("reports created_unsaved when the initial save fails, and stays dirty", async () => {
     useQueueStore.setState({ items: [queueItem("John 3:16", 43, 3, 16)] })
     mockInvoke.mockImplementation(async (cmd: string) => {

@@ -20,6 +20,7 @@ import { cuesFor, cueText } from "@/lib/item-cues"
 import { CUE_TRIGGERS } from "@/types"
 import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { BulkBar } from "@/studio/prepare/bulk-bar"
+import { AddEventPalette } from "@/studio/prepare/add-event-palette"
 import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type SongQueueItem } from "@/types"
 /**
  * The service rundown, built on the existing queue store.
@@ -33,7 +34,7 @@ import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type S
  * In `prepare` mode rows can be dragged by their handle to reorder; the
  * arrow buttons do the same from the keyboard.
  */
-export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { mode: "prepare" | "present"; selectedEventId?: string | null; onSelectEvent?: (id: string | null) => void }) {
+export function RundownList({ mode, selectedEventId = null, onSelectEvent, groupedByPhase = true, onEventCreated, eventsDisabled = false }: { mode: "prepare" | "present"; selectedEventId?: string | null; onSelectEvent?: (id: string | null) => void; groupedByPhase?: boolean; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const selected = useBibleStore((s) => s.selectedVerse)
@@ -62,7 +63,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { m
   const nextShown = activeIndex === null ? -1 : items.findIndex((_, k) => k > activeIndex && !isSkipped(items, headers, k))
   const present = (_item: QueueItem, index: number) => presentActions.presentItem(index)
 
-  if (items.length === 0) {
+  if (items.length === 0 && headers.length === 0) {
     return (
       <p className="p-4 text-center text-xs text-muted-foreground">
         {mode === "prepare"
@@ -176,6 +177,14 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { m
                     onClick={() => useQueueStore.getState().reorderItems(index, index - 1)}>
                     <ArrowUpIcon />
                   </Button>
+                  <AddEventPalette
+                    target={{ kind: "row", itemId: item.id }}
+                    onCreated={onEventCreated}
+                    disabled={eventsDisabled}
+                    compact
+                    label={`Add event before ${item.reference}`}
+                    ariaLabel={`Add event before ${item.reference}`}
+                  />
                   <Button variant="ghost" size="icon-xs" className="size-11" aria-label="Move down" disabled={index === items.length - 1}
                     onClick={() => useQueueStore.getState().reorderItems(index, index + 1)}>
                     <ArrowDownIcon />
@@ -220,6 +229,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { m
       if (r.header.type === "group" && phaseId && collapsed.has(phaseId)) continue
       // The event's own header remains visible so it can be expanded again.
       if (r.header.type === "group" && eventId && r.header.id !== eventId && collapsed.has(eventId)) continue
+      if (mode === "prepare" && !groupedByPhase && r.header.type === "phase") continue
     } else if ((phaseId && collapsed.has(phaseId)) || (eventId && collapsed.has(eventId)) || (groupId && collapsed.has(groupId))) continue
     // …and hidden items: they stay in the service, and Next passes over them.
     else if (mode === "present" && isSkipped(items, headers, r.index)) continue
@@ -238,6 +248,8 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { m
               selected={selectedEventId === r.header.id}
               onSelect={r.header.event ? () => onSelectEvent?.(r.header.id) : undefined}
               onToggle={() => toggle(r.header.id)}
+              onEventCreated={onEventCreated}
+              eventsDisabled={eventsDisabled}
             />
             : <SectionLabel key={r.header.id} header={r.header} summary={summaries[r.header.id]} />
           : renderItem(r.item, r.index),

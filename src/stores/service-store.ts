@@ -744,11 +744,13 @@ export const useServiceStore = create<ServiceState>((set, get) => ({
 
   createFromRundown: async (title, serviceDate, opts) => {
     if (get().current && get().dirty && !opts?.discard) return "unsaved"
+    const rundown = useQueueStore.getState()
+    const hasPlan = rundown.items.length > 0 || rundown.headers.length > 0
     const holders = await idHolders()
     const program = await get().createProgram(title, serviceDate, { discard: true })
     if (!program) return "failed"
     baseline = "" // the rundown is not yet what the database has
-    set({ current: program, dirty: useQueueStore.getState().items.length > 0, conflict: null, unsupportedItems: [], missingTranslations: [] })
+    set({ current: program, dirty: hasPlan, conflict: null, unsupportedItems: [], missingTranslations: [] })
     // Item ids are unique across services: items taken from another service (or copied) get new ones, or the save is refused.
     // In the same tick as the new service becoming current, so the original never looks changed.
     renewItemIds(holders)

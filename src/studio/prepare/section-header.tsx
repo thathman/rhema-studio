@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react"
 import { useAddDialog } from "@/studio/prepare/add-target"
+import { AddEventPalette } from "@/studio/prepare/add-event-palette"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,7 +40,7 @@ export function SectionLabel({ header, summary, action }: { header: OutlineHeade
 }
 
 /** A phase or group in the order of service: name, how it runs, its items and minutes; collapsible. */
-export function SectionHeader({ header, summary, collapsed, selected = false, onSelect, onToggle }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; onSelect?: () => void; onToggle: () => void }) {
+export function SectionHeader({ header, summary, collapsed, selected = false, onSelect, onToggle, onEventCreated, eventsDisabled = false }: { header: OutlineHeader; summary?: SectionSummary; collapsed: boolean; selected?: boolean; onSelect?: () => void; onToggle: () => void; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
   const service = useServiceStore((state) => state.current)
@@ -101,10 +102,18 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
           {phase && header.rule && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title={RULE_LABEL[header.rule].says}>{RULE_LABEL[header.rule].chip}</Badge>}
           {phase && header.disabled && <Badge variant="outline" className="h-5 border-current/30 text-[0.6875rem] font-bold tracking-wide uppercase" title="Its items stay in the service; Present passes over them">Skipped</Badge>}
           {header.event && <Badge variant="outline" className="h-5 text-[0.625rem] font-bold tracking-wide uppercase" title="Event status follows approval of the saved service revision. It does not authorize a live Take.">{approval === "changed" ? "Changed" : approval === "approved" ? "Approved" : "Draft"}</Badge>}
-          <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
+          <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {header.event ? count === 1 ? "moment" : "moments" : count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
         </span>
       </span>
       <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={(event) => useAddDialog.getState().openFor(header.id, event.currentTarget)}><PlusIcon /></Button>
+      <AddEventPalette
+        target={{ kind: "section", headerId: header.id }}
+        onCreated={onEventCreated}
+        disabled={eventsDisabled}
+        compact
+        label={`Add event after ${header.name}`}
+        ariaLabel={`Add event after ${header.name}`}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-xs" aria-label={`${header.name}: options`} className="shrink-0 hover:bg-black/5"><EllipsisIcon /></Button>

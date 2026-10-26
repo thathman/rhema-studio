@@ -53,6 +53,13 @@ export interface RunOfShowEvent<T> {
   moments: T[]
 }
 
+/** A safe point to insert a new event while keeping it inside the chosen phase or event. */
+export interface EventInsertionPoint {
+  at: number
+  /** Insert before this boundary when several headers share the same item index. */
+  beforeHeaderId?: string
+}
+
 const EVENT_FIELDS = new Set(["schema_version", "role", "duration_minutes", "ownership", "approval"])
 
 /** Read only this schema version; an unknown or malformed marker remains opaque payload data. */
@@ -198,10 +205,19 @@ export function headersAfterInsert(headers: OutlineHeader[], index: number): Out
 
 /** Where an item appended to a section goes: the end of that phase, event or group. */
 export function sectionEnd(itemCount: number, headers: OutlineHeader[], headerId: string): number {
+  return sectionInsertionPoint(itemCount, headers, headerId).at
+}
+
+/** Where a new event belongs at the end of a phase/event/group, including same-index header order. */
+export function sectionInsertionPoint(itemCount: number, headers: OutlineHeader[], headerId: string): EventInsertionPoint {
   const sorted = sortHeaders(headers)
   const k = sorted.findIndex((h) => h.id === headerId)
-  if (k === -1) return 0
-  return sectionEndAt(sorted, k, itemCount)
+  if (k === -1) return { at: 0 }
+  const target = sorted[k]
+  const boundary = sorted.slice(k + 1).find((next) =>
+    target.type === "phase" ? next.type === "phase" : target.event ? next.type === "phase" || !!next.event : true,
+  )
+  return { at: boundary?.at ?? itemCount, ...(boundary ? { beforeHeaderId: boundary.id } : {}) }
 }
 
 /**
@@ -299,8 +315,18 @@ export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | nu
 }
 
 /** A new event begins as a draft plan; taking one of its moments never approves the service. */
-export function newRunOfShowEvent(at: number, newId: () => string = () => crypto.randomUUID()): OutlineHeader {
-  return { id: newId(), type: "group", name: "New event", at, event: { schema_version: 1 } }
+export function newRunOfShowEvent(
+  at: number,
+  newId: () => string = () => crypto.randomUUID(),
+  details: { title?: string; role?: string } = {},
+): OutlineHeader {
+  return {
+    id: newId(),
+    type: "group",
+    name: details.title?.trim() || "New event",
+    at,
+    event: { schema_version: 1, ...(details.role?.trim() ? { role: details.role.trim() } : {}) },
+  }
 }
 
 /** The four phases of a church event, the main service holding what is there. */
