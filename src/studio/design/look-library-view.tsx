@@ -7,6 +7,7 @@ import { CanvasVerse } from "@/components/ui/canvas-verse"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useBroadcastStore, useSettingsStore } from "@/stores"
+import { designDraftId } from "@/lib/design-drafts"
 import { useShellStore, type DesignTab } from "@/studio/shell-store"
 import { LOWER_THIRDS } from "@/lib/builtin-themes"
 import { SAMPLE_BILINGUAL_SONG } from "@/lib/theme-migrations"
@@ -233,11 +234,21 @@ function useLookCopies(look: LibraryLook): LookCopy[] {
   const scenes = useBroadcastStore((s) => s.scenes)
   const tickerStyle = useBroadcastStore((s) => s.tickerStyle)
   const stageStyle = useBroadcastStore((s) => s.stageStyle)
+  const tickerDraft = useBroadcastStore((s) => {
+    if (look.kind !== "ticker") return undefined
+    const draft = s.designDrafts.find((item) => item.kind === "ticker" && item.sourceId === "default")
+    return draft?.kind === "ticker" && draft.value.libraryLookId === look.id ? draft : undefined
+  })
+  const stageDraft = useBroadcastStore((s) => {
+    if (look.kind !== "stage") return undefined
+    const draft = s.designDrafts.find((item) => item.kind === "stage" && item.sourceId === "default")
+    return draft?.kind === "stage" && draft.value.libraryLookId === look.id ? draft : undefined
+  })
   const outputs = useBroadcastStore((s) => s.outputs)
   const outputStatus = useBroadcastStore((s) => s.outputStatus)
   const lowerThird = useBroadcastStore((s) => s.lowerThird)
   const ticker = useBroadcastStore((s) => s.ticker)
-  return useMemo(() => lookCopies(look, { themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, outputs, outputStatus, lowerThird, ticker }), [look, themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, outputs, outputStatus, lowerThird, ticker])
+  return useMemo(() => lookCopies(look, { themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, tickerDraft, stageDraft, outputs, outputStatus, lowerThird, ticker }), [look, themes, lowerThirdStyles, scenes, tickerStyle, stageStyle, tickerDraft, stageDraft, outputs, outputStatus, lowerThird, ticker])
 }
 
 const COPIES_WHERE: Record<LibraryLook["kind"], string> = { theme: "In your themes", "lower-third": "In your lower-third styles", scene: "In your scenes", ticker: "In use", stage: "In use" }
@@ -310,7 +321,13 @@ function ResetMenu({ look, copies }: { look: LibraryLook; copies: LookCopy[] }) 
 /** Put a copy back as the library look has it. Refused when something shows it now (checked again here). */
 async function reset(look: LibraryLook, c: LookCopy) {
   const s = useBroadcastStore.getState()
-  const now = lookCopies(look, s).find((x) => x.id === c.id)
+  const tickerDraft = s.designDrafts.find((draft) => draft.kind === "ticker" && draft.sourceId === "default")
+  const stageDraft = s.designDrafts.find((draft) => draft.kind === "stage" && draft.sourceId === "default")
+  const now = lookCopies(look, {
+    ...s,
+    tickerDraft: tickerDraft?.kind === "ticker" ? tickerDraft : undefined,
+    stageDraft: stageDraft?.kind === "stage" ? stageDraft : undefined,
+  }).find((x) => x.id === c.id)
   if (!now || now.usedBy.length > 0) return
   switch (look.kind) {
     case "theme": {
@@ -338,12 +355,14 @@ async function reset(look: LibraryLook, c: LookCopy) {
       break
     }
     case "ticker":
-      // Only the saved look (nothing is running: Reset waits until the ticker stops).
-      useBroadcastStore.setState({ tickerStyle: resetSingleLook(look) })
+      useBroadcastStore.getState().saveDesignDraft({
+        id: designDraftId("ticker", "default"), kind: "ticker", sourceId: "default", value: resetSingleLook(look), updatedAt: Date.now(),
+      })
       break
     case "stage":
-      // No stage screen is on (Reset waits until they are off); they show it when next turned on.
-      s.saveStageStyle(resetSingleLook(look))
+      useBroadcastStore.getState().saveDesignDraft({
+        id: designDraftId("stage", "default"), kind: "stage", sourceId: "default", value: resetSingleLook(look), updatedAt: Date.now(),
+      })
       break
   }
   toast(`“${c.name}” is back to the library look.`)
@@ -354,17 +373,24 @@ async function reset(look: LibraryLook, c: LookCopy) {
  * copies take the church's colours and fonts. Never touches an output or the library look.
  */
 async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab, id?: string) => void, brand?: BrandKit) {
-  if (look.kind === "ticker" && !(await confirm(`Use “${look.name}” as your ticker look?`, "It replaces your ticker's look. A ticker running now keeps its look until you start it again."))) return
-  if (look.kind === "stage" && !(await confirm(`Use “${look.name}” on the stage display?`, "It replaces your stage look, and stage screens show it straight away. The congregation never sees the stage display."))) return
-  if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
   const s = useBroadcastStore.getState()
+  const draftKind = look.kind === "ticker" || look.kind === "stage" ? look.kind : null
+  if (draftKind && s.designDrafts.some((draft) => draft.id === designDraftId(draftKind, "default")) && !(await confirm(
+    `Replace the saved ${draftKind} draft?`,
+    `This replaces the current saved ${draftKind} draft. Connected outputs keep their current design.`,
+    "Replace draft",
+  ))) return
+  if (edit && look.kind === "theme" && !(await mayLeaveThemeDraft())) return
   const taken = [...s.themes.map((t) => t.name), ...s.scenes.map((x) => x.name), ...s.lowerThirdStyles.map((x) => x.name)]
   const added = adoptLook(look, { takenNames: taken, library: libraryLooks(), brand })
   for (const t of added.themes) useBroadcastStore.getState().saveTheme(t)
   if (added.lowerThirdStyle) useBroadcastStore.getState().saveLowerThirdStyle(added.lowerThirdStyle)
-  // Only the saved look: the ticker on air keeps the look it started with.
-  if (added.tickerStyle) useBroadcastStore.setState({ tickerStyle: added.tickerStyle })
-  if (added.stageStyle) useBroadcastStore.getState().saveStageStyle(added.stageStyle)
+  if (added.tickerStyle) useBroadcastStore.getState().saveDesignDraft({
+    id: designDraftId("ticker", "default"), kind: "ticker", sourceId: "default", value: added.tickerStyle, updatedAt: Date.now(),
+  })
+  if (added.stageStyle) useBroadcastStore.getState().saveDesignDraft({
+    id: designDraftId("stage", "default"), kind: "stage", sourceId: "default", value: added.stageStyle, updatedAt: Date.now(),
+  })
   if (added.scene) useBroadcastStore.getState().saveScene(added.scene)
 
   const choose = { label: "Choose for a screen", onClick: () => useShellStore.getState().openOutputs() }
@@ -385,11 +411,11 @@ async function addLook(look: LibraryLook, edit: boolean, onOpen: (tab: DesignTab
       return
     case "ticker":
       if (edit) onOpen("ticker")
-      toast(`Your ticker now uses “${look.name}”.`)
+      toast(`Saved “${look.name}” as a ticker draft.`, { description: "Open the ticker editor to preview and apply it." })
       return
     case "stage":
       if (edit) onOpen("stage")
-      toast(`The stage display now uses “${look.name}”.`)
+      toast(`Saved “${look.name}” as a stage draft.`, { description: "Open the stage editor to preview and apply it." })
       return
     case "scene":
       // Scenes opens the copy in the composer: arranging it there changes nothing on air until Take.

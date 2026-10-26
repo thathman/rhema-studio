@@ -389,6 +389,20 @@ describe("copies remember their library look; Reset for every kind (#299 3.24)",
     expect(lookCopies(stage, live)[0].usedBy).toEqual(["Stage"])
   })
 
+  it("lists singleton gallery drafts separately from their currently live designs", () => {
+    const tickerDraft = { id: "ticker:default", kind: "ticker" as const, sourceId: "default", value: adoptLook(ticker).tickerStyle!, updatedAt: 1 }
+    const stageDraft = { id: "stage:default", kind: "stage" as const, sourceId: "default", value: adoptLook(stage).stageStyle!, updatedAt: 1 }
+    const onAir: ChurchLooks = {
+      themes: [], lowerThirdStyles: [], scenes: [], tickerStyle: DEFAULT_TICKER_STYLE, stageStyle: DEFAULT_STAGE_STYLE,
+      tickerDraft, stageDraft, outputs: [out("Stage", { role: "stage" })],
+      outputStatus: { Stage: { previewOpen: true, ndiActive: true } },
+      ticker: { items: ["Sunday service"], style: DEFAULT_TICKER_STYLE, startedAt: 1 },
+    }
+
+    expect(lookCopies(ticker, onAir)).toEqual([{ id: "ticker", name: "Your ticker draft", usedBy: [] }])
+    expect(lookCopies(stage, onAir)).toEqual([{ id: "stage", name: "Your stage draft", usedBy: [] }])
+  })
+
   it("Reset puts a lower-third style back, keeping its id and name", () => {
     const copy = { ...adoptLook(speaker, { newId: () => "l3" }).lowerThirdStyle!, name: "Ours", radius: 40 }
     expect(resetLowerThirdCopy(copy, speaker)).toEqual({ ...speaker.style, id: "l3", name: "Ours", libraryLookId: speaker.id })

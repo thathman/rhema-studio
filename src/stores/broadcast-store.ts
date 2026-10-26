@@ -37,6 +37,7 @@ import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from 
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
+import { normalizeDesignDraft, normalizeDesignDrafts, type DesignDraft } from "@/lib/design-drafts"
 
 /** Heard verses (Settings → Display mode, the Live panel's Auto): wait, go live, or the Bible feeds only. */
 export type AutoMode = "manual" | "auto" | "bible"
@@ -205,6 +206,10 @@ interface BroadcastState {
   lowerThird: LowerThird | null
   /** Designed looks for the lower third (the first is the default). Saved with the themes. */
   lowerThirdStyles: LowerThirdStyle[]
+  /** Unpublished visual edits. Output renderers never read these drafts. */
+  designDrafts: DesignDraft[]
+  saveDesignDraft: (draft: DesignDraft) => void
+  deleteDesignDraft: (id: string) => void
   /** Add or replace a style (by id); `backing` (resolved) replaces the on-air band's when it uses this style. */
   saveLowerThirdStyle: (style: LowerThirdStyle, backing?: LowerThird["backing"]) => void
   /** Remove a style; the last one cannot go. */
@@ -785,6 +790,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   stageMessage: "",
   lowerThird: null,
   lowerThirdStyles: [DEFAULT_LOWER_THIRD_STYLE],
+  designDrafts: [],
+  saveDesignDraft: (draft) => {
+    const normalized = normalizeDesignDraft(draft)
+    if (!normalized) return
+    const drafts = get().designDrafts.filter((existing) => existing.id !== normalized.id)
+    set({ designDrafts: [...drafts, normalized] })
+  },
+  deleteDesignDraft: (id) => set({ designDrafts: get().designDrafts.filter((draft) => draft.id !== id) }),
   ticker: null,
   tickerItems: [],
   tickerStyle: DEFAULT_TICKER_STYLE,
@@ -1586,6 +1599,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
       if ((await store.get("autoBibleFeeds")) === true && !patch.autoLive) patch.autoBibleFeeds = true
       const ltStyles = (await store.get("lowerThirdStyles")) as LowerThirdStyle[] | undefined
       if (Array.isArray(ltStyles) && ltStyles.length > 0) patch.lowerThirdStyles = ltStyles.map(normalizeLowerThirdStyle)
+      patch.designDrafts = normalizeDesignDrafts(await store.get("designDrafts"))
       patch.tickerStyle = normalizeTickerStyle((await store.get("tickerStyle")) as Partial<TickerStyle> | undefined)
       patch.stageStyle = normalizeStageStyle((await store.get("stageStyle")) as Partial<StageStyle> | undefined)
       patch.countdownLook = normalizeCountdownLook((await store.get("countdownLook")) as Partial<CountdownLook> | undefined)
@@ -1609,6 +1623,7 @@ export function hydrateBroadcastThemes(): Promise<void> {
           state.autoLive !== prevState.autoLive ||
           state.autoBibleFeeds !== prevState.autoBibleFeeds ||
           state.lowerThirdStyles !== prevState.lowerThirdStyles ||
+          state.designDrafts !== prevState.designDrafts ||
           state.tickerStyle !== prevState.tickerStyle ||
           state.stageStyle !== prevState.stageStyle ||
           state.countdownLook !== prevState.countdownLook ||
@@ -1655,6 +1670,8 @@ export interface LooksBackup {
   customThemes: BroadcastTheme[]
   outputs: BroadcastOutput[]
   lowerThirdStyles: LowerThirdStyle[]
+  /** Drafts are optional in older backup files and never applied while restoring. */
+  designDrafts?: DesignDraft[]
   tickerStyle: TickerStyle
   stageStyle: StageStyle
   /** Absent from backups made before the countdown display. */
@@ -1685,6 +1702,7 @@ export function looksForBackup(state: BroadcastState = useBroadcastStore.getStat
       return copy
     }),
     lowerThirdStyles: state.lowerThirdStyles,
+    designDrafts: state.designDrafts,
     tickerStyle: state.tickerStyle,
     stageStyle: state.stageStyle,
     countdownLook: state.countdownLook,
@@ -1730,6 +1748,7 @@ export function restoreLooksFromBackup(raw: unknown): void {
     if (main) patch.activeThemeId = main.themeId
   }
   if (Array.isArray(looks.lowerThirdStyles) && looks.lowerThirdStyles.length > 0) patch.lowerThirdStyles = looks.lowerThirdStyles.filter((x) => typeof x === "object" && x !== null).map((x) => normalizeLowerThirdStyle(x as LowerThirdStyle))
+  if (Array.isArray(looks.designDrafts)) patch.designDrafts = normalizeDesignDrafts(looks.designDrafts)
   if (typeof looks.tickerStyle === "object" && looks.tickerStyle !== null) patch.tickerStyle = normalizeTickerStyle(looks.tickerStyle as Partial<TickerStyle>)
   if (typeof looks.stageStyle === "object" && looks.stageStyle !== null) patch.stageStyle = normalizeStageStyle(looks.stageStyle as Partial<StageStyle>)
   if (typeof looks.countdownLook === "object" && looks.countdownLook !== null) patch.countdownLook = normalizeCountdownLook(looks.countdownLook as Partial<CountdownLook>)
@@ -1764,6 +1783,7 @@ async function persistBroadcastThemes(state: BroadcastState): Promise<void> {
     await store.set("autoLiveOptIn", state.autoLive)
     await store.set("autoBibleFeeds", state.autoBibleFeeds)
     await store.set("lowerThirdStyles", state.lowerThirdStyles)
+    await store.set("designDrafts", state.designDrafts)
     await store.set("tickerStyle", state.tickerStyle)
     await store.set("stageStyle", state.stageStyle)
     await store.set("countdownLook", state.countdownLook)

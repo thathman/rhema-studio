@@ -48,6 +48,38 @@ describe("broadcast store sync", () => {
     )
   })
 
+  it("stores design drafts separately and carries them through local backup restore", async () => {
+    const { looksForBackup, restoreLooksFromBackup, useBroadcastStore } = await import("./broadcast-store")
+    const before = useBroadcastStore.getState()
+    const draft = {
+      id: "stage:default",
+      kind: "stage" as const,
+      sourceId: "default",
+      value: { ...before.stageStyle, background: "#112233" },
+      updatedAt: 123,
+    }
+    const liveBefore = {
+      stageStyle: before.stageStyle,
+      lowerThird: before.lowerThird,
+      ticker: before.ticker,
+      countdownLook: before.countdownLook,
+      outputFrames: before.outputFrames,
+    }
+
+    before.saveDesignDraft(draft)
+
+    expect(useBroadcastStore.getState().designDrafts).toEqual([draft])
+    expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
+    expect(emitToMock).not.toHaveBeenCalled()
+    const backup = looksForBackup()
+    expect(backup.designDrafts).toEqual([draft])
+
+    useBroadcastStore.getState().deleteDesignDraft(draft.id)
+    restoreLooksFromBackup({ designDrafts: backup.designDrafts })
+    expect(useBroadcastStore.getState().designDrafts).toEqual([draft])
+    expect(useBroadcastStore.getState().stageStyle).toEqual(liveBefore.stageStyle)
+  })
+
   it("syncBroadcastOutput fans out to every output with its own theme", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const state = useBroadcastStore.getState()
