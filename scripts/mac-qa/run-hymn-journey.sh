@@ -27,6 +27,7 @@ cleanup() {
       if [[ "$HAD_BIBLE_WAL" == 1 ]]; then cp -p "$QA_SCRATCH/original-rhema.db-wal" "$ROOT/data/rhema.db-wal"; fi
     fi
   fi
+  rm -f "$QA_SCRATCH/original-rhema.db-shm" "$QA_SCRATCH/original-rhema.db-wal"
   if [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]]; then
     printf 'QA scratch retained at %s\n' "$QA_SCRATCH"
   else
