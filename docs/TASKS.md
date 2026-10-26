@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.54 · **Updated:** 2026-10-26 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.55 · **Updated:** 2026-10-26 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -13,7 +13,7 @@
 
 ## Current active work
 
-### Live takeover issue status (2026-10-25)
+### Live takeover issue status (2026-10-26)
 
 The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) is newer than the dated backlog entries below and is the current source for the takeover sequence.
 
@@ -22,7 +22,7 @@ The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) i
 | [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Full automated suite passes; desktop and device acceptance remain open. |
 | [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
 | [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | IN PR | [PR #420](https://github.com/thathman/rhema-studio/pull/420), stacked on #419: scene Takes pin layout, output looks and logo; approval transactionally captures referenced scenes, looks and media; service item Takes use the approved revision; missing references block approval; legacy approvals and live revision metadata are explicit. Migration 0014 is additive. Focused suite 118/118 and Rust content 74/74 pass. Full suite 1,807 passed with one Google TV test timing out under load (isolated file 7/7); desktop/device acceptance remains open. |
-| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | OPEN | #419 ran the full 1,795-test frontend suite, typecheck, lint and build; 8 next-visible component/store regressions pass. No headed browser, native desktop, projector, OBS, NDI receiver, TV or network hardware was tested; physical acceptance remains open. |
+| [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | IN PR (first slice; issue OPEN) | [PR #438](https://github.com/thathman/rhema-studio/pull/438), stacked on #428, adds one repeatable native Tauri hymn journey and a macOS CI workflow. On the Intel Mac it passes hymn details/edit/Add, saved-service reopen and bilingual Preview with Live off; the same journey reproduces #385 on `main`. Typecheck, lint, and the full frontend suite (1,833/1,833) pass locally. Hosted macOS CI and all remaining desktop, accessibility, Windows, and physical-device/system gates are pending. |
 | [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415), stacked on #414: Hymn Book details/shared editor, plus stable-ID selection and close/focus after successful Add across content pickers. On audited main, these suites fail 12 tests (including the #384 queue-order regression fixed by dependency #414); one deduplicated-Add test passes. This branch passes the targeted 13 tests and full 1,774-test suite, typecheck, lint and build. Component tests only; desktop and device acceptance remain open. |
 | [#387 — Allow repeated planned Scripture references](https://github.com/thathman/rhema-studio/issues/387) | IN PR | [PR #416](https://github.com/thathman/rhema-studio/pull/416), based on #415: explicit manual repeats keep distinct item IDs through search, save/reopen, approval revisions and Take. Full 1,781-test suite, typecheck, lint, build, and 71 content tests passed; CI is green. |
 | [#388 — Keep hymn identity and number across the service](https://github.com/thathman/rhema-studio/issues/388) | IN PR | [PR #417](https://github.com/thathman/rhema-studio/pull/417), stacked on #415: additive hymn identity/number snapshots survive save/reopen and archive; legacy items fall back to library metadata. No migration. Full 1,779-test suite, typecheck, lint, build, 72 content tests and Clippy passed. Component tests only; headed browser, desktop and device acceptance remain open. |
@@ -217,6 +217,7 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 
 ## Revision history
 
+- **2026-10-26 (rev 0.55):** #411 first native desktop QA slice in [PR #438](https://github.com/thathman/rhema-studio/pull/438), stacked on #428; isolated QA app and synthetic profile cover hymn detail/edit/Add, save/close/reopen, bilingual Present Preview, and Live-off assertion. It reproduces the missing #385 detail pane on `main` and passes on the open fix stack. Typecheck and lint pass; full frontend suite 1,833/1,833; clean Intel Mac native journey passes; hosted CI is pending. #411 remains open; no physical-system acceptance claimed.
 - **2026-10-25 (rev 0.53):** #391 IN PR via #421, stacked on #420; emptying/resetting the slide composer clears only its temporary preview, preserving a newly inserted saved slide or another queued selection. Regressions cover free text, announcements, QR, responsive readings, normal Add and multi-page Add. Focused Prepare suites 15/15; full frontend suite 1,815/1,815; typecheck, lint, build and `git diff --check` pass. No desktop/device acceptance claimed. #411 remains open.
 - **2026-10-25 (rev 0.52):** #398 IN PR via #420, stacked on #419; on-air scenes pin looks/logo, approved services retain scene/look/media snapshots, service Takes use approved revisions, and missing referenced assets block approval. Focused 118/118; Rust content 74/74; lint and build pass. Full frontend run: 1,807 passed and one Google TV interaction timeout; the affected file passes alone (7/7). No physical acceptance claimed. Next: #391; #411 remains open.
 - **2026-10-25 (rev 0.51):** #390 IN PR via #419, stacked on #418; unified next-visible behavior across operator views, stage/countdown and remote navigation. Eight new regressions cover hidden runs, disabled phase boundaries, moments, stage preview/output, remote Next and rehearsal. Full frontend suite 1,795/1,795, typecheck, lint and build pass; no browser/device acceptance claimed. Next P0: #398.
