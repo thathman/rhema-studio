@@ -126,7 +126,13 @@ if (!detailText.includes("QA Journey Hymn") || !detailText.includes("CAC Main 99
 
 stage = "edit library hymn"
 await clickButton("Edit library hymn QA Journey Hymn", { startsWith: true })
-await setInput('input[placeholder="Amazing Grace"]', "QA Journey Hymn Edited")
+const hymnTitleInput = 'input[placeholder="Amazing Grace"]'
+await waitFor(() => document.querySelector(hymnTitleInput)?.value === "QA Journey Hymn", "selected hymn to finish loading into the editor")
+await setInput(hymnTitleInput, "QA Journey Hymn Edited")
+await waitFor(() => {
+  const save = buttons().find((button) => normal(button.innerText) === "Save")
+  return document.querySelector(hymnTitleInput)?.value === "QA Journey Hymn Edited" && save && !save.disabled
+}, "edited hymn to become saveable")
 stage = "save library hymn"
 await clickButton("Save")
 await waitFor(() => ![...document.querySelectorAll('[role="dialog"][data-state="open"]')].some((dialog) => normal(dialog.innerText).includes("Edit song")), "hymn editor to close after save")
