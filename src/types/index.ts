@@ -60,6 +60,7 @@ export type {
   ServicePackage,
   ServiceLog,
   ServiceLogSummary, RevisionSummary, Revision, MediaAsset, MediaAssetStatus, MediaImportResult, ImageItemPayload,
+  ReusableSlide, ReusableSlideInput,
 } from "./content"
 export type { CountdownTo, NoSignal, Scene, SceneBox, SceneClock, SceneCrop, SceneFrame, SceneLayer, SceneLayerFrame, SceneLayerKind } from "./scene"
 export { NO_SIGNALS } from "./scene"
