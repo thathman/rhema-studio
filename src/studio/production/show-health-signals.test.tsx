@@ -138,6 +138,10 @@ describe("Show on a Google TV remembers the TV (#213)", () => {
     useBroadcastStore.setState({ outputs: [main, hall] })
     const onSubmit = vi.fn()
     await mount(<OutputEditorDialog open onOpenChange={() => {}} output={hall} draft={main} monitors={[]} monitorsRefreshing={false} onRefreshMonitors={() => {}} onSubmit={onSubmit} />)
+    const deviceTab = document.body.querySelector<HTMLButtonElement>('[role="tab"][aria-label="Device"]')!
+    await act(async () => deviceTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })))
+    await flush()
+    expect(document.body.querySelector('[role="tab"][aria-label="Device"]')?.getAttribute("aria-selected")).toBe("true")
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
     const type = async (label: string, value: string) => {
       const input = document.body.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement
