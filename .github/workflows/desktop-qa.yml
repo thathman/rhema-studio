@@ -19,8 +19,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  hymn-journey:
-    name: Hymn journey in native macOS app
+  native-journeys:
+    name: Hymn and scene safety journeys in native macOS app
     runs-on: macos-15-intel
     timeout-minutes: 40
     env:
@@ -39,14 +39,14 @@ jobs:
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
       - name: Build and exercise the isolated native app
-        run: bash scripts/mac-qa/run-hymn-journey.sh
+        run: bash scripts/mac-qa/run-native-journeys.sh
         env:
           TMPDIR: ${{ runner.temp }}
-      - name: Keep the synthetic QA report and app log
+      - name: Keep synthetic QA reports and app log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-hymn-journey-${{ github.run_id }}
-          path: ${{ runner.temp }}/rhema-hymn-qa.*
+          name: native-journeys-${{ github.run_id }}
+          path: ${{ runner.temp }}/rhema-native-qa.*/artifacts/
           if-no-files-found: ignore
           retention-days: 7

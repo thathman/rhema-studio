@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-QA_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/rhema-hymn-qa.XXXXXX")"
+QA_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/rhema-native-qa.XXXXXX")"
 QA_RUN="$QA_SCRATCH/qa-run"
 QA_HOME="$QA_SCRATCH/home"
 APP_BIN="$ROOT/src-tauri/target/debug/Rhema"
@@ -26,6 +26,17 @@ cleanup() {
       if [[ "$HAD_BIBLE_SHM" == 1 ]]; then cp -p "$QA_SCRATCH/original-rhema.db-shm" "$ROOT/data/rhema.db-shm"; fi
       if [[ "$HAD_BIBLE_WAL" == 1 ]]; then cp -p "$QA_SCRATCH/original-rhema.db-wal" "$ROOT/data/rhema.db-wal"; fi
     fi
+  fi
+  if [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]]; then
+    mkdir -p "$QA_SCRATCH/artifacts"
+    for artifact in \
+      "$QA_RUN/out/hymn-journey.json" \
+      "$QA_RUN/out/scene-save-journey.json" \
+      "$QA_SCRATCH/result.json" \
+      "$QA_SCRATCH/scene-result.json" \
+      "$QA_SCRATCH/app.log"; do
+      if [[ -f "$artifact" ]]; then cp "$artifact" "$QA_SCRATCH/artifacts/"; fi
+    done
   fi
   rm -f "$QA_SCRATCH/original-rhema.db-shm" "$QA_SCRATCH/original-rhema.db-wal"
   if [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]]; then
@@ -93,6 +104,29 @@ if [[ "$QA_STATUS" != 0 ]]; then
 fi
 
 python3 - "$QA_RUN/out/hymn-journey.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as report_file:
+    report = json.load(report_file)
+if not report.get("ok"):
+    print(json.dumps(report, ensure_ascii=False, indent=2), file=sys.stderr)
+    raise SystemExit(1)
+print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
+PY
+
+set +e
+"$ROOT/scripts/mac-qa/qa.py" main scene-save-journey "$ROOT/scripts/mac-qa/scene-save-journey.js" 60 >"$QA_SCRATCH/scene-result.json"
+SCENE_STATUS=$?
+set -e
+
+if [[ "$SCENE_STATUS" != 0 ]]; then
+  cat "$QA_SCRATCH/scene-result.json" >&2
+  cat "$QA_SCRATCH/app.log" >&2
+  exit "$SCENE_STATUS"
+fi
+
+python3 - "$QA_RUN/out/scene-save-journey.json" <<'PY'
 import json
 import sys
 
