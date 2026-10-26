@@ -138,7 +138,6 @@ function headerInput(h: OutlineHeader): ItemInput {
       ...(h.event.role ? { role: h.event.role } : {}),
       ...(h.event.duration_minutes !== undefined ? { duration_minutes: h.event.duration_minutes } : {}),
       ...(h.event.ownership ? { ownership: h.event.ownership } : {}),
-      approval: h.event.approval,
     } } : {}),
   }
   return {

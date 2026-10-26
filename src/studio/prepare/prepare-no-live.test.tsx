@@ -31,6 +31,7 @@ afterEach(() => {
   act(() => root?.unmount())
   root = null
   document.body.replaceChildren()
+  useServiceStore.setState({ current: null, dirty: false, saving: false })
 })
 
 async function renderPrepare() {
@@ -102,7 +103,7 @@ describe("Prepare never takes anything live (#299)", () => {
     const eventButton = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Event")!
     await act(async () => eventButton.click())
     expect(useQueueStore.getState().headers).toMatchObject([
-      { type: "group", name: "New event", at: 0, event: { schema_version: 1, approval: "draft" } },
+      { type: "group", name: "New event", at: 0, event: { schema_version: 1 } },
     ])
     expect(projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)[0].moments.map((item) => item.id)).toEqual(["Sermon outline"])
     expect(useBroadcastStore.getState()).toMatchObject({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null })
@@ -143,7 +144,7 @@ describe("Prepare never takes anything live (#299)", () => {
       id: "prayer",
       name: "Opening Prayer",
       notes: "Start the stage countdown",
-      event: { schema_version: 1, role: "Prayer", duration_minutes: 15, ownership: "Pastor", approval: "draft" },
+      event: { schema_version: 1, role: "Prayer", duration_minutes: 15, ownership: "Pastor" },
     })
     const savedEvent = toItemInputs(useQueueStore.getState().items, undefined, undefined, useQueueStore.getState().headers)[0]
     expect(savedEvent).toMatchObject({ kind: "group", reference: "Opening Prayer", notes: "Start the stage countdown" })
@@ -152,12 +153,43 @@ describe("Prepare never takes anything live (#299)", () => {
       role: "Prayer",
       duration_minutes: 15,
       ownership: "Pastor",
-      approval: "draft",
     })
     expect(el.querySelector('[role="alert"]')).toBeNull()
     expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
     expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
     expect(el.textContent).toContain("Draft")
+  })
+
+  it("derives event approval from the saved service revision and marks unsaved edits changed", async () => {
+    useQueueStore.setState({
+      items: [slide("Sermon")],
+      headers: [{ id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, approval: "draft" } }],
+      activeIndex: null,
+    })
+    useServiceStore.setState({
+      current: { id: "service", title: "Sunday", service_date: null, revision: 3, created_at: "", updated_at: "", item_count: 1, approved_revision: 3 },
+      dirty: false,
+      saving: false,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    const before = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    const row = () => el.querySelector<HTMLElement>('[aria-label="Event: Sermon"]')!
+    expect(row().textContent).toContain("Approved") // legacy event.approval is ignored
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    const duration = el.querySelector<HTMLInputElement>('[aria-label="Planned event length in minutes"]')!
+    const setValue = (field: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await act(async () => setValue(duration, "40"))
+
+    expect(useServiceStore.getState().dirty).toBe(true)
+    expect(row().textContent).toContain("Changed")
+    expect(el.textContent).toContain("This status does not authorize a live Take.")
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
   })
 
   it("collapsing an event hides its nested moment groups and their items", async () => {

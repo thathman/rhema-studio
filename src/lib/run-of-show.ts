@@ -15,7 +15,8 @@ export interface RunOfShowEventPlan {
   role?: string
   duration_minutes?: number
   ownership?: string
-  approval: "draft" | "approved"
+  /** Deprecated v1 payload key; the parser ignores it because service approval is authoritative. */
+  approval?: "draft" | "approved"
   /** Event metadata written by a later build; retained on the next save. */
   payload_extra?: Record<string, unknown>
 }
@@ -48,19 +49,17 @@ export interface RunOfShowEvent<T> {
   role?: string
   duration_minutes?: number
   ownership?: string
-  approval: RunOfShowEventPlan["approval"]
   notes?: string | null
   moments: T[]
 }
 
-const EVENT_APPROVALS: readonly RunOfShowEventPlan["approval"][] = ["draft", "approved"]
 const EVENT_FIELDS = new Set(["schema_version", "role", "duration_minutes", "ownership", "approval"])
 
 /** Read only this schema version; an unknown or malformed marker remains opaque payload data. */
 export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null
   const raw = value as Record<string, unknown>
-  if (raw.schema_version !== 1 || !EVENT_APPROVALS.includes(raw.approval as RunOfShowEventPlan["approval"])) return null
+  if (raw.schema_version !== 1) return null
   // eslint-disable-next-line no-control-regex
   const text = (v: unknown) => typeof v === "string" && v.trim().length > 0 && v.trim().length <= 60 && !/[\u0000-\u001f\u007f-\u009f]/.test(v) ? v.trim() : undefined
   const role = text(raw.role)
@@ -73,7 +72,6 @@ export function parseRunOfShowEvent(value: unknown): RunOfShowEventPlan | null {
     ...(role ? { role } : {}),
     ...(duration !== undefined ? { duration_minutes: duration } : {}),
     ...(ownership ? { ownership } : {}),
-    approval: raw.approval as RunOfShowEventPlan["approval"],
     ...(Object.keys(raw).some((key) => !EVENT_FIELDS.has(key)) ? { payload_extra: Object.fromEntries(Object.entries(raw).filter(([key]) => !EVENT_FIELDS.has(key))) } : {}),
   }
 }
@@ -99,7 +97,6 @@ export function projectRunOfShowEvents<T>(items: T[], headers: OutlineHeader[]):
       ...(h.event.role ? { role: h.event.role } : {}),
       ...(h.event.duration_minutes !== undefined ? { duration_minutes: h.event.duration_minutes } : {}),
       ...(h.event.ownership ? { ownership: h.event.ownership } : {}),
-      approval: h.event.approval,
       notes: h.notes,
       moments: items.slice(h.at, end),
     }]
@@ -301,9 +298,9 @@ export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | nu
   return out
 }
 
-/** A new event begins as an unapproved plan; taking one of its moments never approves it. */
+/** A new event begins as a draft plan; taking one of its moments never approves the service. */
 export function newRunOfShowEvent(at: number, newId: () => string = () => crypto.randomUUID()): OutlineHeader {
-  return { id: newId(), type: "group", name: "New event", at, event: { schema_version: 1, approval: "draft" } }
+  return { id: newId(), type: "group", name: "New event", at, event: { schema_version: 1 } }
 }
 
 /** The four phases of a church event, the main service holding what is there. */

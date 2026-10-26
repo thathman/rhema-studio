@@ -87,7 +87,7 @@ export function CuesheetDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                             const row = schedule.rows.find((candidate) => candidate.id === r.event.id)
                             if (row?.kind === "event") {
                               const header = useQueueStore.getState().headers.find((candidate) => candidate.id === row.id)
-                              if (header?.event) useQueueStore.getState().updateHeader(row.id, { event: { ...header.event, duration_minutes: m ?? undefined, approval: "draft" } })
+                              if (header?.event) useQueueStore.getState().updateHeader(row.id, { event: { ...header.event, duration_minutes: m ?? undefined } })
                             } else if (row?.moments[0]) {
                               useQueueStore.getState().updateItem(row.moments[0].id, (item) => ({ ...item, planned_minutes: m }))
                             }
