@@ -63,17 +63,18 @@ const localStorageMock = {
   removeItem: (key: string) => { preferenceStorage.delete(key) },
   clear: () => preferenceStorage.clear(),
 }
+Object.defineProperty(globalThis, "localStorage", { configurable: true, value: localStorageMock })
+Object.defineProperty(window, "localStorage", { configurable: true, value: localStorageMock })
 
 let root: Root | null = null
 afterEach(() => {
   act(() => root?.unmount())
   root = null
-  try { window.localStorage.removeItem(RUNDOWN_VIEW_KEY) } catch { /* unavailable in the Node test runner */ }
+  localStorageMock.removeItem(RUNDOWN_VIEW_KEY)
   useAddDialog.getState().close()
   preferenceStorage.clear()
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
-  vi.unstubAllGlobals()
 })
 
 async function renderPrepare() {
@@ -87,7 +88,6 @@ async function renderPrepare() {
 
 describe("Prepare never takes anything live (#299)", () => {
   it("switches rundown views 20 times without changing the plan or live state (#409, #444)", async () => {
-    vi.stubGlobal("localStorage", localStorageMock)
     const items = [slide("Pre-service"), slide("Opening prayer"), slide("Sermon"), slide("Closing")]
     const headers = [
       { id: "pre", type: "phase" as const, name: "Pre-service", at: 0, rule: "loop" as const, role: "pre" as const, advance_seconds: 30 },
@@ -128,7 +128,7 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(2)
 
     await clickView("Simple list")
-    expect(localStorageMock.getItem(RUNDOWN_VIEW_KEY)).toBe("simple")
+    expect(window.localStorage.getItem(RUNDOWN_VIEW_KEY)).toBe("simple")
     expect(el.querySelector('[aria-label="Phase: Pre-service"]')).toBeNull()
     expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
     expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
@@ -141,7 +141,7 @@ describe("Prepare never takes anything live (#299)", () => {
     for (let flip = 0; flip < 20; flip += 1) {
       const name = flip % 2 === 0 ? "Grouped by phase" : "Simple list"
       await clickView(name)
-      expect(localStorageMock.getItem(RUNDOWN_VIEW_KEY)).toBe(flip % 2 === 0 ? "grouped" : "simple")
+      expect(window.localStorage.getItem(RUNDOWN_VIEW_KEY)).toBe(flip % 2 === 0 ? "grouped" : "simple")
       expect(el.querySelector('[aria-label="Phase: Pre-service"]') !== null).toBe(flip % 2 === 0)
       expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
       expect(el.querySelector('[aria-label="Event: Opening Prayer"]') !== null).toBe(flip % 2 !== 0)
@@ -281,6 +281,68 @@ describe("Prepare never takes anything live (#299)", () => {
     const duplicate = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Duplicate service")!
     await chooseAction(duplicate)
     expect(document.body.querySelector<HTMLInputElement>("#dup-title")?.value).toBe("Sunday service (copy)")
+  })
+
+  it("shows a zero-moment event in both rundown views and keeps its plan separate from Live (#409, #461)", async () => {
+    localStorage.setItem(RUNDOWN_VIEW_KEY, "simple")
+    const event = {
+      id: "prayer-event",
+      type: "group" as const,
+      name: "New event",
+      at: 0,
+      event: { schema_version: 1 as const, role: "Prayer", duration_minutes: 15 },
+    }
+    const phase = {
+      id: "main-phase",
+      type: "phase" as const,
+      name: "Main service",
+      at: 0,
+      rule: "manual" as const,
+      role: "main" as const,
+    }
+    useQueueStore.setState({ items: [], headers: [], activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveVerse: null, liveSlide: null, liveItemId: "on-air-item" })
+    const savedIds = [phase.id, event.id]
+    const beforeLive = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+    }
+
+    const el = await renderPrepare()
+    expect(el.textContent).toContain("Nothing in the service yet")
+    await act(async () => useQueueStore.setState({ headers: [phase, event] }))
+    const assertEventIsVisible = (name: string) => expect(el.querySelector(`[aria-label="Event: ${name}"]`)).not.toBeNull()
+    assertEventIsVisible("New event")
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+    expect(el.textContent).not.toContain("Nothing in the service yet")
+
+    const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")!
+    await act(async () => grouped.click())
+    assertEventIsVisible("New event")
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
+
+    const edit = el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: New event"]')!
+    await act(async () => edit.click())
+    expect(edit.getAttribute("aria-pressed")).toBe("true")
+    const title = el.querySelector<HTMLInputElement>('[aria-label="Event title"]')!
+    expect(title.value).toBe("New event")
+    const setValue = (field: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await act(async () => setValue(title, "Opening Prayer"))
+    expect(el.querySelector<HTMLInputElement>('[aria-label="Event title"]')?.value).toBe("Opening Prayer")
+    assertEventIsVisible("Opening Prayer")
+
+    const hide = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Opening Prayer"]')!
+    await act(async () => hide.click())
+    expect(hide.getAttribute("aria-expanded")).toBe("false")
+    assertEventIsVisible("Opening Prayer")
+
+    expect(useQueueStore.getState().headers.map((header) => header.id)).toEqual(savedIds)
+    expect(useQueueStore.getState().headers).toContainEqual({ ...event, name: "Opening Prayer" })
+    expect(useQueueStore.getState().headers.find((header) => header.id === event.id)?.event).toEqual(event.event)
+    expect(useBroadcastStore.getState()).toMatchObject(beforeLive)
   })
 
   it("opens an event plan editor and keeps its edits separate from live output", async () => {

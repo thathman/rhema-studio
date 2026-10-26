@@ -146,6 +146,34 @@ describe("conversions", () => {
     expect(toItemInputs(loadedMoments, undefined, undefined, loadedHeaders)[0]).toMatchObject(saved[0])
   })
 
+  it("round trips a zero-moment event with its stable id and metadata", () => {
+    const event = {
+      schema_version: 1 as const,
+      role: "Prayer",
+      duration_minutes: 15,
+      ownership: "Pastor",
+    }
+    const headers = [{ id: "prayer-event", type: "group" as const, name: "Opening Prayer", at: 0, notes: "Start the stage countdown", event }]
+    const saved = toItemInputs([], undefined, undefined, headers)
+    expect(saved).toHaveLength(1)
+    expect(saved[0].id).toBe(headers[0].id)
+
+    const storedEvent = item(headers[0].id, saved[0].reference, 0, 0, 0, {
+      kind: "group",
+      book_number: null,
+      chapter: null,
+      verse: null,
+      notes: saved[0].notes,
+      payload: saved[0].payload,
+      position: 0,
+    })
+    const reopened = toQueueItems({ program, items: [storedEvent] }, 1, [KJV])
+    expect(reopened.unsupported).toEqual([])
+    expect(reopened.items).toEqual([])
+    expect(reopened.headers).toMatchObject(headers)
+    expect(toItemInputs(reopened.items, undefined, undefined, reopened.headers)).toEqual(saved)
+  })
+
   it("unknown kinds and malformed verses are set aside, never converted", () => {
     const data: ProgramWithItems = {
       program,
