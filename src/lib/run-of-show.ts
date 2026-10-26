@@ -339,6 +339,14 @@ export function defaultPhases(itemCount: number, newId: () => string = () => cry
   ]
 }
 
+/** Place existing headers inside Main service, keeping the Post-service boundary after them even at index zero. */
+export function organiseHeadersIntoDefaultPhases(headers: OutlineHeader[], itemCount: number, newId?: () => string): OutlineHeader[] {
+  const phases = defaultPhases(itemCount, newId)
+  const postIndex = phases.findIndex((phase) => phase.role === "post")
+  if (postIndex === -1) return [...phases, ...headers]
+  return [...phases.slice(0, postIndex), ...headers, ...phases.slice(postIndex)]
+}
+
 /** How a phase runs, for its chip and strip. */
 export const RULE_LABEL: Record<PhaseRule, { chip: string; says: string }> = {
   loop: { chip: "Loop", says: "Repeats until stopped" },

@@ -505,6 +505,53 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
+  it("keeps a zero-moment event inside Main service when phases are added to an empty rundown", async () => {
+    const event = { id: "sermon", type: "group" as const, name: "Sermon", at: 0, event: { schema_version: 1 as const, duration_minutes: 40 } }
+    useQueueStore.setState({ items: [], headers: [event], activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[title="Add phase structure around the current running order"]')!.click())
+    const add = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add phases")!
+    await act(async () => add.click())
+
+    const rows = [...el.querySelectorAll<HTMLElement>('ol[aria-label="Service rundown"] > li')]
+      .map((row) => row.getAttribute("aria-label"))
+    expect(rows).toEqual([
+      "Phase: Pre-service loop",
+      "Phase: Warm-up",
+      "Phase: Main service",
+      "Event: Sermon",
+      "Phase: Post-service loop",
+    ])
+    expect(useQueueStore.getState().headers.find((header) => header.id === event.id)).toEqual(event)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("does not expose non-draggable phase rows as disabled parents of phase controls", async () => {
+    useQueueStore.setState({
+      items: [],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "moments", type: "group", name: "Sermon moments", at: 0 },
+      ],
+      activeIndex: null,
+    })
+    const el = await renderPrepare()
+
+    for (const name of ["Main service", "Sermon moments"]) {
+      const kind = name === "Main service" ? "Phase" : "Group"
+      const row = el.querySelector<HTMLElement>(`[aria-label="${kind}: ${name}"]`)!
+      const add = el.querySelector<HTMLButtonElement>(`button[aria-label="Add to ${name}"]`)!
+
+      expect(row.getAttribute("aria-disabled")).not.toBe("true")
+      expect(row.getAttribute("role")).not.toBe("button")
+      expect(add.closest('[aria-disabled="true"]')).toBeNull()
+      expect(add.disabled).toBe(false)
+    }
+  })
+
   it("adds an event at the end of its chosen phase before the next phase boundary", async () => {
     useQueueStore.setState({
       items: [slide("Opening"), slide("Sermon"), slide("Closing")],

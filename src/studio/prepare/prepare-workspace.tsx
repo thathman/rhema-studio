@@ -17,7 +17,7 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, defaultPhases, newPhase, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { RULE_LABEL, organiseHeadersIntoDefaultPhases, newPhase, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
 import { CalendarDaysIcon, ClockIcon, EllipsisIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
@@ -333,7 +333,7 @@ function RundownFooter() {
                 toast.info("Phases are already set", { description: "Use the running order view buttons to show or hide them." })
                 return
               }
-              queue.setHeaders([...defaultPhases(queue.items.length), ...queue.headers])
+              queue.setHeaders(organiseHeadersIntoDefaultPhases(queue.headers, queue.items.length))
               setOrganisePhasesOpen(false)
               toast.success("Phases added", { description: "Your items are in Main service. Use Undo to restore the previous rundown." })
             }}>Add phases</Button>
