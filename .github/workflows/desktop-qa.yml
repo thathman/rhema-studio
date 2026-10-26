@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   native-journeys:
-    name: Hymn and scene safety journeys in native macOS app
+    name: Hymn, scene and failed-Take journeys in native macOS app
     runs-on: macos-15-intel
     timeout-minutes: 40
     env:
