@@ -49,6 +49,25 @@ afterEach(() => {
 const card = (el: HTMLElement, name: string) => [...el.querySelectorAll("li")].find((li) => li.querySelector("h4")?.textContent === name) as HTMLLIElement
 
 describe("Design → Library (#299)", () => {
+  it("shows the bundled Worship Expressions gallery on a clean install; Use creates a copy without taking it live", async () => {
+    const el = await render()
+    const section = el.querySelector<HTMLElement>('section[aria-label="Rhema Studio · Worship Expressions"]')
+    expect(section).not.toBeNull()
+    expect(section!.querySelectorAll("li")).toHaveLength(120)
+    expect(section!.textContent).toContain("Included offline")
+    expect(useDesignPackStore.getState().packs).toHaveLength(0)
+
+    const before = useBroadcastStore.getState()
+    const scene = card(el, "Midnight Blue · Camera + Bible band")
+    const use = [...scene.querySelectorAll("button")].find((b) => b.textContent?.includes("Use and edit")) as HTMLButtonElement
+    await act(async () => use.click())
+
+    const after = useBroadcastStore.getState()
+    expect(after.scenes[0]?.libraryLookId).toBe("rhema-worship-expressions/midnight-camera-bible")
+    expect([after.outputs, after.liveVerse, after.isLive]).toEqual([before.outputs, before.liveVerse, before.isLive])
+    expect(useDesignPackStore.getState().packs).toHaveLength(0)
+  })
+
   it("OBS overlay keeps the keyed lower thirds and tickers", async () => {
     const el = await render()
     const chip = [...el.querySelectorAll('[role="radio"]')].find((b) => b.textContent === "OBS overlay") as HTMLButtonElement
@@ -150,7 +169,8 @@ describe("Design → Library (#299)", () => {
         r.readAsText(this)
       })
     }
-    const file = new File([pack], "rhema-worship-expressions.rhema-design.json", { type: "application/json" })
+    const customized = JSON.stringify({ ...JSON.parse(pack), id: "local-worship-expressions" })
+    const file = new File([customized], "local-worship-expressions.rhema-design.json", { type: "application/json" })
     Object.defineProperty(input, "files", { value: [file], configurable: true })
     await act(async () => void input.dispatchEvent(new Event("change", { bubbles: true })))
     await vi.waitFor(() => expect(toasts.map((t) => JSON.stringify(t))).toEqual([expect.stringContaining("Imported")]), { timeout: 15_000 })
@@ -163,13 +183,14 @@ describe("Design → Library (#299)", () => {
 
     const use = [...card(el, "Midnight Blue · Camera + Bible band").querySelectorAll("button")].find((b) => b.textContent?.includes("Use")) as HTMLButtonElement
     await act(async () => use.click())
-    expect(useBroadcastStore.getState().scenes[0]?.libraryLookId).toBe("rhema-worship-expressions/midnight-camera-bible")
+    expect(useBroadcastStore.getState().scenes[0]?.libraryLookId).toBe("local-worship-expressions/midnight-camera-bible")
 
     const remove = [...el.querySelectorAll("button")].find((b) => b.textContent?.includes("Remove pack")) as HTMLButtonElement
     await act(async () => remove.click())
     await vi.waitFor(() => expect(useDesignPackStore.getState().packs).toHaveLength(0), { timeout: 15_000 })
-    // The copy stays the church's; the library shows every family again.
+    // The copy stays the church's; the bundled default remains available in the library.
     expect(useBroadcastStore.getState().scenes).toHaveLength(1)
     expect(el.querySelector('section[aria-label="Church Classic"]')).not.toBeNull()
+    expect(el.querySelector('section[aria-label="Rhema Studio · Worship Expressions"]')).not.toBeNull()
   })
 })
