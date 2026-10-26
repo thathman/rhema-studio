@@ -1,8 +1,9 @@
 # 08 — Desktop Acceptance Guide (integration gate)
 
-Status of this guide: **a manual checklist with three automated native-app journeys**. The
-automation covers the Hymn Book/Add, failed-Take, and scene Save-versus-Take paths recorded in
-section 11; the remaining steps below still require manual desktop or device acceptance.
+Status of this guide: **a manual checklist with four automated native-app journeys**. The
+automation covers Hymn Book/Add, approved-scene revision, failed-Take, and scene Save-versus-Take
+paths recorded in section 11; the remaining steps below still require manual desktop or device
+acceptance.
 
 Build under test: the stacked branches at the heads recorded in
 `09-integration-merge-plan.md`. Run from source with `bun tauri dev`, or from the
@@ -274,12 +275,17 @@ output, edits and saves its reusable name and background, verifies the on-air sn
 frame remain on the taken revision, then verifies an explicit Take applies the saved
 revision. The Hymn journey also seeds Phase One (A/B) and Phase Two (C), opens the picker
 from Phase Two, and adds the Hymn. It verifies A/B/C/Hymn order, unchanged phase boundaries,
-successful selection, and the same structure after service save/reopen. A third journey takes
+successful selection, and the same structure after service save/reopen. A third journey creates
+a scene in Production, approves a service event with that output-scoped scene Take, edits the
+reusable scene through the QA bridge, and Takes the event in Present. The taken frame retains the
+approved scene revision and records the approved service, actor and time. A fourth journey takes
 a valid synthetic slide live, attempts to take an image whose file is missing, and verifies
 the visible failed-Take status and missing-file warning while the prior live item and active
-rundown index stay unchanged. The Hymn journey asserts Live remains off; the failed-Take
-journey asserts that the prior Live item remains on air. These journeys use in-app WebView
-interaction and QA-only fixtures;
+rundown index stay unchanged. The Hymn journey asserts Live remains off; the approved-scene
+journey checks the taken revision and its approval identity; the failed-Take journey asserts
+that the prior Live item remains on air. The approved-scene journey creates its scene through
+Production, approves in Prepare, and uses the QA bridge to edit the reusable draft before taking
+the event in Present. These journeys use in-app WebView interaction and QA-only fixtures;
 they are not external keyboard or screen-reader tests. The runner
 creates a schema-valid temporary Bible database only when none is present; it contains a
 synthetic QA translation with no Bible text. The app log is checked for missing Bible tables,
@@ -287,10 +293,10 @@ and the test restores pre-existing SQLite sidecars. It does not test Scripture c
 search. CI artifacts are restricted to synthetic journey reports and the app log.
 
 PR #438's standard CI passes: frontend (1,833/1,833), typecheck, lint, production build,
-Rust, and Companion. Hosted native run [40287704270](https://github.com/thathman/rhema-studio/actions/runs/40287704270)
-passes the Hymn/Add and scene journeys at `05cf0eb`; the new failed-Take journey passes locally
-and its hosted run is pending. These checks and the three scoped native journeys do not
-complete issue #411.
+Rust, and Companion. Hosted native run [40288446961](https://github.com/thathman/rhema-studio/actions/runs/40288446961)
+passes the Hymn/Add, scene Save/Take and failed-Take journeys at `83b01e9`; the approved-scene
+journey passes locally and its hosted run is pending. These checks and the four scoped native
+journeys do not complete issue #411.
 
 Still unverified: the other interactive steps in sections 1–10l; onboarding and other
 application entrypoints; external keyboard and screen-reader operation; projector/TV

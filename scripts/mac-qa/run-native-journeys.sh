@@ -33,6 +33,7 @@ cleanup() {
       "$QA_RUN/out/hymn-journey.json" \
       "$QA_RUN/out/scene-save-journey.json" \
       "$QA_RUN/out/take-failure-journey.json" \
+      "$QA_RUN/out/approved-scene-journey.json" \
       "$QA_SCRATCH/result.json" \
       "$QA_SCRATCH/scene-result.json" \
       "$QA_SCRATCH/app.log"; do
@@ -105,6 +106,29 @@ if [[ "$QA_STATUS" != 0 ]]; then
 fi
 
 python3 - "$QA_RUN/out/hymn-journey.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as report_file:
+    report = json.load(report_file)
+if not report.get("ok"):
+    print(json.dumps(report, ensure_ascii=False, indent=2), file=sys.stderr)
+    raise SystemExit(1)
+print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
+PY
+
+set +e
+"$ROOT/scripts/mac-qa/qa.py" main approved-scene-journey "$ROOT/scripts/mac-qa/approved-scene-journey.js" 60 >"$QA_SCRATCH/approved-scene-result.json"
+APPROVED_SCENE_STATUS=$?
+set -e
+
+if [[ "$APPROVED_SCENE_STATUS" != 0 ]]; then
+  cat "$QA_SCRATCH/approved-scene-result.json" >&2
+  cat "$QA_SCRATCH/app.log" >&2
+  exit "$APPROVED_SCENE_STATUS"
+fi
+
+python3 - "$QA_RUN/out/approved-scene-journey.json" <<'PY'
 import json
 import sys
 
