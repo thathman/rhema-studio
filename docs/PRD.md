@@ -1,5 +1,7 @@
 # Rhema Studio — Product Requirements Document
 
+> **2026-10-26 owner-approved navigation/editor update:** [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md) and its [workspace/route contract](rhema-studio/28-unified-workspace-contract.md) supersede the October 20 Home/Prepare/Present/More and Canva-first examples below. Treat the old text as historical specification; reconcile detailed PRD sections in a reviewed follow-up PR rather than silently deleting this record. See #442, #443, #444–#448. None of the target UX is declared shipped by this notice.
+
 **Document:** PRD v0.1 (proposed for owner review)  
 **Updated:** 2026-10-20  
 **Project:** [thathman/rhema-studio](https://github.com/thathman/rhema-studio)  

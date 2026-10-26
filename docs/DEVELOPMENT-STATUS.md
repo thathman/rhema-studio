@@ -1,5 +1,7 @@
 # Rhema Studio — Development Status
 
+> **Snapshot warning (2026-10-26):** This page was last reconciled 2026-10-22 and is not a live representation of current main/open PRs. Start with the [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md), inspect GitHub head/PRs/CI, and record verified deltas before asserting implementation or acceptance. This warning does not update the historical snapshot below.
+
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
 **Updated:** 2026-10-22

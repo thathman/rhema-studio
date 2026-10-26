@@ -1,5 +1,7 @@
 # Rhema Studio — Master Task Backlog
 
+> **Unified UX takeover, owner-approved 2026-10-26:** [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md) with [delivery/PR dependency matrix](rhema-studio/31-codex-delivery-matrix.md) tracks cross-route work (#442–#448), existing event/source contracts (#243/#409/#410), and hardware acceptance (#411). Reconcile these into stable task IDs after verifying main and active PRs. Do not auto-upgrade task status from issue/PR creation.
+
 **Backlog revision:** 0.45 · **Updated:** 2026-10-22 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
