@@ -145,6 +145,30 @@ describe("broadcast store sync", () => {
     expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(edited.background)
   })
 
+  it("lets rehearsal preview an edited scene while the public screen keeps its pinned revision", async () => {
+    const [{ useBroadcastStore, outputsForScreens }, { newScene, SCENE_PRESETS, sceneForOutput }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const b = useBroadcastStore.getState()
+    const original = { ...newScene("On air", SCENE_PRESETS[0]), background: "#000000" }
+    b.saveScene(original)
+    b.takeScene("main", original.id)
+    b.saveScene({ ...original, background: "#123456" })
+
+    b.setRehearsal(true)
+    useBroadcastStore.getState().takeScene("main", original.id)
+    const rehearsed = useBroadcastStore.getState()
+    const rehearsalOutput = rehearsed.outputs.find((output) => output.id === "main")!
+    expect(sceneForOutput(rehearsalOutput, rehearsed.scenes)?.background).toBe("#123456")
+    expect(sceneForOutput(outputsForScreens(rehearsed).find((output) => output.id === "main")!, rehearsed.scenes)?.background).toBe("#000000")
+
+    useBroadcastStore.getState().setRehearsal(false)
+    const returned = useBroadcastStore.getState().outputs.find((output) => output.id === "main")!
+    expect(returned.sceneSnapshot?.background).toBe("#000000")
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe("#000000")
+  })
+
   it("restoring a backup keeps the on-air scene snapshot when the saved scene is newer", async () => {
     const [{ useBroadcastStore, looksForBackup, restoreLooksFromBackup }, { newScene, SCENE_PRESETS }] = await Promise.all([
       import("./broadcast-store"),
