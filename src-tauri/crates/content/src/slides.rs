@@ -280,7 +280,10 @@ mod tests {
     #[test]
     fn reusable_slides_create_search_update_with_revision_and_audit() {
         let db = ContentDb::open_in_memory().unwrap();
-        assert!(db.list_reusable_slides(None, 50).unwrap().is_empty());
+        assert_eq!(
+            db.list_reusable_slides(None, 50).unwrap(),
+            Vec::<crate::ReusableSlide>::new()
+        );
 
         let created = db
             .create_reusable_slide(&slide("Welcome", "Glad you are here"))
