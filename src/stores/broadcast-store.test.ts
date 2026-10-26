@@ -739,6 +739,34 @@ describe("updateDraftNested deep paths", () => {
     expect(useBroadcastStore.getState().outputFrames.stream).toBeUndefined()
   })
 
+  it("applies a stage output's selected language to lyrics and Scripture", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, language: "second" })
+
+    useBroadcastStore.setState({ isLive: true, liveVerse: {
+      kind: "lyric",
+      reference: "Amazing Grace · Verse 1",
+      segments: [],
+      lines: ["Amazing grace"],
+      secondaryLines: ["Oore-ọ̀fẹ́ ìyanu"],
+    } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    let payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as { stage: { current: { lines: string[] } } }
+    expect(payload.stage.current.lines).toEqual(["Oore-ọ̀fẹ́ ìyanu"])
+
+    emitToMock.mockClear()
+    useBroadcastStore.setState({ liveVerse: {
+      kind: "verse",
+      reference: "John 3:16",
+      segments: [{ text: "For God so loved the world" }],
+      translationLines: ["For God so loved the world", "Nítorí Ọlọ́run fẹ́ aráyé"],
+    } })
+    useBroadcastStore.getState().syncBroadcastOutput()
+    payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as { stage: { current: { lines: string[] } } }
+    expect(payload.stage.current.lines).toEqual(["Nítorí Ọlọ́run fẹ́ aráyé"])
+  })
+
   it("the ticker crawls only on outputs that show it, takes word changes at once and stops", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()

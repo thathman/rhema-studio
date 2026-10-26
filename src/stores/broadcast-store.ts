@@ -984,6 +984,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       // What comes next leaves out hidden items and a skipped phase (#193).
       const items = markSkipped(q.items, q.headers)
       const countdown = output.stageLayout === "countdown" ? stageCountdownFrame(s, items, q.activeIndex) : null
+      const stageVerse = shown ? forOutputLanguage(shown, output.language) : null
       deliver(outputId, {
         // The stage window draws no theme: send the built-in one (no pictures) rather than the
         // output's, whose pictures can be megabytes, with every timer tick (NFR-03).
@@ -992,7 +993,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         role: "stage",
         // A stage that follows chosen sources shows their words; otherwise the program (ADR 0001).
         stage: applyStageStyle({ ...buildStagePayload({
-          isLive: shown !== null, liveVerse: shown, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
+          isLive: shown !== null, liveVerse: stageVerse, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
         }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
