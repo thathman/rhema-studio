@@ -3,8 +3,8 @@
 # OBS. No speech, Bible, NDI, models or content database: it builds without models/ or data/.
 [package]
 name = "rhema-companion"
-# The app is 1.0.0.0 (A.B.C.D); Cargo and Tauri take three parts.
-version = "1.0.0"
+# The app is 1.1.0.0 (A.B.C.D); Cargo and Tauri take three parts.
+version = "1.1.0"
 description = "Rhema Studio Companion - the church's cameras in OBS on a second computer"
 authors = ["Faithful"]
 license = "MIT"

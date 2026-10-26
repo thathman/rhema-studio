@@ -138,13 +138,15 @@ describe("OBS companion screen (#209)", () => {
 
   it("shows only the companion screen in companion mode: the host, OBS, and the cameras with who watches", async () => {
     useSettingsStore.setState({ companionMode: true })
+    useSettingsStore.setState((s) => ({ obs: { ...s.obs, enabled: true } }))
     useJoin.setState({ live: { cameraFeeds: [{ name: "pulpit", label: "Pulpit", url: null }] } as never })
     await act(async () => root.render(<App />))
     await act(async () => { await look() })
     const text = host.textContent ?? ""
     expect(host.querySelector('[aria-label="OBS companion"]')).not.toBeNull()
     expect(host.querySelector("nav")).toBeNull() // no studio sidebar
-    expect(text).toContain("The church's cameras, in this computer's OBS")
+    expect(text).toContain("Church cameras in this OBS")
+    expect(host.querySelector('[aria-label="OBS connection status"]')?.textContent).toContain("Connected")
     expect(text).toContain("Pulpit")
     expect(text).toContain("H264 · 1280×720 · 2.5 Mbit/s")
     expect(text).toContain("Watching: Media desk (OBS companion)")
@@ -152,6 +154,15 @@ describe("OBS companion screen (#209)", () => {
     expect(host.querySelector('select[aria-label="Delay buffer"]')).not.toBeNull()
     const add = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Add to OBS"))
     expect(add?.disabled).toBe(false)
+  })
+
+  it("marks OBS unavailable when its saved connection is enabled but cannot connect", async () => {
+    useSettingsStore.setState({ companionMode: true })
+    useSettingsStore.setState((s) => ({ obs: { ...s.obs, enabled: true } }))
+    const { useObsStore } = await import("@/stores/obs-store")
+    useObsStore.setState({ status: "error", error: "Connection refused" })
+    await act(async () => root.render(<App />))
+    expect(host.querySelector('[aria-label="OBS connection status"]')?.textContent).toContain("Not connected")
   })
 
   it("tells the operator when the host gave this computer another role", async () => {

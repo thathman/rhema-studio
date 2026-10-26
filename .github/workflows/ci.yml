@@ -1,8 +1,8 @@
 name: CI
 
 # Runs on every pull request and on pushes to feature branches. Release
-# packaging stays in build-release.yml (tags) and build-windows-installer.yml
-# (manual); this workflow never produces artifacts and never signs anything.
+# release packaging stays in build-release.yml (tags) and build-windows-installer.yml
+# (manual). Companion packaging below is a compile/bundle smoke check only: it uploads and signs nothing.
 on:
   pull_request:
   push:
@@ -110,9 +110,8 @@ jobs:
 
   companion:
     # Rhema Studio Companion (#209): the small app for an OBS computer, and the crate it shares with the
-    # studio. Checked and tested here on Linux; nothing is bundled or published. There is no
-    # Windows runner in CI: its Windows-only code (tray, start with the computer) is compile-checked
-    # only by building it on a Windows computer (companion-app/README.md).
+    # studio. Linux runs shared-crate tests and app clippy; companion-packaging below builds native
+    # macOS and Windows bundles without publishing them.
     name: Rhema Studio Companion (shared crate tests, app tests, clippy)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -150,6 +149,36 @@ jobs:
       - name: Companion app clippy (strict)
         working-directory: companion-app/src-tauri
         run: cargo clippy --all-targets -- -D warnings
+
+  companion-packaging:
+    name: Companion package (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macOS Apple Silicon
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            platform: Windows x64
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./companion-app/src-tauri
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build the native Companion bundle
+        run: bun run companion:build -- --target ${{ matrix.target }}
 
   # Windows packaging is a full Tauri bundle with whisper.cpp and LLVM, which
   # takes far longer than a PR check should. It stays manual:

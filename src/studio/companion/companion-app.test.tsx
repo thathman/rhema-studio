@@ -23,7 +23,7 @@ vi.mock("@tauri-apps/api/core", () => ({
         autostart = args?.on === true
         return autostart
       case "companion_version":
-        return "1.0.0.0"
+        return "1.1.0.0"
       case "host_discover":
         return [{ name: "CAC Ibadan", address: "192.168.1.20:8080" }]
       case "join_cameras":
@@ -37,7 +37,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), e
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() }), Toaster: () => null }))
 vi.mock("@/stores/obs-store", async () => {
   const { create } = await import("zustand")
-  const useObsStore = create(() => ({ status: "disconnected", program: null, preview: null, studioMode: false, scenes: [], error: null }))
+  const useObsStore = create(() => ({ status: "off", program: null, preview: null, studioMode: false, scenes: [], error: null }))
   return { useObsStore, obsRequest: async () => ({}) }
 })
 
@@ -83,11 +83,14 @@ describe("Rhema Studio Companion's window (#209)", () => {
     await settle()
     expect(host.querySelector('[aria-label="OBS companion"]')).not.toBeNull()
     expect(host.querySelector('img[alt="Rhema Studio Companion"]')).not.toBeNull()
+    expect(host.querySelector('[role="group"][aria-label="Rhema Studio Companion identity"]')).not.toBeNull()
+    expect(host.querySelector('[role="group"][aria-label="Rhema Studio Companion identity"] h1')).toBeNull()
     expect(text()).toContain("Rhema Studio Companion")
-    expect(text()).toContain("The church's cameras, in this computer's OBS")
+    expect(text()).toContain("Church cameras in this OBS")
+    expect(host.querySelector('[aria-label="OBS connection status"]')?.textContent).toContain("Off")
     expect(button("Open the full studio")).toBeUndefined()
     expect(host.querySelector("nav")).toBeNull()
-    expect(text()).toContain("Rhema Studio Companion 1.0.0.0")
+    expect(text()).toContain("Rhema Studio Companion 1.1.0.0")
   })
 
   it("keeps the OBS camera glyph in the embedded companion view", async () => {

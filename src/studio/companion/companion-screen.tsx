@@ -28,13 +28,22 @@ const NEW_SCENE = "\u0000new"
 export function CompanionScreen({ aside, secure = false, children }: { aside?: ReactNode; secure?: boolean; children?: ReactNode } = {}) {
   useEffect(() => startCompanion(), [])
   const status = useJoin((s) => s.status)
+  const obsEnabled = useSettingsStore((s) => s.obs.enabled)
+  const obsStatus = useObsStore((s) => s.status)
+  const obsConnection = !obsEnabled
+    ? { label: "Off", tone: "off" as const }
+    : obsStatus === "connected"
+      ? { label: "Connected", tone: "ok" as const }
+      : obsStatus === "connecting"
+        ? { label: "Connecting", tone: "warn" as const }
+        : { label: "Not connected", tone: "warn" as const }
   return (
     <main aria-label="OBS companion" className="min-h-dvh overflow-y-auto bg-background text-foreground">
-      <div className="mx-auto flex max-w-[960px] flex-col gap-4 px-6 py-6 max-[720px]:px-4">
+      <div className="mx-auto flex max-w-[1040px] flex-col gap-5 px-6 py-6 max-[720px]:px-4">
         <Header aside={aside} secure={secure} />
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-4 min-[800px]:grid-cols-2">
           {status === "off" ? <JoinForm asCompanion checkCertificate={secure} /> : <HostCard secure={secure} />}
-          <Card kicker="This computer" title="OBS">
+          <Card kicker="This computer" title="OBS" status={<span aria-label="OBS connection status" role="status"><Tone tone={obsConnection.tone}>{obsConnection.label}</Tone></span>}>
             <ObsSettingsBlock />
           </Card>
         </div>
@@ -48,24 +57,31 @@ export function CompanionScreen({ aside, secure = false, children }: { aside?: R
 function Header({ aside, secure }: { aside?: ReactNode; secure: boolean }) {
   const device = useSettingsStore((s) => s.setup.deviceName.trim())
   return (
-    <header className="flex flex-wrap items-start gap-3 border-b border-border pb-4">
-      {secure ? <ProductLockup product="companion" tone="auto" className="h-[38px] max-w-[220px]" /> : <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CameraIcon className="size-5" /></span>}
-      <div className="min-w-0 flex-1">
-        <p className="text-[0.625rem] font-bold tracking-[0.14em] text-muted-foreground uppercase">{secure ? "OBS camera bridge" : "OBS companion"}{device ? ` · ${device}` : ""}</p>
-        <h1 className="text-xl font-bold tracking-[-0.02em]">The church's cameras, in this computer's OBS</h1>
-        <p className="mt-0.5 max-w-[640px] text-xs text-muted-foreground">Each phone sends its picture once, to the camera router on the main Rhema Studio computer. This OBS takes the cameras it wants from there, on the church network only, and cuts between them on its own: the screens in church are not changed from here.</p>
+    <header className="flex flex-col gap-4 border-b border-border pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="group" aria-label="Rhema Studio Companion identity" className="flex min-h-10 items-center">
+          {secure ? <ProductLockup product="companion" tone="auto" className="h-[38px] max-w-[240px]" /> : <span className="flex items-center gap-2.5"><span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"><CameraIcon className="size-5" /></span><span className="font-semibold">Rhema Studio Companion</span></span>}
+        </div>
+        {aside}
       </div>
-      {aside}
+      <div className="max-w-[760px]">
+        <p className="text-xs font-semibold text-muted-foreground">{secure ? "OBS camera bridge" : "OBS companion"}{device ? ` · ${device}` : ""}</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-[-0.025em]">Church cameras in this OBS</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">Each phone sends its picture once to the camera router on the main Rhema Studio computer. This OBS can use the cameras over the church network and cuts between them independently. Nothing here changes the screens in church.</p>
+      </div>
     </header>
   )
 }
 
-function Card({ title, kicker, children, className }: { title: string; kicker: string; children: React.ReactNode; className?: string }) {
+function Card({ title, kicker, children, className, status }: { title: string; kicker: string; children: React.ReactNode; className?: string; status?: ReactNode }) {
   return (
-    <section aria-label={title} className={cn("flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-xs", className)}>
-      <div>
-        <p className="text-[0.625rem] font-bold tracking-[0.1em] text-muted-foreground uppercase">{kicker}</p>
-        <h2 className="text-sm font-bold">{title}</h2>
+    <section aria-label={title} className={cn("flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-xs", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">{kicker}</p>
+          <h2 className="text-base font-semibold">{title}</h2>
+        </div>
+        {status}
       </div>
       {children}
     </section>
@@ -74,7 +90,7 @@ function Card({ title, kicker, children, className }: { title: string; kicker: s
 
 function Tone({ tone, children }: { tone: "ok" | "warn" | "off" | "live"; children: React.ReactNode }) {
   const cls = { ok: "bg-tone-green text-tone-green-foreground", warn: "bg-tone-amber text-tone-amber-foreground", off: "bg-tone-neutral text-tone-neutral-foreground", live: "bg-on-air text-white" }[tone]
-  return <span className={cn("shrink-0 rounded-[5px] px-[7px] py-[5px] text-[0.625rem] font-bold tracking-[0.04em] uppercase", cls)}>{children}</span>
+  return <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold", cls)}>{children}</span>
 }
 
 function HostCard({ secure }: { secure: boolean }) {
