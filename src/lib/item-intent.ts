@@ -35,21 +35,60 @@ export function parseTakeStep(step: string): ParsedTakeStep | null {
   return null
 }
 
-const ORDER: ParsedTakeStep["kind"][] = ["source", "scene", "obs"]
-
 /**
- * Steps worth saving: well-formed, one of each kind (the first wins), in the order they run.
- * Anything else (a step from a newer build, a broken one) is dropped, as unknown macro steps are.
+ * Steps worth saving: one source action, a scene for every distinct congregation target, and one
+ * OBS action. The first step for a target wins. An all-screen scene runs before target overrides,
+ * so an item may set a common layout and deliberately specialize one screen.
+ * Anything malformed or unknown is dropped, as unknown item steps were before.
  */
 export function cleanTakeSteps(raw: unknown): TakeStep[] {
   if (!Array.isArray(raw)) return []
-  const byKind = new Map<ParsedTakeStep["kind"], TakeStep>()
+  let source: TakeStep | undefined
+  let obs: TakeStep | undefined
+  const scenes = new Map<string, TakeStep>()
   for (const s of raw) {
     if (typeof s !== "string" || s.length > MAX_STEP || CONTROL.test(s)) continue
     const p = parseTakeStep(s)
-    if (p && !byKind.has(p.kind)) byKind.set(p.kind, s as TakeStep)
+    if (!p) continue
+    if (p.kind === "source") source ??= s as TakeStep
+    else if (p.kind === "obs") obs ??= s as TakeStep
+    else {
+      const target = p.outputId ?? ""
+      if (!scenes.has(target)) scenes.set(target, s as TakeStep)
+    }
   }
-  return ORDER.flatMap((k) => (byKind.has(k) ? [byKind.get(k)!] : []))
+  return [
+    ...(source ? [source] : []),
+    ...(scenes.has("") ? [scenes.get("")!] : []),
+    ...[...scenes.entries()].filter(([target]) => target !== "").map(([, step]) => step),
+    ...(obs ? [obs] : []),
+  ]
+}
+
+/** Replace one action, or one scene's target, while preserving every other planned destination. */
+export function replaceTakeStep(
+  raw: unknown,
+  kind: ParsedTakeStep["kind"],
+  step: TakeStep | null,
+  outputId: string | null = null,
+): TakeStep[] {
+  const saved = cleanTakeSteps(raw)
+  if (step) {
+    const parsed = parseTakeStep(step)
+    if (!parsed || parsed.kind !== kind) return saved
+    if (parsed.kind === "scene" && parsed.outputId !== outputId) return saved
+  }
+  const matchesTarget = (savedStep: TakeStep) => {
+    const parsed = parseTakeStep(savedStep)!
+    if (parsed.kind !== kind) return false
+    return kind !== "scene" || (parsed.kind === "scene" && parsed.outputId === outputId)
+  }
+  const existingIndex = saved.findIndex(matchesTarget)
+  if (!step) return existingIndex < 0 ? saved : saved.filter((_, index) => index !== existingIndex)
+  const next = [...saved]
+  if (existingIndex < 0) next.push(step)
+  else next[existingIndex] = step
+  return cleanTakeSteps(next)
 }
 
 /** The item's steps, parsed and cleaned. */

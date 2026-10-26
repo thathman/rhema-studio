@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { approvedDesignBlockers } from "@/lib/approved-designs"
+import { approvedDesignBlockers, captureApprovedDesigns } from "@/lib/approved-designs"
 import { BUILTIN_THEMES } from "@/lib/builtin-themes"
 import { defaultNdiSettings, type BroadcastOutput, type QueueItem, type Scene } from "@/types"
 
@@ -42,5 +42,28 @@ describe("approved design blockers", () => {
       [output({ themeFor: { bible: "removed-bible-look" } })],
       [],
     )).toContain("Look removed-bible-look is not on this computer.")
+  })
+})
+
+describe("approved designs include each planned output scene", () => {
+  it("pins scenes for both the shared congregation layout and a screen override", () => {
+    const sanctuary: Scene = { id: "sanctuary-scene", name: "Sanctuary", background: "#000", layers: [], createdAt: 0, updatedAt: 1 }
+    const overflow: Scene = { id: "overflow-scene", name: "Overflow", background: "#111", layers: [], createdAt: 0, updatedAt: 2 }
+    const item = {
+      id: "service-item",
+      kind: "slide",
+      slide: { title: "Sermon", body: "" },
+      reference: "Sermon",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+      on_take: ["scene.take:sanctuary-scene", "scene.take:overflow-scene@overflow"],
+    } as QueueItem
+    const outputs = [output(), output({ id: "overflow", name: "Overflow" })]
+
+    expect(Object.keys(captureApprovedDesigns([item], [sanctuary, overflow], [BUILTIN_THEMES[0]], outputs, null).scenes).sort()).toEqual([
+      "overflow-scene",
+      "sanctuary-scene",
+    ])
   })
 })

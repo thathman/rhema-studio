@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { cleanTakeSteps, idByName, parseTakeStep, planLines, sceneStep, takesSourceOnly } from "./item-intent"
+import { cleanTakeSteps, idByName, intentPayload, parseItemIntent, parseTakeStep, planLines, replaceTakeStep, sceneStep, takesSourceOnly } from "./item-intent"
 import { takeImpact } from "./cues"
 import type { QueueItem } from "@/types"
 
@@ -27,6 +27,47 @@ describe("an item's Take steps as saved", () => {
     expect(cleanTakeSteps(null)).toEqual([])
   })
 
+  it("keeps one independently planned congregation scene per output", () => {
+    expect(cleanTakeSteps([
+      "scene.take:sanctuary@main",
+      "obs.scene:Online",
+      "scene.take:overflow@overflow",
+      "scene.take:replacement@main",
+    ])).toEqual([
+      "scene.take:sanctuary@main",
+      "scene.take:overflow@overflow",
+      "obs.scene:Online",
+    ])
+  })
+
+  it("updates one scene target without replacing another screen's scene", () => {
+    expect(replaceTakeStep(
+      ["scene.take:sanctuary@main", "scene.take:overflow@overflow", "obs.scene:Online"],
+      "scene",
+      sceneStep("new-sanctuary", "main"),
+      "main",
+    )).toEqual(["scene.take:new-sanctuary@main", "scene.take:overflow@overflow", "obs.scene:Online"])
+    expect(replaceTakeStep(
+      ["scene.take:all", "scene.take:overflow@overflow"],
+      "scene",
+      null,
+      null,
+    )).toEqual(["scene.take:overflow@overflow"])
+  })
+
+  it("preserves all scene assignments through a saved item payload", () => {
+    const payload = intentPayload({
+      scene_id: "sanctuary",
+      look_id: null,
+      camera: null,
+      on_take: [sceneStep("sanctuary-scene"), sceneStep("overflow-scene", "overflow")],
+    })
+    expect(parseItemIntent(JSON.stringify(payload)).on_take).toEqual([
+      sceneStep("sanctuary-scene"),
+      sceneStep("overflow-scene", "overflow"),
+    ])
+  })
+
   it("Bible feeds only applies to readings, never to a slide", () => {
     expect(takesSourceOnly(slide({ on_take: ["source.only"] }))).toBe(false)
     const reading = { id: "r", verse: { id: 0, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "", chapter: 3, verse: 16, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, on_take: ["source.only"] } as QueueItem
@@ -34,7 +75,8 @@ describe("an item's Take steps as saved", () => {
   })
 
   it("say what they touch before they run", () => {
-    expect(takeImpact(["obs.scene:Sermon", "scene.take:sc1"])).toEqual(["Arranges a congregation screen as a scene: what is live stays live", "Changes OBS's preview or program (never in rehearsal)"])
+    expect(takeImpact(["obs.scene:Sermon", "scene.take:sc1"])).toEqual(["Arranges congregation screen layouts as scenes; what is live stays live", "Changes OBS's preview or program (never in rehearsal)"])
+    expect(takeImpact(["scene.take:sc1", "scene.take:sc2@overflow"])).toEqual(["Arranges congregation screen layouts as scenes; what is live stays live"])
     expect(takeImpact(undefined)).toEqual([])
   })
 })
@@ -56,5 +98,13 @@ describe("an item's plan in words", () => {
     expect(idByName(" classic DARK ", ctx.looks)).toBe("classic-dark")
     expect(idByName("Neon", ctx.looks)).toBeNull()
     expect(idByName("", ctx.looks)).toBeNull()
+  })
+
+  it("names independently planned scenes and their congregation screens", () => {
+    const item = slide({ on_take: [sceneStep("sc1"), sceneStep("sc2", "overflow")] })
+    expect(planLines(item, { ...ctx, outputs: [...ctx.outputs, { id: "overflow", name: "Overflow" }] })).toEqual([
+      "On Take: Takes the scene Camera and Bible on every congregation screen",
+      "On Take: Takes the scene a scene not on this computer on Overflow",
+    ])
   })
 })

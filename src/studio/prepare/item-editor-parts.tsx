@@ -16,7 +16,7 @@ import { CUE_TRIGGERS, GO_LIVE_CUES, ITEM_CUE_DOES, isImageItem, isSlideItem, is
 import { CUE_DO_LABEL, cueTakesText, MAX_ITEM_CUES, TRIGGER_LABEL } from "@/lib/item-cues"
 import { useSongApproval, useSongPins } from "@/stores/song-pins-store"
 import { CUE_ACTIONS, takeImpact } from "@/lib/cues"
-import { cleanTakeSteps, obsStep, parseTakeStep, sceneStep, takeSteps, type ParsedTakeStep } from "@/lib/item-intent"
+import { obsStep, replaceTakeStep, sceneStep, takeSteps, type ParsedTakeStep } from "@/lib/item-intent"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useObsStore } from "@/stores/obs-store"
 import { formatDuration, parseDuration } from "@/lib/run-of-show"
@@ -524,11 +524,10 @@ export function CueItemEditor({ item }: { item: CueQueueItem }) {
 const fieldLabel = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
 const fieldSelect = "h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs"
 
-/** One kind of Take step replaced (or removed, with null); the rest kept, in the order they run. */
-function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeStep | null) {
+/** Replace one Take action, or one scene's target; all other targets remain saved. */
+function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeStep | null, outputId: string | null = null) {
   useQueueStore.getState().updateItem(itemId, (i) => {
-    const rest = cleanTakeSteps(i.on_take).filter((s) => parseTakeStep(s)?.kind !== kind)
-    const next = cleanTakeSteps(step ? [...rest, step] : rest)
+    const next = replaceTakeStep(i.on_take, kind, step, outputId)
     return { ...i, on_take: next.length ? next : null }
   })
 }
@@ -546,8 +545,8 @@ export function LookAndScene({ item }: { item: QueueItem }) {
   const setScene = (id: string | null) => {
     update({ scene_id: id })
     // A scene armed for the Take follows the item's scene (and goes when it has none).
-    const armed = takeSteps(item).find((s) => s.kind === "scene")
-    if (armed && armed.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id, armed.outputId) : null)
+    const armed = takeSteps(item).find((s) => s.kind === "scene" && s.outputId === null)
+    if (armed && armed.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id) : null, null)
   }
   const pick = (value: string) => (value === "" ? null : value)
   // A saved choice this computer does not have stays selected, and says so.
@@ -589,7 +588,8 @@ export function LookAndScene({ item }: { item: QueueItem }) {
 
 /**
  * Prepare: what your own Take of this item also does (#243 RS.4, OB.2): take its scene, switch OBS,
- * or (a reading) go to the Bible feeds only. Runs once as you, or a joined desk, take it on air;
+ * or (a reading) go to the Bible feeds only. Congregation screens can share a scene and then
+ * override it individually. Runs once as you, or a joined desk, take it on air;
  * never for a timed move or a phase running by itself, and none of it puts anything live by itself.
  */
 export function TakeSteps({ item }: { item: QueueItem }) {
@@ -598,7 +598,8 @@ export function TakeSteps({ item }: { item: QueueItem }) {
   const obsScenes = useObsStore((s) => s.scenes)
   const obsOn = useSettingsStore((s) => s.obs.enabled)
   const steps = takeSteps(item)
-  const sceneArmed = steps.find((s) => s.kind === "scene")
+  const globalScene = steps.find((s) => s.kind === "scene" && s.outputId === null)
+  const outputScenes = new Map(steps.flatMap((s) => s.kind === "scene" && s.outputId ? [[s.outputId, s] as const] : []))
   const obs = steps.find((s) => s.kind === "obs")
   const sourceOnly = steps.some((s) => s.kind === "source")
   const [obsText, setObsText] = useState<string | null>(null)
@@ -619,23 +620,52 @@ export function TakeSteps({ item }: { item: QueueItem }) {
         <input
           type="checkbox"
           className="mt-0.5 size-4"
-          checked={!!sceneArmed}
-          disabled={!item.scene_id && !sceneArmed}
-          onChange={(e) => setTakeStep(item.id, "scene", e.target.checked && item.scene_id ? sceneStep(item.scene_id) : null)}
+          aria-label="Take planned scene on all congregation screens"
+          checked={!!globalScene}
+          disabled={!item.scene_id && !globalScene}
+          onChange={(e) => setTakeStep(item.id, "scene", e.target.checked && item.scene_id ? sceneStep(item.scene_id) : null, null)}
         />
         <span>
-          <span className="font-medium">Take its scene{sceneName ? `, ${sceneName}` : ""}</span>
-          <span className="block text-muted-foreground">{item.scene_id ? "Arranges the screen as the scene; what is live stays live." : "Choose its scene first (Slides → Look and scene)."}</span>
+          <span className="font-medium">Take its scene on all congregation screens{sceneName ? `, ${sceneName}` : ""}</span>
+          <span className="block text-muted-foreground">{item.scene_id ? "Sets the shared layout first; individual screens below can override it. What is live stays live." : "Choose its scene first (Slides → Look and scene)."}</span>
         </span>
       </label>
-      {sceneArmed?.kind === "scene" && congregation.length > 1 && (
-        <label className="ml-6 min-w-0">
-          <span className={fieldLabel}>On</span>
-          <select aria-label={`Screen for the scene of ${item.reference}`} value={sceneArmed.outputId ?? ""} onChange={(e) => setTakeStep(item.id, "scene", sceneStep(sceneArmed.sceneId, e.target.value || null))} className={fieldSelect}>
-            <option value="">Every congregation screen</option>
-            {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        </label>
+      {(congregation.length > 1 || outputScenes.size > 0) && (
+        <div className="ml-6 flex flex-col gap-2" aria-label={`Individual screen scenes for ${item.reference}`}>
+          {congregation.map((output) => {
+            const planned = outputScenes.get(output.id)
+            return (
+              <label key={output.id} className="min-w-0">
+                <span className={fieldLabel}>{output.name}{globalScene ? " override" : " scene"}</span>
+                <select
+                  aria-label={`Scene on ${output.name} when ${item.reference} is taken`}
+                  value={planned?.kind === "scene" ? planned.sceneId : ""}
+                  onChange={(e) => setTakeStep(item.id, "scene", e.target.value ? sceneStep(e.target.value, output.id) : null, output.id)}
+                  className={fieldSelect}
+                >
+                  <option value="">{globalScene ? "Use shared scene" : "Keep this screen's current scene"}</option>
+                  {planned?.kind === "scene" && !scenes.some((scene) => scene.id === planned.sceneId) && <option value={planned.sceneId}>Not on this computer</option>}
+                  {scenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
+                </select>
+              </label>
+            )
+          })}
+          {[...outputScenes.entries()].filter(([id]) => !congregation.some((output) => output.id === id)).map(([id, planned]) => (
+            <label key={id} className="min-w-0">
+              <span className={fieldLabel}>Missing screen · {id}</span>
+              <select
+                aria-label={`Scene on missing screen ${id} when ${item.reference} is taken`}
+                value={planned.sceneId}
+                onChange={(e) => setTakeStep(item.id, "scene", e.target.value ? sceneStep(e.target.value, id) : null, id)}
+                className={fieldSelect}
+              >
+                <option value="">Remove planned scene</option>
+                {!scenes.some((scene) => scene.id === planned.sceneId) && <option value={planned.sceneId}>Scene not on this computer</option>}
+                {scenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.name}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
       )}
       <label className="min-w-0">
         <span className={fieldLabel}>Switch OBS to</span>

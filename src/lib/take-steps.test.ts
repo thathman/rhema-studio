@@ -41,8 +41,10 @@ const reading = (id: string, on_take: TakeStep[]): QueueItem =>
   ({ id, verse: { ...john, id: 0, text: "" }, reference: "John 3:16", confidence: 1, source: "manual", added_at: 0, on_take }) as QueueItem
 
 const scene = newScene("Camera and Bible")
+const overflowScene = newScene("Lyrics and Camera")
 const obsSwitches = () => requests.filter((r) => r.type === "SetCurrentProgramScene" || r.type === "SetCurrentPreviewScene")
 const sceneOnMain = () => useBroadcastStore.getState().outputs.find((o) => o.id === MAIN_OUTPUT_ID)?.sceneId
+const sceneOn = (outputId: string) => useBroadcastStore.getState().outputs.find((o) => o.id === outputId)?.sceneId
 
 async function connectObs() {
   useSettingsStore.setState({ obs: { enabled: true, host: "127.0.0.1", port: 4455, password: "" } })
@@ -103,6 +105,26 @@ describe("an item's Take steps", () => {
     await Promise.resolve()
     expect(sceneOnMain()).toBeUndefined()
     expect(obsSwitches()).toHaveLength(1)
+  })
+
+  it("takes each planned scene to its own congregation output", async () => {
+    const current = useBroadcastStore.getState()
+    useBroadcastStore.setState({
+      scenes: [scene, overflowScene],
+      outputs: [
+        ...current.outputs,
+        { ...current.outputs[0], id: "overflow", name: "Overflow", sceneId: undefined },
+      ],
+    })
+    useQueueStore.getState().updateItem("sermon", (item) => ({
+      ...item,
+      on_take: [`scene.take:${scene.id}`, `scene.take:${overflowScene.id}@overflow`],
+    }))
+
+    await presentQueueItem(1)
+
+    expect(sceneOn(MAIN_OUTPUT_ID)).toBe(scene.id)
+    expect(sceneOn("overflow")).toBe(overflowScene.id)
   })
 
   it("Take live of the item in Preview runs them too", async () => {

@@ -26,7 +26,7 @@ const IMPACT: Record<CueScope, string> = {
   timer: "Changes the service timer",
   stage: "Changes the stage message",
   ticker: "Starts or stops the ticker",
-  scene: "Arranges a congregation screen as a scene: what is live stays live",
+  scene: "Arranges congregation screen layouts as scenes; what is live stays live",
   obs: "Changes OBS's preview or program (never in rehearsal)",
   source: "Sends the reading to the Bible feeds only: the main screens keep what they show",
 }
@@ -153,5 +153,5 @@ const TAKE_SCOPE = { scene: "scene", obs: "obs", source: "source" } as const sat
 
 /** What an item's Take steps will touch, one line per kind, in the order they run. */
 export function takeImpact(steps: readonly TakeStep[] | null | undefined): string[] {
-  return cleanTakeSteps(steps).map((s) => IMPACT[TAKE_SCOPE[parseTakeStep(s)!.kind]])
+  return [...new Set(cleanTakeSteps(steps).map((s) => IMPACT[TAKE_SCOPE[parseTakeStep(s)!.kind]]))]
 }
