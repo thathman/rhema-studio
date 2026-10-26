@@ -5,6 +5,15 @@ main SHA checked, branch/PR, behaviour, tests, remaining work, blockers, next ta
 the owner's (ARCH-001 to ARCH-005, COMMS-001, MCP-001 in #253); PRD and TASKS reconciliation is the owner's
 periodic review, so feature PRs leave those files alone.
 
+## 2026-10-26 — Keep visual design edits in drafts until apply (#442)
+
+- **Main SHA checked:** `d982db84e39f43bc5c31a53619aaac937c3dd136`. #420 is open, mergeable and green; #454 and #455 checks are green. #456's frontend, lint and companion checks passed, but Rust CI timed out after 20 minutes installing Linux dependencies, before Rust checks ran.
+- **Branch / PR:** `fix/design-draft-safety`, PR [#457](https://github.com/thathman/rhema-studio/pull/457), stacked on #420. PR checks are running.
+- **Behaviour:** the lower-third, ticker, stage and countdown designers edit isolated preview drafts. Save Draft persists locally and in visual-design backups. Apply opens a confirmation with the affected output scope; failed application preserves the draft. Stage/Ticker gallery Use and Reset actions save drafts, and reset controls in the Stage/Countdown editors no longer alter published state directly. Draft store changes are not sent to output renderers.
+- **Tests:** 88 focused tests pass across the editors, gallery, look library, broadcast store and draft persistence. `bun run build` passed (including `tsc -b`); changed-file ESLint and `git diff --check` passed. Whole-repository lint passed before the final gallery subscription narrowing; lint on all changed files passed after it. No physical display, OBS or camera hardware QA was performed.
+- **Decisions:** published state remains the source for outputs; saved drafts are keyed by design kind and source ID. Applying is an explicit, confirmed action. Singleton Stage/Ticker gallery drafts are subscribed by only their matching look cards.
+- **Remaining / next:** #457 depends on #420 being integrated, then needs reconciliation against current `main`. Continue #442’s remaining Live workspace consolidation after CI and the stacked scene/revision work are reconciled.
+
 ## 2026-10-25 — Small fixes from issue audit 3 (#299, #213, #243/#246 C17, #187, #215)
 
 - **Branch / PR:** `fix-065/audit3-small` (from `main` 1a68151). Acceptance 10fx.
