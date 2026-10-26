@@ -7,20 +7,26 @@ QA_RUN="$QA_SCRATCH/qa-run"
 QA_HOME="$QA_SCRATCH/home"
 APP_BIN="$ROOT/src-tauri/target/debug/Rhema"
 CREATED_BIBLE_DB=0
+BACKED_UP_BIBLE_SIDECARS=0
+HAD_BIBLE_SHM=0
+HAD_BIBLE_WAL=0
 APP_PID=""
 
 mkdir -p "$QA_RUN/in" "$QA_RUN/out" "$QA_HOME"
-if [[ ! -f "$ROOT/data/rhema.db" ]]; then
-  : > "$ROOT/data/rhema.db"
-  CREATED_BIBLE_DB=1
-fi
 
 cleanup() {
   if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" 2>/dev/null; then
     kill "$APP_PID" 2>/dev/null || true
     wait "$APP_PID" 2>/dev/null || true
   fi
-  if [[ "$CREATED_BIBLE_DB" == 1 ]]; then rm -f "$ROOT/data/rhema.db"; fi
+  if [[ "$CREATED_BIBLE_DB" == 1 ]]; then
+    rm -f "$ROOT/data/rhema.db"
+    if [[ "$BACKED_UP_BIBLE_SIDECARS" == 1 ]]; then
+      rm -f "$ROOT/data/rhema.db-shm" "$ROOT/data/rhema.db-wal"
+      if [[ "$HAD_BIBLE_SHM" == 1 ]]; then cp -p "$QA_SCRATCH/original-rhema.db-shm" "$ROOT/data/rhema.db-shm"; fi
+      if [[ "$HAD_BIBLE_WAL" == 1 ]]; then cp -p "$QA_SCRATCH/original-rhema.db-wal" "$ROOT/data/rhema.db-wal"; fi
+    fi
+  fi
   if [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]]; then
     printf 'QA scratch retained at %s\n' "$QA_SCRATCH"
   else
@@ -28,6 +34,33 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+if [[ ! -f "$ROOT/data/rhema.db" ]]; then
+  CREATED_BIBLE_DB=1
+  if [[ -e "$ROOT/data/rhema.db-shm" ]]; then
+    cp -p "$ROOT/data/rhema.db-shm" "$QA_SCRATCH/original-rhema.db-shm"
+    HAD_BIBLE_SHM=1
+  fi
+  if [[ -e "$ROOT/data/rhema.db-wal" ]]; then
+    cp -p "$ROOT/data/rhema.db-wal" "$QA_SCRATCH/original-rhema.db-wal"
+    HAD_BIBLE_WAL=1
+  fi
+  BACKED_UP_BIBLE_SIDECARS=1
+  rm -f "$ROOT/data/rhema.db-shm" "$ROOT/data/rhema.db-wal"
+  python3 - "$ROOT/data/rhema.db" "$ROOT/data/schema.sql" <<'PY'
+import sqlite3
+import sys
+from pathlib import Path
+
+database_path, schema_path = sys.argv[1:]
+with sqlite3.connect(database_path) as connection:
+    connection.executescript(Path(schema_path).read_text(encoding="utf-8"))
+    connection.execute(
+        "INSERT INTO translations (abbreviation, title, language, license, is_copyrighted, is_downloaded) "
+        "VALUES ('QA', 'QA fixture (no Bible text)', 'en', 'Synthetic QA data', 0, 0)"
+    )
+PY
+fi
 
 if [[ "${SKIP_QA_BUILD:-0}" != 1 ]]; then
   if command -v brew >/dev/null 2>&1 && [[ -z "${ORT_LIB_LOCATION:-}" ]]; then
@@ -69,3 +102,9 @@ if not report.get("ok"):
     raise SystemExit(1)
 print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
 PY
+
+if grep -Eq 'database error: no such table: (translations|books)' "$QA_SCRATCH/app.log"; then
+  echo "QA Bible fixture is missing tables used during app startup:" >&2
+  grep -E 'database error: no such table: (translations|books)' "$QA_SCRATCH/app.log" >&2
+  exit 1
+fi
