@@ -4,16 +4,17 @@
 
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-25
+**Updated:** 2026-10-26
 
 ## Current takeover snapshot
 
-- Target repository: `thathman/rhema-studio`; verified `main` head is `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). The focused work is in [PR #414](https://github.com/thathman/rhema-studio/pull/414), branch `fix/p0-live-scene-and-queue-insertions`; it is open and unmerged.
-- Current PR #414 addresses #383 and #384. It adds output scene snapshots, makes saving a scene leave on-air output unchanged until Take, and replaces Add-then-reorder behavior with the queue store's insertion API. It does not complete #398 shared-asset revision integrity or #411 physical-system acceptance.
+- Target repository: `thathman/rhema-studio`; verified `main` remains `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). PR #414 (`fix/p0-live-scene-and-queue-insertions`) remains open and unmerged; its current branch adds backup-restore, NDI and enabled browser/TV regressions for the on-air scene snapshot.
+- Current open implementation stack: [PR #414](https://github.com/thathman/rhema-studio/pull/414) covers #383/#384; [#415](https://github.com/thathman/rhema-studio/pull/415) covers the Hymn Book detail/Add flow (#385/#386); #417 preserves hymn identity; #427 reports recoverable hymn-search failures; [#428](https://github.com/thathman/rhema-studio/pull/428) commits rundown position after successful Take; and [#438](https://github.com/thathman/rhema-studio/pull/438) adds a native macOS hymn QA slice for #411. [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses #398 on a separate stack. All remain unmerged.
+- PR #438's hosted native Intel Mac journey passed on head `220c121`; it verifies the edited bilingual hymn can be reopened and previewed while Live remains off. No projector, TV, OBS/NDI receiver, camera, Windows or physical church-system acceptance is claimed; #411 remains open.
 - Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the repository implementation contract. The PRD and task history below predate this issue batch.
 - Latest CI on target `main` is [successful on the verified head](https://github.com/thathman/rhema-studio/actions/runs/40158839409).
 - Open PRs at takeover: [#4](https://github.com/thathman/rhema-studio/pull/4), [#278](https://github.com/thathman/rhema-studio/pull/278), [#352](https://github.com/thathman/rhema-studio/pull/352), and [#367](https://github.com/thathman/rhema-studio/pull/367). #352 and #367 warn that merging publishes the website; none was merged as part of this work.
-- Next implementation sequence: #385 and #386. Then continue the verified issue index; leave #398 and #411 open until their remaining work is demonstrated.
+- Next implementation sequence: complete #383 backup/recovery and output-path acceptance on PR #414, then continue the #398 approved-release and #411 device-journey gates. The Hymn Book and successful-Take fixes are already represented by open stacked PRs #415–#428 and still require integration and acceptance.
 
 ## Integrated `main`
 
@@ -35,7 +36,8 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- PR #414 local branch: `bunx vitest run` — 243 files, 1,762 tests passed; `bun run typecheck`, `bun run lint`, and `bun run build` passed. The build retains existing Vite mixed-import and large-chunk warnings.
+- PR #414 local branch: `bunx vitest run --maxWorkers=2 --reporter=dot --silent` — 243 files, 1,765 tests passed; `bun run typecheck` and `bun run lint` passed; `bun run build` passed with existing Vite mixed-import and large-chunk warnings. New backup, NDI and enabled browser-feed regressions fail on baseline `6eaa7dd` and pass on the PR branch.
+- Hosted CI is green for PR #414 head `a4d075a` and PR #438 head `220c121`. The new #383 backup, NDI and browser-feed regressions are local on the current working change; hosted checks for its updated head have not yet run.
 - CI on target `main`: the run on the verified head is successful (linked above). No Rust source changed in PR #414, so no separate Rust test run was performed for that branch.
 
 ## Unverified (release-acceptance blockers, not development blockers)
