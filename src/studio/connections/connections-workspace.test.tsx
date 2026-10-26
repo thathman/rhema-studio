@@ -15,6 +15,7 @@ import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useRouterHealth } from "@/lib/cameras"
 import { useObsStore } from "@/stores/obs-store"
 import { useFeedHealthStore } from "@/lib/show-health"
+import { useSettingsDialogStore } from "@/lib/settings-dialog"
 import { useShellStore } from "@/studio/shell-store"
 import { useProductionTab } from "@/studio/production/production-tab"
 import { openConnectionsHub } from "./navigation"
@@ -41,6 +42,7 @@ beforeEach(() => {
   useFeedHealthStore.setState({})
   useNearbyConnection.setState({ tvAddress: null })
   useShellStore.setState({ workspace: "home", outputsDialogOpen: false, goRequest: null })
+  useSettingsDialogStore.setState({ isOpen: false, activeSection: "audio" })
   useProductionTab.setState({ requested: null, scene: null })
   mockedInvoke.mockImplementation(async (command) => {
     if (command === "host_status") return { running: true, lan: true, port: 8080, tlsPort: 8081, caFingerprint: "a".repeat(64), addresses: ["192.168.1.20"], desks: [] }
@@ -55,6 +57,7 @@ afterEach(async () => {
   host?.remove()
   document.body.innerHTML = ""
   useNearbyConnection.setState({ tvAddress: null })
+  useSettingsDialogStore.setState({ isOpen: false, activeSection: "audio" })
 })
 
 describe("Connections hub (#401)", () => {
@@ -192,6 +195,36 @@ describe("Connections hub (#401)", () => {
     await vi.waitFor(() => expect(document.body.querySelector('img[alt="Pairing link QR code"]')).not.toBeNull())
     expect(document.body.textContent).toContain("OBS Companion computer")
     expect(document.body.textContent).toContain("within two minutes")
+    expect(document.body.textContent).toContain("Encrypted link · HTTPS")
+    expect(document.body.textContent).not.toContain("Not encrypted")
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
+  it("warns when LAN pairing uses HTTP and links directly to the secure phone-page setting", async () => {
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "host_status") return { running: true, lan: true, port: 8080, tlsPort: null, addresses: [], desks: [] }
+      if (command === "camera_router_status") return null
+      if (command === "get_http_status") return { running: true, port: 8080, lan: true, tls_port: null }
+      if (command === "remote_lan_address") return "192.168.1.20"
+      if (command === "remote_pair_start") return "381624"
+      return null
+    })
+    await mount()
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Pair phone, controller or OBS computer"))!.click())
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Show pairing code"))!.click())
+
+    expect(document.body.textContent).toContain("Not encrypted")
+    expect(document.body.textContent).toContain("HTTP")
+    expect(document.body.textContent).toContain("Anyone monitoring the church network could observe the pairing traffic")
+    expect(document.querySelector('[aria-label="Pairing security"] [role="status"]')?.textContent).toContain("Not encrypted · HTTP")
+    expect(document.body.querySelector('[aria-label="Pairing code"]')?.textContent).toBe("381624")
+    await vi.waitFor(() => expect(document.body.querySelector('img[alt="Pairing link QR code"]')).not.toBeNull())
+
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Open secure phone setting"))!.click())
+    await vi.waitFor(() => {
+      expect(useSettingsDialogStore.getState().isOpen).toBe(true)
+      expect(useSettingsDialogStore.getState().activeSection).toBe("remote")
+    })
     expect(useBroadcastStore.getState().isLive).toBe(false)
   })
 

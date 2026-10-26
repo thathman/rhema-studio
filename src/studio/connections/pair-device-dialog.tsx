@@ -134,6 +134,17 @@ export function PairDeviceDialog({ label = "Pair a device" }: { label?: string }
             ) : null}
             {showPairCode ? (
               <div className="rounded-md border border-border bg-muted/40 p-3">
+                {http?.tls_port ? (
+                  <p role="status" aria-label="Pairing security" className="mb-3 rounded-md border border-tone-green/40 bg-tone-green/10 p-2 text-tone-green-foreground">
+                    Encrypted link · HTTPS. A phone may ask you to trust this computer's local certificate.
+                  </p>
+                ) : (
+                  <div aria-label="Pairing security" className="mb-3 rounded-md border border-tone-amber/50 bg-tone-amber/10 p-2">
+                    <p role="status" className="font-semibold text-confidence-mid">Not encrypted · HTTP</p>
+                    <p className="mt-1 text-muted-foreground">Anyone monitoring the church network could observe the pairing traffic. For an encrypted link, stop the listener, turn on “Secure page for phones (https)” in Remote settings, then start the listener again before pairing.</p>
+                    <Button size="xs" variant="outline" className="mt-2" onClick={() => openSettingsRemote()}>Open secure phone setting</Button>
+                  </div>
+                )}
                 {pairQr && (
                   <div className="mb-3 flex items-start gap-3">
                     {pairQr.image && <img src={pairQr.image} alt="Pairing link QR code" className="size-32 shrink-0 rounded bg-white p-1" />}
