@@ -1,6 +1,6 @@
 # Rhema Studio — Master Task Backlog
 
-**Backlog revision:** 0.47 · **Updated:** 2026-10-26 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.48 · **Updated:** 2026-10-26 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -19,7 +19,7 @@ The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) i
 
 | GitHub issue | Current state | Evidence / next gate |
 |---|---|---|
-| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Regressions cover backup restore, NDI frames and an enabled browser/TV feed. Full suite passes locally; hosted checks for the added regressions are pending. |
+| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Regressions cover backup restore, NDI frames and an enabled browser/TV feed. Present and Production show the affected output, scene revision, actor and rehearsal scope before Take. Local full suite passes; hosted checks for the latest head are pending. |
 | [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
 | [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | IN PR | [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses approved scene and look revisions; shared asset and approval acceptance remain open. |
 | [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | IN PROGRESS | [PR #438](https://github.com/thathman/rhema-studio/pull/438) passes a hosted native macOS bilingual-hymn journey with Live off. Real projector, TV, OBS/NDI, camera, Windows and offline church-system gates remain unverified. |
@@ -210,6 +210,7 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 
 ## Revision history
 
+- **2026-10-26 (rev 0.48):** PR #414 adds visible pre-Take scope and revision details in Present and Production; local UI interactions and the 1,765-test full suite pass. Hosted checks for the updated PR head are pending.
 - **2026-10-26 (rev 0.47):** PR #414 adds baseline-failing backup restore, NDI and browser/TV regressions for pinned on-air scene revisions; local full suite is 1,765 tests. Reconciled open PR status for #398, #411, and the Hymn Book workflow against GitHub.
 
 - **2026-10-21 (rev 0.43):** PRs #111–#122 merged; stale "later" notes in done criteria replaced with the PRs that did the work.

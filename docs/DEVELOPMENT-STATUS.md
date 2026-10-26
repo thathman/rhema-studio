@@ -6,7 +6,7 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Current takeover snapshot
 
-- Target repository: `thathman/rhema-studio`; verified `main` remains `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). PR #414 (`fix/p0-live-scene-and-queue-insertions`) remains open and unmerged; its current branch adds backup-restore, NDI and enabled browser/TV regressions for the on-air scene snapshot.
+- Target repository: `thathman/rhema-studio`; verified `main` remains `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). PR #414 (`fix/p0-live-scene-and-queue-insertions`) remains open and unmerged; head `db2dcbf` adds backup-restore, NDI and enabled browser/TV regressions, plus visible output, scene revision, actor and rehearsal scope details before Take in Present and Production.
 - Current open implementation stack: [PR #414](https://github.com/thathman/rhema-studio/pull/414) covers #383/#384; [#415](https://github.com/thathman/rhema-studio/pull/415) covers the Hymn Book detail/Add flow (#385/#386); #417 preserves hymn identity; #427 reports recoverable hymn-search failures; [#428](https://github.com/thathman/rhema-studio/pull/428) commits rundown position after successful Take; and [#438](https://github.com/thathman/rhema-studio/pull/438) adds a native macOS hymn QA slice for #411. [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses #398 on a separate stack. All remain unmerged.
 - PR #438's hosted native Intel Mac journey passed on head `220c121`; it verifies the edited bilingual hymn can be reopened and previewed while Live remains off. No projector, TV, OBS/NDI receiver, camera, Windows or physical church-system acceptance is claimed; #411 remains open.
 - Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the repository implementation contract. The PRD and task history below predate this issue batch.
@@ -34,8 +34,8 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- PR #414 local branch: `bunx vitest run --maxWorkers=2 --reporter=dot --silent` — 243 files, 1,765 tests passed; `bun run typecheck` and `bun run lint` passed; `bun run build` passed with existing Vite mixed-import and large-chunk warnings. New backup, NDI and enabled browser-feed regressions fail on baseline `6eaa7dd` and pass on the PR branch.
-- Hosted CI is green for PR #414 head `a4d075a` and PR #438 head `220c121`. The new #383 backup, NDI and browser-feed regressions are local on the current working change; hosted checks for its updated head have not yet run.
+- PR #414 local branch at `db2dcbf`: `bunx vitest run` — 243 files, 1,765 tests passed; `bun run typecheck`, `bun run lint` and `bun run build` passed. Build retains existing Vite mixed-import and large-chunk warnings. Baseline-failing regressions cover scene snapshots after backup restore, NDI and enabled browser feeds; Present and Production interaction tests verify the pre-Take details and that selecting a draft does not change the output.
+- Hosted CI is green for PR #414 head `a31821e` and PR #438 head `220c121`. Hosted checks for PR #414 head `db2dcbf` are queued/running; do not treat them as complete until GitHub reports results for that head.
 - CI on target `main`: the run on the verified head is successful (linked above). No Rust source changed in PR #414, so no separate Rust test run was performed for that branch.
 
 ## Unverified (release-acceptance blockers, not development blockers)
