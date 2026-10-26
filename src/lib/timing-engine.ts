@@ -57,6 +57,7 @@ export interface TimingInput {
   firstOnAir: Map<string, number>
   /** Total time on air per item (ms), the live one up to now. */
   onAirMs: Map<string, number>
+  /** The active schedule row: an event ID, or a legacy queue item ID. */
   liveItemId: string | null
   /** Wall ms. Planned times fall nearest it, or nearest when the service began once it has. */
   now: number

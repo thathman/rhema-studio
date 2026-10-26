@@ -42,7 +42,7 @@ describe("run of show timing: actual times", () => {
       ],
     })
     useBroadcastStore.setState({ isLive: true, liveItemId: "Reading" })
-    useEventClock.setState({ currentId: "Reading" })
+    useEventClock.setState({ currentId: "Reading", currentMomentId: "Reading" })
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<TimingPanel />))
@@ -85,7 +85,7 @@ describe("run of show timing: an item jumped over", () => {
         { at: at(10, 3), mono: 180_000, kind: "event", label: "Reading", itemId: "Reading" },
       ],
     })
-    useEventClock.setState({ currentId: "Reading" })
+    useEventClock.setState({ currentId: "Reading", currentMomentId: "Reading" })
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<TimingPanel />))

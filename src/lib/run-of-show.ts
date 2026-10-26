@@ -106,6 +106,91 @@ export function projectRunOfShowEvents<T>(items: T[], headers: OutlineHeader[]):
   })
 }
 
+export interface RunOfShowClockRow<T> {
+  id: string
+  reference: string
+  kind: "event" | "item"
+  /** The event's approved estimate, or the sum of its moments when no event estimate is set. */
+  planned_minutes: number | null
+  starts_at?: string | null
+  end_by?: string | null
+  gap_minutes?: number | null
+  timing?: { milestone?: boolean; soft_end_minutes?: number; warn_minutes?: number } | null
+  hidden?: boolean | null
+  /** Original moment records; an ordinary legacy row contains itself. */
+  moments: T[]
+  /** The first queue index represented by this clock row. */
+  sourceAt: number
+}
+
+type ClockItem = {
+  id: string
+  reference: string
+  planned_minutes?: number | null
+  starts_at?: string | null
+  end_by?: string | null
+  gap_minutes?: number | null
+  timing?: RunOfShowClockRow<unknown>["timing"]
+  hidden?: boolean | null
+}
+
+/**
+ * Project the ordered content rows into the events a Timekeeper starts. A versioned event owns its
+ * moments and its planned length; services without event headers retain one clock row per item.
+ * Phase and ordinary group boundaries are projected onto the resulting event order for timing.
+ */
+export function runOfShowClockRows<T extends ClockItem>(items: T[], headers: OutlineHeader[]): { rows: RunOfShowClockRow<T>[]; headers: OutlineHeader[] } {
+  const sorted = sortHeaders(headers)
+  const eventHeaders = sorted.filter((h) => h.event)
+  const ranges = eventHeaders.map((header) => ({ header, start: header.at, end: sectionEndAt(sorted, sorted.indexOf(header), items.length) }))
+  const candidates: Array<{ row: RunOfShowClockRow<T>; order: number }> = []
+
+  for (const range of ranges) {
+    const moments = items.slice(range.start, range.end)
+    const total = moments.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+    candidates.push({
+      order: headers.indexOf(range.header),
+      row: {
+        id: range.header.id,
+        reference: range.header.name,
+        kind: "event",
+        planned_minutes: range.header.event!.duration_minutes ?? (total > 0 ? total : null),
+        moments,
+        sourceAt: range.start,
+      },
+    })
+  }
+
+  items.forEach((item, index) => {
+    if (ranges.some((range) => index >= range.start && index < range.end)) return
+    candidates.push({
+      order: headers.length + index,
+      row: {
+        id: item.id,
+        reference: item.reference,
+        kind: "item",
+        planned_minutes: item.planned_minutes ?? null,
+        ...(item.starts_at !== undefined ? { starts_at: item.starts_at } : {}),
+        ...(item.end_by !== undefined ? { end_by: item.end_by } : {}),
+        ...(item.gap_minutes !== undefined ? { gap_minutes: item.gap_minutes } : {}),
+        ...(item.timing !== undefined ? { timing: item.timing } : {}),
+        ...(item.hidden !== undefined ? { hidden: item.hidden } : {}),
+        moments: [item],
+        sourceAt: index,
+      },
+    })
+  })
+
+  candidates.sort((a, b) => a.row.sourceAt - b.row.sourceAt || a.order - b.order)
+  const rows = candidates.map(({ row }) => row)
+  const projectedHeaders = headers.flatMap((header, order) => {
+    if (header.event || (header.type === "group" && ranges.some((range) => header.id !== range.header.id && header.at >= range.start && header.at < range.end))) return []
+    const at = candidates.filter((candidate) => candidate.row.sourceAt < header.at || (candidate.row.sourceAt === header.at && candidate.order < order)).length
+    return [{ ...header, at }]
+  })
+  return { rows, headers: projectedHeaders }
+}
+
 const shift = (headers: OutlineHeader[], from: number, by: 1 | -1): OutlineHeader[] =>
   headers.map((h) => (h.at > from ? { ...h, at: h.at + by } : h))
 
@@ -198,13 +283,20 @@ export function newPhase(at: number, name = "New phase", newId: () => string = (
 
 /** Each header's item count and planned minutes, by header id. Skipped items count, but take no minutes. */
 export function sectionSummaries(rawItems: Array<{ planned_minutes?: number | null; hidden?: boolean | null }>, headers: OutlineHeader[]): Record<string, SectionSummary> {
-  const items = timedItems(rawItems, headers)
   const sorted = [...headers].map((h, order) => ({ h, order })).sort((a, b) => a.h.at - b.h.at || a.order - b.order).map((x) => x.h)
+  const clock = runOfShowClockRows(rawItems.map((item, index) => ({ ...item, id: String(index), reference: "" })), headers)
+  const clockItems = timedItems(clock.rows, clock.headers)
   const out: Record<string, SectionSummary> = {}
   sorted.forEach((h, k) => {
-    const end = sectionEndAt(sorted, k, items.length)
-    const slice = items.slice(h.at, end)
-    out[h.id] = { count: slice.length, minutes: slice.reduce((m, i) => m + (i.planned_minutes ?? 0), 0) }
+    const end = sectionEndAt(sorted, k, rawItems.length)
+    const slice = rawItems.slice(h.at, end)
+    const nestedMomentGroup = h.type === "group" && sorted.some((event) => event.event && h.at >= event.at && h.at < sectionEndAt(sorted, sorted.indexOf(event), rawItems.length))
+    const minutes = h.event
+      ? phaseAt(headers, h.at)?.disabled ? 0 : h.event.duration_minutes ?? slice.reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+      : nestedMomentGroup
+        ? slice.reduce((sum, item, offset) => sum + (isSkipped(rawItems, headers, h.at + offset) ? 0 : item.planned_minutes ?? 0), 0)
+        : clockItems.filter((item) => item.sourceAt >= h.at && item.sourceAt < end).reduce((sum, item) => sum + (item.planned_minutes ?? 0), 0)
+    out[h.id] = { count: slice.length, minutes }
   })
   return out
 }

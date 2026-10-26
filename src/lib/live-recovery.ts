@@ -32,6 +32,8 @@ export interface LiveSnapshot {
   outputsOn: string[]
   scenes: Record<string, string>
   eventId: string | null
+  /** The content moment in that event; older snapshots omit it. */
+  eventMomentId?: string | null
   /** The service timer when the snapshot was taken (#196): its length, how far it had run, running or not. */
   timer?: { durationMs: number; elapsedMs: number; running: boolean }
   /** Too big to keep whole: the program and sources were left out (pictures as data). */
@@ -83,7 +85,8 @@ export function restoreJournal(kept: KeptJournal | null | undefined, now = Date.
   // The item that was running then (#196 R3.8): its start is known, how long it has run is not,
   // until the operator confirms the time or takes it again. A finished service had none running.
   const lastEvent = [...kept.entries].reverse().find((e) => e.kind === "event")
-  if (lastEvent?.itemId) useTimingTrust.setState({ untrusted: { itemId: lastEvent.itemId, label: lastEvent.label, lastSeen: kept.at, restartedAt: now } })
+  const eventId = lastEvent?.eventId ?? lastEvent?.itemId
+  if (lastEvent && eventId) useTimingTrust.setState({ untrusted: { itemId: lastEvent.itemId ?? eventId, eventId, label: lastEvent.label, lastSeen: kept.at, restartedAt: now } })
   return true
 }
 
@@ -122,6 +125,7 @@ export function takeSnapshot(now = Date.now()): LiveSnapshot {
     outputsOn: b.outputs.filter((o) => outputOnAir(o, b.outputStatus[o.id])).map((o) => o.id),
     scenes: Object.fromEntries(b.outputs.filter((o) => o.sceneId).map((o) => [o.id, o.sceneId!])),
     eventId: useEventClock.getState().currentId,
+    eventMomentId: useEventClock.getState().currentMomentId,
     timer: (() => {
       const t = useTimerStore.getState().timer
       return t.durationMs || t.startedAt !== null || t.accumulatedMs ? { durationMs: t.durationMs, elapsedMs: Math.round(elapsedMs(t, monotonicNow())), running: t.startedAt !== null } : undefined
@@ -149,7 +153,9 @@ export async function putBack(s: LiveSnapshot): Promise<void> {
     if (output && !outputOnAir(output, useBroadcastStore.getState().outputStatus[id])) await enableOutput(output)
   }
   // The same event again, not the operator taking it again: its time stays not trusted (#196 R3.8).
-  if (s.eventId && useEventClock.getState().currentId !== s.eventId) whilePuttingBack(() => useEventClock.getState().start(s.eventId!))
+  if (s.eventId && (useEventClock.getState().currentId !== s.eventId || useEventClock.getState().currentMomentId !== (s.eventMomentId ?? null))) {
+    whilePuttingBack(() => useEventClock.getState().start(s.eventId!, s.eventMomentId ?? null))
+  }
   // The timer as it was, still counting the time Rhema was closed if it was running; not over one started since.
   const now = useTimerStore.getState().timer
   if (s.timer && now.startedAt === null && now.accumulatedMs === 0) {
@@ -220,7 +226,7 @@ export async function startLiveRecovery(): Promise<() => void> {
       }
       if (s.isLive !== p.isLive || s.liveVerse !== p.liveVerse || s.sources !== p.sources || s.outputStatus !== p.outputStatus || s.outputs !== p.outputs) soon()
     }),
-    useEventClock.subscribe((s, p) => { if (s.currentId !== p.currentId) soon() }),
+    useEventClock.subscribe((s, p) => { if (s.currentId !== p.currentId || s.currentMomentId !== p.currentMomentId) soon() }),
     // Started, paused, reset or corrected (not every tick: a running timer is worked out from the time).
     useTimerStore.subscribe((s, p) => { if (s.timer !== p.timer) soon() }),
     useRecovery.subscribe((s, p) => { if ((p.offer && !s.offer) || (s.dismissed && !p.dismissed)) soon() }),

@@ -25,7 +25,7 @@ describe("an item's cues at each moment (#193, #196 R6)", () => {
     pauseTimer.mockClear()
     mark.mockClear()
     useHold.setState({ hold: null })
-    useEventClock.setState({ mode: "screens", currentId: null })
+    useEventClock.setState({ mode: "screens", currentId: null, currentMomentId: null })
     useBroadcastStore.setState({ isLive: false, liveItemId: null, rehearsal: false, stageMessage: "" })
     useQueueStore.setState({
       items: [
@@ -66,14 +66,14 @@ describe("an item's cues at each moment (#193, #196 R6)", () => {
 
   it("none in rehearsal", async () => {
     useBroadcastStore.setState({ rehearsal: true })
-    useEventClock.setState({ currentId: "sermon" })
+    useEventClock.setState({ currentId: "sermon", currentMomentId: "sermon" })
     await flush()
     expect(mark).not.toHaveBeenCalled()
   })
 
   it("a cue-only item fires its cues when taken and leaves the screens as they are", async () => {
     useBroadcastStore.setState({ isLive: true, liveItemId: "sermon" })
-    useEventClock.setState({ currentId: "sermon" })
+    useEventClock.setState({ currentId: "sermon", currentMomentId: "sermon" })
     await presentQueueItem(2)
     await flush()
     expect(useEventClock.getState().currentId).toBe("chapter")

@@ -36,7 +36,7 @@ describe("one timing for Prepare and Present", () => {
     useQueueStore.setState({ items: [slide("a", 10), slide("b", 20)], headers: [{ id: "m", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main", starts_at: "10:00" }] })
     useJournalStore.setState({ entries: [{ at: at(10, 5), mono: 0, kind: "event", label: "a", itemId: "a" }] })
     useBroadcastStore.setState({ isLive: true, liveItemId: "a" })
-    useEventClock.setState({ currentId: "a" })
+    useEventClock.setState({ currentId: "a", currentMomentId: "a" })
     const el = document.createElement("div")
     const root = createRoot(el)
     await act(async () => root.render(<Probe />))
