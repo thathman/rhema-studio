@@ -8,11 +8,12 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 ## Current takeover snapshot
 
-- Target repository: `thathman/rhema-studio`; current `main` is `f65350ed9472ef984f82ccaec421bc3e40770fab`. #424, #451, #475, #414 and #474 are merged. #414 passed all four hosted jobs on head `a2c8880` (run 40441310848); #474 passed all four on head `d6b448d` (run 40441836324). The latest push run on main is 40442343945; check its current status on GitHub.
+- Target repository: `thathman/rhema-studio`; current `main` is `f65350ed9472ef984f82ccaec421bc3e40770fab`. #424, #451, #475, #414 and #474 are merged. #414 passed all four hosted jobs on head `a2c8880` (run 40441310848); #474 passed all four on head `d6b448d` (run 40441836324). Main push run 40442343945 passed all four jobs.
 - #414 delivered P0 fixes #383/#384: scene Save no longer changes an active output until Take; each output keeps its scene revision; queue Add uses stable insertion. Five focused suites passed locally (54 tests). No physical output acceptance is claimed.
-- #430 is rebased on current `main` at head `6f6c009`, retargeted from the merged #424 branch to `main`, and has fresh hosted checks running in [run 40447198265](https://github.com/thathman/rhema-studio/actions/runs/40447198265). Its event foundation and no-Live suites passed locally (30 tests). No desktop or physical-system acceptance is claimed.
-- #415 addresses #385/#386. GitHub auto-closed it when the old #414 base branch was deleted and rejects reopening that PR. Its successor [#476](https://github.com/thathman/rhema-studio/pull/476) is stacked on #430's event foundation; its 22-file diff preserves Hymn Book details/editor, stable-ID Add selection, delayed Scripture refresh protection and browser evidence. Five focused suites passed (27 tests). The combined Prepare candidate passed 105 focused tests, local typecheck and lint, and a Vite production build; fresh hosted checks on the new stack are required.
-- The current Prepare sequence is #430 event foundation → #476 Hymn/Add workflow → event creation and end-to-end Add/save/reopen handoff. #455, #456, #460, #462 and #467 remain separate follow-ons; #460 and #462 need fresh checks after the #451 Linux dependency fix.
+- #430 is rebased on current `main` at head `6f6c009`, retargeted from the merged #424 branch to `main`, and ready for review. All four hosted jobs passed in [run 40447198265](https://github.com/thathman/rhema-studio/actions/runs/40447198265). Its event foundation and no-Live suites passed locally (30 tests). No desktop or physical-system acceptance is claimed.
+- #415 addresses #385/#386. GitHub auto-closed it when the old #414 base branch was deleted and rejects reopening that PR. Its successor [#476](https://github.com/thathman/rhema-studio/pull/476) is stacked on #430's event foundation; its 22-file diff preserves Hymn Book details/editor, stable-ID Add selection, delayed Scripture refresh protection and browser evidence. Five focused suites passed (27 tests). On #476 head `e7c5276`, Frontend, Lint and Rust passed; Companion is still running in [run 40447495755](https://github.com/thathman/rhema-studio/actions/runs/40447495755).
+- Child [#477](https://github.com/thathman/rhema-studio/pull/477) adds event creation and the exact event Add → item editor → save/reopen → Preview handoff. Its focused Prepare/Hymn/Preview/persistence suites passed (105 tests across 8 files); hosted run 40447993603 is pending. The combined candidate also passed local typecheck, lint and Vite production build; Vite reports existing mixed-import and chunk-size warnings.
+- The current Prepare sequence is #430 event foundation → #476 Hymn/Add workflow → #477 event creation and end-to-end Add/save/reopen handoff. #455, #456, #460, #462 and #467 remain separate follow-ons; #460 and #462 need fresh checks after the #451 Linux dependency fix.
 - #417 preserves hymn identity; #427 covers hymn-search recovery; #428 covers successful-Take state; #420 addresses #398; #438 adds a native macOS hymn QA path. Projector/TV, OBS/NDI, camera, Windows and offline church-system acceptance remain unverified; #411 is not complete.
 - [PR #438](https://github.com/thathman/rhema-studio/pull/438) passed a hosted native Intel Mac hymn journey with Live off. Projector/TV, OBS/NDI, camera, Windows and offline church-system acceptance remain unverified; #411 is not complete.
 - Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the implementation contract. #352 and #367 remain publishing-gated and were not merged.
@@ -29,7 +30,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- Use a full GitHub PR listing for the current open count; old PR #415 remains closed and its preserved work is carried by #476, stacked on #430.
+- There are 42 open PRs in the full `gh pr list --limit 1000` result checked 2026-10-27. Old PR #415 remains closed; its preserved work is carried by #476, stacked on #430, with #477 as the event-creation child.
 
 ## Active milestone
 
@@ -38,9 +39,10 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 ## Latest test results
 
 - On the rebased #414 worktree, focused scene, queue, Add and timing suites passed: 5 files / 54 tests; fresh hosted checks passed on head `a2c8880` in [run 40441310848](https://github.com/thathman/rhema-studio/actions/runs/40441310848).
-- On the rebased #430 worktree, event and no-Live suites passed: 2 files / 30 tests. The new hosted run is 40447198265.
-- On the #476 successor worktree, focused Preview, Hymn Book, Song Library, selection and queue suites passed: 5 files / 27 tests. The combined event/Hymn candidate passed 105 focused tests, local typecheck, lint, and Vite build; Vite reports existing mixed-import and chunk-size warnings. Fresh hosted checks are required after the PR stack rebase.
-- #474's full CI passed on head `d6b448d` in [run 40441836324](https://github.com/thathman/rhema-studio/actions/runs/40441836324). #424, #451 and #475 passed all required jobs on their integration heads; see their PR check histories. The new current-main push run is 40442343945.
+- On the rebased #430 worktree, event and no-Live suites passed: 2 files / 30 tests; all four hosted checks passed in [run 40447198265](https://github.com/thathman/rhema-studio/actions/runs/40447198265).
+- On the #476 successor worktree, focused Preview, Hymn Book, Song Library, selection and queue suites passed: 5 files / 27 tests. Its current stacked hosted run is 40447495755, with Companion pending.
+- On child #477, Prepare, Hymn, Preview, queue and service-persistence suites passed: 8 files / 105 tests. Local typecheck, lint and Vite build passed on the combined candidate. Hosted run 40447993603 is pending.
+- #474's full CI passed on head `d6b448d` in [run 40441836324](https://github.com/thathman/rhema-studio/actions/runs/40441836324). #424, #451 and #475 passed all required jobs on their integration heads; see their PR check histories. Main push run 40442343945 passed.
 - PR #438's hosted native macOS journey passed with Live off, but it does not verify physical output hardware or offline cold start. Build warnings and unverified hardware gates remain recorded below.
 
 ## Unverified (release-acceptance blockers, not development blockers)
