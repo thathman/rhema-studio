@@ -52,12 +52,25 @@ export function PreviewPanel({ itemLook = false, compact = false }: { itemLook?:
   useEffect(() => {
     const was = prevActive.current
     prevActive.current = activeTranslationId
-    const verse = useBibleStore.getState().selectedVerse
+    const selection = useBibleStore.getState()
+    const verse = selection.selectedVerse
     if (verse && verse.translation_id === was && verse.book_number > 0 && verse.chapter > 0 && verse.verse > 0) {
       bibleActions
         .fetchVerse(verse.book_number, verse.chapter, verse.verse)
         .then((v) => {
-          if (v) bibleActions.selectVerse(v)
+          // Translation loading is asynchronous. A verse may have been the
+          // selection when this request started, then the operator may have
+          // previewed a different service item. Don't let the old response
+          // clear that newer selection.
+          const current = useBibleStore.getState()
+          if (
+            v &&
+            current.selectedVerse === verse &&
+            current.selectedSlide === null &&
+            current.selectedQueueItemId === selection.selectedQueueItemId
+          ) {
+            bibleActions.selectVerse(v)
+          }
         })
         .catch(() => {})
     }

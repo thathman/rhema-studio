@@ -35,6 +35,8 @@ interface BibleState {
   selectedVerse: Verse | null
   /** A song slide in Preview. Set by previewing a song; cleared by selecting a verse. */
   selectedSlide: SelectedSlide | null
+  /** The exact rundown item whose content was selected, so repeated references stay distinct. */
+  selectedQueueItemId: string | null
   currentChapter: Verse[]
   crossReferences: CrossReference[]
   pendingNavigation: PendingNavigation | null
@@ -63,6 +65,7 @@ interface BibleState {
   setSemanticResults: (results: SemanticSearchResult[]) => void
   selectVerse: (verse: Verse | null) => void
   selectSlide: (slide: SelectedSlide | null) => void
+  setSelectedQueueItemId: (id: string | null) => void
   setCurrentChapter: (verses: Verse[]) => void
   setCrossReferences: (refs: CrossReference[]) => void
   setPendingNavigation: (nav: PendingNavigation | null) => void
@@ -79,6 +82,7 @@ export const useBibleStore = create<BibleState>((set) => ({
   semanticResults: [],
   selectedVerse: null,
   selectedSlide: null,
+  selectedQueueItemId: null,
   currentChapter: [],
   crossReferences: [],
   pendingNavigation: null,
@@ -105,8 +109,9 @@ export const useBibleStore = create<BibleState>((set) => ({
   setBooks: (books) => set({ books }),
   setSearchResults: (searchResults) => set({ searchResults }),
   setSemanticResults: (semanticResults) => set({ semanticResults }),
-  selectVerse: (selectedVerse) => set({ selectedVerse, selectedSlide: null }),
-  selectSlide: (selectedSlide) => set({ selectedSlide }),
+  selectVerse: (selectedVerse) => set({ selectedVerse, selectedSlide: null, selectedQueueItemId: null }),
+  selectSlide: (selectedSlide) => set({ selectedSlide, selectedQueueItemId: null }),
+  setSelectedQueueItemId: (selectedQueueItemId) => set({ selectedQueueItemId }),
   setCurrentChapter: (currentChapter) => set({ currentChapter }),
   setCrossReferences: (crossReferences) => set({ crossReferences }),
   setPendingNavigation: (pendingNavigation) => set({ pendingNavigation }),

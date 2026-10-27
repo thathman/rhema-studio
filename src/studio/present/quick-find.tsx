@@ -24,7 +24,7 @@ type Hit = { kind: "verse"; verse: Verse } | { kind: "song"; song: SongSummary }
  * presented — Show live is a separate action. In `prepare` mode each result
  * can be added to the service.
  */
-export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" | "present"; autoFocus?: boolean; scope?: "all" | "bible" }) {
+export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "prepare" | "present"; autoFocus?: boolean; scope?: "all" | "bible"; onAdded?: (id: string) => void }) {
   const bibleOnly = scope === "bible"
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<Hit[]>([])
@@ -135,7 +135,7 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
 
   const add = (hit: Hit) => {
     const queue = useQueueStore.getState()
-    queue.addItem(
+    const id = queue.addItem(
       hit.kind === "verse"
         ? {
             id: crypto.randomUUID(),
@@ -148,6 +148,7 @@ export function QuickFind({ mode, autoFocus, scope = "all" }: { mode: "prepare" 
         : songQueueItem(hit.song),
       "end",
     )
+    if (id) onAdded?.(id)
   }
 
   return (

@@ -38,6 +38,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { m
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const selected = useBibleStore((s) => s.selectedVerse)
   const selectedSlide = useBibleStore((s) => s.selectedSlide)
+  const selectedQueueItemId = useBibleStore((s) => s.selectedQueueItemId)
   const isLive = useBroadcastStore((s) => s.isLive)
   const liveRef = useBroadcastStore((s) => s.liveVerse?.reference ?? null)
   const liveSlide = useBroadcastStore((s) => s.liveSlide)
@@ -78,12 +79,14 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { m
         const cue = isCueItem(item)
         const skipped = isSkipped(items, headers, index)
         const inPick = mode === "prepare" && picked.length > 1 && picked.includes(item.id)
-        const isSelected = song || custom || picture || cue
-          ? selectedSlide?.item.id === item.id
-          : !!selected && !selectedSlide &&
-            selected.book_number === item.verse.book_number &&
-            selected.chapter === item.verse.chapter &&
-            selected.verse === item.verse.verse
+        const isSelected = selectedQueueItemId
+          ? selectedQueueItemId === item.id
+          : song || custom || picture || cue
+            ? selectedSlide?.item.id === item.id
+            : !!selected && !selectedSlide &&
+              selected.book_number === item.verse.book_number &&
+              selected.chapter === item.verse.chapter &&
+              selected.verse === item.verse.verse
         const onAir = isLive && (liveItemId ? liveItemId === item.id : liveSlide === null && liveRef !== null && !song && !custom && !picture && liveRef.startsWith(item.reference) && !/^[\d:]/.test(liveRef.slice(item.reference.length)))
         const isNext = mode === "present" && !onAir && activeIndex !== null && index === nextShown
         const expanded = song && (isSelected || liveSlide?.itemId === item.id)

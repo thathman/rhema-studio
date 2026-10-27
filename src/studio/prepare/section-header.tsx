@@ -104,7 +104,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, on
           <span className="text-[0.6875rem] whitespace-nowrap tabular-nums">{count} {count === 1 ? "item" : "items"}{minutes ? ` · ${minutes} min` : ""}</span>
         </span>
       </span>
-      <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={() => useAddDialog.getState().openFor(header.id)}><PlusIcon /></Button>
+      <Button variant="ghost" size="icon-xs" aria-label={`Add to ${header.name}`} title={`Add to ${header.name}`} className="shrink-0 hover:bg-black/5" onClick={(event) => useAddDialog.getState().openFor(header.id, event.currentTarget)}><PlusIcon /></Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-xs" aria-label={`${header.name}: options`} className="shrink-0 hover:bg-black/5"><EllipsisIcon /></Button>
