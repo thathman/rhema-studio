@@ -445,6 +445,47 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
+  it("inserts an event at a nested moment-group boundary without changing earlier ownership", async () => {
+    const items = [slide("Sermon opener"), slide("Scripture 1"), slide("Scripture 2"), slide("Application")]
+    useQueueStore.setState({
+      items,
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1 } },
+        { id: "scripture", type: "group", name: "Scripture moments", at: 1 },
+        { id: "application", type: "group", name: "Application moments", at: 3 },
+      ],
+      activeIndex: null,
+    })
+    useServiceStore.setState({
+      current: { id: "existing-service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: items.length },
+      dirty: false,
+      saving: false,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const itemIdsBefore = items.map((item) => item.id)
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add event after Scripture moments"]')!.click())
+    const prayer = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim().startsWith("Prayer"))!
+    await act(async () => prayer.click())
+
+    const state = useQueueStore.getState()
+    const events = projectRunOfShowEvents(state.items, state.headers)
+    const originalEvent = events.find((event) => event.id === "sermon")
+    const insertedEvent = events.find((event) => event.title === "Opening Prayer")
+    expect(state.items.map((item) => item.id)).toEqual(itemIdsBefore)
+    expect(originalEvent?.moments.map((item) => item.id)).toEqual(itemIdsBefore.slice(0, 3))
+    expect(insertedEvent?.moments.map((item) => item.id)).toEqual(itemIdsBefore.slice(3))
+    const insertedEventIndex = state.headers.findIndex((header) => header.name === "Opening Prayer")
+    const applicationGroupIndex = state.headers.findIndex((header) => header.id === "application")
+    expect(insertedEventIndex).toBeGreaterThan(state.headers.findIndex((header) => header.id === "scripture"))
+    expect(insertedEventIndex).toBeLessThan(applicationGroupIndex)
+    expect(state.headers[insertedEventIndex].at).toBe(3)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
   it("switching simple and grouped views preserves the phase plan and current live output", async () => {
     const items = [slide("Welcome"), slide("Sermon moment"), slide("Closing")]
     const headers = [
@@ -473,6 +514,34 @@ describe("Prepare never takes anything live (#299)", () => {
 
     expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(planBefore)
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("keeps a collapsed phase's rows reachable in Simple list", async () => {
+    useQueueStore.setState({
+      items: [slide("Sermon opener"), slide("John 3:16")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40 } },
+      ],
+      activeIndex: null,
+    })
+
+    const el = await renderPrepare()
+    const collapse = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Main service"]')!
+    const simple = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Simple list")!
+    const grouped = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")!
+
+    await act(async () => collapse.click())
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
+
+    await act(async () => simple.click())
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(2)
+
+    await act(async () => grouped.click())
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
   })
 
   it("adds an event at the end of its chosen phase before the next phase boundary", async () => {

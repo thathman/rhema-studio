@@ -231,11 +231,11 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
       else groupId = r.header.id
       // Present leaves out a phase skipped for this service, with its groups (#193).
       if (mode === "present" && phaseOff) continue
-      if (r.header.type === "group" && phaseId && collapsed.has(phaseId)) continue
+      if (r.header.type === "group" && groupedByPhase && phaseId && collapsed.has(phaseId)) continue
       // The event's own header remains visible so it can be expanded again.
       if (r.header.type === "group" && eventId && r.header.id !== eventId && collapsed.has(eventId)) continue
       if (mode === "prepare" && !groupedByPhase && r.header.type === "phase") continue
-    } else if ((phaseId && collapsed.has(phaseId)) || (eventId && collapsed.has(eventId)) || (groupId && collapsed.has(groupId))) continue
+    } else if ((groupedByPhase && phaseId && collapsed.has(phaseId)) || (eventId && collapsed.has(eventId)) || (groupId && collapsed.has(groupId))) continue
     // …and hidden items: they stay in the service, and Next passes over them.
     else if (mode === "present" && isSkipped(items, headers, r.index)) continue
     visible.push(r)
