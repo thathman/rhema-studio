@@ -9,6 +9,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { EventCuesEditor } from "@/studio/prepare/event-cues-editor"
+import { LookAndScene, TakeSteps } from "@/studio/prepare/item-editor-parts"
 import type { QueueItem } from "@/types"
 
 /** Editable plan metadata for one event. Plan edits never activate content or alter a live screen. */
@@ -79,9 +80,10 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
       </header>
 
       <Tabs defaultValue="content" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="mx-5 mt-3 grid w-[calc(100%-2.5rem)] grid-cols-3">
+        <TabsList className="mx-5 mt-3 grid w-[calc(100%-2.5rem)] grid-cols-4">
           <TabsTrigger value="content" aria-label="Event content">Content</TabsTrigger>
           <TabsTrigger value="plan" aria-label="Event plan">Plan</TabsTrigger>
+          <TabsTrigger value="scenes" aria-label="Event scenes">Scenes</TabsTrigger>
           <TabsTrigger value="signals" aria-label="Event signals">Signals</TabsTrigger>
         </TabsList>
         <TabsContent value="content" aria-label="Event content" className="min-h-0 overflow-y-auto px-5 py-4">
@@ -188,6 +190,23 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
               }}
               className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             />
+          </section>
+        </TabsContent>
+        <TabsContent value="scenes" aria-label="Event scenes" className="min-h-0 overflow-y-auto px-5 py-4">
+          <section aria-labelledby={`event-scenes-${header.id}`} className="space-y-3">
+            <div>
+              <h3 id={`event-scenes-${header.id}`} className="text-sm font-semibold">Scenes for this event</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Plan only. Choose a scene and audience for each moment. These choices are saved with the service; event timing never takes a scene. A moment's scene runs only when an operator deliberately Takes it.</p>
+            </div>
+            {moments.length > 0 ? moments.map((moment) => (
+              <article key={moment.id} aria-label={`Scene plan for ${moment.reference}`} className="rounded-md border border-border px-3 py-2">
+                <h4 className="text-sm font-medium">{moment.reference}</h4>
+                <LookAndScene item={moment} />
+                <TakeSteps item={moment} />
+              </article>
+            )) : (
+              <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">Add a moment to this event before assigning scenes.</p>
+            )}
           </section>
         </TabsContent>
         <TabsContent value="signals" aria-label="Event signals" className="min-h-0 overflow-y-auto px-5 py-4">
