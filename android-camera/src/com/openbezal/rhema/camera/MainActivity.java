@@ -46,10 +46,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * The viewfinder: the camera's picture, full screen and nothing else but a small LIVE dot, the
- * Settings gear and the screen-off button, which hide by themselves. Tap to focus and expose
- * there, double-tap to follow the scene again, pinch to zoom. Opens pairing links
- * (rhema-camera://pair?…) from the phone's QR scanner too.
+ * The viewfinder: the camera's picture, full screen, with a small LIVE/CONNECTING/NOT SENDING
+ * status and an idle CONNECT/SEND action. The Settings gear and screen-off button hide by
+ * themselves. Tap to focus and expose there, double-tap to follow the scene again, pinch to zoom.
+ * Opens pairing links (rhema-camera://pair?…) from the phone's QR scanner too.
  */
 public final class MainActivity extends Activity {
     private CameraService service;
