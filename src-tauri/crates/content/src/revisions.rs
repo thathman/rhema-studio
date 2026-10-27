@@ -200,12 +200,24 @@ impl ContentDb {
 
         let mut conn = self.lock()?;
         let tx = conn.transaction()?;
-        crate::check_revision(&tx, program_id, expected_revision)?;
-        let current_approved_revision: Option<i64> = tx.query_row(
-            "SELECT approved_revision FROM programs WHERE id = ?1",
+        let program_state: Option<(i64, Option<i64>)> = tx.query_row(
+            "SELECT revision, approved_revision FROM programs WHERE id = ?1",
             params![program_id],
-            |row| row.get(0),
-        )?;
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional()?;
+        let Some((actual_revision, current_approved_revision)) = program_state else {
+            return Err(ContentError::NotFound(program_id.to_string()));
+        };
+        if actual_revision != expected_revision {
+            // The caller may be retrying a refresh whose successful response was lost.
+            // Accept only the exact manifest stored as the immediately following approved
+            // revision; all other stale approvals remain conflicts.
+            if let Some(program) = approved_refresh_retry(&tx, program_id, expected_revision, current_approved_revision, designs)? {
+                tx.commit()?;
+                return Ok(program);
+            }
+            return Err(ContentError::Conflict { expected: expected_revision, actual: actual_revision });
+        }
         // Refresh is a new release identity even when the service rows did not change.
         // Legacy approvals have no design manifest yet, but still need a new revision
         // so adding their first pins cannot rewrite the historical approval.
@@ -346,6 +358,41 @@ impl ContentDb {
     }
 }
 
+/// Return the program only for an exact retry of the immediately committed design refresh.
+fn approved_refresh_retry(
+    tx: &Transaction<'_>,
+    program_id: &str,
+    expected_revision: i64,
+    current_approved_revision: Option<i64>,
+    designs: &ApprovedDesignSnapshot,
+) -> Result<Option<crate::Program>> {
+    let Some(retry_revision) = expected_revision
+        .checked_add(1)
+        .filter(|revision| current_approved_revision == Some(*revision))
+    else {
+        return Ok(None);
+    };
+    let raw: Option<String> = tx
+        .query_row(
+            "SELECT snapshot FROM approved_design_snapshots WHERE program_id = ?1 AND revision = ?2",
+            params![program_id, retry_revision],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let captured: ApprovedDesignSnapshot = serde_json::from_str(&raw).map_err(|e| {
+        ContentError::Corrupt(format!("approved designs for {program_id} v{retry_revision}: {e}"))
+    })?;
+    if &captured != designs {
+        return Ok(None);
+    }
+    load_program(tx, program_id)?
+        .map(Some)
+        .ok_or_else(|| ContentError::NotFound(program_id.into()))
+}
+
 /// The pinned songs live in a table made when first needed rather than by a migration, so a
 /// database stays openable by builds from before pins (they ignore the table; a migration would
 /// make them refuse the file as newer).
@@ -415,7 +462,16 @@ mod tests {
         let refreshed = db.approve_program_with_designs(&p.id, first.revision, &after).unwrap();
         assert!(refreshed.revision > first.revision);
         assert_eq!(db.approved_designs(&p.id, first.revision).unwrap(), Some(before.clone()));
-        assert_eq!(db.approved_designs(&p.id, refreshed.revision).unwrap(), Some(after));
+        assert_eq!(db.approved_designs(&p.id, refreshed.revision).unwrap(), Some(after.clone()));
+
+        // A lost response after the refresh must not turn an exact retry into a conflict.
+        let revisions_after_refresh = db.list_revisions(&p.id).unwrap();
+        let approvals_after_refresh = db.audit_events("program", &p.id).unwrap().iter().filter(|e| e.action == "approve").count();
+        let retried = db.approve_program_with_designs(&p.id, first.revision, &after).unwrap();
+        assert_eq!(retried, refreshed);
+        assert_eq!(db.list_revisions(&p.id).unwrap(), revisions_after_refresh);
+        assert_eq!(db.audit_events("program", &p.id).unwrap().iter().filter(|e| e.action == "approve").count(), approvals_after_refresh);
+
         assert!(matches!(db.approve_program_with_designs(&p.id, first.revision, &before), Err(ContentError::Conflict { .. })));
     }
 

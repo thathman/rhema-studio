@@ -295,6 +295,66 @@ describe("broadcast store sync", () => {
     expect(useBroadcastStore.getState().outputs[0].sceneAppearanceSnapshot).toMatchObject({ approved: { programId: "service-1", revision: 7 } })
   })
 
+  it("keeps an approved scene, look, and logo pinned after output settings are reloaded", async () => {
+    const saved = new Map<string, unknown>()
+    const store = {
+      get: vi.fn(async (key: string) => structuredClone(saved.get(key))),
+      set: vi.fn(async (key: string, value: unknown) => { saved.set(key, structuredClone(value)) }),
+      save: vi.fn(async () => {}),
+    }
+    vi.doMock("@tauri-apps/plugin-store", () => ({ load: async () => store }))
+
+    try {
+      const initial = await import("./broadcast-store")
+      await initial.hydrateBroadcastThemes()
+      const { newScene, SCENE_PRESETS } = await import("@/lib/scenes")
+      const { useSettingsStore } = await import("@/stores/settings-store")
+      const state = initial.useBroadcastStore.getState()
+      const theme = state.themes[0]
+      const approvedColor = "#445566"
+      const approvedLogo = "data:image/png;base64,approved-logo"
+      const approvedTheme = { ...theme, verseText: { ...theme.verseText, color: approvedColor } }
+      const scene = newScene("Approved service", SCENE_PRESETS.find((preset) => preset.id === "welcome")!)
+      scene.background = "#001122"
+      scene.layers.push({ ...newScene("Feed").layers[0], name: "Scripture", themeId: theme.id })
+      useSettingsStore.getState().setBrandKit({ ...useSettingsStore.getState().brandKit, logoUrl: approvedLogo })
+      state.saveScene(scene)
+      initial.useBroadcastStore.getState().takeSceneRevision(
+        "main", scene, { themes: { [theme.id]: approvedTheme }, logoUrl: approvedLogo }, "service-1", 7,
+      )
+      await initial.flushThemeSave()
+
+      vi.resetModules()
+      const restarted = await import("./broadcast-store")
+      await restarted.hydrateBroadcastThemes()
+      const { useSettingsStore: restartedSettings } = await import("@/stores/settings-store")
+      restartedSettings.getState().setBrandKit({ ...restartedSettings.getState().brandKit, logoUrl: "data:image/png;base64,new-logo" })
+      const afterRestart = restarted.useBroadcastStore.getState()
+      const savedScene = afterRestart.scenes.find((candidate) => candidate.id === scene.id)!
+      afterRestart.saveScene({ ...savedScene, background: "#abcdef" })
+      const savedTheme = afterRestart.themes.find((candidate) => candidate.id === theme.id)!
+      afterRestart.saveTheme({ ...savedTheme, verseText: { ...savedTheme.verseText, color: "#aabbcc" } })
+      afterRestart.syncBroadcastOutputFor("main")
+
+      const output = restarted.useBroadcastStore.getState().outputs.find((candidate) => candidate.id === "main")!
+      expect(output.sceneSnapshot?.background).toBe("#001122")
+      expect(output.sceneAppearanceSnapshot).toMatchObject({
+        logoUrl: approvedLogo,
+        themes: { [theme.id]: { verseText: { color: approvedColor } } },
+        approved: { programId: "service-1", revision: 7 },
+      })
+      expect(restarted.useBroadcastStore.getState().outputFrames.main.scene).toMatchObject({
+        background: "#001122",
+        layers: expect.arrayContaining([
+          expect.objectContaining({ kind: "feed", theme: expect.objectContaining({ verseText: expect.objectContaining({ color: approvedColor }) }) }),
+          expect.objectContaining({ kind: "logo", imageUrl: approvedLogo }),
+        ]),
+      })
+    } finally {
+      vi.doUnmock("@tauri-apps/plugin-store")
+    }
+  })
+
   it("restores the taken scene AND appearance after rehearsal with a newer reusable look", async () => {
     const { useBroadcastStore, outputsForScreens } = await import("./broadcast-store")
     const { newScene } = await import("@/lib/scenes")
