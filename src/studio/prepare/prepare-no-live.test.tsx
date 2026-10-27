@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-// jsdom has no ResizeObserver (the drag-and-drop library needs one at import), CSS.escape or scrollIntoView.
+// jsdom has no ResizeObserver (the drag-and-drop library needs one at import), PointerEvent or CSS.escape.
 vi.hoisted(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+  ;(globalThis as { PointerEvent?: typeof PointerEvent }).PointerEvent ??= MouseEvent as unknown as typeof PointerEvent
   ;(globalThis as { CSS?: { escape: (s: string) => string } }).CSS ??= { escape: (s: string) => s }
 })
 const mockService = vi.hoisted(() => ({
@@ -661,6 +662,122 @@ describe("Prepare never takes anything live (#299)", () => {
     }
 
     expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(planBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("confirms phase creation, preserves the plan and Live, and lets Undo restore the flat list", async () => {
+    const items = [slide("Welcome"), slide("Sermon"), slide("Closing")]
+    useQueueStore.setState({ items, headers: [{ id: "sermon", type: "group", name: "Sermon", at: 1 }], activeIndex: 1 })
+    useQueueStore.getState().resetHistory()
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-sermon", liveSlide: null, liveVerse: null })
+    const before = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    await act(async () => [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Organise into phases"))!.click())
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(dialog.textContent).toContain("Existing items keep their IDs and order")
+    expect(useQueueStore.getState().headers).toEqual(before.headers)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+
+    await act(async () => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add phases")!.click())
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(items.map((item) => item.id))
+    expect(useQueueStore.getState().activeIndex).toBe(before.activeIndex)
+    expect(useQueueStore.getState().headers.filter((header) => header.type === "phase")).toHaveLength(4)
+    expect(useQueueStore.getState().past).toHaveLength(1)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')!.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(before)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("confirms removing one phase and restores its exact timing with Undo", async () => {
+    const items = [slide("Prayer"), slide("Sermon"), slide("Closing")]
+    const headers = [
+      { id: "pre", type: "phase" as const, name: "Pre-service", at: 0, rule: "loop" as const, role: "pre" as const, advance_seconds: 30 },
+      { id: "prayer", type: "group" as const, name: "Prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 15 } },
+      { id: "main", type: "phase" as const, name: "Main service", at: 1, rule: "manual" as const, role: "main" as const, starts_at: "10:00" },
+      { id: "post", type: "phase" as const, name: "Post-service", at: 2, rule: "loop" as const, role: "post" as const, advance_seconds: 20 },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: 1 })
+    useQueueStore.getState().resetHistory()
+    const before = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-sermon", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    const trigger = el.querySelector<HTMLButtonElement>('button[aria-label="Main service: options"]')!
+    await act(async () => {
+      const down = new Event("pointerdown", { bubbles: true })
+      Object.assign(down, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      trigger.dispatchEvent(down)
+    })
+    const remove = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Remove phase…")!
+    expect(remove).toBeDefined()
+    await act(async () => {
+      const down = new Event("pointerdown", { bubbles: true })
+      Object.assign(down, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      remove.dispatchEvent(down)
+      remove.dispatchEvent(new Event("pointerup", { bubbles: true }))
+      remove.click()
+    })
+
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(dialog.textContent).toContain("Remove “Main service”?")
+    expect(useQueueStore.getState().headers).toEqual(headers)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    await act(async () => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Remove phase")!.click())
+
+    expect(useQueueStore.getState().headers).toEqual(before.headers.filter((header) => header.id !== "main"))
+    expect(useQueueStore.getState().items).toEqual(before.items)
+    expect(useQueueStore.getState().activeIndex).toBe(before.activeIndex)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')!.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(before)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
+  it("confirms removal of all phases without deleting events or content", async () => {
+    const items = [slide("Prayer"), slide("Sermon")]
+    const headers = [
+      { id: "pre", type: "phase" as const, name: "Pre-service", at: 0, rule: "loop" as const, role: "pre" as const },
+      { id: "sermon", type: "group" as const, name: "Sermon", at: 1, event: { schema_version: 1 as const, duration_minutes: 40 } },
+      { id: "main", type: "phase" as const, name: "Main service", at: 1, rule: "manual" as const, role: "main" as const },
+    ]
+    useQueueStore.setState({ items, headers, activeIndex: 0 })
+    useQueueStore.getState().resetHistory()
+    const before = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-prayer" })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    const trigger = el.querySelector<HTMLButtonElement>('button[aria-label="Phase options"]')
+    expect(trigger).not.toBeNull()
+    await act(async () => {
+      const down = new Event("pointerdown", { bubbles: true })
+      Object.assign(down, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      trigger!.dispatchEvent(down)
+    })
+    const remove = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Remove phases…")!
+    await act(async () => {
+      const down = new Event("pointerdown", { bubbles: true })
+      Object.assign(down, { button: 0, ctrlKey: false, pointerType: "mouse", isPrimary: true })
+      remove.dispatchEvent(down)
+      remove.dispatchEvent(new Event("pointerup", { bubbles: true }))
+      remove.click()
+    })
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(dialog.textContent).toContain("Remove all phases?")
+    expect(useQueueStore.getState().headers).toEqual(headers)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    await act(async () => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Remove phases")!.click())
+
+    expect(useQueueStore.getState().headers).toEqual(before.headers.filter((header) => header.type !== "phase"))
+    expect(useQueueStore.getState().items).toEqual(before.items)
+    expect(useQueueStore.getState().activeIndex).toBe(before.activeIndex)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')!.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(before)
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
