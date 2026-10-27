@@ -29,7 +29,13 @@ cleanup() {
   fi
   if [[ "${KEEP_QA_SCRATCH:-0}" == 1 ]]; then
     mkdir -p "$QA_SCRATCH/artifacts"
-    for artifact in "$QA_RUN/out/prepare-mixed-journey.json" "$QA_SCRATCH/result.json" "$QA_SCRATCH/app.log"; do
+    for artifact in \
+      "$QA_RUN/out/prepare-mixed-journey.json" \
+      "$QA_RUN/out/program-output-baseline.json" \
+      "$QA_RUN/out/program-output-before-take.json" \
+      "$QA_RUN/out/program-output-after-take.json" \
+      "$QA_SCRATCH/result.json" \
+      "$QA_SCRATCH/app.log"; do
       if [[ -f "$artifact" ]]; then cp "$artifact" "$QA_SCRATCH/artifacts/"; fi
     done
     printf 'QA scratch retained at %s\n' "$QA_SCRATCH"
@@ -92,24 +98,52 @@ export QA_DIR="$QA_RUN"
 HOME="$QA_HOME" RHEMA_QA_DIR="$QA_RUN" "$APP_BIN" >"$QA_SCRATCH/app.log" 2>&1 &
 APP_PID=$!
 set +e
-"$ROOT/scripts/mac-qa/qa.py" main prepare-mixed-journey "$ROOT/scripts/mac-qa/prepare-mixed-journey.js" 120 >"$QA_SCRATCH/result.json"
-QA_STATUS=$?
+"$ROOT/scripts/mac-qa/qa.py" main open-program-window "$ROOT/scripts/mac-qa/open-program-window.js" 30 >"$QA_SCRATCH/open-program-window.json"
+OPEN_STATUS=$?
+if [[ "$OPEN_STATUS" == 0 ]]; then
+  "$ROOT/scripts/mac-qa/qa.py" broadcast-main watch-program-output "$ROOT/scripts/mac-qa/watch-program-output.js" 30 >"$QA_SCRATCH/watch-program-output.json"
+  WATCH_STATUS=$?
+else
+  WATCH_STATUS=1
+fi
+if [[ "$OPEN_STATUS" == 0 && "$WATCH_STATUS" == 0 ]]; then
+  "$ROOT/scripts/mac-qa/qa.py" main prepare-mixed-journey "$ROOT/scripts/mac-qa/prepare-mixed-journey.js" 120 >"$QA_SCRATCH/result.json"
+  QA_STATUS=$?
+else
+  QA_STATUS=1
+fi
 set -e
 
 if [[ "$QA_STATUS" != 0 ]]; then
-  cat "$QA_SCRATCH/result.json" >&2
+  cat "$QA_SCRATCH/open-program-window.json" >&2 || true
+  cat "$QA_SCRATCH/watch-program-output.json" >&2 || true
+  cat "$QA_SCRATCH/result.json" >&2 || true
   cat "$QA_SCRATCH/app.log" >&2
   exit "$QA_STATUS"
 fi
 
-python3 - "$QA_RUN/out/prepare-mixed-journey.json" <<'PY'
+python3 - "$QA_RUN/out/prepare-mixed-journey.json" "$QA_RUN/out" <<'PY'
 import json
 import sys
+from pathlib import Path
 
 with open(sys.argv[1], encoding="utf-8") as report_file:
     report = json.load(report_file)
 if not report.get("ok"):
     print(json.dumps(report, ensure_ascii=False, indent=2), file=sys.stderr)
     raise SystemExit(1)
-print(json.dumps(report.get("result"), ensure_ascii=False, indent=2))
+captures = {}
+for name in ("baseline", "before-take", "after-take"):
+    capture_path = Path(sys.argv[2]) / f"program-output-{name}.json"
+    if not capture_path.is_file():
+        raise SystemExit(f"Missing rendered Program capture: {capture_path.name}")
+    capture = json.loads(capture_path.read_text(encoding="utf-8"))
+    if capture.get("width", 0) <= 0 or capture.get("height", 0) <= 0 or not capture.get("hash"):
+        raise SystemExit(f"Invalid rendered Program capture: {capture_path.name}")
+    captures[name] = capture
+if captures["baseline"]["hash"] != captures["before-take"]["hash"]:
+    raise SystemExit("Rendered Program changed before explicit Take")
+if captures["baseline"]["hash"] == captures["after-take"]["hash"]:
+    raise SystemExit("Rendered Program did not change after explicit Take")
+print(json.dumps({"journey": report.get("result"), "programOutputCaptures": captures}, ensure_ascii=False, indent=2))
 PY

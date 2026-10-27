@@ -63,6 +63,48 @@ const programSnapshot = (qa) => {
     liveVerse: live.liveVerse,
   }))
 }
+const listenTauriEvent = async (event, handler) => {
+  const callback = window.__TAURI_INTERNALS__.transformCallback(handler)
+  const eventId = await window.__TAURI_INTERNALS__.invoke("plugin:event|listen", {
+    event,
+    target: { kind: "Any" },
+    handler: callback,
+  })
+  return () => window.__TAURI_INTERNALS__.invoke("plugin:event|unlisten", { event, eventId })
+}
+const captureProgramOutput = async (name, conditions = {}) => {
+  let resolveCapture
+  let rejectCapture
+  let unlisten = null
+  const captured = new Promise((resolve, reject) => {
+    resolveCapture = resolve
+    rejectCapture = reject
+  })
+  const timeout = setTimeout(() => rejectCapture(new Error(`Timed out capturing Program output at ${name}`)), 12000)
+  try {
+    unlisten = await listenTauriEvent("qa:program-capture-ack", (event) => {
+      if (event.payload?.name !== name) return
+      if (event.payload.error) rejectCapture(new Error(`Program output capture ${name} failed: ${event.payload.error}`))
+      else resolveCapture(event.payload.frame)
+    })
+    await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+      event: "qa:program-checkpoint",
+      payload: { name, ...conditions },
+    })
+    return await captured
+  } finally {
+    clearTimeout(timeout)
+    await unlisten?.()
+  }
+}
+const waitForProgramCanvas = (expectedText, label) => waitFor(
+  () => {
+    const canvas = document.querySelector('[data-studio-live] [data-slot="live-picture"] canvas[role="img"]')
+    const ariaLabel = canvas?.getAttribute("aria-label") ?? ""
+    return ariaLabel.includes(expectedText) ? ariaLabel : null
+  },
+  `rendered Program to show ${label}`,
+)
 
 async function runScenario() {
   let stage = "load Rhema Studio and its QA bridge"
@@ -138,6 +180,11 @@ async function runScenario() {
     await waitFor(() => qa.bible.getState().selectedQueueItemId === baseline.id, "baseline Preview selection")
     await clickButton("Take live")
     await waitFor(() => qa.broadcast.getState().isLive && qa.broadcast.getState().liveItemId === baseline.id, "baseline to appear in Program")
+    const programOutputBaseline = await captureProgramOutput("baseline", { expectChangeFromInitial: true })
+    const renderedBaselineProgram = await waitForProgramCanvas(
+      baseline.slide.body,
+      "the baseline slide after its explicit Take",
+    )
     const programBeforePrepareEdits = programSnapshot(qa)
 
     stage = "add a Slide moment through the event picker"
@@ -255,6 +302,17 @@ async function runScenario() {
       "synthetic hymn words in Preview",
     )
     if (qa.broadcast.getState().liveItemId !== baseline.id) throw new Error("Program stopped showing the baseline before Take")
+    const renderedProgramBeforeTake = await waitForProgramCanvas(
+      baseline.slide.body,
+      "the unchanged baseline while the Hymn is in Preview",
+    )
+    if (!renderedProgramBeforeTake.includes("QA Program Baseline")) {
+      throw new Error(`Rendered Program lost its baseline before Take: ${renderedProgramBeforeTake}`)
+    }
+    const programOutputBeforeTake = await captureProgramOutput("before-take", { expectedHash: programOutputBaseline.hash })
+    if (programOutputBeforeTake.hash !== programOutputBaseline.hash) {
+      throw new Error("The broadcast-main output canvas changed while the Hymn was only in Preview")
+    }
     await clickButton("Take live")
     await waitFor(() => {
       const live = qa.broadcast.getState()
@@ -262,6 +320,14 @@ async function runScenario() {
     }, "explicit Take to update Program to the Hymn")
     const programAfterTake = programSnapshot(qa)
     if (programAfterTake.liveItemId !== hymn.id) throw new Error(`Take did not select the Hymn for Program: ${JSON.stringify(programAfterTake)}`)
+    const renderedProgramAfterTake = await waitForProgramCanvas(
+      "Synthetic QA words for the mixed Prepare journey",
+      "the reopened Hymn after its explicit Take",
+    )
+    const programOutputAfterTake = await captureProgramOutput("after-take", { expectedChangeFromHash: programOutputBaseline.hash })
+    if (programOutputAfterTake.hash === programOutputBaseline.hash) {
+      throw new Error("The broadcast-main output canvas did not change after explicit Take")
+    }
 
     return {
       service: { id: serviceId, title: serviceTitle },
@@ -272,6 +338,12 @@ async function runScenario() {
       ],
       order: reopenedIds,
       previewLabel,
+      renderedBaselineProgram,
+      renderedProgramBeforeTake,
+      renderedProgramAfterTake,
+      programOutputBaseline,
+      programOutputBeforeTake,
+      programOutputAfterTake,
       programBeforeTake: programAfterPreview,
       programAfterTake,
       explicitTakeChangedProgram: programAfterTake.liveItemId !== programAfterPreview.liveItemId,
