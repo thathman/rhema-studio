@@ -427,12 +427,7 @@ describe("Prepare never takes anything live (#299)", () => {
       saving: false,
     })
     useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
-    const liveBefore = {
-      isLive: useBroadcastStore.getState().isLive,
-      liveItemId: useBroadcastStore.getState().liveItemId,
-      liveSlide: useBroadcastStore.getState().liveSlide,
-      liveVerse: useBroadcastStore.getState().liveVerse,
-    }
+    const liveBefore = useBroadcastStore.getState()
     const el = await renderPrepare()
 
     const momentRow = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')]
@@ -447,7 +442,7 @@ describe("Prepare never takes anything live (#299)", () => {
     const insertedEvent = events.find((event) => event.title === "Opening Prayer")
     expect(originalEvent?.moments).toEqual([originalMoment])
     expect(insertedEvent?.moments).toEqual([])
-    expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
   it("switching simple and grouped views preserves the phase plan and current live output", async () => {
