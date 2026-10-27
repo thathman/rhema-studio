@@ -6,9 +6,12 @@ on:
       - ".github/workflows/desktop-prepare-qa.yml"
       - "package.json"
       - "bun.lock"
-      - "src/**"
-      - "src-tauri/**"
       - "scripts/mac-qa/**"
+      - "src-tauri/src/qa_bridge.rs"
+      - "src-tauri/src/commands/content.rs"
+      - "src-tauri/tauri.prepare-qa.conf.json"
+  schedule:
+    - cron: "0 9 * * 1"
   workflow_dispatch:
 
 permissions:
