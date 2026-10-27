@@ -57,6 +57,7 @@ public final class MainActivity extends Activity {
     private SurfaceView view;
     private OverlayView overlay;
     private TextView pill;
+    private TextView sendAction;
     private TextView detail;
     private TextView hint;
     private ImageButton gear;
@@ -128,6 +129,24 @@ public final class MainActivity extends Activity {
             }
         });
         status.addView(pill, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        sendAction = Ui.text(this, "CONNECT", 13, Color.WHITE, true);
+        sendAction.setGravity(Gravity.CENTER);
+        sendAction.setBackground(Ui.round(Ui.TEAL, Ui.dp(this, 16)));
+        sendAction.setPadding(Ui.dp(this, 16), Ui.dp(this, 9), Ui.dp(this, 16), Ui.dp(this, 9));
+        sendAction.setMinHeight(Ui.dp(this, 48));
+        sendAction.setVisibility(View.GONE);
+        sendAction.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                touched();
+                startSending();
+            }
+        });
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        actionParams.topMargin = Ui.dp(this, 8);
+        status.addView(sendAction, actionParams);
+
         detail = Ui.text(this, "", 12, 0xFFE6ECEE, false);
         detail.setShadowLayer(4, 0, 0, Color.BLACK);
         detail.setMaxWidth(Ui.dp(this, 360));
@@ -609,6 +628,7 @@ public final class MainActivity extends Activity {
     private boolean histogramOn;
     private long levelDrawnAt;
     private String shownLabel;
+    private String shownAction;
     private int shownColour;
 
     private final Runnable poll = new Runnable() {
@@ -624,18 +644,10 @@ public final class MainActivity extends Activity {
         CameraService s = service;
         Pairing p = Prefs.pairing(this);
         boolean live = s != null && s.sending && s.publisher() != null && s.publisher().live();
-        int color;
-        String label;
-        if (live) {
-            color = Ui.LIVE;
-            label = "LIVE";
-        } else if (s != null && s.sending) {
-            color = Ui.AMBER;
-            label = "CONNECTING";
-        } else {
-            color = Ui.IDLE;
-            label = p == null ? "NOT PAIRED" : "NOT SENDING";
-        }
+        CamAction.State state = CamAction.resolve(p != null, s != null && s.sending, live);
+        int color = "LIVE".equals(state.status) ? Ui.LIVE
+                : "CONNECTING".equals(state.status) ? Ui.AMBER : Ui.IDLE;
+        String label = state.status;
         // Views change only when what they show changes (no layout work twice a second for nothing).
         if (color != shownColour || !label.equals(shownLabel)) {
             shownColour = color;
@@ -646,6 +658,17 @@ public final class MainActivity extends Activity {
             d.setBounds(0, 0, size, size);
             pill.setCompoundDrawables(d, null, null, null);
             pill.setText(label);
+        }
+        if (!state.action.equals(shownAction)) {
+            shownAction = state.action;
+            if (shownAction.isEmpty()) {
+                sendAction.setVisibility(View.GONE);
+            } else {
+                sendAction.setText(shownAction);
+                sendAction.setContentDescription("CONNECT".equals(shownAction)
+                        ? "Connect this phone to Rhema" : "Send camera to Rhema");
+                sendAction.setVisibility(View.VISIBLE);
+            }
         }
         String text = "";
         if (s != null) {
