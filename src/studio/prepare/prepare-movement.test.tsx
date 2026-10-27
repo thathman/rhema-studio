@@ -40,8 +40,11 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (cmd: string, args?
     database.saved = {
       program: { id: "service", title: "Sunday", service_date: null, revision: 2, created_at: "", updated_at: "", item_count: inputs.length },
       items: inputs.map((item, position) => ({
-        book_number: null, chapter: null, verse: null, translation: null, secondary_translation: null, notes: null, payload: null,
-        ...item, id: item.id!, program_id: "service", position,
+        ...item,
+        id: item.id!, program_id: "service", position,
+        book_number: item.book_number ?? null, chapter: item.chapter ?? null, verse: item.verse ?? null,
+        translation: item.translation ?? null, secondary_translation: item.secondary_translation ?? null,
+        notes: item.notes ?? null, payload: item.payload ?? null,
       })),
     }
     return structuredClone(database.saved)
