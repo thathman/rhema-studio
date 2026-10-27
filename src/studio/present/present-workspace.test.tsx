@@ -143,8 +143,11 @@ describe("Present's unified Live console", () => {
 
     const openTools = element.querySelector<HTMLButtonElement>('[data-tour="live-tools"]')!
     await act(async () => openTools.click())
-    expect(document.querySelector('[data-slot="sheet-content"][data-state="open"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="live-tools-panel"]')).not.toBeNull()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
     expect(document.querySelector("[data-testid='bible-search-panel']")).not.toBeNull()
+    expect(element.querySelector('[aria-label="Preview"]')?.textContent).toContain("stays private")
+    expect(element.querySelector("[data-studio-live]")?.textContent).toContain("Program")
 
     const listeningTab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) => tab.textContent?.includes("Listening"))!
     await act(async () => {
@@ -156,11 +159,20 @@ describe("Present's unified Live console", () => {
     pressArrowRight()
     expect(presentCalls.next).toHaveBeenCalledTimes(1)
 
-    const close = document.querySelector<HTMLButtonElement>('[data-slot="sheet-close"]')!
+    const close = document.querySelector<HTMLButtonElement>('[aria-label="Close Bible and listening tools"]')!
     await act(async () => close.click())
+    expect(document.querySelector('[data-slot="live-tools-panel"]')).toBeNull()
+    expect(document.activeElement).toBe(openTools)
     await act(async () => openTools.click())
     expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("Listening")
     expect(document.querySelector("[data-testid='transcript-panel']")).not.toBeNull()
+
+    const liveToolsPanel = document.querySelector<HTMLElement>('[data-slot="live-tools-panel"]')!
+    await act(async () => {
+      liveToolsPanel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    })
+    expect(document.querySelector('[data-slot="live-tools-panel"]')).toBeNull()
+    expect(document.activeElement).toBe(openTools)
 
     expect(useQueueStore.getState().items).toEqual([queueItem, secondQueueItem])
     expect(useBibleStore.getState()).toMatchObject({ selectedVerse: verse, selectedQueueItemId: "stable-item" })
