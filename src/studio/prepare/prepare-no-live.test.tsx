@@ -666,32 +666,55 @@ describe("Prepare never takes anything live (#299)", () => {
   })
 
   it("keeps phase context visible in Simple list and opens a phase in Grouped by phase", async () => {
-    useQueueStore.setState({
-      items: [slide("Welcome")],
-      headers: [
-        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
-        { id: "post", type: "phase", name: "Post-service", at: 1, rule: "loop", role: "post" },
-      ],
-      activeIndex: null,
-    })
-    const el = await renderPrepare()
-    const simple = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Simple list")!
-    expect(simple.classList.contains("h-11")).toBe(true)
-    await act(async () => simple.click())
+    const pendingFrames: FrameRequestCallback[] = []
+    const originalRequestAnimationFrame = window.requestAnimationFrame
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      pendingFrames.push(callback)
+      return pendingFrames.length
+    }) as typeof window.requestAnimationFrame
+    try {
+      useQueueStore.setState({
+        items: [slide("Welcome")],
+        headers: [
+          { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+          { id: "custom-main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "custom" },
+          { id: "post", type: "phase", name: "Post-service", at: 1, rule: "loop", role: "post" },
+        ],
+        activeIndex: null,
+      })
+      const el = await renderPrepare()
+      const simple = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Simple list")!
+      expect(simple.classList.contains("h-11")).toBe(true)
+      await act(async () => simple.click())
 
-    expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
-    expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
-    const phaseOverview = el.querySelector<HTMLButtonElement>('[aria-label="Phases"] button[role="listitem"]')
-    expect(phaseOverview).not.toBeNull()
-    await act(async () => phaseOverview!.click())
+      expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
+      expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+      const phaseOverview = el.querySelector<HTMLButtonElement>('[aria-label="Phases"] button[data-phase-id="custom-main"]')
+      expect(phaseOverview).not.toBeNull()
+      await act(async () => phaseOverview!.click())
 
-    expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
-    expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")?.getAttribute("aria-pressed")).toBe("true")
+      expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
+      expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")?.getAttribute("aria-pressed")).toBe("true")
+      expect(pendingFrames.length).toBeGreaterThan(0)
+      const mainSection = el.querySelector<HTMLElement>('li[data-phase-id="main"]')!
+      const customMainSection = el.querySelector<HTMLElement>('li[data-phase-id="custom-main"]')!
+      const mainScroll = vi.fn()
+      const customMainScroll = vi.fn()
+      Object.defineProperty(mainSection, "scrollIntoView", { configurable: true, value: mainScroll })
+      Object.defineProperty(customMainSection, "scrollIntoView", { configurable: true, value: customMainScroll })
+      await act(async () => pendingFrames.forEach((frame) => frame(0)))
+      expect(customMainScroll).toHaveBeenCalledWith({ block: "start", behavior: "smooth" })
+      expect(mainScroll).not.toHaveBeenCalled()
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame
+    }
   })
 
   it("places an existing zero-moment event inside Main service when organising an empty rundown", async () => {
     const event = { id: "prayer", type: "group" as const, name: "Prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 10 } }
     useQueueStore.setState({ items: [], headers: [event], activeIndex: null })
+    useQueueStore.getState().resetHistory()
+    const before = structuredClone({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex })
     useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
     const liveBefore = useBroadcastStore.getState()
     const el = await renderPrepare()
@@ -708,6 +731,11 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(eventIndex).toBeGreaterThan(mainIndex)
     expect(postIndex).toBeGreaterThan(eventIndex)
     expect(headers[eventIndex]).toEqual(event)
+    expect(useQueueStore.getState().past).toHaveLength(1)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Undo"]')!.click())
+    expect({ items: useQueueStore.getState().items, headers: useQueueStore.getState().headers, activeIndex: useQueueStore.getState().activeIndex }).toEqual(before)
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 

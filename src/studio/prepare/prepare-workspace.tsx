@@ -127,8 +127,8 @@ export function PrepareWorkspace() {
     if (!phase) return
     changeRundownView("grouped")
     const scrollToPhase = () => {
-      const target = [...document.querySelectorAll<HTMLElement>("[aria-label]")]
-        .find((element) => element.getAttribute("aria-label") === `Phase: ${phase.name}`)
+      const target = [...document.querySelectorAll<HTMLLIElement>("li[data-phase-id]")]
+        .find((element) => element.dataset.phaseId === id)
       target?.scrollIntoView?.({ block: "start", behavior: "smooth" })
     }
     if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(scrollToPhase)
@@ -308,6 +308,7 @@ function PhaseStrip({ onSelectPhase }: { onSelectPhase: (phaseId: string) => voi
       {phases.map((p) => (
         <button
           key={p.id}
+          data-phase-id={p.id}
           type="button"
           role="listitem"
           onClick={() => onSelectPhase(p.id)}
