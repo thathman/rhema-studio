@@ -96,14 +96,35 @@ export QA_DIR="$QA_RUN"
 HOME="$QA_HOME" RHEMA_QA_DIR="$QA_RUN" "$APP_BIN" >"$QA_SCRATCH/app.log" 2>&1 &
 APP_PID=$!
 set +e
-{
-  cat "$ROOT/scripts/mac-qa/approved-scene-journey.js"
-  printf '\nreturn await runScenario()\n'
-} | "$ROOT/scripts/mac-qa/qa.py" main approved-scene-journey - 120 >"$QA_SCRATCH/result.json"
-QA_STATUS=$?
+"$ROOT/scripts/mac-qa/qa.py" main open-approved-output-windows "$ROOT/scripts/mac-qa/open-approved-output-windows.js" 30 >"$QA_SCRATCH/open-output-windows.json"
+OPEN_STATUS=$?
+if [[ "$OPEN_STATUS" == 0 ]]; then
+  "$ROOT/scripts/mac-qa/qa.py" broadcast-main watch-approved-scene-main "$ROOT/scripts/mac-qa/watch-approved-scene-output.js" 30 >"$QA_SCRATCH/watch-approved-scene-main.json"
+  MAIN_WATCH_STATUS=$?
+else
+  MAIN_WATCH_STATUS=1
+fi
+if [[ "$OPEN_STATUS" == 0 && "$MAIN_WATCH_STATUS" == 0 ]]; then
+  "$ROOT/scripts/mac-qa/qa.py" broadcast-qa-secondary watch-approved-scene-secondary "$ROOT/scripts/mac-qa/watch-approved-scene-output.js" 30 >"$QA_SCRATCH/watch-approved-scene-secondary.json"
+  SECONDARY_WATCH_STATUS=$?
+else
+  SECONDARY_WATCH_STATUS=1
+fi
+if [[ "$OPEN_STATUS" == 0 && "$MAIN_WATCH_STATUS" == 0 && "$SECONDARY_WATCH_STATUS" == 0 ]]; then
+  {
+    cat "$ROOT/scripts/mac-qa/approved-scene-journey.js"
+    printf '\nreturn await runScenario()\n'
+  } | "$ROOT/scripts/mac-qa/qa.py" main approved-scene-journey - 120 >"$QA_SCRATCH/result.json"
+  QA_STATUS=$?
+else
+  QA_STATUS=1
+fi
 set -e
 
 if [[ "$QA_STATUS" != 0 ]]; then
+  cat "$QA_SCRATCH/open-output-windows.json" >&2 || true
+  cat "$QA_SCRATCH/watch-approved-scene-main.json" >&2 || true
+  cat "$QA_SCRATCH/watch-approved-scene-secondary.json" >&2 || true
   cat "$QA_SCRATCH/result.json" >&2 || true
   cat "$QA_SCRATCH/app.log" >&2
   exit "$QA_STATUS"

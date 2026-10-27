@@ -11,9 +11,12 @@ const waitFor = async (predicate, label, timeoutMs = 8000) => {
 }
 const normal = (value) => String(value ?? "").replace(/\s+/g, " ").trim()
 const buttons = () => [...document.querySelectorAll("button, [role=tab]")]
-const clickButton = async (name) => {
+const clickButton = async (name, { startsWith = false } = {}) => {
   const button = await waitFor(
-    () => buttons().find((candidate) => normal(candidate.getAttribute("aria-label") || candidate.innerText) === name),
+    () => buttons().find((candidate) => {
+      const label = normal(candidate.getAttribute("aria-label") || candidate.innerText)
+      return startsWith ? label.startsWith(name) : label === name
+    }),
     "button “" + name + "”",
   )
   if (button.disabled || button.getAttribute("aria-disabled") === "true") throw new Error("Button “" + name + "” is disabled")
@@ -49,6 +52,40 @@ const sceneState = (broadcast, outputId) => {
     frameScene: frame?.scene ? { background: frame.scene.background } : null,
   }))
 }
+const listenTauriEvent = async (event, handler) => {
+  const callback = window.__TAURI_INTERNALS__.transformCallback(handler)
+  const eventId = await window.__TAURI_INTERNALS__.invoke("plugin:event|listen", {
+    event,
+    target: { kind: "Any" },
+    handler: callback,
+  })
+  return () => window.__TAURI_INTERNALS__.invoke("plugin:event|unlisten", { event, eventId })
+}
+const captureProgramOutput = async (outputId, name, conditions = {}) => {
+  let resolveCapture
+  let rejectCapture
+  let unlisten = null
+  const captured = new Promise((resolve, reject) => {
+    resolveCapture = resolve
+    rejectCapture = reject
+  })
+  const timeout = setTimeout(() => rejectCapture(new Error(`Timed out capturing ${outputId} Program at ${name}`)), 12000)
+  try {
+    unlisten = await listenTauriEvent("qa:program-capture-ack", (event) => {
+      if (event.payload?.outputId !== outputId || event.payload?.name !== name) return
+      if (event.payload.error) rejectCapture(new Error(`${outputId} Program capture ${name} failed: ${event.payload.error}`))
+      else resolveCapture(event.payload.frame)
+    })
+    await window.__TAURI_INTERNALS__.invoke("plugin:event|emit", {
+      event: "qa:program-checkpoint",
+      payload: { outputId, name, ...conditions },
+    })
+    return await captured
+  } finally {
+    clearTimeout(timeout)
+    await unlisten?.()
+  }
+}
 const programState = (broadcast) => {
   const state = broadcast.getState()
   return JSON.parse(JSON.stringify({
@@ -65,9 +102,10 @@ async function runScenario() {
   const qa = await waitFor(() => window.__rhemaQa?.(), "isolated QA stores")
   let stage = "dismiss first-run setup in the isolated profile"
   try {
-    qa.settings.getState().setSetup({ dismissedAt: new Date().toISOString() })
-    qa.shell.getState().setSetupOpen(false)
-    await waitFor(() => !document.body.innerText.includes("Welcome to Rhema Studio"), "setup dialog to close")
+    await clickButton("Use Rhema Studio now, finish later", { startsWith: true })
+    await waitFor(() => !qa.shell.getState().setupOpen, "setup state to close")
+    await waitFor(() => !!qa.settings.getState().setup.dismissedAt, "setup dismissal to save")
+    await waitFor(() => !document.querySelector('[role="dialog"][data-state="open"]'), "setup dialog to close")
 
     stage = "set the isolated QA operator"
     qa.settings.getState().setOperatorName("QA Operator")
@@ -87,21 +125,18 @@ async function runScenario() {
       "QA scene to save",
     )
     const sceneId = scene.id
+    // Keep this renderer fixture to a flat background so the captured centre pixel proves the
+    // scene revision on air without an unrelated full-frame feed layer covering that colour.
+    qa.broadcast.getState().saveScene({ ...scene, layers: [] })
+    await waitFor(
+      () => qa.broadcast.getState().scenes.find((candidate) => candidate.id === sceneId)?.layers.length === 0,
+      "flat synthetic scene fixture",
+    )
 
     stage = "prepare independent baseline scenes on two outputs"
     const main = qa.broadcast.getState().outputs.find((candidate) => candidate.id === "main")
-    if (!main) throw new Error("The default congregation output is missing")
-    const secondary = {
-      ...structuredClone(main),
-      id: "qa-secondary",
-      name: "QA Secondary Output",
-      type: "browser",
-      role: "congregation",
-      feedToken: "qa-secondary-synthetic",
-      monitorIndex: 1,
-      ndi: { ...main.ndi, sourceName: "QA Secondary Synthetic" },
-    }
-    qa.broadcast.getState().addOutput(secondary)
+    const secondary = qa.broadcast.getState().outputs.find((candidate) => candidate.id === "qa-secondary")
+    if (!main || !secondary) throw new Error("The isolated QA output windows were not prepared")
 
     const mainBaseline = {
       id: "qa-main-baseline",
@@ -131,6 +166,8 @@ async function runScenario() {
     if (secondaryBefore.sceneSnapshot?.background !== "#56789a" || secondaryBefore.frameScene?.background !== "#56789a") {
       throw new Error("Could not establish the secondary output baseline scene")
     }
+    const mainProgramBaseline = await captureProgramOutput("main", "baseline-main", { expectedPixel: [17, 34, 51, 255] })
+    const secondaryProgramBaseline = await captureProgramOutput("qa-secondary", "baseline-secondary", { expectedPixel: [86, 120, 154, 255] })
 
     stage = "create a synthetic event with an output-scoped scene Take"
     await clickButton("Prepare")
@@ -207,6 +244,14 @@ async function runScenario() {
     if (JSON.stringify(sceneState(qa.broadcast, "qa-secondary")) !== JSON.stringify(secondaryBefore)) {
       throw new Error("Preview changed the secondary output scene before explicit Take")
     }
+    const mainProgramBeforeTake = await captureProgramOutput("main", "before-take-main", {
+      expectedHash: mainProgramBaseline.hash,
+      expectedPixel: [17, 34, 51, 255],
+    })
+    const secondaryProgramBeforeTake = await captureProgramOutput("qa-secondary", "before-take-secondary", {
+      expectedHash: secondaryProgramBaseline.hash,
+      expectedPixel: [86, 120, 154, 255],
+    })
 
     stage = "Take the approved event in Present"
     await clickButton("Take live")
@@ -250,12 +295,25 @@ async function runScenario() {
         serviceApprovedAt: serviceBeforeEdit.current.approved_at,
       }))
     }
+    const mainProgramAfterTake = await captureProgramOutput("main", "after-take-main", {
+      expectedChangeFromHash: mainProgramBaseline.hash,
+      expectedPixel: [18, 52, 86, 255],
+    })
+    const secondaryProgramAfterTake = await captureProgramOutput("qa-secondary", "after-take-secondary", {
+      expectedHash: secondaryProgramBaseline.hash,
+      expectedPixel: [86, 120, 154, 255],
+    })
 
     return {
       approvedScene: { id: sceneId, name: approvedScene.name, background: approvedScene.background },
       reusableDraft: { name: savedDraft.name, background: savedDraft.background },
       beforePreview: { main: mainBefore, secondary: secondaryBefore },
       afterTake: { main: mainAfter, secondary: secondaryAfter },
+      renderedProgram: {
+        baseline: { main: mainProgramBaseline, secondary: secondaryProgramBaseline },
+        beforeTake: { main: mainProgramBeforeTake, secondary: secondaryProgramBeforeTake },
+        afterTake: { main: mainProgramAfterTake, secondary: secondaryProgramAfterTake },
+      },
       approvedService: {
         id: serviceBeforeEdit.current.id,
         revision: approvalRevision,
@@ -281,6 +339,11 @@ async function runScenario() {
         title: qa.service.getState().current?.title,
         revision: qa.service.getState().current?.revision,
         approvedRevision: qa.service.getState().current?.approved_revision,
+      },
+      setup: {
+        open: qa.shell.getState().setupOpen,
+        dismissedAt: qa.settings.getState().setup.dismissedAt,
+        dialogs: [...document.querySelectorAll('[role="dialog"]')].map((dialog) => ({ state: dialog.getAttribute("data-state"), text: normal(dialog.innerText).slice(0, 160) })),
       },
       body: normal(document.body.innerText).slice(0, 2400),
     }))

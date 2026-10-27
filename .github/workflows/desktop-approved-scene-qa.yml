@@ -7,7 +7,9 @@ on:
       - "package.json"
       - "bun.lock"
       - "scripts/mac-qa/approved-scene-journey.js"
+      - "scripts/mac-qa/open-approved-output-windows.js"
       - "scripts/mac-qa/run-approved-scene-journey.sh"
+      - "scripts/mac-qa/watch-approved-scene-output.js"
       - "scripts/mac-qa/qa.py"
       - "data/schema.sql"
       - "src/App.tsx"
@@ -22,6 +24,7 @@ on:
       - "src/studio/present-actions.ts"
       - "src/studio/shell-store.ts"
       - "src/lib/approved-designs.ts"
+      - "src/lib/scene-renderer.ts"
       - "src/lib/item-intent.ts"
       - "src/lib/take-steps.ts"
       - "src/lib/remote-actions.ts"
@@ -41,7 +44,7 @@ concurrency:
 
 jobs:
   native-approved-scene-journey:
-    name: Approved scene revision stays scoped to output state (native Tauri)
+    name: Approved scene Take changes only its native Program render
     runs-on: macos-15-intel
     timeout-minutes: 40
     env:
