@@ -1,14 +1,21 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { allMacros, CUE_ACTIONS, cueImpact, runSteps, type CueId } from "@/lib/cues"
+import { allMacros, CUE_ACTIONS, cueImpact, MACROS, runSteps, type CueId } from "@/lib/cues"
 import type { RunOfShowEventCue } from "@/lib/run-of-show"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJoin } from "@/stores/join-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useSettingsStore } from "@/stores/settings-store"
 
 const knownCue = (step: string): step is CueId => Object.prototype.hasOwnProperty.call(CUE_ACTIONS, step)
+
+function isValidCueName(value: string): boolean {
+  const trimmed = value.trim()
+  // eslint-disable-next-line no-control-regex
+  return trimmed.length > 0 && trimmed.length <= 60 && !/[\u0000-\u001f\u007f-\u009f]/.test(value)
+}
 
 function canRunFromHost(eventId: string): boolean {
   return useEventClock.getState().currentId === eventId
@@ -33,8 +40,21 @@ function EventCuesEditorSession({ eventId }: { eventId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const cues = header?.event?.cues ?? []
-  const macros = allMacros()
+  const customMacros = useSettingsStore((state) => state.customMacros)
+  const macros = allMacros(customMacros)
   const selectedMacro = macros.find((macro) => macro.id === macroId) ?? macros[0]
+  const selectedCustomMacro = selectedMacro && !MACROS.some((macro) => macro.id === selectedMacro.id)
+    ? customMacros.find((macro) => macro.id === selectedMacro.id)
+    : undefined
+  // `allMacros` intentionally removes actions unknown to this build before they can run. Event
+  // snapshots retain the stored strings so the UI can mark that cue unavailable instead of
+  // silently changing its meaning.
+  const snapshotSteps = selectedCustomMacro?.steps ?? selectedMacro?.steps ?? []
+  const validCueName = !!selectedMacro && isValidCueName(selectedMacro.label)
+  const canSnapshot = validCueName
+    && snapshotSteps.length > 0
+    && snapshotSteps.length <= 12
+    && snapshotSteps.every((step) => step.length > 0 && step.length <= 60)
   const hostMayRun = currentEventId === eventId && !rehearsal && joinStatus === "off"
 
   const writeCues = (next: RunOfShowEventCue[]) => {
@@ -46,12 +66,12 @@ function EventCuesEditorSession({ eventId }: { eventId: string }) {
   }
 
   const addCue = () => {
-    if (!selectedMacro || cues.length >= 12) return
+    if (!selectedMacro || !canSnapshot || cues.length >= 12) return
     writeCues([...cues, {
       id: crypto.randomUUID(),
-      name: selectedMacro.label,
+      name: selectedMacro.label.trim(),
       trigger: "manual",
-      steps: [...selectedMacro.steps],
+      steps: [...snapshotSteps],
     }])
   }
 
@@ -146,8 +166,9 @@ function EventCuesEditorSession({ eventId }: { eventId: string }) {
         >
           {macros.map((macro, index) => <option key={`${index}-${macro.id}`} value={macro.id}>{macro.label}</option>)}
         </select>
-        <Button size="sm" variant="outline" aria-label={`Add cue to ${header?.name ?? "event"}`} disabled={!selectedMacro || cues.length >= 12} onClick={addCue}>Add cue snapshot</Button>
+        <Button size="sm" variant="outline" aria-label={`Add cue to ${header?.name ?? "event"}`} disabled={!canSnapshot || cues.length >= 12} onClick={addCue}>Add cue snapshot</Button>
       </div>
+      {selectedMacro && !canSnapshot && <p role="status" className="text-xs text-muted-foreground">This saved cue cannot be snapshotted. It must have a valid name and 1–12 actions that this service format can preserve.</p>}
       {!hostMayRun && <p role="status" className="text-xs text-muted-foreground">To run an event cue, start this event and use the main Rhema Studio computer. Joined desks and rehearsal cannot run it.</p>}
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
 

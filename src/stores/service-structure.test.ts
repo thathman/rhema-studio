@@ -43,7 +43,10 @@ describe("a service's phases and groups", () => {
   })
 
   it("round-trips event cue snapshots without dropping unrelated header data", () => {
-    const cues = [{ id: "cue-1", name: "Start prayer", trigger: "manual", steps: ["timer.fresh", "quick.pray"] }]
+    const cues = [
+      { id: "cue-1", name: "Start prayer", trigger: "manual", steps: ["timer.fresh", "future.screen"] },
+      { id: "cue-2", name: "Future cue", trigger: "manual", steps: ["future.action"] },
+    ]
     const source = program([
       row("prayer", "group", "Opening Prayer", JSON.stringify({ run_of_show_event: { schema_version: 1, cues }, future_header_key: { keep: true } })),
       row("moment", "verse", "John 3:16"),

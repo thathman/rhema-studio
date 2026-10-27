@@ -93,4 +93,38 @@ describe("event cue arming and execution", () => {
     act(() => useEventClock.setState({ currentId: "sermon" }))
     expect(arm().disabled).toBe(true)
   })
+
+  it("preserves unavailable custom actions and refuses to snapshot an empty cue", async () => {
+    prepareActiveEvent()
+    useSettingsStore.setState({ customMacros: [
+      { id: "mixed-future", label: "Mixed future cue", steps: ["quick.welcome", "future.screen"] },
+      { id: "future-only", label: "Future-only cue", steps: ["future.live"] },
+      { id: "empty", label: "Empty cue", steps: [] },
+    ] })
+    const el = await renderEditor()
+    const picker = el.querySelector<HTMLSelectElement>('[aria-label="Cue to add to this event"]')!
+    const add = () => el.querySelector<HTMLButtonElement>('[aria-label="Add cue to Opening Prayer"]')!
+    const choose = async (id: string) => act(async () => {
+      picker.value = id
+      picker.dispatchEvent(new Event("change", { bubbles: true }))
+    })
+
+    await choose("mixed-future")
+    expect(add().disabled).toBe(false)
+    await act(async () => add().click())
+    expect(useQueueStore.getState().headers[0].event?.cues?.[0].steps).toEqual(["quick.welcome", "future.screen"])
+    expect(el.textContent).toContain("Unavailable action")
+    expect(el.querySelector<HTMLButtonElement>('[aria-label="Review cue: Mixed future cue"]')!.disabled).toBe(true)
+
+    await choose("future-only")
+    expect(add().disabled).toBe(false)
+    await act(async () => add().click())
+    expect(useQueueStore.getState().headers[0].event?.cues?.[1].steps).toEqual(["future.live"])
+    expect(el.querySelector<HTMLButtonElement>('[aria-label="Review cue: Future-only cue"]')!.disabled).toBe(true)
+
+    await choose("empty")
+    expect(add().disabled).toBe(true)
+    await act(async () => add().click())
+    expect(useQueueStore.getState().headers[0].event?.cues).toHaveLength(2)
+  })
 })
