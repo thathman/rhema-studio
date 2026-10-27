@@ -6,6 +6,7 @@ import { useAddDialog } from "@/studio/prepare/add-target"
 import { AddEventPalette } from "@/studio/prepare/add-event-palette"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useQueueStore } from "@/stores"
@@ -14,6 +15,7 @@ import type { RundownDropPlacement } from "./drop-placement"
 import { cn } from "@/lib/utils"
 import { eventPlanApprovalState } from "@/lib/approval"
 import { useServiceStore } from "@/stores/service-store"
+import { toast } from "sonner"
 
 const ADVANCE_CHOICES = [5, 8, 10, 15, 20, 30, 60]
 
@@ -66,6 +68,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
   }, [dropRef, draggableRef])
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(header.name)
+  const [removePhaseOpen, setRemovePhaseOpen] = useState(false)
   const service = useServiceStore((state) => state.current)
   const serviceDirty = useServiceStore((state) => state.dirty)
   const approval = eventPlanApprovalState(service, serviceDirty)
@@ -80,6 +83,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
   const count = summary?.count ?? 0
   const minutes = summary?.minutes ?? 0
   return (
+    <>
     <li
       ref={setHeaderRef}
       aria-label={`${kind[0].toUpperCase()}${kind.slice(1)}: ${header.name}`}
@@ -191,11 +195,38 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
             </>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => useQueueStore.getState().removeHeader(header.id)}>
-            Remove the {kind} (its items stay)
-          </DropdownMenuItem>
+          {phase ? (
+            <DropdownMenuItem variant="destructive" onSelect={() => setRemovePhaseOpen(true)}>
+              Remove phase…
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem variant="destructive" onSelect={() => useQueueStore.getState().removeHeader(header.id)}>
+              Remove the {kind} (its items stay)
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
+    {phase && (
+      <Dialog open={removePhaseOpen} onOpenChange={setRemovePhaseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove “{header.name}”?</DialogTitle>
+            <DialogDescription>
+              This removes the phase, its timing, running rule and phase-level assignments. Events, groups and content stay in their current order. Use Undo in the rundown toolbar to restore the exact phase; nothing goes live.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemovePhaseOpen(false)}>Keep phase</Button>
+            <Button variant="destructive" onClick={() => {
+              useQueueStore.getState().removeHeader(header.id)
+              setRemovePhaseOpen(false)
+              toast.success("Phase removed", { description: "Events and content remain in the rundown. Use Undo to restore the phase." })
+            }}>Remove phase</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   )
 }

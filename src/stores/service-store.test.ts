@@ -203,6 +203,64 @@ describe("conversions", () => {
   })
 })
 
+describe("per-output scene assignments in saved services", () => {
+  it("saves, closes and reopens a service with its shared scene and multiple screen overrides", async () => {
+    const { sceneStep } = await import("@/lib/item-intent")
+    const planned = {
+      id: "sermon-moment",
+      kind: "slide",
+      slide: { title: "Sermon", body: "" },
+      reference: "Sermon",
+      confidence: 1,
+      source: "manual",
+      added_at: 0,
+      on_take: [
+        sceneStep("shared-scene"),
+        sceneStep("sanctuary-scene", "main"),
+        sceneStep("overflow-scene", "overflow"),
+      ],
+    } as QueueItem
+    const current = { ...program, item_count: 1 }
+    let persisted: ProgramWithItems | null = null
+    useServiceStore.setState({ current, dirty: true })
+    useQueueStore.setState({ items: [planned], headers: [], activeIndex: null })
+    mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === "content_replace_items") {
+        const rows = args?.items as Array<Record<string, unknown>>
+        const savedItems = rows.map((row, position): ProgramItem => ({
+          id: String(row.id),
+          program_id: current.id,
+          position,
+          kind: String(row.kind),
+          reference: String(row.reference),
+          book_number: typeof row.book_number === "number" ? row.book_number : null,
+          chapter: typeof row.chapter === "number" ? row.chapter : null,
+          verse: typeof row.verse === "number" ? row.verse : null,
+          translation: typeof row.translation === "string" ? row.translation : null,
+          secondary_translation: typeof row.secondary_translation === "string" ? row.secondary_translation : null,
+          notes: typeof row.notes === "string" ? row.notes : null,
+          payload: typeof row.payload === "string" ? row.payload : null,
+        }))
+        persisted = { program: { ...current, revision: 2 }, items: savedItems }
+        return structuredClone(persisted)
+      }
+      if (cmd === "content_get_program") return persisted ? structuredClone(persisted) : null
+      return null
+    })
+
+    expect(await useServiceStore.getState().saveCurrent()).toBe("saved")
+    const payload = JSON.parse(String(sentItems()[0].payload)) as { on_take: string[] }
+    expect(payload.on_take).toEqual([
+      "scene.take:shared-scene",
+      "scene.take:sanctuary-scene@main",
+      "scene.take:overflow-scene@overflow",
+    ])
+    expect(useServiceStore.getState().closeProgram()).toBe("closed")
+    expect(await useServiceStore.getState().openProgram(current.id)).toBe("ok")
+    expect(useQueueStore.getState().items[0]).toMatchObject({ id: "sermon-moment", on_take: payload.on_take })
+  })
+})
+
 describe("approved design revisions", () => {
   it("captures the scene and look revisions with the saved service approval", async () => {
     const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
