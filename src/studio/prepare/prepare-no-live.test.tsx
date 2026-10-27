@@ -6,30 +6,41 @@ vi.hoisted(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
   ;(globalThis as { CSS?: { escape: (s: string) => string } }).CSS ??= { escape: (s: string) => s }
 })
+const mockService = vi.hoisted(() => ({
+  program: null as null | Record<string, unknown>,
+  items: [] as Record<string, unknown>[],
+}))
 // Lists come back empty; anything else has nothing to say.
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
     if (cmd.endsWith("_list")) return []
-    if (cmd === "content_create_program") return {
-      id: "local-draft",
-      title: String(args?.title ?? "Service draft"),
-      service_date: typeof args?.serviceDate === "string" ? args.serviceDate : null,
-      revision: 1,
-      created_at: "",
-      updated_at: "",
-      item_count: 0,
+    if (cmd === "content_create_program") {
+      mockService.program = {
+        id: "local-draft",
+        title: String(args?.title ?? "Service draft"),
+        service_date: typeof args?.serviceDate === "string" ? args.serviceDate : null,
+        revision: 1,
+        created_at: "",
+        updated_at: "",
+        item_count: 0,
+      }
+      return mockService.program
     }
-    if (cmd === "content_replace_items") return {
-      program: {
+    if (cmd === "content_replace_items") {
+      mockService.items = Array.isArray(args?.items) ? structuredClone(args.items) as Record<string, unknown>[] : []
+      mockService.program = {
         id: String(args?.programId ?? "local-draft"),
         title: "Service draft",
         service_date: null,
         revision: 2,
         created_at: "",
         updated_at: "",
-        item_count: Array.isArray(args?.items) ? args.items.length : 0,
-      },
-      items: [],
+        item_count: mockService.items.length,
+      }
+      return { program: mockService.program, items: [] }
+    }
+    if (cmd === "content_get_program") {
+      return mockService.program?.id === args?.id ? { program: mockService.program, items: structuredClone(mockService.items) } : null
     }
     return null
   }),
@@ -60,6 +71,8 @@ afterEach(() => {
   root = null
   try { window.localStorage.removeItem("rhema.prepare.rundown-view.v1") } catch { /* unavailable in the Node test runner */ }
   useAddDialog.getState().close()
+  mockService.program = null
+  mockService.items = []
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
 })
@@ -159,6 +172,68 @@ describe("Prepare never takes anything live (#299)", () => {
     expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Clear service"))?.disabled).toBe(false)
     expect(el.textContent).not.toContain("Nothing in the service yet")
     expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
+  it("creates an event, adds and edits an exact moment, saves and reopens it, then previews without changing Live", async () => {
+    useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
+    useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null })
+    useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "currently-on-air", liveSlide: null, liveVerse: null })
+    const liveBefore = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+      liveSlide: useBroadcastStore.getState().liveSlide,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+    }
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add event"]')!.click())
+    const sermon = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Sermon")!
+    await act(async () => sermon.click())
+    const eventId = useQueueStore.getState().headers.find((header) => header.name === "Sermon")!.id
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add content to Sermon"]')!.click())
+    expect(useAddDialog.getState().open).toBe(true)
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    const slidesTab = [...dialog.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((button) => button.textContent?.trim() === "Slides")!
+    await act(async () => {
+      slidesTab.focus()
+      slidesTab.click()
+    })
+    const title = document.body.querySelector<HTMLInputElement>('[aria-label="Slide title"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(title), "value")!.set!.call(title, "Sermon title")
+      title.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    const add = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!
+    await act(async () => add.click())
+
+    const inserted = useQueueStore.getState().items.find((item) => item.reference === "Sermon title")!
+    expect(useQueueStore.getState().addTarget).toBeNull()
+    expect(useAddDialog.getState().open).toBe(false)
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe(inserted.id)
+    expect(el.querySelector('button[aria-label="Event plan"]')).toBeNull()
+    expect(el.textContent).toContain("Confidence")
+    expect(document.activeElement).toBe(document.querySelector(`[data-rundown-item-id="${inserted.id}"]`))
+    expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
+
+    const save = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
+    await act(async () => save.click())
+    expect(useServiceStore.getState().dirty).toBe(false)
+    expect(await useServiceStore.getState().closeProgram()).toBe("closed")
+    expect(await useServiceStore.getState().openProgram("local-draft")).toBe("ok")
+
+    const reopened = useQueueStore.getState()
+    expect(reopened.items.map((item) => item.id)).toContain(inserted.id)
+    expect(reopened.headers.find((header) => header.id === eventId)?.event).toMatchObject({ schema_version: 1 })
+    expect(projectRunOfShowEvents(reopened.items, reopened.headers).find((event) => event.id === eventId)?.moments.map((item) => item.id)).toContain(inserted.id)
+    act(() => useBibleStore.setState({ selectedVerse: null, selectedSlide: null, selectedQueueItemId: null }))
+    const itemRow = document.querySelector<HTMLElement>(`[data-rundown-item-id="${inserted.id}"]`)!
+    await act(async () => itemRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
+    expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
   })
 
   it("opens New and Duplicate service forms from the service actions menu", async () => {

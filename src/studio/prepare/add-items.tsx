@@ -15,12 +15,14 @@ import { presentActions } from "@/studio/present-actions"
 /**
  * Add one item to the service; successful insertion selects it in Prepare.
  */
-export function AddItems({ className }: { className?: string }) {
+export function AddItems({ className, onSelectAddedItem }: { className?: string; onSelectAddedItem?: () => void }) {
   const open = useAddDialog((s) => s.open)
   const target = useQueueStore((s) => s.headers.find((h) => h.id === s.addTarget)?.name ?? null)
   const added = (id: string) => {
     const item = useQueueStore.getState().items.find((candidate) => candidate.id === id)
     if (!item) return
+    onSelectAddedItem?.()
+    useAddDialog.getState().focusAddedItem(id)
     presentActions.previewItem(item)
     useAddDialog.getState().close()
   }
@@ -33,8 +35,12 @@ export function AddItems({ className }: { className?: string }) {
         className="flex h-[min(46rem,88vh)] flex-col gap-3 sm:max-w-4xl"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
-          const { opener, clearOpener } = useAddDialog.getState()
-          if (opener?.isConnected) opener.focus()
+          const { opener, focusItemId, clearOpener } = useAddDialog.getState()
+          const row = focusItemId
+            ? [...document.querySelectorAll<HTMLElement>("[data-rundown-item-id]")].find((element) => element.dataset.rundownItemId === focusItemId) ?? null
+            : null
+          if (row) row.focus()
+          else if (opener?.isConnected) opener.focus()
           clearOpener()
         }}
       >

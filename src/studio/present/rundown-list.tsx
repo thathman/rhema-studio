@@ -277,7 +277,7 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
 function Row({ id, index, sortable, children }: { id: string; index: number; sortable: boolean; children: React.ReactNode }) {
   const { ref, handleRef, isDragging } = useSortable({ id, index, disabled: !sortable })
   return (
-    <li ref={sortable ? ref : undefined} className={cn("flex flex-col", isDragging && "opacity-60")}>
+    <li ref={sortable ? ref : undefined} data-rundown-item-id={sortable ? id : undefined} tabIndex={sortable ? -1 : undefined} className={cn("flex flex-col", isDragging && "opacity-60")}>
       {sortable ? (
         <div className="flex items-stretch">
           <button
