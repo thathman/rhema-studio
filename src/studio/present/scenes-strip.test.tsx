@@ -61,6 +61,22 @@ afterEach(() => {
 })
 
 describe("Present's scenes", () => {
+  it("refreshes only the chosen screen's preview and waits for an explicit Take", async () => {
+    original.takeScene(MAIN_OUTPUT_ID, camera.id)
+    original.takeScene("overflow", camera.id)
+    const before = structuredClone(useBroadcastStore.getState().outputs)
+    await act(async () => useBroadcastStore.getState().saveScene({ ...camera, background: "#123456" }))
+    await render()
+    await click(button("Refresh saved preview for Sanctuary"))
+    expect(take).not.toHaveBeenCalled()
+    expect(useBroadcastStore.getState().outputs).toEqual(before)
+    expect(el.textContent).toContain("Preview refreshed for Sanctuary. Take scene to apply it.")
+    await click(button("Take scene Camera with the Bible to Sanctuary"))
+    expect(take).toHaveBeenCalledExactlyOnceWith(MAIN_OUTPUT_ID, camera.id)
+    expect(output(MAIN_OUTPUT_ID).sceneSnapshot?.background).toBe("#123456")
+    expect(output("overflow")).toEqual(before.find((o) => o.id === "overflow"))
+  })
+
   it("stays out of the way until there is a congregation screen and a saved scene", async () => {
     useBroadcastStore.setState({ scenes: [] })
     await render()
@@ -143,7 +159,7 @@ describe("Present's scenes", () => {
     expect(take).not.toHaveBeenCalled()
     expect(release).not.toHaveBeenCalled()
     // The scene already on the screen cannot be taken again.
-    await act(async () => useBroadcastStore.setState({ outputs: outputs().map((o) => (o.id === MAIN_OUTPUT_ID ? { ...o, sceneId: "cam" } : o)) }))
+    await act(async () => original.takeScene(MAIN_OUTPUT_ID, camera.id))
     await click(sceneButton("Camera with the Bible"))
     expect(button("Take scene Camera with the Bible to Sanctuary").title).toBe("Sanctuary already shows Camera with the Bible")
   })
