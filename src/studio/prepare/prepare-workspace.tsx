@@ -17,7 +17,7 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, defaultPhases, interleave, newPhase, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { RULE_LABEL, interleave, newPhase, organiseHeadersIntoDefaultPhases, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
 import { CalendarDaysIcon, ClockIcon, EllipsisIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
@@ -33,7 +33,7 @@ type RundownView = "simple" | "grouped"
 const RUNDOWN_VIEW_KEY = "rhema.prepare.rundown-view.v1"
 
 function storedRundownView(): RundownView {
-  try { return window.localStorage.getItem(RUNDOWN_VIEW_KEY) === "simple" ? "simple" : "grouped" } catch { return "grouped" }
+  try { return typeof window !== "undefined" && window.localStorage.getItem(RUNDOWN_VIEW_KEY) === "simple" ? "simple" : "grouped" } catch { return "grouped" }
 }
 
 function todayInChurchZone(now = new Date()): { date: string; label: string } {
@@ -122,6 +122,18 @@ export function PrepareWorkspace() {
     setRundownView(view)
     try { window.localStorage.setItem(RUNDOWN_VIEW_KEY, view) } catch { /* This view choice is optional when storage is unavailable. */ }
   }
+  const focusPhase = (id: string) => {
+    const phase = useQueueStore.getState().headers.find((header) => header.id === id && header.type === "phase")
+    if (!phase) return
+    changeRundownView("grouped")
+    const scrollToPhase = () => {
+      const target = [...document.querySelectorAll<HTMLElement>("[aria-label]")]
+        .find((element) => element.getAttribute("aria-label") === `Phase: ${phase.name}`)
+      target?.scrollIntoView?.({ block: "start", behavior: "smooth" })
+    }
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(scrollToPhase)
+    else window.setTimeout(scrollToPhase, 0)
+  }
   const onEventCreated = async (id: string) => {
     setSelectedEventId(id)
     if (useServiceStore.getState().current || draftCreationInProgress.current) return
@@ -194,7 +206,7 @@ export function PrepareWorkspace() {
 
       <EventOverview />
 
-      {rundownView === "grouped" && <PhaseStrip />}
+      <PhaseStrip onSelectPhase={focusPhase} />
 
       <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel" data-tour="prepare-rundown">
@@ -207,9 +219,9 @@ export function PrepareWorkspace() {
               <RundownTools />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <div role="group" aria-label="Running order view" className="flex items-center rounded-md border border-border p-0.5">
-                <Button type="button" size="xs" variant={rundownView === "simple" ? "secondary" : "ghost"} aria-pressed={rundownView === "simple"} onClick={() => changeRundownView("simple")}>Simple list</Button>
-                <Button type="button" size="xs" variant={rundownView === "grouped" ? "secondary" : "ghost"} aria-pressed={rundownView === "grouped"} onClick={() => changeRundownView("grouped")}>Grouped by phase</Button>
+              <div role="group" aria-label="Running order view" className="flex items-center gap-1">
+                <Button type="button" size="sm" variant={rundownView === "simple" ? "secondary" : "ghost"} aria-pressed={rundownView === "simple"} onClick={() => changeRundownView("simple")} className="h-11 min-w-[5.5rem] px-2 text-[0.6875rem]">Simple list</Button>
+                <Button type="button" size="sm" variant={rundownView === "grouped" ? "secondary" : "ghost"} aria-pressed={rundownView === "grouped"} onClick={() => changeRundownView("grouped")} className="h-11 min-w-[5.5rem] px-2 text-[0.6875rem]">Grouped by phase</Button>
               </div>
               <div className="flex items-center gap-1.5">
                 {phaseCount > 0 && (
@@ -285,7 +297,7 @@ export function PrepareWorkspace() {
 const DOT: Record<PhaseRole, string> = { pre: "bg-tone-blue-foreground", warmup: "bg-tone-amber-foreground", main: "bg-tone-green-foreground", post: "bg-tone-neutral-foreground", custom: "bg-tone-accent-foreground" }
 
 /** The event's phases at a glance: how each runs and its minutes; a click finds it in the order of service. */
-function PhaseStrip() {
+function PhaseStrip({ onSelectPhase }: { onSelectPhase: (phaseId: string) => void }) {
   const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
   const phases = headers.filter((h) => h.type === "phase")
@@ -298,7 +310,7 @@ function PhaseStrip() {
           key={p.id}
           type="button"
           role="listitem"
-          onClick={() => document.querySelector(`[aria-label="Phase: ${CSS.escape(p.name)}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" })}
+          onClick={() => onSelectPhase(p.id)}
           className="flex min-h-[5.25rem] min-w-0 items-start gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-left [@media(max-height:860px)]:min-h-0 [@media(max-height:860px)]:items-center [@media(max-height:860px)]:py-2 outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <span aria-hidden className={cn("mt-0.5 size-4 shrink-0 rounded-full [@media(max-height:860px)]:mt-0 [@media(max-height:860px)]:size-3", DOT[p.role ?? "custom"])} />
@@ -358,7 +370,7 @@ function RundownFooter() {
                 toast.info("Phases are already set", { description: "Use the running order view buttons to show or hide them." })
                 return
               }
-              queue.setHeaders([...defaultPhases(queue.items.length), ...queue.headers])
+              queue.setHeaders(organiseHeadersIntoDefaultPhases(queue.headers, queue.items.length))
               setOrganisePhasesOpen(false)
               toast.success("Phases added", { description: "Your items are in Main service. Use Undo to restore the previous rundown." })
             }}>Add phases</Button>

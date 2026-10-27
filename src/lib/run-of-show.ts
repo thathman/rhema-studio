@@ -339,6 +339,15 @@ export function defaultPhases(itemCount: number, newId: () => string = () => cry
   ]
 }
 
+/** Keep existing event/group headers inside Main service when adding phases. */
+export function organiseHeadersIntoDefaultPhases(headers: OutlineHeader[], itemCount: number, newId?: () => string): OutlineHeader[] {
+  const phases = defaultPhases(itemCount, newId)
+  const postIndex = phases.findIndex((phase) => phase.role === "post")
+  return postIndex < 0
+    ? [...phases, ...headers]
+    : [...phases.slice(0, postIndex), ...headers, ...phases.slice(postIndex)]
+}
+
 /** How a phase runs, for its chip and strip. */
 export const RULE_LABEL: Record<PhaseRule, { chip: string; says: string }> = {
   loop: { chip: "Loop", says: "Repeats until stopped" },

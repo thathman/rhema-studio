@@ -520,6 +520,52 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
 
+  it("keeps phase context visible in Simple list and opens a phase in Grouped by phase", async () => {
+    useQueueStore.setState({
+      items: [slide("Welcome")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "post", type: "phase", name: "Post-service", at: 1, rule: "loop", role: "post" },
+      ],
+      activeIndex: null,
+    })
+    const el = await renderPrepare()
+    const simple = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Simple list")!
+    expect(simple.classList.contains("h-11")).toBe(true)
+    await act(async () => simple.click())
+
+    expect(el.querySelector('[aria-label="Phases"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).toBeNull()
+    const phaseOverview = el.querySelector<HTMLButtonElement>('[aria-label="Phases"] button[role="listitem"]')
+    expect(phaseOverview).not.toBeNull()
+    await act(async () => phaseOverview!.click())
+
+    expect(el.querySelector('[aria-label="Phase: Main service"]')).not.toBeNull()
+    expect([...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Grouped by phase")?.getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("places an existing zero-moment event inside Main service when organising an empty rundown", async () => {
+    const event = { id: "prayer", type: "group" as const, name: "Prayer", at: 0, event: { schema_version: 1 as const, duration_minutes: 10 } }
+    useQueueStore.setState({ items: [], headers: [event], activeIndex: null })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[title="Add phase structure around the current running order"]')!.click())
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    await act(async () => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add phases")!.click())
+
+    const headers = useQueueStore.getState().headers
+    const mainIndex = headers.findIndex((header) => header.type === "phase" && header.role === "main")
+    const eventIndex = headers.findIndex((header) => header.id === event.id)
+    const postIndex = headers.findIndex((header) => header.type === "phase" && header.role === "post")
+    expect(mainIndex).toBeGreaterThanOrEqual(0)
+    expect(eventIndex).toBeGreaterThan(mainIndex)
+    expect(postIndex).toBeGreaterThan(eventIndex)
+    expect(headers[eventIndex]).toEqual(event)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
   it("confirms phase creation, preserves the plan and Live, and lets Undo restore the flat list", async () => {
     const items = [slide("Welcome"), slide("Sermon"), slide("Closing")]
     useQueueStore.setState({ items, headers: [{ id: "sermon", type: "group", name: "Sermon", at: 1 }], activeIndex: 1 })
