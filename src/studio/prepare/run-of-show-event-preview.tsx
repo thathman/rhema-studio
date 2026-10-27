@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { drawScene } from "@/lib/scene-renderer"
 import { cameraLabelOf } from "@/lib/cameras"
 import { feedFrame } from "@/lib/live-sources"
 import { overlayFor } from "@/lib/lower-third-style"
 import { sceneClock, sceneFrame } from "@/lib/scenes"
-import { takeSteps } from "@/lib/item-intent"
+import { parseTakeStep, type ParsedTakeStep } from "@/lib/item-intent"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import { tickerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
@@ -20,28 +20,32 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
   const scenes = useBroadcastStore((state) => state.scenes)
   const [momentId, setMomentId] = useState(moments[0]?.id ?? "")
   const [outputId, setOutputId] = useState(() => {
-    const target = moments[0] ? takeSteps(moments[0]).find((step) => step.kind === "scene") : undefined
-    return target?.kind === "scene" && outputs.some((output) => output.id === target.outputId) ? target.outputId! : outputs[0]?.id ?? ""
+    const steps = moments[0] ? plannedSceneSteps(moments[0]) : []
+    const scoped = steps.find((step) => step.outputId && outputs.some((output) => output.id === step.outputId))
+    return scoped?.outputId ?? outputs[0]?.id ?? ""
   })
   const moment = moments.find((item) => item.id === momentId) ?? moments[0]
   const output = outputs.find((item) => item.id === outputId) ?? outputs[0]
-  const plannedScene = moment ? takeSteps(moment).find((step) => step.kind === "scene") : undefined
+  const sceneSelection = moment && output ? sceneForOutput(moment, output) : null
+  const sceneId = sceneSelection?.sceneId
+  const scene = scenes.find((candidate) => candidate.id === sceneId)
+  const lastPreviewedMoment = useRef<QueueItem | null>(null)
 
-  useEffect(() => {
-    if (moment) presentActions.previewItem(moment)
-  }, [moment])
+  const previewMoment = useCallback((item: QueueItem) => {
+    if (lastPreviewedMoment.current === item) return
+    lastPreviewedMoment.current = item
+    presentActions.previewItem(item)
+  }, [])
+
+  // Set the operator's private Preview before the first paint; changing moments does this in the
+  // select handler below so the content card never flashes the previous item.
+  useLayoutEffect(() => {
+    if (moment) previewMoment(moment)
+  }, [moment, previewMoment])
 
   if (!moments.length) {
     return <p className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Add a moment to {eventTitle} before previewing this event.</p>
   }
-
-  const sceneAppliesToOutput = !plannedScene || plannedScene.kind !== "scene" || !plannedScene.outputId || plannedScene.outputId === output?.id
-  const sceneId = output && (sceneAppliesToOutput && plannedScene?.kind === "scene"
-    ? plannedScene.sceneId
-    : sceneAppliesToOutput && moment?.scene_id
-      ? moment.scene_id
-      : output.sceneId)
-  const scene = scenes.find((candidate) => candidate.id === sceneId)
 
   return (
     <div className="space-y-4" aria-label="Event preview content">
@@ -60,9 +64,13 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
               value={moment?.id ?? ""}
               onChange={(event) => {
                 const next = moments.find((item) => item.id === event.currentTarget.value)
+                if (next) previewMoment(next)
                 setMomentId(event.currentTarget.value)
-                const target = next ? takeSteps(next).find((step) => step.kind === "scene") : undefined
-                if (target?.kind === "scene" && target.outputId && outputs.some((screen) => screen.id === target.outputId)) setOutputId(target.outputId)
+                const nextSteps = next ? plannedSceneSteps(next) : []
+                if (!nextSteps.some((step) => step.outputId === null)) {
+                  const scoped = nextSteps.find((step) => step.outputId && outputs.some((screen) => screen.id === step.outputId))
+                  if (scoped?.outputId) setOutputId(scoped.outputId)
+                }
               }}
             >
               {moments.map((item) => <option key={item.id} value={item.id}>{item.reference}</option>)}
@@ -82,17 +90,18 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
           </label>
         </div>
 
-        {plannedScene?.kind === "scene" && plannedScene.outputId && plannedScene.outputId !== output?.id && (
-          <p className="text-xs text-muted-foreground">This moment's scene Take is assigned to another audience screen. Showing this screen's current scene.</p>
+        {sceneSelection?.source === "current" && (
+          <p className="text-xs text-muted-foreground">This screen keeps its current scene for this moment.</p>
         )}
         {scene && output ? (
           <div className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-xs font-semibold">{scene.name} · {output.name}</p>
-              {!plannedScene && !moment?.scene_id && <span className="text-[0.6875rem] text-muted-foreground">Current scene</span>}
+              {sceneSelection?.source === "current" && <span className="text-[0.6875rem] text-muted-foreground">Current scene</span>}
+              {sceneSelection?.source === "item" && <span className="text-[0.6875rem] text-muted-foreground">Item look</span>}
             </div>
             <EventSceneCanvas scene={scene} output={output} />
-            <p className="text-xs text-muted-foreground">Live-source layers show the values active now. The planned moment's content is previewed below; neither preview changes an audience output.</p>
+            <p className="text-xs text-muted-foreground">Congregation preview only. Live-source layers show values active now. OBS stays independent in Production, and stage screens keep their private layouts. Neither preview changes an audience output.</p>
           </div>
         ) : output ? (
           <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">
@@ -111,6 +120,27 @@ export function RunOfShowEventPreview({ eventTitle, moments }: { eventTitle: str
       </section>
     </div>
   )
+}
+
+function plannedSceneSteps(item: QueueItem): Extract<ParsedTakeStep, { kind: "scene" }>[] {
+  // Iterate the saved field directly: takeSteps canonicalizes scene actions, while newer saved
+  // items may contain a shared scene and multiple output-specific overrides.
+  if (!Array.isArray(item.on_take)) return []
+  return item.on_take.flatMap((raw) => {
+    if (typeof raw !== "string") return []
+    const step = parseTakeStep(raw)
+    return step?.kind === "scene" ? [step] : []
+  })
+}
+
+function sceneForOutput(item: QueueItem, output: BroadcastOutput): { sceneId: string | undefined; source: "screen" | "shared" | "item" | "current" } {
+  const steps = plannedSceneSteps(item)
+  const screenScene = steps.find((step) => step.outputId === output.id)
+  if (screenScene) return { sceneId: screenScene.sceneId, source: "screen" }
+  const sharedScene = steps.find((step) => step.outputId === null)
+  if (sharedScene) return { sceneId: sharedScene.sceneId, source: "shared" }
+  if (item.scene_id) return { sceneId: item.scene_id, source: "item" }
+  return { sceneId: output.sceneId, source: "current" }
 }
 
 function EventSceneCanvas({ scene, output }: { scene: Scene; output: BroadcastOutput }) {
