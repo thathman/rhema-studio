@@ -54,6 +54,7 @@ export function ServiceBar() {
   const current = useServiceStore((s) => s.current)
   const dirty = useServiceStore((s) => s.dirty)
   const approval = approvalState(useServiceStore((s) => s.current))
+  const approvedDesignsError = useServiceStore((s) => s.approvedDesignsError)
   const approve = async () => {
     const items = useQueueStore.getState().items
     // Fresh answers, not cached ones: a song imported since, or a file removed since.
@@ -420,11 +421,11 @@ export function ServiceBar() {
           <Button
             size="sm"
             variant={approval === "approved" ? "outline" : "secondary"}
-            disabled={dirty || saving || approval === "approved"}
-            title={dirty ? "Save first; approval covers what is saved" : approvalLabel(current)}
+            disabled={dirty || saving}
+            title={dirty ? "Save first; approval covers what is saved" : approvedDesignsError ?? `${approvalLabel(current)}. Pin saved content, scenes, looks and media; active outputs stay unchanged.`}
             onClick={() => void approve()}
           >
-            <BadgeCheckIcon /> {approval === "approved" ? "Approved" : approval === "changed" ? "Approve again" : "Approve"}
+            <BadgeCheckIcon /> {approval === "approved" ? "Refresh approval" : approval === "changed" ? "Approve again" : "Approve"}
           </Button>
 
           {conflict && (

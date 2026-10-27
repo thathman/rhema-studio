@@ -129,6 +129,27 @@ pub fn content_approve_program(state: State<'_, ContentState>, id: String, expec
     with_db(&state, |db| db.approve_program(&id, expected_revision))
 }
 
+/// Approve a service and the scene/look revisions captured with that exact saved version.
+#[tauri::command]
+pub fn content_approve_program_with_designs(
+    state: State<'_, ContentState>,
+    id: String,
+    expected_revision: i64,
+    designs: rhema_content::ApprovedDesignSnapshot,
+) -> CmdResult<Program> {
+    with_db(&state, |db| db.approve_program_with_designs(&id, expected_revision, &designs))
+}
+
+/// Read the design manifest for an exact approved service revision; older approvals return none.
+#[tauri::command]
+pub fn content_approved_designs(
+    state: State<'_, ContentState>,
+    program_id: String,
+    revision: i64,
+) -> CmdResult<Option<rhema_content::ApprovedDesignSnapshot>> {
+    with_db(&state, |db| db.approved_designs(&program_id, revision))
+}
+
 /// The words of each song as the service was approved (#193), for Present to keep showing them.
 #[tauri::command]
 pub fn content_approved_songs(state: State<'_, ContentState>, program_id: String) -> CmdResult<Vec<rhema_content::SongWithSections>> {

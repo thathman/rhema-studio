@@ -8,7 +8,7 @@ import { runStateNow, timingInputNow } from "@/stores/timing-input"
 import { useTimingTrust } from "@/stores/timing-trust-store"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { cameraSourceId, lowerThirdWords, tickerWords, timerWords } from "@/lib/live-sources"
-import { sceneForOutput } from "@/lib/scenes"
+import { sceneForOutput, sceneNeedsRefresh } from "@/lib/scenes"
 import { cameraSending, useRouterHealth, whepUrl } from "@/lib/cameras"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useJournalStore } from "@/stores/journal-store"
@@ -83,7 +83,7 @@ export interface LiveStateV1 {
    * `revisions` ("scene:<id>"). Both absent from older hosts.
    */
   scenes: ({ id: string; name: string } & Partial<Omit<DeskScene, "id" | "name">>)[]
-  outputs: { id: string; name: string; sceneId: string | null; sceneName?: string; sceneNeedsUpdate?: boolean; sceneRevision?: number; sceneBy?: string }[]
+  outputs: { id: string; name: string; sceneId: string | null; sceneName?: string; sceneNeedsUpdate?: boolean; sceneRevision?: number; sceneBy?: string; sceneAt?: number; sceneLiveDesignRevision?: number; sceneLiveDesignBy?: string | null; sceneSavedRevision?: number; sceneSavedBy?: string | null; sceneApprovedServiceId?: string; sceneApprovedRevision?: number; sceneApprovedAppearanceComplete?: boolean; sceneApprovedAt?: string | null; sceneApprovedBy?: string | null }[]
   /**
    * Production notices (Rhema Comms), newest first. The host's server passes each paired desk only
    * those for it (everyone, its role, its name, or sent by it); the main desk has them all.
@@ -261,9 +261,20 @@ export function buildLiveState(now = Date.now()): LiveStateV1 {
     scenes: (() => { const on = scenesOnScreen(b); return b.scenes.map((s) => sceneForDesk(s, on.has(s.id))) })(),
     outputs: b.outputs.filter((o) => (o.role ?? "congregation") === "congregation").map((o) => {
       const take = b.sceneTakes[o.id]
-      const saved = b.scenes.find((s) => s.id === o.sceneId)
+      const saved = b.scenes.find((scene) => scene.id === o.sceneId)
       const showing = sceneForOutput(o, b.scenes)
-      return { id: o.id, name: o.name, sceneId: o.sceneId ?? null, ...(showing ? { sceneName: showing.name } : {}), ...(o.sceneSnapshot && saved && o.sceneSnapshot.id === saved.id && o.sceneSnapshot.updatedAt !== saved.updatedAt ? { sceneNeedsUpdate: true } : {}), ...(take ? { sceneRevision: take.revision, ...(take.by ? { sceneBy: take.by } : {}) } : {}) }
+      const changed = sceneNeedsRefresh(o, b.scenes, b.themes, useSettingsStore.getState().brandKit.logoUrl)
+      return {
+        id: o.id,
+        name: o.name,
+        sceneId: o.sceneId ?? null,
+        ...(showing ? { sceneName: showing.name } : {}),
+        ...(changed ? { sceneNeedsUpdate: true } : {}),
+        ...(take ? { sceneRevision: take.revision, sceneAt: take.at, ...(take.by ? { sceneBy: take.by } : {}) } : {}),
+        ...(showing ? { sceneLiveDesignRevision: showing.updatedAt, sceneLiveDesignBy: showing.updatedBy } : {}),
+        ...(saved ? { sceneSavedRevision: saved.updatedAt, sceneSavedBy: saved.updatedBy } : {}),
+        ...(o.sceneAppearanceSnapshot?.approved ? { sceneApprovedServiceId: o.sceneAppearanceSnapshot.approved.programId, sceneApprovedRevision: o.sceneAppearanceSnapshot.approved.revision, sceneApprovedAppearanceComplete: o.sceneAppearanceSnapshot.approved.appearanceComplete !== false, sceneApprovedAt: o.sceneAppearanceSnapshot.approved.approvedAt, sceneApprovedBy: o.sceneAppearanceSnapshot.approved.approvedBy } : {}),
+      }
     }),
     notices: useNotices.getState().notices.slice(0, 50),
     crew: useSettingsStore.getState().remoteDevices.map((d) => d.name),

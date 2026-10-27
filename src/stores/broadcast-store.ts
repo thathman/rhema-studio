@@ -29,10 +29,10 @@ import { DEFAULT_TICKER_STYLE, normalizePresets, normalizeTickerStyle } from "@/
 import { useMediaStore } from "@/stores/media-store"
 import { feedLost, overscanPct } from "@/lib/feed-receivers"
 import { cameraSourceId, feedFrame, followsLowerThird, followsOnlyOverlays, followsTicker, isStateSource, sourceOf, type AnySourceId, type LiveSources, type StateSource, type StateSourceId, type StateSources } from "@/lib/live-sources"
-import { normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneOwns } from "@/lib/scenes"
+import { captureSceneAppearance, normalizeScene, presetFromScene, sceneClock, sceneForOutput, sceneFrame, sceneOwns } from "@/lib/scenes"
 import { useSettingsStore } from "@/stores/settings-store"
 import { cameraDownState, cameraLabelOf, useRouterHealth } from "@/lib/cameras"
-import type { Scene, SceneFrame, SceneLayerKind } from "@/types"
+import type { Scene, SceneAppearanceSnapshot, SceneFrame, SceneLayerKind } from "@/types"
 import type { CountdownTargets } from "@/lib/countdown"
 import { zoneCity } from "@/lib/stage-clock"
 import { countdownFrame, countsToTarget, DEFAULT_COUNTDOWN_LOOK, lookCounting, NO_COUNTDOWN_SOURCES, normalizeCountdownLook, type CountdownSources } from "@/lib/countdown-display"
@@ -64,17 +64,18 @@ export interface RehearsalReturn extends ProgramSnapshot {
   outputScenes: Record<string, string>
   /** The exact scene revision each public output had when rehearsal began. */
   outputSceneSnapshots: Record<string, Scene>
+  outputSceneAppearances: Record<string, SceneAppearanceSnapshot>
   /** The scene each output's Restore offered. */
   sceneReturn: Record<string, string>
 }
 
 /** The outputs as the real screens have them: in rehearsal, each with the scene it had before (what is saved). */
 export function outputsForScreens(s: { rehearsal: boolean; rehearsalReturn: RehearsalReturn | null; outputs: BroadcastOutput[] }): BroadcastOutput[] {
-  return s.rehearsal && s.rehearsalReturn ? withScenes(s.outputs, s.rehearsalReturn.outputScenes, s.rehearsalReturn.outputSceneSnapshots) : s.outputs
+  return s.rehearsal && s.rehearsalReturn ? withScenes(s.outputs, s.rehearsalReturn.outputScenes, s.rehearsalReturn.outputSceneSnapshots, s.rehearsalReturn.outputSceneAppearances) : s.outputs
 }
 
 /** The outputs with these scenes on them (by output id); the rest back on their own feed. */
-function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>, snapshots?: Record<string, Scene>): BroadcastOutput[] {
+function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>, snapshots?: Record<string, Scene>, appearances?: Record<string, SceneAppearanceSnapshot>): BroadcastOutput[] {
   return outputs.map((o) => {
     const sceneId = scenes[o.id]
     const next: BroadcastOutput = { ...o }
@@ -83,6 +84,9 @@ function withScenes(outputs: BroadcastOutput[], scenes: Record<string, string>, 
     const snapshot = snapshots?.[o.id] ?? (o.sceneSnapshot?.id === sceneId ? o.sceneSnapshot : undefined)
     if (snapshot) next.sceneSnapshot = snapshot
     else delete next.sceneSnapshot
+    const appearance = appearances?.[o.id]
+    if (appearance && sceneId) next.sceneAppearanceSnapshot = appearance
+    else delete next.sceneAppearanceSnapshot
     return next
   })
 }
@@ -183,6 +187,8 @@ interface BroadcastState {
    * rehearsal ends. `by`: who took it (default: see currentActor).
    */
   takeScene: (outputId: string, sceneId: string, by?: string) => void
+  /** Take an immutable scene/look revision stored with an approved service revision. */
+  takeSceneRevision: (outputId: string, scene: Scene, appearance: SceneAppearanceSnapshot, programId: string, revision: number, by?: string, appearanceComplete?: boolean, approval?: { approvedAt?: string | null; approvedBy?: string | null }) => void
   /** Back to the output's own feed, full frame; Restore takes the scene again. */
   releaseScene: (outputId: string, by?: string) => void
   /** The scene an output last showed, for Restore. Session state. */
@@ -554,7 +560,10 @@ function tickerKey(t: Ticker | null): number {
 function resyncThemeOutputs(themeId: string | null): void {
   if (!themeId) return
   const s = useBroadcastStore.getState()
-  for (const o of s.outputs) if (themeIdsOf(o).includes(themeId)) s.syncBroadcastOutputFor(o.id)
+  for (const o of s.outputs) {
+    const scene = sceneForOutput(o, s.scenes)
+    if (themeIdsOf(o).includes(themeId) || scene?.layers.some((layer) => layer.themeId === themeId)) s.syncBroadcastOutputFor(o.id)
+  }
 }
 
 let activations = 0
@@ -986,7 +995,14 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
       const owns = sceneOwns(scene)
       const liveOverlay = overlayFor(s.lowerThird, shown ? forOutputLanguage(shown, output.language) : null)
       const liveTicker = tickerForScreens(s)
-      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, output, scene)
+      const draft = s.liveDesign && s.draftTheme && scene.layers.some((layer) =>
+        layer.themeId === s.draftTheme!.id ||
+        (!layer.themeId && ["feed", "clock", "camera", "ticker", "lowerThird"].includes(layer.kind) && themeIdsOf(output).includes(s.draftTheme!.id)),
+      ) ? s.draftTheme : null
+      const sceneOutput = draft
+        ? { ...output, sceneAppearanceSnapshot: { themes: { ...(output.sceneAppearanceSnapshot?.themes ?? {}), [draft.id]: draft }, logoUrl: output.sceneAppearanceSnapshot ? output.sceneAppearanceSnapshot.logoUrl : useSettingsStore.getState().brandKit.logoUrl } }
+        : output
+      const frame = sceneFrame({ ...s, clock: sceneClock(useTimerStore.getState().timer, monotonicNow(), Date.now()), ticker: liveTicker, overlay: liveOverlay, logoUrl: useSettingsStore.getState().brandKit.logoUrl, cameraLabel: (url) => cameraLabelOf(url, useSettingsStore.getState().cameras), cameraBackup, cameraDown }, sceneOutput, scene)
       const overlay = followsLowerThird(output) && !owns.lowerThird ? liveOverlay : null
       const ticker = followsTicker(output) && !owns.ticker ? liveTicker : null
       recordFrame(outputId, { theme, verse: null, overlay, ticker, scene: frame })
@@ -1196,19 +1212,20 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         const scene = sceneForOutput(o, s.scenes)
         return scene ? [[o.id, scene]] : []
       }))
-      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, sceneReturn } })
+      const outputSceneAppearances = Object.fromEntries(s.outputs.flatMap((o) => o.sceneAppearanceSnapshot ? [[o.id, o.sceneAppearanceSnapshot]] : []))
+      set({ rehearsal, rehearsalReturn: { isLive, liveVerse, liveSourceVerse, liveItem, liveSlide, liveItemId, heldLive, cleared, activeIndex: useQueueStore.getState().activeIndex, lowerThird, ticker, stageMessage, timer: useTimerStore.getState().timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn } })
       return
     }
     const back = s.rehearsalReturn
     if (back) {
-      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, sceneReturn, ...program } = back
+      const { activeIndex, lowerThird, ticker, stageMessage, timer, outputScenes, outputSceneSnapshots, outputSceneAppearances, sceneReturn, ...program } = back
       // The lower third, ticker, stage message, timer and each screen's scene always come back
       // (a scene deleted meanwhile leaves its screen on its own feed); the program too unless the
       // operator chose Show this live.
       useTimerStore.setState({ timer })
       if (!opts.keepRehearsed) useQueueStore.setState({ activeIndex })
       const kept = Object.fromEntries(Object.entries(outputScenes).filter(([, id]) => s.scenes.some((x) => x.id === id)))
-      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept, outputSceneSnapshots), sceneReturn, rehearsal, rehearsalReturn: null })
+      set({ ...(opts.keepRehearsed ? {} : program), lowerThird, ticker, stageMessage, outputs: withScenes(s.outputs, kept, outputSceneSnapshots, outputSceneAppearances), sceneReturn, rehearsal, rehearsalReturn: null })
     } else {
       set({ rehearsal, rehearsalReturn: null })
     }
@@ -1376,7 +1393,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
   saveScene: (scene) => {
     const s = get()
     const at = s.scenes.findIndex((x) => x.id === scene.id)
-    const next = { ...scene, updatedAt: Math.max(Date.now(), (s.scenes[at]?.updatedAt ?? 0) + 1) }
+    const next = { ...scene, updatedAt: Math.max(Date.now(), (s.scenes[at]?.updatedAt ?? 0) + 1), updatedBy: currentActor() ?? null }
     set({ scenes: at < 0 ? [...s.scenes, next] : s.scenes.map((x, i) => (i === at ? next : x)) })
   },
   deleteScene: (id) => {
@@ -1384,10 +1401,22 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
     for (const o of get().outputs) if (o.sceneId === id) get().updateOutput(o.id, { sceneId: undefined })
   },
   takeScene: (outputId, sceneId, by = currentActor()) => {
-    const scene = get().scenes.find((x) => x.id === sceneId)
-    if (!scene) return
-    set({ sceneReturn: { ...get().sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
-    get().updateOutput(outputId, { sceneId, sceneSnapshot: normalizeScene(scene) ?? scene })
+    const s = get()
+    const scene = s.scenes.find((x) => x.id === sceneId)
+    const output = s.outputs.find((x) => x.id === outputId)
+    if (!scene || !output || (output.role ?? "congregation") !== "congregation") return
+    const appearance = captureSceneAppearance(scene, output, s.themes, useSettingsStore.getState().brandKit.logoUrl)
+    set({ sceneReturn: { ...s.sceneReturn, [outputId]: sceneId }, ...sceneTake(outputId, sceneId, by) })
+    get().updateOutput(outputId, { sceneId, sceneSnapshot: structuredClone(normalizeScene(scene) ?? scene), sceneAppearanceSnapshot: appearance })
+  },
+  takeSceneRevision: (outputId, scene, appearance, programId, revision, by = currentActor(), appearanceComplete = true, approval = {}) => {
+    const output = get().outputs.find((o) => o.id === outputId)
+    if (!programId.trim() || !Number.isSafeInteger(revision) || revision < 0 || !output || (output.role ?? "congregation") !== "congregation") return
+    const snapshot = normalizeScene(scene)
+    if (!snapshot) return
+    const appearanceSnapshot = structuredClone({ ...appearance, approved: { programId, revision, appearanceComplete, ...approval } })
+    set({ sceneReturn: { ...get().sceneReturn, [outputId]: scene.id }, ...sceneTake(outputId, scene.id, by) })
+    get().updateOutput(outputId, { sceneId: scene.id, sceneSnapshot: structuredClone(snapshot), sceneAppearanceSnapshot: appearanceSnapshot })
   },
   releaseScene: (outputId, by = currentActor()) => {
     if (!get().outputs.find((o) => o.id === outputId)?.sceneId) return

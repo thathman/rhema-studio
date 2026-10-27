@@ -1,4 +1,4 @@
-import type { ContentType, FeedSourceKind } from "./broadcast"
+import type { BroadcastTheme, ContentType, FeedSourceKind } from "./broadcast"
 import type { CountdownTo, Scene } from "./scene"
 import type { NdiAlphaMode, NdiFrameRate, NdiResolution } from "./ndi"
 
@@ -316,6 +316,15 @@ export interface BroadcastOutputNdiSettings {
   alphaMode: NdiAlphaMode
 }
 
+/** Looks and church logo captured with a scene Take. Live source content can still follow its feed. */
+export interface SceneAppearanceSnapshot {
+  themes: Record<string, BroadcastTheme>
+  /** Explicit null means the scene was taken while no church logo was set. */
+  logoUrl: string | null
+  /** Present when this output is using a scene/look captured with a particular service approval. */
+  approved?: { programId: string; revision: number; appearanceComplete?: boolean; approvedAt?: string | null; approvedBy?: string | null }
+}
+
 /**
  * Persisted configuration for one broadcast output. Whether the output is
  * currently on air (window open / NDI sender running) is runtime state,
@@ -350,6 +359,8 @@ export interface BroadcastOutput {
   sceneId?: string
   /** Immutable layout revision taken to this output; later edits to the saved scene do not change the program. */
   sceneSnapshot?: Scene
+  /** Immutable reusable looks and Brand Kit logo taken with the scene. */
+  sceneAppearanceSnapshot?: SceneAppearanceSnapshot
   /** Browser feeds: the secret in the feed's link (renewing it closes the old link). */
   feedToken?: string
   signage?: SignageSettings
