@@ -15,13 +15,13 @@ import { presentActions } from "@/studio/present-actions"
 /**
  * Add one item to the service; successful insertion selects it in Prepare.
  */
-export function AddItems({ className, onSelectAddedItem }: { className?: string; onSelectAddedItem?: () => void }) {
+export function AddItems({ className, onSelectAddedItem }: { className?: string; onSelectAddedItem?: (id: string) => void }) {
   const open = useAddDialog((s) => s.open)
   const target = useQueueStore((s) => s.headers.find((h) => h.id === s.addTarget)?.name ?? null)
   const added = (id: string) => {
     const item = useQueueStore.getState().items.find((candidate) => candidate.id === id)
     if (!item) return
-    onSelectAddedItem?.()
+    onSelectAddedItem?.(id)
     useAddDialog.getState().focusAddedItem(id)
     presentActions.previewItem(item)
     useAddDialog.getState().close()

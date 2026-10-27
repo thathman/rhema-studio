@@ -544,6 +544,52 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
   })
 
+  it("reveals and focuses a successful Add inside collapsed sections", async () => {
+    useQueueStore.setState({
+      items: [slide("Existing moment")],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1 } },
+        { id: "scripture", type: "group", name: "Scripture moments", at: 0 },
+      ],
+      activeIndex: null,
+    })
+    useServiceStore.setState({
+      current: { id: "existing-service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 },
+      dirty: false,
+      saving: false,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const liveBefore = useBroadcastStore.getState()
+    const el = await renderPrepare()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Hide Scripture moments"]')!.click())
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Hide Sermon"]')!.click())
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Hide Main service"]')!.click())
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(0)
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add to Main service"]')!.click())
+    const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    const slidesTab = [...dialog.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((button) => button.textContent?.trim() === "Slides")!
+    await act(async () => { slidesTab.focus(); slidesTab.click() })
+    const title = dialog.querySelector<HTMLInputElement>('[aria-label="Slide title"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "Added moment")
+      title.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!.click())
+
+    const added = useQueueStore.getState().items.at(-1)!
+    const row = el.querySelector<HTMLElement>(`[data-rundown-item-id="${added.id}"]`)
+    expect(row).not.toBeNull()
+    expect(el.querySelector('button[aria-label="Hide Main service"]')).not.toBeNull()
+    expect(el.querySelector('button[aria-label="Hide Sermon"]')).not.toBeNull()
+    expect(el.querySelector('button[aria-label="Hide Scripture moments"]')).not.toBeNull()
+    expect(document.activeElement).toBe(row)
+    expect(useAddDialog.getState().open).toBe(false)
+    expect(useBroadcastStore.getState()).toEqual(liveBefore)
+  })
+
   it("adds an event at the end of its chosen phase before the next phase boundary", async () => {
     useQueueStore.setState({
       items: [slide("Opening"), slide("Sermon"), slide("Closing")],

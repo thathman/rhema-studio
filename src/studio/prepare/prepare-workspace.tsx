@@ -15,7 +15,7 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, defaultPhases, newPhase, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { RULE_LABEL, defaultPhases, interleave, newPhase, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
 import { CalendarDaysIcon, ClockIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
@@ -61,6 +61,7 @@ export function PrepareWorkspace() {
     ? `${eventCount} ${eventCount === 1 ? "event" : "events"}${looseItemCount > 0 ? ` · ${looseItemCount} ${looseItemCount === 1 ? "item" : "items"}` : ""}`
     : `${count} ${count === 1 ? "item" : "items"}`
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set())
   const selectedEvent = headers.find((header) => header.id === selectedEventId && header.event)
   const selectedItem = useSelectedItem()
   const [rundownView, setRundownView] = useState<RundownView>(storedRundownView)
@@ -78,6 +79,41 @@ export function PrepareWorkspace() {
     : selectedItem
       ? { kind: "row", itemId: selectedItem.item.id }
       : { kind: "end" }
+  const selectAddedItem = (itemId: string) => {
+    setSelectedEventId(null)
+    const queue = useQueueStore.getState()
+    const selectedIndex = queue.items.findIndex((item) => item.id === itemId)
+    if (selectedIndex < 0) return
+    let phaseId: string | null = null
+    let eventId: string | null = null
+    let groupId: string | null = null
+    const ancestors: string[] = []
+    for (const row of interleave(queue.items, queue.headers)) {
+      if ("header" in row) {
+        if (row.header.type === "phase") { phaseId = row.header.id; eventId = null; groupId = null }
+        else if (row.header.event) { eventId = row.header.id; groupId = null }
+        else groupId = row.header.id
+      } else if (row.index === selectedIndex) {
+        if (phaseId) ancestors.push(phaseId)
+        if (eventId) ancestors.push(eventId)
+        if (groupId) ancestors.push(groupId)
+        break
+      }
+    }
+    if (ancestors.some((id) => collapsedSections.has(id))) {
+      setCollapsedSections((current) => {
+        const next = new Set(current)
+        ancestors.forEach((id) => next.delete(id))
+        return next.size === current.size ? current : next
+      })
+    }
+  }
+  const toggleCollapsedSection = (id: string) => setCollapsedSections((current) => {
+    const next = new Set(current)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
   const changeRundownView = (view: RundownView) => {
     setRundownView(view)
     try { window.localStorage.setItem(RUNDOWN_VIEW_KEY, view) } catch { /* This view choice is optional when storage is unavailable. */ }
@@ -132,7 +168,7 @@ export function PrepareWorkspace() {
             </PopoverContent>
           </Popover>
           <AiDrafts />
-          <AddItems onSelectAddedItem={() => setSelectedEventId(null)} />
+          <AddItems onSelectAddedItem={selectAddedItem} />
           <Button
             variant="outline"
             className="hidden max-[1280px]:inline-flex"
@@ -175,7 +211,7 @@ export function PrepareWorkspace() {
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <RundownList mode="prepare" selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} groupedByPhase={rundownView === "grouped"} onEventCreated={onEventCreated} eventsDisabled={creatingDraft} />
+            <RundownList mode="prepare" selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} groupedByPhase={rundownView === "grouped"} onEventCreated={onEventCreated} eventsDisabled={creatingDraft} collapsedIds={collapsedSections} onToggleSection={toggleCollapsedSection} />
           </div>
           <RundownFooter />
         </section>

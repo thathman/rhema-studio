@@ -37,7 +37,7 @@ type DropCue = { targetId: string; placement: RundownDropPlacement | "inside" }
  * In `prepare` mode rows can be dragged by their handle to reorder; the
  * arrow buttons do the same from the keyboard.
  */
-export function RundownList({ mode, selectedEventId = null, onSelectEvent, groupedByPhase = true, onEventCreated, eventsDisabled = false }: { mode: "prepare" | "present"; selectedEventId?: string | null; onSelectEvent?: (id: string | null) => void; groupedByPhase?: boolean; onEventCreated?: (id: string) => void; eventsDisabled?: boolean }) {
+export function RundownList({ mode, selectedEventId = null, onSelectEvent, groupedByPhase = true, onEventCreated, eventsDisabled = false, collapsedIds, onToggleSection }: { mode: "prepare" | "present"; selectedEventId?: string | null; onSelectEvent?: (id: string | null) => void; groupedByPhase?: boolean; onEventCreated?: (id: string) => void; eventsDisabled?: boolean; collapsedIds?: Set<string>; onToggleSection?: (id: string) => void }) {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const selected = useBibleStore((s) => s.selectedVerse)
@@ -50,10 +50,14 @@ export function RundownList({ mode, selectedEventId = null, onSelectEvent, group
   const headers = useQueueStore((s) => s.headers)
   const picked = useRundownSelection((s) => s.ids)
   const summaries = sectionSummaries(items, headers)
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [localCollapsed, setLocalCollapsed] = useState<Set<string>>(() => new Set())
+  const collapsed = collapsedIds ?? localCollapsed
   const [dropCue, setDropCue] = useState<DropCue | null>(null)
   const dragOrigin = useRef<{ id: string; top: number; bottom: number } | null>(null)
-  const toggle = (id: string) => setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const toggle = (id: string) => {
+    if (onToggleSection) onToggleSection(id)
+    else setLocalCollapsed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  }
 
   const preview = (item: QueueItem) => presentActions.previewItem(item)
   // Prepare: Shift-click picks a range, Cmd/Ctrl-click one more (#193); a plain click picks and previews one.
