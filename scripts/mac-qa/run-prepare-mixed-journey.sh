@@ -41,7 +41,7 @@ trap cleanup EXIT
 
 # Never run this journey against an installed Bible database or church profile.
 # The app needs only a schema-valid empty Bible DB to boot; the journey uses synthetic hymn data.
-if [[ -e "$ROOT/data/rhema.db" ]]; then
+if [[ -L "$ROOT/data" || -e "$ROOT/data/rhema.db" || -L "$ROOT/data/rhema.db" ]]; then
   echo "Refusing to use existing Bible data at $ROOT/data/rhema.db; run this in a clean QA checkout." >&2
   exit 2
 fi
