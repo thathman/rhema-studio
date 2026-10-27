@@ -11,9 +11,10 @@ vi.mock("@tauri-apps/api/event", () => ({
   emitTo: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { remoteActions } from "./remote-actions"
+import { presentQueueItem, remoteActions } from "./remote-actions"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
 
 const johnThreeSixteen: Verse = {
@@ -193,6 +194,43 @@ describe("remoteActions queue navigation", () => {
     remoteActions.queueNext()
 
     expect(useQueueStore.getState().activeIndex).toBe(1)
+  })
+
+  it("keeps the prior rundown item active while a Take is pending, then commits after it succeeds", async () => {
+    const previous = queueItemFor(genesisOneOne)
+    const next = queueItemFor(johnThreeSixteen)
+    useQueueStore.setState({ items: [previous, next], activeIndex: 0 })
+    useEventClock.setState({ mode: "screens", currentId: previous.id })
+    let resolveVerse: (verse: Verse | null) => void = () => {}
+    mockInvoke.mockImplementation((cmd: unknown) =>
+      cmd === "get_verse" ? new Promise<Verse | null>((resolve) => { resolveVerse = resolve }) : Promise.resolve(null),
+    )
+
+    const taking = remoteActions.queueNext()
+
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+    expect(useEventClock.getState().currentId).toBe(previous.id)
+    resolveVerse(johnThreeSixteen)
+    await taking
+
+    expect(useQueueStore.getState().activeIndex).toBe(1)
+    expect(useEventClock.getState().currentId).toBe(previous.id)
+    expect(useBroadcastStore.getState().liveItemId).toBe(next.id)
+  })
+
+  it("keeps the prior item and Program when a Take cannot be presented", async () => {
+    const previous = queueItemFor(genesisOneOne)
+    const next = queueItemFor(johnThreeSixteen)
+    useQueueStore.setState({ items: [previous, next], activeIndex: 0 })
+    useEventClock.setState({ mode: "screens", currentId: previous.id })
+    mockInvoke.mockResolvedValue(null)
+
+    await presentQueueItem(1)
+
+    expect(useQueueStore.getState().activeIndex).toBe(0)
+    expect(useEventClock.getState().currentId).toBe(previous.id)
+    expect(useBroadcastStore.getState().isLive).toBe(false)
+    expect(useBroadcastStore.getState().liveItemId).toBeNull()
   })
 
   it("does nothing on an empty queue", () => {
