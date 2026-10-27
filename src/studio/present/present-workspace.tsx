@@ -1,10 +1,9 @@
 import { outputOnAir } from "@/lib/output-on-air"
 import { useCloudConsentStore } from "@/stores/cloud-consent-store"
 import { leaveRehearsal, showRehearsalLive } from "@/stores/approval-gate-store"
-import { useEffect, useSyncExternalStore } from "react"
-import { ArrowUpIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, LayoutGridIcon, LayoutPanelLeftIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Dashboard } from "@/components/layout/dashboard"
+import { useEffect, useState, useSyncExternalStore } from "react"
+import { ArrowUpIcon, BookOpenIcon, GiftIcon, HandIcon, HeartIcon, ImageIcon, SquareIcon, TriangleAlertIcon, UndoIcon } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { PreviewPanel } from "@/components/panels/preview-panel"
 import { LiveOutputPanel } from "@/components/panels/live-output-panel"
 import { useBibleStore, useBroadcastStore, useQueueStore, useTranscriptStore } from "@/stores"
@@ -28,21 +27,11 @@ import { SoundChip } from "@/studio/present/sound-chip"
 import { CueMenu } from "@/studio/present/cue-menu"
 import { TransportBar } from "@/studio/present/transport-bar"
 import { ScenesStrip } from "@/studio/present/scenes-strip"
-
-/**
- * Present's two layouts over the same service. "production" (stored name kept) is the
- * original dashboard, an advanced view for listening checks and recovery (#299); the
- * service itself is built in Prepare only.
- */
-const VIEW_LABEL = { standard: "Standard", production: "Advanced" } as const
-const VIEW_TITLE = {
-  standard: "The live console",
-  production: "Advanced: the original dashboard with transcript, detections and its own queue, for listening checks and recovery. Build the service in Prepare.",
-} as const
+import { LiveToolsDrawer, type LiveToolsTab } from "@/studio/present/live-tools-drawer"
 
 export function PresentWorkspace() {
-  const view = useShellStore((s) => s.presentView)
-  const setView = useShellStore((s) => s.setPresentView)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [toolsTab, setToolsTab] = useState<LiveToolsTab>("bible")
   const openOutputs = useShellStore((s) => s.openOutputs)
   const isLive = useBroadcastStore((s) => s.isLive)
   // Verses carry a reference; quick screens and custom slides may only have lines.
@@ -61,9 +50,23 @@ export function PresentWorkspace() {
   const startsAt = useQueueStore((s) => (s.headers.find((h) => h.type === "phase" && h.role === "main") ?? s.headers.find((h) => h.type === "phase" && h.rule === "manual"))?.starts_at ?? null)
   const onAir = outputs.filter((o) => outputOnAir(o, outputStatus[o.id])).length
 
+  // Register one keyboard map for the whole Live console. shouldIgnoreKeyboard
+  // suppresses it while the tools drawer or another modal is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
+      const action = keyToPresentAction(e)
+      if (!action) return
+      e.preventDefault()
+      presentActions[action]()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
   return (
     <div className="flex h-full flex-col">
-      {/* The approved design: "Live console" with what is on air and the view on one row, the live tools on the next. */}
+      {/* One Live console: Run of show, Preview, Program and Take never change with a view preference. */}
       <header className="flex shrink-0 flex-col gap-2.5 border-b border-border px-[22px] pt-3.5 pb-3 [@media(max-height:860px)]:gap-1.5 [@media(max-height:860px)]:pt-2 [@media(max-height:860px)]:pb-2">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
@@ -96,33 +99,28 @@ export function PresentWorkspace() {
               onClick={openOutputs}
               title="Open outputs"
             />
-            <div role="group" aria-label="Present view" className="ml-2 flex rounded-md border border-border p-0.5">
-              {(["standard", "production"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={view === v}
-                  onClick={() => setView(v)}
-                  title={VIEW_TITLE[v]}
-                  className={cn(
-                    "flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-medium [&_svg]:size-3.5",
-                    view === v ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {v === "standard" ? <LayoutPanelLeftIcon /> : <LayoutGridIcon />}
-                  <span className="max-[1200px]:sr-only">{VIEW_LABEL[v]}</span>
-                </button>
-              ))}
-            </div>
           </div>
         </div>
         <div role="toolbar" aria-label="Live tools" className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            data-tour="live-tools"
+            aria-label="Open Bible and listening tools"
+            aria-controls="live-tools-panel"
+            aria-expanded={toolsOpen}
+            title="Search the Bible and review what listening has heard"
+            onClick={() => setToolsOpen(true)}
+          >
+            <BookOpenIcon /> Bible &amp; listening
+          </Button>
           <StatusChip tone={listening ? "ok" : "off"} label={listening ? (cloudSpeech ? "Listening (Deepgram)" : "Listening") : "Listening off"} title={listening && cloudSpeech ? "Microphone sound is being sent to Deepgram" : undefined} />
           {listening && autoLive && (
             <StatusChip
               tone="warn"
               label="Auto-live on"
-              title="Verses heard in the sermon replace what is on screen without Take live. Click to turn off (also the Auto switch on the Live panel in the Advanced view)."
+              title="Heard verses can change the Bible source without Take live. Click to turn this off; the Auto control is in the Program panel."
               onClick={() => useBroadcastStore.getState().setAutoLive(false)}
             />
           )}
@@ -155,14 +153,15 @@ export function PresentWorkspace() {
         </span>
         <span role="alert" aria-atomic="true" className="sr-only">{warning ?? ""}</span>
       </header>
+      <LiveToolsDrawer open={toolsOpen} onOpenChange={setToolsOpen} tab={toolsTab} onTabChange={setToolsTab} />
       <div className="relative min-h-0 flex-1">
-        {view === "standard" ? <StandardView /> : <Dashboard />}
+        <LiveConsoleSurface />
       </div>
     </div>
   )
 }
 
-/** Below this width Standard view has no room for the Preview panel: a one-line Preview sits over the transport. */
+/** Below this width the console has no room for the Preview panel: a one-line Preview sits over the transport. */
 const NARROW_PRESENT_QUERY = "(max-width: 1199.98px)"
 function subscribeNarrow(onChange: () => void): () => void {
   const mq = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_PRESENT_QUERY) : null
@@ -171,7 +170,7 @@ function subscribeNarrow(onChange: () => void): () => void {
 }
 const isNarrow = () => typeof window.matchMedia === "function" && window.matchMedia(NARROW_PRESENT_QUERY).matches
 
-function StandardView() {
+function LiveConsoleSurface() {
   // One Preview at a time (the panel also follows translation changes): full when it fits, else the line.
   const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false)
   const isLive = useBroadcastStore((s) => s.isLive)
@@ -180,19 +179,6 @@ function StandardView() {
   const held = useBroadcastStore((s) => s.heldLive !== null)
   const quickOnAir = useBroadcastStore((s) => s.liveVerse?.quickScreen ?? null)
   const service = useServiceStore((s) => s.current)
-
-  // Keyboard verbs, only in Standard view and never while typing.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || shouldIgnoreKeyboard(e.target, e.key)) return
-      const action = keyToPresentAction(e)
-      if (!action) return
-      e.preventDefault()
-      presentActions[action]()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4 max-[1200px]:gap-2 max-[1200px]:p-3 [@media(max-height:860px)]:gap-2 [@media(max-height:860px)]:pt-2.5">
@@ -229,7 +215,7 @@ function StandardView() {
         {/* Never shorter than a readable picture with its sources, however many lines they take: the open
             scenes scroll under it instead. */}
         <div className="min-h-min flex-1 overflow-hidden rounded-xl [&_[data-slot=live-picture]]:min-h-24 [&>div]:h-full" data-studio-live>
-          <LiveOutputPanel goLiveSwitch={false} />
+          <LiveOutputPanel />
         </div>
         <ScenesStrip />
       </div>

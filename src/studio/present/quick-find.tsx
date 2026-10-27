@@ -268,7 +268,7 @@ export function QuickFind({ mode, autoFocus, scope = "all", onAdded }: { mode: "
 /**
  * The Bible tab's own choice of version: the Bible verses are found and added
  * in, and the second language beside it. These are the operator's active
- * versions (the same as in Settings and the Advanced view); a verse already
+ * versions (the same as in Settings and Bible search); a verse already
  * saved in a service keeps the version it was saved with.
  */
 function BibleVersions() {
