@@ -1,6 +1,6 @@
 name: CI
 
-# Runs on every pull request and on pushes to feature branches. Release
+# Runs on every pull request and on pushes to main. Release
 # packaging stays in build-release.yml (tags) and build-windows-installer.yml
 # (manual); this workflow never produces artifacts and never signs anything.
 on:
@@ -8,8 +8,6 @@ on:
   push:
     branches:
       - main
-      - "feature/**"
-      - "pr/**"
   workflow_dispatch:
 
 permissions:
