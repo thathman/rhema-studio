@@ -10,11 +10,11 @@ Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requir
 
 - Target repository: `thathman/rhema-studio`; current `main` is `f65350ed9472ef984f82ccaec421bc3e40770fab`. #424, #451, #475, #414 and #474 are merged. #414 passed all four hosted jobs on head `a2c8880` (run 40441310848); #474 passed all four on head `d6b448d` (run 40441836324). The latest push run on main is 40442343945; check its current status on GitHub.
 - #414 delivered P0 fixes #383/#384: scene Save no longer changes an active output until Take; each output keeps its scene revision; queue Add uses stable insertion. Five focused suites passed locally (54 tests). No physical output acceptance is claimed.
-- #415 addresses #385/#386 and is being restored against current `main` after its old #414 base branch was deleted. Its current candidate changes 22 files including current-status documentation and preserves the Hymn Book detail/editor, stable-ID Add selection, delayed Scripture refresh protection and browser evidence. `bun install --frozen-lockfile` and focused suites passed (5 files / 27 tests). Local standalone typecheck and lint were stopped after more than four minutes without results; do not claim them passed. Require fresh hosted Frontend, Lint, Rust and Companion checks before merge.
+- #415 addresses #385/#386. GitHub auto-closed it when the old #414 base branch was deleted and rejects reopening that PR. The preserved `fix/hymn-picker-workflow` branch is rebased onto current `main`; its 22-file candidate preserves Hymn Book details/editor, stable-ID Add selection, delayed Scripture refresh protection and browser evidence. `bun install --frozen-lockfile` and focused suites passed (5 files / 27 tests). Local standalone typecheck and lint were stopped after more than four minutes without results; do not claim them passed. Track this work in a successor PR and require fresh hosted Frontend, Lint, Rust and Companion checks before merge.
 - The current Prepare recommendation is an event foundation (#430) followed by a consolidated Add/selection/editor workflow from #454–#470. These candidate branches still need rebasing and fresh checks on the current main. Incorporate #415's unique hymn details with the shared Add behavior rather than dropping the closed stack or merging overlapping branches unchanged.
 - #417 preserves hymn identity; #427 covers hymn-search recovery; #428 covers successful-Take state; #420 addresses #398; #438 adds a native macOS hymn QA path. Projector/TV, OBS/NDI, camera, Windows and offline church-system acceptance remain unverified; #411 is not complete.
 - [PR #438](https://github.com/thathman/rhema-studio/pull/438) passed a hosted native Intel Mac hymn journey with Live off. Projector/TV, OBS/NDI, camera, Windows and offline church-system acceptance remain unverified; #411 is not complete.
-- Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the implementation contract. #352 and #367 remain publishing-gated and were not merged. There are 41 open PRs after reopening #415 against main.
+- Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the implementation contract. #352 and #367 remain publishing-gated and were not merged.
 
 ## Integrated `main`
 
@@ -28,7 +28,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- 41 open PRs were returned by a full `gh pr list --limit 1000` query after reopening #415 against `main` on 2026-10-27. Check GitHub for changes after this snapshot.
+- Use a full GitHub PR listing for the current open count; old PR #415 remains closed and its preserved branch is carried by a successor PR.
 
 ## Active milestone
 
