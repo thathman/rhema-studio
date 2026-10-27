@@ -138,6 +138,7 @@ describe("a scene with a ticker or lower-third layer owns it (#243)", () => {
   it("a hidden ticker layer still owns the ticker; a scene without one leaves it to the output", () => {
     const scene = take("ticker")
     useBroadcastStore.getState().saveScene({ ...scene, layers: scene.layers.map((l) => ({ ...l, visible: l.kind !== "ticker" })) })
+    useBroadcastStore.getState().takeScene(MAIN_OUTPUT_ID, scene.id)
     useBroadcastStore.getState().setTickerItems(["Choir Saturday"])
     useBroadcastStore.getState().setTicker({ backing: null })
     expect(sent("broadcast-main")!.ticker).toBeNull()

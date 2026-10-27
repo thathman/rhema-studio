@@ -6,6 +6,7 @@ import { cameraSending, useRouterHealth, watchRouter } from "@/lib/cameras"
 import { CONTENT_NAMES } from "@/lib/content-names"
 import { activatedLabel, cameraPathOf, cameraSourceId, followerCount, followsLowerThird, followsTicker, lowerThirdWords, tickerWords, timerWords, type AnySourceId } from "@/lib/live-sources"
 import { cameraWords } from "@/lib/show-health"
+import { sceneForOutput } from "@/lib/scenes"
 import { tickerForScreens, timerForScreens, useBroadcastStore } from "@/stores/broadcast-store"
 import { useSettingsStore } from "@/stores/settings-store"
 import { monotonicNow, useTimerStore } from "@/stores/timer-store"
@@ -130,7 +131,7 @@ export function LiveSourcesStrip() {
 function lowerThirdFeeds(outputs: readonly BroadcastOutput[], scenes: readonly Scene[]): number {
   return outputs.filter((o) => {
     if ((o.role ?? "congregation") !== "congregation") return false
-    const scene = o.sceneId ? scenes.find((x) => x.id === o.sceneId) : undefined
+    const scene = sceneForOutput(o, scenes)
     return followsLowerThird(o) || !!scene?.layers.some((l) => l.kind === "lowerThird")
   }).length
 }

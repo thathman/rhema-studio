@@ -2,9 +2,11 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { ChevronDownIcon, LayersIcon, RotateCcwIcon, UndoIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { drawScene } from "@/lib/scene-renderer"
-import { sceneFrame } from "@/lib/scenes"
+import { sceneForOutput, sceneFrame } from "@/lib/scenes"
+import { sceneRevisionLabel, sceneTakeDetails } from "@/lib/scene-take-details"
 import { loadThemeImage, themeImageCache } from "@/lib/theme-image-cache"
 import { useBroadcastStore } from "@/stores/broadcast-store"
+import { useSettingsStore } from "@/stores/settings-store"
 import { cleanIntentId } from "@/lib/item-intent"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
 import { SceneSheetButton } from "@/studio/present/scene-sheet"
@@ -36,7 +38,7 @@ export function ScenesStrip({ className }: { className?: string }) {
   const planned = usePlannedScene(scenes)
   if (congregation.length === 0 || scenes.length === 0) return null
   const target = congregation.find((o) => o.id === targetId) ?? congregation[0]
-  const sceneName = (o: BroadcastOutput) => scenes.find((s) => s.id === o.sceneId)?.name ?? "its own feed"
+  const sceneName = (o: BroadcastOutput) => sceneForOutput(o, scenes)?.name ?? "its own feed"
 
   return (
     <section aria-label="Scenes" className={cn("flex shrink-0 flex-col rounded-lg border border-border bg-card", className)}>
@@ -93,6 +95,7 @@ function usePlannedScene(scenes: Scene[]): Scene | null {
  */
 function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; scenes: Scene[]; planned: Scene | null }) {
   const rehearsal = useBroadcastStore((s) => s.rehearsal)
+  const operatorName = useSettingsStore((s) => s.operatorName)
   const back = useBroadcastStore((s) => s.sceneReturn[output.id])
   const covered = useBroadcastStore((s) => (s.isLive ? s.liveVerse?.screen : undefined))
   // The operator's own pick (null: none); undefined follows the plan.
@@ -103,19 +106,27 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
     setSeenPlanned(plannedId)
     setOwn(undefined)
   }
-  const showing = scenes.find((s) => s.id === output.sceneId)
+  const showing = sceneForOutput(output, scenes)
   // Already on this screen: nothing to pre-pick.
   const suggested = planned && planned.id !== showing?.id ? planned : null
   const pickedId = own !== undefined ? own : (suggested?.id ?? null)
   const picked = scenes.find((s) => s.id === pickedId) ?? null
+  const takeDetailsId = useId()
   const restorable = back ? scenes.find((s) => s.id === back) : undefined
   const b = useBroadcastStore.getState
 
-  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id ? `${output.name} already shows ${picked.name}` : null
+  const takeReason = !picked ? "Pick a scene above first" : picked.id === showing?.id && picked.updatedAt === showing.updatedAt ? `${output.name} already shows ${picked.name}` : null
   const ownReason = !showing ? `${output.name} already shows its own feed` : null
   const restoreReason = showing ? `${output.name} shows ${showing.name}: Restore is for after Back to its own feed` : !restorable ? `${output.name} has not shown a scene yet` : null
   // In rehearsal the scene on a screen is the rehearsal's, never called on air.
   const onAirWord = rehearsal ? "In rehearsal" : "On air"
+  const details = picked && !takeReason ? sceneTakeDetails({
+    outputName: output.name,
+    sceneName: picked.name,
+    revision: sceneRevisionLabel(picked),
+    actor: operatorName,
+    rehearsal,
+  }) : null
 
   return (
     <>
@@ -145,6 +156,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
           )
         })}
       </div>
+      {details && <p id={takeDetailsId} role="note" aria-label="Take details" className="text-xs text-muted-foreground">{details}</p>}
       <div className="flex flex-wrap items-center gap-1.5">
         <SceneAction
           icon={<LayersIcon />}
@@ -152,6 +164,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
           text="Take scene"
           title={picked ? (rehearsal ? `Rehearse ${picked.name} on ${output.name}. The screen keeps its scene.` : `Arrange ${output.name} as ${picked.name}. What is live stays live.`) : "Take scene"}
           reason={takeReason}
+          descriptionId={details ? takeDetailsId : undefined}
           onClick={() => {
             if (!picked) return
             b().takeScene(output.id, picked.id)
@@ -192,7 +205,7 @@ function ScenePicker({ output, scenes, planned }: { output: BroadcastOutput; sce
  * A scene control. Like the transport's, one that cannot act stays focusable and says why. Take
  * scene is outlined teal with a layers icon, so it never reads as the solid Take live.
  */
-function SceneAction({ icon, label, text, title, reason, onClick, primary }: { icon: ReactNode; label: string; text: string; title: string; reason: string | null; onClick: () => void; primary?: boolean }) {
+function SceneAction({ icon, label, text, title, reason, onClick, primary, descriptionId }: { icon: ReactNode; label: string; text: string; title: string; reason: string | null; onClick: () => void; primary?: boolean; descriptionId?: string }) {
   const reasonId = useId()
   const off = reason !== null
   return (
@@ -201,7 +214,7 @@ function SceneAction({ icon, label, text, title, reason, onClick, primary }: { i
         type="button"
         aria-label={label}
         aria-disabled={off || undefined}
-        aria-describedby={off ? reasonId : undefined}
+        aria-describedby={off ? reasonId : descriptionId}
         title={reason ?? title}
         onClick={off ? undefined : onClick}
         className={cn(

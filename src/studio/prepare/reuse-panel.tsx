@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useBibleStore, useQueueStore } from "@/stores"
 import { useServiceStore, toQueueItems } from "@/stores/service-store"
-import { appendInOrder, copyForReuse } from "@/lib/reuse"
+import { copyForReuse } from "@/lib/reuse"
 import { isVerseItem, type ProgramWithItems, type QueueItem, type Verse } from "@/types"
 
 const KIND: Record<string, string> = { verse: "Scripture", song: "Song", slide: "Slide", image: "Picture or video" }
@@ -52,7 +52,8 @@ export function ReusePanel() {
 
   const add = async () => {
     const copies = copyForReuse(items, chosen)
-    const added = appendInOrder(copies, (i) => useQueueStore.getState().addItem(i), () => useQueueStore.getState().items.length, (a, b) => { if (useQueueStore.getState().addTarget === null) useQueueStore.getState().reorderItems(a, b) })
+    const queue = useQueueStore.getState()
+    const added = copies.filter((item) => queue.addItem(item, "end") !== null).length
     const skipped = copies.length - added
     toast.success(`${added} item${added === 1 ? "" : "s"} added${skipped ? `; ${skipped} verse${skipped === 1 ? " was" : "s were"} already in the service` : ""}`)
     setChosen(new Set())

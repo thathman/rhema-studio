@@ -1,14 +1,24 @@
 # Rhema Studio — Development Status
 
-> **Snapshot warning (2026-10-26):** This page was last reconciled 2026-10-22 and is not a live representation of current main/open PRs. Start with the [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md), inspect GitHub head/PRs/CI, and record verified deltas before asserting implementation or acceptance. This warning does not update the historical snapshot below.
+> **Snapshot (2026-10-27):** This page reflects upstream `main` and the listed PR state checked on 27 October. Check GitHub for changes after this snapshot; do not infer device acceptance from CI.
 
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-22
+**Updated:** 2026-10-27
+
+## Current takeover snapshot
+
+- Target repository: `thathman/rhema-studio`; `main` is `bcff115968569267e7a11e1693951009f8fde139`. PRs #424, #451 and #475 are merged as `8900656`, `182e5c7` and `bcff115`; the latest main CI run [40439274689](https://github.com/thathman/rhema-studio/actions/runs/40439274689) passed.
+- PR #414 covers P0 issues #383/#384. Its branch is being rebased from base `d982db8` onto current main. The two timing-test conflicts were resolved by retaining deterministic `Date.now()` and `performance.now()` mocks, cleanup of mocks/timers, and explicit React-root unmounts. Focused local suites pass: 5 files, 54 tests. Fresh full hosted checks are required on the pushed rebased head before merge.
+- The P0 scene regressions cover save without Take, backup restore, NDI/browser/TV snapshots and rehearsal isolation; queue tests cover stable insertion at the beginning, end, selected phase and nested groups. No physical output acceptance is claimed.
+- The current Prepare recommendation is an event foundation (#430) followed by a consolidated Add/selection/editor workflow from #454–#470. These candidate branches have not been rebased onto the post-#414 main and their current hosted checks do not validate the integrated stack.
+- [PR #415](https://github.com/thathman/rhema-studio/pull/415) covers the Hymn Book detail/Add flow (#385/#386); #417 preserves hymn identity; #427 covers hymn-search recovery; #428 covers successful-Take state; #420 addresses #398; #438 adds a native macOS hymn QA path. These remain open and require reconciliation with the Prepare stack.
+- [PR #438](https://github.com/thathman/rhema-studio/pull/438) passed a hosted native Intel Mac hymn journey with Live off. Projector/TV, OBS/NDI, camera, Windows and offline church-system acceptance remain unverified; #411 is not complete.
+- Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the implementation contract. #352 and #367 remain publishing-gated and were not merged. There are 43 open PRs at this snapshot.
 
 ## Integrated `main`
 
-- Head: see `git log fork/main` (2026-10-22 17:45 WAT; every PR through #216 merged)
+- Head: `bcff115968569267e7a11e1693951009f8fde139` (2026-10-27; current as of this snapshot)
 - Contents: see CHANGELOG.md. `studio.db` is at migration 0012 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -18,9 +28,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- The owner's redesign continues: UX-03, UX-04 and UX-07 to UX-12 in TASKS.md (UX-01, 02, 05, 06 merged).
-
-- PR #4 `feature/speech-language-openai` (retargeted to `main`): Yoruba speech language and OpenAI Whisper provider. Kept independent until provider/bundling decisions are made (ST-004).
+- 43 open PRs were returned by a full `gh pr list --limit 1000` query on 2026-10-27. Check GitHub for changes after this snapshot.
 
 ## Active milestone
 
@@ -28,10 +36,9 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- Frontend: 669 vitest tests pass (two render-heavy tests can time out on a heavily loaded machine; given 30 s, #176, #180); `tsc -b` clean; blocking ESLint subset clean; whole-repo lint now 0 errors (was 68 before #81, 7 before the lint-debt PR) and blocking in CI.
-- Rust: `rhema-content` 62 tests pass; `rhema-api` 122; app `cargo check` and clippy in CI.
-- Dependency licences: `scripts/check-licenses.ts` (npm production tree, 544 packages; Rust crate graph) runs in CI and passes. A test fails if code names an unlisted internet host (`src/lib/network-hosts.test.ts`).
-- CI on `main`: green on the current head (every merge since PR #46 was followed by a run checked before the next merge).
+- On the #414 rebased worktree, the focused scene, queue, Add, and timing suites pass: 5 files, 54 tests. `bun install --frozen-lockfile` passed. Before merge, require all hosted Frontend, Lint, Rust and Companion checks on the latest PR head; older green runs on stale bases do not verify it.
+- CI on current `main` `bcff115` passed in [run 40439274689](https://github.com/thathman/rhema-studio/actions/runs/40439274689). #424, #451 and #475 each passed all required jobs on their integration heads; see their PR check histories.
+- PR #438's hosted native macOS journey passed with Live off, but it does not verify physical output hardware or offline cold start. Build warnings and unverified hardware gates remain recorded below.
 
 ## Unverified (release-acceptance blockers, not development blockers)
 

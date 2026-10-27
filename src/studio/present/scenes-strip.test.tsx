@@ -12,6 +12,7 @@ import { SCENE_PRESETS, newScene } from "@/lib/scenes"
 import { MAIN_OUTPUT_ID, defaultNdiSettings, type BroadcastOutput, type QueueItem, type Verse } from "@/types"
 import { useBibleStore } from "@/stores/bible-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { useSettingsStore } from "@/stores/settings-store"
 
 const original = { takeScene: useBroadcastStore.getState().takeScene, releaseScene: useBroadcastStore.getState().releaseScene }
 const camera = { ...newScene("Camera with the Bible", SCENE_PRESETS[3]), id: "cam" }
@@ -102,6 +103,30 @@ describe("Present's scenes", () => {
     expect(output(MAIN_OUTPUT_ID).sceneId).toBe("lyr")
   })
 
+  it("shows the taken revision and permits an explicit Take of a saved edit", async () => {
+    useSettingsStore.setState({ operatorName: "Tolu" })
+    const taken = { ...camera, name: "Taken camera layout", updatedAt: Date.UTC(2026, 9, 25, 10) }
+    const saved = { ...camera, name: "Edited camera layout", updatedAt: Date.UTC(2026, 9, 26, 11) }
+    await act(async () => useBroadcastStore.setState({
+      scenes: [saved],
+      outputs: outputs().map((o) => o.id === MAIN_OUTPUT_ID ? { ...o, sceneId: camera.id, sceneSnapshot: taken } : o),
+    }))
+    await render()
+    expect(el.textContent).toContain("Shows Taken camera layout")
+    await click(sceneButton("Edited camera layout"))
+    const takeUpdated = button("Take scene Edited camera layout to Sanctuary")
+    const details = el.querySelector('[aria-label="Take details"]')
+    expect(details?.textContent).toContain("Affected output: Sanctuary only")
+    expect(details?.textContent).toContain(`Revision: ${new Date(saved.updatedAt).toLocaleString()}`)
+    expect(details?.textContent).toContain("Actor: Tolu")
+    expect(takeUpdated.getAttribute("aria-describedby")).toBe(details?.id)
+    expect(takeUpdated.getAttribute("aria-disabled")).toBeNull()
+    expect(take).not.toHaveBeenCalled()
+    await click(takeUpdated)
+    expect(take).toHaveBeenLastCalledWith(MAIN_OUTPUT_ID, camera.id)
+    expect(output(MAIN_OUTPUT_ID).sceneSnapshot?.name).toBe("Edited camera layout")
+  })
+
   it("says why a button cannot act, and a click on it does nothing", async () => {
     await render()
     const takeBtn = button("Take scene")
@@ -129,6 +154,7 @@ describe("Present's scenes", () => {
     await render()
     expect(el.textContent).toContain(SCENES_REHEARSAL_NOTE)
     await click(sceneButton("Camera with the Bible"))
+    expect(el.querySelector('[aria-label="Take details"]')?.textContent).toContain("Scope: rehearsal only; the public screen stays unchanged")
     const takeBtn = button("Take scene Camera with the Bible to Sanctuary")
     expect(takeBtn.getAttribute("aria-disabled")).toBeNull()
     await click(takeBtn)

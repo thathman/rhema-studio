@@ -119,6 +119,107 @@ describe("broadcast store sync", () => {
     )
   })
 
+  it("saving a scene keeps its taken program revision until an explicit Take", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const scene = newScene("On air", SCENE_PRESETS[0])
+    useBroadcastStore.getState().saveScene(scene)
+    useBroadcastStore.getState().takeScene("main", scene.id)
+
+    emitToMock.mockClear()
+    const edited = { ...scene, background: "#123456" }
+    useBroadcastStore.getState().saveScene(edited)
+    expect(emitToMock).not.toHaveBeenCalled()
+
+    useBroadcastStore.getState().syncBroadcastOutputFor("main")
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(scene.background)
+    expect(emitToMock).toHaveBeenLastCalledWith(
+      "broadcast-main",
+      "broadcast:verse-update",
+      expect.objectContaining({ scene: expect.objectContaining({ background: scene.background }) }),
+    )
+
+    useBroadcastStore.getState().takeScene("main", scene.id)
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe(edited.background)
+  })
+
+  it("lets rehearsal preview an edited scene while the public screen keeps its pinned revision", async () => {
+    const [{ useBroadcastStore, outputsForScreens }, { newScene, SCENE_PRESETS, sceneForOutput }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const b = useBroadcastStore.getState()
+    const original = { ...newScene("On air", SCENE_PRESETS[0]), background: "#000000" }
+    b.saveScene(original)
+    b.takeScene("main", original.id)
+    b.saveScene({ ...original, background: "#123456" })
+
+    b.setRehearsal(true)
+    useBroadcastStore.getState().takeScene("main", original.id)
+    const rehearsed = useBroadcastStore.getState()
+    const rehearsalOutput = rehearsed.outputs.find((output) => output.id === "main")!
+    expect(sceneForOutput(rehearsalOutput, rehearsed.scenes)?.background).toBe("#123456")
+    expect(sceneForOutput(outputsForScreens(rehearsed).find((output) => output.id === "main")!, rehearsed.scenes)?.background).toBe("#000000")
+
+    useBroadcastStore.getState().setRehearsal(false)
+    const returned = useBroadcastStore.getState().outputs.find((output) => output.id === "main")!
+    expect(returned.sceneSnapshot?.background).toBe("#000000")
+    expect(useBroadcastStore.getState().outputFrames.main.scene?.background).toBe("#000000")
+  })
+
+  it("restoring a backup keeps the on-air scene snapshot when the saved scene is newer", async () => {
+    const [{ useBroadcastStore, looksForBackup, restoreLooksFromBackup }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const scene = { ...newScene("On air", SCENE_PRESETS[0]), background: "#000000" }
+    const b = useBroadcastStore.getState()
+    b.saveScene(scene)
+    b.takeScene("main", scene.id)
+    b.saveScene({ ...scene, background: "#123456" })
+
+    restoreLooksFromBackup(looksForBackup())
+
+    const restored = useBroadcastStore.getState()
+    expect(restored.scenes.find((candidate) => candidate.id === scene.id)?.background).toBe("#123456")
+    expect(restored.outputs.find((output) => output.id === "main")?.sceneSnapshot?.background).toBe("#000000")
+    restored.syncBroadcastOutputFor("main")
+    expect(restored.outputFrames.main.scene?.background).toBe("#000000")
+  })
+
+  it("sends the pinned scene revision to an NDI output after the library scene is saved", async () => {
+    const [{ useBroadcastStore }, { newScene, SCENE_PRESETS }] = await Promise.all([
+      import("./broadcast-store"),
+      import("@/lib/scenes"),
+    ])
+    const state = useBroadcastStore.getState()
+    const scene = { ...newScene("NDI program", SCENE_PRESETS[0]), background: "#000000" }
+    state.saveScene(scene)
+    state.addOutput({
+      id: "ndi-program",
+      name: "Sanctuary NDI",
+      type: "ndi",
+      role: "congregation",
+      themeId: state.themes[0].id,
+      monitorIndex: 0,
+      ndi: ndiDefaults,
+    })
+    useBroadcastStore.getState().takeScene("ndi-program", scene.id)
+
+    emitToMock.mockClear()
+    useBroadcastStore.getState().saveScene({ ...scene, background: "#123456" })
+    useBroadcastStore.getState().syncBroadcastOutputFor("ndi-program")
+
+    expect(useBroadcastStore.getState().outputFrames["ndi-program"].scene?.background).toBe("#000000")
+    expect(emitToMock).toHaveBeenLastCalledWith(
+      "broadcast-ndi-program",
+      "broadcast:verse-update",
+      expect.objectContaining({ scene: expect.objectContaining({ background: "#000000" }) }),
+    )
+  })
+
   it("duplicateOutput copies config with fresh id, unique name and NDI source name", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const state = useBroadcastStore.getState()

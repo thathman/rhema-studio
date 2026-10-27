@@ -107,10 +107,7 @@ export function HymnBook() {
 
   const add = (song: SongSummary) => {
     const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(hymnItem(song, first))
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    queue.addItem(hymnItem(song, first), "end")
   }
 
   const importFile = async (f: File | undefined) => {

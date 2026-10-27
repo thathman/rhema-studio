@@ -57,10 +57,7 @@ export function SongLibrary({ layout = "list", newRequest = 0 }: { layout?: "lis
 
   const add = (song: SongSummary) => {
     const queue = useQueueStore.getState()
-    const before = queue.items.length
-    queue.addItem(songQueueItem(song))
-    const after = useQueueStore.getState().items.length
-    if (after > before) useQueueStore.getState().reorderItems(0, after - 1)
+    queue.addItem(songQueueItem(song), "end")
   }
 
   return (

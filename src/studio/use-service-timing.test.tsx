@@ -18,7 +18,10 @@ const slide = (id: string, planned_minutes: number): QueueItem =>
 const at = (h: number, m: number) => new Date(2026, 9, 25, h, m).getTime()
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 
 function Probe() {
   const { timing } = useServiceTiming()
@@ -35,8 +38,10 @@ describe("one timing for Prepare and Present", () => {
     useBroadcastStore.setState({ isLive: true, liveItemId: "a" })
     useEventClock.setState({ currentId: "a" })
     const el = document.createElement("div")
-    await act(async () => createRoot(el).render(<Probe />))
+    const root = createRoot(el)
+    await act(async () => root.render(<Probe />))
     // Planned 10:30; began at 10:05 with a live, so expected 10:35.
     expect(el.textContent).toBe("10:30 10:35")
+    await act(async () => root.unmount())
   })
 })

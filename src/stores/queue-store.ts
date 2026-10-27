@@ -12,7 +12,8 @@ interface QueueState {
   /** The live item was removed from the rundown: the items either side of it, for Next/Previous. */
   removedActive: { prevId: string | null; nextId: string | null } | null
 
-  addItem: (item: QueueItem) => void
+  /** Add at the start by default, or at the end; a valid addTarget inserts at that section's end. Returns the inserted id, or null for a duplicate verse. */
+  addItem: (item: QueueItem, placement?: "start" | "end") => string | null
   removeItem: (id: string) => void
   /** Change an item's own settings (song languages, arrangement, notes). */
   updateItem: (id: string, patch: (item: QueueItem) => QueueItem) => void
@@ -87,9 +88,12 @@ function withActiveKept(state: { items: QueueItem[]; activeIndex: number | null 
 }
 
 /** A new item into the rundown: at the top, or at the end of the section being added to. */
-function inserted(state: { items: QueueItem[]; headers: OutlineHeader[]; activeIndex: number | null; addTarget: string | null }, item: QueueItem) {
+function inserted(state: { items: QueueItem[]; headers: OutlineHeader[]; activeIndex: number | null; addTarget: string | null }, item: QueueItem, placement: "start" | "end") {
   const target = state.addTarget && state.headers.some((h) => h.id === state.addTarget) ? state.addTarget : null
-  if (!target) return { ...withActiveKept(state, [item, ...state.items]), headers: headersAfterInsert(state.headers, 0) }
+  if (!target) {
+    const at = placement === "end" ? state.items.length : 0
+    return { ...withActiveKept(state, [...state.items.slice(0, at), item, ...state.items.slice(at)]), headers: headersAfterInsert(state.headers, at) }
+  }
   const at = sectionEnd(state.items.length, state.headers, target)
   const items = [...state.items.slice(0, at), item, ...state.items.slice(at)]
   return { ...withActiveKept(state, items), headers: headersAfterAppend(state.headers, at, target) }
@@ -163,10 +167,14 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   highlightedId: null,
   removedActive: null,
 
-  addItem: (item) =>
+  addItem: (item, placement = "start") => {
+    let insertedId: string | null = null
     set((state) => {
       // Songs may repeat in a service (opening and closing hymn); verses dedupe.
-      if (!isVerseItem(item)) return inserted(state, item)
+      if (!isVerseItem(item)) {
+        insertedId = item.id
+        return inserted(state, item, placement)
+      }
       const idx = state.items.findIndex(
         (i) =>
           isVerseItem(i) &&
@@ -188,8 +196,11 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         }
         return state
       }
-      return inserted(state, item)
-    }),
+      insertedId = item.id
+      return inserted(state, item, placement)
+    })
+    return insertedId
+  },
   // The active item itself removed: the position stays on the one before it (so "next"
   // on the stage and in the rundown is the item that followed), and stepping uses both
   // neighbours: Next goes to the one that followed, Previous to the one before (no skip).
@@ -285,7 +296,7 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
         // As new items are added: each at the end of the section being added to, or all at the top, in the order copied.
         const toSection = !!state.addTarget && state.headers.some((h) => h.id === state.addTarget)
         let next: Pick<QueueState, "items" | "headers" | "activeIndex" | "addTarget"> = state
-        for (const c of toSection ? copies : [...copies].reverse()) next = { ...next, ...inserted(next, c) }
+        for (const c of toSection ? copies : [...copies].reverse()) next = { ...next, ...inserted(next, c, toSection ? "end" : "start") }
         return { items: next.items, headers: next.headers, activeIndex: next.activeIndex }
       }
       // Right after that item, in its section: a header just below it stays below the copies.

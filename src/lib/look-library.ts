@@ -2,7 +2,7 @@ import type { BroadcastTheme, ContentType } from "@/types/broadcast"
 import type { BroadcastOutput, BroadcastOutputStatus, LowerThird, LowerThirdStyle, StageStyle, Ticker, TickerStyle } from "@/types/broadcast-output"
 import type { Scene, SceneBox, SceneLayerKind } from "@/types/scene"
 import { themeIdsOf } from "@/lib/output-themes"
-import { newLayer } from "@/lib/scenes"
+import { newLayer, sceneForOutput } from "@/lib/scenes"
 import { brandLowerThirdStyle, brandTheme, type BrandKit } from "@/lib/brand-kit"
 import { BUNDLED_FONTS } from "@/lib/fonts"
 import { outputOnAir } from "@/lib/output-on-air"
@@ -401,7 +401,7 @@ export function lookCopies(look: LibraryLook, s: ChurchLooks): LookCopy[] {
  */
 export function themeUsedBy(themeId: string, outputs: readonly BroadcastOutput[], scenes: readonly Scene[]): string[] {
   return outputs
-    .filter((o) => themeIdsOf(o).includes(themeId) || (!!o.sceneId && scenes.some((s) => s.id === o.sceneId && s.layers.some((l) => l.themeId === themeId))))
+    .filter((o) => themeIdsOf(o).includes(themeId) || sceneForOutput(o, scenes)?.layers.some((l) => l.themeId === themeId))
     .map((o) => o.name)
 }
 

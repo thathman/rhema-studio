@@ -162,10 +162,11 @@ describe("reset and use", () => {
   it("knows which outputs show a theme, directly or through a scene they show", () => {
     const out = (id: string, patch: Partial<BroadcastOutput>): BroadcastOutput => ({ id, name: id, type: "display", themeId: "x", monitorIndex: 0, ndi: { sourceName: id, resolution: "r1080p", frameRate: "fps30", alphaMode: "noneOpaque" }, ...patch })
     const scenes = [{ id: "s1", name: "S", background: "#000", layers: [{ id: "l", name: "L", kind: "feed" as const, box: { x: 0, y: 0, w: 100, h: 100 }, opacity: 1, visible: true, themeId: "t2" }], createdAt: 0, updatedAt: 0 }]
-    const outputs = [out("A", { themeId: "t1" }), out("B", { themeFor: { hymn: "t3" } }), out("C", { sceneId: "s1" })]
+    const outputs = [out("A", { themeId: "t1" }), out("B", { themeFor: { hymn: "t3" } }), out("C", { sceneId: "s1", sceneSnapshot: { ...scenes[0], layers: [{ ...scenes[0].layers[0], themeId: "t5" }] } })]
     expect(themeUsedBy("t1", outputs, scenes)).toEqual(["A"])
-    expect(themeUsedBy("t2", outputs, scenes)).toEqual(["C"])
+    expect(themeUsedBy("t2", outputs, scenes)).toEqual([])
     expect(themeUsedBy("t3", outputs, scenes)).toEqual(["B"])
+    expect(themeUsedBy("t5", outputs, scenes)).toEqual(["C"])
     expect(themeUsedBy("t4", outputs, scenes)).toEqual([])
   })
 
