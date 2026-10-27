@@ -9,6 +9,8 @@ const waitFor = async (predicate, label, timeoutMs = 8000) => {
   }
   throw new Error(`Timed out waiting for ${label}`)
 }
+const englishWords = "Synthetic English words for the mixed Prepare journey."
+const yorubaWords = "Àánú Ọlọ́run tó ga; ìfẹ́ Rẹ̀ kò ní ìparí."
 const normal = (value) => String(value ?? "").replace(/\s+/g, " ").trim()
 const buttons = () => [...document.querySelectorAll("button, [role=tab]")]
 const activateButton = async (button) => {
@@ -116,7 +118,7 @@ async function runScenario() {
     stage = "dismiss isolated-profile setup"
     qa.settings.getState().setSetup({ dismissedAt: new Date().toISOString() })
     qa.shell.getState().setSetupOpen(false)
-    await waitFor(() => !document.body.innerText.includes("Welcome to Rhema Studio"), "setup dialog to close")
+    await waitFor(() => !document.querySelector('[role="dialog"][data-state="open"]'), "setup dialog to close")
 
     stage = "seed synthetic bilingual hymn"
     const imported = await window.__TAURI_INTERNALS__.invoke("content_import_hymnbook", {
@@ -129,14 +131,14 @@ async function runScenario() {
             alternate_titles: ["Orin Ìdánwò"],
             authors: "Synthetic QA fixture",
             licence: "public_domain",
-            primary_language: "en",
+            primary_language: "yo",
             tags: "cacghb",
             sections: [{
               kind: "verse",
               label: "Verse 1",
               texts: {
-                en: "Synthetic QA words for the mixed Prepare journey.",
-                yo: "Synthetic QA words for the mixed Prepare journey.",
+                en: englishWords,
+                yo: yorubaWords,
               },
             }],
           },
@@ -206,8 +208,8 @@ async function runScenario() {
     await clickButton("Hymn book")
     const languageButton = await waitFor(
       () => [...document.querySelectorAll('[role="group"][aria-label="Language shown first"] button')]
-        .find((button) => normal(button.innerText) === "English"),
-      "English-first hymn display control",
+        .find((button) => normal(button.innerText) === "Yorùbá"),
+      "Yorùbá-first hymn display control",
     )
     await activateButton(languageButton)
     await setInput('input[aria-label="Find a hymn"]', "QA Mixed Journey Hymn")
@@ -274,6 +276,14 @@ async function runScenario() {
     if (reopenedHymn?.song?.title !== "QA Mixed Journey Hymn" || !reopenedEvent?.event) {
       throw new Error("The Hymn or its event did not round-trip")
     }
+    if (reopenedHymn.song.languages[0] !== "yo" || !reopenedHymn.song.languages.includes("en")) {
+      throw new Error(`The saved Hymn lost one of its selected languages: ${JSON.stringify(reopenedHymn.song.languages)}`)
+    }
+    const persistedHymn = await qa.songs.getState().load(reopenedHymn.song.song_id, { refresh: true })
+    const persistedTexts = persistedHymn?.sections[0]?.texts
+    if (persistedTexts?.en !== englishWords || persistedTexts?.yo !== yorubaWords || persistedTexts.en === persistedTexts.yo) {
+      throw new Error(`Distinct English and Yorùbá words did not round-trip: ${JSON.stringify(persistedTexts)}`)
+    }
     if (JSON.stringify(programSnapshot(qa)) !== JSON.stringify(programBeforePrepareEdits)) {
       throw new Error("Saving or reopening the plan changed Program before Take")
     }
@@ -297,9 +307,9 @@ async function runScenario() {
     const previewLabel = await waitFor(
       () => {
         const label = previewCanvas.getAttribute("aria-label") ?? ""
-        return label.includes("Synthetic QA words for the mixed Prepare journey") ? label : null
+        return label.includes(yorubaWords) ? label : null
       },
-      "synthetic hymn words in Preview",
+      "distinct Yorùbá hymn words in Preview",
     )
     if (qa.broadcast.getState().liveItemId !== baseline.id) throw new Error("Program stopped showing the baseline before Take")
     const renderedProgramBeforeTake = await waitForProgramCanvas(
@@ -321,7 +331,7 @@ async function runScenario() {
     const programAfterTake = programSnapshot(qa)
     if (programAfterTake.liveItemId !== hymn.id) throw new Error(`Take did not select the Hymn for Program: ${JSON.stringify(programAfterTake)}`)
     const renderedProgramAfterTake = await waitForProgramCanvas(
-      "Synthetic QA words for the mixed Prepare journey",
+      yorubaWords,
       "the reopened Hymn after its explicit Take",
     )
     const programOutputAfterTake = await captureProgramOutput("after-take", { expectedChangeFromHash: programOutputBaseline.hash })
@@ -338,6 +348,7 @@ async function runScenario() {
       ],
       order: reopenedIds,
       previewLabel,
+      bilingualWords: { en: englishWords, yo: yorubaWords },
       renderedBaselineProgram,
       renderedProgramBeforeTake,
       renderedProgramAfterTake,
