@@ -88,6 +88,19 @@ describe("Home: skipped rundown items", () => {
     expect(rows.textContent).not.toContain(" · next")
   })
 
+  it("does not mark a next item when every later item is hidden or in a disabled phase", async () => {
+    const rows = await render(
+      [slide("Current"), slide("Hidden tail", { hidden: true }), slide("Skipped phase tail")],
+      [{ id: "skipped", type: "phase", name: "Skipped phase", at: 2, disabled: true }],
+      0,
+    )
+    const entries = [...rows.querySelectorAll("ol > li")]
+
+    expect(entries[1].textContent).toContain("Hidden for this service")
+    expect(entries[2].textContent).toContain("Phase skipped for this service")
+    expect(rows.textContent).not.toContain(" · next")
+  })
+
   it("counts saved items but schedules time only for items that are not skipped", async () => {
     const rows = await render(
       [slide("Current", { planned_minutes: 5 }), slide("Hidden", { hidden: true, planned_minutes: 10 }), slide("Warm-up item", { planned_minutes: 20 }), slide("Main item", { planned_minutes: 7 })],
@@ -105,9 +118,15 @@ describe("Home: skipped rundown items", () => {
     expect(planStat?.textContent).toContain("12 min scheduled")
   })
 
-  it("explains when every item is hidden and there is nothing runnable", async () => {
-    const rows = await render([slide("Hidden one", { hidden: true }), slide("Hidden two", { hidden: true })], [], 0)
+  it("explains when every item is hidden or in a skipped phase", async () => {
+    const rows = await render(
+      [slide("Hidden one", { hidden: true }), slide("Skipped phase item")],
+      [{ id: "skipped", type: "phase", name: "Skipped phase", at: 1, disabled: true }],
+      0,
+    )
+    const entries = [...rows.querySelectorAll("ol > li")]
 
+    expect(entries[1].textContent).toContain("Phase skipped for this service")
     expect(rows.textContent).toContain("Every item is hidden or in a skipped phase; nothing is scheduled to present.")
     expect(rows.textContent).not.toContain(" · next")
   })
