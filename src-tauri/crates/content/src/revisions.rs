@@ -212,7 +212,7 @@ impl ContentDb {
             // The caller may be retrying a refresh whose successful response was lost.
             // Accept only the exact manifest stored as the immediately following approved
             // revision; all other stale approvals remain conflicts.
-            if let Some(program) = approved_refresh_retry(&tx, program_id, expected_revision, current_approved_revision, designs)? {
+            if let Some(program) = approved_refresh_retry(&tx, program_id, expected_revision, actual_revision, current_approved_revision, designs)? {
                 tx.commit()?;
                 return Ok(program);
             }
@@ -363,12 +363,13 @@ fn approved_refresh_retry(
     tx: &Transaction<'_>,
     program_id: &str,
     expected_revision: i64,
+    actual_revision: i64,
     current_approved_revision: Option<i64>,
     designs: &ApprovedDesignSnapshot,
 ) -> Result<Option<crate::Program>> {
     let Some(retry_revision) = expected_revision
         .checked_add(1)
-        .filter(|revision| current_approved_revision == Some(*revision))
+        .filter(|revision| actual_revision == *revision && current_approved_revision == Some(*revision))
     else {
         return Ok(None);
     };
@@ -471,6 +472,11 @@ mod tests {
         assert_eq!(retried, refreshed);
         assert_eq!(db.list_revisions(&p.id).unwrap(), revisions_after_refresh);
         assert_eq!(db.audit_events("program", &p.id).unwrap().iter().filter(|e| e.action == "approve").count(), approvals_after_refresh);
+
+        let later_edit = db.update_program(&p.id, refreshed.revision, "Concurrent draft edit", None).unwrap();
+        let late_retry = db.approve_program_with_designs(&p.id, first.revision, &after);
+        assert!(matches!(late_retry, Err(ContentError::Conflict { expected, actual }) if expected == first.revision && actual == later_edit.revision));
+        assert_eq!(db.get_program(&p.id).unwrap().unwrap().program.title, "Concurrent draft edit");
 
         assert!(matches!(db.approve_program_with_designs(&p.id, first.revision, &before), Err(ContentError::Conflict { .. })));
     }
