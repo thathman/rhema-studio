@@ -18,7 +18,10 @@ const slide = (id: string, planned_minutes: number): QueueItem =>
 const at = (h: number, m: number) => new Date(2026, 9, 25, h, m).getTime()
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 
 function Probe() {
   const { timing } = useServiceTiming()

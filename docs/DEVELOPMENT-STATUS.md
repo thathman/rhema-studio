@@ -1,24 +1,24 @@
 # Rhema Studio — Development Status
 
-> **Snapshot warning (2026-10-26):** This page was last reconciled 2026-10-22 and is not a live representation of current main/open PRs. Start with the [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md), inspect GitHub head/PRs/CI, and record verified deltas before asserting implementation or acceptance. This warning does not update the historical snapshot below.
+> **Snapshot (2026-10-27):** This page reflects upstream `main` and the listed PR state checked on 27 October. Check GitHub for changes after this snapshot; do not infer device acceptance from CI.
 
 Short, durable snapshot for resuming work. Backlog: [TASKS.md](TASKS.md). Requirements: [PRD.md](PRD.md). Release gates: [RELEASE-PLAN.md](RELEASE-PLAN.md).
 
-**Updated:** 2026-10-26
+**Updated:** 2026-10-27
 
 ## Current takeover snapshot
 
-- Target repository: `thathman/rhema-studio`; verified `main` remains `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25). PR #414 (`fix/p0-live-scene-and-queue-insertions`) remains open and unmerged; source commit `db2dcbf` adds backup-restore, NDI and enabled browser/TV regressions, plus visible output, scene revision, actor and rehearsal scope details before Take in Present and Production. A follow-up regression now verifies rehearsal can preview a saved edit to the same scene while public outputs and rehearsal exit retain the captured scene revision; latest hosted checks are pending.
-- Current open implementation stack: [PR #414](https://github.com/thathman/rhema-studio/pull/414) covers #383/#384; [#415](https://github.com/thathman/rhema-studio/pull/415) covers the Hymn Book detail/Add flow (#385/#386); #417 preserves hymn identity; #427 reports recoverable hymn-search failures; [#428](https://github.com/thathman/rhema-studio/pull/428) commits rundown position after successful Take; and [#438](https://github.com/thathman/rhema-studio/pull/438) adds a native macOS hymn QA slice for #411. [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses #398 on a separate stack. All remain unmerged.
-- PR #438's hosted native Intel Mac journey passed on head `220c121`; it verifies the edited bilingual hymn can be reopened and previewed while Live remains off. No projector, TV, OBS/NDI receiver, camera, Windows or physical church-system acceptance is claimed; #411 remains open.
-- Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the repository implementation contract. The PRD and task history below predate this issue batch.
-- Latest CI on target `main` is [successful on the verified head](https://github.com/thathman/rhema-studio/actions/runs/40158839409).
-- Open PRs at takeover: [#4](https://github.com/thathman/rhema-studio/pull/4), [#278](https://github.com/thathman/rhema-studio/pull/278), [#352](https://github.com/thathman/rhema-studio/pull/352), and [#367](https://github.com/thathman/rhema-studio/pull/367). #352 and #367 warn that merging publishes the website; none was merged as part of this work.
-- Next implementation sequence: complete #383 backup/recovery and output-path acceptance on PR #414, then continue the #398 approved-release and #411 device-journey gates. The Hymn Book and successful-Take fixes are already represented by open stacked PRs #415–#428 and still require integration and acceptance.
+- Target repository: `thathman/rhema-studio`; `main` is `bcff115968569267e7a11e1693951009f8fde139`. PRs #424, #451 and #475 are merged as `8900656`, `182e5c7` and `bcff115`; the latest main CI run [40439274689](https://github.com/thathman/rhema-studio/actions/runs/40439274689) passed.
+- PR #414 covers P0 issues #383/#384. Its branch is being rebased from base `d982db8` onto current main. The two timing-test conflicts were resolved by retaining deterministic `Date.now()` and `performance.now()` mocks, cleanup of mocks/timers, and explicit React-root unmounts. Focused local suites pass: 5 files, 54 tests. Fresh full hosted checks are required on the pushed rebased head before merge.
+- The P0 scene regressions cover save without Take, backup restore, NDI/browser/TV snapshots and rehearsal isolation; queue tests cover stable insertion at the beginning, end, selected phase and nested groups. No physical output acceptance is claimed.
+- The current Prepare recommendation is an event foundation (#430) followed by a consolidated Add/selection/editor workflow from #454–#470. These candidate branches have not been rebased onto the post-#414 main and their current hosted checks do not validate the integrated stack.
+- [PR #415](https://github.com/thathman/rhema-studio/pull/415) covers the Hymn Book detail/Add flow (#385/#386); #417 preserves hymn identity; #427 covers hymn-search recovery; #428 covers successful-Take state; #420 addresses #398; #438 adds a native macOS hymn QA path. These remain open and require reconciliation with the Prepare stack.
+- [PR #438](https://github.com/thathman/rhema-studio/pull/438) passed a hosted native Intel Mac hymn journey with Live off. Projector/TV, OBS/NDI, camera, Windows and offline church-system acceptance remain unverified; #411 is not complete.
+- Owner-ratified architecture and cross-feature failure contracts are [#243](https://github.com/thathman/rhema-studio/issues/243) and [#246](https://github.com/thathman/rhema-studio/issues/246); ADR 0001 is the implementation contract. #352 and #367 remain publishing-gated and were not merged. There are 43 open PRs at this snapshot.
 
 ## Integrated `main`
 
-- Head: `6eaa7ddc01543b19cb5db568aa1f47a7ceeae457` (2026-10-25; current as of this takeover snapshot)
+- Head: `bcff115968569267e7a11e1693951009f8fde139` (2026-10-27; current as of this snapshot)
 - Contents: see CHANGELOG.md. `studio.db` is at migration 0012 (services, item identity, songs, media, revisions, key/tempo, approval, service logs, attachments, archive/templates/approver, who saved each version).
 - Branches `feature/language-integration`, `feature/rhema-studio-foundation`, `feature/rhema-studio-content`, `docs/rhema-studio-product-plan` are merged and kept (not deleted).
 
@@ -28,7 +28,7 @@ Enabled 2026-10-20. #31 ST-006 acceptance pass, #32 QA-001 Windows smoke, #33 an
 
 ## Open PRs
 
-- Current open PRs are listed in the takeover snapshot above; check GitHub for changes after 2026-10-25.
+- 43 open PRs were returned by a full `gh pr list --limit 1000` query on 2026-10-27. Check GitHub for changes after this snapshot.
 
 ## Active milestone
 
@@ -36,9 +36,9 @@ All PRD milestones through 8 have first slices merged: 2B songs, 2C service buil
 
 ## Latest test results
 
-- PR #414 local branch at `db2dcbf`: `bunx vitest run` — 243 files, 1,765 tests passed; `bun run typecheck`, `bun run lint` and `bun run build` passed. Build retains existing Vite mixed-import and large-chunk warnings. Baseline-failing regressions cover scene snapshots after backup restore, NDI and enabled browser feeds; Present and Production interaction tests verify the pre-Take details and that selecting a draft does not change the output.
-- Hosted CI is green for PR #414 head `8a0cca5` ([run 40272729012](https://github.com/thathman/rhema-studio/actions/runs/40272729012)) and PR #438 head `220c121`. The #414 source tested by that run is `db2dcbf`; `8a0cca5` adds the corresponding documentation update.
-- CI on target `main`: the run on the verified head is successful (linked above). No Rust source changed in PR #414, so no separate Rust test run was performed for that branch.
+- On the #414 rebased worktree, the focused scene, queue, Add, and timing suites pass: 5 files, 54 tests. `bun install --frozen-lockfile` passed. Before merge, require all hosted Frontend, Lint, Rust and Companion checks on the latest PR head; older green runs on stale bases do not verify it.
+- CI on current `main` `bcff115` passed in [run 40439274689](https://github.com/thathman/rhema-studio/actions/runs/40439274689). #424, #451 and #475 each passed all required jobs on their integration heads; see their PR check histories.
+- PR #438's hosted native macOS journey passed with Live off, but it does not verify physical output hardware or offline cold start. Build warnings and unverified hardware gates remain recorded below.
 
 ## Unverified (release-acceptance blockers, not development blockers)
 

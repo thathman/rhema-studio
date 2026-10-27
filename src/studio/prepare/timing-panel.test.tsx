@@ -22,7 +22,10 @@ function setClock(h: number, m: number, mono: number) {
   vi.spyOn(performance, "now").mockReturnValue(mono)
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 
 describe("run of show timing: actual times", () => {
   it("shows when the service began against its start, each item's time on air, and moves the finish", async () => {
