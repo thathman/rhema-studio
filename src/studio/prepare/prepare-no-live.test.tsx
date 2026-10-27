@@ -10,11 +10,20 @@ vi.hoisted(() => {
 const mockService = vi.hoisted(() => ({
   program: null as null | Record<string, unknown>,
   items: [] as Record<string, unknown>[],
+  verses: [
+    { id: 1, translation_id: 1, book_number: 19, book_name: "Psalms", book_abbreviation: "Ps", chapter: 23, verse: 1, text: "The Lord is my shepherd" },
+    { id: 2, translation_id: 1, book_number: 43, book_name: "John", book_abbreviation: "Jn", chapter: 3, verse: 16, text: "For God so loved the world" },
+  ],
 }))
 // Lists come back empty; anything else has nothing to say.
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
     if (cmd.endsWith("_list")) return []
+    if (cmd === "get_verse") {
+      return mockService.verses.find((verse) =>
+        verse.book_number === args?.bookNumber && verse.chapter === args?.chapter && verse.verse === args?.verse,
+      ) ?? null
+    }
     if (cmd === "content_create_program") {
       mockService.program = {
         id: "local-draft",
@@ -51,12 +60,15 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), e
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { PrepareWorkspace } from "./prepare-workspace"
+import { LiveOutputPanel } from "@/components/panels/live-output-panel"
+import { TransportBar } from "@/studio/present/transport-bar"
 import { saveStateOf } from "./save-state"
 import { useQueueStore } from "@/stores/queue-store"
 import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useAddDialog } from "@/studio/prepare/add-target"
+import { useRundownSelection } from "@/studio/prepare/rundown-selection"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
 import type { QueueItem } from "@/types"
@@ -72,18 +84,20 @@ afterEach(() => {
   root = null
   try { window.localStorage.removeItem("rhema.prepare.rundown-view.v1") } catch { /* unavailable in the Node test runner */ }
   useAddDialog.getState().close()
+  useRundownSelection.getState().clear()
   mockService.program = null
   mockService.items = []
   document.body.replaceChildren()
   useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
 })
 
-async function renderPrepare() {
+async function renderPrepare(withLiveControls = false) {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const el = document.createElement("div")
   document.body.appendChild(el)
   root = createRoot(el)
-  await act(async () => root!.render(<PrepareWorkspace />))
+  const workspace = withLiveControls ? <><PrepareWorkspace /><LiveOutputPanel /><TransportBar /></> : <PrepareWorkspace />
+  await act(async () => root!.render(workspace))
   return el
 }
 
@@ -238,6 +252,137 @@ describe("Prepare never takes anything live (#299)", () => {
     await act(async () => itemRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
+  }, 30_000)
+
+  it("roundtrips Bible and slide moments, edits and reorders them, and keeps Preview private until Take", async () => {
+    const alreadyLive = {
+      kind: "slide",
+      content: "slide",
+      reference: "Previously on air",
+      segments: [],
+      lines: ["The running service is unchanged"],
+    }
+    useQueueStore.setState({ items: [], headers: [], activeIndex: null, addTarget: null })
+    useRundownSelection.getState().clear()
+    useBibleStore.setState({
+      selectedVerse: null,
+      selectedSlide: null,
+      selectedQueueItemId: null,
+      activeTranslationId: 1,
+      secondaryTranslationId: null,
+      translations: [{ id: 1, abbreviation: "KJV", title: "King James Version", language: "en", is_copyrighted: false, is_downloaded: true }],
+      books: [
+        { id: 19, translation_id: 1, book_number: 19, name: "Psalms", abbreviation: "Ps", testament: "OT" },
+        { id: 43, translation_id: 1, book_number: 43, name: "John", abbreviation: "Jn", testament: "NT" },
+      ],
+    })
+    useServiceStore.setState({ programs: [], current: null, dirty: false, saving: false })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "currently-on-air", liveSlide: null, liveVerse: alreadyLive as never })
+    const el = await renderPrepare(true)
+    const livePanel = el.querySelector<HTMLElement>('[data-slot="live-output-panel"]')!
+    const liveCanvas = () => livePanel.querySelector<HTMLCanvasElement>('canvas[role="img"]')
+    const liveAtStart = liveCanvas()?.getAttribute("aria-label")
+    expect(liveAtStart).toContain("Previously on air")
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add event"]')!.click())
+    const sermon = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Sermon")!
+    await act(async () => sermon.click())
+    const eventId = useQueueStore.getState().headers.find((header) => header.name === "Sermon")!.id
+
+    const setValue = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    const openEventAdd = async () => {
+      const edit = el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!
+      if (edit.getAttribute("aria-pressed") !== "true") await act(async () => edit.click())
+      await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add content to Sermon"]')!.click())
+    }
+    const addBibleMoment = async (example: string, reference: string) => {
+      await openEventAdd()
+      const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+      const before = new Set(useQueueStore.getState().items.map((item) => item.id))
+      const search = dialog.querySelector<HTMLInputElement>('input[aria-label="Quick find"]')!
+      await act(async () => setValue(search, example))
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 240)) })
+      const result = [...dialog.querySelectorAll("li")].find((row) => row.textContent?.includes(reference))!
+      expect(result).toBeDefined()
+      await act(async () => [...result.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add")!.click())
+      expect(useAddDialog.getState().open).toBe(false)
+      const added = useQueueStore.getState().items.filter((item) => !before.has(item.id))
+      expect(added).toHaveLength(1)
+      return added[0]
+    }
+
+    const psalm = await addBibleMoment("psalm 23 1", "Psalms 23:1")
+    expect(psalm).toHaveProperty("verse")
+
+    await openEventAdd()
+    const slideDialog = document.body.querySelector<HTMLElement>('[role="dialog"]')!
+    const slidesTab = [...slideDialog.querySelectorAll<HTMLButtonElement>('button[role="tab"]')].find((button) => button.textContent?.trim() === "Slides")!
+    await act(async () => { slidesTab.focus(); slidesTab.click() })
+    const slideTitle = slideDialog.querySelector<HTMLInputElement>('[aria-label="Slide title"]')!
+    const slideText = slideDialog.querySelector<HTMLTextAreaElement>('[aria-label="Slide text"]')!
+    await act(async () => { setValue(slideTitle, "Sermon draft"); setValue(slideText, "Draft words") })
+    await act(async () => [...slideDialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add to service")!.click())
+    const slideMoment = useQueueStore.getState().items.find((item) => item.kind === "slide")!
+    expect(slideMoment.kind).toBe("slide")
+
+    const john = await addBibleMoment("john 3 16", "John 3:16")
+    expect(john).toHaveProperty("verse")
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual([psalm.id, slideMoment.id, john.id])
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
+
+    const slideRow = () => el.querySelector<HTMLElement>(`[data-rundown-item-id="${slideMoment.id}"]`)
+    await act(async () => slideRow()!.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    const editorTitle = el.querySelector<HTMLInputElement>('[aria-label="Slide title"]')!
+    const editorText = el.querySelector<HTMLTextAreaElement>('[aria-label="Slide text"]')!
+    await act(async () => { setValue(editorTitle, "Edited sermon title"); setValue(editorText, "Revised words for Sunday") })
+    expect(useQueueStore.getState().items.find((item) => item.id === slideMoment.id)).toMatchObject({
+      reference: "Edited sermon title",
+      slide: { title: "Edited sermon title", body: "Revised words for Sunday" },
+    })
+
+    useRundownSelection.getState().clear()
+    const clickWithControl = async (id: string) => act(async () => {
+      const rowButton = el.querySelector<HTMLElement>(`[data-rundown-item-id="${id}"] button[title="Click to preview"]`)!
+      rowButton.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }))
+    })
+    await clickWithControl(psalm.id)
+    await clickWithControl(john.id)
+    expect(useRundownSelection.getState().ids).toEqual([psalm.id, john.id])
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Move the picked items up"]')!.click())
+    expect(useQueueStore.getState().items.map((item) => item.id)).toEqual([psalm.id, john.id, slideMoment.id])
+    useRundownSelection.getState().clear()
+
+    const save = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
+    await act(async () => save.click())
+    expect(useServiceStore.getState().dirty).toBe(false)
+    expect(await useServiceStore.getState().closeProgram()).toBe("closed")
+    expect(await useServiceStore.getState().openProgram("local-draft")).toBe("ok")
+
+    const reopened = useQueueStore.getState()
+    expect(reopened.items.map((item) => item.id)).toEqual([psalm.id, john.id, slideMoment.id])
+    expect(reopened.items.map((item) => "verse" in item ? "verse" : item.kind)).toEqual(["verse", "verse", "slide"])
+    expect(reopened.items.find((item) => item.id === slideMoment.id)).toMatchObject({
+      reference: "Edited sermon title",
+      slide: { title: "Edited sermon title", body: "Revised words for Sunday" },
+    })
+    expect(projectRunOfShowEvents(reopened.items, reopened.headers).find((event) => event.id === eventId)?.moments.map((item) => item.id)).toEqual(reopened.items.map((item) => item.id))
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
+
+    const reopenedSlideRow = el.querySelector<HTMLElement>(`[data-rundown-item-id="${slideMoment.id}"]`)!
+    await act(async () => reopenedSlideRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
+    const previewCanvas = el.querySelector<HTMLCanvasElement>('[data-slot="preview-panel"] canvas[role="img"]')!
+    expect(previewCanvas.getAttribute("aria-label")).toContain("Edited sermon title")
+    expect(previewCanvas.getAttribute("aria-label")).toContain("Revised words for Sunday")
+    expect(liveCanvas()?.getAttribute("aria-label")).toBe(liveAtStart)
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: "currently-on-air", liveVerse: alreadyLive })
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Take live"]')!.click())
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: true, liveItemId: slideMoment.id, liveVerse: { reference: "Edited sermon title", lines: ["Revised words for Sunday"] } })
+    expect(liveCanvas()?.getAttribute("aria-label")).toContain("Edited sermon title")
+    expect(liveCanvas()?.getAttribute("aria-label")).toContain("Revised words for Sunday")
   }, 30_000)
 
   it("opens New and Duplicate service forms from the service actions menu", async () => {

@@ -75,6 +75,20 @@ Review independently. Merge only when tested against the actual target branch, p
 ### Required agent completion handoff
 Every agent must return: role/task; base SHA; files read/changed; branch/commit or PR; exact commands and results; dependencies/blockers; untested hardware or migration risks; next action; and whether its work is `PROPOSED`, `IN PR`, `MERGED`, `ACCEPTED` or `SHIPPED`. No invented results.
 
+## Subagent evidence and integration gate (owner-enforced 27 October 2026)
+
+Every substantial implementation PR needs an auditable `### Delegation and integration evidence` section. Include:
+
+1. **Lead and starting state:** named lead execution context, true `main` SHA, PR base/head SHA, dependency PRs and possible overlaps.
+2. **Agent roster:** each *actually spawned* agent's name/role, bounded objective, assigned files, read-only vs writer, worktree/branch, start/finish order, and whether agents truly overlapped in time. Do not publish private prompts or secrets. A declared `.codex/agents` profile **does not** prove a run occurred.
+3. **No capacity?** Write `Serial fallback` and the concrete failure/resource limit, then execute serially instead of waiting indefinitely.
+4. **Output and lead review:** changed files or findings, how the lead checked them, tests and exact results; resolve conflicting recommendations before merging.
+5. **Integration evidence:** actual parent/target, head SHA, fresh CI on the correct base, collisions with other PRs, final integration owner and remaining real-device gates.
+
+Before starting a new PR, prefer merging or reconciling *existing safe green work*. A deliberately stacked PR is justified only for a specific dependency, with the parent named; after the parent merges, retarget/rebase and re-verify. Do not close a PR as superseded unless its distinct code/tests are demonstrably preserved. Preserve normal approval rules, CI and release gates.
+
+For 27 October 2026 CI, **job logs** from runs `40530544218` (#490), `40534311958` (#492) and `40536903146` (#493) show Linux dependency installation pulling dozens/hundreds of packages from `azure.archive.ubuntu.com` over 20 minutes, ending in the explicit step timeout. This is **not evidence of a Rust compile/test failure**. See the workflow `.github/workflows/ci.yml` for the configured 20-minute install-step timeout. Only treat an install retry as successful after all required jobs complete; profile package mirror throughput and installed dependencies separately from compiler/test timings. Do not change mirrors, remove packages or lengthen timeouts blindly.
+
 ## Compact example instruction for the main Codex thread
 > Follow `AGENTS.md`, the unified handoff and this playbook. First re-audit current main, all open PRs and CI evidence. Spawn three read-only subagents in parallel: `pr-auditor` for PR DAG/duplicates, `ci-profiler` for measured build bottlenecks, and `qa-reviewer` for safety/testing coverage. Reconcile their findings into a prioritized, evidence-backed integration plan. Then implement the smallest safe unblocker with a focused PR and passing tests. Use independent worker agents in isolated branches/worktrees **only** for disjoint implementation scopes. Keep the 26 October product scope intact. Do not merge website PRs, deploy, publish, modify production data, or claim hardware validation without evidence. Continue sequentially through verified small PRs; report concrete progress, not future-work promises.
 
