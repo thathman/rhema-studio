@@ -9,6 +9,7 @@ import { useQueueStore } from "@/stores/queue-store"
 import { useServiceStore } from "@/stores/service-store"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { EventCuesEditor } from "@/studio/prepare/event-cues-editor"
+import { RunOfShowEventPreview } from "@/studio/prepare/run-of-show-event-preview"
 import { LookAndScene, TakeSteps } from "@/studio/prepare/item-editor-parts"
 import type { QueueItem } from "@/types"
 
@@ -80,10 +81,11 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
       </header>
 
       <Tabs defaultValue="content" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="mx-5 mt-3 grid w-[calc(100%-2.5rem)] grid-cols-4">
+        <TabsList className="mx-5 mt-3 grid w-[calc(100%-2.5rem)] grid-cols-5">
           <TabsTrigger value="content" aria-label="Event content">Content</TabsTrigger>
           <TabsTrigger value="plan" aria-label="Event plan">Plan</TabsTrigger>
           <TabsTrigger value="scenes" aria-label="Event scenes">Scenes</TabsTrigger>
+          <TabsTrigger value="preview" aria-label="Event preview">Preview</TabsTrigger>
           <TabsTrigger value="signals" aria-label="Event signals">Signals</TabsTrigger>
         </TabsList>
         <TabsContent value="content" aria-label="Event content" className="min-h-0 overflow-y-auto px-5 py-4">
@@ -208,6 +210,9 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
               <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">Add a moment to this event before assigning scenes.</p>
             )}
           </section>
+        </TabsContent>
+        <TabsContent value="preview" aria-label="Event preview" className="min-h-0 overflow-y-auto px-5 py-4">
+          <RunOfShowEventPreview eventTitle={header.name} moments={moments} />
         </TabsContent>
         <TabsContent value="signals" aria-label="Event signals" className="min-h-0 overflow-y-auto px-5 py-4">
           <EventCuesEditor eventId={header.id} />
