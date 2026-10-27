@@ -13,6 +13,14 @@
 - The lead integrates results, validates current `main` and PR dependency graph, runs or verifies tests, and remains accountable for safe integration. No subagent may bypass approvals, tests, owner restrictions, licensing or hardware proof.
 - Prioritize deterministic CI, P0 Live/Plan safety, one fully usable Prepare slice, then independent incremental app and editor deliveries. Measure actual CI times before claiming gains; never substitute quick local checks for full required gates.
 
+## Codex CLI progress visibility (27 October 2026)
+
+**Codex CLI owner request:** use [codex-tasklist](https://github.com/martinille/codex-tasklist) to show the current task queue and status changes directly in the terminal. Follow [docs/CODEX-TASKLIST-CLI.md](docs/CODEX-TASKLIST-CLI.md) to install the plugin **on the machine running Codex CLI**, review/trust its local Python hooks, restart the CLI, and set up the launcher/panel when supported.
+
+- The lead should keep a *bounded active-work* task queue accurate (`pending`, `active`, `blocked`, `done`) throughout each implementation session, including delegated subagent handoffs and verification. Do not call a PR merged/shipped merely because a subtask is done.
+- The plugin's per-session SQLite queue and pane are **local only**. For remote owner visibility, post evidence-backed milestone updates to the appropriate existing GitHub issue/PR; do not promise that tasklist automatically syncs to GitHub.
+- If CLI plugin support, Python, hook trust or terminal panel is unavailable, report actual blockers and use the upstream-supported queue/text fallback. A repository instruction is not evidence that the CLI plugin has been installed.
+
 ## Source of truth
 
 1. Latest owner-ratified [#243](https://github.com/thathman/rhema-studio/issues/243) + architecture [#246](https://github.com/thathman/rhema-studio/issues/246) take precedence over obsolete early per-verse destination-selection designs.
