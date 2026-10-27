@@ -37,10 +37,10 @@ jobs:
         run: bunx vitest run
       - name: Dependency licences (npm production tree)
         run: bun scripts/check-licenses.ts --js
-      - name: Production build (tsc -b && vite build)
-        run: bun run build
-      - name: Rhema Studio Companion page build (its own Vite entry, #209)
-        run: bun run companion:web
+      - name: Production build (Vite; typecheck passed above)
+        run: bun run vite build
+      - name: Rhema Studio Companion page build (its own Vite entry, #209; typecheck passed above)
+        run: bun run vite build --config companion-app/vite.config.ts
 
   lint:
     # The whole repository lints clean (ST-010); any new error fails the job.
