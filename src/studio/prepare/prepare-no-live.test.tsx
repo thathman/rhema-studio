@@ -537,6 +537,7 @@ describe("Prepare never takes anything live (#299)", () => {
 
     await act(async () => [...dialog.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Add phases")!.click())
     expect(useQueueStore.getState().items.map((item) => item.id)).toEqual(items.map((item) => item.id))
+    expect(useQueueStore.getState().activeIndex).toBe(before.activeIndex)
     expect(useQueueStore.getState().headers.filter((header) => header.type === "phase")).toHaveLength(4)
     expect(useQueueStore.getState().past).toHaveLength(1)
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
