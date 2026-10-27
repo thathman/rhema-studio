@@ -28,6 +28,8 @@ interface QueueState {
   updateHeader: (id: string, patch: Partial<OutlineHeader>) => void
   /** Remove a phase or group; its items stay where they are. */
   removeHeader: (id: string) => void
+  /** Remove every phase in one undoable edit; events, groups and items stay. */
+  removePhases: () => void
   /** Flash-highlight a queue item briefly (1.5 s). */
   flashItem: (id: string) => void
   /** Find an existing item by book+chapter+verse. Returns its index or -1. */
@@ -262,6 +264,11 @@ export const useQueueStore = create<QueueState>((rawSet, get) => {
   setAddTarget: (addTarget) => set({ addTarget }),
   updateHeader: (id, patch) => set((state) => ({ headers: state.headers.map((h) => (h.id === id ? { ...h, ...patch, id } : h)) }), `header:${id}`),
   removeHeader: (id) => set((state) => ({ headers: state.headers.filter((h) => h.id !== id) })),
+  removePhases: () =>
+    set((state) => {
+      const headers = state.headers.filter((header) => header.type !== "phase")
+      return headers.length === state.headers.length ? state : { headers }
+    }),
   flashItem: (id) => {
     if (flashTimer) clearTimeout(flashTimer)
     set({ highlightedId: id })
