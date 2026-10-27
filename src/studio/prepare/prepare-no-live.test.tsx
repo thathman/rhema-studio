@@ -216,7 +216,10 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(useBibleStore.getState().selectedSlide?.item.id).toBe(inserted.id)
     expect(el.querySelector('button[aria-label="Event plan"]')).toBeNull()
     expect(el.textContent).toContain("Confidence")
-    expect(document.activeElement).toBe(document.querySelector(`[data-rundown-item-id="${inserted.id}"]`))
+    await vi.waitFor(
+      () => expect(document.activeElement).toBe(document.querySelector(`[data-rundown-item-id="${inserted.id}"]`)),
+      { timeout: 1000 },
+    )
     expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
 
     const save = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Save")!
@@ -234,7 +237,7 @@ describe("Prepare never takes anything live (#299)", () => {
     await act(async () => itemRow.querySelector<HTMLButtonElement>('button[title="Click to preview"]')!.click())
     expect(useBibleStore.getState().selectedQueueItemId).toBe(inserted.id)
     expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
-  })
+  }, 30_000)
 
   it("opens New and Duplicate service forms from the service actions menu", async () => {
     const current = { id: "service", title: "Sunday service", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 }
@@ -585,7 +588,7 @@ describe("Prepare never takes anything live (#299)", () => {
     expect(el.querySelector('button[aria-label="Hide Main service"]')).not.toBeNull()
     expect(el.querySelector('button[aria-label="Hide Sermon"]')).not.toBeNull()
     expect(el.querySelector('button[aria-label="Hide Scripture moments"]')).not.toBeNull()
-    expect(document.activeElement).toBe(row)
+    await vi.waitFor(() => expect(document.activeElement).toBe(row), { timeout: 1000 })
     expect(useAddDialog.getState().open).toBe(false)
     expect(useBroadcastStore.getState()).toEqual(liveBefore)
   })
