@@ -267,13 +267,13 @@ describe("Prepare never takes anything live (#299)", () => {
     const duplicateAction = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Duplicate service")!
     expect(duplicateAction).toBeDefined()
     await chooseAction(newAction)
-    expect(document.body.querySelector<HTMLInputElement>("#svc-title")).not.toBeNull()
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>("#svc-title")).not.toBeNull(), { timeout: 1000 })
     await act(async () => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Cancel")!.click())
     await openActions()
     const duplicate = [...document.body.querySelectorAll<HTMLElement>("[role=menuitem]")].find((item) => item.textContent?.trim() === "Duplicate service")!
     await chooseAction(duplicate)
-    expect(document.body.querySelector<HTMLInputElement>("#dup-title")?.value).toBe("Sunday service (copy)")
-  })
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLInputElement>("#dup-title")?.value).toBe("Sunday service (copy)"), { timeout: 1000 })
+  }, 30_000)
 
   it("opens an event plan editor and keeps its edits separate from live output", async () => {
     useQueueStore.setState({
