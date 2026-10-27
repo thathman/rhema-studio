@@ -4,6 +4,15 @@
 
 **Mandatory coverage preservation:** Read [docs/rhema-studio/32-feature-coverage-inventory.md](docs/rhema-studio/32-feature-coverage-inventory.md) after the handover. Earlier approved features (especially Rhema Comms simultaneous full-duplex PTT, private notices, MCP service drafts, quiz, rehearsal, independent outputs and church sync) may be described in separate issues; none may be dropped just because the unified route specification summarizes them.
 
+## Delivery acceleration and required subagent use (27 October 2026)
+
+**Read [docs/FAST-DELIVERY-SUBAGENTS.md](docs/FAST-DELIVERY-SUBAGENTS.md) before planning or implementing multi-PR, CI, or cross-workspace changes.** This is an execution protocol; the unified product handoff and coverage inventory remain the product authority.
+
+- On complex tasks with independent work, the lead Codex thread **must delegate distinct, bounded subtasks to subagents**, normally starting with the project specialists `pr-auditor`, `ci-profiler`, and `qa-reviewer` for the initial audit. Use built-in `worker` for isolated code implementation. See project agent definitions in `.codex/agents/` and optional concurrency cap in `.codex/config.toml`.
+- Prefer three concurrent independent subagents; maximum four in project configuration. **No two writing agents may edit the same working tree or file set.** Use isolated worktrees/branches with explicit file ownership; otherwise delegate read-only analysis and serialize code edits. Keep trivial or sequential tasks single-agent.
+- The lead integrates results, validates current `main` and PR dependency graph, runs or verifies tests, and remains accountable for safe integration. No subagent may bypass approvals, tests, owner restrictions, licensing or hardware proof.
+- Prioritize deterministic CI, P0 Live/Plan safety, one fully usable Prepare slice, then independent incremental app and editor deliveries. Measure actual CI times before claiming gains; never substitute quick local checks for full required gates.
+
 ## Source of truth
 
 1. Latest owner-ratified [#243](https://github.com/thathman/rhema-studio/issues/243) + architecture [#246](https://github.com/thathman/rhema-studio/issues/246) take precedence over obsolete early per-verse destination-selection designs.
