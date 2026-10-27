@@ -754,6 +754,8 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().syncBroadcastOutput()
     let payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as { stage: { current: { lines: string[] } } }
     expect(payload.stage.current.lines).toEqual(["Oore-ọ̀fẹ́ ìyanu"])
+    let mainPayload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-main")?.[2] as { verse: { lines?: string[]; secondaryLines?: string[]; translationLines?: string[] } }
+    expect(mainPayload.verse).toMatchObject({ lines: ["Amazing grace"], secondaryLines: ["Oore-ọ̀fẹ́ ìyanu"] })
 
     emitToMock.mockClear()
     useBroadcastStore.setState({ liveVerse: {
@@ -765,6 +767,8 @@ describe("updateDraftNested deep paths", () => {
     useBroadcastStore.getState().syncBroadcastOutput()
     payload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as { stage: { current: { lines: string[] } } }
     expect(payload.stage.current.lines).toEqual(["Nítorí Ọlọ́run fẹ́ aráyé"])
+    mainPayload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-main")?.[2] as { verse: { translationLines: string[] } }
+    expect(mainPayload.verse.translationLines).toEqual(["For God so loved the world", "Nítorí Ọlọ́run fẹ́ aráyé"])
   })
 
   it("the ticker crawls only on outputs that show it, takes word changes at once and stops", async () => {
