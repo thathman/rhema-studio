@@ -54,6 +54,8 @@ import { ObsPanel } from "@/studio/production/obs-panel"
 import { ReadyMadeFeeds } from "@/studio/production/ready-made-feeds"
 import { useEventClock } from "@/stores/event-clock-store"
 import { useQueueStore } from "@/stores/queue-store"
+import { runOfShowClockRows } from "@/lib/run-of-show"
+import { eventTimes } from "@/lib/journal"
 import { countdownLine, countdownTarget } from "@/lib/countdown"
 import { CountdownSelect } from "@/studio/production/countdown-select"
 
@@ -883,14 +885,26 @@ function TvRow({ output, tv, watching }: { output: BroadcastOutput; tv: Receiver
 function EventClockBar() {
   const mode = useEventClock((s) => s.mode)
   const currentId = useEventClock((s) => s.currentId)
+  const untrusted = useTimingTrust((s) => s.untrusted)
   const items = useQueueStore((s) => s.items)
-  const current = items.find((i) => i.id === currentId)
-  const at = current ? items.indexOf(current) : -1
-  const next = items[at + 1]
+  const headers = useQueueStore((s) => s.headers)
+  const entries = useJournalStore((s) => s.entries)
+  const [now, setNow] = useState(() => monotonicNow())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(monotonicNow()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  const rows = runOfShowClockRows(items, headers).rows
+  const current = rows.find((row) => row.id === currentId)
+  const at = current ? rows.indexOf(current) : -1
+  const next = rows[at + 1]
+  const elapsed = current ? eventTimes(entries, now).get(current.id) : undefined
+  const timeUntrusted = !!current && !!untrusted && (untrusted.eventId ?? untrusted.itemId) === current.id
   return (
     <div role="group" aria-label="Event clock" className="mb-3 flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-2.5 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">Now: {current ? current.reference : "no event yet"}</span>
+        {current && (current.planned_minutes || elapsed !== undefined || timeUntrusted) && <span className="text-muted-foreground tabular-nums">{timeUntrusted ? "Elapsed time not trusted after restart" : elapsed !== undefined ? `${formatMs(elapsed)} elapsed` : "Not started yet"}{current.planned_minutes ? ` · ${current.planned_minutes} min planned` : ""}</span>}
         <span className="flex-1" />
         <select aria-label="What starts each event" value={mode} onChange={(e) => useEventClock.getState().setMode(e.target.value as "screens" | "own")} className="h-7 rounded-md border border-input bg-card px-1.5">
           <option value="screens">Follows the screens</option>
@@ -901,7 +915,7 @@ function EventClockBar() {
         <Button size="sm" variant="outline" disabled={at <= 0} onClick={() => useEventClock.getState().previous()}>Back one</Button>
         <Button size="sm" disabled={!next} onClick={() => useEventClock.getState().next()}>{next ? `Start ${next.reference}` : "Last event"}</Button>
         <FinishService />
-        <span className="text-muted-foreground">{mode === "screens" ? "Each item's event starts when it goes on air; you can also move it on here." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
+        <span className="text-muted-foreground">{mode === "screens" ? "An event starts when its first moment goes on air; later moments keep the same event time." : "Events start only from here; showing content does not move the clock."} The screens never change from here.</span>
       </div>
     </div>
   )

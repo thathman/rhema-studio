@@ -33,7 +33,7 @@ import { isCueItem, isImageItem, isSlideItem, isSongItem, type QueueItem, type S
  * In `prepare` mode rows can be dragged by their handle to reorder; the
  * arrow buttons do the same from the keyboard.
  */
-export function RundownList({ mode }: { mode: "prepare" | "present" }) {
+export function RundownList({ mode, selectedEventId = null, onSelectEvent }: { mode: "prepare" | "present"; selectedEventId?: string | null; onSelectEvent?: (id: string | null) => void }) {
   const items = useQueueStore((s) => s.items)
   const activeIndex = useQueueStore((s) => s.activeIndex)
   const selected = useBibleStore((s) => s.selectedVerse)
@@ -51,6 +51,7 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
   const preview = (item: QueueItem) => presentActions.previewItem(item)
   // Prepare: Shift-click picks a range, Cmd/Ctrl-click one more (#193); a plain click picks and previews one.
   const pick = (item: QueueItem, e: React.MouseEvent) => {
+    onSelectEvent?.(null)
     const range = e.shiftKey
     const toggle = e.metaKey || e.ctrlKey
     useRundownSelection.getState().click(item.id, items.map((i) => i.id), { range, toggle })
@@ -198,20 +199,25 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
           </Row>
         )
   }
-  // Prepare shows the run of show's phases and groups between the items; a collapsed one hides its items.
+  // Prepare shows phases, events and their moments; a collapsed parent hides nested groups too.
   const rows = interleave(items, headers)
-  // Which rows show: a collapsed phase hides its groups and items; a collapsed group its items.
+  // Which rows show: phases contain events; events may contain moment groups; ordinary groups stay shallow.
   const visible: typeof rows = []
   let phaseId: string | null = null
+  let eventId: string | null = null
   let groupId: string | null = null
   let phaseOff = false
   for (const r of rows) {
     if ("header" in r) {
-      if (r.header.type === "phase") { phaseId = r.header.id; groupId = null; phaseOff = !!r.header.disabled } else groupId = r.header.id
+      if (r.header.type === "phase") { phaseId = r.header.id; eventId = null; groupId = null; phaseOff = !!r.header.disabled }
+      else if (r.header.event) { eventId = r.header.id; groupId = null }
+      else groupId = r.header.id
       // Present leaves out a phase skipped for this service, with its groups (#193).
       if (mode === "present" && phaseOff) continue
       if (r.header.type === "group" && phaseId && collapsed.has(phaseId)) continue
-    } else if ((phaseId && collapsed.has(phaseId)) || (groupId && collapsed.has(groupId))) continue
+      // The event's own header remains visible so it can be expanded again.
+      if (r.header.type === "group" && eventId && r.header.id !== eventId && collapsed.has(eventId)) continue
+    } else if ((phaseId && collapsed.has(phaseId)) || (eventId && collapsed.has(eventId)) || (groupId && collapsed.has(groupId))) continue
     // …and hidden items: they stay in the service, and Next passes over them.
     else if (mode === "present" && isSkipped(items, headers, r.index)) continue
     visible.push(r)
@@ -221,7 +227,15 @@ export function RundownList({ mode }: { mode: "prepare" | "present" }) {
       {visible.map((r) =>
         "header" in r
           ? mode === "prepare"
-            ? <SectionHeader key={r.header.id} header={r.header} summary={summaries[r.header.id]} collapsed={collapsed.has(r.header.id)} onToggle={() => toggle(r.header.id)} />
+            ? <SectionHeader
+              key={r.header.id}
+              header={r.header}
+              summary={summaries[r.header.id]}
+              collapsed={collapsed.has(r.header.id)}
+              selected={selectedEventId === r.header.id}
+              onSelect={r.header.event ? () => onSelectEvent?.(r.header.id) : undefined}
+              onToggle={() => toggle(r.header.id)}
+            />
             : <SectionLabel key={r.header.id} header={r.header} summary={summaries[r.header.id]} />
           : renderItem(r.item, r.index),
       )}

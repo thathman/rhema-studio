@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const sent: Record<string, unknown>[] = []
 /** What the host answers the next join_command with: a note, or a refusal (as join.rs marks it). */
@@ -26,6 +26,8 @@ import type { LiveStateV1 } from "@/lib/live-state"
 import { NoticesPanel } from "@/studio/notices-panel"
 import type { Notice } from "@/stores/notices-store"
 
+const roots: ReturnType<typeof createRoot>[] = []
+
 /** The specialist desks (#215 G10, #243 VL.5) and editing scenes from a joined desk (#243 SC.16). */
 const box = { x: 0, y: 0, w: 100, h: 100 }
 const live: LiveStateV1 = {
@@ -43,9 +45,13 @@ const live: LiveStateV1 = {
 
 const render = async (role: string, state: LiveStateV1 = live) => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  useJoin.setState({ status: "connected", me: { name: "Op", role }, live: state, error: null, paused: false, note: null })
   const el = document.createElement("div")
-  await act(async () => createRoot(el).render(<OperatorsPanel />))
+  const root = createRoot(el)
+  roots.push(root)
+  await act(async () => {
+    useJoin.setState({ status: "connected", me: { name: "Op", role }, live: state, error: null, paused: false, note: null })
+    root.render(<OperatorsPanel />)
+  })
   return el
 }
 const has = (el: HTMLElement, name: string) => !!el.querySelector(`[aria-label="${name}"]`)
@@ -63,6 +69,10 @@ const type = async (input: HTMLInputElement | HTMLSelectElement, value: string) 
 beforeEach(() => {
   sent.length = 0
   answer = {}
+})
+
+afterEach(async () => {
+  await act(async () => { for (const root of roots.splice(0)) root.unmount() })
 })
 
 describe("each specialist desk sees only its part", () => {
@@ -180,6 +190,7 @@ describe("a desk's scene change on the main desk", () => {
     const onAnswer = vi.fn()
     const el = document.createElement("div")
     const root = createRoot(el)
+    roots.push(root)
     await act(async () => root.render(<NoticesPanel notices={[n]} role="host" me="Main desk" onSend={() => {}} onAnswer={onAnswer} onAction={onAction} />))
     expect([...el.querySelectorAll('[aria-label="Answer Ade screens"] button')].map((b) => b.textContent)).toEqual(["Accept the scene change", "Decline"])
     await click(button(el, "Accept the scene change"))

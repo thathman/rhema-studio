@@ -15,11 +15,15 @@ import { createRoot, type Root } from "react-dom/client"
 import { PrepareWorkspace } from "./prepare-workspace"
 import { saveStateOf } from "./save-state"
 import { useQueueStore } from "@/stores/queue-store"
+import { useBibleStore } from "@/stores/bible-store"
 import { useBroadcastStore } from "@/stores/broadcast-store"
 import { useServiceStore } from "@/stores/service-store"
+import { useAddDialog } from "@/studio/prepare/add-target"
 import { useShellStore } from "@/studio/shell-store"
 import { presentActions } from "@/studio/present-actions"
 import type { QueueItem } from "@/types"
+import { projectRunOfShowEvents } from "@/lib/run-of-show"
+import { toItemInputs } from "@/stores/service-store"
 
 const slide = (id: string): QueueItem =>
   ({ id, kind: "slide", slide: { title: id, body: "words" }, reference: id, confidence: 1, source: "manual", added_at: 0, planned_minutes: 3 }) as unknown as QueueItem
@@ -28,7 +32,9 @@ let root: Root | null = null
 afterEach(() => {
   act(() => root?.unmount())
   root = null
+  useAddDialog.getState().close()
   document.body.replaceChildren()
+  useServiceStore.setState({ current: null, dirty: false, saving: false })
 })
 
 async function renderPrepare() {
@@ -89,6 +95,176 @@ describe("Prepare never takes anything live (#299)", () => {
     await act(async () => present.click())
     expect(useShellStore.getState().workspace).toBe("present")
     expect(useBroadcastStore.getState().isLive).toBe(false)
+  })
+
+  it("adds a versioned draft event to the service plan without changing live output", async () => {
+    useQueueStore.setState({ items: [slide("Sermon outline")], headers: [], activeIndex: null })
+    useBroadcastStore.setState({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null })
+    const el = await renderPrepare()
+    const preview = el.querySelector<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')!
+    await act(async () => preview.click())
+    const eventButton = [...el.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Event")!
+    await act(async () => eventButton.click())
+    expect(useQueueStore.getState().headers).toMatchObject([
+      { type: "group", name: "New event", at: 0, event: { schema_version: 1 } },
+    ])
+    expect(projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)[0].moments.map((item) => item.id)).toEqual(["Sermon outline"])
+    expect(useBroadcastStore.getState()).toMatchObject({ isLive: false, liveVerse: null, liveSlide: null, liveItemId: null })
+    expect(el.querySelector('[aria-label="Event: New event"]')).not.toBeNull()
+  })
+
+  it("opens an event plan editor and keeps its edits separate from live output", async () => {
+    useQueueStore.setState({
+      items: [slide("Opening prayer")],
+      headers: [{ id: "prayer", type: "group", name: "New event", at: 0, event: { schema_version: 1, approval: "approved" } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    const el = await renderPrepare()
+    const before = useBroadcastStore.getState()
+    const edit = el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: New event"]')
+    expect(edit).not.toBeNull()
+    await act(async () => edit!.click())
+    await act(async () => {
+      const planTab = el.querySelector<HTMLButtonElement>('button[aria-label="Event plan"]')!
+      planTab.focus()
+      planTab.click()
+    })
+
+    const setValue = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    const duration = el.querySelector<HTMLInputElement>('[aria-label="Planned event length in minutes"]')!
+    await act(async () => setValue(duration, "601"))
+    expect(useQueueStore.getState().headers[0].event?.duration_minutes).toBeUndefined()
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("600")
+    await act(async () => {
+      setValue(el.querySelector<HTMLInputElement>('[aria-label="Event title"]')!, "Opening Prayer")
+      setValue(el.querySelector<HTMLInputElement>('[aria-label="Event role"]')!, "Prayer")
+      setValue(duration, "15")
+      setValue(el.querySelector<HTMLInputElement>('[aria-label="Event owner"]')!, "Pastor")
+      setValue(el.querySelector<HTMLTextAreaElement>('[aria-label="Event notes"]')!, "Start the stage countdown")
+    })
+
+    expect(useQueueStore.getState().headers[0]).toMatchObject({
+      id: "prayer",
+      name: "Opening Prayer",
+      notes: "Start the stage countdown",
+      event: { schema_version: 1, role: "Prayer", duration_minutes: 15, ownership: "Pastor" },
+    })
+    const savedEvent = toItemInputs(useQueueStore.getState().items, undefined, undefined, useQueueStore.getState().headers)[0]
+    expect(savedEvent).toMatchObject({ kind: "group", reference: "Opening Prayer", notes: "Start the stage countdown" })
+    expect(JSON.parse(savedEvent.payload ?? "{}").run_of_show_event).toMatchObject({
+      schema_version: 1,
+      role: "Prayer",
+      duration_minutes: 15,
+      ownership: "Pastor",
+    })
+    expect(el.querySelector('[role="alert"]')).toBeNull()
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
+    expect(el.textContent).toContain("Draft")
+  })
+
+  it("shows an event's ordered moments and opens one in the editor without taking it live", async () => {
+    useQueueStore.setState({
+      items: [slide("Camera and speaker"), slide("John 3:16"), slide("Closing cue")],
+      headers: [{ id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15 } }],
+      activeIndex: null,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    const before = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Opening Prayer"]')!.click())
+
+    const contentTab = el.querySelector<HTMLButtonElement>('button[role="tab"][aria-label="Event content"]')
+    expect(contentTab).not.toBeNull()
+    expect(el.textContent).toContain("Camera and speaker")
+    expect(el.textContent).toContain("John 3:16")
+    expect(el.textContent).toContain("Closing cue")
+    expect(useQueueStore.getState().addTarget).toBeNull()
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Open moment 2: John 3:16 in editor"]')!.click())
+    expect(useBibleStore.getState().selectedSlide?.item.id).toBe("John 3:16")
+    expect(el.querySelector('[aria-label="Event content"]')).toBeNull()
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
+    useAddDialog.getState().close()
+  })
+
+  it("opens the event's Add item flow with that event as the insertion target", async () => {
+    useQueueStore.setState({
+      items: [slide("Welcome"), slide("Sermon"), slide("Closing")],
+      headers: [{ id: "sermon", type: "group", name: "Sermon", at: 1, event: { schema_version: 1 } }],
+      activeIndex: null,
+      addTarget: null,
+    })
+    const el = await renderPrepare()
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    const add = el.querySelector<HTMLButtonElement>('button[aria-label="Add content to Sermon"]')
+    expect(add).not.toBeNull()
+    await act(async () => add!.click())
+    expect(useQueueStore.getState().addTarget).toBe("sermon")
+    expect(useAddDialog.getState().open).toBe(true)
+    useAddDialog.getState().close()
+  })
+
+  it("derives event approval from the saved service revision and marks unsaved edits changed", async () => {
+    useQueueStore.setState({
+      items: [slide("Sermon")],
+      headers: [{ id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, approval: "draft" } }],
+      activeIndex: null,
+    })
+    useServiceStore.setState({
+      current: { id: "service", title: "Sunday", service_date: null, revision: 3, created_at: "", updated_at: "", item_count: 1, approved_revision: 3 },
+      dirty: false,
+      saving: false,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item" })
+    const before = useBroadcastStore.getState()
+    const el = await renderPrepare()
+    const row = () => el.querySelector<HTMLElement>('[aria-label="Event: Sermon"]')!
+    expect(row().textContent).toContain("Approved") // legacy event.approval is ignored
+
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Edit event: Sermon"]')!.click())
+    await act(async () => {
+      const planTab = el.querySelector<HTMLButtonElement>('button[aria-label="Event plan"]')!
+      planTab.focus()
+      planTab.click()
+    })
+    const duration = el.querySelector<HTMLInputElement>('[aria-label="Planned event length in minutes"]')!
+    const setValue = (field: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value)
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await act(async () => setValue(duration, "40"))
+
+    expect(useServiceStore.getState().dirty).toBe(true)
+    expect(row().textContent).toContain("Changed")
+    expect(el.textContent).toContain("This status does not authorize a live Take.")
+    expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
+    expect(useBroadcastStore.getState().liveItemId).toBe(before.liveItemId)
+  })
+
+  it("collapsing an event hides its nested moment groups and their items", async () => {
+    useQueueStore.setState({
+      items: [slide("Sermon opener"), slide("John 3:16"), slide("Prayer")],
+      headers: [
+        { id: "sermon", type: "group", name: "Sermon", at: 0, event: { schema_version: 1, duration_minutes: 40, approval: "draft" } },
+        { id: "scripture", type: "group", name: "Scripture moments", at: 1 },
+        { id: "prayer-event", type: "group", name: "Closing prayer", at: 2, event: { schema_version: 1, approval: "draft" } },
+      ],
+      activeIndex: null,
+    })
+    const el = await renderPrepare()
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(3)
+    const collapse = el.querySelector<HTMLButtonElement>('button[aria-label="Hide Sermon"]')!
+    await act(async () => collapse.click())
+    expect(el.querySelector('[aria-label="Event: Sermon"]')).not.toBeNull()
+    expect(el.querySelector('[aria-label="Group: Scripture moments"]')).toBeNull()
+    expect(el.querySelector('[aria-label="Event: Closing prayer"]')).not.toBeNull()
+    expect(el.querySelectorAll('ol[aria-label="Service rundown"] button[title="Click to preview"]')).toHaveLength(1)
   })
 
   it("says whether the service is saved, next to its name", async () => {
