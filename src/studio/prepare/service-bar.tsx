@@ -5,14 +5,15 @@ import { useSettingsStore } from "@/stores/settings-store"
 import { publishLineage, publishToChurchFolder, unchangedCopy } from "@/lib/church-folder"
 import { useState } from "react"
 import { toast } from "sonner"
-import { BadgeCheckIcon, CalendarIcon, CopyIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
+import { BadgeCheckIcon, CalendarIcon, CopyIcon, EllipsisIcon, FolderUpIcon, PencilIcon, PlusIcon, RefreshCwIcon, SaveIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { approvalBlockers, approvalLabel, approvalState } from "@/lib/approval"
 import { useMediaStore } from "@/stores/media-store"
 import { useSongStore } from "@/stores/song-store"
 import { isImageItem, isSongItem } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   Select,
   SelectContent,
@@ -94,6 +95,7 @@ export function ServiceBar() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [dupOpen, setDupOpen] = useState(false)
+  const [pendingServiceAction, setPendingServiceAction] = useState<"new" | "duplicate" | null>(null)
   const [dupTitle, setDupTitle] = useState("")
   const [dupDate, setDupDate] = useState("")
   const [editOpen, setEditOpen] = useState(false)
@@ -303,23 +305,89 @@ export function ServiceBar() {
           </PopoverContent>
         </Popover>
       )}
-      {current && (
-        <Popover
-          open={dupOpen}
-          onOpenChange={(o) => {
-            setDupOpen(o)
-            if (o) {
-              setDupTitle(`${current.title} (copy)`)
-              setDupDate(current.service_date ?? "")
-            }
-          }}
-        >
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" disabled={dirty} title={dirty ? "Save or discard changes first" : "Make a copy of this service, e.g. for the 9 am and 11 am"}>
-              <CopyIcon /> Copy
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-72">
+      <Popover
+        open={newOpen || dupOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setNewOpen(false)
+            setDupOpen(false)
+          }
+        }}
+      >
+        <DropdownMenu>
+          <PopoverAnchor asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-sm" aria-label="Service actions" title="Service actions">
+                <EllipsisIcon />
+              </Button>
+            </DropdownMenuTrigger>
+          </PopoverAnchor>
+          <DropdownMenuContent
+            align="end"
+            className="w-56"
+            onCloseAutoFocus={() => {
+              const action = pendingServiceAction
+              if (!action) return
+              setPendingServiceAction(null)
+              if (action === "new") setNewOpen(true)
+              else setDupOpen(true)
+            }}
+          >
+            <DropdownMenuItem disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : undefined} onSelect={() => setPendingServiceAction("new")}>
+              <PlusIcon /> New service
+            </DropdownMenuItem>
+            {current && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={dirty}
+                  title={dirty ? "Save or discard changes first" : undefined}
+                  onSelect={() => {
+                    setDupTitle(`${current.title} (copy)`)
+                    setDupDate(current.service_date ?? "")
+                    setPendingServiceAction("duplicate")
+                  }}
+                >
+                  <CopyIcon /> Duplicate service
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <PopoverContent align="end" className="w-72">
+          {newOpen ? (
+            <form
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void create()
+              }}
+            >
+              <label className="text-xs text-muted-foreground" htmlFor="svc-title">Title</label>
+              <Input id="svc-title" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sunday service" required maxLength={200} />
+              <label className="text-xs text-muted-foreground" htmlFor="svc-date">Date (optional)</label>
+              <div className="relative">
+                <CalendarIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input id="svc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="pl-8" />
+              </div>
+              {templates.length > 0 && (
+                <>
+                  <label className="text-xs text-muted-foreground" htmlFor="svc-from">Start from</label>
+                  <select id="svc-from" value={fromTemplate} onChange={(e) => setFromTemplate(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
+                    <option value="">{count > 0 ? "The items on screen" : "Nothing (empty)"}</option>
+                    {templates.map((t) => <option key={t.id} value={t.id}>Template: {t.title}</option>)}
+                  </select>
+                </>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {fromTemplate ? `A copy of the template's items (the template is not changed).${!current && count > 0 ? ` The ${count} unsaved item${count === 1 ? "" : "s"} on screen will be replaced.` : ""}` : count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
+              </p>
+              <div className="mt-1 flex justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setNewOpen(false)}>Cancel</Button>
+                <Button type="submit" size="sm" disabled={!title.trim()}>Create</Button>
+              </div>
+            </form>
+          ) : dupOpen ? (
             <form
               className="flex flex-col gap-2"
               onSubmit={(e) => {
@@ -334,48 +402,7 @@ export function ServiceBar() {
               <Input id="dup-date" type="date" value={dupDate} onChange={(e) => setDupDate(e.target.value)} />
               <Button type="submit" size="sm" disabled={!dupTitle.trim()}>Make the copy</Button>
             </form>
-          </PopoverContent>
-        </Popover>
-      )}
-
-      <Popover open={newOpen} onOpenChange={setNewOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" disabled={!!current && dirty} title={current && dirty ? "Save or discard changes first" : !current ? (count > 0 ? "Save the items on screen as a new service" : "Start a new service") : count > 0 ? `Start another service from the items on screen, or from a template; "${current.title}" stays as saved` : `Start another service; "${current.title}" stays as saved`}>
-            <PlusIcon /> New service
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72">
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void create()
-            }}
-          >
-            <label className="text-xs text-muted-foreground" htmlFor="svc-title">Title</label>
-            <Input id="svc-title" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sunday service" required maxLength={200} />
-            <label className="text-xs text-muted-foreground" htmlFor="svc-date">Date (optional)</label>
-            <div className="relative">
-              <CalendarIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input id="svc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="pl-8" />
-            </div>
-            {templates.length > 0 && (
-              <>
-                <label className="text-xs text-muted-foreground" htmlFor="svc-from">Start from</label>
-                <select id="svc-from" value={fromTemplate} onChange={(e) => setFromTemplate(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
-                  <option value="">{count > 0 ? "The items on screen" : "Nothing (empty)"}</option>
-                  {templates.map((t) => <option key={t.id} value={t.id}>Template: {t.title}</option>)}
-                </select>
-              </>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {fromTemplate ? `A copy of the template's items (the template is not changed).${!current && count > 0 ? ` The ${count} unsaved item${count === 1 ? "" : "s"} on screen will be replaced.` : ""}` : count > 0 ? `The ${count} item${count === 1 ? "" : "s"} on screen become this service and are saved.` : "Starts empty."}
-            </p>
-            <div className="mt-1 flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="sm" onClick={() => setNewOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={!title.trim()}>Create</Button>
-            </div>
-          </form>
+          ) : null}
         </PopoverContent>
       </Popover>
 

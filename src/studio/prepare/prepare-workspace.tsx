@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { timeText } from "@/lib/church-time"
 import { churchTimeZone } from "@/stores/timing-input"
 import { Trash2Icon } from "lucide-react"
@@ -15,8 +15,8 @@ import { AddItems } from "@/studio/prepare/add-items"
 import { AiDrafts } from "@/studio/prepare/ai-drafts"
 import { TimingPanel } from "@/studio/prepare/timing-panel"
 import { useSelectedItem } from "@/studio/prepare/use-selected-item"
-import { RULE_LABEL, defaultPhases, newPhase, newRunOfShowEvent, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
-import { CalendarDaysIcon, CalendarPlusIcon, ClockIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
+import { RULE_LABEL, defaultPhases, interleave, newPhase, runOfShowClockRows, sectionSummaries, timedItems, type PhaseRole } from "@/lib/run-of-show"
+import { CalendarDaysIcon, ClockIcon, FolderPlusIcon, LayersIcon, LayersPlusIcon, MonitorPlayIcon, ZapIcon } from "lucide-react"
 import { RundownTools } from "@/studio/prepare/bulk-bar"
 import { useBibleStore } from "@/stores"
 import type { CueQueueItem } from "@/types"
@@ -24,6 +24,25 @@ import { useShellStore } from "@/studio/shell-store"
 import { useServiceTiming } from "@/studio/use-service-timing"
 import { presentActions } from "@/studio/present-actions"
 import { cn } from "@/lib/utils"
+import { AddEventPalette, type EventInsertionTarget } from "@/studio/prepare/add-event-palette"
+import { toast } from "sonner"
+
+type RundownView = "simple" | "grouped"
+const RUNDOWN_VIEW_KEY = "rhema.prepare.rundown-view.v1"
+
+function storedRundownView(): RundownView {
+  try { return window.localStorage.getItem(RUNDOWN_VIEW_KEY) === "simple" ? "simple" : "grouped" } catch { return "grouped" }
+}
+
+function todayInChurchZone(now = new Date()): { date: string; label: string } {
+  const zone = churchTimeZone() || undefined
+  const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: zone }).formatToParts(now)
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return {
+    date: `${value.year}-${value.month}-${value.day}`,
+    label: new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: zone }).format(now),
+  }
+}
 
 /**
  * Service builder: the order of service, the selected item's editor and the
@@ -33,9 +52,21 @@ import { cn } from "@/lib/utils"
  */
 export function PrepareWorkspace() {
   const count = useQueueStore((s) => s.items.length)
+  const items = useQueueStore((s) => s.items)
   const headers = useQueueStore((s) => s.headers)
+  const orderRows = runOfShowClockRows(items, headers).rows
+  const eventCount = orderRows.filter((row) => row.kind === "event").length
+  const looseItemCount = orderRows.filter((row) => row.kind === "item").length
+  const orderCountLabel = eventCount > 0
+    ? `${eventCount} ${eventCount === 1 ? "event" : "events"}${looseItemCount > 0 ? ` · ${looseItemCount} ${looseItemCount === 1 ? "item" : "items"}` : ""}`
+    : `${count} ${count === 1 ? "item" : "items"}`
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set())
   const selectedEvent = headers.find((header) => header.id === selectedEventId && header.event)
+  const selectedItem = useSelectedItem()
+  const [rundownView, setRundownView] = useState<RundownView>(storedRundownView)
+  const [creatingDraft, setCreatingDraft] = useState(false)
+  const draftCreationInProgress = useRef(false)
   // Hidden items and a skipped phase take no planned time (#193).
   const planned = useQueueStore((s) => formatMinutes(plannedTotalMs(timedItems(s.items, s.headers))))
   const service = useServiceStore((s) => s.current)
@@ -43,6 +74,73 @@ export function PrepareWorkspace() {
   // On a narrower window the timing column folds away; this brings it back over the editor.
   const [timingOpen, setTimingOpen] = useState(false)
   const weekday = service?.service_date ? new Date(`${service.service_date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long" }) : null
+  const eventTarget: EventInsertionTarget = selectedEvent
+    ? { kind: "section", headerId: selectedEvent.id }
+    : selectedItem
+      ? { kind: "row", itemId: selectedItem.item.id }
+      : { kind: "end" }
+  const selectAddedItem = (itemId: string) => {
+    setSelectedEventId(null)
+    const queue = useQueueStore.getState()
+    const selectedIndex = queue.items.findIndex((item) => item.id === itemId)
+    if (selectedIndex < 0) return
+    let phaseId: string | null = null
+    let eventId: string | null = null
+    let groupId: string | null = null
+    const ancestors: string[] = []
+    for (const row of interleave(queue.items, queue.headers)) {
+      if ("header" in row) {
+        if (row.header.type === "phase") { phaseId = row.header.id; eventId = null; groupId = null }
+        else if (row.header.event) { eventId = row.header.id; groupId = null }
+        else groupId = row.header.id
+      } else if (row.index === selectedIndex) {
+        if (phaseId) ancestors.push(phaseId)
+        if (eventId) ancestors.push(eventId)
+        if (groupId) ancestors.push(groupId)
+        break
+      }
+    }
+    if (ancestors.some((id) => collapsedSections.has(id))) {
+      setCollapsedSections((current) => {
+        const next = new Set(current)
+        ancestors.forEach((id) => next.delete(id))
+        return next.size === current.size ? current : next
+      })
+    }
+  }
+  const toggleCollapsedSection = (id: string) => setCollapsedSections((current) => {
+    const next = new Set(current)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const changeRundownView = (view: RundownView) => {
+    setRundownView(view)
+    try { window.localStorage.setItem(RUNDOWN_VIEW_KEY, view) } catch { /* This view choice is optional when storage is unavailable. */ }
+  }
+  const onEventCreated = async (id: string) => {
+    setSelectedEventId(id)
+    if (useServiceStore.getState().current || draftCreationInProgress.current) return
+    draftCreationInProgress.current = true
+    setCreatingDraft(true)
+    const queueHeaders = useQueueStore.getState().headers
+    const selectedHeaderIndex = queueHeaders.findIndex((header) => header.id === id)
+    const today = todayInChurchZone()
+    const title = `Service draft — ${today.label}`
+    try {
+      const result = await useServiceStore.getState().createFromRundown(title, today.date)
+      // Creating a service gives every row a fresh ID. Its order is unchanged, so keep the new event selected.
+      const savedId = useQueueStore.getState().headers[selectedHeaderIndex]?.id
+      if (savedId) setSelectedEventId(savedId)
+      if (result === "created") toast.success("Local service draft created", { description: `${title} is saved on this computer.` })
+      else toast.error("Local service draft needs attention", { description: useServiceStore.getState().error ?? "The draft could not be saved. Your work is still on screen." })
+    } catch (error) {
+      toast.error("Local service draft could not be created", { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      draftCreationInProgress.current = false
+      setCreatingDraft(false)
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -55,12 +153,12 @@ export function PrepareWorkspace() {
         <div className="flex items-center gap-2">
           <Popover open={confirmOpen} onOpenChange={setConfirmOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" disabled={count === 0}>
+              <Button variant="outline" disabled={count === 0 && headers.length === 0}>
                 <Trash2Icon /> Clear service
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-64">
-              <p className="mb-3 text-sm">Remove all {count} items from the service?</p>
+              <p className="mb-3 text-sm">Clear the whole service order? This removes {orderCountLabel} and its phase settings.</p>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setConfirmOpen(false)}>Keep</Button>
                 <Button variant="destructive" size="sm" onClick={() => { useQueueStore.getState().clearQueue(); setConfirmOpen(false) }}>
@@ -70,7 +168,7 @@ export function PrepareWorkspace() {
             </PopoverContent>
           </Popover>
           <AiDrafts />
-          <AddItems />
+          <AddItems onSelectAddedItem={selectAddedItem} />
           <Button
             variant="outline"
             className="hidden max-[1280px]:inline-flex"
@@ -92,21 +190,30 @@ export function PrepareWorkspace() {
 
       <EventOverview />
 
-      <PhaseStrip />
+      {rundownView === "grouped" && <PhaseStrip />}
 
       <div className="relative grid min-h-0 flex-1 grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(16rem,20rem)] gap-4 px-8 pb-6 max-[1280px]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)] max-[1200px]:px-5">
         <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-panel" data-tour="prepare-rundown">
-          <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
-              <h2 className="text-sm font-semibold">{count} {count === 1 ? "item" : "items"}{planned ? ` · ${planned} planned in all` : ""}</h2>
+          <div className="flex flex-col gap-2 border-b border-border px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[0.6875rem] font-extrabold tracking-[0.12em] text-muted-foreground uppercase">Order of service</p>
+                <h2 className="text-sm font-semibold">{orderCountLabel}{planned ? ` · ${planned} planned in all` : ""}</h2>
+              </div>
+              <RundownTools />
             </div>
-            <RundownTools />
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <div role="group" aria-label="Running order view" className="flex items-center rounded-md border border-border p-0.5">
+                <Button type="button" size="xs" variant={rundownView === "simple" ? "secondary" : "ghost"} aria-pressed={rundownView === "simple"} onClick={() => changeRundownView("simple")}>Simple list</Button>
+                <Button type="button" size="xs" variant={rundownView === "grouped" ? "secondary" : "ghost"} aria-pressed={rundownView === "grouped"} onClick={() => changeRundownView("grouped")}>Grouped by phase</Button>
+              </div>
+              <AddEventPalette target={eventTarget} onCreated={onEventCreated} disabled={creatingDraft} label="Add Event" ariaLabel="Add event" />
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <RundownList mode="prepare" selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} />
+            <RundownList mode="prepare" selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} groupedByPhase={rundownView === "grouped"} onEventCreated={onEventCreated} eventsDisabled={creatingDraft} collapsedIds={collapsedSections} onToggleSection={toggleCollapsedSection} />
           </div>
-          <RundownFooter onEventAdded={setSelectedEventId} />
+          <RundownFooter />
         </section>
 
         <section className="min-h-0 overflow-hidden rounded-lg border border-border bg-card shadow-panel">
@@ -171,19 +278,13 @@ function PhaseStrip() {
 }
 
 /** Under the order of service: organise it into phases, or put a group above the selected item. */
-function RundownFooter({ onEventAdded }: { onEventAdded: (id: string) => void }) {
+function RundownFooter() {
   const count = useQueueStore((s) => s.items.length)
   const hasPhases = useQueueStore((s) => s.headers.some((h) => h.type === "phase"))
   const sel = useSelectedItem()
   const addGroup = () => {
     const at = sel?.index ?? 0
     useQueueStore.getState().setHeaders([...useQueueStore.getState().headers, { id: crypto.randomUUID(), type: "group", name: "New group", at }])
-  }
-  const addEvent = () => {
-    const queue = useQueueStore.getState()
-    const event = newRunOfShowEvent(sel?.index ?? count)
-    queue.setHeaders([...queue.headers, event])
-    onEventAdded(event.id)
   }
   // A church-named phase (#193): before the selected item, else at the end; rename it from its menu.
   const addPhase = () => {
@@ -205,9 +306,6 @@ function RundownFooter({ onEventAdded }: { onEventAdded: (id: string) => void })
       )}
       <Button size="sm" variant="outline" onClick={addGroup} title={sel ? `A group starting at ${sel.item.reference}` : "A group at the top"}>
         <FolderPlusIcon /> Group
-      </Button>
-      <Button size="sm" variant="outline" onClick={addEvent} title={sel ? `A service event starting at ${sel.item.reference}` : "Add a service event at the end of the run of show"}>
-        <CalendarPlusIcon /> Event
       </Button>
       {hasPhases && (
         <Button size="sm" variant="outline" onClick={addPhase} title={sel ? `A phase of your own starting at ${sel.item.reference}` : "A phase of your own at the end"}>

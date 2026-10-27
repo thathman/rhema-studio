@@ -109,7 +109,7 @@ export function RunOfShowEventEditor({ header, onOpenMoment }: { header: Outline
             ) : (
               <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground">This event has no moments yet. Add Scripture, a song, a slide, media, or a production cue.</p>
             )}
-            <Button variant="outline" onClick={() => useAddDialog.getState().openFor(header.id)} aria-label={`Add content to ${header.name}`}>
+            <Button variant="outline" onClick={(event) => useAddDialog.getState().openFor(header.id, event.currentTarget)} aria-label={`Add content to ${header.name}`}>
               Add content to event
             </Button>
           </section>
