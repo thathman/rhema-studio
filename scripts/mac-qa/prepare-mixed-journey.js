@@ -82,7 +82,7 @@ const captureProgramOutput = async (name, conditions = {}) => {
     resolveCapture = resolve
     rejectCapture = reject
   })
-  const timeout = setTimeout(() => rejectCapture(new Error(`Timed out capturing Program output at ${name}`)), 12000)
+  const timeout = setTimeout(() => rejectCapture(new Error(`Timed out capturing Program output at ${name}`)), 25000)
   try {
     unlisten = await listenTauriEvent("qa:program-capture-ack", (event) => {
       if (event.payload?.name !== name) return

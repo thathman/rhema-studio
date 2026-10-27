@@ -1,14 +1,5 @@
 // Observe rendered pixels in the actual broadcast-main WebView during the mixed Prepare journey.
 const invoke = window.__TAURI_INTERNALS__.invoke.bind(window.__TAURI_INTERNALS__)
-const waitFor = async (predicate, label, timeoutMs = 10000) => {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    const value = predicate()
-    if (value) return value
-    await sleep(50)
-  }
-  throw new Error(`Timed out waiting for ${label}`)
-}
 const hashPng = (dataUrl) => {
   let hash = 2166136261
   for (let index = 0; index < dataUrl.length; index += 1) {
@@ -22,18 +13,36 @@ const sampleProgramCanvas = () => {
   const png = canvas.toDataURL("image/png")
   return { width: canvas.width, height: canvas.height, hash: hashPng(png), dataUrlCharacters: png.length }
 }
-const initialFrame = await waitFor(sampleProgramCanvas, "the Program output canvas")
+const waitForStableCanvas = async (matches, label, timeoutMs = 20000) => {
+  const deadline = Date.now() + timeoutMs
+  let previousHash = null
+  let stableSamples = 0
+  let lastFrame = null
+  while (Date.now() < deadline) {
+    const frame = sampleProgramCanvas()
+    if (frame) {
+      lastFrame = frame
+      if (matches(frame) && frame.hash === previousHash) stableSamples += 1
+      else stableSamples = matches(frame) ? 1 : 0
+      previousHash = frame.hash
+      if (stableSamples >= 4) return frame
+    }
+    await sleep(100)
+  }
+  throw new Error(`Timed out waiting for ${label}; last frame ${JSON.stringify(lastFrame)}; font status ${document.fonts?.status ?? "unavailable"}`)
+}
+await document.fonts?.ready
+await sleep(250)
+const initialFrame = await waitForStableCanvas(() => true, "a stable initial Program output frame")
 const handleCheckpoint = async (event) => {
   const { name, expectedHash, expectedChangeFromHash, expectChangeFromInitial } = event.payload ?? {}
   try {
-    const frame = await waitFor(() => {
-      const current = sampleProgramCanvas()
-      if (!current) return null
-      if (expectedHash && current.hash !== expectedHash) return null
-      if (expectedChangeFromHash && current.hash === expectedChangeFromHash) return null
-      if (expectChangeFromInitial && current.hash === initialFrame.hash) return null
-      return current
-    }, `the Program output frame for ${name}`)
+    const frame = await waitForStableCanvas((current) => {
+      if (expectedHash && current.hash !== expectedHash) return false
+      if (expectedChangeFromHash && current.hash === expectedChangeFromHash) return false
+      if (expectChangeFromInitial && current.hash === initialFrame.hash) return false
+      return true
+    }, `the stable Program output frame for ${name}`)
     await invoke("plugin:event|emit", {
       event: "qa:report",
       payload: { name: `program-output-${name}`, body: frame },
