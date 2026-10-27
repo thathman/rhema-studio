@@ -506,6 +506,7 @@ describe("Prepare never takes anything live (#299)", () => {
   it("edits per-output scene intent from an event without changing the live program", async () => {
     const liveScene = newScene("Current program")
     const prayerScene = newScene("Prayer camera and name")
+    const overflowScene = newScene("Overflow sermon layout")
     useQueueStore.setState({
       items: [slide("Camera and speaker"), slide("John 3:16")],
       headers: [{ id: "prayer", type: "group", name: "Opening Prayer", at: 0, event: { schema_version: 1, duration_minutes: 15 } }],
@@ -514,7 +515,7 @@ describe("Prepare never takes anything live (#299)", () => {
     useBroadcastStore.setState({
       isLive: true,
       liveItemId: "on-air-item",
-      scenes: [liveScene, prayerScene],
+      scenes: [liveScene, prayerScene, overflowScene],
       outputs: [
         display("sanctuary", "Sanctuary", liveScene.id),
         display("overflow", "Overflow", liveScene.id),
@@ -537,21 +538,24 @@ describe("Prepare never takes anything live (#299)", () => {
     const scene = el.querySelector<HTMLSelectElement>('select[aria-label="Scene for Camera and speaker"]')
     expect(scene).not.toBeNull()
     await act(async () => setSelectValue(scene!, prayerScene.id))
-    const takeScene = [...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((input) => input.parentElement?.textContent?.includes("Take its scene, Prayer camera and name"))
-    expect(takeScene).toBeDefined()
-    await act(async () => takeScene!.click())
-    const screen = el.querySelector<HTMLSelectElement>('select[aria-label="Screen for the scene of Camera and speaker"]')
+    const addOverride = el.querySelector<HTMLButtonElement>('button[aria-label="Add screen override for Camera and speaker"]')
+    expect(addOverride).not.toBeNull()
+    await act(async () => addOverride!.click())
+    const screen = el.querySelector<HTMLSelectElement>('select[aria-label="Screen target for Camera and speaker 1"]')
     expect(screen).not.toBeNull()
-    await act(async () => setSelectValue(screen!, "sanctuary"))
+    await act(async () => setSelectValue(screen!, "overflow"))
+    const overrideScene = el.querySelector<HTMLSelectElement>('select[aria-label="Scene override 1 for Camera and speaker"]')
+    expect(overrideScene).not.toBeNull()
+    await act(async () => setSelectValue(overrideScene!, overflowScene.id))
 
     expect(useQueueStore.getState().items[0]).toMatchObject({
       scene_id: prayerScene.id,
-      on_take: [`scene.take:${prayerScene.id}@sanctuary`],
+      on_take: [`scene.take:${overflowScene.id}@overflow`],
     })
     const savedMoment = toItemInputs(useQueueStore.getState().items, undefined, undefined, useQueueStore.getState().headers).find((item) => item.reference === "Camera and speaker")!
     expect(JSON.parse(savedMoment.payload ?? "{}")).toMatchObject({
       scene_id: prayerScene.id,
-      on_take: [`scene.take:${prayerScene.id}@sanctuary`],
+      on_take: [`scene.take:${overflowScene.id}@overflow`],
     })
     expect(useBroadcastStore.getState().outputs).toEqual(beforeOutputs)
     expect(useBroadcastStore.getState().isLive).toBe(before.isLive)
