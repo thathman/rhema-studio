@@ -771,6 +771,27 @@ describe("updateDraftNested deep paths", () => {
     expect(mainPayload.verse.translationLines).toEqual(["For God so loved the world", "Nítorí Ọlọ́run fẹ́ aráyé"])
   })
 
+  it("labels a Stage fallback when its selected second language is unavailable", async () => {
+    const { useBroadcastStore } = await import("./broadcast-store")
+    const s = useBroadcastStore.getState()
+    s.addOutput({ id: "stage", name: "Stage", type: "display", role: "stage", themeId: s.themes[0].id, monitorIndex: 1, ndi: ndiDefaults, language: "second" })
+    const availableText = "The Lord is my shepherd"
+    useBroadcastStore.setState({ isLive: true, liveVerse: {
+      kind: "verse",
+      reference: "Psalm 23:1",
+      segments: [{ text: availableText }],
+    } })
+
+    emitToMock.mockClear()
+    useBroadcastStore.getState().syncBroadcastOutput()
+
+    const stagePayload = emitToMock.mock.calls.find((call) => call[0] === "broadcast-stage")?.[2] as {
+      stage: { current: { lines: string[] } | null; languageNotice?: string | null }
+    }
+    expect(stagePayload.stage.current?.lines).toEqual([availableText])
+    expect(stagePayload.stage.languageNotice).toBe("Second language unavailable; showing available text.")
+  })
+
   it("the ticker crawls only on outputs that show it, takes word changes at once and stops", async () => {
     const { useBroadcastStore } = await import("./broadcast-store")
     const s = useBroadcastStore.getState()

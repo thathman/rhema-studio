@@ -21,7 +21,7 @@ import { monotonicNow, useTimerStore } from "@/stores/timer-store"
 import type { TimerState } from "@/lib/timer"
 import { useSongStore } from "@/stores/song-store"
 import { markSkipped } from "@/lib/run-of-show"
-import { forOutputLanguage } from "@/lib/output-language"
+import { forOutputLanguage, isOutputLanguageFallback } from "@/lib/output-language"
 import { activePlaylist, signageFrame, signageIndex } from "@/lib/signage"
 import { themeIdFor, themeIdsOf } from "@/lib/output-themes"
 import { DEFAULT_LOWER_THIRD_STYLE, normalizeLowerThirdStyle, overlayFor } from "@/lib/lower-third-style"
@@ -995,7 +995,7 @@ export const useBroadcastStore = create<BroadcastState>((set, get) => ({
         stage: applyStageStyle({ ...buildStagePayload({
           isLive: shown !== null, liveVerse: stageVerse, items, activeIndex: q.activeIndex, timer: useTimerStore.getState().timer, now: monotonicNow(), message: s.stageMessage,
           song: s.liveSlide ? (useSongStore.getState().songs[s.liveSlide.songId]?.song ?? null) : null,
-        }), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
+        }), ...(isOutputLanguageFallback(shown, output.language) ? { languageNotice: "Second language unavailable; showing available text." } : {}), finish: s.stageFinish, aux: s.stageCountdown ? [s.stageCountdown, ...s.stageAux] : s.stageAux, ...(countdown ? { countdown } : {}), ...(s.stageClock ? { clock: s.stageClock } : {}),
           // This output's own layout, orientation and low-light colours (#196 R6); absent from older outputs.
           ...(output.stageLayout && output.stageLayout !== "countdown" ? { layout: output.stageLayout } : {}),
           ...(output.stageOrientation ? { portrait: output.stageOrientation } : {}),
