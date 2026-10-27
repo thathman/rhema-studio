@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 import { useDraggable, useDroppable } from "@dnd-kit/react"
-import { defaultCollisionDetection } from "@dnd-kit/collision"
+import { pointerIntersection } from "@dnd-kit/collision"
 import { ChevronDownIcon, ChevronRightIcon, EllipsisIcon, GripVerticalIcon, PlusIcon } from "lucide-react"
 import { useAddDialog } from "@/studio/prepare/add-target"
 import { AddEventPalette } from "@/studio/prepare/add-event-palette"
@@ -53,10 +53,7 @@ export function SectionHeader({ header, summary, collapsed, selected = false, dr
     id: `section:${header.id}`,
     data: { kind: "section", headerId: header.id, headerType: header.type, isEvent: !!header.event, eventOrder },
     collisionPriority: 4,
-    collisionDetector: (input) => {
-      const collision = defaultCollisionDetection(input)
-      return collision ? { ...collision, priority: 100 } : null
-    },
+    collisionDetector: pointerIntersection,
   })
   const { ref: draggableRef, handleRef, isDragging } = useDraggable({
     id: `event:${header.id}`,

@@ -9,12 +9,16 @@ vi.hoisted(() => {
   ;(globalThis as { PointerEvent?: typeof PointerEvent }).PointerEvent ??= MouseEvent as unknown as typeof PointerEvent
   ;(globalThis as { CSS?: { escape: (s: string) => string } }).CSS ??= { escape: (s: string) => s }
 })
-const drag = vi.hoisted(() => ({ current: null as ComponentProps<typeof DragDropProvider> | null, sortables: new Map<string, ReturnType<typeof import("@dnd-kit/react/sortable").useSortable>["sortable"]>() }))
+const drag = vi.hoisted(() => ({ droppables: new Map<string, ReturnType<typeof import("@dnd-kit/react").useDroppable>["droppable"]>(), current: null as ComponentProps<typeof DragDropProvider> | null, sortables: new Map<string, ReturnType<typeof import("@dnd-kit/react/sortable").useSortable>["sortable"]>() }))
 // Keep the actual provider/hooks; expose its callbacks for deterministic collision fixtures.
 vi.mock("@dnd-kit/react", async (importOriginal) => {
   const original = await importOriginal<typeof import("@dnd-kit/react")>()
   const { createElement } = await import("react")
-  return { ...original, DragDropProvider: (props: ComponentProps<typeof DragDropProvider>) => {
+  return { ...original, useDroppable: (input: Parameters<typeof original.useDroppable>[0]) => {
+    const result = original.useDroppable(input)
+    drag.droppables.set(String(input.id), result.droppable)
+    return result
+  }, DragDropProvider: (props: ComponentProps<typeof DragDropProvider>) => {
     drag.current = props
     return createElement(original.DragDropProvider, props)
   } }
@@ -47,6 +51,8 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (cmd: string, args?
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}), emitTo: vi.fn(async () => {}), emit: vi.fn(async () => {}) }))
 
 import { act } from "react"
+import { sortCollisions, type Collision, type CollisionDetector } from "@dnd-kit/abstract"
+import { Rectangle } from "@dnd-kit/geometry"
 import { createRoot, type Root } from "react-dom/client"
 import { RundownList } from "@/studio/present/rundown-list"
 import { useQueueStore } from "@/stores/queue-store"
@@ -85,6 +91,7 @@ afterEach(async () => {
   database.saved = null
   drag.current = null
   drag.sortables.clear()
+  drag.droppables.clear()
 })
 async function render() {
   const el = document.createElement("div")
@@ -104,6 +111,55 @@ async function drop(source: unknown, target: unknown, y: number, canceled = fals
 }
 
 describe("Prepare movement keeps the plan separate from Live", () => {
+  function selectCollision(headerId: string, itemId: string, pointerY: number) {
+    const header = drag.droppables.get(headerId)!
+    const moment = drag.sortables.get(itemId)!.droppable
+    // Use the mounted targets' actual detectors and priorities, real rectangle
+    // intersections and the library's sorter (including priority overrides).
+    const operation = {
+      position: { current: { x: 50, y: pointerY }, direction: null },
+      shape: { current: new Rectangle(0, 20, 100, 44) },
+    }
+    const collisions = [
+      { target: header, shape: new Rectangle(0, 0, 100, 40) },
+      { target: moment, shape: new Rectangle(0, 40, 100, 44) },
+    ].flatMap(({ target, shape }): Collision[] => {
+      const collision = target.collisionDetector!({
+        droppable: { id: target.id, shape }, dragOperation: operation,
+      } as unknown as Parameters<CollisionDetector>[0])
+      if (!collision) return []
+      return [{ ...collision, priority: target.collisionPriority ?? collision.priority }]
+    }).sort(sortCollisions)
+    return { collisions, header, moment }
+  }
+
+  it.each([
+    ["section:pre", "Prayer"],
+    ["section:prayer", "Prayer"],
+    ["section:nested", "Scripture"],
+  ])("collision selection keeps the first moment under the pointer ahead of overlapping %s", async (headerId, itemId) => {
+    await render()
+    const liveBefore = live()
+    const { collisions, moment } = selectCollision(headerId, itemId, 42)
+    expect(collisions[0]?.id).toBe(itemId)
+    const source = drag.sortables.get("Response")!.draggable
+    await drop(source, { id: moment.id, data: moment.data, shape: new Rectangle(0, 40, 100, 44) }, 42)
+    expect(ids()).toEqual(itemId === "Prayer"
+      ? ["Response", "Prayer", "Scripture", "Sermon"]
+      : ["Prayer", "Response", "Scripture", "Sermon"])
+    expect(projectRunOfShowEvents(q().items, q().headers).find((event) => event.id === "sermon")!.moments.map((item) => item.id)).toEqual(["Sermon"])
+    expect(live()).toEqual(liveBefore)
+  })
+
+  it.each([
+    ["section:pre", "Prayer"],
+    ["section:prayer", "Prayer"],
+    ["section:nested", "Scripture"],
+  ])("collision selection retains deliberate pointer drops onto %s", async (headerId, itemId) => {
+    await render()
+    expect(selectCollision(headerId, itemId, 20).collisions[0]?.id).toBe(headerId)
+  })
+
   it("moves an event from its keyboard menu, undoes/redoes it, saves and reopens every moment and nested group", async () => {
     useServiceStore.setState({ current: { id: "service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 10 }, dirty: false })
     const before = order()
