@@ -411,6 +411,45 @@ describe("Prepare never takes anything live (#299)", () => {
     createDraft.mockRestore()
   })
 
+  it("inserts before an event's first moment without taking that moment from its event or changing Live", async () => {
+    const originalMoment = slide("original-moment-id")
+    useQueueStore.setState({
+      items: [originalMoment],
+      headers: [
+        { id: "main", type: "phase", name: "Main service", at: 0, rule: "manual", role: "main" },
+        { id: "existing-event", type: "group", name: "Existing event", at: 0, event: { schema_version: 1 } },
+      ],
+      activeIndex: null,
+    })
+    useServiceStore.setState({
+      current: { id: "existing-service", title: "Sunday", service_date: null, revision: 1, created_at: "", updated_at: "", item_count: 1 },
+      dirty: false,
+      saving: false,
+    })
+    useBroadcastStore.setState({ isLive: true, liveItemId: "on-air-item", liveSlide: null, liveVerse: null })
+    const liveBefore = {
+      isLive: useBroadcastStore.getState().isLive,
+      liveItemId: useBroadcastStore.getState().liveItemId,
+      liveSlide: useBroadcastStore.getState().liveSlide,
+      liveVerse: useBroadcastStore.getState().liveVerse,
+    }
+    const el = await renderPrepare()
+
+    const momentRow = [...el.querySelectorAll<HTMLButtonElement>('ol[aria-label="Service rundown"] button[title="Click to preview"]')]
+      .find((button) => button.textContent?.includes("original-moment-id"))!
+    await act(async () => momentRow.click())
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Add event"]')!.click())
+    const prayer = [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim().startsWith("Prayer"))!
+    await act(async () => prayer.click())
+
+    const events = projectRunOfShowEvents(useQueueStore.getState().items, useQueueStore.getState().headers)
+    const originalEvent = events.find((event) => event.id === "existing-event")
+    const insertedEvent = events.find((event) => event.title === "Opening Prayer")
+    expect(originalEvent?.moments).toEqual([originalMoment])
+    expect(insertedEvent?.moments).toEqual([])
+    expect(useBroadcastStore.getState()).toMatchObject(liveBefore)
+  })
+
   it("switching simple and grouped views preserves the phase plan and current live output", async () => {
     const items = [slide("Welcome"), slide("Sermon moment"), slide("Closing")]
     const headers = [

@@ -39,7 +39,10 @@ function insertEvent(target: EventInsertionTarget, preset: EventPreset): string 
 
   if (target.kind === "row") {
     const index = queue.items.findIndex((item) => item.id === target.itemId)
-    if (index !== -1) at = index
+    if (index !== -1) {
+      at = index
+      beforeHeaderId = queue.headers.find((header) => header.at === at && header.event)?.id
+    }
   } else if (target.kind === "section") {
     if (queue.headers.some((header) => header.id === target.headerId)) {
       const point = sectionInsertionPoint(queue.items.length, queue.headers, target.headerId)
