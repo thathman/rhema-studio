@@ -524,10 +524,18 @@ export function CueItemEditor({ item }: { item: CueQueueItem }) {
 const fieldLabel = "mb-0.5 block text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
 const fieldSelect = "h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs"
 
-/** One kind of Take step replaced (or removed, with null); the rest kept, in the order they run. */
-function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeStep | null) {
+/** Replace one Take action; scene actions are keyed by their congregation output. */
+function setTakeStep(itemId: string, kind: ParsedTakeStep["kind"], step: TakeStep | null, sceneOutputId?: string | null) {
   useQueueStore.getState().updateItem(itemId, (i) => {
-    const rest = cleanTakeSteps(i.on_take).filter((s) => parseTakeStep(s)?.kind !== kind)
+    const parsedNext = step ? parseTakeStep(step) : null
+    const targetOutputId = sceneOutputId !== undefined
+      ? sceneOutputId
+      : parsedNext?.kind === "scene" ? parsedNext.outputId : null
+    const rest = cleanTakeSteps(i.on_take).filter((s) => {
+      const parsed = parseTakeStep(s)
+      if (parsed?.kind !== kind) return true
+      return kind === "scene" && parsed.kind === "scene" && parsed.outputId !== targetOutputId
+    })
     const next = cleanTakeSteps(step ? [...rest, step] : rest)
     return { ...i, on_take: next.length ? next : null }
   })
@@ -546,8 +554,8 @@ export function LookAndScene({ item }: { item: QueueItem }) {
   const setScene = (id: string | null) => {
     update({ scene_id: id })
     // A scene armed for the Take follows the item's scene (and goes when it has none).
-    const armed = takeSteps(item).find((s) => s.kind === "scene")
-    if (armed && armed.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id, armed.outputId) : null)
+    const shared = takeSteps(item).find((s) => s.kind === "scene" && s.outputId === null)
+    if (shared?.kind === "scene") setTakeStep(item.id, "scene", id ? sceneStep(id) : null, null)
   }
   const pick = (value: string) => (value === "" ? null : value)
   // A saved choice this computer does not have stays selected, and says so.
@@ -598,11 +606,14 @@ export function TakeSteps({ item }: { item: QueueItem }) {
   const obsScenes = useObsStore((s) => s.scenes)
   const obsOn = useSettingsStore((s) => s.obs.enabled)
   const steps = takeSteps(item)
-  const sceneArmed = steps.find((s) => s.kind === "scene")
+  const sceneSteps = steps.filter((s): s is Extract<ParsedTakeStep, { kind: "scene" }> => s.kind === "scene")
+  const sharedScene = sceneSteps.find((s) => s.outputId === null)
+  const sceneOverrides = sceneSteps.filter((s) => s.outputId !== null)
   const obs = steps.find((s) => s.kind === "obs")
   const sourceOnly = steps.some((s) => s.kind === "source")
   const [obsText, setObsText] = useState<string | null>(null)
-  const sceneName = scenes.find((s) => s.id === item.scene_id)?.name
+  const sharedSceneId = sharedScene?.sceneId ?? item.scene_id
+  const sceneName = scenes.find((s) => s.id === sharedSceneId)?.name
   const congregation = outputs.filter((o) => (o.role ?? "congregation") === "congregation")
   const impact = takeImpact(item.on_take)
   const listId = `obs-scenes-${item.id}`
@@ -619,23 +630,80 @@ export function TakeSteps({ item }: { item: QueueItem }) {
         <input
           type="checkbox"
           className="mt-0.5 size-4"
-          checked={!!sceneArmed}
-          disabled={!item.scene_id && !sceneArmed}
-          onChange={(e) => setTakeStep(item.id, "scene", e.target.checked && item.scene_id ? sceneStep(item.scene_id) : null)}
+          checked={!!sharedScene}
+          disabled={!item.scene_id && !sharedScene}
+          onChange={(e) => setTakeStep(item.id, "scene", e.target.checked && sharedSceneId ? sceneStep(sharedSceneId) : null, null)}
         />
         <span>
-          <span className="font-medium">Take its scene{sceneName ? `, ${sceneName}` : ""}</span>
-          <span className="block text-muted-foreground">{item.scene_id ? "Arranges the screen as the scene; what is live stays live." : "Choose its scene first (Slides → Look and scene)."}</span>
+          <span className="font-medium">Take its scene{sceneName ? `, ${sceneName}` : ""} on every congregation screen</span>
+          <span className="block text-muted-foreground">{sharedSceneId ? "Arranges each congregation screen as this scene; screen overrides run after it. What is live stays live." : "Choose its scene first (Slides → Look and scene)."}</span>
         </span>
       </label>
-      {sceneArmed?.kind === "scene" && congregation.length > 1 && (
-        <label className="ml-6 min-w-0">
-          <span className={fieldLabel}>On</span>
-          <select aria-label={`Screen for the scene of ${item.reference}`} value={sceneArmed.outputId ?? ""} onChange={(e) => setTakeStep(item.id, "scene", sceneStep(sceneArmed.sceneId, e.target.value || null))} className={fieldSelect}>
-            <option value="">Every congregation screen</option>
-            {congregation.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        </label>
+      {sceneOverrides.map((override, index) => {
+        const output = outputs.find((candidate) => candidate.id === override.outputId)
+        const isValidOutput = !!output && (output.role ?? "congregation") === "congregation"
+        const optionsForThisOverride = congregation.filter((candidate) =>
+          candidate.id === override.outputId || !sceneOverrides.some((other) => other !== override && other.outputId === candidate.id),
+        )
+        const sceneExists = scenes.some((candidate) => candidate.id === override.sceneId)
+        return (
+          <div key={`${override.outputId}:${index}`} className="ml-6 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <label className="min-w-0">
+              <span className={fieldLabel}>Congregation screen</span>
+              <select
+                aria-label={`Screen target for ${item.reference} ${index + 1}`}
+                value={override.outputId!}
+                onChange={(e) => setTakeStep(item.id, "scene", sceneStep(override.sceneId, e.target.value), override.outputId)}
+                className={fieldSelect}
+              >
+                {!isValidOutput && (
+                  <option value={override.outputId!} disabled>
+                    {output ? `Not a congregation screen: ${output.name}` : `Screen not found: ${override.outputId}`}
+                  </option>
+                )}
+                {optionsForThisOverride.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              </select>
+            </label>
+            <label className="min-w-0">
+              <span className={fieldLabel}>Scene on this screen</span>
+              <select
+                aria-label={`Scene override ${index + 1} for ${item.reference}`}
+                value={override.sceneId}
+                onChange={(e) => setTakeStep(item.id, "scene", sceneStep(e.target.value, override.outputId), override.outputId)}
+                className={fieldSelect}
+              >
+                {!sceneExists && <option value={override.sceneId} disabled>Scene not on this computer: {override.sceneId}</option>}
+                {scenes.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
+              </select>
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove screen override ${index + 1} for ${item.reference}`}
+              className="mt-3 size-7"
+              onClick={() => setTakeStep(item.id, "scene", null, override.outputId)}
+            >
+              <XIcon className="size-3.5" aria-hidden />
+            </Button>
+          </div>
+        )
+      })}
+      {congregation.some((o) => !sceneOverrides.some((override) => override.outputId === o.id)) && scenes.length > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label={`Add screen override for ${item.reference}`}
+          className="ml-6 h-7 w-fit text-xs"
+          onClick={() => {
+            const target = congregation.find((o) => !sceneOverrides.some((override) => override.outputId === o.id))
+            const sceneId = item.scene_id && scenes.some((candidate) => candidate.id === item.scene_id) ? item.scene_id : scenes[0]?.id
+            if (target && sceneId) setTakeStep(item.id, "scene", sceneStep(sceneId, target.id))
+          }}
+        >
+          Add screen override
+        </Button>
       )}
       <label className="min-w-0">
         <span className={fieldLabel}>Switch OBS to</span>

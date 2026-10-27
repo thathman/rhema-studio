@@ -12,6 +12,10 @@ import { BUNDLED_FONTS } from "@/lib/fonts"
 import { SlideBackground } from "@/studio/prepare/slide-composer"
 import { lowerThirdBacking } from "@/lib/lower-third-backing"
 import { cn } from "@/lib/utils"
+import { DesignDraftActions } from "@/studio/design/design-draft-actions"
+import { useDesignDraft } from "@/studio/design/use-design-draft"
+import { followsLowerThird } from "@/lib/live-sources"
+import { designDraftId } from "@/lib/design-drafts"
 
 type Sample = "name" | "scripture" | "lyrics"
 const SAMPLES: Record<Sample, { lt: LowerThird; verse: VerseRenderData | null }> = {
@@ -46,32 +50,32 @@ export function Colour({ value, onChange, label }: { value: string; onChange: (c
 
 /**
  * Lower third styles: position, size, fonts, colours, a picture or video
- * behind the band, an accent and how it comes on. Edits apply as you make
- * them, to the band on air too when it uses the style.
+ * behind the band, an accent and how it comes on. Edits stay in a local
+ * design draft until the operator deliberately applies them.
  */
 export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
   const styles = useBroadcastStore((s) => s.lowerThirdStyles)
   const outputs = useBroadcastStore((s) => s.outputs)
+  const scenes = useBroadcastStore((s) => s.scenes)
+  const liveLowerThird = useBroadcastStore((s) => s.lowerThird)
   const themes = useBroadcastStore((s) => s.themes)
   const assets = useMediaStore((s) => s.assets)
   const [selectedId, setSelectedId] = useState(() => initialId ?? useBroadcastStore.getState().lowerThirdStyles[0]?.id ?? "")
   const [sample, setSample] = useState<Sample>("name")
-  const style = styles.find((x) => x.id === selectedId) ?? styles[0]
+  const savedStyle = styles.find((x) => x.id === selectedId) ?? styles[0] ?? DEFAULT_LOWER_THIRD_STYLE
+  const draft = useDesignDraft("lower-third", savedStyle.id, savedStyle, normalizeLowerThirdStyle)
+  const style = draft.value
   const output = outputs.find((o) => o.lowerThirds) ?? outputs.find((o) => o.id === MAIN_OUTPUT_ID)
   const theme = themes.find((t) => t.id === output?.themeId) ?? themes[0]
   const [backing, setBacking] = useState<LowerThird["backing"]>(null)
   const preview = useMemo(() => overlayFor({ ...SAMPLES[sample].lt, style, backing }, SAMPLES[sample].verse), [sample, style, backing])
 
-  const save = (next: LowerThirdStyle, media = false) => {
-    useBroadcastStore.getState().saveLowerThirdStyle(next)
-    if (media) void lowerThirdBacking(next).then((b) => { setBacking(b); useBroadcastStore.getState().saveLowerThirdStyle(next, b) })
-  }
-  const patch = (p: Partial<LowerThirdStyle>) => save({ ...style, ...p })
+  const patch = (p: Partial<LowerThirdStyle>) => draft.update(normalizeLowerThirdStyle({ ...style, ...p }))
   const pick = (id: string) => {
+    if (id === selectedId) return
+    if (draft.dirty) draft.save()
     setSelectedId(id)
-    const next = styles.find((x) => x.id === id)
     setBacking(null)
-    if (next) void lowerThirdBacking(next).then(setBacking)
   }
   const add = (from: LowerThirdStyle) => {
     const copy = normalizeLowerThirdStyle({ ...from, id: crypto.randomUUID(), name: from === DEFAULT_LOWER_THIRD_STYLE ? "New style" : `${from.name} copy` })
@@ -79,13 +83,40 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
     pick(copy.id)
   }
   const media = style.background.mediaId ? assets.find((a) => a.id === style.background.mediaId) : undefined
-  // The picture or video behind the style shown first.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- once, for the style the page opens on
-  useEffect(() => { if (style) void lowerThirdBacking(style).then(setBacking) }, [])
+  const lowerThirdIsLive = liveLowerThird?.style?.id === style.id
+  const liveOutputs = lowerThirdIsLive ? outputs.filter((candidate) => {
+    if ((candidate.role ?? "congregation") !== "congregation") return false
+    const scene = scenes.find((saved) => saved.id === candidate.sceneId)
+    const sceneOwnsBand = scene?.layers.some((layer) => layer.kind === "lowerThird" && layer.visible) ?? false
+    return followsLowerThird(candidate) || sceneOwnsBand
+  }).map((candidate) => candidate.name) : []
+  const styleBackgroundKind = style.background.kind
+  const styleBackgroundMediaId = style.background.mediaId
+  useEffect(() => {
+    let current = true
+    void lowerThirdBacking({ background: { kind: styleBackgroundKind, mediaId: styleBackgroundMediaId } }).then((value) => { if (current) setBacking(value) }).catch(() => { if (current) setBacking(null) })
+    return () => { current = false }
+  }, [styleBackgroundKind, styleBackgroundMediaId])
+
+  const apply = async () => {
+    const normalized = normalizeLowerThirdStyle(style)
+    const resolved = await lowerThirdBacking(normalized)
+    useBroadcastStore.getState().saveLowerThirdStyle(normalized, resolved)
+  }
 
   return (
     <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">Design the band for names, scripture and lyrics. Changes apply at once, also to a band on air in this style.</p>
+        <p className="text-sm text-muted-foreground">Design the band for names, scripture and lyrics. Preview and save a draft here; applying is a deliberate action.</p>
+        <DesignDraftActions
+          dirty={draft.dirty}
+          saved={draft.saved}
+          scope={lowerThirdIsLive ? "the lower third currently on air and congregation outputs subscribed to it" : "the saved lower-third style for future uses"}
+          outputs={liveOutputs}
+          onSave={draft.save}
+          onDiscard={draft.discard}
+          onApply={apply}
+          onApplied={draft.markApplied}
+        />
         <div className="grid gap-4 md:grid-cols-[11rem_minmax(0,1fr)]">
           <div className="flex flex-col gap-1" role="listbox" aria-label="Styles">
             {styles.map((x) => (
@@ -96,7 +127,11 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
             <div className="mt-2 flex flex-wrap gap-1">
               <Button size="xs" variant="outline" onClick={() => add(DEFAULT_LOWER_THIRD_STYLE)}><PlusIcon /> New</Button>
               <Button size="xs" variant="outline" onClick={() => add(style)}><CopyIcon /> Duplicate</Button>
-              <Button size="xs" variant="ghost" disabled={styles.length < 2} onClick={() => { useBroadcastStore.getState().deleteLowerThirdStyle(style.id); pick(styles.find((x) => x.id !== style.id)?.id ?? "") }} aria-label="Delete style"><Trash2Icon /></Button>
+              <Button size="xs" variant="ghost" disabled={styles.length < 2 || draft.dirty} title={draft.dirty ? "Save or discard the draft before deleting this style" : "Delete style"} onClick={() => {
+                useBroadcastStore.getState().deleteDesignDraft(designDraftId("lower-third", style.id))
+                useBroadcastStore.getState().deleteLowerThirdStyle(style.id)
+                pick(styles.find((x) => x.id !== style.id)?.id ?? "")
+              }} aria-label="Delete style"><Trash2Icon /></Button>
             </div>
           </div>
 <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)]">
@@ -154,7 +189,7 @@ export function LowerThirdDesigner({ initialId }: { initialId?: string } = {}) {
               noneLabel="None (colour only)"
               hint="Behind the band; the colour lies over it at its opacity. A video loops silently."
               value={style.background.mediaId ? { media_id: style.background.mediaId, name: media?.name ?? "" } : null}
-              onChange={(v) => save({ ...style, background: { ...style.background, kind: v ? (v.kind === "video" ? "video" : "picture") : "color", mediaId: v?.media_id ?? null } }, true)}
+              onChange={(v) => patch({ background: { ...style.background, kind: v ? (v.kind === "video" ? "video" : "picture") : "color", mediaId: v?.media_id ?? null } })}
             />
             <Row label="Accent">
               <label className="flex items-center gap-1"><input type="checkbox" checked={style.accent.enabled} onChange={(e) => patch({ accent: { ...style.accent, enabled: e.target.checked } })} /> Bar</label>

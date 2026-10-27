@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { QueueItem, SlideQueueItem, TakeStep, Verse } from "@/types"
 
 /**
@@ -50,6 +50,7 @@ async function connectObs() {
 }
 
 beforeEach(async () => {
+  vi.restoreAllMocks()
   requests.length = 0
   studioMode = false
   for (const f of Object.values(toast)) f.mockClear()
@@ -68,6 +69,7 @@ beforeEach(async () => {
   await connectObs()
   requests.length = 0
 })
+afterEach(() => vi.restoreAllMocks())
 
 describe("an item's Take steps", () => {
   it("takes the scene/look revisions pinned by the approved service", async () => {
@@ -199,5 +201,61 @@ describe("an item's Take steps", () => {
     await vi.waitFor(() => expect(toast.warning).toHaveBeenCalledTimes(2))
     expect(sceneOnMain()).toBeUndefined()
     expect(obsSwitches()).toEqual([])
+  })
+
+  it("takes a shared scene before output overrides and keeps each screen's own scene", async () => {
+    const { runTakeSteps } = await import("./take-steps")
+    const overflowScene = newScene("Overflow")
+    const sanctuaryScene = newScene("Sanctuary override")
+    const current = useBroadcastStore.getState()
+    useBroadcastStore.setState({
+      scenes: [scene, overflowScene, sanctuaryScene],
+      outputs: [
+        ...current.outputs,
+        { ...current.outputs[0], id: "overflow", name: "Overflow" },
+      ],
+    })
+    const taken: Array<[string, string]> = []
+    const takeScene = vi.spyOn(useBroadcastStore.getState(), "takeScene").mockImplementation((outputId, sceneId) => {
+      taken.push([outputId, sceneId])
+    })
+
+    await runTakeSteps(slide("multi-screen", [
+      `scene.take:${overflowScene.id}@overflow`,
+      `scene.take:${scene.id}`,
+      `scene.take:${sanctuaryScene.id}@${MAIN_OUTPUT_ID}`,
+    ]))
+
+    expect(taken).toEqual([
+      [MAIN_OUTPUT_ID, scene.id],
+      ["overflow", scene.id],
+      ["overflow", overflowScene.id],
+      [MAIN_OUTPUT_ID, sanctuaryScene.id],
+    ])
+    takeScene.mockRestore()
+  })
+
+  it("ignores missing and non-congregation output targets without changing any screen", async () => {
+    const { runTakeSteps } = await import("./take-steps")
+    const current = useBroadcastStore.getState()
+    useBroadcastStore.setState({
+      outputs: [
+        ...current.outputs,
+        { ...current.outputs[0], id: "stage", name: "Stage", role: "stage" },
+        { ...current.outputs[0], id: "signage", name: "Signage", role: "signage" },
+      ],
+    })
+    const takeScene = vi.spyOn(useBroadcastStore.getState(), "takeScene")
+
+    await runTakeSteps(slide("invalid-targets", [
+      `scene.take:${scene.id}@missing-screen`,
+      `scene.take:${scene.id}@stage`,
+      `scene.take:${scene.id}@signage`,
+    ]))
+
+    expect(toast.warning).toHaveBeenCalledTimes(3)
+    expect(takeScene).not.toHaveBeenCalled()
+    expect(useBroadcastStore.getState().outputs.map((o) => o.sceneId)).toEqual([undefined, undefined, undefined])
+    takeScene.mockRestore()
   })
 })
