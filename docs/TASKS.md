@@ -2,7 +2,7 @@
 
 > **Unified UX takeover, owner-approved 2026-10-26:** [Codex Unified Handover](CODEX-UNIFIED-HANDOFF.md) with [delivery/PR dependency matrix](rhema-studio/31-codex-delivery-matrix.md) tracks cross-route work (#442–#448), existing event/source contracts (#243/#409/#410), and hardware acceptance (#411). Reconcile these into stable task IDs after verifying main and active PRs. Do not auto-upgrade task status from issue/PR creation.
 
-**Backlog revision:** 0.51 · **Updated:** 2026-10-27 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
+**Backlog revision:** 0.52 · **Updated:** 2026-10-27 · **Authoritative requirements:** [PRD.md](PRD.md) · **Release gates:** [RELEASE-PLAN.md](RELEASE-PLAN.md)
 
 ## Operating rules
 
@@ -21,13 +21,13 @@ The issue index in [#382](https://github.com/thathman/rhema-studio/issues/382) i
 
 | GitHub issue | Current state | Evidence / next gate |
 |---|---|---|
-| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): scene Save stays in the library; explicit Take refreshes the output. Regressions cover backup restore, NDI, browser/TV feeds and rehearsal isolation. Rebased onto main `bcff115`; focused scene, queue, Add and timing suites pass (5 files / 54 tests). Use the current PR checks to verify the latest head before merge; physical output acceptance remains open. |
-| [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | IN PR | [PR #414](https://github.com/thathman/rhema-studio/pull/414): one insertion API covers beginning, end, selected phase and nested group. |
+| [#383 — Scene Save changes an on-air revision](https://github.com/thathman/rhema-studio/issues/383) | MERGED | [PR #414](https://github.com/thathman/rhema-studio/pull/414) merged as `073c1e6`; scene Save stays in the library until explicit Take. Regressions cover backup restore, NDI/browser/TV snapshots and rehearsal isolation. Physical output acceptance remains open. |
+| [#384 — Add to a later phase reorders an unrelated item](https://github.com/thathman/rhema-studio/issues/384) | MERGED | [PR #414](https://github.com/thathman/rhema-studio/pull/414) routes Add through a stable ID-returning insertion API and covers beginning, middle, end and nested groups. |
 | [#398 — Approved scenes and live content need revision integrity](https://github.com/thathman/rhema-studio/issues/398) | IN PR | [PR #420](https://github.com/thathman/rhema-studio/pull/420) addresses approved scene and look revisions; shared asset and approval acceptance remain open. |
 | [#411 — Full-journey and physical-system validation](https://github.com/thathman/rhema-studio/issues/411) | IN PROGRESS | [PR #438](https://github.com/thathman/rhema-studio/pull/438) passes a hosted native macOS bilingual-hymn journey with Live off. Real projector, TV, OBS/NDI, camera, Windows and offline church-system gates remain unverified. |
-| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415) restores the Hymn Book detail pane and Add selection; #438 exercises the workflow on the open stack. |
+| [#385 — Hymn Book detail/editor workflow](https://github.com/thathman/rhema-studio/issues/385), [#386 — Add selects the inserted service item](https://github.com/thathman/rhema-studio/issues/386) | IN PR | [PR #415](https://github.com/thathman/rhema-studio/pull/415), reopened on current `main`: restores Hymn Book details/shared editor and selects the exact inserted item. Focused refreshed suites pass (5 files / 27 tests); fresh hosted checks and volunteer desktop acceptance remain required. |
 
-PRs #414, #415, #417, #420, #427, #428 and #438 are open and unmerged at this snapshot. Upstream main is `bcff115`; 43 PRs are open. Check GitHub for later branch/check changes. The current base and acceptance evidence are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
+Upstream main is `f65350e`. PR #414 is merged; #415 is reopened on main for the Hymn Book/Add work. There are 41 open PRs at this snapshot. Check GitHub for later branch/check changes. The current base and acceptance evidence are recorded in [DEVELOPMENT-STATUS.md](DEVELOPMENT-STATUS.md).
 
 | Task | P | State | Depends on | Evidence / next gate |
 |---|---|---|---|---|
@@ -212,6 +212,7 @@ The owner's concept (a complete overhaul of the UI; kept out of the repo) is the
 
 ## Revision history
 
+- **2026-10-27 (rev 0.52):** #383/#384 merged through #414 (`073c1e6`), with 54 focused scene/queue/Add/timing tests passing and all hosted jobs green. Rebased the retained #415 Hymn Book/Add work onto `f65350e`; 27 focused tests pass. Reopened PR #415 against main; full hosted checks are required before merge.
 - **2026-10-27 (rev 0.51):** Reconciled current `main` at `bcff115`; #424/#451/#475 are merged. #414's clock-test overlap was resolved with deterministic wall and monotonic mocks plus cleanup; five focused suites pass (54 tests). Rebased #414 still requires a fresh full hosted run and hardware acceptance remains open.
 - **2026-10-26 (rev 0.50):** PR #414 adds a rehearsal regression and snapshot handling so rehearsing a saved edit to the same on-air scene previews the new revision in-app while public output and exit restore the captured revision. Local full suite, typecheck, lint and build pass; hosted CI for the new head is pending. No physical output test is claimed.
 - **2026-10-26 (rev 0.49):** PR #414 hosted CI passed on head `8a0cca5` (run 40272729012); local UI interactions and the 1,765-test full suite pass. PR remains open/unmerged.
